@@ -1,0 +1,18 @@
+#app-deconvolution_pars-folder-modal > div > div > div.modal-body > 
+div.sF-navigation.btn-toolbar > select {
+  width: calc(70% - 340px)
+}
+
+.modal {
+  overflow-x: clip;
+  overflow-y: clip;
+}
+
+.modal-dialog {
+  margin-top: 60px;
+}
+
+// Deconvolution sidebar
+#app-deconvolution_pars-path_selected {
+  margin-top: -20px;
+}

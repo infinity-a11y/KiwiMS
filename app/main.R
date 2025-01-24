@@ -1,6 +1,6 @@
 box::use(
   bslib,
-  shiny[moduleServer, NS],
+  shiny[moduleServer, NS, reactive, renderPrint, verbatimTextOutput],
 )
 
 box::use(
@@ -25,7 +25,8 @@ ui <- function(id) {
                       sidebar = deconvolution_sidebar$ui(
                         ns("deconvolution_pars")),
                       bslib$card(bslib$card_header("Mass Spectra"),
-                                 deconvolution_card$ui(ns("spectra"))))),
+                                 # verbatimTextOutput(ns("test")),
+                                 deconvolution_card$ui(ns("deconvolution_plot"))))),
     bslib$nav_panel(title = "Mass Conversion", 
                     bslib$page_sidebar(
                       sidebar = upload_spectra$ui(ns("mass_conversion")),
@@ -49,5 +50,9 @@ ui <- function(id) {
 server <- function(id) {
   moduleServer(id, function(input, output, session) {
     conversion_card$server("conversion_card")
+    
+    waters_dir <- deconvolution_sidebar$server("deconvolution_pars")
+    
+    deconvolution_card$server("deconvolution_plot", reactive(waters_dir()))
   })
 }

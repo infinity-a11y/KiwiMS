@@ -17,12 +17,6 @@ ui <- function(id) {
 server <- function(id) {
   moduleServer(id, function(input, output, session) {
     output$conversion_table <- renderDataTable({
-      # validate(need(
-      #   is.data.frame(df_conv()),
-      #   "Calculation of conversions failed, please check parameters"))
-      # 
-      # df_conv()
-      
       # placeholder dataset
       rhinos
       },
