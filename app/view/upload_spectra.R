@@ -1,8 +1,8 @@
 # app/view/upload_spectra.R
 
 box::use(
-  bslib[sidebar],
-  shiny[actionButton, fileInput, selectInput, textInput, NS],
+  bslib[card, card_body, card_header, sidebar],
+  shiny[actionButton, br, fileInput, textInput, NS],
 )
 
 #' @export
@@ -22,11 +22,26 @@ ui <- function(id) {
       multiple = FALSE,
       accept = c("text/tab-separated-values")),
     textInput(ns("protein_mass"), "Protein Mass", ""),
-    selectInput(
-      ns("units"),
-      "Select units for Kobs/KI calculations",
-      choices = c("\U003BCM - minutes", "M - seconds"), 
-      selected = "\U003BCM - minutes"),
+    card(
+      card_header(
+        class = "bg-dark",
+        "Set noise level (+/-)"
+      ),
+      card_body(
+        textInput(ns("cmpd_label"), "Compound Labeling", "4"),
+        textInput(ns("prot_peak"), "Protein Peak", "10") 
+      )
+    ),
+    card(
+      card_header(
+        class = "bg-dark",
+        "Customize"
+      ),
+      card_body(
+        textInput(ns("n_label"), "Considered number of labeling", "4"),
+        textInput(ns("n_spectra"), "Considered number of spectra", "20")
+      )
+    ),
     actionButton(ns("run_conversion_function"), "Calculate Conversions")
   )
 }

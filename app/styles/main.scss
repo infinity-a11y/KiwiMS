@@ -16,3 +16,43 @@ div.sF-navigation.btn-toolbar > select {
 #app-deconvolution_pars-path_selected {
   margin-top: -20px;
 }
+
+.bslib-sidebar-layout>.sidebar {
+  width: 130%;
+  box-shadow: 4px 0px 14px 0px #888;
+}
+
+.bslib-sidebar-layout>.main {
+  margin-left: 80px;
+}
+
+*::-webkit-scrollbar {
+  width: 15px;
+  height: 15px;
+}
+
+*::-webkit-scrollbar-track {
+  background: #F0F0F0;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: #bcbcbc;
+  border: 2px solid #F0F0F0;
+  border-radius: 10px;
+  min-width: 100px;
+  overflow-y: scroll;
+} 
+
+*::-webkit-scrollbar-corner {
+  background: #F0F0F0;
+}
+
+.bslib-sidebar-layout>.collapse-toggle {
+  border: 1px solid #88888857;
+  right: -2rem;
+}
+
+.bslib-sidebar-layout .sidebar-title {
+  margin-top: -2rem;
+  font-weight: bold;
+}

@@ -5,9 +5,28 @@ box::use(
 )
 
 #' @export
-deconvolute <- function(waters_dir, py_script) {
-  cmd <- base::paste("python", py_script, waters_dir)
-  base::system(cmd, intern = T)
+deconvolute <- function(waters_dir, py_script, config_startz = 1, 
+                        config_endz = 50, config_minmz = '', 
+                        config_maxmz = '', config_masslb = 5000, 
+                        config_massub = 500000, config_massbins = 10, 
+                        config_peakthresh = 0.1, config_peakwindow = 500,
+                        config_peaknorm = 1, config_time_start = '',
+                        config_time_end = '') {
+  
+  cmd <- paste("python", shQuote(py_script), shQuote(waters_dir), 
+               shQuote(config_startz), shQuote(config_endz), 
+               shQuote(config_minmz), shQuote(config_maxmz),
+               shQuote(config_masslb), shQuote(config_massub), 
+               shQuote(config_massbins),
+               shQuote(config_peakthresh), 
+               shQuote(config_peakwindow), 
+               shQuote(config_peaknorm), 
+               shQuote(config_time_start), shQuote(config_time_end))
+  
+  print(cmd)
+  
+  output <- base::system(cmd, intern = TRUE, ignore.stderr = FALSE)
+  print(output)
 }
 
 #' @export

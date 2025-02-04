@@ -1,8 +1,8 @@
 # app/view/ki_kinact.R
 
 box::use(
-  bslib[card, card_body, card_header, sidebar],
-  shiny[actionButton, br, textInput, NS],
+  bslib[sidebar],
+  shiny[actionButton, br, selectInput, textInput, NS],
 )
 
 #' @export
@@ -11,27 +11,11 @@ ui <- function(id) {
   
   sidebar(
     title = "Parameter Settings",
-    card(
-      card_header(
-        class = "bg-dark",
-        "Set noise level (+/-)"
-      ),
-      card_body(
-        textInput(ns("cmpd_label"), "Compound Labeling", "4"),
-        textInput(ns("prot_peak"), "Protein Peak", "10") 
-      )
-    ),
-    br(),
-    card(
-      card_header(
-        class = "bg-dark",
-        "Customize"
-      ),
-      card_body(
-        textInput(ns("n_label"), "Considered number of labeling", "4"),
-        textInput(ns("n_spectra"), "Considered number of spectra", "20")
-      )
-    ),
+    selectInput(
+      ns("units"),
+      "Select units for Kobs/KI calculations",
+      choices = c("\U003BCM - minutes", "M - seconds"), 
+      selected = "\U003BCM - minutes"),
     br(),
     actionButton(ns("run_ki"), "Calculate KI/Kinact")
   )
