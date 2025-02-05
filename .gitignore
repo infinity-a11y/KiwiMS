@@ -4,3 +4,4 @@
 .renv/**
 
 !renv.lock
+".Rhistory" 

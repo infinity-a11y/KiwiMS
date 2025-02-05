@@ -17,10 +17,8 @@ deconvolute <- function(waters_dir, py_script, config_startz = 1,
                shQuote(config_startz), shQuote(config_endz), 
                shQuote(config_minmz), shQuote(config_maxmz),
                shQuote(config_masslb), shQuote(config_massub), 
-               shQuote(config_massbins),
-               shQuote(config_peakthresh), 
-               shQuote(config_peakwindow), 
-               shQuote(config_peaknorm), 
+               shQuote(config_massbins), shQuote(config_peakthresh), 
+               shQuote(config_peakwindow), shQuote(config_peaknorm), 
                shQuote(config_time_start), shQuote(config_time_end))
   
   print(cmd)

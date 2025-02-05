@@ -18,12 +18,32 @@ div.sF-navigation.btn-toolbar > select {
 }
 
 .bslib-sidebar-layout>.sidebar {
-  width: 130%;
+  width: 150%;
   box-shadow: 4px 0px 14px 0px #888;
 }
 
 .bslib-sidebar-layout>.main {
-  margin-left: 80px;
+  margin-left: 8rem;
+}
+
+.deconv-param-input .shiny-input-container .control-label,
+.deconv-param-input-adv .shiny-input-container .control-label,
+.deconv-param-input-time .shiny-input-container .control-label {
+  display: none;
+}
+
+.deconv-param-input {
+  margin-left: -2rem;
+  width: 160%;
+}
+
+.deconv-param-input-time {
+  margin-left: -22px;
+  width: 160%;
+}
+
+.bslib-card .card-body {
+  padding-bottom: 0px;
 }
 
 *::-webkit-scrollbar {
@@ -48,11 +68,17 @@ div.sF-navigation.btn-toolbar > select {
 }
 
 .bslib-sidebar-layout>.collapse-toggle {
-  border: 1px solid #88888857;
-  right: -2rem;
+  border: 1px solid rgba(136,136,136,.3411764706);
+  right: -5rem;
+  top: 12px;
 }
 
 .bslib-sidebar-layout .sidebar-title {
   margin-top: -2rem;
   font-weight: bold;
+}
+
+input[type=number]::-webkit-inner-spin-button {
+  position: relative;
+  left: 7px;
 }

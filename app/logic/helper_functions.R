@@ -6,8 +6,32 @@ box::use(
   maditr[dcast],
   minpack.lm[nlsLM],
   plyr[ddply, rename],
+  shiny[div, icon, NS, span],
   stringr[str_split_fixed],
 )
+
+#' @export
+collapsiblePanelUI <- function(id, title, content) {
+  ns <- NS(id)
+  
+  div(
+    style = "border: 1px solid #ddd; margin: 10px 0;",
+    div(
+      style = "background-color: #f8f9fa; padding: 10px; cursor: pointer;",
+      onclick = sprintf("$('#%s').slideToggle()", ns("content")),
+      span(
+        icon("chevron-right", class = "toggle-icon"),
+        style = "margin-right: 10px;"
+      ),
+      title
+    ),
+    div(
+      id = ns("content"),
+      style = "padding: 15px; display: none;",
+      content
+    )
+  )
+}
 
 # New version of length which can handle NA's: if na.rm==T, don't count them
 length2 <- function(x, na_rm = FALSE) {

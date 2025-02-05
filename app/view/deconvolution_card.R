@@ -13,7 +13,10 @@ box::use(
 ui <- function(id) {
   ns <- NS(id)
   
-  plotOutput(ns("ms_spectrum"))
+  shiny::fluidRow(
+    shiny::uiOutput(ns("deconvolute_start_ui")),
+    plotOutput(ns("ms_spectrum")) 
+  )
 }
 
 #' @export
