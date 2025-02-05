@@ -1,4 +1,5 @@
 # This file allows packrat (used by rsconnect during deployment) to pick up dependencies.
+library(bsicons)
 library(data.table)
 library(DT)
 library(ggplot2)

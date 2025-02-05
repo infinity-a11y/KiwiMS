@@ -1,12 +1,12 @@
 # app/view/deconvolution_card.R
 
 box::use(
-  shiny[NS, reactive, renderPlot, need, validate, plotOutput, moduleServer],
+  shiny[column, NS, reactive, renderPlot, need, validate, plotOutput, 
+        moduleServer],
 )
 
 box::use(
   app/logic/deconvolution_functions[plot_ms_spec],
-  app/view/deconvolution_sidebar,
 )
 
 #' @export
@@ -14,8 +14,10 @@ ui <- function(id) {
   ns <- NS(id)
   
   shiny::fluidRow(
-    shiny::uiOutput(ns("deconvolute_start_ui")),
-    plotOutput(ns("ms_spectrum")) 
+    column(
+      width = 12,
+      plotOutput(ns("ms_spectrum")) 
+    )
   )
 }
 

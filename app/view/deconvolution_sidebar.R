@@ -8,7 +8,6 @@ box::use(
 )
 
 box::use(
-  app/logic/deconvolution_functions[deconvolute],
   app/logic/helper_functions[collapsiblePanelUI],
 )
 
@@ -192,6 +191,7 @@ ui <- function(id) {
                       min = 0,
                       max = 100,
                       value = 0.5,
+                      step = 0.1,
                       width = "130%"
                     )
                   )
@@ -326,8 +326,6 @@ ui <- function(id) {
 server <- function(id) {
   moduleServer(id, function(input, output, session) {
     
-    ns <- session$ns
-    
     # Define roots for directory browsing
     roots <- c(
       Home = path_home(),
@@ -355,17 +353,6 @@ server <- function(id) {
       } else {
         cat("Nothing selected")
       }
-    })
-    
-    output$deconvolute_start_ui <- shiny::renderUI({
-      if (!is.null(waters_dir()) && length(waters_dir()) > 0) {
-        shiny::actionButton(ns("deconvolute_start"), "Run Deconvolution")
-      }
-    })
-    
-    shiny::observeEvent(input$deconvolute_start, {
-      deconvolute(waters_dir = waters_dir(), 
-                  py_script = file.path(getwd(), "app/logic/run_unidec.py"))
     })
     
     return(waters_dir)
