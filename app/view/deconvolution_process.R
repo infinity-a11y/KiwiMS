@@ -35,7 +35,7 @@ server <- function(id, waters_dir) {
     })
     
     shiny$observeEvent(input$deconvolute_start, {
-      deconvolute(waters_dir = raw_dir(), 
+      deconvolute(parent_dir = raw_dir(), 
                   py_script = file.path(getwd(), 
                                         "app/logic/run_unidec.py"))
     })
