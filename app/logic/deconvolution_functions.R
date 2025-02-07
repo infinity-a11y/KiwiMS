@@ -2,7 +2,9 @@
 
 box::use(
   utils[read.table],
-  parallel[detectCores, makeCluster, parLapply, stopCluster]
+  shiny[showNotification],
+  parallel[detectCores, makeCluster, parLapply, stopCluster],
+  reticulate[use_python, py_config],
 )
 
 #' @export
@@ -14,13 +16,35 @@ deconvolute <- function(parent_dir, py_script,
                         config_massbins = 10, config_peakthresh = 0.1,
                         config_peakwindow = 500, config_peaknorm = 1,
                         config_time_start = '', config_time_end = '') {
+  
+  # ensure python path and packages availability
+  py_outcome <- tryCatch({
+    use_python(py_config()$python, required = TRUE)
+    TRUE
+  }, error = function(e) {
+    showNotification(
+      "Python modules could not be loaded. Aborting.",
+      type = "error",
+      duration = NULL
+    )
+    FALSE
+  })
+  
+  if (!py_outcome) {
+    return()
+  }
 
   # Find all .raw directories
   raw_dirs <- list.dirs(parent_dir, full.names = TRUE, recursive = FALSE)
   raw_dirs <- raw_dirs[grep("\\.raw$", raw_dirs)]
 
   if (length(raw_dirs) == 0) {
-    stop("No .raw directories found in ", parent_dir)
+    showNotification(
+      paste0("No .raw directories found in ", parent_dir),
+      type = "error",
+      duration = NULL
+    )
+    return()
   }
 
   message(sprintf("Found %d .raw directories to process", length(raw_dirs)))
@@ -57,8 +81,8 @@ deconvolute <- function(parent_dir, py_script,
 
     message(paste0(num_cores, " cores detected. Parallel processing started."))
 
-    results <- parLapply(cl, raw_dirs, process_single_dir,
-                                   py_script = py_script)
+    results <- parLapply(cl, raw_dirs, process_single_dir, 
+                         py_script = py_script)
   } else {
     message(paste0(num_cores, " core(s) detected. Slowed processing started."))
     
