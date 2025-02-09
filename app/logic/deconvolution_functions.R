@@ -4,11 +4,11 @@ box::use(
   utils[read.table],
   shiny[showNotification],
   parallel[detectCores, makeCluster, parLapply, stopCluster],
-  reticulate[use_python, py_config],
+  reticulate[use_python, py_config, py_run_string],
 )
 
 #' @export
-deconvolute <- function(parent_dir, py_script,
+deconvolute <- function(parent_dir, 
                         num_cores = detectCores() - 1,
                         config_startz = 1, config_endz = 50,
                         config_minmz = '', config_maxmz = '',
@@ -33,11 +33,11 @@ deconvolute <- function(parent_dir, py_script,
   if (!py_outcome) {
     return()
   }
-
+  
   # Find all .raw directories
   raw_dirs <- list.dirs(parent_dir, full.names = TRUE, recursive = FALSE)
   raw_dirs <- raw_dirs[grep("\\.raw$", raw_dirs)]
-
+  
   if (length(raw_dirs) == 0) {
     showNotification(
       paste0("No .raw directories found in ", parent_dir),
@@ -46,60 +46,133 @@ deconvolute <- function(parent_dir, py_script,
     )
     return()
   }
-
+  
   message(sprintf("Found %d .raw directories to process", length(raw_dirs)))
+  showNotification(
+    sprintf("Found %d .raw directories to process", length(raw_dirs)),
+    type = "message", duration = NULL)
+  
+  # Define the processing function without default arguments
+  process_single_dir <- function(waters_dir, 
+                                 startz, endz, minmz, maxmz,
+                                 masslb, massub, massbins, peakthresh,
+                                 peakwindow, peaknorm, time_start, time_end) {
+    
+    input_path <- gsub("\\\\", "/", waters_dir)
+    
+    # Function to properly format parameters for Python
+    format_param <- function(x) {
+      if (is.character(x) && x == "") {
+        return("''")  # Empty string becomes quoted empty string
+      } else {
+        return(as.character(x))  # Numbers remain as-is
+      }
+    }
+    
+    # Create parameters string for Python
+    params_string <- sprintf(
+      '"startz": %s, "endz": %s, "minmz": %s, "maxmz": %s, "masslb": %s, "massub": %s, "massbins": %s, "peakthresh": %s, "peakwindow": %s, "peaknorm": %s, "time_start": %s, "time_end": %s',
+      format_param(startz),
+      format_param(endz),
+      format_param(minmz),
+      format_param(maxmz),
+      format_param(masslb),
+      format_param(massub),
+      format_param(massbins),
+      format_param(peakthresh),
+      format_param(peakwindow),
+      format_param(peaknorm),
+      format_param(time_start),
+      format_param(time_end)
+    )
+    
+    reticulate::py_run_string(sprintf('
+import sys
+import unidec
+import re
 
-  # Define the processing function for each directory
-  process_single_dir <- function(waters_dir, py_script) {
-    cmd <- paste("python", shQuote(py_script), shQuote(waters_dir),
-                 shQuote(config_startz), shQuote(config_endz),
-                 shQuote(config_minmz), shQuote(config_maxmz),
-                 shQuote(config_masslb), shQuote(config_massub),
-                 shQuote(config_massbins), shQuote(config_peakthresh),
-                 shQuote(config_peakwindow), shQuote(config_peaknorm),
-                 shQuote(config_time_start), shQuote(config_time_end))
+# Initialize UniDec engine
+engine = unidec.UniDec()
 
-    message(sprintf("Processing: %s", waters_dir))
-    message(sprintf("Command: %s", cmd))
+# Convert Waters .raw to txt
+input_file = r"%s"
+engine.raw_process(input_file)
+txt_file = re.sub(r"\\.raw$", "_rawdata.txt", input_file)
+engine.open_file(txt_file)
 
-    tryCatch({
-      output <- base::system(cmd, intern = TRUE, ignore.stderr = FALSE)
-      list(status = "success",
-           dir = waters_dir,
-           output = output)
-    }, error = function(e) {
-      list(status = "error",
-           dir = waters_dir,
-           error = as.character(e))
-    })
+# Parameters passed from R
+params = {%s}
+
+# Set configuration parameters
+engine.config.startz = params["startz"]
+engine.config.endz = params["endz"]
+engine.config.minmz = params["minmz"]
+engine.config.maxmz = params["maxmz"]
+engine.config.masslb = params["masslb"]
+engine.config.massub = params["massub"]
+engine.config.massbins = params["massbins"]
+engine.config.peakthresh = params["peakthresh"]
+engine.config.peakwindow = params["peakwindow"]
+engine.config.peaknorm = params["peaknorm"]
+engine.config.time_start = params["time_start"]
+engine.config.time_end = params["time_end"]
+
+# Process and deconvolve the data
+engine.process_data()
+engine.run_unidec()
+engine.pick_peaks()
+', input_path, params_string))
   }
-
+  
+  showNotification(paste0("Deconvolution initiated"),
+                   type = "message", duration = NULL)
+  
   # Process directories in parallel
   if(num_cores > 1) {
     cl <- makeCluster(num_cores)
     on.exit(stopCluster(cl))
-
-    message(paste0(num_cores, " cores detected. Parallel processing started."))
-
-    results <- parLapply(cl, raw_dirs, process_single_dir, 
-                         py_script = py_script)
-  } else {
-    message(paste0(num_cores, " core(s) detected. Slowed processing started."))
     
-    results <- lapply(raw_dirs, process_single_dir, py_script = py_script)
+    message(paste0(num_cores, " cores detected. Parallel processing started."))
+    
+    # Create wrapper function that includes all parameters
+    process_wrapper <- function(dir) {
+      process_single_dir(dir, 
+                         config_startz, config_endz,
+                         config_minmz, config_maxmz,
+                         config_masslb, config_massub,
+                         config_massbins, config_peakthresh,
+                         config_peakwindow, config_peaknorm,
+                         config_time_start, config_time_end)
+    }
+    
+    results <- parLapply(cl, raw_dirs, process_wrapper)
+    
+  } else {
+    message(paste0(num_cores, " core(s) detected. Sequential processing started."))
+    
+    results <- lapply(raw_dirs, function(dir) {
+      process_single_dir(dir, 
+                         config_startz, config_endz,
+                         config_minmz, config_maxmz,
+                         config_masslb, config_massub,
+                         config_massbins, config_peakthresh,
+                         config_peakwindow, config_peaknorm,
+                         config_time_start, config_time_end)
+    })
   }
-
+  
   # Summarize results
-  successful <- sum(sapply(results, function(x) x$status == "success"))
-  failed <- sum(sapply(results, function(x) x$status == "error"))
+  successful <- sum(sapply(results, function(x) !is.null(x)))
+  failed <- length(results) - successful
 
-  message(
-    sprintf(
-      "\nProcessing complete:\n- Successfully processed: %d\n- Failed: %d",
-      successful, failed))
+  showNotification("Deconvolution finalized", type = "message", duration = NULL)
+  message(sprintf(
+    "\nProcessing complete:\n- Successfully processed: %d\n- Failed: %d",
+    successful, failed))
   
   return(results)
 }
+
 
 #' @export
 plot_ms_spec <- function(waters_dir) {

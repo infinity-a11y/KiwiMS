@@ -2,6 +2,7 @@
 library(bsicons)
 library(data.table)
 library(DT)
+library(future)
 library(ggplot2)
 library(grid)
 library(maditr)

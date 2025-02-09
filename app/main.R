@@ -1,8 +1,9 @@
 box::use(
   bsicons[bs_icon],
   bslib,
-  shiny[moduleServer, NS, tags, tagList, reactive, renderPrint, 
+  shiny[div, moduleServer, NS, tags, tagList, reactive, renderPrint, 
         verbatimTextOutput],
+  shinyjs[useShinyjs],
 )
 
 box::use(
@@ -22,6 +23,8 @@ ui <- function(id) {
   
   tagList(
     dev_utils$add_dev_headers(),
+    div(id = "blocking-overlay"),
+    useShinyjs(),
     bslib$page_navbar(
       title = "MSFlow 0.0.1",
       bg = "#35357A",
