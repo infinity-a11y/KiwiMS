@@ -8,8 +8,7 @@ box::use(
 )
 
 #' @export
-deconvolute <- function(parent_dir, 
-                        num_cores = detectCores() - 1,
+deconvolute <- function(raw_dirs, num_cores = detectCores() - 1,
                         config_startz = 1, config_endz = 50,
                         config_minmz = '', config_maxmz = '',
                         config_masslb = 5000, config_massub = 500000,
@@ -22,35 +21,17 @@ deconvolute <- function(parent_dir,
     use_python(py_config()$python, required = TRUE)
     TRUE
   }, error = function(e) {
-    showNotification(
-      "Python modules could not be loaded. Aborting.",
-      type = "error",
-      duration = NULL
-    )
+    # showNotification(
+    #   "Python modules could not be loaded. Aborting.",
+    #   type = "error",
+    #   duration = NULL
+    # )
     FALSE
   })
   
   if (!py_outcome) {
     return()
   }
-  
-  # Find all .raw directories
-  raw_dirs <- list.dirs(parent_dir, full.names = TRUE, recursive = FALSE)
-  raw_dirs <- raw_dirs[grep("\\.raw$", raw_dirs)]
-  
-  if (length(raw_dirs) == 0) {
-    showNotification(
-      paste0("No .raw directories found in ", parent_dir),
-      type = "error",
-      duration = NULL
-    )
-    return()
-  }
-  
-  message(sprintf("Found %d .raw directories to process", length(raw_dirs)))
-  showNotification(
-    sprintf("Found %d .raw directories to process", length(raw_dirs)),
-    type = "message", duration = NULL)
   
   # Define the processing function without default arguments
   process_single_dir <- function(waters_dir, 
@@ -124,8 +105,8 @@ engine.pick_peaks()
 ', input_path, params_string))
   }
   
-  showNotification(paste0("Deconvolution initiated"),
-                   type = "message", duration = NULL)
+  # showNotification(paste0("Deconvolution initiated"),
+  #                  type = "message", duration = NULL)
   
   # Process directories in parallel
   if(num_cores > 1) {
@@ -148,7 +129,7 @@ engine.pick_peaks()
     results <- parLapply(cl, raw_dirs, process_wrapper)
     
   } else {
-    message(paste0(num_cores, " core(s) detected. Sequential processing started."))
+    # message(paste0(num_cores, " core(s) detected. Sequential processing started."))
     
     results <- lapply(raw_dirs, function(dir) {
       process_single_dir(dir, 
@@ -165,12 +146,12 @@ engine.pick_peaks()
   successful <- sum(sapply(results, function(x) !is.null(x)))
   failed <- length(results) - successful
 
-  showNotification("Deconvolution finalized", type = "message", duration = NULL)
-  message(sprintf(
-    "\nProcessing complete:\n- Successfully processed: %d\n- Failed: %d",
-    successful, failed))
+  # showNotification("Deconvolution finalized", type = "message", duration = NULL)
+  # message(sprintf(
+  #   "\nProcessing complete:\n- Successfully processed: %d\n- Failed: %d",
+  #   successful, failed))
   
-  return(results)
+  # return(results)
 }
 
 
