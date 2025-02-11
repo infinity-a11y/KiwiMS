@@ -94,3 +94,19 @@ input[type=number]::-webkit-inner-spin-button {
   z-index: 99999 !important;
   cursor: wait;
 }
+
+.progress {
+  height: 2em;
+  --bs-progress-bar-bg: #35357A;
+}
+
+#app-deconvolution_process-deconvolute_progress > div {
+  margin-top: 11px;
+}
+
+#app-deconvolution_process-deconvolute_end,
+app-deconvolution_process-deconvolute_end,
+#app-deconvolution_process-deconvolute_start,
+app-deconvolution_process-deconvolute_start {
+  margin-top: 1em;
+}

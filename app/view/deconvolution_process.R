@@ -1,8 +1,8 @@
 box::use(
   shiny,
-  shinyjs[enable, disable, disabled, runjs],
+  shinyjs[enable, disable, runjs],
   shinyWidgets[progressBar, updateProgressBar],
-  future[future, plan, multisession],
+  future[future],
   promises[then, catch],
   fs[dir_ls],
 )
@@ -26,15 +26,7 @@ ui <- function(id) {
         ),
         shiny$column(
           width = 9,
-          disabled(
-            progressBar(
-              id = ns("progressBar"),
-              value = 0,
-              total = 100,
-              title = "Processing Files",
-              display_pct = TRUE
-            )
-          )
+          shiny$uiOutput(ns("deconvolute_progress"))
         )
       )
     )
@@ -42,27 +34,29 @@ ui <- function(id) {
 }
 
 #' @export
-server <- function(id, waters_dir) {
-  # Set up parallel processing
-  plan(multisession)
-  
+server <- function(id, params) {
   shiny$moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
-    raw_dir <- shiny$reactive({waters_dir()})
+    raw_dir <- shiny$reactive({params$dir()})
+    minz <- shiny$reactive({params$minz})
     
     output$deconvolute_start_ui <- shiny$renderUI({
-      shiny$validate(
-        shiny$need(dir.exists(raw_dir()), "No Waters .raw selected"))
-      shiny$actionButton(ns("deconvolute_start"), "Run Deconvolution")
+      print(raw_dir())
+      if(isFALSE(reactVars$isRunning)) {
+        shiny$validate(
+          shiny$need(dir.exists(raw_dir()), "No Waters .raw selected"))
+        shiny$actionButton(ns("deconvolute_start"), "Run Deconvolution")
+      }
     })
     
-    values <- shiny$reactiveValues(
+    reactVars <- shiny$reactiveValues(
       isRunning = FALSE,
       completedFiles = 0,
       expectedFiles = 0,
       initialFileCount = 0,
-      lastCheck = 0
+      lastCheck = 0,
+      count = 0
     )
     
     checkProgress <- function(dir_path) {
@@ -74,9 +68,9 @@ server <- function(id, waters_dir) {
     }
     
     reset_progress <- function() {
-      values$isRunning <- TRUE
-      values$completedFiles <- 0
-      values$lastCheck <- Sys.time()
+      reactVars$isRunning <- TRUE
+      reactVars$completedFiles <- 0
+      reactVars$lastCheck <- Sys.time()
       updateProgressBar(
         session = session,
         id = ns("progressBar"),
@@ -90,9 +84,6 @@ server <- function(id, waters_dir) {
     progress_observer <- NULL
     
     shiny$observeEvent(input$deconvolute_start, {
-      disable(ns("deconvolute_start"))
-      runjs('document.getElementById("blocking-overlay").style.display = "block";')
-      
       reset_progress()
       
       raw_dirs <- list.dirs(raw_dir(), full.names = TRUE, recursive = FALSE)
@@ -104,8 +95,6 @@ server <- function(id, waters_dir) {
           type = "error",
           duration = NULL
         )
-        enable(ns("deconvolute_start"))
-        runjs('document.getElementById("blocking-overlay").style.display = "none";')
         return()
       }
       
@@ -114,25 +103,44 @@ server <- function(id, waters_dir) {
         sprintf("Found %d .raw directories to process", length(raw_dirs)),
         type = "message", duration = NULL)
       
-      values$expectedFiles <- length(raw_dirs)
-      values$initialFileCount <- checkProgress(raw_dir())
-      message("Initial file count: ", values$initialFileCount)
+      reactVars$expectedFiles <- length(raw_dirs)
+      reactVars$initialFileCount <- checkProgress(raw_dir())
+      message("Initial file count: ", reactVars$initialFileCount)
       
       if (!is.null(progress_observer)) {
         progress_observer$destroy()
       }
       
-    enable(ns("progressBar"))
+      # close parameter settings menu
+      runjs('document.querySelector("button.collapse-toggle").click();')
+      
+      # render deconvolution progress bar
+      output$deconvolute_progress <- shiny$renderUI(
+        progressBar(
+          id = ns("progressBar"),
+          value = 0,
+          title = "Initiating Deconvolution",
+          display_pct = TRUE
+        )
+      )
+      
+      # hide start and render terminate button
+      output$deconvolute_start_ui <- shiny$renderUI(
+        shiny$actionButton(ns("deconvolute_end"), "Abort Deconvolution")
+      )
+      
+      print(input)
       
       # Start deconvolution
       future({
         message("Starting deconvolution in parallel session")
       deconvolute(raw_dirs)
       }) |>
+        # on successful completion
         then(
           onFulfilled = function(value) {
             message("Future completed successfully")
-            values$isRunning <- FALSE
+            reactVars$isRunning <- FALSE
             progress_observer$destroy()
 
             updateProgressBar(
@@ -144,13 +152,13 @@ server <- function(id, waters_dir) {
 
             output$status <- shiny$renderText("Process completed successfully!")
             enable(ns("deconvolute_start"))
-            runjs('document.getElementById("blocking-overlay").style.display = "none";')
           }
         ) |>
+        # on failing process
         catch(
           function(error) {
             message("Future failed with error: ", error$message)
-            values$isRunning <- FALSE
+            reactVars$isRunning <- FALSE
             progress_observer$destroy()
 
             updateProgressBar(
@@ -164,34 +172,83 @@ server <- function(id, waters_dir) {
               paste("Process failed!", error$message)
             )
             enable(ns("deconvolute_start"))
-            runjs('document.getElementById("blocking-overlay").style.display = "none";')
           }
         )
-        
+      
+      # Progress tracking observer  
       progress_observer <- shiny$observe({
-          shiny$req(values$isRunning)
-          shiny$invalidateLater(500)
+        shiny$req(reactVars$isRunning)
+        shiny$invalidateLater(500)
+        
+        if (difftime(Sys.time(), reactVars$lastCheck, units = "secs") >= 0.5) {
+          current_total_files <- checkProgress(raw_dir())
+          reactVars$completedFiles <- 
+            current_total_files - reactVars$initialFileCount
+          reactVars$lastCheck <- Sys.time()
           
-          if (difftime(Sys.time(), values$lastCheck, units = "secs") >= 0.5) {
-            current_total_files <- checkProgress(raw_dir())
-            values$completedFiles <- current_total_files - values$initialFileCount
-            values$lastCheck <- Sys.time()
-            
-            progress_pct <- min(100, round(
-              100 * values$completedFiles / values$expectedFiles))
-            
-            message("Updating progress: ", progress_pct, "% (", 
-                    values$completedFiles, "/", values$expectedFiles, ")")
-            
-            updateProgressBar(
-              session = session,
-              id = ns("progressBar"),
-              value = progress_pct,
-              title = sprintf("Processing Files (%d/%d)", 
-                              values$completedFiles, values$expectedFiles)
-            )
+          progress_pct <- min(100, round(
+            100 * reactVars$completedFiles / reactVars$expectedFiles))
+          
+          message("Updating progress: ", progress_pct, "% (", 
+                  reactVars$completedFiles, "/", reactVars$expectedFiles, ")")
+          
+          if (reactVars$count < 3) {
+            reactVars$count <- reactVars$count + 1 
+          } else {
+            reactVars$count <- 0
           }
-        })
+          
+          if(progress_pct != 100) {
+            title <- paste0(
+              sprintf("Processing Files (%d/%d) ", 
+                      reactVars$completedFiles, reactVars$expectedFiles), 
+              paste0(rep(".", reactVars$count), collapse = ""))
+          } else {
+            title <- paste0("Finalizing ", 
+                            paste0(rep(".", reactVars$count), collapse = ""))
+          }
+          
+          updateProgressBar(
+            session = session,
+            id = ns("progressBar"),
+            value = progress_pct,
+            title = title
+          )
+        }
+      })
+    })
+    
+    shiny$observeEvent(input$deconvolute_end, {
+      shiny$showModal(
+        shiny$div(
+          class = "start-modal",
+          shiny$modalDialog(
+            shiny$fluidRow(
+              shiny$br(), 
+              shiny$column(
+                width = 11,
+                shiny$p(
+                  shiny$HTML(
+                    'Are you sure you want to cancel the deconvolution?'
+                  )
+                )
+              ),
+              shiny$br()
+            ),
+            title = "Abort Deconvolution",
+            easyClose = TRUE,
+            footer = shiny$tagList(
+              shiny$modalButton("Dismiss"),
+              shiny$actionButton("deconvolute_end_conf", "Abort", 
+                           class = "load-db", width = "100px")
+            )
+          )
+        )
+      )
+    })
+    
+    shiny$observeEvent(input$deconvolute_end_conf, {
+      # TODO
     })
   })
 }

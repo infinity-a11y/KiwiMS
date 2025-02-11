@@ -2,7 +2,7 @@
 
 box::use(
   fs[path_home],
-  shiny[column, div, fluidRow, h6, NS, moduleServer, reactive],
+  shiny[column, div, fluidRow, h6, NS, moduleServer, reactive, reactiveValues],
   shinyFiles[parseDirPath, shinyDirButton, shinyDirChoose],
   bslib[card, card_body, card_header, sidebar],
 )
@@ -355,6 +355,12 @@ server <- function(id) {
       }
     })
     
-    return(waters_dir)
+    reactiveValues(
+      dir = waters_dir,
+      config_startz = reactive(input$startz),
+      config_endz = reactive(input$endz),
+      config_minmz = reactive(input$minmz),
+      config_maxmz = reactive(input$maxmz)
+    )
   })
 }

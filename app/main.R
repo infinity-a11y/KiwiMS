@@ -2,8 +2,9 @@ box::use(
   bsicons[bs_icon],
   bslib,
   shiny[div, moduleServer, NS, tags, tagList, reactive, renderPrint, 
-        verbatimTextOutput],
+        verbatimTextOutput, stopApp],
   shinyjs[useShinyjs],
+  parallel[stopCluster, makeCluster, detectCores],
 )
 
 box::use(
@@ -78,12 +79,22 @@ ui <- function(id) {
 server <- function(id) {
   moduleServer(id, function(input, output, session) {
     
+    # Kill server on session end
+    session$onSessionEnded( function() {
+      # stopCluster(cl)
+      stopApp()
+    })
+    
     # initiate module servers
     conversion_main$server("conversion_card")
     
     # transfer selected waters dir path
-    waters_dir <- deconvolution_sidebar$server("deconvolution_pars")
-    deconvolution_process$server("deconvolution_process", reactive(waters_dir()))
+    # waters_dir <- deconvolution_sidebar$server("deconvolution_pars")
+    # deconvolution_process$server("deconvolution_process", 
+                                 # reactive(waters_dir()))
+    params <- deconvolution_sidebar$server("deconvolution_pars")
+    deconvolution_process$server("deconvolution_process", params)
+    
     deconvolution_results$server("deconvolution_plot", reactive(waters_dir()))
   })
 }

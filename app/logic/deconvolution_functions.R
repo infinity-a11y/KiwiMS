@@ -8,7 +8,8 @@ box::use(
 )
 
 #' @export
-deconvolute <- function(raw_dirs, num_cores = detectCores() - 1,
+deconvolute <- function(raw_dirs, 
+                        num_cores = detectCores() - 1,
                         config_startz = 1, config_endz = 50,
                         config_minmz = '', config_maxmz = '',
                         config_masslb = 5000, config_massub = 500000,
@@ -110,7 +111,7 @@ engine.pick_peaks()
   
   # Process directories in parallel
   if(num_cores > 1) {
-    cl <- makeCluster(num_cores)
+    cl <- makeCluster(detectCores() - 1)
     on.exit(stopCluster(cl))
     
     message(paste0(num_cores, " cores detected. Parallel processing started."))
@@ -129,10 +130,10 @@ engine.pick_peaks()
     results <- parLapply(cl, raw_dirs, process_wrapper)
     
   } else {
-    # message(paste0(num_cores, " core(s) detected. Sequential processing started."))
-    
+    message(paste0(num_cores, " core(s) detected. Sequential processing started."))
+
     results <- lapply(raw_dirs, function(dir) {
-      process_single_dir(dir, 
+      process_single_dir(dir,
                          config_startz, config_endz,
                          config_minmz, config_maxmz,
                          config_masslb, config_massub,
@@ -141,7 +142,7 @@ engine.pick_peaks()
                          config_time_start, config_time_end)
     })
   }
-  
+
   # Summarize results
   successful <- sum(sapply(results, function(x) !is.null(x)))
   failed <- length(results) - successful
@@ -150,7 +151,7 @@ engine.pick_peaks()
   # message(sprintf(
   #   "\nProcessing complete:\n- Successfully processed: %d\n- Failed: %d",
   #   successful, failed))
-  
+
   # return(results)
 }
 
