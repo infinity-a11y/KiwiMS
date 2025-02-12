@@ -5,28 +5,332 @@ box::use(
   future[future],
   promises[then, catch],
   fs[dir_ls],
+  bslib[card, card_body, card_header, sidebar],
 )
 
 # Import the deconvolution function
 box::use(
   app/logic/deconvolution_functions[deconvolute],
+  app/logic/helper_functions[collapsiblePanelUI],
 )
 
 #' @export
 ui <- function(id) {
   ns <- shiny$NS(id)
   
-  shiny$fluidRow(
-    shiny$column(
-      width = 12,
-      shiny$fluidRow(
-        shiny$column(
-          width = 3,
-          shiny$uiOutput(ns("deconvolute_start_ui"))
+  shiny$column(
+    width = 12,
+    shiny$fluidRow(
+      shiny$column(
+        width = 4,
+        card(
+          card_header(
+            class = "bg-dark",
+            "Charge state [z]"
+          ),
+          card_body(
+            shiny$fluidRow(
+              shiny$column(
+                width = 3,
+                shiny$h6("Low", style = "margin-top: 8px;")
+              ),
+              shiny$column(
+                width = 3,
+                shiny$div(
+                  class = "deconv-param-input",
+                  shiny$numericInput(
+                    ns("startz"),
+                    "",
+                    min = 0,
+                    max = 100,
+                    value = 1,
+                    width = "130%"
+                  ) 
+                )
+              ),
+              shiny$column(
+                width = 3,
+                shiny$h6("High", style = "margin-top: 8px;")
+              ),
+              shiny$column(
+                width = 3,
+                shiny$div(
+                  class = "deconv-param-input",
+                  shiny$numericInput(
+                    ns("endz"),
+                    "",
+                    min = 0,
+                    max = 100,
+                    value = 50,
+                    width = "130%"
+                  )
+                )
+              )
+            )
+          )
         ),
-        shiny$column(
-          width = 9,
-          shiny$uiOutput(ns("deconvolute_progress"))
+        card(
+          card_header(
+            class = "bg-dark",
+            "Spectrum range [m/z]"
+          ),
+          card_body(
+            shiny$fluidRow(
+              shiny$column(
+                width = 3,
+                shiny$h6("Low", style = "margin-top: 8px;")
+              ),
+              shiny$column(
+                width = 3,
+                shiny$div(
+                  class = "deconv-param-input",
+                  shiny$numericInput(
+                    ns("minmz"),
+                    "",
+                    min = 0,
+                    max = 100000,
+                    value = 710,
+                    width = "130%"
+                  )
+                )
+              ),
+              shiny$column(
+                width = 3,
+                shiny$h6("High", style = "margin-top: 8px;")
+              ),
+              shiny$column(
+                width = 3,
+                shiny$div(
+                  class = "deconv-param-input",
+                  shiny$numericInput(
+                    ns("maxmz"),
+                    "",
+                    min = 0,
+                    max = 100000,
+                    value = 1100,
+                    width = "130%"
+                  )
+                )
+              )
+            )
+          )
+        )
+      ),
+      shiny$column(
+        width = 4,
+        card(
+          card_header(
+            class = "bg-dark",
+            "Mass range [Mw]"
+          ),
+          card_body(
+            shiny$fluidRow(
+              shiny$column(
+                width = 3,
+                shiny$h6("Low", style = "margin-top: 8px;")
+              ),
+              shiny$column(
+                width = 3,
+                shiny$div(
+                  class = "deconv-param-input",
+                  shiny$numericInput(
+                    ns("masslb"),
+                    "",
+                    min = 0,
+                    max = 100000,
+                    value = 35000,
+                    width = "130%"
+                  )
+                )
+              ),
+              shiny$column(
+                width = 3,
+                shiny$h6("High", style = "margin-top: 8px;")
+              ),
+              shiny$column(
+                width = 3,
+                shiny$div(
+                  class = "deconv-param-input",
+                  shiny$numericInput(
+                    ns("massub"),
+                    "",
+                    min = 0,
+                    max = 100000,
+                    value = 42000,
+                    width = "130%"
+                  )
+                )
+              )
+            )
+          )
+        ),
+        card(
+          card_header(
+            class = "bg-dark",
+            "Retention time [min]"
+          ),
+          card_body(
+            shiny$fluidRow(
+              shiny$column(
+                width = 3,
+                shiny$h6("Start", style = "margin-top: 8px;")
+              ),
+              shiny$column(
+                width = 3,
+                shiny$div(
+                  class = "deconv-param-input",
+                  shiny$numericInput(
+                    ns("peakthresh"),
+                    "",
+                    min = 0,
+                    max = 100,
+                    value = 1,
+                    width = "130%",
+                    step = 0.05
+                  )
+                )
+              ),
+              shiny$column(
+                width = 3,
+                shiny$h6("End", style = "margin-top: 8px;")
+              ),
+              shiny$column(
+                width = 3,
+                shiny$div(
+                  class = "deconv-param-input",
+                  shiny$numericInput(
+                    ns("time_end"),
+                    "",
+                    min = 0,
+                    max = 100,
+                    value = 1.35,
+                    width = "130%",
+                    step = 0.05
+                  )
+                )
+              )
+            )
+          )
+        )
+      ),
+      shiny$column(
+        width = 4,
+        shiny$uiOutput(ns("deconvolute_start_ui")),
+        shiny$br(),
+        shiny$uiOutput(ns("deconvolute_progress"))
+      )
+    ),
+    shiny$fluidRow(
+      shiny$column(
+        width = 8,
+        collapsiblePanelUI(
+          "advanced_params",
+          "Advanced Parameter Settings",
+          shiny$fluidRow(
+            shiny$column(
+              width = 7,
+              card(
+                card_header(
+                  class = "bg-dark",
+                  "Peak parameters"
+                ),
+                card_body(
+                  shiny$fluidRow(
+                    shiny$column(
+                      width = 3,
+                      shiny$h6("Window", style = "margin-top: 8px;")
+                    ),
+                    shiny$column(
+                      width = 3,
+                      shiny$div(
+                        class = "deconv-param-input-adv",
+                        shiny$numericInput(
+                          ns("peakwindow"),
+                          "",
+                          min = 0,
+                          max = 1000,
+                          value = 40,
+                          width = "130%"
+                        )
+                      )
+                    ),
+                    shiny$column(
+                      width = 3,
+                      shiny$h6("Norm", style = "margin-top: 8px;")
+                    ),
+                    shiny$column(
+                      width = 3,
+                      shiny$div(
+                        class = "deconv-param-input-adv",
+                        shiny$numericInput(
+                          ns("peaknorm"),
+                          "",
+                          min = 0,
+                          max = 100,
+                          value = 2,
+                          width = "130%"
+                        )
+                      )
+                    )
+                  ),
+                  shiny$fluidRow(
+                    shiny$column(
+                      width = 3,
+                      shiny$h6("Threshold", 
+                               style = "font-size: small; margin-top: 8px;")
+                    ),
+                    shiny$column(
+                      width = 3,
+                      shiny$div(
+                        class = "deconv-param-input-adv",
+                        shiny$numericInput(
+                          ns("peakthresh"),
+                          "",
+                          min = 0,
+                          max = 1,
+                          value = 0.07,
+                          width = "130%",
+                          step = 0.01
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            ),
+            shiny$column(
+              width = 5,
+              card(
+                card_header(
+                  class = "bg-dark",
+                  "Mass Bins"
+                ),
+                card_body(
+                  shiny$fluidRow(
+                    shiny$column(
+                      width = 6,
+                      shiny$h6("Size", style = "margin-top: 8px;")
+                    ),
+                    shiny$column(
+                      width = 5,
+                      shiny$div(
+                        class = "deconv-param-input-adv",
+                        shiny$numericInput(
+                          ns("massbins"),
+                          "",
+                          min = 0,
+                          max = 100,
+                          value = 0.5,
+                          step = 0.1,
+                          width = "130%"
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
         )
       )
     )

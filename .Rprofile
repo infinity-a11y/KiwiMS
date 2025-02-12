@@ -5,8 +5,10 @@ if (file.exists("renv")) {
   message("No 'renv' directory found; renv won't be activated.")
 }
 
+Sys.setlocale("LC_NUMERIC", "C")
+
 # Allow absolute module imports (relative to the app root).
-options(box.path = getwd())
+options(box.path = getwd(), OutDec = ".")
 
 # box.lsp languageserver external hook
 if (nzchar(system.file(package = "box.lsp"))) {

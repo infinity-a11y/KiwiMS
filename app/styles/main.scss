@@ -32,6 +32,10 @@ div.sF-navigation.btn-toolbar > select {
   display: none;
 }
 
+.deconv-param-input-adv {
+  margin-left: -1rem;
+}
+
 .deconv-param-input {
   margin-left: -2rem;
   width: 160%;
@@ -109,4 +113,9 @@ app-deconvolution_process-deconvolute_end,
 #app-deconvolution_process-deconvolute_start,
 app-deconvolution_process-deconvolute_start {
   margin-top: 1em;
+}
+
+.bg-dark {
+  color: black;
+  background-color: #615e1d3d !important;
 }
