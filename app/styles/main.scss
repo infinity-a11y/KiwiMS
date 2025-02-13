@@ -19,8 +19,8 @@ div.sF-navigation.btn-toolbar > select {
 
 .bslib-sidebar-layout>.sidebar {
   width: 150%;
-  margin-top: 1em;
-  margin-bottom: 1em;
+  margin-top: 23px;
+  margin-bottom: 23px;
   border-top-right-radius: 7px;
   border-bottom-right-radius: 7px;
   box-shadow: 4px 4px 7px 4px rgb(0 0 0 / 35%) !important;
@@ -84,6 +84,7 @@ div.sF-navigation.btn-toolbar > select {
 .bslib-sidebar-layout .sidebar-title {
   margin-top: -2rem;
   font-weight: bold;
+  margin-bottom: 0rem;
 }
 
 input[type=number]::-webkit-inner-spin-button {
@@ -163,10 +164,11 @@ body > div.waiter-overlay.waiter-fullscreen {
 
 .card-custom .bslib-card {
   box-shadow: none !important;
+  border-color: black;
 }
 
 .bslib-card {
-  box-shadow: 4px 4px 10px 4px rgb(0 0 0 / 38%) !important;
+  box-shadow: 4px 4px 10px 4px rgb(0 0 0 / 55%) !important;
 }
 
 .nav-link, .navbar-brand {
@@ -179,3 +181,8 @@ body > div.waiter-overlay.waiter-fullscreen {
   z-index: 999 !important;
 }
 
+.bslib-page-navbar>.navbar .navbar-header{
+  height: 2rem;
+  margin-right: 4rem;
+  margin-top: -5px;
+}

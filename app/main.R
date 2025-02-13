@@ -29,8 +29,13 @@ ui <- function(id) {
     waiterShowOnLoad(html = waiter::spin_orbit()),
     useShinyjs(),
     bslib$page_navbar(
-      title = "MSFlow 0.0.1",
-      bg = "#35357A",
+      title = tags$div(
+        tags$img(src = "static/logo.svg", height = "37rem",
+                 style = "margin-right: 5px;"),
+        tags$span("KiwiFlow",
+                  style = "font-size: 1em;top: 2px; position: relative;")
+      ),
+      window_title = "KiwiFlow 0.1.0",
       underline = TRUE,
       bslib$nav_panel(title = "Deconvolution",
                       bslib$page_sidebar(

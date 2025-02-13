@@ -16,7 +16,8 @@ ui <- function(id) {
   sidebar(
     title = "File Upload",
     h6("Folder with Multiple Target Files",
-       style = "font-weight: 700; margin-left: 1em;"),
+       style = paste0("font-weight: 700; margin-left: 1em; text-align: center;",
+                      "margin-bottom: -5px;")),
     shinyDirButton(
       ns("folder"),
       "Select Root Folder",
@@ -33,7 +34,8 @@ ui <- function(id) {
     shiny::uiOutput(ns("batch_vial_col_ui")),
     shiny::hr(style = "margin: 1rem 0; opacity: 1;"),
     h6("Individual Target File",
-       style = "font-weight: 700; margin-left: 1em;"),
+       style = paste0("font-weight: 700; margin-left: 1em; text-align: center;",
+                      "margin-bottom: -5px;")),
     shinyDirButton(
       ns("file"),
       "Select Single File",
