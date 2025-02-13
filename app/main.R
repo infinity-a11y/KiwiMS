@@ -3,20 +3,18 @@
 box::use(
   bsicons[bs_icon],
   bslib,
-  shiny[div, moduleServer, NS, tags, tagList, reactive, renderPrint,
-        verbatimTextOutput, stopApp],
+  shiny[div, moduleServer, NS, reactive, stopApp, tagList, tags],
   shinyjs[useShinyjs],
-  parallel[stopCluster, makeCluster, detectCores],
 )
 
 box::use(
+  app/logic/dev_utils,
+  app/view/conversion_main,
+  app/view/conversion_sidebar,
   app/view/deconvolution_process,
   app/view/deconvolution_results,
   app/view/deconvolution_sidebar,
-  app/view/conversion_main,
-  app/view/conversion_sidebar,
   app/view/ki_kinact_sidebar,
-  app/logic/dev_utils,
 )
 
 #' @export
@@ -59,7 +57,7 @@ ui <- function(id) {
       bslib$nav_menu(
         title = "Links",
         align = "right",
-        icon = bs_icon("link-45deg", size = "1rem",),
+        icon = bs_icon("link-45deg", size = "1rem"),
         bslib$nav_item(
           tags$a(
             tags$span(
@@ -81,21 +79,17 @@ server <- function(id) {
   moduleServer(id, function(input, output, session) {
 
     # Kill server on session end
-    session$onSessionEnded( function() {
-      # stopCluster(cl)
+    session$onSessionEnded(function() {
       stopApp()
     })
 
     # initiate module servers
     conversion_main$server("conversion_card")
 
-    # transfer selected waters dir path
-    # waters_dir <- deconvolution_sidebar$server("deconvolution_pars")
-    # deconvolution_process$server("deconvolution_process",
-                                 # reactive(waters_dir()))
-    params <- deconvolution_sidebar$server("deconvolution_pars")
-    deconvolution_process$server("deconvolution_process", params)
+    # transfer selected directories paths
+    dirs <- deconvolution_sidebar$server("deconvolution_pars")
+    deconvolution_process$server("deconvolution_process", dirs)
 
-    deconvolution_results$server("deconvolution_plot", reactive(waters_dir()))
+    #deconvolution_results$server("deconvolution_plot", reactive(waters_dir()))
   })
 }

@@ -1,4 +1,4 @@
-#app-deconvolution_pars-folder-modal > div > div > div.modal-body > 
+#app-deconvolution_pars-folder-modal > div > div > div.modal-body >
 div.sF-navigation.btn-toolbar > select {
   width: calc(70% - 340px)
 }
@@ -65,7 +65,7 @@ div.sF-navigation.btn-toolbar > select {
   border-radius: 10px;
   min-width: 100px;
   overflow-y: scroll;
-} 
+}
 
 *::-webkit-scrollbar-corner {
   background: #F0F0F0;
@@ -118,4 +118,12 @@ app-deconvolution_process-deconvolute_start {
 .bg-dark {
   color: black;
   background-color: #615e1d3d !important;
+}
+
+.nav-link, .nav-tabs>li>a {
+  color: #35357A;
+}
+
+.btn:disabled, .btn.disabled {
+  cursor: not-allowed;
 }
