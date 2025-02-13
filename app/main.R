@@ -5,6 +5,7 @@ box::use(
   bslib,
   shiny[div, moduleServer, NS, reactive, stopApp, tagList, tags],
   shinyjs[useShinyjs],
+  waiter[spin_fading_circles, useWaiter, waiterShowOnLoad, waiter_hide],
 )
 
 box::use(
@@ -24,6 +25,8 @@ ui <- function(id) {
   tagList(
     dev_utils$add_dev_headers(),
     div(id = "blocking-overlay"),
+    useWaiter(),
+    waiterShowOnLoad(html = waiter::spin_orbit()),
     useShinyjs(),
     bslib$page_navbar(
       title = "MSFlow 0.0.1",
@@ -89,5 +92,7 @@ server <- function(id) {
     # transfer selected directories paths
     dirs <- deconvolution_sidebar$server("deconvolution_pars")
     deconvolution_process$server("deconvolution_process", dirs)
+
+    waiter_hide()
   })
 }

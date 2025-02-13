@@ -12,7 +12,6 @@ div.sF-navigation.btn-toolbar > select {
   margin-top: 60px;
 }
 
-// Deconvolution sidebar
 #app-deconvolution_pars-path_selected,
 #app-deconvolution_pars-file_selected {
   margin-top: -20px;
@@ -20,7 +19,11 @@ div.sF-navigation.btn-toolbar > select {
 
 .bslib-sidebar-layout>.sidebar {
   width: 150%;
-  box-shadow: 4px 0px 14px 0px #888;
+  margin-top: 1em;
+  margin-bottom: 1em;
+  border-top-right-radius: 7px;
+  border-bottom-right-radius: 7px;
+  box-shadow: 4px 4px 7px 4px rgb(0 0 0 / 35%) !important;
 }
 
 .bslib-sidebar-layout>.main {
@@ -75,7 +78,7 @@ div.sF-navigation.btn-toolbar > select {
 .bslib-sidebar-layout>.collapse-toggle {
   border: 1px solid rgba(136,136,136,.3411764706);
   right: -5rem;
-  top: 12px;
+  top: 2em;
 }
 
 .bslib-sidebar-layout .sidebar-title {
@@ -117,8 +120,8 @@ app-deconvolution_process-deconvolute_start {
 }
 
 .bg-dark {
-  color: black;
-  background-color: #615e1d3d !important;
+  color: #000;
+  background-color: #DDDDDE !important;
 }
 
 .btn:disabled, .btn.disabled {
@@ -144,3 +147,35 @@ app-deconvolution_pars-id_column-label {
   margin-top: -2em;
   margin-bottom: -2em;
 }
+
+body > div.waiter-overlay.waiter-fullscreen {
+  background: linear-gradient(135deg, #35357A, #4A4A89, #77778F, #B0B0B8, #E0E0E0);
+  cursor: wait;
+}
+
+.bslib-sidebar-layout {
+  background: linear-gradient(135deg, #35357A, #4A4A89, #77778F, #B0B0B8, #E0E0E0) !important;
+}
+
+.bslib-sidebar-layout>.sidebar {
+  background: white !important;
+}
+
+.card-custom .bslib-card {
+  box-shadow: none !important;
+}
+
+.bslib-card {
+  box-shadow: 4px 4px 10px 4px rgb(0 0 0 / 38%) !important;
+}
+
+.nav-link, .navbar-brand {
+  color: black !important;
+}
+
+.bslib-page-navbar>.navbar {
+  background: linear-gradient(90deg, #e8cb97, #C6C5B4, #DDDDDE) !important;
+  box-shadow: 0px 6px 6px 0px rgb(0 0 0 / 38%) !important;
+  z-index: 999 !important;
+}
+
