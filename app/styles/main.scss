@@ -13,7 +13,8 @@ div.sF-navigation.btn-toolbar > select {
 }
 
 // Deconvolution sidebar
-#app-deconvolution_pars-path_selected {
+#app-deconvolution_pars-path_selected,
+#app-deconvolution_pars-file_selected {
   margin-top: -20px;
 }
 
@@ -120,10 +121,26 @@ app-deconvolution_process-deconvolute_start {
   background-color: #615e1d3d !important;
 }
 
-.nav-link, .nav-tabs>li>a {
-  color: #35357A;
-}
-
 .btn:disabled, .btn.disabled {
   cursor: not-allowed;
+}
+
+app-deconvolution_pars-vial_column-label,
+app-deconvolution_pars-id_column-label {
+  display: none;
+}
+
+.selectize-control .selectize-input.disabled {
+  opacity: 0.5;
+  background-color: RGBA(var(--bs-emphasis-color-rgb, 0, 0, 0), 0.06);
+  cursor: not-allowed !important;
+}
+
+.batch-file {
+  margin-bottom: -1em;
+}
+
+.batch-select {
+  margin-top: -2em;
+  margin-bottom: -2em;
 }

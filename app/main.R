@@ -89,7 +89,5 @@ server <- function(id) {
     # transfer selected directories paths
     dirs <- deconvolution_sidebar$server("deconvolution_pars")
     deconvolution_process$server("deconvolution_process", dirs)
-
-    #deconvolution_results$server("deconvolution_plot", reactive(waters_dir()))
   })
 }

@@ -3,7 +3,7 @@
 box::use(
   bslib[card, card_body, card_header],
   fs[dir_ls],
-  future[future],
+  future[future, plan, multisession],
   promises[catch, then],
   shiny,
   shinyjs[disabled, enable, runjs],
@@ -218,6 +218,7 @@ ui <- function(id) {
       shiny$column(
         width = 4,
         align = "center",
+        shiny$br(), shiny$br(),
         shiny$uiOutput(ns("deconvolute_start_ui")),
         shiny$br(),
         shiny$uiOutput(ns("deconvolute_progress"))
@@ -342,20 +343,18 @@ ui <- function(id) {
 
 #' @export
 server <- function(id, dirs) {
+
+  plan(multisession)
+
   shiny$moduleServer(id, function(input, output, session) {
     ns <- session$ns
-
-    # Get selected directories
-    raw_dir <- shiny$reactive({
-      dirs$dir()
-    })
 
     # Render start button conditionally
     output$deconvolute_start_ui <- shiny$renderUI({
       if (isFALSE(reactVars$isRunning)) {
 
         shiny$validate(
-          shiny$need(dir.exists(raw_dir()), "No Waters .raw selected"))
+          shiny$need(dir.exists(dirs$dir()), "No Waters .raw selected"))
         button <- shiny$actionButton(ns("deconvolute_start"),
                                      "Run Deconvolution")
 
@@ -424,13 +423,12 @@ server <- function(id, dirs) {
 
     shiny$observeEvent(input$deconvolute_start, {
       reset_progress()
-
-      raw_dirs <- list.dirs(raw_dir(), full.names = TRUE, recursive = FALSE)
+      raw_dirs <- list.dirs(dirs$dir(), full.names = TRUE, recursive = FALSE)
       raw_dirs <- raw_dirs[grep("\\.raw$", raw_dirs)]
 
       if (length(raw_dirs) == 0) {
         shiny$showNotification(
-          paste0("No .raw directories found in ", raw_dir()),
+          paste0("No .raw directories found in ", dirs$dir()),
           type = "error",
           duration = NULL
         )
@@ -444,7 +442,7 @@ server <- function(id, dirs) {
         type = "message", duration = NULL)
 
       reactVars$expectedFiles <- length(raw_dirs)
-      reactVars$initialFileCount <- checkProgress(raw_dir())
+      reactVars$initialFileCount <- checkProgress(dirs$dir())
       message("Initial file count: ", reactVars$initialFileCount)
 
       if (!is.null(progress_observer)) {
@@ -469,23 +467,23 @@ server <- function(id, dirs) {
         shiny$actionButton(ns("deconvolute_end"), "Abort Deconvolution")
       )
 
-      print(input)
-
       # Start deconvolution
       future({
-        message("Starting deconvolution in parallel session")
-      deconvolute(raw_dirs, config_startz = input$startz,
-                  config_endz = input$endz,
-                  config_minmz = input$minmz,
-                  config_maxmz = input$maxmz,
-                  config_masslb = input$masslb,
-                  config_massub = input$massub,
-                  config_massbins = input$massbins,
-                  config_peakthresh = input$peakthresh,
-                  config_peakwindow = input$window,
-                  config_peaknorm = input$peaknorm,
-                  config_time_start = input$time_start,
-                  config_time_end = input$time_end)
+      deconvolute(raw_dirs)
+                  # ,
+                  # config_startz = input$startz,
+                  # config_endz = input$endz,
+                  # config_minmz = input$minmz,
+                  # config_maxmz = input$maxmz,
+                  # config_masslb = input$masslb,
+                  # config_massub = input$massub,
+                  # config_massbins = input$massbins,
+                  # config_peakthresh = input$peakthresh,
+                  # config_peakwindow = input$peakwindow,
+                  # config_peaknorm = input$peaknorm,
+                  # config_time_start = input$time_start,
+                  # config_time_end = input$time_end
+                  # )
       }) |>
         # on successful completion
         then(
@@ -532,7 +530,7 @@ server <- function(id, dirs) {
         shiny$invalidateLater(500)
 
         if (difftime(Sys.time(), reactVars$lastCheck, units = "secs") >= 0.5) {
-          current_total_files <- checkProgress(raw_dir())
+          current_total_files <- checkProgress(dirs$dir())
           reactVars$completedFiles <-
             current_total_files - reactVars$initialFileCount
           reactVars$lastCheck <- Sys.time()
