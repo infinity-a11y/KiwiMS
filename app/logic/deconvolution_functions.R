@@ -8,15 +8,15 @@ box::use(
 )
 
 #' @export
-deconvolute <- function(raw_dirs, 
+deconvolute <- function(raw_dirs,
                         num_cores = detectCores() - 1,
-                        config_startz = 1, config_endz = 50,
-                        config_minmz = '', config_maxmz = '',
-                        config_masslb = 5000, config_massub = 500000,
-                        config_massbins = 10, config_peakthresh = 0.1,
-                        config_peakwindow = 500, config_peaknorm = 1,
-                        config_time_start = '', config_time_end = '') {
-  
+                        startz = 1, endz = 50,
+                        minmz = '', maxmz = '',
+                        masslb = 5000, massub = 500000,
+                        massbins = 10, peakthresh = 0.1,
+                        peakwindow = 500, peaknorm = 1,
+                        time_start = '', time_end = '') {
+
   # ensure python path and packages availability
   py_outcome <- tryCatch({
     use_python(py_config()$python, required = TRUE)
@@ -29,28 +29,28 @@ deconvolute <- function(raw_dirs,
     # )
     FALSE
   })
-  
+
   if (!py_outcome) {
     return()
   }
-  
-  # Define the processing function without default arguments
-  process_single_dir <- function(waters_dir, 
+
+  # Deconvolution function for a single waters .raw
+  process_single_dir <- function(waters_dir,
                                  startz, endz, minmz, maxmz,
                                  masslb, massub, massbins, peakthresh,
                                  peakwindow, peaknorm, time_start, time_end) {
-    
+
     input_path <- gsub("\\\\", "/", waters_dir)
-    
+
     # Function to properly format parameters for Python
     format_param <- function(x) {
       if (is.character(x) && x == "") {
-        return("''")  # Empty string becomes quoted empty string
+        return("''")
       } else {
-        return(as.character(x))  # Numbers remain as-is
+        return(as.character(x))
       }
     }
-    
+
     # Create parameters string for Python
     params_string <- sprintf(
       '"startz": %s, "endz": %s, "minmz": %s, "maxmz": %s, "masslb": %s, "massub": %s, "massbins": %s, "peakthresh": %s, "peakwindow": %s, "peaknorm": %s, "time_start": %s, "time_end": %s',
@@ -67,7 +67,7 @@ deconvolute <- function(raw_dirs,
       format_param(time_start),
       format_param(time_end)
     )
-    
+
     reticulate::py_run_string(sprintf('
 import sys
 import unidec
@@ -105,41 +105,55 @@ engine.run_unidec()
 engine.pick_peaks()
 ', input_path, params_string))
   }
-  
+
   # showNotification(paste0("Deconvolution initiated"),
   #                  type = "message", duration = NULL)
-  
+
   # Process directories in parallel
   if(num_cores > 1) {
     cl <- makeCluster(detectCores() - 1)
     on.exit(stopCluster(cl))
-    
+
     message(paste0(num_cores, " cores detected. Parallel processing started."))
-    
+
+    # Pass variables
+    startz <- startz
+    endz <- endz
+    minmz <- minmz
+    maxmz <- maxmz
+    masslb <- masslb
+    massub <- massub
+    massbins <- massbins
+    peakthresh <- peakthresh
+    peakwindow <- peakwindow
+    peaknorm <- peaknorm
+    time_start <- time_start
+    time_end <- time_end
+
     # Create wrapper function that includes all parameters
     process_wrapper <- function(dir) {
-      process_single_dir(dir, 
-                         config_startz, config_endz,
-                         config_minmz, config_maxmz,
-                         config_masslb, config_massub,
-                         config_massbins, config_peakthresh,
-                         config_peakwindow, config_peaknorm,
-                         config_time_start, config_time_end)
+      process_single_dir(dir,
+                         startz, endz,
+                         minmz, maxmz,
+                         masslb, massub,
+                         massbins, peakthresh,
+                         peakwindow, peaknorm,
+                         time_start, time_end)
     }
-    
+
     results <- parLapply(cl, raw_dirs, process_wrapper)
-    
+
   } else {
     message(paste0(num_cores, " core(s) detected. Sequential processing started."))
 
     results <- lapply(raw_dirs, function(dir) {
       process_single_dir(dir,
-                         config_startz, config_endz,
-                         config_minmz, config_maxmz,
-                         config_masslb, config_massub,
-                         config_massbins, config_peakthresh,
-                         config_peakwindow, config_peaknorm,
-                         config_time_start, config_time_end)
+                         startz, endz,
+                         minmz, maxmz,
+                         masslb, massub,
+                         massbins, peakthresh,
+                         peakwindow, peaknorm,
+                         time_start, time_end)
     })
   }
 
@@ -158,15 +172,15 @@ engine.pick_peaks()
 
 #' @export
 plot_ms_spec <- function(waters_dir) {
-  
+
   # Get results directories
   unidecfiles <- list.files(waters_dir, full.names = TRUE)
-  
+
   # Get file
   mass_intensity <- grep("_mass\\.txt$", unidecfiles, value = TRUE)
   mass_data <- read.table(mass_intensity, sep = " ", header = TRUE)
   colnames(mass_data) <- c("mz", "intensity")
-  
+
   plot(mass_data$mz, mass_data$intensity, type = "h",
        xlab = "Mass (Da)", ylab = "Intensity",
        main = "Deconvoluted Mass Spectrum",

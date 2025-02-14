@@ -15,7 +15,7 @@ ui <- function(id) {
 
   sidebar(
     title = "File Upload",
-    h6("Folder with Multiple Target Files",
+    h6("Multiple Target Files",
        style = paste0("font-weight: 700; margin-left: 1em; text-align: center;",
                       "margin-bottom: -5px;")),
     shinyDirButton(

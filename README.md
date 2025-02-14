@@ -1,1 +1,1 @@
-<img src="app/static/logo_name.png" width="80%"/>
+<img src="app/static/logo_name.png" width="100%"/>
