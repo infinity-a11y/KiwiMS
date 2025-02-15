@@ -81,10 +81,7 @@ ui <- function(id) {
           tags$a(
             tags$span(
               tags$img(
-                src = paste0(
-                  "https://lh6.googleusercontent.com/NmEaWRJ9c3dlq4aT7_B9D-9yP",
-                  "_R1nhCzGoq083otoMyyqBMFZ39bpngw63Dqesvww8YiM-3_CYKnIFY2ab8j",
-                  "CqE=w16383"),
+                src = "static/liora_logo.png",
                 style = "height: 1em; margin-right: 5px;"),
               "Liora Bioinformatics"
             ),

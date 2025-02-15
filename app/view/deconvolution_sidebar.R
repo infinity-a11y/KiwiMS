@@ -76,8 +76,11 @@ server <- function(id) {
       shiny::validate(shiny::need(input$file, "Nothing selected"))
       parseDirPath(roots, input$file)
     })
-    batch_path <- reactive({
-      input$batch_selection
+    batch_file <- reactive({
+      file_path <- file.path(dirname(input$batch_selection$datapath),
+                             basename(input$batch_selection$datapath))
+      print(file_path)
+      utils::read.csv(file_path)
     })
 
     # File selection feedback
@@ -129,13 +132,11 @@ server <- function(id) {
     # Render batch column selection UI
     output$batch_id_col_ui <- shiny::renderUI({
 
-      tryCatch({
+      # tryCatch({
         if (!is.null(input$batch_selection)) {
-
-          file_path <- file.path(dirname(input$batch_selection$datapath),
-                                 basename(input$batch_selection$datapath))
-          batch <- read_excel(file_path)
+          batch <- batch_file()
           choices <- colnames(batch)
+          print(choices)
           select <- shiny::selectInput(ns("id_column"), "", choices = choices)
         } else {
           select <- disabled(shiny::selectInput(ns("id_column"), "",
@@ -152,17 +153,15 @@ server <- function(id) {
             div(class = "batch-select", select)
           )
         )
-      }, error = function(e) {
-        NULL
-      })
+      # }, error = function(e) {
+      #   NULL
+      # })
     })
 
     output$batch_vial_col_ui <- shiny::renderUI({
       tryCatch({
         if (!is.null(input$batch_selection)) {
-          file_path <- file.path(dirname(input$batch_selection$datapath),
-                                 basename(input$batch_selection$datapath))
-          batch <- read_excel(file_path)
+          batch <- batch_file()
           choices <- colnames(batch)[colnames(batch) != input$id_column]
           select <- shiny::selectInput(ns("vial_column"), "", choices = choices)
         } else {
@@ -185,8 +184,17 @@ server <- function(id) {
       })
     })
 
+    vial_column_reactive <- reactive({
+      input$vial_column
+    })
+
+    id_column_reactive <- reactive({
+      input$id_column
+    })
+
     # Return paths
-    reactiveValues(dir = root_dir, file = file_path, batch_file = batch_path,
-                   selected = selected)
+    reactiveValues(dir = root_dir, file = file_path, batch_file = batch_file,
+                   selected = selected, id_column = id_column_reactive,
+                   vial_column = vial_column_reactive)
   })
 }

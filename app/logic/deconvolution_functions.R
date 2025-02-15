@@ -1,6 +1,7 @@
 # app/logic/deconvolution_functions.R
 
 box::use(
+  ggplot2,
   utils[read.table],
   shiny[showNotification],
   parallel[detectCores, makeCluster, parLapply, stopCluster],
@@ -169,7 +170,6 @@ engine.pick_peaks()
   # return(results)
 }
 
-
 #' @export
 plot_ms_spec <- function(waters_dir) {
 
@@ -185,4 +185,48 @@ plot_ms_spec <- function(waters_dir) {
        xlab = "Mass (Da)", ylab = "Intensity",
        main = "Deconvoluted Mass Spectrum",
        col = "blue", lwd = 3)
+}
+
+#' @export
+create_384_plate_heatmap <- function(data) {
+  # Expect data frame with columns: well_id (e.g., "A1"), value
+
+  # Create plate layout coordinates
+  rows <- LETTERS[1:16]
+  cols <- 1:24
+  plate_layout <- expand.grid(row = rows, col = cols)
+  plate_layout$well_id <- paste0(plate_layout$row, plate_layout$col)
+
+  # Merge data with plate layout
+  plate_data <- merge(plate_layout, data, by = "well_id", all.x = TRUE)
+
+  # Create the plot
+  plate_plot <- ggplot2$ggplot(plate_data,
+                               ggplot2$aes(x = col, y = row, fill = value)) +
+    ggplot2$geom_tile(color = "black", linewidth = 0.1) +
+    ggplot2$scale_y_discrete(limits = rev(rows)) +
+    ggplot2$scale_x_continuous(
+      breaks = 1:24,
+      labels = 1:24,
+      expand = c(0.01, 0.01)
+    ) +
+    ggplot2$scale_fill_gradient2(
+      low = "white",
+      mid = "yellow",
+      high = "red",
+      midpoint = mean(plate_data$value, na.rm = TRUE),
+      na.value = "grey90"
+    ) +
+    ggplot2$coord_fixed() +
+    ggplot2$theme_minimal() +
+    ggplot2$theme(
+      axis.text.x = ggplot2$element_text(size = 8, angle = 0),
+      axis.text.y = ggplot2$element_text(size = 8),
+      axis.title = ggplot2$element_blank(),
+      panel.grid = ggplot2$element_blank(),
+      plot.title = ggplot2$element_text(hjust = 0.5),
+      plot.margin = ggplot2$margin(t = 10, r = 10, b = 10, l = 10, unit = "pt")
+    )
+
+  return(plate_plot)
 }
