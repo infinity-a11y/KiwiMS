@@ -13,7 +13,6 @@ box::use(
   app/view/conversion_main,
   app/view/conversion_sidebar,
   app/view/deconvolution_process,
-  app/view/deconvolution_results,
   app/view/deconvolution_sidebar,
   app/view/ki_kinact_sidebar,
 )
@@ -41,18 +40,11 @@ ui <- function(id) {
                       bslib$page_sidebar(
                         sidebar = deconvolution_sidebar$ui(
                           ns("deconvolution_pars")),
-                        bslib$navset_card_tab(
-                          bslib$nav_panel(
-                            title = "Deconvolution",
-                            deconvolution_process$ui(
-                              ns("deconvolution_process"))),
-                          bslib$nav_panel(
-                            title = "Mass Spectra",
-                            deconvolution_results$ui(
-                              ns("deconvolution_plot")))))),
-      bslib$nav_panel(title = "Mass Conversion",
+                        bslib$card(deconvolution_process$ui(
+                          ns("deconvolution_process"))))),
+      bslib$nav_panel(title = "Protein Conversion",
                       bslib$page_sidebar(
-                        sidebar = conversion_sidebar$ui(ns("mass_conversion")),
+                        sidebar = conversion_sidebar$ui(ns("protein_conversion")),
                         bslib$card(bslib$card_header("Conversion Table"),
                                    conversion_main$ui(ns("conversion_card"))))),
       bslib$ nav_panel(title = "KI/Kinact",

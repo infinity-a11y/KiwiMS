@@ -4,14 +4,16 @@ box::use(
   bslib[card, card_body, card_header],
   fs[dir_ls],
   future[future, plan, multisession],
+  plotly[event_data, plotlyOutput, renderPlotly],
   promises[catch, then],
   shiny,
   shinyjs[disabled, enable, runjs],
-  shinyWidgets[progressBar, updateProgressBar],
+  shinyWidgets[radioGroupButtons, progressBar, updateProgressBar],
 )
 
 box::use(
-  app/logic/deconvolution_functions[deconvolute, create_384_plate_heatmap],
+  app/logic/deconvolution_functions[deconvolute, create_384_plate_heatmap,
+                                    spectrum_plot],
   app/logic/helper_functions[collapsiblePanelUI],
 )
 
@@ -42,49 +44,206 @@ server <- function(id, dirs) {
       width = 12,
       shiny$fluidRow(
         shiny$column(
-          width = 4,
-          shiny$div(
-            class = "card-custom",
-            card(
-              card_header(
-                class = "bg-dark",
-                "Charge state [z]"
-              ),
-              card_body(
-                shiny$fluidRow(
-                  shiny$column(
-                    width = 3,
-                    shiny$h6("Low", style = "margin-top: 8px;")
+          width = 8,
+          shiny$fluidRow(
+            shiny$column(
+              width = 6,
+              shiny$div(
+                class = "card-custom",
+                card(
+                  card_header(
+                    class = "bg-dark",
+                    "Charge state [z]"
                   ),
-                  shiny$column(
-                    width = 3,
-                    shiny$div(
-                      class = "deconv-param-input",
-                      shiny$numericInput(
-                        ns("startz"),
-                        "",
-                        min = 0,
-                        max = 100,
-                        value = 1,
-                        width = "130%"
+                  card_body(
+                    shiny$fluidRow(
+                      shiny$column(
+                        width = 3,
+                        shiny$h6("Low", style = "margin-top: 8px;")
+                      ),
+                      shiny$column(
+                        width = 3,
+                        shiny$div(
+                          class = "deconv-param-input",
+                          shiny$numericInput(
+                            ns("startz"),
+                            "",
+                            min = 0,
+                            max = 100,
+                            value = 1,
+                            width = "130%"
+                          )
+                        )
+                      ),
+                      shiny$column(
+                        width = 3,
+                        shiny$h6("High", style = "margin-top: 8px;")
+                      ),
+                      shiny$column(
+                        width = 3,
+                        shiny$div(
+                          class = "deconv-param-input",
+                          shiny$numericInput(
+                            ns("endz"),
+                            "",
+                            min = 0,
+                            max = 100,
+                            value = 50,
+                            width = "130%"
+                          )
+                        )
                       )
                     )
+                  )
+                )
+              ),
+              shiny$div(
+                class = "card-custom",
+                card(
+                  card_header(
+                    class = "bg-dark",
+                    "Spectrum range [m/z]"
                   ),
-                  shiny$column(
-                    width = 3,
-                    shiny$h6("High", style = "margin-top: 8px;")
+                  card_body(
+                    shiny$fluidRow(
+                      shiny$column(
+                        width = 3,
+                        shiny$h6("Low", style = "margin-top: 8px;")
+                      ),
+                      shiny$column(
+                        width = 3,
+                        shiny$div(
+                          class = "deconv-param-input",
+                          shiny$numericInput(
+                            ns("minmz"),
+                            "",
+                            min = 0,
+                            max = 100000,
+                            value = 710,
+                            width = "130%"
+                          )
+                        )
+                      ),
+                      shiny$column(
+                        width = 3,
+                        shiny$h6("High", style = "margin-top: 8px;")
+                      ),
+                      shiny$column(
+                        width = 3,
+                        shiny$div(
+                          class = "deconv-param-input",
+                          shiny$numericInput(
+                            ns("maxmz"),
+                            "",
+                            min = 0,
+                            max = 100000,
+                            value = 1100,
+                            width = "130%"
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            ),
+            shiny$column(
+              width = 6,
+              shiny$div(
+                class = "card-custom",
+                card(
+                  card_header(
+                    class = "bg-dark",
+                    "Mass range [Mw]"
                   ),
-                  shiny$column(
-                    width = 3,
-                    shiny$div(
-                      class = "deconv-param-input",
-                      shiny$numericInput(
-                        ns("endz"),
-                        "",
-                        min = 0,
-                        max = 100,
-                        value = 50,
-                        width = "130%"
+                  card_body(
+                    shiny$fluidRow(
+                      shiny$column(
+                        width = 3,
+                        shiny$h6("Low", style = "margin-top: 8px;")
+                      ),
+                      shiny$column(
+                        width = 3,
+                        shiny$div(
+                          class = "deconv-param-input",
+                          shiny$numericInput(
+                            ns("masslb"),
+                            "",
+                            min = 0,
+                            max = 100000,
+                            value = 35000,
+                            width = "130%"
+                          )
+                        )
+                      ),
+                      shiny$column(
+                        width = 3,
+                        shiny$h6("High", style = "margin-top: 8px;")
+                      ),
+                      shiny$column(
+                        width = 3,
+                        shiny$div(
+                          class = "deconv-param-input",
+                          shiny$numericInput(
+                            ns("massub"),
+                            "",
+                            min = 0,
+                            max = 100000,
+                            value = 42000,
+                            width = "130%"
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              ),
+              shiny$div(
+                class = "card-custom",
+                card(
+                  card_header(
+                    class = "bg-dark",
+                    "Retention time [min]"
+                  ),
+                  card_body(
+                    shiny$fluidRow(
+                      shiny$column(
+                        width = 3,
+                        shiny$h6("Start", style = "margin-top: 8px;")
+                      ),
+                      shiny$column(
+                        width = 3,
+                        shiny$div(
+                          class = "deconv-param-input",
+                          shiny$numericInput(
+                            ns("time_start"),
+                            "",
+                            min = 0,
+                            max = 100,
+                            value = 1,
+                            width = "130%",
+                            step = 0.05
+                          )
+                        )
+                      ),
+                      shiny$column(
+                        width = 3,
+                        shiny$h6("End", style = "margin-top: 8px;")
+                      ),
+                      shiny$column(
+                        width = 3,
+                        shiny$div(
+                          class = "deconv-param-input",
+                          shiny$numericInput(
+                            ns("time_end"),
+                            "",
+                            min = 0,
+                            max = 100,
+                            value = 1.35,
+                            width = "130%",
+                            step = 0.05
+                          )
+                        )
                       )
                     )
                   )
@@ -92,151 +251,119 @@ server <- function(id, dirs) {
               )
             )
           ),
-          shiny$div(
-            class = "card-custom",
-            card(
-              card_header(
-                class = "bg-dark",
-                "Spectrum range [m/z]"
-              ),
-              card_body(
+          shiny$fluidRow(
+            shiny$column(
+              width = 12,
+              collapsiblePanelUI(
+                "advanced_params",
+                "Advanced Parameter Settings",
                 shiny$fluidRow(
                   shiny$column(
-                    width = 3,
-                    shiny$h6("Low", style = "margin-top: 8px;")
-                  ),
-                  shiny$column(
-                    width = 3,
+                    width = 7,
                     shiny$div(
-                      class = "deconv-param-input",
-                      shiny$numericInput(
-                        ns("minmz"),
-                        "",
-                        min = 0,
-                        max = 100000,
-                        value = 710,
-                        width = "130%"
+                      class = "card-custom",
+                      card(
+                        card_header(
+                          class = "bg-dark",
+                          "Peak parameters"
+                        ),
+                        card_body(
+                          shiny$fluidRow(
+                            shiny$column(
+                              width = 3,
+                              shiny$h6("Window", style = "margin-top: 8px;")
+                            ),
+                            shiny$column(
+                              width = 3,
+                              shiny$div(
+                                class = "deconv-param-input-adv",
+                                shiny$numericInput(
+                                  ns("peakwindow"),
+                                  "",
+                                  min = 0,
+                                  max = 1000,
+                                  value = 40,
+                                  width = "130%"
+                                )
+                              )
+                            ),
+                            shiny$column(
+                              width = 3,
+                              shiny$h6("Norm", style = "margin-top: 8px;")
+                            ),
+                            shiny$column(
+                              width = 3,
+                              shiny$div(
+                                class = "deconv-param-input-adv",
+                                shiny$numericInput(
+                                  ns("peaknorm"),
+                                  "",
+                                  min = 0,
+                                  max = 100,
+                                  value = 2,
+                                  width = "130%"
+                                )
+                              )
+                            )
+                          ),
+                          shiny$fluidRow(
+                            shiny$column(
+                              width = 3,
+                              shiny$h6("Threshold",
+                                       style = "font-size: small; margin-top: 8px;")
+                            ),
+                            shiny$column(
+                              width = 3,
+                              shiny$div(
+                                class = "deconv-param-input-adv",
+                                shiny$numericInput(
+                                  ns("peakthresh"),
+                                  "",
+                                  min = 0,
+                                  max = 1,
+                                  value = 0.07,
+                                  width = "130%",
+                                  step = 0.01
+                                )
+                              )
+                            )
+                          )
+                        )
                       )
                     )
                   ),
                   shiny$column(
-                    width = 3,
-                    shiny$h6("High", style = "margin-top: 8px;")
-                  ),
-                  shiny$column(
-                    width = 3,
+                    width = 5,
                     shiny$div(
-                      class = "deconv-param-input",
-                      shiny$numericInput(
-                        ns("maxmz"),
-                        "",
-                        min = 0,
-                        max = 100000,
-                        value = 1100,
-                        width = "130%"
-                      )
-                    )
-                  )
-                )
-              )
-            )
-          )
-        ),
-        shiny$column(
-          width = 4,
-          shiny$div(
-            class = "card-custom",
-            card(
-              card_header(
-                class = "bg-dark",
-                "Mass range [Mw]"
-              ),
-              card_body(
-                shiny$fluidRow(
-                  shiny$column(
-                    width = 3,
-                    shiny$h6("Low", style = "margin-top: 8px;")
-                  ),
-                  shiny$column(
-                    width = 3,
-                    shiny$div(
-                      class = "deconv-param-input",
-                      shiny$numericInput(
-                        ns("masslb"),
-                        "",
-                        min = 0,
-                        max = 100000,
-                        value = 35000,
-                        width = "130%"
-                      )
-                    )
-                  ),
-                  shiny$column(
-                    width = 3,
-                    shiny$h6("High", style = "margin-top: 8px;")
-                  ),
-                  shiny$column(
-                    width = 3,
-                    shiny$div(
-                      class = "deconv-param-input",
-                      shiny$numericInput(
-                        ns("massub"),
-                        "",
-                        min = 0,
-                        max = 100000,
-                        value = 42000,
-                        width = "130%"
-                      )
-                    )
-                  )
-                )
-              )
-            )
-          ),
-          shiny$div(
-            class = "card-custom",
-            card(
-              card_header(
-                class = "bg-dark",
-                "Retention time [min]"
-              ),
-              card_body(
-                shiny$fluidRow(
-                  shiny$column(
-                    width = 3,
-                    shiny$h6("Start", style = "margin-top: 8px;")
-                  ),
-                  shiny$column(
-                    width = 3,
-                    shiny$div(
-                      class = "deconv-param-input",
-                      shiny$numericInput(
-                        ns("time_start"),
-                        "",
-                        min = 0,
-                        max = 100,
-                        value = 1,
-                        width = "130%",
-                        step = 0.05
-                      )
-                    )
-                  ),
-                  shiny$column(
-                    width = 3,
-                    shiny$h6("End", style = "margin-top: 8px;")
-                  ),
-                  shiny$column(
-                    width = 3,
-                    shiny$div(
-                      class = "deconv-param-input",
-                      shiny$numericInput(
-                        ns("time_end"),
-                        "",
-                        min = 0,
-                        max = 100,
-                        value = 1.35,
-                        width = "130%",
-                        step = 0.05
+                      class = "card-custom",
+                      card(
+                        card_header(
+                          class = "bg-dark",
+                          "Mass Bins"
+                        ),
+                        card_body(
+                          shiny$fluidRow(
+                            shiny$column(
+                              width = 6,
+                              shiny$h6("Size", style = "margin-top: 8px;")
+                            ),
+                            shiny$column(
+                              width = 5,
+                              shiny$div(
+                                class = "deconv-param-input-adv",
+                                shiny$numericInput(
+                                  ns("massbins"),
+                                  "",
+                                  min = 0,
+                                  max = 100,
+                                  value = 0.5,
+                                  step = 0.1,
+                                  width = "130%"
+                                )
+                              )
+                            )
+                          )
+                        )
                       )
                     )
                   )
@@ -248,130 +375,11 @@ server <- function(id, dirs) {
         shiny$column(
           width = 4,
           align = "center",
-          shiny$br(), shiny$br(),
+          shiny$br(), shiny$br(), shiny$br(), shiny$br(), shiny$br(),
+          shiny$br(), shiny$br(), shiny$br(), shiny$br(), shiny$br(),
           shiny$uiOutput(ns("deconvolute_start_ui")),
           shiny$br(),
           shiny$uiOutput(ns("deconvolute_progress"))
-        )
-      ),
-      shiny$fluidRow(
-        shiny$column(
-          width = 8,
-          collapsiblePanelUI(
-            "advanced_params",
-            "Advanced Parameter Settings",
-            shiny$fluidRow(
-              shiny$column(
-                width = 7,
-                shiny$div(
-                  class = "card-custom",
-                  card(
-                    card_header(
-                      class = "bg-dark",
-                      "Peak parameters"
-                    ),
-                    card_body(
-                      shiny$fluidRow(
-                        shiny$column(
-                          width = 3,
-                          shiny$h6("Window", style = "margin-top: 8px;")
-                        ),
-                        shiny$column(
-                          width = 3,
-                          shiny$div(
-                            class = "deconv-param-input-adv",
-                            shiny$numericInput(
-                              ns("peakwindow"),
-                              "",
-                              min = 0,
-                              max = 1000,
-                              value = 40,
-                              width = "130%"
-                            )
-                          )
-                        ),
-                        shiny$column(
-                          width = 3,
-                          shiny$h6("Norm", style = "margin-top: 8px;")
-                        ),
-                        shiny$column(
-                          width = 3,
-                          shiny$div(
-                            class = "deconv-param-input-adv",
-                            shiny$numericInput(
-                              ns("peaknorm"),
-                              "",
-                              min = 0,
-                              max = 100,
-                              value = 2,
-                              width = "130%"
-                            )
-                          )
-                        )
-                      ),
-                      shiny$fluidRow(
-                        shiny$column(
-                          width = 3,
-                          shiny$h6("Threshold",
-                                   style = "font-size: small; margin-top: 8px;")
-                        ),
-                        shiny$column(
-                          width = 3,
-                          shiny$div(
-                            class = "deconv-param-input-adv",
-                            shiny$numericInput(
-                              ns("peakthresh"),
-                              "",
-                              min = 0,
-                              max = 1,
-                              value = 0.07,
-                              width = "130%",
-                              step = 0.01
-                            )
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
-              ),
-              shiny$column(
-                width = 5,
-                shiny$div(
-                  class = "card-custom",
-                  card(
-                    card_header(
-                      class = "bg-dark",
-                      "Mass Bins"
-                    ),
-                    card_body(
-                      shiny$fluidRow(
-                        shiny$column(
-                          width = 6,
-                          shiny$h6("Size", style = "margin-top: 8px;")
-                        ),
-                        shiny$column(
-                          width = 5,
-                          shiny$div(
-                            class = "deconv-param-input-adv",
-                            shiny$numericInput(
-                              ns("massbins"),
-                              "",
-                              min = 0,
-                              max = 100,
-                              value = 0.5,
-                              step = 0.1,
-                              width = "130%"
-                            )
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
-              )
-            )
-          )
         )
       )
     )
@@ -384,13 +392,9 @@ server <- function(id, dirs) {
     deconvolution_running_ui <- shiny$column(
       width = 12,
       shiny$fluidRow(
+        shiny$column(width = 1),
         shiny$column(
-          width = 4,
-          align = "center",
-          shiny$uiOutput(ns("result_picker_ui"))
-        ),
-        shiny$column(
-          width = 5,
+          width = 7,
           progressBar(
             id = ns("progressBar"),
             value = 0,
@@ -398,41 +402,111 @@ server <- function(id, dirs) {
             display_pct = TRUE
           )
         ),
-        shiny$column(1),
         shiny$column(
-          width = 2,
-          shiny$actionButton(ns("deconvolute_end"), "Abort Deconvolution")
+          width = 4,
+          align = "center",
+          shiny$actionButton(ns("deconvolute_end"), "Abort")
         )
       ),
       shiny$hr(),
       shiny$fluidRow(
         shiny$column(
           width = 6,
-          shiny$plotOutput(ns("plate_heatmap"), height = "600px")
+          shiny$br(), shiny$br(),
+          plotlyOutput(ns("heatmap"))
+        ),
+        shiny$column(
+          width = 6,
+          shiny$fluidRow(
+            shiny$column(
+              width = 6,
+              shiny$uiOutput(ns("result_picker_ui"))
+            ),
+            shiny$column(
+              width = 6,
+              radioGroupButtons(
+                ns("toggle_result"),
+                choiceNames = c("Deconvoluted", "Raw m/z"),
+                choiceValues = c(FALSE, TRUE)
+              )
+            )
+          ),
+          shiny$fluidRow(
+            shiny$column(
+              width = 12,
+              # shiny$verbatimTextOutput(ns("click_info")),
+              plotlyOutput(ns("spectrum"))
+            )
+          )
         )
       )
     )
 
-    output$plate_heatmap <- shiny$renderPlot({
-      create_384_plate_heatmap(data.frame(well_id = "", value = 0))
+    output$result_picker_ui <- shiny$renderUI({
+      if (!is.null(reactVars$result_files) &&
+         length(reactVars$result_files) > 0) {
+        select <- shiny$selectInput("result_picker", "",
+                                    choices = reactVars$result_files)
+      } else {
+        select <- disabled(shiny$selectInput("result_picker", "", choices = ""))
+      }
+
+      session$sendCustomMessage("selectize-init", "result_picker")
+
+      shiny$div(
+        class = "result-picker",
+        select
+      )
     })
 
-    output$result_picker_ui <- shiny$renderUI({
-      shiny$validate(
-        shiny$need((!is.null(reactVars$result_files) &&
-                      length(reactVars$result_files) > 0),
-                   "No results available yet")
-      )
-      select <- shiny$selectInput("result_picker", "",
-                                  choices = reactVars$result_files)
+    # Render result spectrum when available
+    output$spectrum <- renderPlotly({
+      click_data <- event_data("plotly_click")
+      if (!is.null(click_data)) {
+        runjs(paste0('document.getElementById("blocking-overlay").styl',
+                     'e.display = "block";'))
+
+        # Get the clicked point's row and column
+        row <- LETTERS[16 - floor(click_data$y) + 1]
+        col <- round(click_data$x)
+        well_id <- paste0(row, col)
+        # Find the corresponding sample in the data
+        clicked_sample <-
+          reactVars$rslt_df$sample[reactVars$rslt_df$well_id == well_id]
+
+        spectrum <- NULL
+        if (length(clicked_sample) > 0) {
+          spectrum <- spectrum_plot(
+            file.path(dirs$dir(),
+                      paste0(clicked_sample, "_rawdata_unidecfiles")),
+            input$toggle_result)
+        }
+
+        runjs(paste0('document.getElementById("blocking-overlay").st',
+                     'yle.display = "none";'))
+        spectrum
+      }
     })
 
     # Render start button conditionally
     output$deconvolute_start_ui <- shiny$renderUI({
-      if (isFALSE(reactVars$isRunning)) {
+      # root_dir_presence <- !is.null(dirs$dir()) && length(dirs$dir()) > 0
+      # batch_file_presence <- !is.null(dirs$batch_file()) && length(dirs$batch_file()) > 0
+      # single_file_presence <- !is.null(dirs$file()) && length(dirs$file()) > 0
+      #
+      # print(paste("reactVars$isRunning", reactVars$isRunning))
+      # print(paste("dirs$dir()", dirs$dir()))
+      # print(root_dir_presence)
+      # print(paste("dirs$batch_file()", dirs$batch_file()))
+      # print(batch_file_presence)
+      # print(paste("dirs$file", dirs$file()))
+      # print(single_file_presence)
 
-        shiny$validate(
-          shiny$need(dir.exists(dirs$dir()), "No Waters .raw selected"))
+      # if (isFALSE(reactVars$isRunning)) {
+
+        # shiny$validate(
+        #   shiny$need(dir.exists(dirs$dir()), "No Waters .raw selected"))
+
         button <- shiny$actionButton(ns("deconvolute_start"),
                                      "Run Deconvolution")
 
@@ -457,12 +531,16 @@ server <- function(id, dirs) {
             length(input$masslb) && length(input$massub) &&
             length(input$massbins) && length(input$peakthresh) &&
             length(input$peakwindow) && length(input$peaknorm) &&
-            length(input$time_start) && length(input$time_end)) {
+            length(input$time_start) && length(input$time_end)
+            # &&
+            # ((root_dir_presence && batch_file_presence) ||
+            #  single_file_presence)
+            ) {
           button
         } else {
           disabled(button)
         }
-      }
+      # }
     })
 
     # Reactive variables to track deconvolution process
@@ -470,6 +548,7 @@ server <- function(id, dirs) {
       isRunning = FALSE,
       completedFiles = 0,
       expectedFiles = 0,
+      current_total_files = 0,
       initialFileCount = 0,
       lastCheck = 0,
       count = 0
@@ -481,7 +560,6 @@ server <- function(id, dirs) {
       count <- length(files)
       message("Found files: ", count)
       reactVars$result_files <- gsub(".txt", "", basename(files))
-      print(reactVars$result_files)
       count
     }
 
@@ -502,6 +580,7 @@ server <- function(id, dirs) {
     progress_observer <- NULL
 
     shiny$observeEvent(input$deconvolute_start, {
+
       reset_progress()
 
       # Check processing mode & get target files
@@ -525,10 +604,12 @@ server <- function(id, dirs) {
         return()
       }
 
+      runjs(paste0('document.getElementById("blocking-overlay").style.display ',
+                   '= "block";'))
+      runjs(paste0("document.getElementById('deconvolute_start').style.animati",
+                   "on = none;"))
+
       message(sprintf("Found %d .raw directories to process", length(raw_dirs)))
-      shiny$showNotification(
-        sprintf("Found %d .raw directories to process", length(raw_dirs)),
-        type = "message", duration = NULL)
 
       reactVars$expectedFiles <- length(raw_dirs)
       reactVars$initialFileCount <- checkProgress(dirs$dir())
@@ -577,6 +658,72 @@ server <- function(id, dirs) {
 
             output$status <- shiny$renderText("Process completed successfully!")
             enable(ns("deconvolute_start"))
+
+            # # Render plate result visualization
+            # batch <- dirs$batch_file()
+            # sample_names <- batch[[dirs$id_column()]]
+            # sample_names <- gsub(".raw", "", sample_names)
+            #
+            # results_all <- fs::dir_ls(dirs$dir(), glob = "*_rawdata_unidecfiles")
+            #
+            # results <- results_all[basename(results_all) %in% paste0(
+            #   sample_names, "_rawdata_unidecfiles")]
+            #
+            # wells <- gsub(",", "", sub("^.*:", "", batch[[dirs$vial_column()]]))
+            #
+            # value <- numeric()
+            # for (i in 1:nrow(batch)) {
+            #
+            #   sample_name <- gsub(".raw", "", batch$sample[i])
+            #
+            #   rslt_folder <- file.path(
+            #     dirs$dir(), paste0(sample_name, "_rawdata_unidecfiles"))
+            #
+            #   peak_file <- file.path(
+            #     dirs$dir(),
+            #     paste0(sample_name, "_rawdata_unidecfiles"),
+            #     paste0(sample_name, "_rawdata_peaks.dat"))
+            #
+            #   if (dir.exists(rslt_folder) && file.exists(peak_file)) {
+            #     peaks <- utils::read.delim(peak_file, header = F, sep = " ")
+            #     value[i] <- max(peaks$V1)
+            #   } else {
+            #     value[i] <- NA
+            #   }
+            # }
+            #
+            # reactVars$rslt_df <- data.frame(sample = sample_names, well_id = wells,
+            #                       value = value)
+            #
+            # output$heatmap <- renderPlotly({
+            #   create_384_plate_heatmap(reactVars$rslt_df)
+            # })
+            #
+            # output$spectrum <- renderPlotly({
+            #   click_data <- event_data("plotly_click")
+            #   if (!is.null(click_data)) {
+            #     runjs(paste0('document.getElementById("blocking-overlay").styl',
+            #                  'e.display = "block";'))
+            #
+            #     # Get the clicked point's row and column
+            #     row <- LETTERS[16 - floor(click_data$y) + 1]
+            #     col <- round(click_data$x)
+            #     well_id <- paste0(row, col)
+            #     # Find the corresponding sample in the data
+            #     clicked_sample <- reactVars$rslt_df$sample[reactVars$rslt_df$well_id == well_id]
+            #     if (length(clicked_sample) > 0) {
+            #       spectrum <- spectrum_plot(
+            #         file.path(dirs$dir(),
+            #                   paste0(clicked_sample, "_rawdata_unidecfiles")),
+            #         input$toggle_result)
+            #
+            #       runjs(paste0('document.getElementById("blocking-overlay").st',
+            #                    'yle.display = "none";'))
+            #
+            #       spectrum
+            #     }
+            #   }
+            # })
           }
         ) |>
         # on failing process
@@ -603,12 +750,56 @@ server <- function(id, dirs) {
       # Progress tracking observer
       progress_observer <- shiny$observe({
         shiny$req(reactVars$isRunning)
-        shiny$invalidateLater(500)
+        shiny$invalidateLater(1000)
 
         if (difftime(Sys.time(), reactVars$lastCheck, units = "secs") >= 0.5) {
           current_total_files <- checkProgress(dirs$dir())
+
+          if(current_total_files > reactVars$current_total_files) {
+            # Render plate result visualization
+            batch <- dirs$batch_file()
+            sample_names <- batch[[dirs$id_column()]]
+            sample_names <- gsub(".raw", "", sample_names)
+
+            results_all <- fs::dir_ls(dirs$dir(), glob = "*_rawdata_unidecfiles")
+
+            results <- results_all[basename(results_all) %in% paste0(
+              sample_names, "_rawdata_unidecfiles")]
+
+            wells <- gsub(",", "", sub("^.*:", "", batch[[dirs$vial_column()]]))
+
+            value <- numeric()
+            for (i in 1:nrow(batch)) {
+
+              sample_name <- gsub(".raw", "", batch$sample[i])
+
+              rslt_folder <- file.path(
+                dirs$dir(), paste0(sample_name, "_rawdata_unidecfiles"))
+
+              peak_file <- file.path(
+                dirs$dir(),
+                paste0(sample_name, "_rawdata_unidecfiles"),
+                paste0(sample_name, "_rawdata_peaks.dat"))
+
+              if (dir.exists(rslt_folder) && file.exists(peak_file)) {
+                peaks <- utils::read.delim(peak_file, header = F, sep = " ")
+                value[i] <- max(peaks$V1)
+              } else {
+                value[i] <- NA
+              }
+            }
+
+            reactVars$rslt_df <- data.frame(sample = sample_names, well_id = wells,
+                                  value = value)
+
+            output$heatmap <- renderPlotly({
+              create_384_plate_heatmap(reactVars$rslt_df)
+            })
+          }
+
+          reactVars$current_total_files <- current_total_files
           reactVars$completedFiles <-
-            current_total_files - reactVars$initialFileCount
+            reactVars$current_total_files - reactVars$initialFileCount
           reactVars$lastCheck <- Sys.time()
 
           progress_pct <- min(100, round(
@@ -649,6 +840,9 @@ server <- function(id, dirs) {
       output$deconvolution_running_ui <- shiny$renderUI({
         deconvolution_running_ui
       })
+
+      runjs(paste0('document.getElementById("blocking-overlay").style.display ',
+                   '= "none";'))
     })
 
     shiny$observeEvent(input$deconvolute_end, {

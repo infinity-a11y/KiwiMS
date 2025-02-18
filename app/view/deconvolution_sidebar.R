@@ -69,17 +69,22 @@ server <- function(id) {
 
     # Get selected paths
     root_dir <- reactive({
+      shiny::req(input$folder)
+
       shiny::validate(shiny::need(input$folder, "Nothing selected"))
       parseDirPath(roots, input$folder)
     })
     file_path <- reactive({
+      shiny::req(input$file)
+
       shiny::validate(shiny::need(input$file, "Nothing selected"))
       parseDirPath(roots, input$file)
     })
     batch_file <- reactive({
+      shiny::req(input$batch_selection)
+
       file_path <- file.path(dirname(input$batch_selection$datapath),
                              basename(input$batch_selection$datapath))
-      print(file_path)
       utils::read.csv(file_path)
     })
 
@@ -136,7 +141,6 @@ server <- function(id) {
         if (!is.null(input$batch_selection)) {
           batch <- batch_file()
           choices <- colnames(batch)
-          print(choices)
           select <- shiny::selectInput(ns("id_column"), "", choices = choices)
         } else {
           select <- disabled(shiny::selectInput(ns("id_column"), "",
