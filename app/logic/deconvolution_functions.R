@@ -1,9 +1,10 @@
 # app/logic/deconvolution_functions.R
 
 box::use(
+  dplyr[left_join, mutate, n_distinct],
   ggplot2,
   plotly[config, event_register, ggplotly, layout],
-  utils[read.table],
+  utils[read.delim, read.table],
   scales[percent_format],
   shiny[showNotification],
   parallel[detectCores, makeCluster, parLapply, stopCluster],
@@ -195,30 +196,41 @@ create_384_plate_heatmap <- function(data) {
   # Create plate layout coordinates
   rows <- rev(LETTERS[1:16])
   cols <- 1:24
-  plate_layout <- expand.grid(row = rows, col = cols)
-  plate_layout$well_id <- paste0(plate_layout$row, plate_layout$col)
+  plate_layout <- expand.grid(row = rows, col = cols) |>
+    mutate(well_id = paste0(row, col))  # Vectorized for efficiency
 
-  # Merge data with plate layout
-  plate_data <- merge(plate_layout, data, by = "well_id", all.x = TRUE)
+  # Merge data with plate layout efficiently
+  plate_data <- left_join(plate_layout, data, by = "well_id")
 
-  # Create tooltip text with NA handling
-  plate_data$tooltip_text <- sprintf(
-    "Well: %s\nValue: %s\nSample: %s",
-    plate_data$well_id,
-    ifelse(is.na(plate_data$value), "NA", sprintf("%.2f", plate_data$value)),
-    ifelse(is.na(plate_data$sample), "Empty", as.character(plate_data$sample))
-  )
+  # Efficient tooltip text creation
+  plate_data <- plate_data |>
+    mutate(
+      value_fmt = ifelse(is.na(value), "NA", sprintf("%.2f", value)),
+      sample_fmt = ifelse(is.na(sample), "Empty", as.character(sample)),
+      tooltip_text = sprintf("Well: %s\nValue: %s\nSample: %s", well_id,
+                             value_fmt, sample_fmt)
+    )
 
-  min_value <- min(plate_data$value, na.rm = TRUE)
-  max_value <- max(plate_data$value, na.rm = TRUE)
-
-  # Ensure a color range even if only one unique value
-  if (min_value == max_value) {
-    min_value <- min_value - 0.01
-    max_value <- max_value + 0.01
+  # Optimize the unique value check
+  num_unique_values <- n_distinct(plate_data$value, na.rm = TRUE)
+  #
+  if (num_unique_values == 1) {
+  #   print("unique")
+  #   plate_data$value <- factor(plate_data$value)
+  #   scale <- ggplot2$scale_fill_viridis_d(name = "Peak Mass [Da]",
+  #                                         na.value = "white")
+    show_legend <- FALSE
+  } else {
+  #   print("more")
+    # scale <- ggplot2$scale_fill_viridis_c(name = "Peak Mass [Da]",
+    #                                       na.value = "white")
+    show_legend <- TRUE
   }
 
-  # Create the ggplot
+  scale <- ggplot2$scale_fill_viridis_c(name = "Peak Mass [Da]",
+                                        na.value = "white")
+
+  # Create the heatmap
   plate_plot <- ggplot2$ggplot(
     plate_data,
     ggplot2$aes(x = col, y = factor(row, levels = rev(rows)), fill = value)) +
@@ -234,8 +246,10 @@ create_384_plate_heatmap <- function(data) {
       color = "black",
       linewidth = 0.5
     ) +
-    ggplot2$geom_tile(ggplot2$aes(text = tooltip_text),
-                      width = 0.95, height = 0.95) +
+    suppressWarnings({
+      ggplot2$geom_tile(ggplot2$aes(text = tooltip_text),
+                        width = 0.95, height = 0.95)
+    }) +
     ggplot2$scale_y_discrete(limits = rows) +
     ggplot2$scale_x_continuous(
       breaks = 1:24,
@@ -243,8 +257,7 @@ create_384_plate_heatmap <- function(data) {
       position = "top",
       expand = c(0, 0)
     ) +
-    scale_fill_viridis(name = "Peak m/z", option = "D",
-                       limits = c(min_value, max_value)) +
+    scale +
     ggplot2$coord_fixed() +
     ggplot2$theme_minimal() +
     ggplot2$theme(
@@ -263,7 +276,12 @@ create_384_plate_heatmap <- function(data) {
   interactive_plot <- interactive_plot |>
     layout(
       dragmode = FALSE,
-      showlegend = TRUE,
+      showlegend = show_legend,
+      hoverlabel = list(
+        bgcolor = "#38387Cdb",
+        font = list(size = 14, color = "white"),
+        bordercolor = "white"
+      ),
       yaxis = list(
         scaleanchor = "x",
         scaleratio = 1,
@@ -298,61 +316,59 @@ create_384_plate_heatmap <- function(data) {
     config(
       displayModeBar = "hover",
       scrollZoom = FALSE,
-      modeBarButtonsToRemove = c("pan2d", "select2d", "lasso2d",
-                                 "hoverClosestCartesian",
-                                 "hoverCompareCartesian"),
-      modeBarButtonsToKeep = c("zoom2d", "toImage", "autoScale2d",
-                               "resetScale2d", "zoomIn2d", "zoomOut2d")
-    ) |>
-    event_register("plotly_click")
+      modeBarButtons = list(
+        list("zoom2d", "toImage", "autoScale2d",
+             "resetScale2d", "zoomIn2d", "zoomOut2d")
+      )
+    )
 
   return(interactive_plot)
 }
 
 # Min-Max normalization and scale to percentage
 normalize_min_max <- function(x) {
-  return((x - min(x)) / (max(x) - min(x)) * 100)  # Scale to 0-100
+  return((x - min(x)) / (max(x) - min(x)) * 100)
 }
 
 #' @export
 spectrum_plot <- function(result_path, raw) {
-
-  # Read the data
+  # Get paths
   base <- gsub("_unidecfiles", "", basename(result_path))
 
+  raw_file <- file.path(result_path, paste0(base, "_rawdata.txt"))
+  mass_file <- file.path(result_path, paste0(base, "_mass.txt"))
+  peaks_file <- file.path(result_path, paste0(base, "_peaks.dat"))
+
+  if(!file.exists(mass_file) || !file.exists(peaks_file)) return()
+
+  # Read data
   if(raw) {
-    mass <- utils::read.delim(file.path(result_path,
-                                        paste0(base, "_rawdata.txt")),
-                       sep = " ", header = FALSE)
+    mass <- read.delim(raw_file, sep = " ", header = FALSE)
 
-    mass$V2 <- ((mass$V2 - min(mass$V2)) / (max(mass$V2) - min(mass$V2)) * 100)
+    mass$V2 <- (mass$V2 - min(mass$V2)) / (max(mass$V2) - min(mass$V2)) * 100
   } else {
-    mass <- utils::read.delim(file.path(result_path, paste0(base, "_mass.txt")),
-                       sep = " ", header = FALSE)
-    peaks <- utils::read.delim(file.path(result_path,
-                                         paste0(base, "_peaks.dat")),
-                        sep = " ", header = FALSE)
+    mass <- read.delim(mass_file, sep = " ", header = FALSE)
+    peaks <- read.delim(peaks_file, sep = " ", header = FALSE)
 
-    mass$V2 <- ((mass$V2 - min(mass$V2)) / (max(mass$V2) - min(mass$V2)) * 100)
+    mass$V2 <- (mass$V2 - min(mass$V2)) / (max(mass$V2) - min(mass$V2)) * 100
     highlight_peaks <- mass[mass$V1 %in% peaks$V1, ]
   }
 
-  # Create plot with tooltip data
-  plot <- ggplot2$ggplot(mass, ggplot2$aes(x = V1, y = V2, group = 1,
-                           text = paste0("Mass: ", V1, " Da\nIntensity: ",
-                                         round(V2, 2), "%"))) +
-    ggplot2$geom_line() +  # Draw the main line
+  # Create spectrum
+  plot <- ggplot2$ggplot(
+    mass,  ggplot2$aes(x = V1, y = V2, group = 1,
+                       text = paste0("Mass: ", V1, " Da\nIntensity: ",
+                                     round(V2, 2), "%"))) +
+    ggplot2$geom_line() +
     ggplot2$scale_y_continuous(labels = percent_format(scale = 1)) +
     ggplot2$theme_minimal()
 
   if(raw) {
     plot <- plot + ggplot2$labs(y = "Intensity [%]", x = "m/z [Th]")
   } else {
-    plot <- plot +
-      ggplot2$geom_point(data = highlight_peaks,
-                         ggplot2$aes(x = V1, y = V2),
-                         fill = "#e8cb97", colour = "#35357A",
-                         shape = 21, size = 2) +
+    plot <- plot + ggplot2$geom_point(
+      data = highlight_peaks, ggplot2$aes(x = V1, y = V2),
+      fill = "#e8cb97", colour = "#35357A", shape = 21, size = 2) +
       ggplot2$labs(y = "Intensity [%]", x = "Mass [Da]")
   }
 
@@ -361,13 +377,11 @@ spectrum_plot <- function(result_path, raw) {
     config(
       displayModeBar = "hover",
       scrollZoom = FALSE,
-      modeBarButtonsToRemove = c("pan2d", "select2d", "lasso2d",
-                                 "hoverClosestCartesian",
-                                 "hoverCompareCartesian"),
-      modeBarButtonsToKeep = c("zoom2d", "toImage", "autoScale2d",
-                               "resetScale2d", "zoomIn2d", "zoomOut2d")
+      modeBarButtons = list(
+        list("zoom2d", "toImage", "autoScale2d",
+             "resetScale2d", "zoomIn2d", "zoomOut2d")
+      )
     )
 
-  # Display the plot
   interactive_plot
 }

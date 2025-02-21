@@ -4,10 +4,11 @@ box::use(
   bslib[card, card_body, card_header],
   fs[dir_ls],
   future[future, plan, multisession],
-  plotly[event_data, plotlyOutput, renderPlotly],
+  parallel[detectCores, makeCluster],
+  plotly[event_data, event_register, plotlyOutput, renderPlotly],
   promises[catch, then],
   shiny,
-  shinyjs[disabled, enable, runjs],
+  shinyjs[delay, disabled, enable, runjs],
   shinyWidgets[radioGroupButtons, progressBar, updateProgressBar],
 )
 
@@ -38,7 +39,7 @@ server <- function(id, dirs) {
   shiny$moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
-    # Deconvolution initiation interface
+    ### Deconvolution initiation interface ----
 
     deconvolution_init_ui <- shiny$column(
       width = 12,
@@ -309,8 +310,9 @@ server <- function(id, dirs) {
                           shiny$fluidRow(
                             shiny$column(
                               width = 3,
-                              shiny$h6("Threshold",
-                                       style = "font-size: small; margin-top: 8px;")
+                              shiny$h6(
+                                "Threshold",
+                                style = "font-size: small; margin-top: 8px;")
                             ),
                             shiny$column(
                               width = 3,
@@ -384,11 +386,11 @@ server <- function(id, dirs) {
       )
     )
 
-    output$deconvolution_init_ui <- shiny$renderUI({
+    output$deconvolution_init_ui <- shiny$renderUI(
       deconvolution_init_ui
-    })
+    )
 
-    # Deconvolution running interface
+    ### Deconvolution running interface ----
     deconvolution_running_ui <- shiny$column(
       width = 12,
       shiny$fluidRow(
@@ -412,7 +414,7 @@ server <- function(id, dirs) {
       shiny$fluidRow(
         shiny$column(
           width = 6,
-          shiny$br(), shiny$br(),
+          shiny$br(),
           plotlyOutput(ns("heatmap"))
         ),
         shiny$column(
@@ -424,17 +426,18 @@ server <- function(id, dirs) {
             ),
             shiny$column(
               width = 6,
-              radioGroupButtons(
-                ns("toggle_result"),
-                choiceNames = c("Deconvoluted", "Raw m/z"),
-                choiceValues = c(FALSE, TRUE)
+              disabled(
+                radioGroupButtons(
+                  ns("toggle_result"),
+                  choiceNames = c("Deconvoluted", "Raw m/z"),
+                  choiceValues = c(FALSE, TRUE)
+                )
               )
             )
           ),
           shiny$fluidRow(
             shiny$column(
               width = 12,
-              # shiny$verbatimTextOutput(ns("click_info")),
               plotlyOutput(ns("spectrum"))
             )
           )
@@ -442,108 +445,34 @@ server <- function(id, dirs) {
       )
     )
 
-    output$result_picker_ui <- shiny$renderUI({
-      if (!is.null(reactVars$result_files) &&
-         length(reactVars$result_files) > 0) {
-        select <- shiny$selectInput("result_picker", "",
-                                    choices = reactVars$result_files)
-      } else {
-        select <- disabled(shiny$selectInput("result_picker", "", choices = ""))
-      }
-
-      session$sendCustomMessage("selectize-init", "result_picker")
-
-      shiny$div(
-        class = "result-picker",
-        select
-      )
-    })
-
-    # Render result spectrum when available
-    output$spectrum <- renderPlotly({
-      click_data <- event_data("plotly_click")
-      if (!is.null(click_data)) {
-        runjs(paste0('document.getElementById("blocking-overlay").styl',
-                     'e.display = "block";'))
-
-        # Get the clicked point's row and column
-        row <- LETTERS[16 - floor(click_data$y) + 1]
-        col <- round(click_data$x)
-        well_id <- paste0(row, col)
-        # Find the corresponding sample in the data
-        clicked_sample <-
-          reactVars$rslt_df$sample[reactVars$rslt_df$well_id == well_id]
-
-        spectrum <- NULL
-        if (length(clicked_sample) > 0) {
-          spectrum <- spectrum_plot(
-            file.path(dirs$dir(),
-                      paste0(clicked_sample, "_rawdata_unidecfiles")),
-            input$toggle_result)
-        }
-
-        runjs(paste0('document.getElementById("blocking-overlay").st',
-                     'yle.display = "none";'))
-        spectrum
-      }
-    })
-
-    # Render start button conditionally
+    ### Validate start button ----
     output$deconvolute_start_ui <- shiny$renderUI({
-      # root_dir_presence <- !is.null(dirs$dir()) && length(dirs$dir()) > 0
-      # batch_file_presence <- !is.null(dirs$batch_file()) && length(dirs$batch_file()) > 0
-      # single_file_presence <- !is.null(dirs$file()) && length(dirs$file()) > 0
-      #
-      # print(paste("reactVars$isRunning", reactVars$isRunning))
-      # print(paste("dirs$dir()", dirs$dir()))
-      # print(root_dir_presence)
-      # print(paste("dirs$batch_file()", dirs$batch_file()))
-      # print(batch_file_presence)
-      # print(paste("dirs$file", dirs$file()))
-      # print(single_file_presence)
 
-      # if (isFALSE(reactVars$isRunning)) {
+      shiny$validate(
+        shiny$need(((!is.null(dirs$file()) && length(dirs$file()) > 0) ||
+                      (!is.null(dirs$dir()) && length(dirs$dir()) > 0)),
+                   "Select target file(s) from the sidebar to start"))
 
-        # shiny$validate(
-        #   shiny$need(dir.exists(dirs$dir()), "No Waters .raw selected"))
+      shiny$validate(
+        shiny$need(input$startz < input$endz,
+                   "High charge z must be greater than low charge z"))
 
-        button <- shiny$actionButton(ns("deconvolute_start"),
-                                     "Run Deconvolution")
+      shiny$validate(
+        shiny$need(input$minmz < input$maxmz,
+                   "High m/z must be greater than low m/z"))
 
-        shiny$validate(
-          shiny$need(input$startz < input$endz,
-                     "High charge z must be greater than low charge z"))
+      shiny$validate(
+        shiny$need(input$masslb < input$massub,
+                   "High mass Mw must be greater than low mass Mw"))
 
-        shiny$validate(
-          shiny$need(input$minmz < input$maxmz,
-                     "High m/z must be greater than low m/z"))
+      shiny$validate(
+        shiny$need(input$time_start < input$time_end,
+                   "Retention start time must be earlier than end time"))
 
-        shiny$validate(
-          shiny$need(input$masslb < input$massub,
-                     "High mass Mw must be greater than low mass Mw"))
-
-        shiny$validate(
-          shiny$need(input$time_start < input$time_end,
-                     "Retention start time must be earlier than end time"))
-
-        if (length(input$startz) && length(input$endz) &&
-            length(input$minmz) && length(input$maxmz) &&
-            length(input$masslb) && length(input$massub) &&
-            length(input$massbins) && length(input$peakthresh) &&
-            length(input$peakwindow) && length(input$peaknorm) &&
-            length(input$time_start) && length(input$time_end)
-            # &&
-            # ((root_dir_presence && batch_file_presence) ||
-            #  single_file_presence)
-            ) {
-          button
-        } else {
-          disabled(button)
-        }
-      # }
+      shiny$actionButton(ns("deconvolute_start"), "Run Deconvolution")
     })
 
-    # Reactive variables to track deconvolution process
+    ### Reactive variables declaration ----
     reactVars <- shiny$reactiveValues(
       isRunning = FALSE,
       completedFiles = 0,
@@ -551,39 +480,99 @@ server <- function(id, dirs) {
       current_total_files = 0,
       initialFileCount = 0,
       lastCheck = 0,
-      count = 0
+      lastCheckresults = 0,
+      count = 0,
+      rslt_df = data.frame()
     )
 
-    checkProgress <- function(dir_path) {
+    result_files_sel <- shiny$reactiveVal()
+
+    shiny$observe({
+      if (!is.null(input$result_picker)) result_files_sel(input$result_picker)
+    })
+
+    progress_observer <- NULL
+    results_observer <- NULL
+    click_observer <- NULL
+
+    ### Functions ----
+    #### check_progress ----
+    check_progress <- function(dir_path) {
       message("Checking progress at: ", Sys.time())
       files <- dir_ls(dir_path, glob = "*_rawdata.txt")
       count <- length(files)
       message("Found files: ", count)
-      reactVars$result_files <- gsub(".txt", "", basename(files))
       count
     }
 
+    #### reset_progress ----
     reset_progress <- function() {
-      reactVars$isRunning <- TRUE
+      reactVars$isRunning <- FALSE
+      reactVars$heatmap_ready <- FALSE
       reactVars$completedFiles <- 0
+      reactVars$sample_names <- NULL
+      reactVars$wells <- NULL
+      reactVars$rslt_df <- data.frame()
       reactVars$lastCheck <- Sys.time()
-      updateProgressBar(
-        session = session,
-        id = ns("progressBar"),
-        value = 0,
-        title = "Starting Process..."
-      )
-      output$progress <- shiny$renderText("Initializing...")
-      output$status <- shiny$renderText("")
+      reactVars$lastCheckresults <- Sys.time()
     }
 
-    progress_observer <- NULL
+    ### Event start deconvolution ----
 
+    #### Start confirmation modal ----
     shiny$observeEvent(input$deconvolute_start, {
+      if (dirs$selected() == "folder") {
+        if(length(dirs$batch_file())) {
+          message <- paste0("<b>Multiple target file(s) selected</b><br><br>",
+                            nrow(dirs$batch_file()), " raw file(s) present in ",
+                            "the batch file will be deconvoluted.")
+        } else {
+          message <- paste0("<b>Multiple target file(s) selected</b><br><br>",
+                            "No batch file uploaded. All raw files in the",
+                            " selected directory will be deconvoluted.")
+        }
+      } else {
+        name <- basename(dirs$file())
+        message <- paste0("<b>Individual target file selected</b><br><br>",
+                          name, " will be deconvoluted.")
+      }
 
+      shiny$showModal(
+        shiny$div(
+          class = "start-modal",
+          shiny$modalDialog(
+            shiny$fluidRow(
+              shiny$br(),
+              shiny$column(
+                width = 11,
+                shiny$p(
+                  shiny$HTML(
+                    message
+                  )
+                )
+              ),
+              shiny$br()
+            ),
+            title = "Start Deconvolution",
+            easyClose = TRUE,
+            footer = shiny$tagList(
+              shiny$modalButton("Dismiss"),
+              shiny$actionButton(ns("deconvolute_start_conf"), "Continue",
+                                 class = "load-db", width = "auto")
+            )
+          )
+        )
+      )
+    })
+
+    #### Confirmed deconvolution start ----
+    shiny$observeEvent(input$deconvolute_start_conf, {
+
+      # Reset modal and previous processes
+      shiny$removeModal()
       reset_progress()
 
-      # Check processing mode & get target files
+      ##### Determine deconvolution mode ----
       if (dirs$selected() == "folder") {
         raw_dirs <- list.dirs(dirs$dir(), full.names = TRUE, recursive = FALSE)
         raw_dirs <- raw_dirs[grep("\\.raw$", raw_dirs)]
@@ -594,32 +583,49 @@ server <- function(id, dirs) {
         raw_dirs <- raw_dirs[basename(raw_dirs) %in% sample_names]
       }
 
+      #### Validate inputs ----
       if (length(raw_dirs) == 0) {
         shiny$showNotification(
           paste0("No .raw directories found in ", dirs$dir()),
           type = "error",
           duration = NULL
         )
-        reactVars$isRunning <- FALSE
+        reset_progress()
         return()
       }
 
+      # UI changes if inputs valid
       runjs(paste0('document.getElementById("blocking-overlay").style.display ',
                    '= "block";'))
-      runjs(paste0("document.getElementById('deconvolute_start').style.animati",
-                   "on = none;"))
+      runjs(paste0("document.getElementById('app-deconvolution_process-deconvo",
+                   "lute_start').style.animation = 'none';"))
 
       message(sprintf("Found %d .raw directories to process", length(raw_dirs)))
 
+      # Render disabled results picker
+      output$result_picker_ui <- shiny$renderUI(
+        shiny$div(
+          class = "result-picker",
+          disabled(shiny$selectInput(ns("result_picker"), "", choices = "")))
+      )
+      # Apply JS modifications for picker
+      session$sendCustomMessage("selectize-init", "result_picker")
+
+      # Initialization variables
+      reactVars$isRunning <- TRUE
       reactVars$expectedFiles <- length(raw_dirs)
-      reactVars$initialFileCount <- checkProgress(dirs$dir())
+      reactVars$initialFileCount <- check_progress(dirs$dir())
       message("Initial file count: ", reactVars$initialFileCount)
 
-      if (!is.null(progress_observer)) {
-        progress_observer$destroy()
-      }
+      # Prepare heatmap variables
+      reactVars$sample_names <- gsub(
+        ".raw", "", dirs$batch_file()[[dirs$id_column()]])
+      reactVars$wells <- gsub(
+        ",", "", sub("^.*:", "", dirs$batch_file()[[dirs$vial_column()]]))
 
-      # Get parameter
+      #### Future computation ----
+
+      # Get deconvolution parameter
       startz <- input$startz
       endz <- input$endz
       minmz <- input$minmz
@@ -633,9 +639,9 @@ server <- function(id, dirs) {
       time_start <- input$time_start
       time_end <- input$time_end
 
-      # Start deconvolution
-      future({
-        deconvolute(raw_dirs, startz = startz, endz = endz,
+      f <- future({
+        deconvolute(raw_dirs,
+                    startz = startz, endz = endz,
                     minmz = minmz, maxmz = maxmz,
                     masslb = masslb, massub = massub,
                     massbins = massbins, peakthresh = peakthresh,
@@ -647,7 +653,6 @@ server <- function(id, dirs) {
           onFulfilled = function(value) {
             message("Future completed successfully")
             reactVars$isRunning <- FALSE
-            progress_observer$destroy()
 
             updateProgressBar(
               session = session,
@@ -657,73 +662,11 @@ server <- function(id, dirs) {
             )
 
             output$status <- shiny$renderText("Process completed successfully!")
-            enable(ns("deconvolute_start"))
 
-            # # Render plate result visualization
-            # batch <- dirs$batch_file()
-            # sample_names <- batch[[dirs$id_column()]]
-            # sample_names <- gsub(".raw", "", sample_names)
-            #
-            # results_all <- fs::dir_ls(dirs$dir(), glob = "*_rawdata_unidecfiles")
-            #
-            # results <- results_all[basename(results_all) %in% paste0(
-            #   sample_names, "_rawdata_unidecfiles")]
-            #
-            # wells <- gsub(",", "", sub("^.*:", "", batch[[dirs$vial_column()]]))
-            #
-            # value <- numeric()
-            # for (i in 1:nrow(batch)) {
-            #
-            #   sample_name <- gsub(".raw", "", batch$sample[i])
-            #
-            #   rslt_folder <- file.path(
-            #     dirs$dir(), paste0(sample_name, "_rawdata_unidecfiles"))
-            #
-            #   peak_file <- file.path(
-            #     dirs$dir(),
-            #     paste0(sample_name, "_rawdata_unidecfiles"),
-            #     paste0(sample_name, "_rawdata_peaks.dat"))
-            #
-            #   if (dir.exists(rslt_folder) && file.exists(peak_file)) {
-            #     peaks <- utils::read.delim(peak_file, header = F, sep = " ")
-            #     value[i] <- max(peaks$V1)
-            #   } else {
-            #     value[i] <- NA
-            #   }
-            # }
-            #
-            # reactVars$rslt_df <- data.frame(sample = sample_names, well_id = wells,
-            #                       value = value)
-            #
-            # output$heatmap <- renderPlotly({
-            #   create_384_plate_heatmap(reactVars$rslt_df)
-            # })
-            #
-            # output$spectrum <- renderPlotly({
-            #   click_data <- event_data("plotly_click")
-            #   if (!is.null(click_data)) {
-            #     runjs(paste0('document.getElementById("blocking-overlay").styl',
-            #                  'e.display = "block";'))
-            #
-            #     # Get the clicked point's row and column
-            #     row <- LETTERS[16 - floor(click_data$y) + 1]
-            #     col <- round(click_data$x)
-            #     well_id <- paste0(row, col)
-            #     # Find the corresponding sample in the data
-            #     clicked_sample <- reactVars$rslt_df$sample[reactVars$rslt_df$well_id == well_id]
-            #     if (length(clicked_sample) > 0) {
-            #       spectrum <- spectrum_plot(
-            #         file.path(dirs$dir(),
-            #                   paste0(clicked_sample, "_rawdata_unidecfiles")),
-            #         input$toggle_result)
-            #
-            #       runjs(paste0('document.getElementById("blocking-overlay").st',
-            #                    'yle.display = "none";'))
-            #
-            #       spectrum
-            #     }
-            #   }
-            # })
+            shiny$updateActionButton(session, "deconvolute_end",
+                                     label = "Reset")
+
+            progress_observer$destroy()
           }
         ) |>
         # on failing process
@@ -743,61 +686,148 @@ server <- function(id, dirs) {
             output$status <- shiny$renderText(
               paste("Process failed!", error$message)
             )
-            enable(ns("deconvolute_start"))
           }
         )
 
-      # Progress tracking observer
+      #### Results tracking observer ----
+      results_observer <- shiny$observe({
+        shiny$req(reactVars$sample_names, reactVars$wells)
+        shiny$invalidateLater(10000)
+
+        if (nrow(reactVars$rslt_df) < reactVars$completedFiles &&
+          difftime(Sys.time(), reactVars$lastCheckresults,
+                     units = "secs") >= 10) {
+          results_all <- fs::dir_ls(dirs$dir(),
+                                    glob = "*_rawdata_unidecfiles")
+
+          results <- results_all[basename(results_all) %in% paste0(
+            reactVars$sample_names, "_rawdata_unidecfiles")]
+
+          if(length(results_all)) {
+
+            if(is.null(reactVars$rslt_df) || nrow(reactVars$rslt_df) < 1) {
+              well <- character()
+              value <- numeric()
+              sample_names <- character()
+              for (i in 1:length(results)) {
+
+                sample_names[i] <- gsub("_rawdata_unidecfiles", "",
+                                        basename(results[i]))
+                well[i] <- reactVars$wells[which(
+                  reactVars$sample_names == sample_names[i])]
+                peak_file <- file.path(results[i], paste0(sample_names[i],
+                                                          "_rawdata_peaks.dat"))
+                if (file.exists(peak_file)) {
+                  peaks <- utils::read.delim(peak_file, header = F, sep = " ")
+                  max <- max(peaks$V1)
+                  if(length(max) && !is.na(max)) {
+                    value[i] <- max
+                  } else {
+                    value[i] <- NA
+                  }
+                } else {
+                  value[i] <- NA
+                }
+              }
+              rslt_df <- data.frame(sample = sample_names,
+                                    well_id = well, value = value)
+              reactVars$rslt_df <- rslt_df[!as.logical(
+                rowSums(is.na(rslt_df))), ]
+
+            } else {
+              new <- !gsub("_rawdata_unidecfiles", "", basename(results)) %in%
+                reactVars$rslt_df$sample
+              new_results <- results[new]
+
+              if(length(new_results)) {
+                well <- character()
+                value <- numeric()
+                sample_names <- character()
+                for (i in 1:length(new_results)) {
+
+                  sample_names[i] <- gsub("_rawdata_unidecfiles", "",
+                                          basename(new_results[i]))
+                  well[i] <- reactVars$wells[which(
+                    reactVars$sample_names == sample_names[i])]
+
+                  peak_file <- file.path(new_results[i],
+                                         paste0(sample_names[i],
+                                                "_rawdata_peaks.dat"))
+
+                  if (file.exists(peak_file)) {
+                    get_peaks <- tryCatch({
+                      peaks <- utils::read.delim(peak_file, header = F,
+                                                 sep = " ")
+                    }, error = function(e) {
+                      NULL
+                    })
+
+                    if(is.null(peaks)) {
+                      value[i] <- NA
+                      next
+                    }
+
+                    max <- max(peaks$V1)
+                    if(length(max) && !is.na(max)) {
+                      value[i] <- max
+                    } else {
+                      value[i] <- NA
+                    }
+                  } else {
+                    value[i] <- NA
+                  }
+                }
+
+                new_rslt_df <- data.frame(sample = sample_names,
+                                          well_id = well, value = value)
+                new_rslt_df <- new_rslt_df[!as.logical(
+                  rowSums(is.na(new_rslt_df))), ]
+
+                reactVars$rslt_df <- rbind(reactVars$rslt_df, new_rslt_df)
+              }
+            }
+
+            ##### Render heatmap & result picker ----
+            if(nrow(reactVars$rslt_df) > 0) {
+
+              # enable("app-deconvolution_process-toggle_result")
+              # enable(ns("toggle_result"))
+              enable(selector = "#app-deconvolution_process-toggle_result")
+
+              # Render results picker
+              output$result_picker_ui <- shiny$renderUI(
+                shiny$div(
+                  class = "result-picker",
+                  shiny$selectInput(ns("result_picker"), "",
+                                    choices = gsub("_rawdata_unidecfiles", "",
+                                                   basename(results)),
+                                    selected = result_files_sel()))
+              )
+              # Apply JS modifications for picker
+              session$sendCustomMessage("selectize-init", "result_picker")
+
+              output$heatmap <- renderPlotly({
+                heatmap <- create_384_plate_heatmap(reactVars$rslt_df) |>
+                  event_register("plotly_click")
+                reactVars$heatmap_ready <- TRUE
+                heatmap
+              })
+
+              reactVars$trigger <- TRUE
+            }
+          }
+
+          reactVars$lastCheckresults <- Sys.time()
+        }
+      })
+
+      #### Progress tracking observer ----
       progress_observer <- shiny$observe({
         shiny$req(reactVars$isRunning)
         shiny$invalidateLater(1000)
 
         if (difftime(Sys.time(), reactVars$lastCheck, units = "secs") >= 0.5) {
-          current_total_files <- checkProgress(dirs$dir())
-
-          if(current_total_files > reactVars$current_total_files) {
-            # Render plate result visualization
-            batch <- dirs$batch_file()
-            sample_names <- batch[[dirs$id_column()]]
-            sample_names <- gsub(".raw", "", sample_names)
-
-            results_all <- fs::dir_ls(dirs$dir(), glob = "*_rawdata_unidecfiles")
-
-            results <- results_all[basename(results_all) %in% paste0(
-              sample_names, "_rawdata_unidecfiles")]
-
-            wells <- gsub(",", "", sub("^.*:", "", batch[[dirs$vial_column()]]))
-
-            value <- numeric()
-            for (i in 1:nrow(batch)) {
-
-              sample_name <- gsub(".raw", "", batch$sample[i])
-
-              rslt_folder <- file.path(
-                dirs$dir(), paste0(sample_name, "_rawdata_unidecfiles"))
-
-              peak_file <- file.path(
-                dirs$dir(),
-                paste0(sample_name, "_rawdata_unidecfiles"),
-                paste0(sample_name, "_rawdata_peaks.dat"))
-
-              if (dir.exists(rslt_folder) && file.exists(peak_file)) {
-                peaks <- utils::read.delim(peak_file, header = F, sep = " ")
-                value[i] <- max(peaks$V1)
-              } else {
-                value[i] <- NA
-              }
-            }
-
-            reactVars$rslt_df <- data.frame(sample = sample_names, well_id = wells,
-                                  value = value)
-
-            output$heatmap <- renderPlotly({
-              create_384_plate_heatmap(reactVars$rslt_df)
-            })
-          }
-
-          reactVars$current_total_files <- current_total_files
+          reactVars$current_total_files <- check_progress(dirs$dir())
           reactVars$completedFiles <-
             reactVars$current_total_files - reactVars$initialFileCount
           reactVars$lastCheck <- Sys.time()
@@ -814,7 +844,10 @@ server <- function(id, dirs) {
             reactVars$count <- 0
           }
 
-          if (progress_pct != 100) {
+          if (reactVars$current_total_files == 0) {
+            title <- paste0("Initializing ",
+                            paste0(rep(".", reactVars$count), collapse = ""))
+          } else if (progress_pct != 100) {
             title <- paste0(
               sprintf("Processing Files (%d/%d) ",
                       reactVars$completedFiles, reactVars$expectedFiles),
@@ -833,7 +866,26 @@ server <- function(id, dirs) {
         }
       })
 
-      # close parameter settings menu
+      #### Heatmap click observer ----
+      click_observer <- shiny$observe({
+        click_data <- event_data("plotly_click")
+        if (!is.null(click_data)) {
+          # Get the clicked point's row and column
+          row <- LETTERS[16 - floor(click_data$y) + 1]
+          col <- round(click_data$x)
+          well_id <- paste0(row, col)
+
+          # Find the corresponding sample in the data
+          shiny$isolate(
+            clicked_sample <-
+              reactVars$rslt_df$sample[reactVars$rslt_df$well_id == well_id]
+          )
+
+          result_files_sel(clicked_sample)
+        }
+      })
+
+      #### Switch to running UI ----
       runjs("document.querySelector('button.collapse-toggle').click();")
       output$deconvolution_init_ui <- NULL
 
@@ -845,37 +897,83 @@ server <- function(id, dirs) {
                    '= "none";'))
     })
 
+    ### Render result spectrum ----
+    output$spectrum <- renderPlotly({
+      shiny$req(result_files_sel(), input$toggle_result)
+
+      reactVars$trigger
+
+      result_dir <- file.path(dirs$dir(), paste0(result_files_sel(),
+                                                 "_rawdata_unidecfiles"))
+
+      if(dir.exists(result_dir)) {
+        runjs(paste0('document.getElementById("blocking-overlay").st',
+                     'yle.display = "block";'))
+
+        spectrum <- spectrum_plot(result_dir, input$toggle_result)
+
+        runjs(paste0('document.getElementById("blocking-overlay").st',
+                     'yle.display = "none";'))
+        spectrum
+      }
+    })
+
+    ### Event end deconvolution ----
     shiny$observeEvent(input$deconvolute_end, {
-      shiny$showModal(
-        shiny$div(
-          class = "start-modal",
-          shiny$modalDialog(
-            shiny$fluidRow(
-              shiny$br(),
-              shiny$column(
-                width = 11,
-                shiny$p(
-                  shiny$HTML(
-                    "Are you sure you want to cancel the deconvolution?"
+      if(reactVars$isRunning) {
+        shiny$showModal(
+          shiny$div(
+            class = "start-modal",
+            shiny$modalDialog(
+              shiny$fluidRow(
+                shiny$br(),
+                shiny$column(
+                  width = 11,
+                  shiny$p(
+                    shiny$HTML(
+                      "Are you sure you want to cancel the deconvolution?"
+                    )
                   )
-                )
+                ),
+                shiny$br()
               ),
-              shiny$br()
-            ),
-            title = "Abort Deconvolution",
-            easyClose = TRUE,
-            footer = shiny$tagList(
-              shiny$modalButton("Dismiss"),
-              shiny$actionButton("deconvolute_end_conf", "Abort",
-                           class = "load-db", width = "100px")
+              title = "Abort Deconvolution",
+              easyClose = TRUE,
+              footer = shiny$tagList(
+                shiny$modalButton("Dismiss"),
+                shiny$actionButton("deconvolute_end_conf", "Abort",
+                                   class = "load-db", width = "auto")
+              )
             )
           )
         )
-      )
+      } else {
+        runjs(paste0('document.getElementById("blocking-overlay").styl',
+                     'e.display = "block";'))
+
+        progress_observer$destroy()
+        results_observer$destroy()
+        click_observer$destroy()
+        reset_progress()
+
+        output$deconvolution_running_ui <- NULL
+        output$deconvolution_init_ui <- shiny$renderUI(
+          deconvolution_init_ui
+        )
+
+        runjs(paste0('document.getElementById("blocking-overlay").styl',
+                     'e.display = "none";'))
+        runjs("document.querySelector('button.collapse-toggle').click();")
+      }
     })
 
     shiny$observeEvent(input$deconvolute_end_conf, {
-      # TODO
+      cancel(f)
+      stopCluster(cl)
+      progress_observer$destroy()
+      results_observer$destroy()
+      click_observer$destroy()
+      reset_progress()
     })
   })
 }

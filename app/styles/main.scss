@@ -1,6 +1,19 @@
 #app-deconvolution_pars-folder-modal > div > div > div.modal-body >
+div.sF-navigation.btn-toolbar > select,
+#app-deconvolution_pars-file-modal > div > div > div.modal-body >
 div.sF-navigation.btn-toolbar > select {
   width: calc(70% - 340px)
+}
+
+.sF-modal .modal-content {
+  overflow: auto;
+  min-width: 276px;
+  max-height: 85vh;
+}
+
+#app-deconvolution_pars-folder-modal .modal-header,
+#app-deconvolution_pars-file-modal .modal-header {
+  padding-bottom: 0;
 }
 
 .navbar+.container-fluid>.tab-content>.tab-pane.active.html-fill-container>.bslib-sidebar-layout:only-child:not([data-bslib-sidebar-border-radius="true"]) {
@@ -204,6 +217,18 @@ body > div.waiter-overlay.waiter-fullscreen {
 #app-deconvolution_process-deconvolute_start {
   background: #38387C;
   color: white;
+  box-shadow: 0 0 12px rgb(0 0 0 / 80%);
+  animation: pulsate-shadow 2s infinite ease-in-out;
+  padding: 20px;
+  padding: 20px;
+  padding-right: 40px;
+  padding-left: 40px;
+}
+
+#app-deconvolution_process-deconvolute_start:hover {
+  background: #404040;
+  color: white;
+  box-shadow: 0 0 12px rgb(0 0 0 / 80%);
   animation: pulsate-shadow 2s infinite ease-in-out;
   padding: 20px;
   padding: 20px;
@@ -235,28 +260,75 @@ body > div.waiter-overlay.waiter-fullscreen {
 }
 
 .result-picker {
+  margin-top: -2em;
+}
+
+.selectize-input.focus {
+  border-color: black !important;
+  box-shadow: none;
+}
+
+.form-control:focus {
+  color: var(--bs-body-color);
+  background-color: var(--bs-body-bg);
+  border-color: #000000;
+  outline: 0;
+  box-shadow: 0 0 6px .25rem #35357a42;
+}
+
+.shiny-text-output {
+  overflow: auto;
+  margin-bottom: 0;
+  padding-bottom: 0;
+  height: 45px;
+  max-height: 150px;
+}
+
+#app-deconvolution_process-toggle_result {
   margin-top: -1em;
 }
 
-.btn-outline-primary {
-  --bs-btn-color: #000000;
+.btn-primary, .btn-outline-primary {
+  --bs-btn-color: #fff;
+  --bs-btn-bg: #38387C;
   --bs-btn-border-color: #38387C;
   --bs-btn-hover-color: #fff;
   --bs-btn-hover-bg: #38387C;
   --bs-btn-hover-border-color: #38387C;
-  --bs-btn-focus-shadow-rgb: 0,123,194;
+  --bs-btn-focus-shadow-rgb: 38,143,203;
   --bs-btn-active-color: #fff;
   --bs-btn-active-bg: #38387C;
   --bs-btn-active-border-color: #38387C;
   --bs-btn-active-shadow: inset 0 3px 5px rgba(0,0,0,0.125);
-  --bs-btn-disabled-color: #38387C;
-  --bs-btn-disabled-bg: transparent;
+  --bs-btn-disabled-color: #fff;
+  --bs-btn-disabled-bg: #38387C;
   --bs-btn-disabled-border-color: #38387C;
-  --bs-btn-bg: transparent;
-  --bs-gradient: none;
 }
 
-.selectize-input.focus {
-  border-color: none;
-  box-shadow: none;
+.btn-group>.btn {
+  background-color: white;
+  color: #404040;
+}
+
+.btn-group>.btn:hover {
+  background-color: #404040;
+  color: white;
+}
+
+.btn-check:checked + .btn:hover {
+  color: #fff !important;
+  background-color: #38387C !important;
+  border-color: #38387C !important
+}
+
+#app-deconvolution_pars-folder-modal *::-webkit-scrollbar-track,
+#app-deconvolution_pars-folder-modal::-webkit-scrollbar-track,
+#app-deconvolution_pars-file-modal *::-webkit-scrollbar-track,
+#app-deconvolution_pars-file-modal::-webkit-scrollbar-track {
+  border-top-right-radius: 7px;
+  border-bottom-right-radius: 7px;
+}
+
+.selectize-dropdown .selected {
+  background-color: #38387C;
 }

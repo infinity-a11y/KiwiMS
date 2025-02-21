@@ -69,23 +69,38 @@ server <- function(id) {
 
     # Get selected paths
     root_dir <- reactive({
-      shiny::req(input$folder)
-
-      shiny::validate(shiny::need(input$folder, "Nothing selected"))
-      parseDirPath(roots, input$folder)
+      if(is.null(input$folder)) {
+        character()
+      } else {
+        parseDirPath(roots, input$folder)
+      }
     })
+
     file_path <- reactive({
-      shiny::req(input$file)
-
-      shiny::validate(shiny::need(input$file, "Nothing selected"))
-      parseDirPath(roots, input$file)
+      if(is.null(input$file)) {
+        character()
+      } else {
+        parseDirPath(roots, input$file)
+      }
     })
-    batch_file <- reactive({
-      shiny::req(input$batch_selection)
 
-      file_path <- file.path(dirname(input$batch_selection$datapath),
-                             basename(input$batch_selection$datapath))
-      utils::read.csv(file_path)
+    batch_file <- reactive({
+      if(is.null(input$batch_selection)) {
+        character()
+      } else {
+        file_path <- file.path(dirname(input$batch_selection$datapath),
+                               basename(input$batch_selection$datapath))
+        utils::read.csv(file_path)
+      }
+    })
+
+    # Collection of reactive vars
+    rootdir <- shiny::reactiveVal(character())
+    filepath <- shiny::reactiveVal(character())
+
+    shiny::observe({
+      filepath(file_path())
+      rootdir(root_dir())
     })
 
     # File selection feedback
@@ -94,6 +109,8 @@ server <- function(id) {
 
     shiny::observeEvent(input$file, {
       selected("file")
+
+      rootdir(character())
 
       # Adjust UI elements
       output$path_selected <- shiny::renderPrint(cat("Nothing selected"))
@@ -116,6 +133,8 @@ server <- function(id) {
     })
     shiny::observeEvent(input$folder, {
       selected("folder")
+
+      filepath(character())
 
       # Adjust UI elements
       output$file_selected <- shiny::renderPrint(cat("Nothing selected"))
@@ -197,7 +216,7 @@ server <- function(id) {
     })
 
     # Return paths
-    reactiveValues(dir = root_dir, file = file_path, batch_file = batch_file,
+    reactiveValues(dir = rootdir, file = filepath, batch_file = batch_file,
                    selected = selected, id_column = id_column_reactive,
                    vial_column = vial_column_reactive)
   })

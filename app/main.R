@@ -3,7 +3,7 @@
 box::use(
   bsicons[bs_icon],
   bslib,
-  shiny[div, moduleServer, NS, reactive, stopApp, tagList, tags],
+  shiny[div, moduleServer, NS, observe, reactive, stopApp, tagList, tags],
   shinyjs[useShinyjs],
   waiter[spin_fading_circles, useWaiter, waiterShowOnLoad, waiter_hide],
 )
