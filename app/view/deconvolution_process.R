@@ -574,13 +574,24 @@ server <- function(id, dirs) {
 
       ##### Determine deconvolution mode ----
       if (dirs$selected() == "folder") {
-        raw_dirs <- list.dirs(dirs$dir(), full.names = TRUE, recursive = FALSE)
-        raw_dirs <- raw_dirs[grep("\\.raw$", raw_dirs)]
+        if (length(dirs$batch_file())) {
+          raw_dirs <- list.dirs(dirs$dir(), full.names = TRUE, recursive = FALSE)
+          raw_dirs <- raw_dirs[grep("\\.raw$", raw_dirs)]
 
-        batch <- dirs$batch_file()
-        sample_names <- batch[[dirs$id_column()]]
+          batch <- dirs$batch_file()
+          sample_names <- batch[[dirs$id_column()]]
 
-        raw_dirs <- raw_dirs[basename(raw_dirs) %in% sample_names]
+          raw_dirs <- raw_dirs[basename(raw_dirs) %in% sample_names]
+
+          # Prepare heatmap variables
+          reactVars$sample_names <- gsub(
+            ".raw", "", dirs$batch_file()[[dirs$id_column()]])
+          reactVars$wells <- gsub(
+            ",", "", sub("^.*:", "", dirs$batch_file()[[dirs$vial_column()]]))
+
+        } else {
+          raw_dirs <- list.dirs(dirs$dir(), full.names = TRUE, recursive = FALSE)
+        }
       }
 
       #### Validate inputs ----
@@ -617,12 +628,6 @@ server <- function(id, dirs) {
       reactVars$initialFileCount <- check_progress(dirs$dir())
       message("Initial file count: ", reactVars$initialFileCount)
 
-      # Prepare heatmap variables
-      reactVars$sample_names <- gsub(
-        ".raw", "", dirs$batch_file()[[dirs$id_column()]])
-      reactVars$wells <- gsub(
-        ",", "", sub("^.*:", "", dirs$batch_file()[[dirs$vial_column()]]))
-
       #### Future computation ----
 
       # Get deconvolution parameter
@@ -639,7 +644,10 @@ server <- function(id, dirs) {
       time_start <- input$time_start
       time_end <- input$time_end
 
-      f <- future({
+      future_id <- uuid::UUIDgenerate()
+      reactVars$current_future_id <- future_id
+
+      future_promise <- future({
         deconvolute(raw_dirs,
                     startz = startz, endz = endz,
                     minmz = minmz, maxmz = maxmz,
@@ -647,7 +655,11 @@ server <- function(id, dirs) {
                     massbins = massbins, peakthresh = peakthresh,
                     peakwindow = peakwindow, peaknorm = peaknorm,
                     time_start = time_start, time_end = time_end)
-      }) |>
+      })
+
+      assign(paste0("future_", future_id), future_promise, envir = .GlobalEnv)
+
+      future_promise |>
         # on successful completion
         then(
           onFulfilled = function(value) {
@@ -968,12 +980,7 @@ server <- function(id, dirs) {
     })
 
     shiny$observeEvent(input$deconvolute_end_conf, {
-      cancel(f)
-      stopCluster(cl)
-      progress_observer$destroy()
-      results_observer$destroy()
-      click_observer$destroy()
-      reset_progress()
+
     })
   })
 }

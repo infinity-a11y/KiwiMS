@@ -109,6 +109,19 @@ engine.process_data()
 engine.run_unidec()
 engine.pick_peaks()
 ', input_path, params_string))
+
+    # save spectra
+    result <- gsub(".raw", "_rawdata_unidecfiles", waters_dir)
+
+    if (dir.exists(result)) {
+      plots <- list(
+        decon_spec = spectrum_plot(result, F),
+        raw_spec = spectrum_plot(result, T)
+      )
+
+      saveRDS(plots, file.path(result, "plots.rds"))
+    }
+
   }
 
   # showNotification(paste0("Deconvolution initiated"),
@@ -172,23 +185,6 @@ engine.pick_peaks()
   #   successful, failed))
 
   # return(results)
-}
-
-#' @export
-plot_ms_spec <- function(waters_dir) {
-
-  # Get results directories
-  unidecfiles <- list.files(waters_dir, full.names = TRUE)
-
-  # Get file
-  mass_intensity <- grep("_mass\\.txt$", unidecfiles, value = TRUE)
-  mass_data <- read.table(mass_intensity, sep = " ", header = TRUE)
-  colnames(mass_data) <- c("mz", "intensity")
-
-  plot(mass_data$mz, mass_data$intensity, type = "h",
-       xlab = "Mass (Da)", ylab = "Intensity",
-       main = "Deconvoluted Mass Spectrum",
-       col = "blue", lwd = 3)
 }
 
 #' @export
