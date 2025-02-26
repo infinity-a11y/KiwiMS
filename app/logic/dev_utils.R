@@ -7,11 +7,11 @@ box::use(
 #' @export
 add_dev_headers <- function() {
   tags$head(
-    tags$meta(http_equiv = "Cache-Control",
-              content = "no-cache, no-store, must-revalidate"),
-    tags$meta(http_equiv = "Pragma",
-              content = "no-cache"),
-    tags$meta(http_equiv = "Expires",
-              content = "0")
+    tags$meta(
+      http_equiv = "Cache-Control",
+      content = "no-cache, no-store, must-revalidate"
+    ),
+    tags$meta(http_equiv = "Pragma", content = "no-cache"),
+    tags$meta(http_equiv = "Expires", content = "0")
   )
 }

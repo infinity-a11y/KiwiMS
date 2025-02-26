@@ -9,16 +9,17 @@ box::use(
 #' @export
 ui <- function(id) {
   ns <- NS(id)
-  
+
   DTOutput(ns("conversion_table"))
 }
 
 #' @export
 server <- function(id) {
   moduleServer(id, function(input, output, session) {
-    output$conversion_table <- renderDataTable({
-      # placeholder dataset
-      rhinos
+    output$conversion_table <- renderDataTable(
+      {
+        # placeholder dataset
+        rhinos
       },
       filter = "top",
       style = "bootstrap",

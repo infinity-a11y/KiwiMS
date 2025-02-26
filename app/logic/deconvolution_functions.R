@@ -13,38 +13,58 @@ box::use(
 )
 
 #' @export
-deconvolute <- function(raw_dirs,
-                        num_cores = detectCores() - 1,
-                        startz = 1, endz = 50,
-                        minmz = '', maxmz = '',
-                        masslb = 5000, massub = 500000,
-                        massbins = 10, peakthresh = 0.1,
-                        peakwindow = 500, peaknorm = 1,
-                        time_start = '', time_end = '') {
-
+deconvolute <- function(
+  raw_dirs,
+  num_cores = detectCores() - 1,
+  startz = 1,
+  endz = 50,
+  minmz = '',
+  maxmz = '',
+  masslb = 5000,
+  massub = 500000,
+  massbins = 10,
+  peakthresh = 0.1,
+  peakwindow = 500,
+  peaknorm = 1,
+  time_start = '',
+  time_end = ''
+) {
   # ensure python path and packages availability
-  py_outcome <- tryCatch({
-    use_python(py_config()$python, required = TRUE)
-    TRUE
-  }, error = function(e) {
-    # showNotification(
-    #   "Python modules could not be loaded. Aborting.",
-    #   type = "error",
-    #   duration = NULL
-    # )
-    FALSE
-  })
+  py_outcome <- tryCatch(
+    {
+      use_python(py_config()$python, required = TRUE)
+      TRUE
+    },
+    error = function(e) {
+      # showNotification(
+      #   "Python modules could not be loaded. Aborting.",
+      #   type = "error",
+      #   duration = NULL
+      # )
+      FALSE
+    }
+  )
 
   if (!py_outcome) {
     return()
   }
 
   # Deconvolution function for a single waters .raw
-  process_single_dir <- function(waters_dir,
-                                 startz, endz, minmz, maxmz,
-                                 masslb, massub, massbins, peakthresh,
-                                 peakwindow, peaknorm, time_start, time_end) {
-
+  process_single_dir <- function(
+    waters_dir,
+    startz,
+    endz,
+    minmz,
+    maxmz,
+    masslb,
+    massub,
+    massbins,
+    peakthresh,
+    peakwindow,
+    peaknorm,
+    time_start,
+    time_end
+  ) {
     input_path <- gsub("\\\\", "/", waters_dir)
 
     # Function to properly format parameters for Python
@@ -73,7 +93,8 @@ deconvolute <- function(raw_dirs,
       format_param(time_end)
     )
 
-    reticulate::py_run_string(sprintf('
+    reticulate::py_run_string(sprintf(
+      '
 import sys
 import unidec
 import re
@@ -108,7 +129,10 @@ engine.config.time_end = params["time_end"]
 engine.process_data()
 engine.run_unidec()
 engine.pick_peaks()
-', input_path, params_string))
+',
+      input_path,
+      params_string
+    ))
 
     # save spectra
     result <- gsub(".raw", "_rawdata_unidecfiles", waters_dir)
@@ -121,14 +145,13 @@ engine.pick_peaks()
 
       saveRDS(plots, file.path(result, "plots.rds"))
     }
-
   }
 
   # showNotification(paste0("Deconvolution initiated"),
   #                  type = "message", duration = NULL)
 
   # Process directories in parallel
-  if(num_cores > 1) {
+  if (num_cores > 1) {
     cl <- makeCluster(num_cores)
     on.exit(stopCluster(cl))
 
@@ -150,28 +173,46 @@ engine.pick_peaks()
 
     # Create wrapper function that includes all parameters
     process_wrapper <- function(dir) {
-      process_single_dir(dir,
-                         startz, endz,
-                         minmz, maxmz,
-                         masslb, massub,
-                         massbins, peakthresh,
-                         peakwindow, peaknorm,
-                         time_start, time_end)
+      process_single_dir(
+        dir,
+        startz,
+        endz,
+        minmz,
+        maxmz,
+        masslb,
+        massub,
+        massbins,
+        peakthresh,
+        peakwindow,
+        peaknorm,
+        time_start,
+        time_end
+      )
     }
 
     results <- parLapply(cl, raw_dirs, process_wrapper)
-
   } else {
-    message(paste0(num_cores, " core(s) detected. Sequential processing started."))
+    message(paste0(
+      num_cores,
+      " core(s) detected. Sequential processing started."
+    ))
 
     results <- lapply(raw_dirs, function(dir) {
-      process_single_dir(dir,
-                         startz, endz,
-                         minmz, maxmz,
-                         masslb, massub,
-                         massbins, peakthresh,
-                         peakwindow, peaknorm,
-                         time_start, time_end)
+      process_single_dir(
+        dir,
+        startz,
+        endz,
+        minmz,
+        maxmz,
+        masslb,
+        massub,
+        massbins,
+        peakthresh,
+        peakwindow,
+        peaknorm,
+        time_start,
+        time_end
+      )
     })
   }
 
@@ -193,7 +234,7 @@ create_384_plate_heatmap <- function(data) {
   rows <- rev(LETTERS[1:16])
   cols <- 1:24
   plate_layout <- expand.grid(row = rows, col = cols) |>
-    mutate(well_id = paste0(row, col))  # Vectorized for efficiency
+    mutate(well_id = paste0(row, col)) # Vectorized for efficiency
 
   # Merge data with plate layout efficiently
   plate_data <- left_join(plate_layout, data, by = "well_id")
@@ -203,33 +244,40 @@ create_384_plate_heatmap <- function(data) {
     mutate(
       value_fmt = ifelse(is.na(value), "NA", sprintf("%.2f", value)),
       sample_fmt = ifelse(is.na(sample), "Empty", as.character(sample)),
-      tooltip_text = sprintf("Well: %s\nValue: %s\nSample: %s", well_id,
-                             value_fmt, sample_fmt)
+      tooltip_text = sprintf(
+        "Well: %s\nValue: %s\nSample: %s",
+        well_id,
+        value_fmt,
+        sample_fmt
+      )
     )
 
   # Optimize the unique value check
   num_unique_values <- n_distinct(plate_data$value, na.rm = TRUE)
   #
   if (num_unique_values == 1) {
-  #   print("unique")
-  #   plate_data$value <- factor(plate_data$value)
-  #   scale <- ggplot2$scale_fill_viridis_d(name = "Peak Mass [Da]",
-  #                                         na.value = "white")
+    #   print("unique")
+    #   plate_data$value <- factor(plate_data$value)
+    #   scale <- ggplot2$scale_fill_viridis_d(name = "Peak Mass [Da]",
+    #                                         na.value = "white")
     show_legend <- FALSE
   } else {
-  #   print("more")
+    #   print("more")
     # scale <- ggplot2$scale_fill_viridis_c(name = "Peak Mass [Da]",
     #                                       na.value = "white")
     show_legend <- TRUE
   }
 
-  scale <- ggplot2$scale_fill_viridis_c(name = "Peak Mass [Da]",
-                                        na.value = "white")
+  scale <- ggplot2$scale_fill_viridis_c(
+    name = "Peak Mass [Da]",
+    na.value = "white"
+  )
 
   # Create the heatmap
   plate_plot <- ggplot2$ggplot(
     plate_data,
-    ggplot2$aes(x = col, y = factor(row, levels = rev(rows)), fill = value)) +
+    ggplot2$aes(x = col, y = factor(row, levels = rev(rows)), fill = value)
+  ) +
     ggplot2$geom_rect(
       data = plate_layout,
       ggplot2$aes(
@@ -243,8 +291,11 @@ create_384_plate_heatmap <- function(data) {
       linewidth = 0.5
     ) +
     suppressWarnings({
-      ggplot2$geom_tile(ggplot2$aes(text = tooltip_text),
-                        width = 0.95, height = 0.95)
+      ggplot2$geom_tile(
+        ggplot2$aes(text = tooltip_text),
+        width = 0.95,
+        height = 0.95
+      )
     }) +
     ggplot2$scale_y_discrete(limits = rows) +
     ggplot2$scale_x_continuous(
@@ -257,8 +308,12 @@ create_384_plate_heatmap <- function(data) {
     ggplot2$coord_fixed() +
     ggplot2$theme_minimal() +
     ggplot2$theme(
-      axis.text.x = ggplot2$element_text(size = 8, angle = 0, vjust = 0,
-                                         hjust = 0.5),
+      axis.text.x = ggplot2$element_text(
+        size = 8,
+        angle = 0,
+        vjust = 0,
+        hjust = 0.5
+      ),
       axis.text.y = ggplot2$element_text(size = 8, hjust = 1),
       axis.title = ggplot2$element_blank(),
       panel.grid = ggplot2$element_blank(),
@@ -313,8 +368,14 @@ create_384_plate_heatmap <- function(data) {
       displayModeBar = "hover",
       scrollZoom = FALSE,
       modeBarButtons = list(
-        list("zoom2d", "toImage", "autoScale2d",
-             "resetScale2d", "zoomIn2d", "zoomOut2d")
+        list(
+          "zoom2d",
+          "toImage",
+          "autoScale2d",
+          "resetScale2d",
+          "zoomIn2d",
+          "zoomOut2d"
+        )
       )
     )
 
@@ -335,10 +396,10 @@ spectrum_plot <- function(result_path, raw) {
   mass_file <- file.path(result_path, paste0(base, "_mass.txt"))
   peaks_file <- file.path(result_path, paste0(base, "_peaks.dat"))
 
-  if(!file.exists(mass_file) || !file.exists(peaks_file)) return()
+  if (!file.exists(mass_file) || !file.exists(peaks_file)) return()
 
   # Read data
-  if(raw) {
+  if (raw) {
     mass <- read.delim(raw_file, sep = " ", header = FALSE)
 
     mass$V2 <- (mass$V2 - min(mass$V2)) / (max(mass$V2) - min(mass$V2)) * 100
@@ -352,19 +413,30 @@ spectrum_plot <- function(result_path, raw) {
 
   # Create spectrum
   plot <- ggplot2$ggplot(
-    mass,  ggplot2$aes(x = V1, y = V2, group = 1,
-                       text = paste0("Mass: ", V1, " Da\nIntensity: ",
-                                     round(V2, 2), "%"))) +
+    mass,
+    ggplot2$aes(
+      x = V1,
+      y = V2,
+      group = 1,
+      text = paste0("Mass: ", V1, " Da\nIntensity: ", round(V2, 2), "%")
+    )
+  ) +
     ggplot2$geom_line() +
     ggplot2$scale_y_continuous(labels = percent_format(scale = 1)) +
     ggplot2$theme_minimal()
 
-  if(raw) {
+  if (raw) {
     plot <- plot + ggplot2$labs(y = "Intensity [%]", x = "m/z [Th]")
   } else {
-    plot <- plot + ggplot2$geom_point(
-      data = highlight_peaks, ggplot2$aes(x = V1, y = V2),
-      fill = "#e8cb97", colour = "#35357A", shape = 21, size = 2) +
+    plot <- plot +
+      ggplot2$geom_point(
+        data = highlight_peaks,
+        ggplot2$aes(x = V1, y = V2),
+        fill = "#e8cb97",
+        colour = "#35357A",
+        shape = 21,
+        size = 2
+      ) +
       ggplot2$labs(y = "Intensity [%]", x = "Mass [Da]")
   }
 
@@ -374,8 +446,14 @@ spectrum_plot <- function(result_path, raw) {
       displayModeBar = "hover",
       scrollZoom = FALSE,
       modeBarButtons = list(
-        list("zoom2d", "toImage", "autoScale2d",
-             "resetScale2d", "zoomIn2d", "zoomOut2d")
+        list(
+          "zoom2d",
+          "toImage",
+          "autoScale2d",
+          "resetScale2d",
+          "zoomIn2d",
+          "zoomOut2d"
+        )
       )
     )
 

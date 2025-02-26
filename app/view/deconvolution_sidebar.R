@@ -15,9 +15,13 @@ ui <- function(id) {
 
   sidebar(
     title = "File Upload",
-    h6("Multiple Target Files",
-       style = paste0("font-weight: 700; margin-left: 1em; text-align: center;",
-                      "margin-bottom: -5px;")),
+    h6(
+      "Multiple Target Files",
+      style = paste0(
+        "font-weight: 700; margin-left: 1em; text-align: center;",
+        "margin-bottom: -5px;"
+      )
+    ),
     shinyDirButton(
       ns("folder"),
       "Select Root Folder",
@@ -27,15 +31,24 @@ ui <- function(id) {
       root = path_home()
     ),
     shiny::verbatimTextOutput(ns("path_selected")),
-    div(class = "batch-file",
-        shiny::fileInput(ns("batch_selection"), "Select Batch File",
-                         accept = c(".csv", ".xlsx"))),
+    div(
+      class = "batch-file",
+      shiny::fileInput(
+        ns("batch_selection"),
+        "Select Batch File",
+        accept = c(".csv", ".xlsx")
+      )
+    ),
     shiny::uiOutput(ns("batch_id_col_ui")),
     shiny::uiOutput(ns("batch_vial_col_ui")),
     shiny::hr(style = "margin: 1rem 0; opacity: 1;"),
-    h6("Individual Target File",
-       style = paste0("font-weight: 700; margin-left: 1em; text-align: center;",
-                      "margin-bottom: -5px;")),
+    h6(
+      "Individual Target File",
+      style = paste0(
+        "font-weight: 700; margin-left: 1em; text-align: center;",
+        "margin-bottom: -5px;"
+      )
+    ),
     shinyDirButton(
       ns("file"),
       "Select Single File",
@@ -60,16 +73,26 @@ server <- function(id) {
     roots <- c(Home = path_home(), C = "C:/", D = "D:/")
 
     # Initialize root folder selection
-    shinyDirChoose(input, id = "folder", roots = roots,
-                   defaultRoot = "Home", session = session)
+    shinyDirChoose(
+      input,
+      id = "folder",
+      roots = roots,
+      defaultRoot = "Home",
+      session = session
+    )
 
     # Initialize individual file selection
-    shinyDirChoose(input, id = "file", roots = roots,
-                   defaultRoot = "Home", session = session)
+    shinyDirChoose(
+      input,
+      id = "file",
+      roots = roots,
+      defaultRoot = "Home",
+      session = session
+    )
 
     # Get selected paths
     root_dir <- reactive({
-      if(is.null(input$folder)) {
+      if (is.null(input$folder)) {
         character()
       } else {
         parseDirPath(roots, input$folder)
@@ -77,7 +100,7 @@ server <- function(id) {
     })
 
     file_path <- reactive({
-      if(is.null(input$file)) {
+      if (is.null(input$file)) {
         character()
       } else {
         parseDirPath(roots, input$file)
@@ -85,11 +108,13 @@ server <- function(id) {
     })
 
     batch_file <- reactive({
-      if(is.null(input$batch_selection)) {
+      if (is.null(input$batch_selection)) {
         character()
       } else {
-        file_path <- file.path(dirname(input$batch_selection$datapath),
-                               basename(input$batch_selection$datapath))
+        file_path <- file.path(
+          dirname(input$batch_selection$datapath),
+          basename(input$batch_selection$datapath)
+        )
         utils::read.csv(file_path)
       }
     })
@@ -115,11 +140,19 @@ server <- function(id) {
       # Adjust UI elements
       output$path_selected <- shiny::renderPrint(cat("Nothing selected"))
       shinyjs::reset("batch_selection")
-      shiny::updateSelectInput(session, "vial_column", choices = "",
-                               selected = "")
+      shiny::updateSelectInput(
+        session,
+        "vial_column",
+        choices = "",
+        selected = ""
+      )
       shinyjs::disable("vial_column")
-      shiny::updateSelectInput(session, "id_column", choices = "",
-                               selected = "")
+      shiny::updateSelectInput(
+        session,
+        "id_column",
+        choices = "",
+        selected = ""
+      )
       shinyjs::disable("id_column")
 
       output$file_selected <- shiny::renderPrint({
@@ -155,56 +188,68 @@ server <- function(id) {
 
     # Render batch column selection UI
     output$batch_id_col_ui <- shiny::renderUI({
-
       # tryCatch({
-        if (!is.null(input$batch_selection)) {
-          batch <- batch_file()
-          choices <- colnames(batch)
-          select <- shiny::selectInput(ns("id_column"), "", choices = choices)
-        } else {
-          select <- disabled(shiny::selectInput(ns("id_column"), "",
-                                                choices = ""))
-        }
+      if (!is.null(input$batch_selection)) {
+        batch <- batch_file()
+        choices <- colnames(batch)
+        select <- shiny::selectInput(ns("id_column"), "", choices = choices)
+      } else {
+        select <- disabled(shiny::selectInput(
+          ns("id_column"),
+          "",
+          choices = ""
+        ))
+      }
 
-        fluidRow(
-          column(
-            width = 5,
-            h6("Sample ID Column", style = "font-size: small")
-          ),
-          column(
-            width = 7,
-            div(class = "batch-select", select)
-          )
+      fluidRow(
+        column(
+          width = 5,
+          h6("Sample ID Column", style = "font-size: small")
+        ),
+        column(
+          width = 7,
+          div(class = "batch-select", select)
         )
+      )
       # }, error = function(e) {
       #   NULL
       # })
     })
 
     output$batch_vial_col_ui <- shiny::renderUI({
-      tryCatch({
-        if (!is.null(input$batch_selection)) {
-          batch <- batch_file()
-          choices <- colnames(batch)[colnames(batch) != input$id_column]
-          select <- shiny::selectInput(ns("vial_column"), "", choices = choices)
-        } else {
-          select <- disabled(shiny::selectInput(ns("vial_column"), "",
-                                                choices = ""))
-        }
+      tryCatch(
+        {
+          if (!is.null(input$batch_selection)) {
+            batch <- batch_file()
+            choices <- colnames(batch)[colnames(batch) != input$id_column]
+            select <- shiny::selectInput(
+              ns("vial_column"),
+              "",
+              choices = choices
+            )
+          } else {
+            select <- disabled(shiny::selectInput(
+              ns("vial_column"),
+              "",
+              choices = ""
+            ))
+          }
 
-        fluidRow(
-          column(
-            width = 5,
-            h6("Vial Column", style = "font-size: small")
-          ),
-          column(
-            width = 7,
-            div(class = "batch-select", select)
+          fluidRow(
+            column(
+              width = 5,
+              h6("Vial Column", style = "font-size: small")
+            ),
+            column(
+              width = 7,
+              div(class = "batch-select", select)
+            )
           )
-        )
-      }, error = function(e) {
-        NULL
-      })
+        },
+        error = function(e) {
+          NULL
+        }
+      )
     })
 
     vial_column_reactive <- reactive({
@@ -216,8 +261,13 @@ server <- function(id) {
     })
 
     # Return paths
-    reactiveValues(dir = rootdir, file = filepath, batch_file = batch_file,
-                   selected = selected, id_column = id_column_reactive,
-                   vial_column = vial_column_reactive)
+    reactiveValues(
+      dir = rootdir,
+      file = filepath,
+      batch_file = batch_file,
+      selected = selected,
+      id_column = id_column_reactive,
+      vial_column = vial_column_reactive
+    )
   })
 }

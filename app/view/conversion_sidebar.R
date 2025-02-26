@@ -8,19 +8,21 @@ box::use(
 #' @export
 ui <- function(id) {
   ns <- NS(id)
-  
+
   sidebar(
     title = "File Upload",
     fileInput(
       ns("raw_input"),
       "Select Input File",
       multiple = FALSE,
-      accept = c(".txt", ".tab")),
+      accept = c(".txt", ".tab")
+    ),
     fileInput(
       ns("mass_input"),
       "Select ExpMW File",
       multiple = FALSE,
-      accept = c("text/tab-separated-values")),
+      accept = c("text/tab-separated-values")
+    ),
     textInput(ns("protein_mass"), "Protein Mass", ""),
     card(
       card_header(
@@ -29,7 +31,7 @@ ui <- function(id) {
       ),
       card_body(
         textInput(ns("cmpd_label"), "Compound Labeling", "4"),
-        textInput(ns("prot_peak"), "Protein Peak", "10") 
+        textInput(ns("prot_peak"), "Protein Peak", "10")
       )
     ),
     card(
