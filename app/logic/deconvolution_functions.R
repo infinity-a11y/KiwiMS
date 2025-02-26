@@ -346,7 +346,7 @@ create_384_plate_heatmap <- function(data) {
         tickfont = list(size = 12),
         tickangle = 0
       ),
-      margin = list(t = 40, r = 0, b = 0, l = 50),
+      margin = list(t = 40, r = 10, b = 0, l = 50),
       plot_bgcolor = "white",
       paper_bgcolor = "white"
     ) |>

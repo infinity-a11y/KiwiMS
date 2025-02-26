@@ -521,7 +521,7 @@ server <- function(id, dirs) {
     #### check_progress ----
     check_progress <- function(dir_path) {
       message("Checking progress at: ", Sys.time())
-      files <- dir_ls(dir_path, glob = "*_rawdata.txt")
+      files <- dir_ls(dir_path, glob = "*_rawdata_unidecfiles")
       count <- length(files)
       message("Found files: ", count)
       count
@@ -855,8 +855,6 @@ server <- function(id, dirs) {
 
             ##### Render heatmap & result picker ----
             if (nrow(reactVars$rslt_df) > 0) {
-              # enable("app-deconvolution_process-toggle_result")
-              # enable(ns("toggle_result"))
               enable(selector = "#app-deconvolution_process-toggle_result")
 
               # Render results picker
@@ -946,6 +944,101 @@ server <- function(id, dirs) {
               "Finalizing ",
               paste0(rep(".", reactVars$count), collapse = "")
             )
+
+            result_files <- dir_ls(dirs$dir(), glob = "*_rawdata_unidecfiles")
+
+            # check if deconvolution finished for all target files
+            if (all(file.exists(file.path(result_files, "plots.rds")))) {
+              # stop observers
+              reactVars$progress_observer$destroy()
+              reactVars$process_observer$destroy()
+              reactVars$results_observer$destroy()
+              reactVars$isRunning <- FALSE
+
+              # final result check for heatmap update
+              results <- result_files[
+                basename(result_files) %in%
+                  paste0(
+                    reactVars$sample_names,
+                    "_rawdata_unidecfiles"
+                  )
+              ]
+
+              new <- !gsub("_rawdata_unidecfiles", "", basename(results)) %in%
+                reactVars$rslt_df$sample
+              new_results <- results[new]
+
+              if (length(new_results)) {
+                well <- character()
+                value <- numeric()
+                sample_names <- character()
+                for (i in 1:length(new_results)) {
+                  sample_names[i] <- gsub(
+                    "_rawdata_unidecfiles",
+                    "",
+                    basename(new_results[i])
+                  )
+                  well[i] <- reactVars$wells[which(
+                    reactVars$sample_names == sample_names[i]
+                  )]
+
+                  peak_file <- file.path(
+                    new_results[i],
+                    paste0(sample_names[i], "_rawdata_peaks.dat")
+                  )
+
+                  if (file.exists(peak_file)) {
+                    get_peaks <- tryCatch(
+                      {
+                        peaks <- utils::read.delim(
+                          peak_file,
+                          header = F,
+                          sep = " "
+                        )
+                      },
+                      error = function(e) {
+                        NULL
+                      }
+                    )
+
+                    if (is.null(peaks)) {
+                      value[i] <- NA
+                      next
+                    }
+
+                    max <- max(peaks$V1)
+                    if (length(max) && !is.na(max)) {
+                      value[i] <- max
+                    } else {
+                      value[i] <- NA
+                    }
+                  } else {
+                    value[i] <- NA
+                  }
+                }
+
+                new_rslt_df <- data.frame(
+                  sample = sample_names,
+                  well_id = well,
+                  value = value
+                )
+                new_rslt_df <- new_rslt_df[
+                  !as.logical(
+                    rowSums(is.na(new_rslt_df))
+                  ),
+                ]
+
+                reactVars$rslt_df <- rbind(reactVars$rslt_df, new_rslt_df)
+              }
+
+              shiny$updateActionButton(
+                session,
+                "deconvolute_end",
+                label = "Reset"
+              )
+
+              title <- "Finalized!"
+            }
           }
 
           updateProgressBar(

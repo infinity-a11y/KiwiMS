@@ -103,6 +103,7 @@ server <- function(id) {
     dirs <- deconvolution_sidebar$server("deconvolution_pars")
     deconvolution_process$server("deconvolution_process", dirs)
 
+    Sys.sleep(3)
     waiter_hide()
   })
 }
