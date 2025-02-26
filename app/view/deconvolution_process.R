@@ -3,10 +3,9 @@
 box::use(
   bslib[card, card_body, card_header],
   fs[dir_ls],
-  future[future, plan, multisession],
   parallel[detectCores, makeCluster],
   plotly[event_data, event_register, plotlyOutput, renderPlotly],
-  promises[catch, then],
+  processx[process],
   shiny,
   shinyjs[delay, disabled, enable, runjs],
   shinyWidgets[radioGroupButtons, progressBar, updateProgressBar],
@@ -38,10 +37,10 @@ ui <- function(id) {
 
 #' @export
 server <- function(id, dirs) {
-  plan(multisession)
-
   shiny$moduleServer(id, function(input, output, session) {
     ns <- session$ns
+
+    process_data <- shiny$reactiveVal(NULL)
 
     ### Deconvolution initiation interface ----
 
@@ -518,10 +517,6 @@ server <- function(id, dirs) {
       if (!is.null(input$result_picker)) result_files_sel(input$result_picker)
     })
 
-    progress_observer <- NULL
-    results_observer <- NULL
-    click_observer <- NULL
-
     ### Functions ----
     #### check_progress ----
     check_progress <- function(dir_path) {
@@ -547,6 +542,7 @@ server <- function(id, dirs) {
     ### Event start deconvolution ----
 
     #### Start confirmation modal ----
+
     shiny$observeEvent(input$deconvolute_start, {
       if (dirs$selected() == "folder") {
         if (length(dirs$batch_file())) {
@@ -684,85 +680,52 @@ server <- function(id, dirs) {
       reactVars$initialFileCount <- check_progress(dirs$dir())
       message("Initial file count: ", reactVars$initialFileCount)
 
-      #### Future computation ----
+      #### Start computation ----
 
-      # Get deconvolution parameter
-      startz <- input$startz
-      endz <- input$endz
-      minmz <- input$minmz
-      maxmz <- input$maxmz
-      masslb <- input$masslb
-      massub <- input$massub
-      massbins <- input$massbins
-      peakthresh <- input$peakthresh
-      peakwindow <- input$peakwindow
-      peaknorm <- input$peaknorm
-      time_start <- input$time_start
-      time_end <- input$time_end
+      # save config parameter
+      conf <- list(
+        params = data.frame(
+          startz = input$startz,
+          endz = input$endz,
+          minmz = input$minmz,
+          maxmz = input$maxmz,
+          masslb = input$masslb,
+          massub = input$massub,
+          massbins = input$massbins,
+          peakthresh = input$peakthresh,
+          peakwindow = input$peakwindow,
+          peaknorm = input$peaknorm,
+          time_start = input$time_start,
+          time_end = input$time_end
+        ),
+        dirs = raw_dirs,
+        selected = dirs$selected()
+      )
 
-      f <- future({
-        deconvolute(
-          raw_dirs,
-          startz = startz,
-          endz = endz,
-          minmz = minmz,
-          maxmz = maxmz,
-          masslb = masslb,
-          massub = massub,
-          massbins = massbins,
-          peakthresh = peakthresh,
-          peakwindow = peakwindow,
-          peaknorm = peaknorm,
-          time_start = time_start,
-          time_end = time_end
-        )
-      }) |>
-        # on successful completion
-        then(
-          onFulfilled = function(value) {
-            message("Future completed successfully")
-            reactVars$isRunning <- FALSE
+      tmp <- file.path(tempdir(), "conf.rds")
+      saveRDS(conf, tmp)
 
-            updateProgressBar(
-              session = session,
-              id = ns("progressBar"),
-              value = 100,
-              title = "Processing Complete!"
-            )
+      rx_process <- process$new(
+        "Rscript",
+        args = c("app/logic/deconvolution_execute.R", tmp),
+        stdout = "|",
+        stderr = "|"
+      )
 
-            output$status <- shiny$renderText("Process completed successfully!")
+      process_data(rx_process)
 
-            shiny$updateActionButton(
-              session,
-              "deconvolute_end",
-              label = "Reset"
-            )
+      reactVars$process_observer <- shiny$observe({
+        proc <- process_data()
 
-            progress_observer$destroy()
+        session$onSessionEnded(function() {
+          if (!is.null(proc) && proc$is_alive()) {
+            proc$kill()
           }
-        ) |>
-        # on failing process
-        catch(
-          function(error) {
-            message("Future failed with error: ", error$message)
-            reactVars$isRunning <- FALSE
-            progress_observer$destroy()
-
-            updateProgressBar(
-              session = session,
-              id = ns("progressBar"),
-              value = 0,
-              title = "Process Failed!"
-            )
-
-            output$status <- shiny$renderText(
-              paste("Process failed!", error$message)
-            )
-          }
-        )
+        })
+      })
 
       #### Results tracking observer ----
-      results_observer <- shiny$observe({
+      reactVars$results_observer <- shiny$observe({
         shiny$req(reactVars$sample_names, reactVars$wells)
         shiny$invalidateLater(10000)
 
@@ -931,7 +894,7 @@ server <- function(id, dirs) {
       })
 
       #### Progress tracking observer ----
-      progress_observer <- shiny$observe({
+      reactVars$progress_observer <- shiny$observe({
         shiny$req(reactVars$isRunning)
         shiny$invalidateLater(1000)
 
@@ -995,7 +958,7 @@ server <- function(id, dirs) {
       })
 
       #### Heatmap click observer ----
-      click_observer <- shiny$observe({
+      reactVars$click_observer <- shiny$observe({
         click_data <- event_data("plotly_click")
         if (!is.null(click_data)) {
           # Get the clicked point's row and column
@@ -1078,7 +1041,7 @@ server <- function(id, dirs) {
               footer = shiny$tagList(
                 shiny$modalButton("Dismiss"),
                 shiny$actionButton(
-                  "deconvolute_end_conf",
+                  ns("deconvolute_end_conf"),
                   "Abort",
                   class = "load-db",
                   width = "auto"
@@ -1093,12 +1056,14 @@ server <- function(id, dirs) {
           'e.display = "block";'
         ))
 
-        progress_observer$destroy()
-        results_observer$destroy()
-        click_observer$destroy()
+        reactVars$progress_observer$destroy()
+        reactVars$process_observer$destroy()
+        reactVars$results_observer$destroy()
+        reactVars$click_observer$destroy()
         reset_progress()
 
         output$deconvolution_running_ui <- NULL
+        output$heatmap <- NULL
         output$deconvolution_init_ui <- shiny$renderUI(
           deconvolution_init_ui
         )
@@ -1112,6 +1077,31 @@ server <- function(id, dirs) {
     })
 
     shiny$observeEvent(input$deconvolute_end_conf, {
+      proc <- process_data()
+      if (!is.null(proc) && proc$is_alive()) {
+        proc$kill()
+      }
+
+      updateProgressBar(
+        session = session,
+        id = ns("progressBar"),
+        value = 0,
+        title = "Processing aborted"
+      )
+
+      shiny$updateActionButton(
+        session,
+        "deconvolute_end",
+        label = "Reset"
+      )
+
+      reactVars$progress_observer$destroy()
+      reactVars$results_observer$destroy()
+      reactVars$process_observer$destroy()
+      reactVars$isRunning <- FALSE
+
+      shiny$removeModal()
+      shiny$showNotification("Process terminated", type = "message")
     })
   })
 }

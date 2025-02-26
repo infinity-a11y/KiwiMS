@@ -147,9 +147,6 @@ engine.pick_peaks()
     }
   }
 
-  # showNotification(paste0("Deconvolution initiated"),
-  #                  type = "message", duration = NULL)
-
   # Process directories in parallel
   if (num_cores > 1) {
     cl <- makeCluster(num_cores)
@@ -215,17 +212,6 @@ engine.pick_peaks()
       )
     })
   }
-
-  # Summarize results
-  successful <- sum(sapply(results, function(x) !is.null(x)))
-  failed <- length(results) - successful
-
-  # showNotification("Deconvolution finalized", type = "message", duration = NULL)
-  # message(sprintf(
-  #   "\nProcessing complete:\n- Successfully processed: %d\n- Failed: %d",
-  #   successful, failed))
-
-  # return(results)
 }
 
 #' @export
