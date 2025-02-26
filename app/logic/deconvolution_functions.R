@@ -3,7 +3,7 @@
 box::use(
   dplyr[left_join, mutate, n_distinct],
   ggplot2,
-  plotly[config, event_register, ggplotly, layout],
+  plotly[config, event_register, ggplotly, hide_colorbar, layout, style],
   utils[read.delim, read.table],
   scales[percent_format],
   shiny[showNotification],
@@ -220,12 +220,12 @@ create_384_plate_heatmap <- function(data) {
   rows <- rev(LETTERS[1:16])
   cols <- 1:24
   plate_layout <- expand.grid(row = rows, col = cols) |>
-    mutate(well_id = paste0(row, col)) # Vectorized for efficiency
+    mutate(well_id = paste0(row, col))
 
-  # Merge data with plate layout efficiently
+  # Merge data with plate layout
   plate_data <- left_join(plate_layout, data, by = "well_id")
 
-  # Efficient tooltip text creation
+  # Tooltip text creation
   plate_data <- plate_data |>
     mutate(
       value_fmt = ifelse(is.na(value), "NA", sprintf("%.2f", value)),
@@ -238,26 +238,13 @@ create_384_plate_heatmap <- function(data) {
       )
     )
 
-  # Optimize the unique value check
   num_unique_values <- n_distinct(plate_data$value, na.rm = TRUE)
-  #
-  if (num_unique_values == 1) {
-    #   print("unique")
-    #   plate_data$value <- factor(plate_data$value)
-    #   scale <- ggplot2$scale_fill_viridis_d(name = "Peak Mass [Da]",
-    #                                         na.value = "white")
-    show_legend <- FALSE
-  } else {
-    #   print("more")
-    # scale <- ggplot2$scale_fill_viridis_c(name = "Peak Mass [Da]",
-    #                                       na.value = "white")
-    show_legend <- TRUE
-  }
 
-  scale <- ggplot2$scale_fill_viridis_c(
-    name = "Peak Mass [Da]",
-    na.value = "white"
-  )
+  if (num_unique_values == 1) {
+    left <- 80
+  } else {
+    left <- 0
+  }
 
   # Create the heatmap
   plate_plot <- ggplot2$ggplot(
@@ -290,7 +277,10 @@ create_384_plate_heatmap <- function(data) {
       position = "top",
       expand = c(0, 0)
     ) +
-    scale +
+    ggplot2$scale_fill_viridis_c(
+      name = "Peak Mass [Da]",
+      na.value = "white"
+    ) +
     ggplot2$coord_fixed() +
     ggplot2$theme_minimal() +
     ggplot2$theme(
@@ -303,8 +293,7 @@ create_384_plate_heatmap <- function(data) {
       axis.text.y = ggplot2$element_text(size = 8, hjust = 1),
       axis.title = ggplot2$element_blank(),
       panel.grid = ggplot2$element_blank(),
-      axis.ticks = ggplot2$element_blank(),
-      plot.margin = ggplot2$margin(t = 0, r = 0, b = 0, l = 0, unit = "pt")
+      axis.ticks = ggplot2$element_blank()
     )
 
   # Convert to plotly
@@ -313,7 +302,6 @@ create_384_plate_heatmap <- function(data) {
   interactive_plot <- interactive_plot |>
     layout(
       dragmode = FALSE,
-      showlegend = show_legend,
       hoverlabel = list(
         bgcolor = "#38387Cdb",
         font = list(size = 14, color = "white"),
@@ -329,7 +317,7 @@ create_384_plate_heatmap <- function(data) {
         tickangle = 0,
         automargin = TRUE,
         title = "",
-        # ticklabelposition="inside",
+        ticklabelposition = "outside",
         ticklabeloverflow = "allow"
       ),
       xaxis = list(
@@ -346,7 +334,8 @@ create_384_plate_heatmap <- function(data) {
         tickfont = list(size = 12),
         tickangle = 0
       ),
-      margin = list(t = 40, r = 10, b = 0, l = 50),
+      # margin = list(t = 40, r = 60, b = 0, l = 50),
+      margin = list(t = 40, r = 60, b = 0, l = left),
       plot_bgcolor = "white",
       paper_bgcolor = "white"
     ) |>
@@ -365,7 +354,18 @@ create_384_plate_heatmap <- function(data) {
       )
     )
 
-  return(interactive_plot)
+  if (num_unique_values == 1) {
+    interactive_plot |>
+      style(
+        0,
+        colorscale = list(c(0, 1), c("#440154FF", "#440154FF")),
+        showscale = FALSE,
+        showlegend = FALSE
+      ) |>
+      hide_colorbar()
+  } else {
+    interactive_plot
+  }
 }
 
 # Min-Max normalization and scale to percentage
@@ -428,6 +428,9 @@ spectrum_plot <- function(result_path, raw) {
 
   # Convert to interactive plot
   interactive_plot <- ggplotly(plot, tooltip = "text") |>
+    layout(
+      margin = list(t = 0, r = 0, b = 0, l = 50)
+    ) |>
     config(
       displayModeBar = "hover",
       scrollZoom = FALSE,

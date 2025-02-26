@@ -627,6 +627,7 @@ server <- function(id, dirs) {
             "",
             dirs$batch_file()[[dirs$id_column()]]
           )
+
           reactVars$wells <- gsub(
             ",",
             "",
@@ -728,6 +729,11 @@ server <- function(id, dirs) {
       reactVars$results_observer <- shiny$observe({
         shiny$req(reactVars$sample_names, reactVars$wells)
         shiny$invalidateLater(10000)
+
+        runjs(paste0(
+          'document.getElementById("blocking-overlay").style.display ',
+          '= "block";'
+        ))
 
         if (
           nrow(reactVars$rslt_df) < reactVars$completedFiles &&
@@ -889,6 +895,11 @@ server <- function(id, dirs) {
 
           reactVars$lastCheckresults <- Sys.time()
         }
+
+        runjs(paste0(
+          'document.getElementById("blocking-overlay").style.display ',
+          '= "none";'
+        ))
       })
 
       #### Progress tracking observer ----
@@ -1194,7 +1205,6 @@ server <- function(id, dirs) {
       reactVars$isRunning <- FALSE
 
       shiny$removeModal()
-      shiny$showNotification("Process terminated", type = "message")
     })
   })
 }
