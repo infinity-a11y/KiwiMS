@@ -8,7 +8,7 @@ box::use(
   processx[process],
   shiny,
   shinyjs[delay, disabled, enable, runjs],
-  shinyWidgets[radioGroupButtons, progressBar, updateProgressBar],
+  shinyWidgets[radioGroupButtons, pickerInput, progressBar, updateProgressBar],
 )
 
 box::use(
@@ -544,30 +544,6 @@ server <- function(id, dirs) {
     #### Start confirmation modal ----
 
     shiny$observeEvent(input$deconvolute_start, {
-      if (dirs$selected() == "folder") {
-        if (length(dirs$batch_file())) {
-          message <- paste0(
-            "<b>Multiple target file(s) selected</b><br><br>",
-            nrow(dirs$batch_file()),
-            " raw file(s) present in ",
-            "the batch file will be deconvoluted."
-          )
-        } else {
-          message <- paste0(
-            "<b>Multiple target file(s) selected</b><br><br>",
-            "No batch file uploaded. All raw files in the",
-            " selected directory will be deconvoluted."
-          )
-        }
-      } else {
-        name <- basename(dirs$file())
-        message <- paste0(
-          "<b>Individual target file selected</b><br><br>",
-          name,
-          " will be deconvoluted."
-        )
-      }
-
       shiny$showModal(
         shiny$div(
           class = "start-modal",
@@ -576,13 +552,12 @@ server <- function(id, dirs) {
               shiny$br(),
               shiny$column(
                 width = 11,
-                shiny$p(
-                  shiny$HTML(
-                    message
-                  )
-                )
-              ),
-              shiny$br()
+                shiny$uiOutput(ns("message_ui")),
+                shiny$uiOutput(ns("target_sel_ui")),
+                shiny$br(),
+                shiny$uiOutput(ns("warning_ui")),
+                shiny$uiOutput(ns("selector_ui"))
+              )
             ),
             title = "Start Deconvolution",
             easyClose = TRUE,
@@ -598,6 +573,230 @@ server <- function(id, dirs) {
           )
         )
       )
+    })
+
+    output$selector_ui <- shiny$renderUI({
+      select <- NULL
+
+      if (dirs$selected() == "folder") {
+        finished_files <- fs::dir_ls(
+          dirs$dir(),
+          glob = "*_rawdata_unidecfiles"
+        )
+
+        if (length(dirs$batch_file())) {
+          batch_sel <- gsub(
+            ".raw",
+            "_rawdata_unidecfiles",
+            dirs$batch_file()[[dirs$id_column()]]
+          )
+
+          intersect <- batch_sel %in% basename(finished_files)
+
+          if (any(intersect)) {
+            select <- shiny$radioButtons(
+              ns("decon_select"),
+              "",
+              c("Overwrite Files", "Skip Files")
+            )
+          }
+        } else if (!is.null(input$target_selector)) {
+          intersect <- gsub(
+            ".raw",
+            "_rawdata_unidecfiles",
+            input$target_selector
+          ) %in%
+            basename(finished_files)
+
+          if (any(intersect)) {
+            select <- shiny$radioButtons(
+              ns("decon_select"),
+              "",
+              c("Overwrite Files", "Skip Files")
+            )
+          }
+        }
+      }
+
+      return(select)
+    })
+
+    output$message_ui <- shiny$renderUI({
+      message <- NULL
+
+      if (dirs$selected() == "folder") {
+        finished_files <- fs::dir_ls(
+          dirs$dir(),
+          glob = "*_rawdata_unidecfiles"
+        )
+
+        if (length(dirs$batch_file())) {
+          message <- shiny$p(
+            shiny$HTML(
+              paste0(
+                "<b>Multiple target file(s) selected</b><br><br><b>",
+                nrow(dirs$batch_file()),
+                "</b> raw file(s) present in ",
+                "the batch file are queried for deconvolution."
+              )
+            )
+          )
+        } else {
+          if (is.null(input$target_selector)) {
+            num_targets <- 0
+          } else {
+            num_targets <- length(input$target_selector)
+          }
+
+          message <- shiny$p(
+            shiny$HTML(
+              paste0(
+                "<b>Multiple target file(s) selected</b><br><br>",
+                "No batch file uploaded. <b>",
+                num_targets,
+                "</b> raw files in the",
+                " selected directory are currently queried for deconvolution.",
+                " If you wish to process only a subset (de)select the respective",
+                " target files or dismiss and upload a batch file."
+              )
+            )
+          )
+        }
+      } else {
+        name <- basename(dirs$file())
+
+        message <- shiny$p(
+          shiny$HTML(
+            paste0(
+              "<b>Individual target file selected</b><br><br>",
+              name,
+              " is queried for deconvolution."
+            )
+          )
+        )
+      }
+
+      return(message)
+    })
+
+    output$warning_ui <- shiny$renderUI({
+      warning <- NULL
+      reactVars$overwrite <- FALSE
+
+      if (dirs$selected() == "folder") {
+        finished_files <- fs::dir_ls(
+          dirs$dir(),
+          glob = "*_rawdata_unidecfiles"
+        )
+
+        if (length(dirs$batch_file())) {
+          batch_sel <- gsub(
+            ".raw",
+            "_rawdata_unidecfiles",
+            dirs$batch_file()[[dirs$id_column()]]
+          )
+
+          intersect <- batch_sel %in% basename(finished_files)
+
+          if (any(intersect)) {
+            reactVars$overwrite <- intersect
+
+            warning <- shiny$p(
+              shiny$HTML(
+                paste0(
+                  '<i class="fa-solid fa-circle-exclamation" style="font-size:1em; color:black; margin-right: 10px;"></i>',
+                  "<b>",
+                  sum(intersect),
+                  paste0(
+                    "</b> file(s) queried for deconvolution appear to have already",
+                    " been processed. Please choose how to proceed."
+                  )
+                )
+              )
+            )
+          }
+        } else if (!is.null(input$target_selector)) {
+          intersect <- gsub(
+            ".raw",
+            "_rawdata_unidecfiles",
+            input$target_selector
+          ) %in%
+            basename(finished_files)
+
+          if (sum(intersect) > 0) {
+            reactVars$overwrite <- intersect
+
+            warning <- shiny$p(
+              shiny$HTML(
+                paste0(
+                  '<i class="fa-solid fa-circle-exclamation" style="font-size:1em; color:black; margin-right: 10px;"></i>',
+                  "<b>",
+                  sum(intersect),
+                  paste0(
+                    "</b> file(s) queried for deconvolution appear to have already",
+                    " been processed. Please choose how to proceed."
+                  )
+                )
+              )
+            )
+          }
+        }
+      } else {
+        finished_files <- fs::dir_ls(
+          dirname(dirs$file()),
+          glob = "*_rawdata_unidecfiles"
+        )
+
+        name <- basename(dirs$file())
+
+        intersect <- gsub(".raw", "_rawdata_unidecfiles", name) %in%
+          basename(finished_files)
+
+        if (any(intersect)) {
+          reactVars$overwrite <- intersect
+
+          warning <- shiny$p(
+            shiny$HTML(
+              paste0(
+                '<i class="fa-solid fa-circle-exclamation" style="font-size:1em; color:black; margin-right: 10px;"></i>',
+                "The file queried for deconvolution appears to have already",
+                " been processed. Choosing to continue will overwrite",
+                " the present result."
+              )
+            )
+          )
+        }
+      }
+
+      return(warning)
+    })
+
+    output$target_sel_ui <- shiny$renderUI({
+      picker <- NULL
+
+      if (dirs$selected() == "folder" && length(dirs$batch_file()) == 0) {
+        picker <- pickerInput(
+          ns("target_selector"),
+          "",
+          choices = basename(fs::dir_ls(dirs$dir(), glob = "*.raw")),
+          selected = basename(fs::dir_ls(dirs$dir(), glob = "*.raw")),
+          options = list(
+            `live-search` = TRUE,
+            `actions-box` = TRUE,
+            size = 10,
+            style = "border-color: black;"
+          ),
+          multiple = TRUE
+        )
+      }
+
+      return(picker)
+    })
+
+    shiny$observe({
+      if (!is.null(input$decon_select)) {
+        reactVars$duplicated <- input$decon_select
+      }
     })
 
     #### Confirmed deconvolution start ----
@@ -700,7 +899,9 @@ server <- function(id, dirs) {
           time_end = input$time_end
         ),
         dirs = raw_dirs,
-        selected = dirs$selected()
+        selected = dirs$selected(),
+        overwrite = reactVars$overwrite,
+        duplicated = reactVars$duplicated
       )
 
       tmp <- file.path(tempdir(), "conf.rds")

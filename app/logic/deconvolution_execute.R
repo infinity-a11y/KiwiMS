@@ -10,9 +10,16 @@ box::use(
     ],
 )
 
+# Get parameters
 tmp <- commandArgs(trailingOnly = TRUE)[1]
 conf <- readRDS(tmp)
 
+# Prepare results files
+# if (conf$overwrite != FALSE) {
+#   conf$dirs[conf$overwrite]
+# }
+
+# Start deconvolution
 deconvolute(
   conf$dirs,
   startz = conf$params$startz,
