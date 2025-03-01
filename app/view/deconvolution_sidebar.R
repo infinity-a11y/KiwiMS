@@ -1,9 +1,8 @@
 # app/view/deconvolution_sidebar.R
 
 box::use(
-  bslib[card, card_body, card_header, sidebar],
+  bslib[sidebar],
   fs[path_home],
-  readxl[read_excel],
   shiny[column, div, fluidRow, h6, NS, moduleServer, reactive, reactiveValues],
   shinyFiles[parseDirPath, parseFilePaths, shinyDirButton, shinyDirChoose],
   shinyjs[disabled]
@@ -122,10 +121,12 @@ server <- function(id) {
     # Collection of reactive vars
     rootdir <- shiny::reactiveVal(character())
     filepath <- shiny::reactiveVal(character())
+    batchfile <- shiny::reactiveVal(character())
 
     shiny::observe({
       filepath(file_path())
       rootdir(root_dir())
+      batchfile(batch_file())
     })
 
     # File selection feedback
@@ -135,6 +136,7 @@ server <- function(id) {
     shiny::observeEvent(input$file, {
       selected("file")
 
+      # batchfile(character())
       rootdir(character())
 
       # Adjust UI elements
@@ -166,7 +168,7 @@ server <- function(id) {
     })
     shiny::observeEvent(input$folder, {
       selected("folder")
-
+      # batchfile(character())
       filepath(character())
 
       # Adjust UI elements
@@ -188,7 +190,6 @@ server <- function(id) {
 
     # Render batch column selection UI
     output$batch_id_col_ui <- shiny::renderUI({
-      # tryCatch({
       if (!is.null(input$batch_selection)) {
         batch <- batch_file()
         choices <- colnames(batch)
@@ -211,9 +212,6 @@ server <- function(id) {
           div(class = "batch-select", select)
         )
       )
-      # }, error = function(e) {
-      #   NULL
-      # })
     })
 
     output$batch_vial_col_ui <- shiny::renderUI({
@@ -264,7 +262,7 @@ server <- function(id) {
     reactiveValues(
       dir = rootdir,
       file = filepath,
-      batch_file = batch_file,
+      batch_file = batchfile,
       selected = selected,
       id_column = id_column_reactive,
       vial_column = vial_column_reactive

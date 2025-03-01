@@ -162,7 +162,9 @@ body > div.waiter-overlay.waiter-fullscreen {
   background: white !important;
 }
 
-.card-custom .bslib-card {
+.card-custom .bslib-card,
+.card-custom-plate .bslib-card,
+.card-custom-plate2 .bslib-card {
   box-shadow: none !important;
   border-color: black;
 }
@@ -353,6 +355,10 @@ body > div.waiter-overlay.waiter-fullscreen {
   text-align: justify;
 }
 
+#app-deconvolution_process-warning_ui {
+  font-style: italic;
+}
+
 #app-deconvolution_process-target_sel_ui > div > div {
   width: inherit;
 }
@@ -379,4 +385,20 @@ app-deconvolution_process-decon_select {
 
 #app-deconvolution_pars-path_selected {
   margin-bottom: 0em;
+}
+
+a {
+  color: #38387C;
+}
+
+.dropdown-menu {
+  --bs-dropdown-link-active-bg: #38387C;
+}
+
+.card-custom-plate {
+  margin-top: -1rem;
+}
+
+.card-custom-plate2 {
+  margin-top: 0.5rem;
 }
