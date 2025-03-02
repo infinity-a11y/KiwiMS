@@ -213,6 +213,7 @@ body > div.waiter-overlay.waiter-fullscreen {
 
 .progress {
   height: 2em;
+  border: 1px solid black;
   --bs-progress-bar-bg: #35357A;
 }
 
@@ -401,4 +402,12 @@ a {
 
 .card-custom-plate2 {
   margin-top: 0.5rem;
+}
+
+.waiter-overlay {
+  background-color: #ffffffe3 !important;
+}
+
+.wandering-cubes div{
+  background-color: #38387c;
 }

@@ -8,7 +8,14 @@ box::use(
   processx[process],
   shiny,
   shinyjs[delay, disabled, enable, runjs],
-  shinyWidgets[radioGroupButtons, pickerInput, progressBar, updateProgressBar],
+  shinyWidgets[
+    addSpinner,
+    radioGroupButtons,
+    pickerInput,
+    progressBar,
+    updateProgressBar
+  ],
+  waiter[useWaiter, spin_wandering_cubes, waiter_show, waiter_hide, withWaiter],
 )
 
 box::use(
@@ -405,6 +412,7 @@ server <- function(id, dirs) {
     ### Deconvolution running interface ----
     deconvolution_running_ui_plate <- shiny$column(
       width = 12,
+      useWaiter(),
       shiny$fluidRow(
         shiny$column(width = 1),
         shiny$column(
@@ -453,7 +461,15 @@ server <- function(id, dirs) {
                 class = "bg-dark",
                 "384-Well Plate Heatmap"
               ),
-              card_body(plotlyOutput(ns("heatmap")))
+              card_body(
+                withWaiter(
+                  addSpinner(
+                    plotlyOutput(ns("heatmap")),
+                    spin = "cube",
+                    color = "#38387c"
+                  )
+                )
+              )
             )
           )
         ),
@@ -467,7 +483,11 @@ server <- function(id, dirs) {
                 "Spectrum"
               ),
               card_body(
-                plotlyOutput(ns("spectrum"))
+                addSpinner(
+                  plotlyOutput(ns("spectrum")),
+                  spin = "cube",
+                  color = "#38387c"
+                )
               )
             )
           )
@@ -477,6 +497,7 @@ server <- function(id, dirs) {
 
     deconvolution_running_ui_noplate <- shiny$column(
       width = 12,
+      useWaiter(),
       shiny$fluidRow(
         shiny$column(width = 1),
         shiny$column(
@@ -524,7 +545,11 @@ server <- function(id, dirs) {
                 "Spectrum"
               ),
               card_body(
-                plotlyOutput(ns("spectrum"))
+                addSpinner(
+                  plotlyOutput(ns("spectrum")),
+                  spin = "cube",
+                  color = "#38387c"
+                )
               )
             )
           )
@@ -627,6 +652,8 @@ server <- function(id, dirs) {
         )
         # Apply JS modifications for picker
         session$sendCustomMessage("selectize-init", "result_picker")
+
+        reactVars$trigger <- TRUE
       }
 
       count <- sum(finished_files)
@@ -944,14 +971,10 @@ server <- function(id, dirs) {
           )
         } else {
           raw_dirs <- raw_dirs[basename(raw_dirs) %in% target_selector_sel()]
-          print(paste("Raw Dirs:", raw_dirs))
         }
       } else if (dirs$selected() == "file") {
         raw_dirs <- dirs$file()
       }
-
-      print(reactVars$overwrite)
-      print(reactVars$duplicated)
 
       # Overwrite or skip already present result dirs
       if (!isFALSE(reactVars$overwrite)) {
@@ -1016,6 +1039,8 @@ server <- function(id, dirs) {
       )
       # Apply JS modifications for picker
       session$sendCustomMessage("selectize-init", "result_picker")
+
+      reactVars$trigger <- TRUE
 
       # Initialization variables
       reactVars$isRunning <- TRUE
@@ -1234,7 +1259,7 @@ server <- function(id, dirs) {
                         "",
                         choices = gsub(
                           "_rawdata_unidecfiles",
-                          "",
+                          ".raw",
                           basename(results)
                         ),
                         selected = result_files_sel()
@@ -1245,9 +1270,14 @@ server <- function(id, dirs) {
                   session$sendCustomMessage("selectize-init", "result_picker")
 
                   output$heatmap <- renderPlotly({
+                    waiter_show(
+                      id = ns("heatmap"),
+                      html = spin_wandering_cubes()
+                    )
                     heatmap <- create_384_plate_heatmap(reactVars$rslt_df) |>
                       event_register("plotly_click")
                     reactVars$heatmap_ready <- TRUE
+                    waiter_hide(id = ns("heatmap"))
                     heatmap
                   })
 
@@ -1283,6 +1313,20 @@ server <- function(id, dirs) {
                 )
                 # Apply JS modifications for picker
                 session$sendCustomMessage("selectize-init", "result_picker")
+
+                output$heatmap <- renderPlotly({
+                  waiter_show(
+                    id = ns("heatmap"),
+                    html = spin_wandering_cubes()
+                  )
+                  heatmap <- create_384_plate_heatmap(reactVars$rslt_df) |>
+                    event_register("plotly_click")
+                  reactVars$heatmap_ready <- TRUE
+                  waiter_hide(id = ns("heatmap"))
+                  heatmap
+                })
+
+                reactVars$trigger <- TRUE
               }
 
               count <- sum(finished_files)
@@ -1504,41 +1548,37 @@ server <- function(id, dirs) {
         }
       })
 
+      ### Render result spectrum ----
+      output$spectrum <- renderPlotly({
+        waiter_show(id = ns("spectrum"), html = spin_wandering_cubes())
+
+        shiny$req(result_files_sel(), input$toggle_result)
+
+        reactVars$trigger
+
+        if (dirs$selected() == "folder") {
+          result_dir <- file.path(
+            dirs$dir(),
+            gsub(".raw", "_rawdata_unidecfiles", result_files_sel())
+          )
+        } else if (dirs$selected() == "file") {
+          result_dir <- gsub(".raw", "_rawdata_unidecfiles", dirs$file())
+        }
+
+        if (dir.exists(result_dir)) {
+          # Generate the spectrum plot
+          spectrum <- spectrum_plot(result_dir, input$toggle_result)
+
+          waiter_hide(id = ns("spectrum"))
+
+          return(spectrum)
+        }
+      })
+
       runjs(paste0(
         'document.getElementById("blocking-overlay").style.display ',
         '= "none";'
       ))
-    })
-
-    ### Render result spectrum ----
-    output$spectrum <- renderPlotly({
-      shiny$req(result_files_sel(), input$toggle_result)
-
-      reactVars$trigger
-
-      if (dirs$selected() == "folder") {
-        result_dir <- file.path(
-          dirs$dir(),
-          gsub(".raw", "_rawdata_unidecfiles", result_files_sel())
-        )
-      } else if (dirs$selected() == "file") {
-        result_dir <- gsub(".raw", "_rawdata_unidecfiles", dirs$file())
-      }
-
-      if (dir.exists(result_dir)) {
-        runjs(paste0(
-          'document.getElementById("blocking-overlay").st',
-          'yle.display = "block";'
-        ))
-
-        spectrum <- spectrum_plot(result_dir, input$toggle_result)
-
-        runjs(paste0(
-          'document.getElementById("blocking-overlay").st',
-          'yle.display = "none";'
-        ))
-        spectrum
-      }
     })
 
     ### Event end/reset deconvolution ----
