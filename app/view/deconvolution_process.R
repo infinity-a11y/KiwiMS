@@ -671,6 +671,8 @@ server <- function(id, dirs) {
       reactVars$rslt_df <- data.frame()
       reactVars$lastCheck <- Sys.time()
       reactVars$lastCheckresults <- Sys.time()
+
+      output$spectrum <- NULL
     }
 
     ### Event start deconvolution ----

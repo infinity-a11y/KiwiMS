@@ -5,7 +5,8 @@ box::use(
   fs[path_home],
   shiny[column, div, fluidRow, h6, NS, moduleServer, reactive, reactiveValues],
   shinyFiles[parseDirPath, parseFilePaths, shinyDirButton, shinyDirChoose],
-  shinyjs[disabled]
+  shinyjs[enable, disable, disabled],
+  shinyWidgets[radioGroupButtons],
 )
 
 #' @export
@@ -15,49 +16,67 @@ ui <- function(id) {
   sidebar(
     title = "File Upload",
     h6(
-      "Multiple Target Files",
-      style = paste0(
-        "font-weight: 700; margin-left: 1em; text-align: center;",
-        "margin-bottom: -5px;"
+      "Select Deconvolution Mode",
+      style = "color: RGBA(var(--bs-emphasis-color-rgb, 0, 0, 0), 0.5); font-style: italic;"
+    ),
+    radioGroupButtons(
+      ns("deconvolution_mode"),
+      "",
+      c("Multiple / Batch", "Single")
+    ),
+    shiny::hr(style = "margin: 0.5rem 0; opacity: 0.8;"),
+    shiny::conditionalPanel(
+      condition = sprintf(
+        "input['%s'] == 'Multiple / Batch'",
+        ns("deconvolution_mode")
+      ),
+      shinyDirButton(
+        ns("folder"),
+        "Select Root Folder",
+        icon = shiny::icon("folder-open"),
+        title = "Select Folder",
+        buttonType = "default",
+        root = path_home()
+      ),
+      shiny::verbatimTextOutput(ns("path_selected")),
+      shiny::checkboxInput(
+        ns("batch_mode"),
+        "Batch Processing Mode",
+        value = FALSE
+      ),
+      shiny::conditionalPanel(
+        condition = sprintf(
+          "input['%s'] == true",
+          ns("batch_mode")
+        ),
+        div(
+          class = "batch-file",
+          shiny::fileInput(
+            ns("batch_selection"),
+            "Select Batch File",
+            accept = c(".csv", ".xlsx")
+          )
+        ),
+        shiny::uiOutput(ns("batch_id_col_ui")),
+        shiny::uiOutput(ns("batch_vial_col_ui"))
       )
     ),
-    shinyDirButton(
-      ns("folder"),
-      "Select Root Folder",
-      icon = shiny::icon("folder-open"),
-      title = "Select Folder",
-      buttonType = "default",
-      root = path_home()
-    ),
-    shiny::verbatimTextOutput(ns("path_selected")),
-    div(
-      class = "batch-file",
-      shiny::fileInput(
-        ns("batch_selection"),
-        "Select Batch File",
-        accept = c(".csv", ".xlsx")
-      )
-    ),
-    shiny::uiOutput(ns("batch_id_col_ui")),
-    shiny::uiOutput(ns("batch_vial_col_ui")),
-    shiny::hr(style = "margin: 1rem 0; opacity: 1;"),
-    h6(
-      "Individual Target File",
-      style = paste0(
-        "font-weight: 700; margin-left: 1em; text-align: center;",
-        "margin-bottom: -5px;"
-      )
-    ),
-    shinyDirButton(
-      ns("file"),
-      "Select Single File",
-      multiple = TRUE,
-      icon = shiny::icon("file"),
-      title = "Select Waters .raw Folder",
-      buttonType = "default",
-      root = path_home()
-    ),
-    shiny::verbatimTextOutput(ns("file_selected"))
+    shiny::conditionalPanel(
+      condition = sprintf(
+        "input['%s'] == 'Single'",
+        ns("deconvolution_mode")
+      ),
+      shinyDirButton(
+        ns("file"),
+        "Select Single File",
+        multiple = TRUE,
+        icon = shiny::icon("file"),
+        title = "Select Waters .raw Folder",
+        buttonType = "default",
+        root = path_home()
+      ),
+      shiny::verbatimTextOutput(ns("file_selected"))
+    )
   )
 }
 

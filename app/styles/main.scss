@@ -411,3 +411,18 @@ a {
 .wandering-cubes div{
   background-color: #38387c;
 }
+
+#app-deconvolution_pars-deconvolution_mode {
+  margin-top: -3em;
+}
+
+.shiny-input-container .checkbox input:checked {
+  background-color: #38387c;
+  border-color: #38387c;
+}
+
+.form-label, .shiny-input-container .control-label {
+    margin-bottom: 0;
+    color: RGBA(var(--bs-emphasis-color-rgb, 0, 0, 0), 0.5);
+    font-style: italic;
+}
