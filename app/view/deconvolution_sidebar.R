@@ -22,12 +22,12 @@ ui <- function(id) {
     radioGroupButtons(
       ns("deconvolution_mode"),
       "",
-      c("Multiple / Batch", "Single")
+      c("Multiple", "Single")
     ),
     shiny::hr(style = "margin: 0.5rem 0; opacity: 0.8;"),
     shiny::conditionalPanel(
       condition = sprintf(
-        "input['%s'] == 'Multiple / Batch'",
+        "input['%s'] == 'Multiple'",
         ns("deconvolution_mode")
       ),
       shinyDirButton(
@@ -39,6 +39,7 @@ ui <- function(id) {
         root = path_home()
       ),
       shiny::verbatimTextOutput(ns("path_selected")),
+      shiny::uiOutput(ns("root_dir_check")),
       shiny::checkboxInput(
         ns("batch_mode"),
         "Batch Processing Mode",
@@ -49,14 +50,7 @@ ui <- function(id) {
           "input['%s'] == true",
           ns("batch_mode")
         ),
-        div(
-          class = "batch-file",
-          shiny::fileInput(
-            ns("batch_selection"),
-            "Select Batch File",
-            accept = c(".csv", ".xlsx")
-          )
-        ),
+        shiny::uiOutput(ns("batch_file_ui")),
         shiny::uiOutput(ns("batch_id_col_ui")),
         shiny::uiOutput(ns("batch_vial_col_ui"))
       )
@@ -148,14 +142,78 @@ server <- function(id) {
       batchfile(batch_file())
     })
 
+    output$root_dir_check <- shiny::renderUI({
+      if (!is.null(root_dir()) && length(root_dir()) > 0) {
+        raw_dirs <- list.dirs(
+          root_dir(),
+          full.names = TRUE,
+          recursive = FALSE
+        )
+        raw_dirs <- raw_dirs[grep("\\.raw$", raw_dirs)]
+
+        if (length(raw_dirs)) {
+          enable(selector = "#app-deconvolution_pars-batch_mode")
+
+          shiny::p(
+            shiny::HTML(
+              paste0(
+                '<i class="fa-solid fa-circle-check" style="font-size:1em; color:#8BC34A; margin-right: 10px;"></i>',
+                paste(
+                  "<b>",
+                  length(raw_dirs),
+                  "</b> .raw directories in directory"
+                )
+              )
+            )
+          )
+        } else {
+          shiny::updateCheckboxInput(session, "batch_mode", value = FALSE)
+          disable(selector = "#app-deconvolution_pars-batch_mode")
+
+          shiny::p(
+            shiny::HTML(
+              paste0(
+                '<i class="fa-solid fa-circle-exclamation" style="font-size:1em; color:black; margin-right: 10px;"></i>',
+                "<b>No</b> .raw directories in directory"
+              )
+            )
+          )
+        }
+      } else {
+        shiny::updateCheckboxInput(session, "batch_mode", value = FALSE)
+        disable(selector = "#app-deconvolution_pars-batch_mode")
+
+        shiny::p(
+          shiny::HTML(
+            "Select directory containing .raw result folders"
+          )
+        )
+      }
+    })
+
+    # Render batch selection input element
+    batch_selection <- div(
+      class = "batch-file",
+      shiny::fileInput(
+        ns("batch_selection"),
+        "Select Batch File",
+        accept = c(".csv", ".xlsx")
+      )
+    )
+
+    output$batch_file_ui <- shiny::renderUI(
+      batch_selection
+    )
+
     # File selection feedback
     output$file_selected <- shiny::renderPrint(cat("Nothing selected"))
     output$path_selected <- shiny::renderPrint(cat("Nothing selected"))
 
     shiny::observeEvent(input$file, {
       selected("file")
-
-      # batchfile(character())
+      output$batch_file_ui <- shiny::renderUI(
+        batch_selection
+      )
       rootdir(character())
 
       # Adjust UI elements
@@ -187,8 +245,10 @@ server <- function(id) {
     })
     shiny::observeEvent(input$folder, {
       selected("folder")
-      # batchfile(character())
       filepath(character())
+      output$batch_file_ui <- shiny::renderUI(
+        batch_selection
+      )
 
       # Adjust UI elements
       output$file_selected <- shiny::renderPrint(cat("Nothing selected"))

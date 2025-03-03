@@ -142,6 +142,7 @@ app-deconvolution_pars-id_column-label {
 
 .batch-file {
   margin-bottom: -0.5em;
+  margin-top: -1em;
 }
 
 .batch-select {
@@ -385,7 +386,7 @@ app-deconvolution_process-decon_select {
 }
 
 #app-deconvolution_pars-path_selected {
-  margin-bottom: 0em;
+  margin-bottom: -1em;
 }
 
 a {
@@ -425,4 +426,10 @@ a {
     margin-bottom: 0;
     color: RGBA(var(--bs-emphasis-color-rgb, 0, 0, 0), 0.5);
     font-style: italic;
+}
+
+#app-deconvolution_pars-root_dir_check {
+  font-style: italic;
+  font-size: 14px;
+  color: RGBA(var(--bs-emphasis-color-rgb, 0, 0, 0), 0.5);
 }
