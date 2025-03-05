@@ -32,6 +32,7 @@ div.sF-navigation.btn-toolbar > select {
 #app-deconvolution_pars-path_selected,
 #app-deconvolution_pars-file_selected {
   margin-top: -20px;
+  margin-bottom: -1em;
 }
 
 .bslib-sidebar-layout>.sidebar {
@@ -117,7 +118,7 @@ input[type=number]::-webkit-inner-spin-button {
 }
 
 #app-deconvolution_process-deconvolute_end {
-  margin-top: 20px;
+  margin-top: 0.5em;
 }
 
 .bg-dark {
@@ -208,10 +209,6 @@ body > div.waiter-overlay.waiter-fullscreen {
   font-size: calc(var(--base-size, 14px) * var(--scale-factor, 1));
 }
 
-.progress-group {
-  margin-top: 1em
-}
-
 .progress {
   height: 2em;
   border: 1px solid black;
@@ -264,7 +261,7 @@ body > div.waiter-overlay.waiter-fullscreen {
 }
 
 .result-picker {
-  margin-top: -2em;
+  margin-top: -1rem;
 }
 
 .selectize-input.focus {
@@ -286,10 +283,6 @@ body > div.waiter-overlay.waiter-fullscreen {
   padding-bottom: 0;
   height: 45px;
   max-height: 150px;
-}
-
-#app-deconvolution_process-toggle_result {
-  margin-top: -1em;
 }
 
 .btn-primary, .btn-outline-primary {
@@ -385,10 +378,6 @@ app-deconvolution_process-decon_select {
   width: inherit;
 }
 
-#app-deconvolution_pars-path_selected {
-  margin-bottom: -1em;
-}
-
 a {
   color: #38387C;
 }
@@ -428,8 +417,9 @@ a {
     font-style: italic;
 }
 
-#app-deconvolution_pars-root_dir_check {
+#app-deconvolution_pars-multi_dir_check,
+#app-deconvolution_pars-single_dir_check {
   font-style: italic;
   font-size: 14px;
-  color: RGBA(var(--bs-emphasis-color-rgb, 0, 0, 0), 0.5);
+  color: black;
 }

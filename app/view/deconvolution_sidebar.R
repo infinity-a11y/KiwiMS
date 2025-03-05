@@ -14,7 +14,7 @@ ui <- function(id) {
   ns <- NS(id)
 
   sidebar(
-    title = "File Upload",
+    title = "Raw Target Files",
     h6(
       "Select Deconvolution Mode",
       style = "color: RGBA(var(--bs-emphasis-color-rgb, 0, 0, 0), 0.5); font-style: italic;"
@@ -39,7 +39,7 @@ ui <- function(id) {
         root = path_home()
       ),
       shiny::verbatimTextOutput(ns("path_selected")),
-      shiny::uiOutput(ns("root_dir_check")),
+      shiny::uiOutput(ns("multi_dir_check")),
       shiny::checkboxInput(
         ns("batch_mode"),
         "Batch Processing Mode",
@@ -69,7 +69,8 @@ ui <- function(id) {
         buttonType = "default",
         root = path_home()
       ),
-      shiny::verbatimTextOutput(ns("file_selected"))
+      shiny::verbatimTextOutput(ns("file_selected")),
+      shiny::uiOutput(ns("single_dir_check"))
     )
   )
 }
@@ -142,10 +143,10 @@ server <- function(id) {
       batchfile(batch_file())
     })
 
-    output$root_dir_check <- shiny::renderUI({
-      if (!is.null(root_dir()) && length(root_dir()) > 0) {
+    output$multi_dir_check <- shiny::renderUI({
+      if (!is.null(rootdir()) && length(rootdir()) > 0) {
         raw_dirs <- list.dirs(
-          root_dir(),
+          rootdir(),
           full.names = TRUE,
           recursive = FALSE
         )
@@ -191,6 +192,40 @@ server <- function(id) {
       }
     })
 
+    output$single_dir_check <- shiny::renderUI({
+      if (length(filepath())) {
+        if (
+          grepl("\\.raw$", filepath(), ignore.case = TRUE) &&
+            dir.exists(filepath())
+        ) {
+          shiny::p(
+            shiny::HTML(
+              paste0(
+                '<i class="fa-solid fa-circle-check" style="font-size:1em; c',
+                'olor:#8BC34A; margin-right: 10px;"></i>',
+                "Directory is a valid .raw result folder"
+              )
+            )
+          )
+        } else {
+          shiny::p(
+            shiny::HTML(
+              paste0(
+                '<i class="fa-solid fa-circle-exclamation" style="font-size:1em; color:black; margin-right: 10px;"></i>',
+                "Directory is <b>not</b> a .raw result folder"
+              )
+            )
+          )
+        }
+      } else {
+        shiny::p(
+          shiny::HTML(
+            "Select directory containing .raw result folder"
+          )
+        )
+      }
+    })
+
     # Render batch selection input element
     batch_selection <- div(
       class = "batch-file",
@@ -211,6 +246,8 @@ server <- function(id) {
 
     shiny::observeEvent(input$file, {
       selected("file")
+      shiny::updateCheckboxInput(session, "batch_mode", value = FALSE)
+      disable(selector = "#app-deconvolution_pars-batch_mode")
       output$batch_file_ui <- shiny::renderUI(
         batch_selection
       )
@@ -236,8 +273,8 @@ server <- function(id) {
 
       output$file_selected <- shiny::renderPrint({
         input$file
-        if (!is.null(file_path()) && length(file_path()) > 0) {
-          file_path()
+        if (!is.null(filepath()) && length(filepath()) > 0) {
+          filepath()
         } else {
           cat("Nothing selected")
         }
@@ -337,12 +374,17 @@ server <- function(id) {
       input$id_column
     })
 
+    batchmode <- reactive({
+      input$batch_mode
+    })
+
     # Return paths
     reactiveValues(
       dir = rootdir,
       file = filepath,
       batch_file = batchfile,
       selected = selected,
+      batch_mode = batchmode,
       id_column = id_column_reactive,
       vial_column = vial_column_reactive
     )

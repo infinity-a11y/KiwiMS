@@ -7,7 +7,7 @@ box::use(
   plotly[event_data, event_register, plotlyOutput, renderPlotly],
   processx[process],
   shiny,
-  shinyjs[delay, disabled, enable, runjs],
+  shinyjs[delay, disable, disabled, enable, hide, show, hidden, runjs],
   shinyWidgets[
     addSpinner,
     radioGroupButtons,
@@ -414,7 +414,18 @@ server <- function(id, dirs) {
       width = 12,
       useWaiter(),
       shiny$fluidRow(
-        shiny$column(width = 1),
+        shiny$column(
+          width = 2,
+          align = "center",
+          shinyjs::hidden(
+            shiny$div(
+              id = ns("processing"),
+              shiny$HTML(
+                '<i class="fa fa-spinner fa-spin fa-fw fa-2x" style="color: #38387C; margin-top: 0.5em"></i>'
+              )
+            )
+          )
+        ),
         shiny$column(
           width = 7,
           progressBar(
@@ -425,12 +436,12 @@ server <- function(id, dirs) {
           )
         ),
         shiny$column(
-          width = 4,
+          width = 3,
           align = "center",
           shiny$actionButton(ns("deconvolute_end"), "Abort")
         )
       ),
-      shiny$hr(),
+      shiny$hr(style = "margin: 1.5rem 0; opacity: 0.8;"),
       shiny$fluidRow(
         shiny$column(6),
         shiny$column(
@@ -499,7 +510,18 @@ server <- function(id, dirs) {
       width = 12,
       useWaiter(),
       shiny$fluidRow(
-        shiny$column(width = 1),
+        shiny$column(
+          width = 2,
+          align = "center",
+          shinyjs::hidden(
+            shiny$div(
+              id = ns("processing"),
+              shiny$HTML(
+                '<i class="fa fa-spinner fa-spin fa-fw fa-2x" style="color: #38387C; margin-top: 0.5em"></i>'
+              )
+            )
+          )
+        ),
         shiny$column(
           width = 7,
           progressBar(
@@ -510,12 +532,12 @@ server <- function(id, dirs) {
           )
         ),
         shiny$column(
-          width = 4,
+          width = 3,
           align = "center",
           shiny$actionButton(ns("deconvolute_end"), "Abort")
         )
       ),
-      shiny$hr(),
+      shiny$hr(style = "margin: 1.5rem 0; opacity: 0.8;"),
       shiny$fluidRow(
         shiny$column(2),
         shiny$column(
@@ -594,6 +616,32 @@ server <- function(id, dirs) {
           "Retention start time must be earlier than end time"
         )
       )
+
+      if (dirs$selected() == "folder") {
+        valid_folder <- length(dir_ls(
+          dirs$dir(),
+          glob = "*.raw"
+        )) !=
+          0
+
+        shiny$validate(
+          shiny$need(
+            valid_folder,
+            "No valid target folder selected"
+          )
+        )
+      } else if (dirs$selected() == "file") {
+        valid_file <- (length(dirs$file()) &&
+          grepl("\\.raw$", dirs$file(), ignore.case = TRUE) &&
+          dir.exists(dirs$file()))
+
+        shiny$validate(
+          shiny$need(
+            valid_file,
+            "No valid target file selected"
+          )
+        )
+      }
 
       shiny$actionButton(ns("deconvolute_start"), "Run Deconvolution")
     })
@@ -677,7 +725,7 @@ server <- function(id, dirs) {
 
     ### Event start deconvolution ----
 
-    #### Start confirmation modal ----
+    #### Confirmation modal ----
 
     shiny$observeEvent(input$deconvolute_start, {
       shiny$showModal(
@@ -717,7 +765,7 @@ server <- function(id, dirs) {
       select <- NULL
 
       if (dirs$selected() == "folder") {
-        finished_files <- fs::dir_ls(
+        finished_files <- dir_ls(
           dirs$dir(),
           glob = "*_rawdata_unidecfiles"
         )
@@ -761,26 +809,65 @@ server <- function(id, dirs) {
 
     output$message_ui <- shiny$renderUI({
       input$deconvolute_start
-
+      enable(
+        selector = "#app-deconvolution_process-deconvolute_start_conf"
+      )
       message <- NULL
 
       if (dirs$selected() == "folder") {
-        finished_files <- fs::dir_ls(
+        raw_dirs <- dir_ls(
           dirs$dir(),
-          glob = "*_rawdata_unidecfiles"
+          glob = "*.raw"
         )
 
-        if (length(dirs$batch_file())) {
-          message <- shiny$p(
-            shiny$HTML(
-              paste0(
-                "<b>Multiple target file(s) selected</b><br><br><b>",
-                nrow(dirs$batch_file()),
-                "</b> raw file(s) present in ",
-                "the batch file are queried for deconvolution."
+        if (isTRUE(dirs$batch_mode()) & length(dirs$batch_file())) {
+          presence <- dirs$batch_file()[[dirs$id_column()]] %in%
+            basename(raw_dirs)
+
+          if (all(presence)) {
+            message <- shiny$p(
+              shiny$HTML(
+                paste0(
+                  "<b>Multiple target file(s) selected</b><br><br><b>",
+                  nrow(dirs$batch_file()),
+                  "</b> raw file(s) present in ",
+                  "the batch file are queried for deconvolution."
+                )
               )
             )
-          )
+          } else if (sum(presence) == 0) {
+            disable(
+              selector = "#app-deconvolution_process-deconvolute_start_conf"
+            )
+
+            message <- shiny$p(
+              shiny$HTML(
+                paste0(
+                  "<b>Multiple target file(s) selected</b><br><br>",
+                  '<i class="fa-solid fa-circle-exclamation" style="font-size:',
+                  '1em; color:black; margin-right: 10px;"></i>',
+                  "<i>None of the raw file(s) present in ",
+                  "the batch file can be found in the root folder.</i>"
+                )
+              )
+            )
+          } else {
+            message <- shiny$p(
+              shiny$HTML(
+                paste0(
+                  "<b>Multiple target file(s) selected</b><br><br><b>",
+                  sum(presence),
+                  "</b> raw file(s) present in ",
+                  "the batch file are queried for deconvolution.<br><br>",
+                  '<i class="fa-solid fa-circle-exclamation" style="font-size:',
+                  '1em; color:black; margin-right: 10px;"></i><i><b>',
+                  sum(!presence),
+                  "</b> of the batch raw file(s) are<b> NOT</b> prese",
+                  "nt in the selected root folder.</i>"
+                )
+              )
+            )
+          }
         } else {
           if (is.null(input$target_selector)) {
             num_targets <- 0
@@ -788,15 +875,20 @@ server <- function(id, dirs) {
             num_targets <- length(input$target_selector)
           }
 
+          if (num_targets == 0) {
+            disable(
+              selector = "#app-deconvolution_process-deconvolute_start_conf"
+            )
+          }
+
           message <- shiny$p(
             shiny$HTML(
               paste0(
-                "<b>Multiple target file(s) selected</b><br><br>",
-                "No batch file uploaded. <b>",
+                "<b>Multiple target file(s) selected</b><br><br><b>",
                 num_targets,
-                "</b> raw files in the",
+                "</b> raw file(s) in the",
                 " selected directory are currently queried for deconvolution.",
-                " If you wish to process only a subset (de)select the respective",
+                " If you wish to process only a subset select the respective",
                 " target files or dismiss and upload a batch file."
               )
             )
@@ -826,7 +918,7 @@ server <- function(id, dirs) {
       reactVars$overwrite <- FALSE
 
       if (dirs$selected() == "folder") {
-        finished_files <- fs::dir_ls(
+        finished_files <- dir_ls(
           dirs$dir(),
           glob = "*_rawdata_unidecfiles"
         )
@@ -913,12 +1005,15 @@ server <- function(id, dirs) {
 
       picker <- NULL
 
-      if (dirs$selected() == "folder" && length(dirs$batch_file()) == 0) {
+      if (
+        dirs$selected() == "folder" &&
+          (isFALSE(dirs$batch_mode()) || length(dirs$batch_file()) == 0)
+      ) {
         picker <- pickerInput(
           ns("target_selector"),
           "",
-          choices = basename(fs::dir_ls(dirs$dir(), glob = "*.raw")),
-          selected = basename(fs::dir_ls(dirs$dir(), glob = "*.raw")),
+          choices = basename(dir_ls(dirs$dir(), glob = "*.raw")),
+          selected = basename(dir_ls(dirs$dir(), glob = "*.raw")),
           options = list(
             `live-search` = TRUE,
             `actions-box` = TRUE,
@@ -938,7 +1033,7 @@ server <- function(id, dirs) {
       }
     })
 
-    #### Confirmed deconvolution start ----
+    #### Deconvolution start ----
     shiny$observeEvent(input$deconvolute_start_conf, {
       # Reset modal and previous processes
       shiny$removeModal()
@@ -1118,7 +1213,7 @@ server <- function(id, dirs) {
             ) {
               shiny$req(reactVars$sample_names, reactVars$wells)
 
-              results_all <- fs::dir_ls(
+              results_all <- dir_ls(
                 dirs$dir(),
                 glob = "*_rawdata_unidecfiles"
               )
@@ -1505,6 +1600,8 @@ server <- function(id, dirs) {
               )
 
               title <- "Finalized!"
+
+              hide(selector = "#app-deconvolution_process-processing")
             }
           }
 
@@ -1549,6 +1646,8 @@ server <- function(id, dirs) {
           deconvolution_running_ui_noplate
         }
       })
+
+      delay(1000, show(selector = "#app-deconvolution_process-processing"))
 
       ### Render result spectrum ----
       output$spectrum <- renderPlotly({
@@ -1622,6 +1721,8 @@ server <- function(id, dirs) {
           'e.display = "block";'
         ))
 
+        hide(selector = "#app-deconvolution_process-processing")
+
         # stop observers
         if (!is.null(reactVars$progress_observer)) {
           reactVars$progress_observer$destroy()
@@ -1663,6 +1764,8 @@ server <- function(id, dirs) {
         value = 0,
         title = "Processing aborted"
       )
+
+      hide(selector = "#app-deconvolution_process-processing")
 
       shiny$updateActionButton(
         session,
