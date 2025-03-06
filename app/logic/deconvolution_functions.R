@@ -343,6 +343,9 @@ create_384_plate_heatmap <- function(data) {
           "zoomIn2d",
           "zoomOut2d"
         )
+      ),
+      toImageButtonOptions = list(
+        filename = paste0(Sys.Date(), "_Plate_Heatmap")
       )
     )
 
@@ -418,6 +421,12 @@ spectrum_plot <- function(result_path, raw) {
       ggplot2$labs(y = "Intensity [%]", x = "Mass [Da]")
   }
 
+  plot_name <- ifelse(
+    raw == TRUE,
+    paste0(gsub("_rawdata", "", base), "_raw"),
+    paste0(gsub("_rawdata", "", base), "_deconvoluted")
+  )
+
   # Convert to interactive plot
   interactive_plot <- ggplotly(plot, tooltip = "text") |>
     layout(
@@ -435,7 +444,8 @@ spectrum_plot <- function(result_path, raw) {
           "zoomIn2d",
           "zoomOut2d"
         )
-      )
+      ),
+      toImageButtonOptions = list(filename = paste0(Sys.Date(), "_", plot_name))
     )
 
   interactive_plot
