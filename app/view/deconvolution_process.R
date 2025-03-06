@@ -972,7 +972,7 @@ server <- function(id, dirs) {
                   sum(intersect),
                   paste0(
                     "</b> file(s) queried for deconvolution appear to have ",
-                    " been processed. Please choose how to proceed:"
+                    "already been processed. Please choose how to proceed:"
                   )
                 )
               )
@@ -1640,7 +1640,11 @@ server <- function(id, dirs) {
       output$deconvolution_init_ui <- NULL
 
       output$deconvolution_running_ui <- shiny$renderUI({
-        if (dirs$selected() == "folder" && length(dirs$batch_file())) {
+        if (
+          dirs$selected() == "folder" &&
+            isTRUE(dirs$batch_mode()) &&
+            length(dirs$batch_file())
+        ) {
           deconvolution_running_ui_plate
         } else {
           deconvolution_running_ui_noplate

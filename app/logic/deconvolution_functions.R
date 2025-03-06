@@ -36,11 +36,6 @@ deconvolute <- function(
       TRUE
     },
     error = function(e) {
-      # showNotification(
-      #   "Python modules could not be loaded. Aborting.",
-      #   type = "error",
-      #   duration = NULL
-      # )
       FALSE
     }
   )
@@ -147,26 +142,26 @@ engine.pick_peaks()
     }
   }
 
-  # Process directories in parallel
-  if (num_cores > 1) {
+  # Pass variables
+  startz <- startz
+  endz <- endz
+  minmz <- minmz
+  maxmz <- maxmz
+  masslb <- masslb
+  massub <- massub
+  massbins <- massbins
+  peakthresh <- peakthresh
+  peakwindow <- peakwindow
+  peaknorm <- peaknorm
+  time_start <- time_start
+  time_end <- time_end
+
+  # Evaluate processing mode parallel or sequential
+  if (length(raw_dirs) > 20 && num_cores > 1) {
     cl <- makeCluster(num_cores)
     on.exit(stopCluster(cl))
 
     message(paste0(num_cores, " cores detected. Parallel processing started."))
-
-    # Pass variables
-    startz <- startz
-    endz <- endz
-    minmz <- minmz
-    maxmz <- maxmz
-    masslb <- masslb
-    massub <- massub
-    massbins <- massbins
-    peakthresh <- peakthresh
-    peakwindow <- peakwindow
-    peaknorm <- peaknorm
-    time_start <- time_start
-    time_end <- time_end
 
     # Create wrapper function that includes all parameters
     process_wrapper <- function(dir) {
@@ -187,16 +182,13 @@ engine.pick_peaks()
       )
     }
 
-    results <- parLapply(cl, raw_dirs, process_wrapper)
+    parLapply(cl, raw_dirs, process_wrapper)
   } else {
-    message(paste0(
-      num_cores,
-      " core(s) detected. Sequential processing started."
-    ))
+    message("Sequential processing started.")
 
-    results <- lapply(raw_dirs, function(dir) {
+    for (dir in seq_along(raw_dirs)) {
       process_single_dir(
-        dir,
+        raw_dirs[dir],
         startz,
         endz,
         minmz,
@@ -210,7 +202,7 @@ engine.pick_peaks()
         time_start,
         time_end
       )
-    })
+    }
   }
 }
 
