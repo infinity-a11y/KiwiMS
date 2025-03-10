@@ -3,16 +3,15 @@
 box::use(
   bslib[card, card_body, card_header],
   fs[dir_ls],
-  parallel[detectCores, makeCluster],
   plotly[event_data, event_register, plotlyOutput, renderPlotly],
   processx[process],
   shiny,
   shinyjs[delay, disable, disabled, enable, hide, show, hidden, runjs],
   shinyWidgets[
     addSpinner,
-    radioGroupButtons,
     pickerInput,
     progressBar,
+    radioGroupButtons,
     updateProgressBar
   ],
   waiter[useWaiter, spin_wandering_cubes, waiter_show, waiter_hide, withWaiter],
@@ -22,7 +21,6 @@ box::use(
   app /
     logic /
     deconvolution_functions[
-      deconvolute,
       create_384_plate_heatmap,
       spectrum_plot
     ],
@@ -421,7 +419,10 @@ server <- function(id, dirs) {
             shiny$div(
               id = ns("processing"),
               shiny$HTML(
-                '<i class="fa fa-spinner fa-spin fa-fw fa-2x" style="color: #38387C; margin-top: 0.5em"></i>'
+                paste0(
+                  '<i class="fa fa-spinner fa-spin fa-fw fa-2x" style="color: ',
+                  '#38387C; margin-top: 0.5em"></i>'
+                )
               )
             )
           )
@@ -517,7 +518,10 @@ server <- function(id, dirs) {
             shiny$div(
               id = ns("processing"),
               shiny$HTML(
-                '<i class="fa fa-spinner fa-spin fa-fw fa-2x" style="color: #38387C; margin-top: 0.5em"></i>'
+                paste0(
+                  '<i class="fa fa-spinner fa-spin fa-fw fa-2x" style="color: ',
+                  '#38387C; margin-top: 0.5em"></i>'
+                )
               )
             )
           )
@@ -532,7 +536,15 @@ server <- function(id, dirs) {
           )
         ),
         shiny$column(
-          width = 3,
+          width = 1,
+          shiny$actionButton(
+            ns("show_log"),
+            "",
+            icon = shiny$icon("code")
+          )
+        ),
+        shiny$column(
+          width = 2,
           align = "center",
           shiny$actionButton(ns("deconvolute_end"), "Abort")
         )
@@ -656,7 +668,8 @@ server <- function(id, dirs) {
       lastCheck = 0,
       lastCheckresults = 0,
       count = 0,
-      rslt_df = data.frame()
+      rslt_df = data.frame(),
+      logs = ""
     )
 
     result_files_sel <- shiny$reactiveVal()
@@ -770,7 +783,10 @@ server <- function(id, dirs) {
           glob = "*_rawdata_unidecfiles"
         )
 
-        if (length(dirs$batch_file())) {
+        if (
+          isTRUE(dirs$batch_mode()) &&
+            length(dirs$batch_file())
+        ) {
           batch_sel <- gsub(
             ".raw",
             "_rawdata_unidecfiles",
@@ -923,7 +939,10 @@ server <- function(id, dirs) {
           glob = "*_rawdata_unidecfiles"
         )
 
-        if (length(dirs$batch_file())) {
+        if (
+          isTRUE(dirs$batch_mode()) &&
+            length(dirs$batch_file())
+        ) {
           batch_sel <- gsub(
             ".raw",
             "_rawdata_unidecfiles",
@@ -938,12 +957,13 @@ server <- function(id, dirs) {
             warning <- shiny$p(
               shiny$HTML(
                 paste0(
-                  '<i class="fa-solid fa-circle-exclamation" style="font-size:1em; color:black; margin-right: 10px;"></i>',
+                  '<i class="fa-solid fa-circle-exclamation" style="font-size:',
+                  '1em; color:black; margin-right: 10px;"></i>',
                   "<b>",
                   sum(intersect),
                   paste0(
-                    "</b> file(s) queried for deconvolution appear to have already",
-                    " been processed. Please choose how to proceed:"
+                    "</b> file(s) queried for deconvolution appear to have ",
+                    "already been processed. Please choose how to proceed:"
                   )
                 )
               )
@@ -967,7 +987,8 @@ server <- function(id, dirs) {
             warning <- shiny$p(
               shiny$HTML(
                 paste0(
-                  '<i class="fa-solid fa-circle-exclamation" style="font-size:1em; color:black; margin-right: 10px;"></i>',
+                  '<i class="fa-solid fa-circle-exclamation" style="font-size:',
+                  '1em; color:black; margin-right: 10px;"></i>',
                   "<b>",
                   sum(intersect),
                   paste0(
@@ -1048,7 +1069,10 @@ server <- function(id, dirs) {
         )
         raw_dirs <- raw_dirs[grep("\\.raw$", raw_dirs)]
 
-        if (length(dirs$batch_file())) {
+        if (
+          isTRUE(dirs$batch_mode()) &&
+            length(dirs$batch_file())
+        ) {
           batch <- dirs$batch_file()
           sample_names <- batch[[dirs$id_column()]]
 
@@ -1148,7 +1172,7 @@ server <- function(id, dirs) {
       #### Start computation ----
 
       # save config parameter
-      conf <- list(
+      config <- list(
         params = data.frame(
           startz = input$startz,
           endz = input$endz,
@@ -1167,14 +1191,18 @@ server <- function(id, dirs) {
         selected = dirs$selected()
       )
 
-      tmp <- file.path(tempdir(), "conf.rds")
-      saveRDS(conf, tmp)
+      temp <- tempdir()
+      config_path <- file.path(temp, "config.rds")
+      saveRDS(config, config_path)
+
+      out <- file.path(temp, "output.txt")
+      err <- file.path(temp, "errors.txt")
 
       rx_process <- process$new(
         "Rscript",
         args = c("app/logic/deconvolution_execute.R", tmp),
-        stdout = "|",
-        stderr = "|"
+        stdout = out,
+        stderr = err
       )
 
       process_data(rx_process)
@@ -1208,7 +1236,8 @@ server <- function(id, dirs) {
               10
           ) {
             if (
-              length(dirs$batch_file()) &&
+              isTRUE(dirs$batch_mode()) &&
+                length(dirs$batch_file()) &&
                 nrow(reactVars$rslt_df) < reactVars$completedFiles
             ) {
               shiny$req(reactVars$sample_names, reactVars$wells)
@@ -1231,7 +1260,7 @@ server <- function(id, dirs) {
                   well <- character()
                   value <- numeric()
                   sample_names <- character()
-                  for (i in 1:length(results)) {
+                  for (i in seq_along(results)) {
                     sample_names[i] <- gsub(
                       "_rawdata_unidecfiles",
                       "",
@@ -1247,7 +1276,7 @@ server <- function(id, dirs) {
                     if (file.exists(peak_file)) {
                       peaks <- utils::read.delim(
                         peak_file,
-                        header = F,
+                        header = FALSE,
                         sep = " "
                       )
                       max <- max(peaks$V1)
@@ -1283,7 +1312,7 @@ server <- function(id, dirs) {
                     well <- character()
                     value <- numeric()
                     sample_names <- character()
-                    for (i in 1:length(new_results)) {
+                    for (i in seq_along(new_results)) {
                       sample_names[i] <- gsub(
                         "_rawdata_unidecfiles",
                         "",
@@ -1303,7 +1332,7 @@ server <- function(id, dirs) {
                           {
                             peaks <- utils::read.delim(
                               peak_file,
-                              header = F,
+                              header = FALSE,
                               sep = " "
                             )
                           },
@@ -1516,7 +1545,11 @@ server <- function(id, dirs) {
               reactVars$isRunning <- FALSE
 
               # final result check for heatmap update
-              if (dirs$selected() == "folder" && length(dirs$batch_file())) {
+              if (
+                dirs$selected() == "folder" &&
+                  isTRUE(dirs$batch_mode()) &&
+                  length(dirs$batch_file())
+              ) {
                 results <- result_files[
                   basename(result_files) %in%
                     paste0(
@@ -1533,7 +1566,7 @@ server <- function(id, dirs) {
                   well <- character()
                   value <- numeric()
                   sample_names <- character()
-                  for (i in 1:length(new_results)) {
+                  for (i in seq_along(new_results)) {
                     sample_names[i] <- gsub(
                       "_rawdata_unidecfiles",
                       "",
@@ -1553,7 +1586,7 @@ server <- function(id, dirs) {
                         {
                           peaks <- utils::read.delim(
                             peak_file,
-                            header = F,
+                            header = FALSE,
                             sep = " "
                           )
                         },
@@ -1615,7 +1648,11 @@ server <- function(id, dirs) {
       })
 
       #### Heatmap click observer ----
-      if (dirs$selected() == "folder" && length(dirs$batch_file())) {
+      if (
+        dirs$selected() == "folder" &&
+          isTRUE(dirs$batch_mode()) &&
+          length(dirs$batch_file())
+      ) {
         reactVars$click_observer <- shiny$observe({
           click_data <- event_data("plotly_click")
           if (!is.null(click_data)) {

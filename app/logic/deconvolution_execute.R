@@ -5,8 +5,6 @@ box::use(
     logic /
     deconvolution_functions[
       deconvolute,
-      create_384_plate_heatmap,
-      spectrum_plot
     ],
 )
 

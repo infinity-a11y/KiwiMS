@@ -2,7 +2,7 @@
 
 box::use(
   ggplot2,
-  grid[grid.text, gpar, unit],
+  grid[gpar, grid.text, unit],
   maditr[dcast],
   minpack.lm[nlsLM],
   plyr[ddply, rename],

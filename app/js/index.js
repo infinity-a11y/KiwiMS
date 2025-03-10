@@ -17,7 +17,6 @@ const resizeSelectOptions = () => {
   });
 };
 
-// Add to your Shiny app
 $(document).ready(function() {
   // Initialize observer for dropdown opening
   const observer = new MutationObserver((mutations) => {

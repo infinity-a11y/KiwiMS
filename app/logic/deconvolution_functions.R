@@ -3,13 +3,11 @@
 box::use(
   dplyr[left_join, mutate, n_distinct],
   ggplot2,
-  plotly[config, event_register, ggplotly, hide_colorbar, layout, style],
-  utils[read.delim, read.table],
-  scales[percent_format],
-  shiny[showNotification],
   parallel[detectCores, makeCluster, parLapply, stopCluster],
+  plotly[config, event_register, ggplotly, hide_colorbar, layout, style],
   reticulate[use_python, py_config, py_run_string],
-  viridis[scale_fill_viridis],
+  scales[percent_format],
+  utils[read.delim, read.table],
 )
 
 #' @export
@@ -18,16 +16,16 @@ deconvolute <- function(
   num_cores = detectCores() - 1,
   startz = 1,
   endz = 50,
-  minmz = '',
-  maxmz = '',
+  minmz = "",
+  maxmz = "",
   masslb = 5000,
   massub = 500000,
   massbins = 10,
   peakthresh = 0.1,
   peakwindow = 500,
   peaknorm = 1,
-  time_start = '',
-  time_end = ''
+  time_start = "",
+  time_end = ""
 ) {
   # ensure python path and packages availability
   py_outcome <- tryCatch(
@@ -73,7 +71,11 @@ deconvolute <- function(
 
     # Create parameters string for Python
     params_string <- sprintf(
-      '"startz": %s, "endz": %s, "minmz": %s, "maxmz": %s, "masslb": %s, "massub": %s, "massbins": %s, "peakthresh": %s, "peakwindow": %s, "peaknorm": %s, "time_start": %s, "time_end": %s',
+      paste0(
+        '"startz": %s, "endz": %s, "minmz": %s, "maxmz": %s, "masslb": %s',
+        ', "massub": %s, "massbins": %s, "peakthresh": %s, "peakwindow": ',
+        '%s, "peaknorm": %s, "time_start": %s, "time_end": %s'
+      ),
       format_param(startz),
       format_param(endz),
       format_param(minmz),
@@ -88,7 +90,7 @@ deconvolute <- function(
       format_param(time_end)
     )
 
-    reticulate::py_run_string(sprintf(
+    py_run_string(sprintf(
       '
 import sys
 import unidec
@@ -134,8 +136,8 @@ engine.pick_peaks()
 
     if (dir.exists(result)) {
       plots <- list(
-        decon_spec = spectrum_plot(result, F),
-        raw_spec = spectrum_plot(result, T)
+        decon_spec = spectrum_plot(result, FALSE),
+        raw_spec = spectrum_plot(result, TRUE)
       )
 
       saveRDS(plots, file.path(result, "plots.rds"))
@@ -326,7 +328,6 @@ create_384_plate_heatmap <- function(data) {
         tickfont = list(size = 12),
         tickangle = 0
       ),
-      # margin = list(t = 40, r = 60, b = 0, l = 50),
       margin = list(t = 40, r = 60, b = 0, l = left),
       plot_bgcolor = "white",
       paper_bgcolor = "white"
@@ -361,11 +362,6 @@ create_384_plate_heatmap <- function(data) {
   } else {
     interactive_plot
   }
-}
-
-# Min-Max normalization and scale to percentage
-normalize_min_max <- function(x) {
-  return((x - min(x)) / (max(x) - min(x)) * 100)
 }
 
 #' @export
@@ -403,7 +399,7 @@ spectrum_plot <- function(result_path, raw) {
     )
   ) +
     ggplot2$geom_line() +
-    ggplot2$scale_y_continuous(labels = percent_format(scale = 1)) +
+    ggplot2$scale_y_continuous(labels = scales::percent_format(scale = 1)) +
     ggplot2$theme_minimal()
 
   if (raw) {

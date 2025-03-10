@@ -3,9 +3,9 @@
 box::use(
   bslib[sidebar],
   fs[path_home],
-  shiny[column, div, fluidRow, h6, NS, moduleServer, reactive, reactiveValues],
-  shinyFiles[parseDirPath, parseFilePaths, shinyDirButton, shinyDirChoose],
-  shinyjs[enable, disable, disabled],
+  shiny[column, div, fluidRow, h6, moduleServer, NS, reactive, reactiveValues],
+  shinyFiles[parseDirPath, shinyDirButton, shinyDirChoose],
+  shinyjs[disable, disabled, enable],
   shinyWidgets[radioGroupButtons],
 )
 
@@ -158,7 +158,8 @@ server <- function(id) {
           shiny::p(
             shiny::HTML(
               paste0(
-                '<i class="fa-solid fa-circle-check" style="font-size:1em; color:#8BC34A; margin-right: 10px;"></i>',
+                '<i class="fa-solid fa-circle-check" style="font-size:1em; col',
+                'or:#8BC34A; margin-right: 10px;"></i>',
                 paste(
                   "<b>",
                   length(raw_dirs),
@@ -174,7 +175,8 @@ server <- function(id) {
           shiny::p(
             shiny::HTML(
               paste0(
-                '<i class="fa-solid fa-circle-exclamation" style="font-size:1em; color:black; margin-right: 10px;"></i>',
+                '<i class="fa-solid fa-circle-exclamation" style="font-size:1e',
+                'm; color:black; margin-right: 10px;"></i>',
                 "<b>No</b> .raw directories in directory"
               )
             )
@@ -211,7 +213,8 @@ server <- function(id) {
           shiny::p(
             shiny::HTML(
               paste0(
-                '<i class="fa-solid fa-circle-exclamation" style="font-size:1em; color:black; margin-right: 10px;"></i>',
+                '<i class="fa-solid fa-circle-exclamation" style="font-size:1e',
+                'm; color:black; margin-right: 10px;"></i>',
                 "Directory is <b>not</b> a .raw result folder"
               )
             )

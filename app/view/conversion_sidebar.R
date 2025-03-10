@@ -2,7 +2,7 @@
 
 box::use(
   bslib[card, card_body, card_header, sidebar],
-  shiny[actionButton, br, fileInput, textInput, NS],
+  shiny[actionButton, fileInput, NS, textInput],
 )
 
 #' @export
