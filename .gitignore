@@ -2,6 +2,7 @@
 .RData
 .Rproj.user
 .renv/**
+logs
 
 !renv.lock
-".Rhistory" 
+".Rhistory"

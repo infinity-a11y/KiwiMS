@@ -14,6 +14,7 @@ box::use(
     radioGroupButtons,
     updateProgressBar
   ],
+  utils[head, tail],
   waiter[useWaiter, spin_wandering_cubes, waiter_show, waiter_hide, withWaiter],
 )
 
@@ -25,6 +26,7 @@ box::use(
       spectrum_plot
     ],
   app / logic / helper_functions[collapsiblePanelUI],
+  app / logic / logging[write_log]
 )
 
 #' @export
@@ -437,9 +439,17 @@ server <- function(id, dirs) {
           )
         ),
         shiny$column(
-          width = 3,
-          align = "center",
+          width = 1,
+          align = "left",
           shiny$actionButton(ns("deconvolute_end"), "Abort")
+        ),
+        shiny$column(
+          width = 1,
+          shiny$actionButton(
+            ns("show_log"),
+            "",
+            icon = shiny$icon("code")
+          )
         )
       ),
       shiny$hr(style = "margin: 1.5rem 0; opacity: 0.8;"),
@@ -537,16 +547,16 @@ server <- function(id, dirs) {
         ),
         shiny$column(
           width = 1,
+          align = "left",
+          shiny$actionButton(ns("deconvolute_end"), "Abort")
+        ),
+        shiny$column(
+          width = 1,
           shiny$actionButton(
             ns("show_log"),
             "",
             icon = shiny$icon("code")
           )
-        ),
-        shiny$column(
-          width = 2,
-          align = "center",
-          shiny$actionButton(ns("deconvolute_end"), "Abort")
         )
       ),
       shiny$hr(style = "margin: 1.5rem 0; opacity: 0.8;"),
@@ -1059,6 +1069,17 @@ server <- function(id, dirs) {
       # Reset modal and previous processes
       shiny$removeModal()
       reset_progress()
+      write_log("Deconvolution initiated")
+
+      # UI changes
+      runjs(paste0(
+        'document.getElementById("blocking-overlay").style.display ',
+        '= "block";'
+      ))
+      runjs(paste0(
+        "document.getElementById('app-deconvolution_process-deconvo",
+        "lute_start').style.animation = 'none';"
+      ))
 
       ##### Deconvolution init and mode ----
       if (dirs$selected() == "folder") {
@@ -1073,6 +1094,8 @@ server <- function(id, dirs) {
           isTRUE(dirs$batch_mode()) &&
             length(dirs$batch_file())
         ) {
+          write_log("Multiple target deconvolution mode (with batch file)")
+
           batch <- dirs$batch_file()
           sample_names <- batch[[dirs$id_column()]]
 
@@ -1091,10 +1114,20 @@ server <- function(id, dirs) {
             sub("^.*:", "", dirs$batch_file()[[dirs$vial_column()]])
           )
         } else {
+          write_log("Multiple target deconvolution mode (no batch file)")
+
           raw_dirs <- raw_dirs[basename(raw_dirs) %in% target_selector_sel()]
         }
+
+        write_log(paste(
+          length(raw_dirs),
+          "targets. Directory:",
+          dirname(raw_dirs[1])
+        ))
       } else if (dirs$selected() == "file") {
+        write_log("Single target deconvolution mode")
         raw_dirs <- dirs$file()
+        write_log(paste("Target:", dirs$file()))
       }
 
       # Overwrite or skip already present result dirs
@@ -1103,11 +1136,19 @@ server <- function(id, dirs) {
           # Remove result files and dirs
           if (dirs$selected() == "file") {
             rslt_dirs <- gsub(".raw", "_rawdata_unidecfiles", dirs$file())
+
+            write_log(paste("Overwriting existing", rslt_dirs))
           } else {
             rslt_dirs <- file.path(
               dirs$dir(),
               reactVars$overwrite
             )
+
+            write_log(paste(
+              "Overwriting",
+              length(rslt_dirs),
+              "existing result file(s)"
+            ))
           }
 
           rslt_dirs <- rslt_dirs[dir.exists(rslt_dirs)]
@@ -1125,31 +1166,14 @@ server <- function(id, dirs) {
             !basename(raw_dirs) %in%
               gsub("_rawdata_unidecfiles", ".raw", reactVars$overwrite)
           ]
+
+          write_log(paste(
+            "Skipping",
+            length(raw_dirs),
+            "existing result file(s)"
+          ))
         }
       }
-
-      # Validate inputs
-      if (length(raw_dirs) == 0) {
-        shiny$showNotification(
-          paste0("No .raw directories found in ", dirs$dir()),
-          type = "error",
-          duration = NULL
-        )
-        reset_progress()
-        return()
-      }
-
-      # UI changes if inputs valid
-      runjs(paste0(
-        'document.getElementById("blocking-overlay").style.display ',
-        '= "block";'
-      ))
-      runjs(paste0(
-        "document.getElementById('app-deconvolution_process-deconvo",
-        "lute_start').style.animation = 'none';"
-      ))
-
-      message(sprintf("Found %d .raw directories to process", length(raw_dirs)))
 
       # Render disabled results picker
       output$result_picker_ui <- shiny$renderUI(
@@ -1195,23 +1219,39 @@ server <- function(id, dirs) {
       config_path <- file.path(temp, "config.rds")
       saveRDS(config, config_path)
 
-      out <- file.path(temp, "output.txt")
-      err <- file.path(temp, "errors.txt")
+      reactVars$out <- file.path(temp, "output.txt")
+      reactVars$err <- file.path(temp, "errors.txt")
+
+      # Ensure log files are empty before running
+      write("", reactVars$out)
+      write("", reactVars$err)
 
       rx_process <- process$new(
         "Rscript",
-        args = c("app/logic/deconvolution_execute.R", tmp),
-        stdout = out,
-        stderr = err
+        args = c("app/logic/deconvolution_execute.R", config_path),
+        stdout = reactVars$out,
+        stderr = reactVars$err
       )
 
       process_data(rx_process)
 
+      write_log("Deconvolution started")
+
       reactVars$process_observer <- shiny$observe({
         proc <- process_data()
+        completed_files <- reactVars$completedFiles
+        expected_files <- reactVars$expectedFiles
 
         session$onSessionEnded(function() {
           if (!is.null(proc) && proc$is_alive()) {
+            write_log(paste(
+              "Deconvolution cancelled with",
+              completed_files,
+              "out of",
+              expected_files,
+              "target(s) completed"
+            ))
+
             proc$kill()
           }
         })
@@ -1634,6 +1674,8 @@ server <- function(id, dirs) {
 
               title <- "Finalized!"
 
+              write_log("Deconvolution finalized")
+
               hide(selector = "#app-deconvolution_process-processing")
             }
           }
@@ -1779,6 +1821,8 @@ server <- function(id, dirs) {
         }
         reset_progress()
 
+        write_log("Deconvolution resetted")
+
         output$deconvolution_running_ui <- NULL
         output$heatmap <- NULL
         output$deconvolution_init_ui <- shiny$renderUI(
@@ -1798,6 +1842,14 @@ server <- function(id, dirs) {
       if (!is.null(proc) && proc$is_alive()) {
         proc$kill()
       }
+
+      write_log(paste(
+        "Deconvolution cancelled with",
+        reactVars$completedFiles,
+        "out of",
+        reactVars$expectedFiles,
+        "target(s) completed"
+      ))
 
       updateProgressBar(
         session = session,

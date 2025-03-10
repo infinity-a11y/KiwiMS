@@ -322,6 +322,16 @@
       ],
       "Hash": "b21916dd77a27642b447374a5d30ecf3"
     },
+    "clipr": {
+      "Package": "clipr",
+      "Version": "0.8.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "utils"
+      ],
+      "Hash": "3f038e5ac7f41d4ac41ce658c85e3042"
+    },
     "codetools": {
       "Package": "codetools",
       "Version": "0.2-20",
@@ -345,6 +355,17 @@
         "stats"
       ],
       "Hash": "d954cb1c57e8d8b756165d7ba18aa55a"
+    },
+    "common": {
+      "Package": "common",
+      "Version": "1.1.3",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "utils"
+      ],
+      "Hash": "d599e49b752b790842070992fdd992c4"
     },
     "commonmark": {
       "Package": "commonmark",
@@ -851,6 +872,19 @@
         "utils"
       ],
       "Hash": "f25d781d5bc7757e08cf38c741a5ad1c"
+    },
+    "logr": {
+      "Package": "logr",
+      "Version": "1.3.8",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "common",
+        "utils",
+        "withr"
+      ],
+      "Hash": "7350b288758a90862fb3efbaea02f643"
     },
     "maditr": {
       "Package": "maditr",

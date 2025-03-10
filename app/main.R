@@ -3,7 +3,7 @@
 box::use(
   bsicons[bs_icon],
   bslib,
-  shiny[div, moduleServer, NS, stopApp, tagList, tags],
+  shiny[div, moduleServer, NS, stopApp, tagList, tags, reactive],
   shinyjs[useShinyjs],
   waiter[useWaiter, waiter_hide, waiterShowOnLoad],
 )
@@ -15,6 +15,8 @@ box::use(
   app / view / deconvolution_process,
   app / view / deconvolution_sidebar,
   app / view / ki_kinact_sidebar,
+  app / view / log_view,
+  app / logic / logging[start_logging, write_log, close_logging]
 )
 
 #' @export
@@ -28,6 +30,7 @@ ui <- function(id) {
     waiterShowOnLoad(html = waiter::spin_orbit()),
     useShinyjs(),
     bslib$page_navbar(
+      id = ns("tabs"),
       title = tags$div(
         tags$img(
           src = "static/logo.svg",
@@ -72,6 +75,12 @@ ui <- function(id) {
           )
         )
       ),
+      bslib$nav_panel(
+        title = "Logs",
+        bslib$card(
+          log_view$ui(ns("logs"))
+        )
+      ),
       bslib$nav_spacer(),
       bslib$nav_menu(
         title = "Links",
@@ -112,16 +121,30 @@ server <- function(id) {
   moduleServer(id, function(input, output, session) {
     # Kill server on session end
     session$onSessionEnded(function() {
+      write_log("Session closed")
       stopApp()
     })
 
-    # initiate module servers
+    # Initiate logging
+    start_logging()
+    write_log("Session started")
+
+    # Log view server
+    active_tab_reactive <- reactive({
+      input$tabs
+    })
+    log_view$server("logs", active_tab_reactive)
+
+    # Conversion server
     conversion_main$server("conversion_card")
 
-    # transfer selected directories paths
+    # Deconvolution sidebar server
     dirs <- deconvolution_sidebar$server("deconvolution_pars")
+
+    # Deconvolution process server
     deconvolution_process$server("deconvolution_process", dirs)
 
+    # Hide waiter
     Sys.sleep(3)
     waiter_hide()
   })

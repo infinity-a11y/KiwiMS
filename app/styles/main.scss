@@ -73,19 +73,19 @@ div.sF-navigation.btn-toolbar > select {
 }
 
 *::-webkit-scrollbar-track {
-  background: #f0f0f0;
+  background: white;
 }
 
 *::-webkit-scrollbar-thumb {
-  background-color: #bcbcbc;
-  border: 2px solid #f0f0f0;
+  background-color: #35357A;
+  border: 5px solid white;
   border-radius: 10px;
   min-width: 100px;
   overflow-y: scroll;
 }
 
 *::-webkit-scrollbar-corner {
-  background: #f0f0f0;
+  background: transparent;
 }
 
 .bslib-sidebar-layout > .collapse-toggle {
@@ -117,8 +117,17 @@ input[type="number"]::-webkit-inner-spin-button {
   cursor: wait;
 }
 
-#app-deconvolution_process-deconvolute_end {
+#app-deconvolution_process-deconvolute_end,
+#app-deconvolution_process-show_log {
   margin-top: 0.5em;
+}
+
+#app-deconvolution_process-deconvolute_end {
+  margin-left: 3em;
+}
+
+#app-deconvolution_process-show_log {
+  margin-left: 5em;
 }
 
 .bg-dark {
@@ -157,7 +166,8 @@ body > div.waiter-overlay.waiter-fullscreen {
   cursor: wait;
 }
 
-.bslib-sidebar-layout {
+.bslib-sidebar-layout,
+.navbar:not(.fixed-bottom):not(.navbar-fixed-bottom):not(.navbar-fixed-bottom)+div>.tab-content>.tab-pane {
   background: linear-gradient(135deg, #35357A, #4A4A89, #77778F, #B0B0B8, #E0E0E0) !important;
 }
 
@@ -167,7 +177,10 @@ body > div.waiter-overlay.waiter-fullscreen {
 
 .card-custom .bslib-card,
 .card-custom-plate .bslib-card,
-.card-custom-plate2 .bslib-card {
+.card-custom-plate2 .bslib-card,
+.card-log-output .bslib-card,
+.card-log-control .bslib-card,
+{
   box-shadow: none !important;
   border-color: black;
 }
@@ -430,4 +443,32 @@ a {
   font-style: italic;
   font-size: 14px;
   color: black;
+}
+
+#app-logs-log-output {
+  font-family: monospace;
+  padding-bottom: 2rem;
+  max-height: 26rem;
+  padding-left: 3rem;
+  padding-right: 10rem;
+}
+
+#app-logs-log-control {
+  display: flex;
+  margin-top: 1rem;
+  gap: 1em;
+}
+
+.card-log-output {
+  padding: 5rem;
+  padding-top: 0.5rem;
+  width: 90%;
+}
+
+.card-log-output .bslib-card {
+  max-height: 35rem;
+}
+
+#app-logs-refresh_logs {
+  margin-left: 5rem;
 }
