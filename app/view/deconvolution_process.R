@@ -14,6 +14,7 @@ box::use(
     radioGroupButtons,
     updateProgressBar
   ],
+  clipr[write_clip],
   utils[head, tail],
   waiter[useWaiter, spin_wandering_cubes, waiter_show, waiter_hide, withWaiter],
 )
@@ -1220,17 +1221,13 @@ server <- function(id, dirs) {
       saveRDS(config, config_path)
 
       reactVars$out <- file.path(temp, "output.txt")
-      reactVars$err <- file.path(temp, "errors.txt")
-
-      # Ensure log files are empty before running
       write("", reactVars$out)
-      write("", reactVars$err)
 
       rx_process <- process$new(
         "Rscript",
         args = c("app/logic/deconvolution_execute.R", config_path),
         stdout = reactVars$out,
-        stderr = reactVars$err
+        stderr = reactVars$out
       )
 
       process_data(rx_process)
@@ -1878,6 +1875,77 @@ server <- function(id, dirs) {
       reactVars$isRunning <- FALSE
 
       shiny$removeModal()
+    })
+
+    ### Deconvolution log ----
+    shiny$observeEvent(input$show_log, {
+      output$logtext <- shiny$renderText({
+        if (!is.null(reactVars$out) && file.exists(reactVars$out)) {
+          reactVars$deconvolution_log <- paste(
+            readLines(reactVars$out, warn = FALSE),
+            collapse = "\n"
+          )
+        } else {
+          reactVars$deconvolution_log <- "Log file not found."
+        }
+
+        reactVars$deconvolution_log
+      })
+
+      shiny$showModal(
+        shiny$div(
+          class = "start-modal",
+          shiny$modalDialog(
+            shiny$fluidRow(
+              shiny$br(),
+              shiny$column(
+                width = 12,
+                shiny$verbatimTextOutput(ns("logtext"))
+              )
+            ),
+            title = "Deconvolution Output",
+            easyClose = TRUE,
+            footer = shiny$tagList(
+              shiny$div(
+                class = "modal-button",
+                shiny$modalButton("Dismiss")
+              ),
+              shiny$div(
+                class = "modal-button",
+                shiny$actionButton(
+                  ns("copy_deconvolution_log"),
+                  "Clip",
+                  icon = shiny$icon("clipboard")
+                )
+              ),
+              shiny$div(
+                class = "modal-button",
+                shiny$downloadButton(
+                  ns("save_deconvolution_log"),
+                  "Save",
+                  class = "load-db",
+                  width = "auto"
+                )
+              )
+            )
+          )
+        )
+      )
+    })
+
+    output$save_deconvolution_log <- shiny$downloadHandler(
+      filename = function() {
+        paste0(Sys.Date(), "_Deconvolution_Log.txt")
+      },
+      content = function(file) {
+        file.copy(reactVars$out, file)
+      }
+    )
+
+    shiny$observeEvent(input$copy_deconvolution_log, {
+      shiny$req(reactVars$deconvolution_log)
+
+      write_clip(reactVars$deconvolution_log)
     })
   })
 }
