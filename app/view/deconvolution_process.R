@@ -48,6 +48,30 @@ server <- function(id, dirs) {
   shiny$moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
+    ### Reactive variables declaration ----
+    reactVars <- shiny$reactiveValues(
+      isRunning = FALSE,
+      completedFiles = 0,
+      expectedFiles = 0,
+      current_total_files = 0,
+      initialFileCount = 0,
+      lastCheck = 0,
+      lastCheckresults = 0,
+      count = 0,
+      rslt_df = data.frame(),
+      logs = ""
+    )
+
+    result_files_sel <- shiny$reactiveVal()
+    target_selector_sel <- shiny$reactiveVal()
+
+    shiny$observe({
+      if (!is.null(input$result_picker)) result_files_sel(input$result_picker)
+      if (!is.null(input$target_selector)) {
+        target_selector_sel(input$target_selector)
+      }
+    })
+
     process_data <- shiny$reactiveVal(NULL)
 
     ### Deconvolution initiation interface ----
@@ -667,30 +691,6 @@ server <- function(id, dirs) {
       }
 
       shiny$actionButton(ns("deconvolute_start"), "Run Deconvolution")
-    })
-
-    ### Reactive variables declaration ----
-    reactVars <- shiny$reactiveValues(
-      isRunning = FALSE,
-      completedFiles = 0,
-      expectedFiles = 0,
-      current_total_files = 0,
-      initialFileCount = 0,
-      lastCheck = 0,
-      lastCheckresults = 0,
-      count = 0,
-      rslt_df = data.frame(),
-      logs = ""
-    )
-
-    result_files_sel <- shiny$reactiveVal()
-    target_selector_sel <- shiny$reactiveVal()
-
-    shiny$observe({
-      if (!is.null(input$result_picker)) result_files_sel(input$result_picker)
-      if (!is.null(input$target_selector)) {
-        target_selector_sel(input$target_selector)
-      }
     })
 
     ### Functions ----
@@ -1476,20 +1476,6 @@ server <- function(id, dirs) {
                 )
                 # Apply JS modifications for picker
                 session$sendCustomMessage("selectize-init", "result_picker")
-
-                output$heatmap <- renderPlotly({
-                  waiter_show(
-                    id = ns("heatmap"),
-                    html = spin_wandering_cubes()
-                  )
-                  heatmap <- create_384_plate_heatmap(reactVars$rslt_df) |>
-                    event_register("plotly_click")
-                  reactVars$heatmap_ready <- TRUE
-                  waiter_hide(id = ns("heatmap"))
-                  heatmap
-                })
-
-                reactVars$trigger <- TRUE
               }
 
               count <- sum(finished_files)
@@ -1660,6 +1646,36 @@ server <- function(id, dirs) {
                   ]
 
                   reactVars$rslt_df <- rbind(reactVars$rslt_df, new_rslt_df)
+                }
+              } else if (dirs$selected() == "folder") {
+                selected_files <- file.path(dirs$dir(), target_selector_sel())
+                fin_dirs <- gsub(".raw", "_rawdata_unidecfiles", selected_files)
+                peak_files <- file.path(fin_dirs, "plots.rds")
+                finished_files <- file.exists(peak_files)
+
+                if (sum(finished_files) > 0) {
+                  choices <- basename(selected_files)[finished_files]
+                  selected <- ifelse(
+                    is.null(result_files_sel()),
+                    choices[1],
+                    result_files_sel()
+                  )
+
+                  enable(selector = "#app-deconvolution_process-toggle_result")
+
+                  output$result_picker_ui <- shiny$renderUI(
+                    shiny$div(
+                      class = "result-picker",
+                      shiny$selectInput(
+                        ns("result_picker"),
+                        "",
+                        choices = choices,
+                        selected = selected
+                      )
+                    )
+                  )
+                  # Apply JS modifications for picker
+                  session$sendCustomMessage("selectize-init", "result_picker")
                 }
               }
 
