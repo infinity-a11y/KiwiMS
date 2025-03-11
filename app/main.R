@@ -16,6 +16,7 @@ box::use(
   app / view / deconvolution_sidebar,
   app / view / ki_kinact_sidebar,
   app / view / log_view,
+  app / view / log_sidebar,
   app / logic / logging[start_logging, write_log, close_logging]
 )
 
@@ -77,8 +78,11 @@ ui <- function(id) {
       ),
       bslib$nav_panel(
         title = "Logs",
-        bslib$card(
-          log_view$ui(ns("logs"))
+        bslib$page_sidebar(
+          sidebar = log_sidebar$ui(ns("log_sidebar")),
+          bslib$card(
+            log_view$ui(ns("logs"))
+          )
         )
       ),
       bslib$nav_spacer(),
@@ -133,7 +137,8 @@ server <- function(id) {
     active_tab_reactive <- reactive({
       input$tabs
     })
-    log_view$server("logs", active_tab_reactive)
+    log_buttons <- log_sidebar$server("log_sidebar")
+    log_view$server("logs", active_tab_reactive, log_buttons)
 
     # Conversion server
     conversion_main$server("conversion_card")
