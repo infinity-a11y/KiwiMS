@@ -46,7 +46,7 @@ server <- function(id, active_tab_reactive, log_buttons) {
         log_lines(log)
 
         output$log_output <- renderUI({
-          HTML(c(format_log(paste(log_lines(), collapse = "\n")), rep("", 5)))
+          HTML(format_log(paste(log_lines(), collapse = "\n")))
         })
       }
     })
@@ -59,7 +59,7 @@ server <- function(id, active_tab_reactive, log_buttons) {
         log_lines(log)
 
         output$log_output <- renderUI({
-          HTML(c(format_log(paste(log_lines(), collapse = "\n")), rep("", 5)))
+          HTML(format_log(paste(log_lines(), collapse = "\n")))
         })
       }
     })

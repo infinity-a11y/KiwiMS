@@ -27,7 +27,7 @@ box::use(
       spectrum_plot
     ],
   app / logic / helper_functions[collapsiblePanelUI],
-  app / logic / logging[write_log]
+  app / logic / logging[write_log],
 )
 
 #' @export
@@ -586,7 +586,14 @@ server <- function(id, dirs) {
       ),
       shiny$hr(style = "margin: 1.5rem 0; opacity: 0.8;"),
       shiny$fluidRow(
-        shiny$column(2),
+        shiny$column(
+          width = 2,
+          shiny$actionButton(
+            ns("deconvolution_report"),
+            "Report",
+            icon = shiny$icon("square-poll-vertical")
+          )
+        ),
         shiny$column(
           width = 4,
           shiny$uiOutput(ns("result_picker_ui"))
@@ -1225,7 +1232,10 @@ server <- function(id, dirs) {
 
       rx_process <- process$new(
         "Rscript",
-        args = c("app/logic/deconvolution_execute.R", config_path),
+        args = c(
+          "app/logic/deconvolution_execute.R",
+          temp
+        ),
         stdout = reactVars$out,
         stderr = reactVars$out
       )
