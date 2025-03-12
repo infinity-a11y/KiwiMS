@@ -1232,7 +1232,15 @@ server <- function(id, dirs) {
 
       process_data(rx_process)
 
+      # Log
       write_log("Deconvolution started")
+      formatted_params <- apply(config$params, 1, function(row) {
+        paste(names(config$params), row, sep = " = ", collapse = " | ")
+      })
+      write_log(paste(
+        "Deconvolution parameters:\n",
+        paste(formatted_params, collapse = "\n")
+      ))
 
       reactVars$process_observer <- shiny$observe({
         proc <- process_data()
