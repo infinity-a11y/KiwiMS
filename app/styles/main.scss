@@ -127,7 +127,7 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 
 #app-deconvolution_process-show_log {
-  margin-left: 5em;
+  margin-left: -2em;
 }
 
 .bg-dark {
@@ -224,8 +224,8 @@ body > div.waiter-overlay.waiter-fullscreen {
 
 .progress {
   height: 2em;
-  border: 1px solid black;
-  --bs-progress-bar-bg: #35357A;
+  border: none;
+  --bs-progress-bar-bg: #8BC34A;
 }
 
 #app-deconvolution_process-deconvolute_start {
@@ -485,4 +485,18 @@ a {
 
 .bs-actionsbox .btn-group {
   border: 1px solid #404040;
+}
+
+.deconv-rep-element .shiny-input-container:not(.shiny-input-container-inline) {
+  width: 100%
+}
+
+textarea.form-control {
+  height: 10vh;
+  max-height: 20vh;
+}
+
+deconv-rep-check {
+  position: relative;
+  top: 3vh;
 }

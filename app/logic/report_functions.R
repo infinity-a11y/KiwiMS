@@ -5,7 +5,12 @@ box::use(
 )
 
 #' @export
-generate_decon_rslt <- function(paths, log, output) {
+generate_decon_rslt <- function(
+  paths,
+  log = NULL,
+  output = NULL,
+  heatmap = NULL
+) {
   # Optimized file reader function
   read_file_safe <- function(filename, col_names = NULL) {
     if (!file.exists(filename)) return(data.frame())
@@ -91,6 +96,8 @@ generate_decon_rslt <- function(paths, log, output) {
   names(results) <- basename(paths)
   results[["session"]] <- log
   results[["output"]] <- output
+  if (file.exists(file.path(getwd(), "results/heatmap.rds")))
+    results[["heatmap"]] <- readRDS(file.path(getwd(), "results/heatmap.rds"))
 
   return(results)
 }

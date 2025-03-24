@@ -6,7 +6,6 @@ box::use(
     deconvolution_functions[
       deconvolute,
     ],
-  app / logic / logging[get_log],
   app / logic / report_functions[generate_decon_rslt],
 )
 
@@ -31,13 +30,14 @@ deconvolute(
   time_end = conf$params$time_end
 )
 
-log <- if (file.exists(get_log())) readLines(get_log(), warn = FALSE) else
-  c("No logs yet.")
+logfile <- commandArgs(trailingOnly = TRUE)[2]
+log <- if (file.exists(logfile)) readLines(logfile, warn = FALSE) else
+  c("No log")
 
 output <- if (file.exists(file.path(temp, "output.txt"))) {
   readLines(file.path(temp, "output.txt"), warn = FALSE)
 } else {
-  "Log file not found."
+  "No output"
 }
 
 result <- generate_decon_rslt(
@@ -46,4 +46,10 @@ result <- generate_decon_rslt(
   output = output
 )
 
-saveRDS(result, file.path(dirname(dirname(get_log())), "result.rds"))
+result_short <- lapply(result, function(x) x[-c(5, 6, 7)])
+saveRDS(
+  result_short,
+  file.path(getwd(), "results/result_short.rds"),
+  compress = FALSE
+)
+saveRDS(result, file.path(getwd(), "results/result.rds"), compress = FALSE)

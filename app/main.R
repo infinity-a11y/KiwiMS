@@ -20,6 +20,8 @@ box::use(
   app / logic / logging[start_logging, write_log, close_logging]
 )
 
+suppressWarnings(library(logr))
+
 #' @export
 ui <- function(id) {
   ns <- NS(id)

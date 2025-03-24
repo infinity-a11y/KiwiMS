@@ -17,6 +17,7 @@ box::use(
   clipr[write_clip],
   utils[head, tail],
   waiter[useWaiter, spin_wandering_cubes, waiter_show, waiter_hide, withWaiter],
+  quarto[quarto_render],
 )
 
 box::use(
@@ -27,7 +28,7 @@ box::use(
       spectrum_plot
     ],
   app / logic / helper_functions[collapsiblePanelUI],
-  app / logic / logging[write_log],
+  app / logic / logging[write_log, get_log],
 )
 
 #' @export
@@ -464,7 +465,7 @@ server <- function(id, dirs) {
           )
         ),
         shiny$column(
-          width = 1,
+          width = 2,
           align = "left",
           shiny$actionButton(ns("deconvolute_end"), "Abort")
         ),
@@ -479,7 +480,15 @@ server <- function(id, dirs) {
       ),
       shiny$hr(style = "margin: 1.5rem 0; opacity: 0.8;"),
       shiny$fluidRow(
-        shiny$column(6),
+        shiny$column(
+          width = 2,
+          shiny$actionButton(
+            ns("deconvolution_report"),
+            "Report",
+            icon = shiny$icon("square-poll-vertical")
+          )
+        ),
+        shiny$column(4),
         shiny$column(
           width = 3,
           align = "center",
@@ -571,7 +580,7 @@ server <- function(id, dirs) {
           )
         ),
         shiny$column(
-          width = 1,
+          width = 2,
           align = "left",
           shiny$actionButton(ns("deconvolute_end"), "Abort")
         ),
@@ -1079,6 +1088,16 @@ server <- function(id, dirs) {
       reset_progress()
       write_log("Deconvolution initiated")
 
+      if (!dir.exists(file.path(getwd(), "results")))
+        dir.create(file.path(getwd(), "results"))
+
+      if (file.exists(file.path(getwd(), "results/result.rds")))
+        file.remove(file.path(getwd(), "results/result.rds"))
+      if (file.exists(file.path(getwd(), "results/result_short.rds")))
+        file.remove(file.path(getwd(), "results/result_short.rds"))
+      if (file.exists(file.path(getwd(), "results/heatmap.rds")))
+        file.remove(file.path(getwd(), "results/heatmap.rds"))
+
       # UI changes
       runjs(paste0(
         'document.getElementById("blocking-overlay").style.display ',
@@ -1230,11 +1249,14 @@ server <- function(id, dirs) {
       reactVars$out <- file.path(temp, "output.txt")
       write("", reactVars$out)
 
+      # dirs <- c(temp, get_log())
+
       rx_process <- process$new(
         "Rscript",
         args = c(
           "app/logic/deconvolution_execute.R",
-          temp
+          temp,
+          get_log()
         ),
         stdout = reactVars$out,
         stderr = reactVars$out
@@ -1561,14 +1583,17 @@ server <- function(id, dirs) {
             )
           } else {
             title <- paste0(
-              "Finalizing ",
+              "Saving Results ",
               paste0(rep(".", reactVars$count), collapse = "")
             )
 
             result_files <- gsub(".raw", "_rawdata_unidecfiles", raw_dirs)
 
             # check if deconvolution finished for all target files
-            if (all(file.exists(file.path(result_files, "plots.rds")))) {
+            if (
+              all(file.exists(file.path(result_files, "plots.rds"))) &&
+                file.exists(file.path(getwd(), "results/result.rds"))
+            ) {
               # stop observers
               if (!is.null(reactVars$progress_observer)) {
                 reactVars$progress_observer$destroy()
@@ -1664,6 +1689,13 @@ server <- function(id, dirs) {
                   ]
 
                   reactVars$rslt_df <- rbind(reactVars$rslt_df, new_rslt_df)
+                }
+
+                # Save heatmap
+                if (!file.exists("results/heatmap.rds")) {
+                  heatmap <- create_384_plate_heatmap(reactVars$rslt_df)
+
+                  saveRDS(heatmap, "results/heatmap.rds")
                 }
               } else if (dirs$selected() == "folder") {
                 selected_files <- file.path(dirs$dir(), target_selector_sel())
@@ -1911,7 +1943,9 @@ server <- function(id, dirs) {
       shiny$removeModal()
     })
 
-    ### Deconvolution log ----
+    ### Logging events  ----
+
+    #### Show Log ----
     shiny$observeEvent(input$show_log, {
       output$logtext <- shiny$renderText({
         if (!is.null(reactVars$out) && file.exists(reactVars$out)) {
@@ -1967,6 +2001,7 @@ server <- function(id, dirs) {
       )
     })
 
+    #### Save log ----
     output$save_deconvolution_log <- shiny$downloadHandler(
       filename = function() {
         paste0(Sys.Date(), "_Deconvolution_Log.txt")
@@ -1976,10 +2011,125 @@ server <- function(id, dirs) {
       }
     )
 
+    #### Clip log ----
     shiny$observeEvent(input$copy_deconvolution_log, {
       shiny$req(reactVars$deconvolution_log)
 
       write_clip(reactVars$deconvolution_log)
+    })
+
+    ### Report events ----
+    shiny$observeEvent(input$deconvolution_report, {
+      if (file.exists("settings/decon_rep_settings.rds")) {
+        rep_input <- readRDS("settings/decon_rep_settings.rds")
+        title <- rep_input[1]
+        author <- rep_input[2]
+        comment <- rep_input[3]
+        label <- "Overwrite previous report settings?"
+      } else {
+        title <- "Deconvolution Report"
+        author <- "Author"
+        comment <- ""
+        label <- "Save report settings for the next time?"
+      }
+
+      shiny$showModal(
+        shiny$div(
+          class = "start-modal",
+          shiny$modalDialog(
+            shiny$fluidRow(
+              shiny$br(),
+              shiny$column(
+                width = 11,
+                shiny$div(
+                  class = "deconv-rep-element",
+                  shiny$textInput(
+                    ns("decon_rep_title"),
+                    "Title",
+                    value = title
+                  )
+                ),
+                shiny$div(
+                  class = "deconv-rep-element",
+                  shiny$textInput(
+                    ns("decon_rep_author"),
+                    "Author",
+                    value = author
+                  )
+                ),
+                shiny$div(
+                  class = "deconv-rep-element",
+                  shiny$textAreaInput(
+                    ns("decon_rep_desc"),
+                    "Description",
+                    value = comment,
+                    placeholder = "Description and comments about the experiment..."
+                  )
+                ),
+                shiny$div(
+                  class = "deconv-rep-check",
+                  shiny$checkboxInput(
+                    ns("decon_save"),
+                    label,
+                    value = FALSE
+                  )
+                )
+              )
+            ),
+            title = "Deconvolution Report",
+            easyClose = TRUE,
+            footer = shiny$tagList(
+              shiny$modalButton("Dismiss"),
+              shiny$actionButton(
+                ns("make_deconvolution_report"),
+                "Make Report",
+                class = "load-db",
+                width = "auto"
+              )
+            )
+          )
+        )
+      )
+    })
+
+    shiny$observeEvent(input$make_deconvolution_report, {
+      runjs(
+        'document.getElementById("blocking-overlay").style.display = "block";'
+      )
+
+      if (isTRUE(input$decon_save)) {
+        if (!dir.exists("settings")) dir.create("settings")
+
+        rep_input <- c(
+          input$decon_rep_title,
+          input$decon_rep_author,
+          input$decon_rep_desc
+        )
+        saveRDS(rep_input, "settings/decon_rep_settings.rds")
+      }
+
+      # Use only filename (not full path)
+      output_filename <- "deconvolution_report.html"
+
+      quarto_render(
+        input = "deconvolution_report.qmd",
+        output_file = output_filename,
+        execute_params = list(
+          report_title = input$decon_rep_title,
+          report_author = input$decon_rep_author,
+          comment = input$decon_rep_desc,
+          result_path = file.path(getwd(), "results")
+        )
+      )
+
+      runjs(
+        'document.getElementById("blocking-overlay").style.display = "none";'
+      )
+
+      shiny$removeModal()
+
+      # Open in browser
+      utils::browseURL(file.path(getwd(), output_filename))
     })
   })
 }
