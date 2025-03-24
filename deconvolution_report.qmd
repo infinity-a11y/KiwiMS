@@ -1,0 +1,277 @@
+---
+title: "`r params$report_title`"
+author: "`r params$report_author`"
+date: "`r Sys.Date()`"
+params:
+  report_title: "Deconvolution Report"
+  report_author: ""
+  comment: ""
+  result_path: ""
+output:
+  html_document:
+    self_contained: true
+    embed-resources: true
+title-block-banner: "#27445C"
+css: app/styles/quarto_styles.css
+format:
+  html:
+    smooth-scroll: true
+    embed-resources: true
+    other-links:
+      - text: KiwiFlow Repository
+        icon: github
+        href: https://github.com/infinity-a11y/KiwiFlow
+        target: _blank
+      - text: UniDec Repository
+        icon: github
+        href: https://github.com/michaelmarty/UniDec
+        target: _blank
+      - text: Liora Bioinformatics
+        href: https://www.liora-bioinformatics.com/
+        target: _blank
+---
+
+```{r }
+#| label: List Result
+#| message: false
+#| warning: false
+#| include: false
+
+# Load the result list from RDS file
+result <- readRDS(file.path(params$result_path, "result_short.rds"))
+names_result <- names(result)[!names(result) %in% c("session", "output")]
+```
+
+`r if(params$comment != "") paste("<div class='comment-text'>", params$comment, "</div> <hr>")`
+
+### Parameter
+
+``` {r}
+#| label: Load Result
+#| message: false
+#| warning: false
+#| include: false
+
+# Load the result list from RDS file
+config_all <- unlist(result[[1]][1])
+names(config_all) <- gsub("config.", "", names(config_all))
+
+imp_params <- names(config_all) %in% c("startz", "endz", "minmz", "maxmz", "masslb", "massub", "peakwindow", "peakthresh", "peaknorm", "massbins")
+
+main_params <- config_all[imp_params]
+
+config_ex_path <- config_all[!names(config_all) %in% c("input", "output")]
+config_paths <- config_all[names(config_all) %in% c("input", "output")]
+```
+
+
+```{r echo=FALSE, results='asis'}
+#| label: Parameter
+
+main_param_table <- data.frame(
+  Parameter = names(main_params),
+  Value = as.character(main_params),  
+  stringsAsFactors = FALSE
+)
+
+# Split main_param_table into three parts for a 6-column format
+third_n_main <- ceiling(nrow(main_param_table) / 3)
+
+main_left <- main_param_table[1:third_n_main, ]
+main_middle <- main_param_table[(third_n_main + 1):(2 * third_n_main), ]
+main_right <- main_param_table[(2 * third_n_main + 1):nrow(main_param_table), ]
+
+# Pad shorter columns with empty rows
+max_rows_main <- max(nrow(main_left), nrow(main_middle), nrow(main_right))
+
+if (nrow(main_left) < max_rows_main) {
+  empty_rows <- data.frame(Parameter = rep("", max_rows_main - nrow(main_left)), 
+                           Value = rep("", max_rows_main - nrow(main_left)))
+  main_left <- rbind(main_left, empty_rows)
+}
+
+if (nrow(main_middle) < max_rows_main) {
+  empty_rows <- data.frame(Parameter = rep("", max_rows_main - nrow(main_middle)), 
+                           Value = rep("", max_rows_main - nrow(main_middle)))
+  main_middle <- rbind(main_middle, empty_rows)
+}
+
+if (nrow(main_right) < max_rows_main) {
+  empty_rows <- data.frame(Parameter = rep("", max_rows_main - nrow(main_right)), 
+                           Value = rep("", max_rows_main - nrow(main_right)))
+  main_right <- rbind(main_right, empty_rows)
+}
+
+# Combine into final 6-column format for main parameters
+main_param_table_wide <- cbind(main_left, main_middle, main_right)
+
+param_table <- data.frame(
+  Parameter = names(config_ex_path),
+  Value = as.character(config_ex_path),  
+  stringsAsFactors = FALSE
+)
+
+extra_rows <- data.frame(
+  Parameter = names(config_paths),
+  Value = config_paths,
+  stringsAsFactors = FALSE
+)
+colnames(extra_rows) <- NULL
+
+# Determine the third of the remaining parameters
+third_n <- ceiling(nrow(param_table) / 3)
+
+# Split into three parts for a 6-column format
+param_left <- param_table[1:third_n, ]
+param_middle <- param_table[(third_n + 1):(2 * third_n), ]
+param_right <- param_table[(2 * third_n + 1):nrow(param_table), ]
+
+# Pad the shorter columns with empty rows if necessary
+max_rows <- max(nrow(param_left), nrow(param_middle), nrow(param_right))
+
+if (nrow(param_left) < max_rows) {
+  empty_rows <- data.frame(Parameter = rep("", max_rows - nrow(param_left)), 
+                           Value = rep("", max_rows - nrow(param_left)))
+  param_left <- rbind(param_left, empty_rows)
+}
+
+if (nrow(param_middle) < max_rows) {
+  empty_rows <- data.frame(Parameter = rep("", max_rows - nrow(param_middle)), 
+                           Value = rep("", max_rows - nrow(param_middle)))
+  param_middle <- rbind(param_middle, empty_rows)
+}
+
+if (nrow(param_right) < max_rows) {
+  empty_rows <- data.frame(Parameter = rep("", max_rows - nrow(param_right)), 
+                           Value = rep("", max_rows - nrow(param_right)))
+  param_right <- rbind(param_right, empty_rows)
+}
+
+# Combine into final table structure with 6 columns
+param_table_wide <- cbind(param_left, param_middle, param_right)
+
+# Remove column names for all tables
+colnames(main_param_table_wide) <- NULL
+colnames(param_table_wide) <- NULL
+colnames(extra_rows) <- NULL
+
+# Render main parameter table with no headers
+main_param_tab <- knitr::kable(main_param_table_wide, booktabs = TRUE, row.names = FALSE, align = "l") |>
+  kableExtra::kable_styling(full_width = TRUE, bootstrap_options = c("hover", "condensed")) |>
+  kableExtra::column_spec(c(2, 4, 6), monospace = TRUE) |>
+  kableExtra::kable_styling("striped")
+
+
+# Create table with the updated 6 columns
+other_param_tab <- knitr::kable(param_table_wide, booktabs = TRUE, row.names = FALSE, align = "l") |>
+  kableExtra::kable_styling(full_width = TRUE, bootstrap_options = c("hover", "condensed")) |>
+  kableExtra::column_spec(c(2, 4, 6), monospace = TRUE) |>
+  kableExtra::kable_styling("striped")
+
+# Render extra rows
+path_param_tab <- knitr::kable(extra_rows, booktabs = TRUE, row.names = FALSE, align = "l") |>
+  kableExtra::kable_styling(full_width = TRUE, bootstrap_options = c("hover", "condensed")) |>
+  kableExtra::kable_styling("striped")
+
+# Print tables with a break in between
+cat(main_param_tab)
+cat("<div style='overflow-x: auto; width: 100%;'>")
+cat(path_param_tab)
+cat("</div>")
+cat("<br><details>  <summary>Parameter Full List</summary> ")
+cat(other_param_tab)
+cat("</details>")
+
+
+```
+
+------------------------------------------------------------------------
+
+### Results
+
+```{r echo=FALSE, results="asis"}
+#| label: Sample List
+#| message: false
+#| warning: false
+
+# Generate clickable list of names with alternating row colors
+clickable_list <- sapply(seq_along(names_result), function(i) {
+  # Alternate row colors using light greyish hues
+  row_color <- ifelse(i %% 2 == 0, "#f2f2f27a", "#ffffff")  # Even rows light grey, odd rows white
+  paste0("<tr style='background-color:", row_color, ";'><td><a href='#", tolower(names_result[i]), "'>", names_result[i], "</a></td></tr>")
+})
+
+# Convert clickable list to a single character string with table structure
+clickable_list <- paste("<table class='table table-bordered' style='width:100%; border-collapse: collapse;'>", 
+                        paste(clickable_list, collapse = "\n"), 
+                        "</table>", sep = "\n")
+
+if (file.exists(file.path(params$result_path, "heatmap.rds"))) {
+  heatmap <- readRDS(file.path(params$result_path, "heatmap.rds"))
+  htmltools::tagList(heatmap) 
+}
+
+cat("<br>", clickable_list)
+
+# cat("### A2.raw")
+```
+
+```{r echo=FALSE, fig.height=6, fig.show='hold', fig.width=10, results='asis'}
+#| label: Results
+#| message: false
+#| warning: false
+
+# Store plots in a list for rendering
+plot_output <- list()
+
+for (name in names_result) {
+  if (!is.null(result[[name]]$plots)) {
+    plot1 <- result[[name]]$plots[[1]]
+    plot2 <- result[[name]]$plots[[2]]
+
+    if (inherits(plot1, "plotly") && inherits(plot2, "plotly")) {
+      
+      combined_plot <- plotly::subplot(plot1, plot2, nrows = 1, shareX = FALSE, shareY = FALSE)
+      
+      # Create a linked section header and horizontal separator
+      section_html <- htmltools::tagList(
+        htmltools::tags$section(
+          id = tolower(name),
+          class = "level4",
+          htmltools::h4(
+            class = "anchored",
+            `data-anchor-id` = tolower(name),
+             # Split the title into two parts and style them differently
+            htmltools::span(
+              class = "name-part",
+              paste(name)  # This will be the larger font
+            ),
+            " ",  # A space between the two parts
+            htmltools::span(
+              class = "subtitle-part",
+              "Deconvoluted Spectrum | Original Raw Spectrum"  # This will be the smaller font
+            ),
+            htmltools::a(
+              class = "anchorjs-link",
+              `aria-label` = "Anchor",
+              `data-anchorjs-icon` = "\uE84B",
+              href = paste0("#", tolower(name)),
+              style = "font: 1em / 1 anchorjs-icons; margin-left: 0.1875em; padding-right: 0.1875em;"
+            )
+          ),
+          combined_plot
+        )
+      )
+
+      # Append the section to the output list
+      plot_output <- append(plot_output, list(section_html))
+    }
+  }
+}
+
+# Force Quarto to recognize and render everything
+htmltools::tagList(plot_output)
+```
+
+
+------------------------------------------------------------------------
