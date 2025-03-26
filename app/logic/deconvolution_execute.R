@@ -46,10 +46,4 @@ result <- generate_decon_rslt(
   output = output
 )
 
-result_short <- lapply(result, function(x) x[-c(5, 6, 7)])
-saveRDS(
-  result_short,
-  file.path(getwd(), "results/result_short.rds"),
-  compress = FALSE
-)
-saveRDS(result, file.path(getwd(), "results/result.rds"), compress = FALSE)
+saveRDS(result, file.path(getwd(), "results/result.rds"), compress = TRUE)

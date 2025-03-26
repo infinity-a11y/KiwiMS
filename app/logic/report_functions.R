@@ -1,7 +1,15 @@
 # app/logic/report_functions.R
 
 box::use(
-  data.table[fread, setnames, data.table, as.data.table]
+  data.table[fread, setnames, data.table, as.data.table],
+)
+
+box::use(
+  app /
+    logic /
+    deconvolution_functions[
+      spectrum_plot,
+    ],
 )
 
 #' @export
@@ -43,10 +51,10 @@ generate_decon_rslt <- function(
     }
 
     # Read RDS safely using tryCatch
-    plots <- tryCatch(
-      readRDS(file.path(rslt_folder, "plots.rds")),
-      error = function(e) list()
-    )
+    # plots <- tryCatch(
+    #   readRDS(file.path(rslt_folder, "plots.rds")),
+    #   error = function(e) list()
+    # )
 
     # Read other files
     peaks_df <- read_file_safe(
@@ -81,9 +89,21 @@ generate_decon_rslt <- function(
       paste0(raw_name, "_input.dat")
     ))
 
+    decon_spec <- spectrum_plot(
+      rslt_folder,
+      raw = FALSE,
+      interactive = FALSE
+    )
+    raw_spec <- spectrum_plot(
+      rslt_folder,
+      raw = TRUE,
+      interactive = FALSE
+    )
+
     return(list(
       config = conf_df,
-      plots = plots,
+      decon_spec = decon_spec,
+      raw_spec = raw_spec,
       peaks = peaks_df,
       error = error_df,
       rawdata = rawdata_df,

@@ -1093,8 +1093,6 @@ server <- function(id, dirs) {
 
       if (file.exists(file.path(getwd(), "results/result.rds")))
         file.remove(file.path(getwd(), "results/result.rds"))
-      if (file.exists(file.path(getwd(), "results/result_short.rds")))
-        file.remove(file.path(getwd(), "results/result_short.rds"))
       if (file.exists(file.path(getwd(), "results/heatmap.rds")))
         file.remove(file.path(getwd(), "results/heatmap.rds"))
 

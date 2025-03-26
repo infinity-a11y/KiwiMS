@@ -365,7 +365,7 @@ create_384_plate_heatmap <- function(data) {
 }
 
 #' @export
-spectrum_plot <- function(result_path, raw) {
+spectrum_plot <- function(result_path, raw, interactive = TRUE) {
   # Get paths
   base <- gsub("_unidecfiles", "", basename(result_path))
 
@@ -417,6 +417,9 @@ spectrum_plot <- function(result_path, raw) {
       ggplot2$labs(y = "Intensity [%]", x = "Mass [Da]")
   }
 
+  # If not interactive return ggplot
+  if (!interactive) return(plot)
+
   plot_name <- ifelse(
     raw == TRUE,
     paste0(gsub("_rawdata", "", base), "_raw"),
@@ -444,5 +447,5 @@ spectrum_plot <- function(result_path, raw) {
       toImageButtonOptions = list(filename = paste0(Sys.Date(), "_", plot_name))
     )
 
-  interactive_plot
+  return(interactive_plot)
 }

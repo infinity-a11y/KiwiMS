@@ -6,7 +6,7 @@ params:
   report_title: "Deconvolution Report"
   report_author: ""
   comment: ""
-  result_path: ""
+  result_path: "C:/Users/Admin/Desktop/EKIKO/MS_Workflow/MSFlow/results"
 output:
   html_document:
     self_contained: true
@@ -31,6 +31,43 @@ format:
         target: _blank
 ---
 
+````{html}
+<button onclick="topFunction()" id="topBtn" class="btn btn-primary">↑ Back to Top</button>
+
+<script>
+  // Get the button
+  let mybutton = document.getElementById("topBtn");
+
+  // Show the button when scrolling down
+  window.onscroll = function () {
+    if (document.body.scrollTop > 200 || document.documentElement.scrollTop > 200) {
+      mybutton.style.display = "block";
+    } else {
+      mybutton.style.display = "none";
+    }
+  };
+
+  // Scroll to the top smoothly
+  function topFunction() {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+</script>
+
+<style>
+  #topBtn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    display: none;
+    padding: 10px 15px;
+    font-size: 16px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+</style>
+
+
 ```{r }
 #| label: List Result
 #| message: false
@@ -38,7 +75,7 @@ format:
 #| include: false
 
 # Load the result list from RDS file
-result <- readRDS(file.path(params$result_path, "result_short.rds"))
+result <- readRDS(file.path(params$result_path, "result.rds"))
 names_result <- names(result)[!names(result) %in% c("session", "output")]
 ```
 
@@ -61,7 +98,6 @@ imp_params <- names(config_all) %in% c("startz", "endz", "minmz", "maxmz", "mass
 main_params <- config_all[imp_params]
 
 config_ex_path <- config_all[!names(config_all) %in% c("input", "output")]
-config_paths <- config_all[names(config_all) %in% c("input", "output")]
 ```
 
 
@@ -111,13 +147,6 @@ param_table <- data.frame(
   stringsAsFactors = FALSE
 )
 
-extra_rows <- data.frame(
-  Parameter = names(config_paths),
-  Value = config_paths,
-  stringsAsFactors = FALSE
-)
-colnames(extra_rows) <- NULL
-
 # Determine the third of the remaining parameters
 third_n <- ceiling(nrow(param_table) / 3)
 
@@ -153,7 +182,6 @@ param_table_wide <- cbind(param_left, param_middle, param_right)
 # Remove column names for all tables
 colnames(main_param_table_wide) <- NULL
 colnames(param_table_wide) <- NULL
-colnames(extra_rows) <- NULL
 
 # Render main parameter table with no headers
 main_param_tab <- knitr::kable(main_param_table_wide, booktabs = TRUE, row.names = FALSE, align = "l") |>
@@ -168,21 +196,13 @@ other_param_tab <- knitr::kable(param_table_wide, booktabs = TRUE, row.names = F
   kableExtra::column_spec(c(2, 4, 6), monospace = TRUE) |>
   kableExtra::kable_styling("striped")
 
-# Render extra rows
-path_param_tab <- knitr::kable(extra_rows, booktabs = TRUE, row.names = FALSE, align = "l") |>
-  kableExtra::kable_styling(full_width = TRUE, bootstrap_options = c("hover", "condensed")) |>
-  kableExtra::kable_styling("striped")
-
 # Print tables with a break in between
 cat(main_param_tab)
 cat("<div style='overflow-x: auto; width: 100%;'>")
-cat(path_param_tab)
 cat("</div>")
 cat("<br><details>  <summary>Parameter Full List</summary> ")
 cat(other_param_tab)
 cat("</details>")
-
-
 ```
 
 ------------------------------------------------------------------------
@@ -190,30 +210,49 @@ cat("</details>")
 ### Results
 
 ```{r echo=FALSE, results="asis"}
+#| label: Heatmap
+
+if (file.exists(file.path(params$result_path, "heatmap.rds"))) {
+  heatmap <- readRDS(file.path(params$result_path, "heatmap.rds"))
+  htmltools::tagList(
+  htmltools::div(
+    style = "max-width: 65%;",
+    heatmap
+  )
+)
+}
+```
+
+```{r echo=FALSE, results="asis"}
 #| label: Sample List
 #| message: false
 #| warning: false
 
-# Generate clickable list of names with alternating row colors
-clickable_list <- sapply(seq_along(names_result), function(i) {
-  # Alternate row colors using light greyish hues
-  row_color <- ifelse(i %% 2 == 0, "#f2f2f27a", "#ffffff")  # Even rows light grey, odd rows white
-  paste0("<tr style='background-color:", row_color, ";'><td><a href='#", tolower(names_result[i]), "'>", names_result[i], "</a></td></tr>")
+# Define the number of columns
+num_cols <- 2
+
+# Generate clickable list of names in two columns with alternating row colors
+table_rows <- sapply(seq(1, length(names_result), by = num_cols), function(i) {
+  row_color <- ifelse((i %/% num_cols) %% 2 == 0, "#f2f2f27a", "#ffffff")  # Alternate row colors
+  
+  # Create cells for each column
+  cells <- lapply(i:(i + num_cols - 1), function(j) {
+    if (j <= length(names_result)) {
+      paste0("<td><a href='#", tolower(names_result[j]), "'>", names_result[j], "</a></td>")
+    } else {
+      "<td></td>"  # Empty cell for uneven rows
+    }
+  })
+  
+  paste0("<tr style='background-color:", row_color, ";'>", paste(unlist(cells), collapse = ""), "</tr>")
 })
 
-# Convert clickable list to a single character string with table structure
-clickable_list <- paste("<table class='table table-bordered' style='width:100%; border-collapse: collapse;'>", 
-                        paste(clickable_list, collapse = "\n"), 
-                        "</table>", sep = "\n")
+# Convert table rows to a single character string with table structure
+clickable_table <- paste("<table class='table table-bordered' style='width:100%; border-collapse: collapse;'>", paste(table_rows, collapse = "\n"), "</table>", sep = "\n")
 
-if (file.exists(file.path(params$result_path, "heatmap.rds"))) {
-  heatmap <- readRDS(file.path(params$result_path, "heatmap.rds"))
-  htmltools::tagList(heatmap) 
-}
 
-cat("<br>", clickable_list)
+cat("<br>", clickable_table)
 
-# cat("### A2.raw")
 ```
 
 ```{r echo=FALSE, fig.height=6, fig.show='hold', fig.width=10, results='asis'}
@@ -221,57 +260,71 @@ cat("<br>", clickable_list)
 #| message: false
 #| warning: false
 
-# Store plots in a list for rendering
+# Function to convert ggplot to Base64 PNG
+ggplot_to_base64 <- function(plot, width = 5, height = 5, dpi = 300) {
+  temp_file <- tempfile(fileext = ".png")  # Create temp file
+  
+  ggplot2::ggsave(temp_file, plot = plot, width = width, height = height, dpi = dpi, device = "png") 
+  
+  base64_data <- base64enc::dataURI(file = temp_file, mime = "image/png")  # Convert to Base64
+  
+  unlink(temp_file)  # Delete temp file
+  
+  return(base64_data)
+}
+
+# Store image sections in a list for rendering
 plot_output <- list()
 
 for (name in names_result) {
-  if (!is.null(result[[name]]$plots)) {
-    plot1 <- result[[name]]$plots[[1]]
-    plot2 <- result[[name]]$plots[[2]]
+  if (!is.null(result[[name]]$decon_spec) && !is.null(result[[name]]$raw_spec)) {
+    # Convert ggplots to Base64
+    img1_base64 <- ggplot_to_base64(result[[name]]$decon_spec)
+    img2_base64 <- ggplot_to_base64(result[[name]]$raw_spec)
+    
+    config <- unlist(result[[name]]$config)
+    names(config) <- gsub("config.", "", names(config))
+    config_path <- dirname(normalizePath(config[names(config) %in% c("input")]))
 
-    if (inherits(plot1, "plotly") && inherits(plot2, "plotly")) {
-      
-      combined_plot <- plotly::subplot(plot1, plot2, nrows = 1, shareX = FALSE, shareY = FALSE)
-      
-      # Create a linked section header and horizontal separator
-      section_html <- htmltools::tagList(
-        htmltools::tags$section(
-          id = tolower(name),
-          class = "level4",
-          htmltools::h4(
-            class = "anchored",
-            `data-anchor-id` = tolower(name),
-             # Split the title into two parts and style them differently
-            htmltools::span(
-              class = "name-part",
-              paste(name)  # This will be the larger font
-            ),
-            " ",  # A space between the two parts
-            htmltools::span(
-              class = "subtitle-part",
-              "Deconvoluted Spectrum | Original Raw Spectrum"  # This will be the smaller font
-            ),
-            htmltools::a(
-              class = "anchorjs-link",
-              `aria-label` = "Anchor",
-              `data-anchorjs-icon` = "\uE84B",
-              href = paste0("#", tolower(name)),
-              style = "font: 1em / 1 anchorjs-icons; margin-left: 0.1875em; padding-right: 0.1875em;"
-            )
-          ),
-          combined_plot
+    # Create a linked section header and horizontal separator
+    section_html <- htmltools::tagList(
+      htmltools::tags$section(
+        id = tolower(name),
+        class = "level4",
+        htmltools::h4(
+          class = "anchored",
+          `data-anchor-id` = tolower(name),
+          htmltools::span(class = "name-part", paste(name)),
+          " ",  
+          htmltools::span(class = "subtitle-part", "Deconvoluted Spectrum | Original Raw Spectrum"),
+          htmltools::a(
+            class = "anchorjs-link",
+            `aria-label` = "Anchor",
+            `data-anchorjs-icon` = "\uE84B",
+            href = paste0("#", tolower(name)),
+            style = "font: 1em / 1 anchorjs-icons; margin-left: 0.1875em; padding-right: 0.1875em;"
+          )
+        ),
+        htmltools::div(
+          style = "overflow-wrap: anywhere;",
+          htmltools::p(config_path)
+        ),
+        # Side-by-side images
+        htmltools::div(
+          style = "display: flex;",
+          htmltools::img(src = img1_base64, width = "50%"),
+          htmltools::img(src = img2_base64, width = "50%")
         )
       )
+    )
 
-      # Append the section to the output list
-      plot_output <- append(plot_output, list(section_html))
-    }
+    # Append the section to the output list
+    plot_output <- append(plot_output, list(section_html))
   }
 }
 
 # Force Quarto to recognize and render everything
 htmltools::tagList(plot_output)
 ```
-
 
 ------------------------------------------------------------------------
