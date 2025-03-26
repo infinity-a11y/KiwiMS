@@ -6,7 +6,7 @@ params:
   report_title: "Deconvolution Report"
   report_author: ""
   comment: ""
-  result_path: "C:/Users/Admin/Desktop/EKIKO/MS_Workflow/MSFlow/results"
+  result_path: ""
 output:
   html_document:
     self_contained: true
@@ -228,7 +228,8 @@ if (file.exists(file.path(params$result_path, "heatmap.rds"))) {
 #| message: false
 #| warning: false
 
-# Define the number of columns
+if(length(names_result) > 1) {
+  # Define the number of columns
 num_cols <- 2
 
 # Generate clickable list of names in two columns with alternating row colors
@@ -252,6 +253,7 @@ clickable_table <- paste("<table class='table table-bordered' style='width:100%;
 
 
 cat("<br>", clickable_table)
+}
 
 ```
 
@@ -260,7 +262,11 @@ cat("<br>", clickable_table)
 #| message: false
 #| warning: false
 
-# Function to convert ggplot to Base64 PNG
+# Load necessary libraries
+library(ragg)
+library(base64enc)
+
+# Function to convert ggplot to Base64 
 ggplot_to_base64 <- function(plot, width = 5, height = 5, dpi = 300) {
   temp_file <- tempfile(fileext = ".png")  # Create temp file
   
@@ -278,14 +284,14 @@ plot_output <- list()
 
 for (name in names_result) {
   if (!is.null(result[[name]]$decon_spec) && !is.null(result[[name]]$raw_spec)) {
-    # Convert ggplots to Base64
+    # Convert ggplots to Base64 without saving to disk
     img1_base64 <- ggplot_to_base64(result[[name]]$decon_spec)
     img2_base64 <- ggplot_to_base64(result[[name]]$raw_spec)
     
     config <- unlist(result[[name]]$config)
     names(config) <- gsub("config.", "", names(config))
     config_path <- dirname(normalizePath(config[names(config) %in% c("input")]))
-
+    
     # Create a linked section header and horizontal separator
     section_html <- htmltools::tagList(
       htmltools::tags$section(
@@ -306,6 +312,7 @@ for (name in names_result) {
           )
         ),
         htmltools::div(
+          class = "result-path",
           style = "overflow-wrap: anywhere;",
           htmltools::p(config_path)
         ),
@@ -317,7 +324,7 @@ for (name in names_result) {
         )
       )
     )
-
+    
     # Append the section to the output list
     plot_output <- append(plot_output, list(section_html))
   }

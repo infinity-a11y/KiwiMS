@@ -113,7 +113,8 @@ section .level4 {
     background-color: #35357A;
 }
 
-p {
+p .result-path,
+.result-path p {
     margin-top: 0;
     margin-bottom: 1em;
     padding-left: 1.2em;

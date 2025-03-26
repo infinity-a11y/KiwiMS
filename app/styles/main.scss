@@ -117,17 +117,9 @@ input[type="number"]::-webkit-inner-spin-button {
   cursor: wait;
 }
 
-#app-deconvolution_process-deconvolute_end,
-#app-deconvolution_process-show_log {
-  margin-top: 0.5em;
-}
-
 #app-deconvolution_process-deconvolute_end {
+  margin-top: 0.5em;
   margin-left: 3em;
-}
-
-#app-deconvolution_process-show_log {
-  margin-left: -2em;
 }
 
 .bg-dark {
@@ -274,7 +266,8 @@ body > div.waiter-overlay.waiter-fullscreen {
 }
 
 .result-picker {
-  margin-top: -1rem;
+  margin-top: -1.5em;
+  margin-left: 2em;
 }
 
 .selectize-input.focus {
@@ -433,9 +426,10 @@ a {
 }
 
 .form-label, .shiny-input-container .control-label {
-    margin-bottom: 0;
-    color: RGBA(var(--bs-emphasis-color-rgb, 0, 0, 0), 0.5);
-    font-style: italic;
+  margin-bottom: 0;
+  color: RGBA(var(--bs-emphasis-color-rgb, 0, 0, 0), 0.5);
+  font-style: italic;
+  font-size: smaller;
 }
 
 #app-deconvolution_pars-multi_dir_check,
@@ -478,7 +472,15 @@ a {
   word-wrap: break-word;
 }
 
-#app-deconvolution_process-logtext::-webkit-scrollbar-track {
+#app-deconvolution_process-decon_rep_logtext {
+  max-height: 30vh;
+  height: 100%;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+#app-deconvolution_process-logtext::-webkit-scrollbar-track,
+#app-deconvolution_process-decon_rep_logtext::-webkit-scrollbar-track{
   border-bottom-right-radius: 5px;
   border-top-right-radius: 5px;
 }
@@ -499,4 +501,31 @@ textarea.form-control {
 deconv-rep-check {
   position: relative;
   top: 3vh;
+}
+
+.decon-btn .btn-default .fas {
+  position: relative;
+  right: 8px;
+  padding-left: 8px;
+}
+
+.decon-btn .btn-default {
+  width: 100%;
+}
+
+.result-picker .selectize-control.single .selectize-input {
+  height: 46.6px;
+  border: 1px solid black;
+}
+
+.selectize-input > * {
+  vertical-align: -webkit-baseline-middle;
+}
+
+#app-deconvolution_process-toggle_result {
+  margin-right: 2em;
+}
+
+decon-report-modal .btn-default {
+    width: 160px;
 }

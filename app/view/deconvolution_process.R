@@ -17,7 +17,6 @@ box::use(
   clipr[write_clip],
   utils[head, tail],
   waiter[useWaiter, spin_wandering_cubes, waiter_show, waiter_hide, withWaiter],
-  quarto[quarto_render],
 )
 
 box::use(
@@ -60,7 +59,8 @@ server <- function(id, dirs) {
       lastCheckresults = 0,
       count = 0,
       rslt_df = data.frame(),
-      logs = ""
+      logs = "",
+      deconv_report_fin = "idle"
     )
 
     result_files_sel <- shiny$reactiveVal()
@@ -453,10 +453,32 @@ server <- function(id, dirs) {
                 )
               )
             )
+          ),
+          shinyjs::hidden(
+            shiny$div(
+              id = ns("processing_stop"),
+              shiny$HTML(
+                paste0(
+                  '<i class="fa-solid fa-spinner fa-2x" style="color: ',
+                  '#38387C; margin-top: 0.5em"></i>'
+                )
+              )
+            )
+          ),
+          shinyjs::hidden(
+            shiny$div(
+              id = ns("processing_fin"),
+              shiny$HTML(
+                paste0(
+                  '<i class="fa-solid fa-circle-check fa-2x" style="color: ',
+                  '#38387C; margin-top: 0.5em"></i>'
+                )
+              )
+            )
           )
         ),
         shiny$column(
-          width = 7,
+          width = 8,
           progressBar(
             id = ns("progressBar"),
             value = 0,
@@ -468,27 +490,47 @@ server <- function(id, dirs) {
           width = 2,
           align = "left",
           shiny$actionButton(ns("deconvolute_end"), "Abort")
-        ),
-        shiny$column(
-          width = 1,
-          shiny$actionButton(
-            ns("show_log"),
-            "",
-            icon = shiny$icon("code")
-          )
         )
       ),
       shiny$hr(style = "margin: 1.5rem 0; opacity: 0.8;"),
       shiny$fluidRow(
         shiny$column(
           width = 2,
-          shiny$actionButton(
-            ns("deconvolution_report"),
-            "Report",
-            icon = shiny$icon("square-poll-vertical")
+          shiny$div(
+            class = "decon-btn",
+            shiny$actionButton(
+              ns("show_log"),
+              "Show Log",
+              icon = shiny$icon("code")
+            )
           )
         ),
-        shiny$column(4),
+        shiny$column(
+          width = 2,
+          shiny$div(
+            class = "decon-btn",
+            disabled(
+              shiny$actionButton(
+                ns("deconvolution_report"),
+                "Create Report",
+                icon = shiny$icon("square-poll-vertical")
+              )
+            )
+          )
+        ),
+        shiny$column(
+          width = 2,
+          shiny$div(
+            class = "decon-btn",
+            disabled(
+              shiny$actionButton(
+                ns("forward_deonvoltuion"),
+                "Transfer Results",
+                icon = shiny$icon("forward-fast")
+              )
+            )
+          )
+        ),
         shiny$column(
           width = 3,
           align = "center",
@@ -568,10 +610,32 @@ server <- function(id, dirs) {
                 )
               )
             )
+          ),
+          shinyjs::hidden(
+            shiny$div(
+              id = ns("processing_stop"),
+              shiny$HTML(
+                paste0(
+                  '<i class="fa-solid fa-spinner fa-2x" style="color: ',
+                  '#38387C; margin-top: 0.5em"></i>'
+                )
+              )
+            )
+          ),
+          shinyjs::hidden(
+            shiny$div(
+              id = ns("processing_fin"),
+              shiny$HTML(
+                paste0(
+                  '<i class="fa-solid fa-circle-check fa-2x" style="color: ',
+                  '#38387C; margin-top: 0.5em"></i>'
+                )
+              )
+            )
           )
         ),
         shiny$column(
-          width = 7,
+          width = 8,
           progressBar(
             id = ns("progressBar"),
             value = 0,
@@ -583,32 +647,55 @@ server <- function(id, dirs) {
           width = 2,
           align = "left",
           shiny$actionButton(ns("deconvolute_end"), "Abort")
-        ),
-        shiny$column(
-          width = 1,
-          shiny$actionButton(
-            ns("show_log"),
-            "",
-            icon = shiny$icon("code")
-          )
         )
       ),
       shiny$hr(style = "margin: 1.5rem 0; opacity: 0.8;"),
       shiny$fluidRow(
         shiny$column(
           width = 2,
-          shiny$actionButton(
-            ns("deconvolution_report"),
-            "Report",
-            icon = shiny$icon("square-poll-vertical")
+          shiny$div(
+            class = "decon-btn",
+            shiny$actionButton(
+              ns("show_log"),
+              "Show Log",
+              icon = shiny$icon("code")
+            )
           )
         ),
         shiny$column(
-          width = 4,
+          width = 2,
+          shiny$div(
+            class = "decon-btn",
+            disabled(
+              shiny$actionButton(
+                ns("deconvolution_report"),
+                "Create Report",
+                icon = shiny$icon("square-poll-vertical")
+              )
+            )
+          )
+        ),
+        shiny$column(
+          width = 2,
+          shiny$div(
+            class = "decon-btn",
+            disabled(
+              shiny$actionButton(
+                ns("forward_deonvoltuion"),
+                "Transfer Results",
+                icon = shiny$icon("forward-fast")
+              )
+            )
+          )
+        ),
+        shiny$column(
+          width = 3,
+          align = "center",
           shiny$uiOutput(ns("result_picker_ui"))
         ),
         shiny$column(
-          width = 4,
+          width = 3,
+          align = "center",
           disabled(
             radioGroupButtons(
               ns("toggle_result"),
@@ -1090,7 +1177,6 @@ server <- function(id, dirs) {
 
       if (!dir.exists(file.path(getwd(), "results")))
         dir.create(file.path(getwd(), "results"))
-
       if (file.exists(file.path(getwd(), "results/result.rds")))
         file.remove(file.path(getwd(), "results/result.rds"))
       if (file.exists(file.path(getwd(), "results/heatmap.rds")))
@@ -1105,6 +1191,13 @@ server <- function(id, dirs) {
         "document.getElementById('app-deconvolution_process-deconvo",
         "lute_start').style.animation = 'none';"
       ))
+      delay(
+        500,
+        runjs(paste0(
+          "document.querySelector('.bslib-sidebar-layout.sidebar-coll",
+          "apsed>.collapse-toggle').style.display = 'none';"
+        ))
+      )
 
       ##### Deconvolution init and mode ----
       if (dirs$selected() == "folder") {
@@ -1244,10 +1337,8 @@ server <- function(id, dirs) {
       config_path <- file.path(temp, "config.rds")
       saveRDS(config, config_path)
 
-      reactVars$out <- file.path(temp, "output.txt")
-      write("", reactVars$out)
-
-      # dirs <- c(temp, get_log())
+      reactVars$decon_process_out <- file.path(temp, "output.txt")
+      write("", reactVars$decon_process_out)
 
       rx_process <- process$new(
         "Rscript",
@@ -1256,8 +1347,8 @@ server <- function(id, dirs) {
           temp,
           get_log()
         ),
-        stdout = reactVars$out,
-        stderr = reactVars$out
+        stdout = reactVars$decon_process_out,
+        stderr = reactVars$decon_process_out
       )
 
       process_data(rx_process)
@@ -1737,7 +1828,11 @@ server <- function(id, dirs) {
 
               write_log("Deconvolution finalized")
 
+              enable(
+                selector = "#app-deconvolution_process-deconvolution_report"
+              )
               hide(selector = "#app-deconvolution_process-processing")
+              show(selector = "#app-deconvolution_process-processing_fin")
             }
           }
 
@@ -1866,6 +1961,8 @@ server <- function(id, dirs) {
         ))
 
         hide(selector = "#app-deconvolution_process-processing")
+        hide(selector = "#app-deconvolution_process-processing_stop")
+        hide(selector = "#app-deconvolution_process-processing_fin")
 
         # stop observers
         if (!is.null(reactVars$progress_observer)) {
@@ -1894,6 +1991,10 @@ server <- function(id, dirs) {
           'document.getElementById("blocking-overlay").styl',
           'e.display = "none";'
         ))
+        runjs(paste0(
+          "document.querySelector('.bslib-sidebar-layout.sidebar-coll",
+          "apsed>.collapse-toggle').style.display = 'block';"
+        ))
         runjs("document.querySelector('button.collapse-toggle').click();")
       }
     })
@@ -1920,6 +2021,7 @@ server <- function(id, dirs) {
       )
 
       hide(selector = "#app-deconvolution_process-processing")
+      show(selector = "#app-deconvolution_process-processing_stop")
 
       shiny$updateActionButton(
         session,
@@ -1946,9 +2048,12 @@ server <- function(id, dirs) {
     #### Show Log ----
     shiny$observeEvent(input$show_log, {
       output$logtext <- shiny$renderText({
-        if (!is.null(reactVars$out) && file.exists(reactVars$out)) {
+        if (
+          !is.null(reactVars$decon_process_out) &&
+            file.exists(reactVars$decon_process_out)
+        ) {
           reactVars$deconvolution_log <- paste(
-            readLines(reactVars$out, warn = FALSE),
+            readLines(reactVars$decon_process_out, warn = FALSE),
             collapse = "\n"
           )
         } else {
@@ -2005,7 +2110,7 @@ server <- function(id, dirs) {
         paste0(Sys.Date(), "_Deconvolution_Log.txt")
       },
       content = function(file) {
-        file.copy(reactVars$out, file)
+        file.copy(reactVars$decon_process_out, file)
       }
     )
 
@@ -2018,62 +2123,11 @@ server <- function(id, dirs) {
 
     ### Report events ----
     shiny$observeEvent(input$deconvolution_report, {
-      if (file.exists("settings/decon_rep_settings.rds")) {
-        rep_input <- readRDS("settings/decon_rep_settings.rds")
-        title <- rep_input[1]
-        author <- rep_input[2]
-        comment <- rep_input[3]
-        label <- "Overwrite previous report settings?"
-      } else {
-        title <- "Deconvolution Report"
-        author <- "Author"
-        comment <- ""
-        label <- "Save report settings for the next time?"
-      }
-
       shiny$showModal(
         shiny$div(
-          class = "start-modal",
+          class = "decon-report-modal",
           shiny$modalDialog(
-            shiny$fluidRow(
-              shiny$br(),
-              shiny$column(
-                width = 11,
-                shiny$div(
-                  class = "deconv-rep-element",
-                  shiny$textInput(
-                    ns("decon_rep_title"),
-                    "Title",
-                    value = title
-                  )
-                ),
-                shiny$div(
-                  class = "deconv-rep-element",
-                  shiny$textInput(
-                    ns("decon_rep_author"),
-                    "Author",
-                    value = author
-                  )
-                ),
-                shiny$div(
-                  class = "deconv-rep-element",
-                  shiny$textAreaInput(
-                    ns("decon_rep_desc"),
-                    "Description",
-                    value = comment,
-                    placeholder = "Description and comments about the experiment..."
-                  )
-                ),
-                shiny$div(
-                  class = "deconv-rep-check",
-                  shiny$checkboxInput(
-                    ns("decon_save"),
-                    label,
-                    value = FALSE
-                  )
-                )
-              )
-            ),
+            shiny$uiOutput(ns("decon_report_ui")),
             title = "Deconvolution Report",
             easyClose = TRUE,
             footer = shiny$tagList(
@@ -2090,44 +2144,178 @@ server <- function(id, dirs) {
       )
     })
 
-    shiny$observeEvent(input$make_deconvolution_report, {
-      runjs(
-        'document.getElementById("blocking-overlay").style.display = "block";'
-      )
-
-      if (isTRUE(input$decon_save)) {
-        if (!dir.exists("settings")) dir.create("settings")
-
-        rep_input <- c(
-          input$decon_rep_title,
-          input$decon_rep_author,
-          input$decon_rep_desc
-        )
-        saveRDS(rep_input, "settings/decon_rep_settings.rds")
+    output$decon_report_ui <- shiny$renderUI({
+      if (file.exists("settings/decon_rep_settings.rds")) {
+        rep_input <- readRDS("settings/decon_rep_settings.rds")
+        title <- rep_input[1]
+        author <- rep_input[2]
+        comment <- rep_input[3]
+        label <- "Overwrite previous report settings?"
+      } else {
+        title <- "Deconvolution Report"
+        author <- "Author"
+        comment <- ""
+        label <- "Save report settings for the next time?"
       }
 
-      # Use only filename (not full path)
-      output_filename <- "deconvolution_report.html"
-
-      quarto_render(
-        input = "deconvolution_report.qmd",
-        output_file = output_filename,
-        execute_params = list(
-          report_title = input$decon_rep_title,
-          report_author = input$decon_rep_author,
-          comment = input$decon_rep_desc,
-          result_path = file.path(getwd(), "results")
+      shiny$fluidRow(
+        shiny$br(),
+        shiny$column(
+          width = 11,
+          shiny$div(
+            class = "deconv-rep-element",
+            shiny$textInput(
+              ns("decon_rep_title"),
+              "Title",
+              value = title
+            )
+          ),
+          shiny$div(
+            class = "deconv-rep-element",
+            shiny$textInput(
+              ns("decon_rep_author"),
+              "Author",
+              value = author
+            )
+          ),
+          shiny$div(
+            class = "deconv-rep-element",
+            shiny$textAreaInput(
+              ns("decon_rep_desc"),
+              "Description",
+              value = comment,
+              placeholder = "Description and comments about the experiment..."
+            )
+          ),
+          shiny$div(
+            class = "deconv-rep-check",
+            shiny$checkboxInput(
+              ns("decon_save"),
+              label,
+              value = FALSE
+            )
+          )
         )
       )
+    })
 
-      runjs(
-        'document.getElementById("blocking-overlay").style.display = "none";'
+    shiny$observeEvent(
+      input$make_deconvolution_report,
+      {
+        reactVars$deconv_report_fin <- "running"
+
+        reactVars$decon_rep_process_out <- file.path(
+          tempdir(),
+          "rep_output.txt"
+        )
+        write("", reactVars$decon_rep_process_out)
+
+        output$decon_report_ui <- shiny$renderUI(
+          shiny$fluidRow(
+            shiny$br(),
+            shiny$fluidRow(
+              shiny$column(
+                width = 2,
+                shiny$div(
+                  id = ns("generating_report"),
+                  shiny$HTML(
+                    paste0(
+                      '<i class="fa fa-spinner fa-spin fa-fw fa-2x" style="color: ',
+                      '#38387C; margin-top: 0.25em"></i>'
+                    )
+                  )
+                )
+              ),
+              shiny$column(
+                width = 10,
+                shiny$p(
+                  "Generating this report might take some time. Please wait ..."
+                )
+              )
+            ),
+            shiny$fluidRow(
+              shiny$column(
+                width = 12,
+                shiny$verbatimTextOutput(ns("decon_rep_logtext"))
+              )
+            )
+          )
+        )
+
+        if (isTRUE(input$decon_save)) {
+          if (!dir.exists("settings")) dir.create("settings")
+
+          rep_input <- c(
+            input$decon_rep_title,
+            input$decon_rep_author,
+            input$decon_rep_desc
+          )
+          saveRDS(rep_input, "settings/decon_rep_settings.rds")
+        }
+
+        session_id <- sub(".*(_id\\d+)$", "\\1", basename(get_log()))
+
+        process$new(
+          "Rscript",
+          args = c(
+            "app/logic/deconvolution_report.R",
+            input$decon_rep_title,
+            input$decon_rep_author,
+            input$decon_rep_desc,
+            paste0("deconvolution_report_", Sys.Date(), session_id, ".html")
+          ),
+          stdout = reactVars$decon_rep_process_out,
+          stderr = reactVars$decon_rep_process_out
+        )
+
+        # shiny$removeModal()
+
+        # Open in browser
+        # utils::browseURL(file.path(getwd(), output_filename))
+      }
+    )
+
+    output$decon_rep_logtext <- shiny$renderText({
+      shiny$invalidateLater(1000)
+
+      if (
+        !is.null(reactVars$decon_rep_process_out) &&
+          file.exists(reactVars$decon_rep_process_out)
+      ) {
+        log <- paste(
+          readLines(reactVars$decon_rep_process_out, warn = FALSE),
+          collapse = "\n"
+        )
+      } else {
+        log <- "Initiating Report Generation ..."
+      }
+
+      session_id <- sub(".*(_id\\d+)$", "\\1", basename(get_log()))
+      report_fin <- paste0(
+        "deconvolution_report_",
+        Sys.Date(),
+        session_id,
+        ".html"
       )
+      if (file.exists(report_fin)) reactVars$deconv_report_fin <- "finished"
 
-      shiny$removeModal()
+      gsub("\\s*\\|[ .]*\\|\\s*", "", log, perl = TRUE)
+    })
 
-      # Open in browser
-      utils::browseURL(file.path(getwd(), output_filename))
+    shiny$observe({
+      if (reactVars$deconv_report_fin == "running") {
+        shiny$updateActionButton(
+          session,
+          "make_deconvolution_report",
+          label = "Cancel"
+        )
+      } else if (reactVars$deconv_report_fin == "finished") {
+        shiny$updateActionButton(
+          session,
+          "make_deconvolution_report",
+          label = "Open"
+        )
+      }
     })
   })
 }
