@@ -60,6 +60,8 @@ ui <- function(id) {
       ),
       bslib$nav_panel(
         title = "Protein Conversion",
+        class = "locked-panel",
+        div(id = "overlay-message", "Module still in work ..."),
         bslib$page_sidebar(
           sidebar = conversion_sidebar$ui(ns("protein_conversion")),
           bslib$card(
@@ -70,6 +72,8 @@ ui <- function(id) {
       ),
       bslib$nav_panel(
         title = "KI/Kinact",
+        class = "locked-panel",
+        div(id = "overlay-message", "Module still in work ..."),
         bslib$page_sidebar(
           sidebar = ki_kinact_sidebar$ui(ns("ki")),
           bslib$navset_card_tab(
