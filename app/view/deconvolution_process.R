@@ -1200,8 +1200,6 @@ server <- function(id, dirs) {
 
     #### Deconvolution start ----
     shiny$observeEvent(input$deconvolute_start_conf, {
-      test <- c()
-      test[1] <- c(2, 1)
       # Reset modal and previous processes
       shiny$removeModal()
       reset_progress()

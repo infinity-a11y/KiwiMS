@@ -324,7 +324,10 @@ server <- function(id) {
       fluidRow(
         column(
           width = 5,
-          h6("Sample ID Column", style = "font-size: small")
+          h6(
+            "Sample ID Column",
+            style = "font-size: small; margin-top: 0.5em; margin-bottom: 0;"
+          )
         ),
         column(
           width = 7,
@@ -355,7 +358,10 @@ server <- function(id) {
           fluidRow(
             column(
               width = 5,
-              h6("Vial Column", style = "font-size: small")
+              h6(
+                "Vial Column",
+                style = "font-size: small; margin-top: 0.5em; margin-bottom: 0;"
+              )
             ),
             column(
               width = 7,
