@@ -10,10 +10,6 @@ box::use(
   utils[read.delim, read.table],
 )
 
-box::use(
-  app / logic / helper_functions[suppressPlotlyMessage],
-)
-
 #' @export
 deconvolute <- function(
   raw_dirs,

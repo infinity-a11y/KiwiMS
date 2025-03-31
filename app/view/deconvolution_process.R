@@ -820,9 +820,8 @@ server <- function(id, dirs) {
             shiny$selectInput(
               ns("result_picker"),
               "",
-              choices = choices
-              # ,
-              # selected = selected
+              choices = choices,
+              selected = selected
             )
           )
         )
@@ -1000,6 +999,13 @@ server <- function(id, dirs) {
               )
             )
           }
+
+          # if duplicates present disable continue button
+          if (any(duplicated(dirs$batch_file()[[dirs$id_column()]]))) {
+            disable(
+              selector = "#app-deconvolution_process-deconvolute_start_conf"
+            )
+          }
         } else {
           if (is.null(input$target_selector)) {
             num_targets <- 0
@@ -1037,13 +1043,6 @@ server <- function(id, dirs) {
               " is queried for deconvolution."
             )
           )
-        )
-      }
-
-      # if duplicates present disable continue button
-      if (any(duplicated(dirs$batch_file()[[dirs$id_column()]]))) {
-        disable(
-          selector = "#app-deconvolution_process-deconvolute_start_conf"
         )
       }
 
@@ -1201,6 +1200,8 @@ server <- function(id, dirs) {
 
     #### Deconvolution start ----
     shiny$observeEvent(input$deconvolute_start_conf, {
+      test <- c()
+      test[1] <- c(2, 1)
       # Reset modal and previous processes
       shiny$removeModal()
       reset_progress()
@@ -1248,15 +1249,12 @@ server <- function(id, dirs) {
           batch <- dirs$batch_file()
           sample_names <- batch[[dirs$id_column()]]
           raw_dirs <- raw_dirs[basename(raw_dirs) %in% sample_names]
-          test1 <<- basename(raw_dirs)
-          test2 <<- reactVars$sample_names
 
           # Prepare heatmap variables
           reactVars$sample_names <- gsub(
             ".raw",
             "",
-            # dirs$batch_file()[[dirs$id_column()]]
-            basename(raw_dirs)
+            dirs$batch_file()[[dirs$id_column()]]
           )
           reactVars$wells <- gsub(
             ",",
@@ -1293,8 +1291,6 @@ server <- function(id, dirs) {
               dirs$dir(),
               reactVars$overwrite
             )
-
-            print(paste("Overwrite", reactVars$overwrite))
 
             write_log(paste(
               "Overwriting",
@@ -1446,7 +1442,7 @@ server <- function(id, dirs) {
                 dirs$dir(),
                 glob = "*_rawdata_unidecfiles"
               )
-              test1 <<- results_all
+
               results <- results_all[
                 basename(results_all) %in%
                   paste0(
@@ -1454,7 +1450,6 @@ server <- function(id, dirs) {
                     "_rawdata_unidecfiles"
                   )
               ]
-              test2 <<- results
 
               if (length(results_all)) {
                 if (is.null(reactVars$rslt_df) || nrow(reactVars$rslt_df) < 1) {
@@ -1467,10 +1462,6 @@ server <- function(id, dirs) {
                       "",
                       basename(results[i])
                     )
-                    wells <<- reactVars$wells
-                    sample_names2 <<- reactVars$sample_names
-                    smp_nm <<- sample_names
-                    ia <<- i
                     well[i] <- reactVars$wells[which(
                       reactVars$sample_names == sample_names[i]
                     )]
@@ -1637,9 +1628,8 @@ server <- function(id, dirs) {
                     shiny$selectInput(
                       ns("result_picker"),
                       "",
-                      choices = choices
-                      # ,
-                      # selected = selected
+                      choices = choices,
+                      selected = selected
                     )
                   )
                 )
@@ -1717,11 +1707,6 @@ server <- function(id, dirs) {
             )
 
             result_files <- gsub(".raw", "_rawdata_unidecfiles", raw_dirs)
-
-            print(
-              all(file.exists(file.path(result_files, "plots.rds"))) &&
-                file.exists(file.path(getwd(), "results/result.rds"))
-            )
 
             # check if deconvolution finished for all target files
             if (
@@ -1853,9 +1838,8 @@ server <- function(id, dirs) {
                       shiny$selectInput(
                         ns("result_picker"),
                         "",
-                        choices = choices
-                        # ,
-                        # selected = selected
+                        choices = choices,
+                        selected = selected
                       )
                     )
                   )

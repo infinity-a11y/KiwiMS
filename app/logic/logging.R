@@ -106,13 +106,36 @@ format_log <- function(log_text) {
             "</div>"
           )
         )
-      } else if (grepl("^\\[WARN\\]", line)) {
-        # Warnings (Yellow)
+      } else if (grepl("^\\[WARN\\]|^Warning:", line)) {
+        # Convert "Warning:" messages to "[WARNING]" format
+        warning_message <- gsub("^Warning:", "[WARNING]", line)
+
+        # Extract the first letter after [WARNING] and capitalize it
+        first_letter <- sub(
+          "^\\[WARNING\\] (\\w)(.*)",
+          "\\1",
+          warning_message,
+          perl = TRUE
+        )
+        rest_of_message <- sub(
+          "^\\[WARNING\\] \\w(.*)",
+          "\\1",
+          warning_message,
+          perl = TRUE
+        )
+
+        # Reconstruct the formatted warning message
+        formatted_warning <- paste0(
+          "[WARNING] ",
+          toupper(first_letter),
+          rest_of_message
+        )
+
         formatted_lines <- c(
           formatted_lines,
           paste0(
             "<div style='color: orange; font-weight: bold;'>",
-            line,
+            formatted_warning,
             "</div>"
           )
         )

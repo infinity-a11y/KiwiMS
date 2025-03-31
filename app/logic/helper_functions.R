@@ -5,16 +5,10 @@ box::use(
   grid[gpar, grid.text, unit],
   maditr[dcast],
   minpack.lm[nlsLM],
-  plotly[plotly_build],
   plyr[ddply, rename],
   shiny[div, icon, NS, span],
   stringr[str_split_fixed],
 )
-
-#' @export
-suppressPlotlyMessage <- function(p) {
-  suppressWarnings(plotly_build(p))
-}
 
 #' @export
 collapsiblePanelUI <- function(id, title, content) {
@@ -248,7 +242,7 @@ make_kinact_matrix <- function(kobs, units, tmp_dir) {
     subset <- rbind(subset, subset_dummy)
     subset <- subset[order(subset$conc), ]
 
-    # dirty hack (needs to be fixed)
+    # fix subotopimal workaround
     if (any(subset$kobs > 1)) {
       subset <- subset[-which(subset$kobs > 1), ]
     }
