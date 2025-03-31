@@ -262,10 +262,6 @@ cat("<br>", clickable_table)
 #| message: false
 #| warning: false
 
-# Load necessary libraries
-library(ragg)
-library(base64enc)
-
 # Function to convert ggplot to Base64 
 ggplot_to_base64 <- function(plot, width = 5, height = 5, dpi = 300) {
   temp_file <- tempfile(fileext = ".png")  # Create temp file

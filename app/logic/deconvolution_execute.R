@@ -46,4 +46,4 @@ result <- generate_decon_rslt(
   output = output
 )
 
-saveRDS(result, file.path(getwd(), "results/result.rds"), compress = TRUE)
+saveRDS(result, file.path(getwd(), "results/result.rds"), compress = FALSE)

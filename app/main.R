@@ -152,7 +152,7 @@ server <- function(id) {
     deconvolution_process$server("deconvolution_process", dirs)
 
     # Hide waiter
-    Sys.sleep(3)
+    # Sys.sleep(3)
     waiter_hide()
   })
 }

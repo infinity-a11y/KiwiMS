@@ -5,10 +5,16 @@ box::use(
   grid[gpar, grid.text, unit],
   maditr[dcast],
   minpack.lm[nlsLM],
+  plotly[plotly_build],
   plyr[ddply, rename],
   shiny[div, icon, NS, span],
   stringr[str_split_fixed],
 )
+
+#' @export
+suppressPlotlyMessage <- function(p) {
+  suppressWarnings(plotly_build(p))
+}
 
 #' @export
 collapsiblePanelUI <- function(id, title, content) {

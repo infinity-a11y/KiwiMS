@@ -39,3 +39,26 @@ $(document).ready(function() {
     }
   });
 });
+
+$(document).on('shiny:value', function(event) {
+        if (event.name === 'app-deconvolution_process-decon_rep_logtext') {
+            var preElement = document.getElementById('app-deconvolution_process-decon_rep_logtext');
+            if (preElement) {
+                var isAtBottom = preElement.scrollHeight - preElement.scrollTop <= preElement.clientHeight + 5;
+
+                if (isAtBottom) {
+                    preElement.scrollTop = preElement.scrollHeight;
+                }
+
+                preElement.addEventListener('scroll', function() {
+                    var isUserScrollingUp = preElement.scrollHeight - preElement.scrollTop > preElement.clientHeight + 5;
+                    preElement.dataset.userScroll = isUserScrollingUp ? 'true' : 'false';
+                });
+
+                if (preElement.dataset.userScroll !== 'true') {
+                    preElement.scrollTop = preElement.scrollHeight;
+                }
+            }
+        }
+    });
+

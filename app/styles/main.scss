@@ -473,8 +473,9 @@ a {
 }
 
 #app-deconvolution_process-decon_rep_logtext {
-  max-height: 30vh;
+  max-height: 35vh;
   height: 100%;
+  margin-top: 1.5em;
   white-space: pre-wrap;
   word-wrap: break-word;
 }
@@ -527,5 +528,10 @@ deconv-rep-check {
 }
 
 decon-report-modal .btn-default {
-    width: 160px;
+  width: 160px;
+}
+
+.modal {
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
 }

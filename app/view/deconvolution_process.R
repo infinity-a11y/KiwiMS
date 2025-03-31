@@ -60,7 +60,7 @@ server <- function(id, dirs) {
       count = 0,
       rslt_df = data.frame(),
       logs = "",
-      deconv_report_fin = "idle"
+      deconv_report_status = "idle"
     )
 
     result_files_sel <- shiny$reactiveVal()
@@ -73,7 +73,7 @@ server <- function(id, dirs) {
       }
     })
 
-    process_data <- shiny$reactiveVal(NULL)
+    decon_process_data <- shiny$reactiveVal(NULL)
 
     ### Deconvolution initiation interface ----
 
@@ -820,8 +820,9 @@ server <- function(id, dirs) {
             shiny$selectInput(
               ns("result_picker"),
               "",
-              choices = choices,
-              selected = selected
+              choices = choices
+              # ,
+              # selected = selected
             )
           )
         )
@@ -846,6 +847,7 @@ server <- function(id, dirs) {
       reactVars$rslt_df <- data.frame()
       reactVars$lastCheck <- Sys.time()
       reactVars$lastCheckresults <- Sys.time()
+      reactVars$heatmap_ready <- FALSE
 
       output$spectrum <- NULL
     }
@@ -1038,6 +1040,13 @@ server <- function(id, dirs) {
         )
       }
 
+      # if duplicates present disable continue button
+      if (any(duplicated(dirs$batch_file()[[dirs$id_column()]]))) {
+        disable(
+          selector = "#app-deconvolution_process-deconvolute_start_conf"
+        )
+      }
+
       return(message)
     })
 
@@ -1057,31 +1066,53 @@ server <- function(id, dirs) {
           isTRUE(dirs$batch_mode()) &&
             length(dirs$batch_file())
         ) {
-          batch_sel <- gsub(
-            ".raw",
-            "_rawdata_unidecfiles",
-            dirs$batch_file()[[dirs$id_column()]]
-          )
-
-          intersect <- batch_sel %in% basename(finished_files)
-
-          if (any(intersect)) {
-            reactVars$overwrite <- batch_sel[intersect]
-
+          # check if any duplicated targets in batch
+          if (any(duplicated(dirs$batch_file()[[dirs$id_column()]]))) {
+            dup_count <- sum(duplicated(dirs$batch_file()[[dirs$id_column()]]))
+            msg <- ifelse(
+              dup_count > 1,
+              "</b> targets are duplicated in the batch. ",
+              "</b> target is duplicated in the batch. "
+            )
             warning <- shiny$p(
               shiny$HTML(
                 paste0(
                   '<i class="fa-solid fa-circle-exclamation" style="font-size:',
-                  '1em; color:black; margin-right: 10px;"></i>',
+                  '1em; color:red; margin-right: 10px;"></i>',
                   "<b>",
-                  sum(intersect),
-                  paste0(
-                    "</b> file(s) queried for deconvolution appear to have ",
-                    "already been processed. Please choose how to proceed:"
-                  )
+                  dup_count,
+                  msg,
+                  "Modify the batch file and try again."
                 )
               )
             )
+          } else {
+            batch_sel <- gsub(
+              ".raw",
+              "_rawdata_unidecfiles",
+              dirs$batch_file()[[dirs$id_column()]]
+            )
+
+            intersect <- batch_sel %in% basename(finished_files)
+
+            if (any(intersect)) {
+              reactVars$overwrite <- batch_sel[intersect]
+
+              warning <- shiny$p(
+                shiny$HTML(
+                  paste0(
+                    '<i class="fa-solid fa-circle-exclamation" style="font-size:',
+                    '1em; color:black; margin-right: 10px;"></i>',
+                    "<b>",
+                    sum(intersect),
+                    paste0(
+                      "</b> file(s) queried for deconvolution appear to have ",
+                      "already been processed. Please choose how to proceed:"
+                    )
+                  )
+                )
+              )
+            }
           }
         } else if (!is.null(input$target_selector)) {
           intersect <- gsub(
@@ -1216,20 +1247,21 @@ server <- function(id, dirs) {
 
           batch <- dirs$batch_file()
           sample_names <- batch[[dirs$id_column()]]
-
           raw_dirs <- raw_dirs[basename(raw_dirs) %in% sample_names]
+          test1 <<- basename(raw_dirs)
+          test2 <<- reactVars$sample_names
 
           # Prepare heatmap variables
           reactVars$sample_names <- gsub(
             ".raw",
             "",
-            dirs$batch_file()[[dirs$id_column()]]
+            # dirs$batch_file()[[dirs$id_column()]]
+            basename(raw_dirs)
           )
-
           reactVars$wells <- gsub(
             ",",
             "",
-            sub("^.*:", "", dirs$batch_file()[[dirs$vial_column()]])
+            sub("^.*:", "", batch[[dirs$vial_column()]])
           )
         } else {
           write_log("Multiple target deconvolution mode (no batch file)")
@@ -1261,6 +1293,8 @@ server <- function(id, dirs) {
               dirs$dir(),
               reactVars$overwrite
             )
+
+            print(paste("Overwrite", reactVars$overwrite))
 
             write_log(paste(
               "Overwriting",
@@ -1351,7 +1385,7 @@ server <- function(id, dirs) {
         stderr = reactVars$decon_process_out
       )
 
-      process_data(rx_process)
+      decon_process_data(rx_process)
 
       # Log
       write_log("Deconvolution started")
@@ -1364,7 +1398,7 @@ server <- function(id, dirs) {
       ))
 
       reactVars$process_observer <- shiny$observe({
-        proc <- process_data()
+        proc <- decon_process_data()
         completed_files <- reactVars$completedFiles
         expected_files <- reactVars$expectedFiles
 
@@ -1412,7 +1446,7 @@ server <- function(id, dirs) {
                 dirs$dir(),
                 glob = "*_rawdata_unidecfiles"
               )
-
+              test1 <<- results_all
               results <- results_all[
                 basename(results_all) %in%
                   paste0(
@@ -1420,6 +1454,7 @@ server <- function(id, dirs) {
                     "_rawdata_unidecfiles"
                   )
               ]
+              test2 <<- results
 
               if (length(results_all)) {
                 if (is.null(reactVars$rslt_df) || nrow(reactVars$rslt_df) < 1) {
@@ -1432,6 +1467,10 @@ server <- function(id, dirs) {
                       "",
                       basename(results[i])
                     )
+                    wells <<- reactVars$wells
+                    sample_names2 <<- reactVars$sample_names
+                    smp_nm <<- sample_names
+                    ia <<- i
                     well[i] <- reactVars$wells[which(
                       reactVars$sample_names == sample_names[i]
                     )]
@@ -1568,11 +1607,11 @@ server <- function(id, dirs) {
                     )
                     heatmap <- create_384_plate_heatmap(reactVars$rslt_df) |>
                       event_register("plotly_click")
-                    reactVars$heatmap_ready <- TRUE
                     waiter_hide(id = ns("heatmap"))
                     heatmap
                   })
 
+                  reactVars$heatmap_ready <- TRUE
                   reactVars$trigger <- TRUE
                 }
               }
@@ -1598,8 +1637,9 @@ server <- function(id, dirs) {
                     shiny$selectInput(
                       ns("result_picker"),
                       "",
-                      choices = choices,
-                      selected = selected
+                      choices = choices
+                      # ,
+                      # selected = selected
                     )
                   )
                 )
@@ -1677,6 +1717,11 @@ server <- function(id, dirs) {
             )
 
             result_files <- gsub(".raw", "_rawdata_unidecfiles", raw_dirs)
+
+            print(
+              all(file.exists(file.path(result_files, "plots.rds"))) &&
+                file.exists(file.path(getwd(), "results/result.rds"))
+            )
 
             # check if deconvolution finished for all target files
             if (
@@ -1808,8 +1853,9 @@ server <- function(id, dirs) {
                       shiny$selectInput(
                         ns("result_picker"),
                         "",
-                        choices = choices,
-                        selected = selected
+                        choices = choices
+                        # ,
+                        # selected = selected
                       )
                     )
                   )
@@ -1852,20 +1898,22 @@ server <- function(id, dirs) {
           length(dirs$batch_file())
       ) {
         reactVars$click_observer <- shiny$observe({
-          click_data <- event_data("plotly_click")
-          if (!is.null(click_data)) {
-            # Get the clicked point's row and column
-            row <- LETTERS[16 - floor(click_data$y) + 1]
-            col <- round(click_data$x)
-            well_id <- paste0(row, col)
+          if (isTRUE(reactVars$heatmap_ready)) {
+            click_data <- event_data("plotly_click")
+            if (!is.null(click_data)) {
+              # Get the clicked point's row and column
+              row <- LETTERS[16 - floor(click_data$y) + 1]
+              col <- round(click_data$x)
+              well_id <- paste0(row, col)
 
-            # Find the corresponding sample in the data
-            shiny$isolate(
-              clicked_sample <-
-                reactVars$rslt_df$sample[reactVars$rslt_df$well_id == well_id]
-            )
+              # Find the corresponding sample in the data
+              shiny$isolate(
+                clicked_sample <-
+                  reactVars$rslt_df$sample[reactVars$rslt_df$well_id == well_id]
+              )
 
-            result_files_sel(paste0(clicked_sample, ".raw"))
+              result_files_sel(paste0(clicked_sample, ".raw"))
+            }
           }
         })
       }
@@ -1981,6 +2029,9 @@ server <- function(id, dirs) {
 
         write_log("Deconvolution resetted")
 
+        output$decon_rep_logtext <- NULL
+        reactVars$deconv_report_status <- "idle"
+
         output$deconvolution_running_ui <- NULL
         output$heatmap <- NULL
         output$deconvolution_init_ui <- shiny$renderUI(
@@ -2000,7 +2051,7 @@ server <- function(id, dirs) {
     })
 
     shiny$observeEvent(input$deconvolute_end_conf, {
-      proc <- process_data()
+      proc <- decon_process_data()
       if (!is.null(proc) && proc$is_alive()) {
         proc$kill()
       }
@@ -2123,6 +2174,14 @@ server <- function(id, dirs) {
 
     ### Report events ----
     shiny$observeEvent(input$deconvolution_report, {
+      if (reactVars$deconv_report_status == "running") {
+        label <- "Cancel"
+      } else if (reactVars$deconv_report_status == "finished") {
+        label <- "Open"
+      } else {
+        label <- "Make Report"
+      }
+
       shiny$showModal(
         shiny$div(
           class = "decon-report-modal",
@@ -2134,7 +2193,7 @@ server <- function(id, dirs) {
               shiny$modalButton("Dismiss"),
               shiny$actionButton(
                 ns("make_deconvolution_report"),
-                "Make Report",
+                label = label,
                 class = "load-db",
                 width = "auto"
               )
@@ -2144,72 +2203,206 @@ server <- function(id, dirs) {
       )
     })
 
-    output$decon_report_ui <- shiny$renderUI({
-      if (file.exists("settings/decon_rep_settings.rds")) {
-        rep_input <- readRDS("settings/decon_rep_settings.rds")
-        title <- rep_input[1]
-        author <- rep_input[2]
-        comment <- rep_input[3]
-        label <- "Overwrite previous report settings?"
-      } else {
-        title <- "Deconvolution Report"
-        author <- "Author"
-        comment <- ""
-        label <- "Save report settings for the next time?"
-      }
-
-      shiny$fluidRow(
-        shiny$br(),
-        shiny$column(
-          width = 11,
-          shiny$div(
-            class = "deconv-rep-element",
-            shiny$textInput(
-              ns("decon_rep_title"),
-              "Title",
-              value = title
-            )
-          ),
-          shiny$div(
-            class = "deconv-rep-element",
-            shiny$textInput(
-              ns("decon_rep_author"),
-              "Author",
-              value = author
-            )
-          ),
-          shiny$div(
-            class = "deconv-rep-element",
-            shiny$textAreaInput(
-              ns("decon_rep_desc"),
-              "Description",
-              value = comment,
-              placeholder = "Description and comments about the experiment..."
-            )
-          ),
-          shiny$div(
-            class = "deconv-rep-check",
-            shiny$checkboxInput(
-              ns("decon_save"),
-              label,
-              value = FALSE
-            )
-          )
-        )
-      )
-    })
+    decon_rep_process_data <- shiny$reactiveVal(NULL)
 
     shiny$observeEvent(
       input$make_deconvolution_report,
       {
-        reactVars$deconv_report_fin <- "running"
+        output$decon_rep_logtext <- shiny$renderText({
+          shiny$invalidateLater(1000)
 
-        reactVars$decon_rep_process_out <- file.path(
-          tempdir(),
-          "rep_output.txt"
-        )
-        write("", reactVars$decon_rep_process_out)
+          if (
+            !is.null(reactVars$decon_rep_process_out) &&
+              file.exists(reactVars$decon_rep_process_out)
+          ) {
+            log <- paste(
+              readLines(reactVars$decon_rep_process_out, warn = FALSE),
+              collapse = "\n"
+            )
+          } else {
+            log <- "Initiating Report Generation ..."
+          }
 
+          session_id <- regmatches(
+            basename(get_log()),
+            regexpr("id\\d+", basename(get_log()))
+          )
+          report_fin <- paste0(
+            "deconvolution_report_",
+            Sys.Date(),
+            "_",
+            session_id,
+            ".html"
+          )
+          if (grepl(paste("Output created:", report_fin), log))
+            reactVars$deconv_report_status <- "finished"
+
+          gsub("\\s*\\|[ .]*\\|\\s*", "", log, perl = TRUE)
+        })
+
+        if (reactVars$deconv_report_status == "running") {
+          proc <- decon_rep_process_data()
+
+          if (!is.null(proc) && proc$is_alive()) {
+            write_log("Deconvolution report generation cancelled")
+
+            proc$kill()
+          }
+        } else if (reactVars$deconv_report_status == "finished") {
+          session_id <- regmatches(
+            basename(get_log()),
+            regexpr("id\\d+", basename(get_log()))
+          )
+
+          # Open in browser
+          utils::browseURL(paste0(
+            "deconvolution_report_",
+            Sys.Date(),
+            "_",
+            session_id,
+            ".html"
+          ))
+
+          shiny$removeModal()
+        } else {
+          write_log("Deconvolution report generation initiated")
+          reactVars$deconv_report_status <- "running"
+
+          reactVars$decon_rep_process_out <- file.path(
+            tempdir(),
+            "rep_output.txt"
+          )
+          write("", reactVars$decon_rep_process_out)
+
+          output$decon_report_ui <- shiny$renderUI(
+            shiny$fluidRow(
+              shiny$br(),
+              shiny$fluidRow(
+                shiny$column(
+                  width = 2,
+                  shiny$div(
+                    id = ns("generating_report"),
+                    shiny$HTML(
+                      paste0(
+                        '<i class="fa fa-spinner fa-spin fa-fw fa-2x" style="color: ',
+                        '#38387C; margin-top: 0.25em"></i>'
+                      )
+                    )
+                  )
+                ),
+                shiny$column(
+                  width = 10,
+                  shiny$p(
+                    "Generating this report might take some time. Please wait ..."
+                  )
+                )
+              ),
+              shiny$fluidRow(
+                shiny$column(
+                  width = 12,
+                  shiny$verbatimTextOutput(ns("decon_rep_logtext"))
+                )
+              )
+            )
+          )
+
+          if (isTRUE(input$decon_save)) {
+            if (!dir.exists("settings")) dir.create("settings")
+
+            rep_input <- c(
+              input$decon_rep_title,
+              input$decon_rep_author,
+              input$decon_rep_desc
+            )
+            saveRDS(rep_input, "settings/decon_rep_settings.rds")
+          }
+
+          session_id <- regmatches(
+            basename(get_log()),
+            regexpr("id\\d+", basename(get_log()))
+          )
+
+          rep_process <- process$new(
+            "Rscript",
+            args = c(
+              "app/logic/deconvolution_report.R",
+              input$decon_rep_title,
+              input$decon_rep_author,
+              input$decon_rep_desc,
+              paste0(
+                "deconvolution_report_",
+                Sys.Date(),
+                "_",
+                session_id,
+                ".html"
+              )
+            ),
+            stdout = reactVars$decon_rep_process_out,
+            stderr = reactVars$decon_rep_process_out
+          )
+
+          decon_rep_process_data(rep_process)
+        }
+      }
+    )
+
+    shiny$observe({
+      if (reactVars$deconv_report_status == "idle") {
+        output$decon_report_ui <- shiny$renderUI({
+          if (file.exists("settings/decon_rep_settings.rds")) {
+            rep_input <- readRDS("settings/decon_rep_settings.rds")
+            title <- rep_input[1]
+            author <- rep_input[2]
+            comment <- rep_input[3]
+            label <- "Overwrite previous report settings?"
+          } else {
+            title <- "Deconvolution Report"
+            author <- "Author"
+            comment <- ""
+            label <- "Save report settings for the next time?"
+          }
+
+          shiny$fluidRow(
+            shiny$br(),
+            shiny$column(
+              width = 11,
+              shiny$div(
+                class = "deconv-rep-element",
+                shiny$textInput(
+                  ns("decon_rep_title"),
+                  "Title",
+                  value = title
+                )
+              ),
+              shiny$div(
+                class = "deconv-rep-element",
+                shiny$textInput(
+                  ns("decon_rep_author"),
+                  "Author",
+                  value = author
+                )
+              ),
+              shiny$div(
+                class = "deconv-rep-element",
+                shiny$textAreaInput(
+                  ns("decon_rep_desc"),
+                  "Description",
+                  value = comment,
+                  placeholder = "Description and comments about the experiment..."
+                )
+              ),
+              shiny$div(
+                class = "deconv-rep-check",
+                shiny$checkboxInput(
+                  ns("decon_save"),
+                  label,
+                  value = FALSE
+                )
+              )
+            )
+          )
+        })
+      } else if (reactVars$deconv_report_status == "finished") {
         output$decon_report_ui <- shiny$renderUI(
           shiny$fluidRow(
             shiny$br(),
@@ -2220,8 +2413,8 @@ server <- function(id, dirs) {
                   id = ns("generating_report"),
                   shiny$HTML(
                     paste0(
-                      '<i class="fa fa-spinner fa-spin fa-fw fa-2x" style="color: ',
-                      '#38387C; margin-top: 0.25em"></i>'
+                      '<i class="fa-solid fa-circle-check fa-2x" style="color:',
+                      '#38387C; margin-top: 0.5em"></i>'
                     )
                   )
                 )
@@ -2229,7 +2422,8 @@ server <- function(id, dirs) {
               shiny$column(
                 width = 10,
                 shiny$p(
-                  "Generating this report might take some time. Please wait ..."
+                  "Report successfully generated!",
+                  style = "margin-top: 1.3em;"
                 )
               )
             ),
@@ -2241,75 +2435,19 @@ server <- function(id, dirs) {
             )
           )
         )
-
-        if (isTRUE(input$decon_save)) {
-          if (!dir.exists("settings")) dir.create("settings")
-
-          rep_input <- c(
-            input$decon_rep_title,
-            input$decon_rep_author,
-            input$decon_rep_desc
-          )
-          saveRDS(rep_input, "settings/decon_rep_settings.rds")
-        }
-
-        session_id <- sub(".*(_id\\d+)$", "\\1", basename(get_log()))
-
-        process$new(
-          "Rscript",
-          args = c(
-            "app/logic/deconvolution_report.R",
-            input$decon_rep_title,
-            input$decon_rep_author,
-            input$decon_rep_desc,
-            paste0("deconvolution_report_", Sys.Date(), session_id, ".html")
-          ),
-          stdout = reactVars$decon_rep_process_out,
-          stderr = reactVars$decon_rep_process_out
-        )
-
-        # shiny$removeModal()
-
-        # Open in browser
-        # utils::browseURL(file.path(getwd(), output_filename))
       }
-    )
-
-    output$decon_rep_logtext <- shiny$renderText({
-      shiny$invalidateLater(1000)
-
-      if (
-        !is.null(reactVars$decon_rep_process_out) &&
-          file.exists(reactVars$decon_rep_process_out)
-      ) {
-        log <- paste(
-          readLines(reactVars$decon_rep_process_out, warn = FALSE),
-          collapse = "\n"
-        )
-      } else {
-        log <- "Initiating Report Generation ..."
-      }
-
-      session_id <- sub(".*(_id\\d+)$", "\\1", basename(get_log()))
-      report_fin <- paste0(
-        "deconvolution_report_",
-        Sys.Date(),
-        session_id,
-        ".html"
-      )
-      if (file.exists(report_fin)) reactVars$deconv_report_fin <- "finished"
-
-      gsub("\\s*\\|[ .]*\\|\\s*", "", log, perl = TRUE)
     })
 
     shiny$observe({
-      if (reactVars$deconv_report_fin == "running") {
+      if (reactVars$deconv_report_status == "running") {
         shiny$updateActionButton(
           session,
           "make_deconvolution_report",
           label = "Cancel"
         )
-      } else if (reactVars$deconv_report_fin == "finished") {
+      } else if (reactVars$deconv_report_status == "finished") {
+        write_log("Deconvolution report generation finalized")
+
         shiny$updateActionButton(
           session,
           "make_deconvolution_report",

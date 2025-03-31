@@ -10,6 +10,10 @@ box::use(
   utils[read.delim, read.table],
 )
 
+box::use(
+  app / logic / helper_functions[suppressPlotlyMessage],
+)
+
 #' @export
 deconvolute <- function(
   raw_dirs,
@@ -356,7 +360,8 @@ create_384_plate_heatmap <- function(data) {
         0,
         colorscale = list(c(0, 1), c("#440154FF", "#440154FF")),
         showscale = FALSE,
-        showlegend = FALSE
+        showlegend = FALSE,
+        traces = 2
       ) |>
       hide_colorbar()
   } else {
