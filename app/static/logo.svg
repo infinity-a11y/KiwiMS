@@ -1,25 +1,25 @@
 <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
   <!-- Hexagon outline -->
-  <path 
-    d="M50 5 L87.5 25 L87.5 75 L50 95 L12.5 75 L12.5 25 Z" 
-    fill="none" 
-    stroke="black" 
+  <path
+    d="M50 5 L87.5 25 L87.5 75 L50 95 L12.5 75 L12.5 25 Z"
+    fill="none"
+    stroke="black"
     stroke-width="4"
   />
-  
+
   <!-- Kiwi outer ring (brown) -->
   <circle cx="50" cy="50" r="30" fill="#754C24"/>
-  
+
   <!-- Main kiwi flesh (green) -->
   <circle cx="50" cy="50" r="28" fill="#7CB342"/>
-  
+
   <!-- Lighter green ring -->
   <circle cx="50" cy="50" r="26" fill="#8BC34A"/>
-  
+
   <!-- Center pulp (light green) -->
-  <path d="M50 35 Q60 40 65 50 Q60 60 50 65 Q40 60 35 50 Q40 40 50 35" 
+  <path d="M50 35 Q60 40 65 50 Q60 60 50 65 Q40 60 35 50 Q40 40 50 35"
         fill="#C5E1A5"/>
-  
+
   <!-- Seeds (black teardrop shapes) -->
   <g fill="black">
     <!-- Outer ring of seeds -->
@@ -35,7 +35,7 @@
     <path d="M30 50 Q32 52 30 54 Q28 52 30 50 Z"/>
     <path d="M32 40 Q34 42 32 44 Q30 42 32 40 Z"/>
     <path d="M40 32 Q42 34 40 36 Q38 34 40 32 Z"/>
-    
+
     <!-- Inner ring of seeds -->
     <path d="M50 40 Q52 42 50 44 Q48 42 50 40 Z"/>
     <path d="M60 45 Q62 47 60 49 Q58 47 60 45 Z"/>

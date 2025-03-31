@@ -30,7 +30,24 @@ ui <- function(id) {
     dev_utils$add_dev_headers(),
     div(id = "blocking-overlay"),
     useWaiter(),
-    waiterShowOnLoad(html = waiter::spin_orbit()),
+    waiterShowOnLoad(
+      html = tags$div(
+        style = "text-align: center;",
+        tags$img(
+          src = "static/logo_animated.svg",
+          width = "400px",
+          height = "400px"
+        ),
+        tags$div(
+          style = paste0(
+            "font-family: monospace; font-size: 50px; color: blac",
+            "k; opacity: 0; animation: fadeIn 1s ease-in forwards",
+            "; animation-delay: 1s;"
+          ),
+          "KiwiFlow"
+        )
+      )
+    ),
     useShinyjs(),
     bslib$page_navbar(
       id = ns("tabs"),
@@ -156,7 +173,7 @@ server <- function(id) {
     deconvolution_process$server("deconvolution_process", dirs)
 
     # Hide waiter
-    # Sys.sleep(3)
+    Sys.sleep(2)
     waiter_hide()
   })
 }
