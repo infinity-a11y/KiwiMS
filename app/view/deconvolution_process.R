@@ -2012,6 +2012,7 @@ server <- function(id, dirs) {
         write_log("Deconvolution resetted")
 
         output$decon_rep_logtext <- NULL
+        output$decon_rep_logtext_ui <- NULL
         reactVars$deconv_report_status <- "idle"
 
         output$deconvolution_running_ui <- NULL
@@ -2081,6 +2082,8 @@ server <- function(id, dirs) {
     #### Show Log ----
     shiny$observeEvent(input$show_log, {
       output$logtext <- shiny$renderText({
+        shiny$invalidateLater(2000)
+
         if (
           !is.null(reactVars$decon_process_out) &&
             file.exists(reactVars$decon_process_out)
@@ -2135,6 +2138,8 @@ server <- function(id, dirs) {
           )
         )
       )
+
+      delay(2000, runjs("App.smartScroll('app-deconvolution_process-logtext')"))
     })
 
     #### Save log ----
@@ -2155,6 +2160,7 @@ server <- function(id, dirs) {
     })
 
     ### Report events ----
+
     shiny$observeEvent(input$deconvolution_report, {
       if (reactVars$deconv_report_status == "running") {
         label <- "Cancel"
@@ -2168,7 +2174,16 @@ server <- function(id, dirs) {
         shiny$div(
           class = "decon-report-modal",
           shiny$modalDialog(
-            shiny$uiOutput(ns("decon_report_ui")),
+            shiny$column(
+              width = 12,
+              shiny$uiOutput(ns("decon_report_ui")),
+              shiny$fluidRow(
+                shiny$column(
+                  width = 12,
+                  shiny$uiOutput(ns("decon_rep_logtext_ui"))
+                )
+              )
+            ),
             title = "Deconvolution Report",
             easyClose = TRUE,
             footer = shiny$tagList(
@@ -2183,6 +2198,11 @@ server <- function(id, dirs) {
           )
         )
       )
+
+      delay(
+        2000,
+        runjs("App.smartScroll('app-deconvolution_process-decon_rep_logtext')")
+      )
     })
 
     decon_rep_process_data <- shiny$reactiveVal(NULL)
@@ -2190,6 +2210,10 @@ server <- function(id, dirs) {
     shiny$observeEvent(
       input$make_deconvolution_report,
       {
+        output$decon_rep_logtext_ui <- shiny$renderUI(
+          shiny$verbatimTextOutput(ns("decon_rep_logtext"))
+        )
+
         output$decon_rep_logtext <- shiny$renderText({
           shiny$invalidateLater(1000)
 
@@ -2278,12 +2302,6 @@ server <- function(id, dirs) {
                     "Generating this report might take some time. Please wait ..."
                   )
                 )
-              ),
-              shiny$fluidRow(
-                shiny$column(
-                  width = 12,
-                  shiny$verbatimTextOutput(ns("decon_rep_logtext"))
-                )
               )
             )
           )
@@ -2325,6 +2343,13 @@ server <- function(id, dirs) {
 
           decon_rep_process_data(rep_process)
         }
+
+        delay(
+          2000,
+          runjs(
+            "App.smartScroll('app-deconvolution_process-decon_rep_logtext')"
+          )
+        )
       }
     )
 
@@ -2407,12 +2432,6 @@ server <- function(id, dirs) {
                   "Report successfully generated!",
                   style = "margin-top: 1.3em;"
                 )
-              )
-            ),
-            shiny$fluidRow(
-              shiny$column(
-                width = 12,
-                shiny$verbatimTextOutput(ns("decon_rep_logtext"))
               )
             )
           )

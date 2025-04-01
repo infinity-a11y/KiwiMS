@@ -53,7 +53,7 @@ a {
   background-color: #35357A;
   border: 5px solid white;
   border-radius: 10px;
-  min-width: 100px;
+  min-height: 50px;
   overflow-y: scroll;
 }
 
@@ -237,6 +237,7 @@ button .sF-modal {
 }
 
 #app-deconvolution_process-logtext {
+  overflow-y: auto;
   max-height: 22rem;
   height: 100%;
   white-space: pre-wrap;
@@ -249,6 +250,7 @@ button .sF-modal {
 }
 
 #app-deconvolution_process-decon_rep_logtext {
+  overflow-y: auto;
   max-height: 35vh;
   height: 100%;
   margin-top: 1.5em;
