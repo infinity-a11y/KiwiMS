@@ -19,3 +19,6 @@ quarto_render(
     result_path = file.path(getwd(), "results")
   )
 )
+
+file.rename(from = filename,
+            to = file.path(getwd(), "logs", Sys.Date(), filename))

@@ -50,12 +50,6 @@ generate_decon_rslt <- function(
       conf_df <- conf_df[-1, , drop = FALSE]
     }
 
-    # Read RDS safely using tryCatch
-    # plots <- tryCatch(
-    #   readRDS(file.path(rslt_folder, "plots.rds")),
-    #   error = function(e) list()
-    # )
-
     # Read other files
     peaks_df <- read_file_safe(
       file.path(rslt_folder, paste0(raw_name, "_peaks.dat")),

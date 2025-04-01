@@ -93,3 +93,19 @@ export function smartScroll(elementID) {
     }
   });
 }
+
+export function disableDismiss() {
+  const button = document.querySelector('[data-dismiss="modal"]');
+
+  button.style.cursor = 'not-allowed';
+  button.style.pointerEvents = 'none';
+  button.style.opacity = 0.65;
+}
+
+export function enableDismiss() {
+  const button = document.querySelector('[data-dismiss="modal"]');
+
+  button.style.cursor = 'pointer';
+  button.style.pointerEvents = 'all';
+  button.style.opacity = 1;
+}

@@ -58,6 +58,7 @@ server <- function(id, dirs) {
       lastCheck = 0,
       lastCheckresults = 0,
       count = 0,
+      rep_count = 0,
       rslt_df = data.frame(),
       logs = "",
       deconv_report_status = "idle"
@@ -2185,7 +2186,7 @@ server <- function(id, dirs) {
               )
             ),
             title = "Deconvolution Report",
-            easyClose = TRUE,
+            easyClose = FALSE,
             footer = shiny$tagList(
               shiny$modalButton("Dismiss"),
               shiny$actionButton(
@@ -2240,10 +2241,29 @@ server <- function(id, dirs) {
             session_id,
             ".html"
           )
-          if (grepl(paste("Output created:", report_fin), log))
-            reactVars$deconv_report_status <- "finished"
 
-          gsub("\\s*\\|[ .]*\\|\\s*", "", log, perl = TRUE)
+          clean_log <- gsub("\\s*\\|[ .]*\\|\\s*", "", log, perl = TRUE)
+
+          if (grepl(paste("Output created:", report_fin), log)) {
+            reactVars$deconv_report_status <- "finished"
+            title <- "Report Generated!"
+            value <- 100
+          } else {
+            value <- regmatches(
+              clean_log,
+              gregexpr("(?<=\\|)\\d+%", clean_log, perl = TRUE)
+            )[[1]]
+            title <- "Generating Report ..."
+          }
+
+          updateProgressBar(
+            session = session,
+            id = ns("progressBar"),
+            value = tail(as.integer(gsub("%", "", value)), 1),
+            title = title
+          )
+
+          clean_log
         })
 
         if (reactVars$deconv_report_status == "running") {
@@ -2254,6 +2274,23 @@ server <- function(id, dirs) {
 
             proc$kill()
           }
+
+          updateProgressBar(
+            session = session,
+            id = ns("progressBar"),
+            value = 0,
+            title = "Report Generation Aborted"
+          )
+
+          output$decon_rep_logtext <- NULL
+          output$decon_rep_logtext_ui <- NULL
+
+          hide(selector = "#app-deconvolution_process-processing")
+          show(selector = "#app-deconvolution_process-processing_stop")
+
+          reactVars$deconv_report_status <- "idle"
+
+          shiny$removeModal()
         } else if (reactVars$deconv_report_status == "finished") {
           session_id <- regmatches(
             basename(get_log()),
@@ -2261,13 +2298,14 @@ server <- function(id, dirs) {
           )
 
           # Open in browser
-          utils::browseURL(paste0(
+          filename <- paste0(
             "deconvolution_report_",
             Sys.Date(),
             "_",
             session_id,
             ".html"
-          ))
+          )
+          utils::browseURL(file.path(getwd(), "logs", Sys.Date(), filename))
 
           shiny$removeModal()
         } else {
@@ -2441,6 +2479,12 @@ server <- function(id, dirs) {
 
     shiny$observe({
       if (reactVars$deconv_report_status == "running") {
+        hide(selector = "#app-deconvolution_process-processing_stop")
+        hide(selector = "#app-deconvolution_process-processing_fin")
+        show(selector = "#app-deconvolution_process-processing")
+
+        runjs("App.disableDismiss()")
+
         shiny$updateActionButton(
           session,
           "make_deconvolution_report",
@@ -2448,6 +2492,11 @@ server <- function(id, dirs) {
         )
       } else if (reactVars$deconv_report_status == "finished") {
         write_log("Deconvolution report generation finalized")
+
+        hide(selector = "#app-deconvolution_process-processing")
+        show(selector = "#app-deconvolution_process-processing_fin")
+
+        runjs("App.enableDismiss()")
 
         shiny$updateActionButton(
           session,
