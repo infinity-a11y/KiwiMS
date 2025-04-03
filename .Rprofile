@@ -1,10 +1,3 @@
-if (file.exists("renv")) {
-  source("renv/activate.R")
-} else {
-  # The `renv` directory is automatically skipped when deploying with rsconnect.
-  message("No 'renv' directory found; renv won't be activated.")
-}
-
 Sys.setlocale("LC_NUMERIC", "C")
 
 # Allow absolute module imports (relative to the app root).
