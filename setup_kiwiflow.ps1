@@ -5,28 +5,10 @@ $basePath = $PSScriptRoot
 Start-Transcript -Path "$basePath\kiwiflow_setup.log" -Append
 Write-Host "Setting up KiwiFlow environment in $basePath..."
 
-# Check if running as Administrator
-function Test-Admin {
-    $currentUser = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
-    return $currentUser.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-}
-
-if (-not (Test-Admin)) {
-    Write-Host "This script requires Administrator privileges to install Miniconda to C:\. Attempting to elevate..."
-    try {
-        Start-Process powershell -Verb RunAs -ArgumentList "-File `"$PSCommandPath`"" -Wait -ErrorAction Stop
-        Write-Host "Elevation successful. Script will continue in elevated window."
-        exit
-    } catch {
-        Write-Host "Error: Failed to elevate privileges. $_"
-        Write-Host "Falling back to user directory installation."
-    }
-}
-
 # Check if Conda is installed
 $condaPath = (Get-Command conda -ErrorAction SilentlyContinue).Source
 if (-not $condaPath) {
-    Write-Host "Conda not found. Downloading and installing Miniconda..."
+    Write-Host "Conda not found. Downloading and installing Miniconda to user directory..."
     $minicondaUrl = "https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe"
     $installerPath = "$env:USERPROFILE\Downloads\Miniconda3-latest.exe"
 
@@ -39,22 +21,17 @@ if (-not $condaPath) {
         exit 1
     }
 
-    # Try installing to C:\Miniconda3
-    Write-Host "Installing Miniconda to C:\Miniconda3 (requires admin)..."
+    # Install to user directory (no admin required)
+    Write-Host "Installing Miniconda to $env:USERPROFILE\Miniconda3..."
     try {
-        Start-Process -FilePath $installerPath -ArgumentList "/S /AddToPath=1 /D=C:\Miniconda3" -Wait -NoNewWindow -ErrorAction Stop
-        $env:Path += ";C:\Miniconda3;C:\Miniconda3\Scripts;C:\Miniconda3\Library\bin"
-        [Environment]::SetEnvironmentVariable("Path", $env:Path, [System.EnvironmentVariableTarget]::User)
-        Write-Host "Miniconda installed to C:\Miniconda3."
-    } catch {
-        Write-Host "Failed to install to C:\Miniconda3: $_"
-        Write-Host "Trying user directory instead..."
-        Remove-Item $installerPath -ErrorAction SilentlyContinue
-        Invoke-WebRequest -Uri $minicondaUrl -OutFile $installerPath -ErrorAction Stop
         Start-Process -FilePath $installerPath -ArgumentList "/S /AddToPath=1 /D=$env:USERPROFILE\Miniconda3" -Wait -NoNewWindow -ErrorAction Stop
         $env:Path += ";$env:USERPROFILE\Miniconda3;$env:USERPROFILE\Miniconda3\Scripts;$env:USERPROFILE\Miniconda3\Library\bin"
         [Environment]::SetEnvironmentVariable("Path", $env:Path, [System.EnvironmentVariableTarget]::User)
         Write-Host "Miniconda installed to $env:USERPROFILE\Miniconda3."
+    } catch {
+        Write-Host "Error: Failed to install Miniconda. $_"
+        pause
+        exit 1
     }
     Remove-Item $installerPath -ErrorAction SilentlyContinue
 
@@ -75,7 +52,10 @@ Write-Host "Initializing Conda for PowerShell..."
 try {
     & conda init powershell
     Write-Host "Conda initialized. Reloading shell environment..."
-    $condaHook = "C:\Miniconda3\shell\condabin\conda-hook.ps1"
+    $condaHook = "$env:USERPROFILE\Miniconda3\shell\condabin\conda-hook.ps1"
+    if (-not (Test-Path $condaHook)) {
+        $condaHook = "C:\Miniconda3\shell\condabin\conda-hook.ps1"
+    }
     if (Test-Path $condaHook) {
         . $condaHook
     } else {
@@ -116,7 +96,7 @@ try {
 # Activate environment
 Write-Host "Activating kiwiflow environment..."
 try {
-    & "C:\Miniconda3\condabin\conda" activate kiwiflow
+    & conda activate kiwiflow
     if ($LASTEXITCODE -ne 0) { throw "Activation failed with exit code $LASTEXITCODE." }
     Write-Host "Environment activated."
 } catch {
@@ -140,7 +120,7 @@ Write-Host "Launching KiwiFlow app..."
 try {
     & conda activate kiwiflow
     & Rscript -e "shiny::runApp('app.R', port=3838, launch.browser = T)"
-    Write-Host "KiwiFlow should open in your browser at http://localhost:3838. Close the new PowerShell window to stop."
+    Write-Host "KiwiFlow should open in your browser at http://localhost:3838."
 } catch {
     Write-Host "Error: Failed to launch app. $_"
 }
@@ -155,7 +135,7 @@ try {
     $wshShell = New-Object -ComObject WScript.Shell
     $shortcut = $wshShell.CreateShortcut($shortcutPath)
     $shortcut.TargetPath = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
-    $shortcut.Arguments = "-NoExit -Command `"& {conda activate kiwiflow; Rscript -e \`"shiny::runApp('$appPath', port=3838, launch.browser = T)\`"}`""
+    $shortcut.Arguments = "-NoExit -Command `"conda activate kiwiflow; Rscript -e \`"shiny::runApp('$appPath', port=3838, launch.browser = T)\`"`""
     $shortcut.WorkingDirectory = $basePath
     $shortcut.Description = "Launch KiwiFlow Shiny App"
     if (Test-Path $iconPath) {
