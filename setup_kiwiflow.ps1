@@ -139,7 +139,7 @@ try {
 Write-Host "Launching KiwiFlow app..."
 try {
     & conda activate kiwiflow
-    & Rscript -e "shiny::runApp('KiwiFlow/app.R', port=3838, launch.browser = T)"
+    & Rscript -e "shiny::runApp('app.R', port=3838, launch.browser = T)"
     Write-Host "KiwiFlow should open in your browser at http://localhost:3838. Close the new PowerShell window to stop."
 } catch {
     Write-Host "Error: Failed to launch app. $_"
