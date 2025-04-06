@@ -1,7 +1,6 @@
 # app/main.R
 
 box::use(
-  bsicons[bs_icon],
   bslib,
   shiny[div, moduleServer, NS, stopApp, tagList, tags, reactive],
   shinyjs[useShinyjs],
