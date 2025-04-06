@@ -1,9 +1,19 @@
 # app/view/deconvolution_sidebar.R
 
 box::use(
-  bslib[sidebar],
+  bslib[sidebar, tooltip],
   fs[path_home],
-  shiny[column, div, fluidRow, h6, moduleServer, NS, reactive, reactiveValues],
+  shiny[
+    column,
+    div,
+    fluidRow,
+    h6,
+    icon,
+    moduleServer,
+    NS,
+    reactive,
+    reactiveValues
+  ],
   shinyFiles[parseDirPath, shinyDirButton, shinyDirChoose],
   shinyjs[disable, disabled, enable],
   shinyWidgets[radioGroupButtons],
@@ -14,7 +24,7 @@ ui <- function(id) {
   ns <- NS(id)
 
   sidebar(
-    title = "Raw Target Files",
+    title = "Select Target Files",
     h6(
       "Select Deconvolution Mode",
       style = "color: RGBA(var(--bs-emphasis-color-rgb, 0, 0, 0), 0.5); font-style: italic;"
@@ -40,10 +50,24 @@ ui <- function(id) {
       ),
       shiny::verbatimTextOutput(ns("path_selected")),
       shiny::uiOutput(ns("multi_dir_check")),
-      shiny::checkboxInput(
-        ns("batch_mode"),
-        "Batch Processing Mode",
-        value = FALSE
+      shiny::fluidRow(
+        shiny::column(
+          width = 10,
+          shiny::checkboxInput(
+            ns("batch_mode"),
+            "Batch Processing Mode",
+            value = FALSE
+          )
+        ),
+        shiny::column(
+          width = 2,
+          tooltip(
+            icon("circle-question"),
+            "Upload a batch file specifying ID and position of samples on a microtiter plate.",
+            placement = "right",
+            options = list(customClass = "tool-tip")
+          )
+        )
       ),
       shiny::conditionalPanel(
         condition = sprintf(
@@ -153,7 +177,7 @@ server <- function(id) {
         raw_dirs <- raw_dirs[grep("\\.raw$", raw_dirs)]
 
         if (length(raw_dirs)) {
-          enable(selector = "#app-deconvolution_pars-batch_mode")
+          enable(selector = "#deconvolution_pars-batch_mode")
 
           shiny::p(
             shiny::HTML(
@@ -170,7 +194,7 @@ server <- function(id) {
           )
         } else {
           shiny::updateCheckboxInput(session, "batch_mode", value = FALSE)
-          disable(selector = "#app-deconvolution_pars-batch_mode")
+          disable(selector = "#deconvolution_pars-batch_mode")
 
           shiny::p(
             shiny::HTML(
@@ -184,7 +208,7 @@ server <- function(id) {
         }
       } else {
         shiny::updateCheckboxInput(session, "batch_mode", value = FALSE)
-        disable(selector = "#app-deconvolution_pars-batch_mode")
+        disable(selector = "#deconvolution_pars-batch_mode")
 
         shiny::p(
           shiny::HTML(
@@ -250,7 +274,7 @@ server <- function(id) {
     shiny::observeEvent(input$file, {
       selected("file")
       shiny::updateCheckboxInput(session, "batch_mode", value = FALSE)
-      disable(selector = "#app-deconvolution_pars-batch_mode")
+      disable(selector = "#deconvolution_pars-batch_mode")
       output$batch_file_ui <- shiny::renderUI(
         batch_selection
       )
