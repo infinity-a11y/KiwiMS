@@ -2,7 +2,7 @@
 
 box::use(
   bslib,
-  shiny[div, moduleServer, NS, stopApp, tagList, tags, reactive],
+  shiny[div, icon, moduleServer, NS, stopApp, tagList, tags, reactive],
   shinyjs[useShinyjs],
   waiter[useWaiter, waiter_hide, waiterShowOnLoad],
 )
@@ -111,7 +111,7 @@ ui <- function(id) {
       bslib$nav_menu(
         title = "Links",
         align = "right",
-        icon = bs_icon("link-45deg", size = "1rem"),
+        icon = icon("link"),
         bslib$nav_item(
           tags$a(
             tags$span(

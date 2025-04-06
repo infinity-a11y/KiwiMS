@@ -532,7 +532,7 @@ server <- function(id, dirs) {
             shiny$actionButton(
               ns("show_log"),
               "Show Log",
-              icon = shiny$shiny$icon("code")
+              icon = shiny$icon("code")
             )
           )
         ),
@@ -544,7 +544,7 @@ server <- function(id, dirs) {
               shiny$actionButton(
                 ns("deconvolution_report"),
                 "Create Report",
-                icon = shiny$shiny$icon("square-poll-vertical")
+                icon = shiny$icon("square-poll-vertical")
               )
             )
           )
@@ -557,7 +557,7 @@ server <- function(id, dirs) {
               shiny$actionButton(
                 ns("forward_deonvoltuion"),
                 "Transfer Results",
-                icon = shiny$shiny$icon("forward-fast")
+                icon = shiny$icon("forward-fast")
               )
             )
           )
@@ -689,7 +689,7 @@ server <- function(id, dirs) {
             shiny$actionButton(
               ns("show_log"),
               "Show Log",
-              icon = shiny$shiny$icon("code")
+              icon = shiny$icon("code")
             )
           )
         ),
@@ -701,7 +701,7 @@ server <- function(id, dirs) {
               shiny$actionButton(
                 ns("deconvolution_report"),
                 "Create Report",
-                icon = shiny$shiny$icon("square-poll-vertical")
+                icon = shiny$icon("square-poll-vertical")
               )
             )
           )
@@ -714,7 +714,7 @@ server <- function(id, dirs) {
               shiny$actionButton(
                 ns("forward_deonvoltuion"),
                 "Transfer Results",
-                icon = shiny$shiny$icon("forward-fast")
+                icon = shiny$icon("forward-fast")
               )
             )
           )
@@ -2130,7 +2130,7 @@ server <- function(id, dirs) {
                 shiny$actionButton(
                   ns("copy_deconvolution_log"),
                   "Clip",
-                  icon = shiny$shiny$icon("clipboard")
+                  icon = shiny$icon("clipboard")
                 )
               ),
               shiny$div(
