@@ -3,6 +3,7 @@
 .Rproj.user
 .renv/**
 logs
-
+results
+kiwiflow_setup.log
 !renv.lock
 ".Rhistory"

@@ -945,7 +945,7 @@ server <- function(id, dirs) {
     output$message_ui <- shiny$renderUI({
       input$deconvolute_start
       enable(
-        selector = "#deconvolution_process-deconvolute_start_conf"
+        selector = "#app-deconvolution_process-deconvolute_start_conf"
       )
       message <- NULL
 
@@ -972,7 +972,7 @@ server <- function(id, dirs) {
             )
           } else if (sum(presence) == 0) {
             disable(
-              selector = "#deconvolution_process-deconvolute_start_conf"
+              selector = "#app-deconvolution_process-deconvolute_start_conf"
             )
 
             message <- shiny$p(
@@ -1007,7 +1007,7 @@ server <- function(id, dirs) {
           # if duplicates present disable continue button
           if (any(duplicated(dirs$batch_file()[[dirs$id_column()]]))) {
             disable(
-              selector = "#deconvolution_process-deconvolute_start_conf"
+              selector = "#app-deconvolution_process-deconvolute_start_conf"
             )
           }
         } else {
@@ -1019,7 +1019,7 @@ server <- function(id, dirs) {
 
           if (num_targets == 0) {
             disable(
-              selector = "#deconvolution_process-deconvolute_start_conf"
+              selector = "#app-deconvolution_process-deconvolute_start_conf"
             )
           }
 
@@ -1572,7 +1572,7 @@ server <- function(id, dirs) {
 
                 ##### Render heatmap & result picker ----
                 if (nrow(reactVars$rslt_df) > 0) {
-                  enable(selector = "#deconvolution_process-toggle_result")
+                  enable(selector = "#app-deconvolution_process-toggle_result")
 
                   # Render results picker
                   output$result_picker_ui <- shiny$renderUI(
@@ -1622,7 +1622,7 @@ server <- function(id, dirs) {
                   result_files_sel()
                 )
 
-                enable(selector = "#deconvolution_process-toggle_result")
+                enable(selector = "#app-deconvolution_process-toggle_result")
 
                 output$result_picker_ui <- shiny$renderUI(
                   shiny$div(
@@ -1836,7 +1836,7 @@ server <- function(id, dirs) {
                     result_files_sel()
                   )
 
-                  enable(selector = "#deconvolution_process-toggle_result")
+                  enable(selector = "#app-deconvolution_process-toggle_result")
 
                   output$result_picker_ui <- shiny$renderUI(
                     shiny$div(
@@ -1865,10 +1865,10 @@ server <- function(id, dirs) {
               write_log("Deconvolution finalized")
 
               enable(
-                selector = "#deconvolution_process-deconvolution_report"
+                selector = "#app-deconvolution_process-deconvolution_report"
               )
-              hide(selector = "#deconvolution_process-processing")
-              show(selector = "#deconvolution_process-processing_fin")
+              hide(selector = "#app-deconvolution_process-processing")
+              show(selector = "#app-deconvolution_process-processing_fin")
             }
           }
 
@@ -1924,7 +1924,7 @@ server <- function(id, dirs) {
         }
       })
 
-      delay(1000, show(selector = "#deconvolution_process-processing"))
+      delay(1000, show(selector = "#app-deconvolution_process-processing"))
 
       ### Render result spectrum ----
       output$spectrum <- renderPlotly({
@@ -1998,9 +1998,9 @@ server <- function(id, dirs) {
           'e.display = "block";'
         ))
 
-        hide(selector = "#deconvolution_process-processing")
-        hide(selector = "#deconvolution_process-processing_stop")
-        hide(selector = "#deconvolution_process-processing_fin")
+        hide(selector = "#app-deconvolution_process-processing")
+        hide(selector = "#app-deconvolution_process-processing_stop")
+        hide(selector = "#app-deconvolution_process-processing_fin")
 
         # stop observers
         if (!is.null(reactVars$progress_observer)) {
@@ -2062,8 +2062,8 @@ server <- function(id, dirs) {
         title = "Processing aborted"
       )
 
-      hide(selector = "#deconvolution_process-processing")
-      show(selector = "#deconvolution_process-processing_stop")
+      hide(selector = "#app-deconvolution_process-processing")
+      show(selector = "#app-deconvolution_process-processing_stop")
 
       shiny$updateActionButton(
         session,
@@ -2292,8 +2292,8 @@ server <- function(id, dirs) {
           output$decon_rep_logtext <- NULL
           output$decon_rep_logtext_ui <- NULL
 
-          hide(selector = "#deconvolution_process-processing")
-          show(selector = "#deconvolution_process-processing_stop")
+          hide(selector = "#app-deconvolution_process-processing")
+          show(selector = "#app-deconvolution_process-processing_stop")
 
           reactVars$deconv_report_status <- "idle"
 
@@ -2486,9 +2486,9 @@ server <- function(id, dirs) {
 
     shiny$observe({
       if (reactVars$deconv_report_status == "running") {
-        hide(selector = "#deconvolution_process-processing_stop")
-        hide(selector = "#deconvolution_process-processing_fin")
-        show(selector = "#deconvolution_process-processing")
+        hide(selector = "#app-deconvolution_process-processing_stop")
+        hide(selector = "#app-deconvolution_process-processing_fin")
+        show(selector = "#app-deconvolution_process-processing")
 
         runjs("App.disableDismiss()")
 
@@ -2500,8 +2500,8 @@ server <- function(id, dirs) {
       } else if (reactVars$deconv_report_status == "finished") {
         write_log("Deconvolution report generation finalized")
 
-        hide(selector = "#deconvolution_process-processing")
-        show(selector = "#deconvolution_process-processing_fin")
+        hide(selector = "#app-deconvolution_process-processing")
+        show(selector = "#app-deconvolution_process-processing_fin")
 
         runjs("App.enableDismiss()")
 

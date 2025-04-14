@@ -267,6 +267,10 @@ button .sF-modal {
 // FORM INPUTS & CONTROLS
 // ============================
 
+.shiny-input-container:not(.shiny-input-container-inline) {
+  width: 100%
+}
+
 // Deconvolution progress bar
 .progress {
   height: 2em;
