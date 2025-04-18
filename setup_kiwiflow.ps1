@@ -67,6 +67,17 @@ try {
     exit 1
 }
 
+# Activate Conda base environment
+Write-Host "Activating Conda base environment..."
+try {
+    & conda activate base
+    if ($LASTEXITCODE -ne 0) { throw "Base environment activation failed with exit code $LASTEXITCODE." }
+} catch {
+    Write-Host "Error: Failed to activate base environment. $_"
+    pause
+    exit 1
+}
+
 # Set working directory to the base path
 Set-Location $basePath
 
