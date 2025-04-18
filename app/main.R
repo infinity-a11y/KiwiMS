@@ -2,7 +2,7 @@
 
 box::use(
   bslib,
-  shiny[div, icon, moduleServer, NS, stopApp, tagList, tags, reactive],
+  shiny,
   shinyjs[useShinyjs],
   waiter[useWaiter, waiter_hide, waiterShowOnLoad],
 )
@@ -16,28 +16,29 @@ box::use(
   app / view / ki_kinact_sidebar,
   app / view / log_view,
   app / view / log_sidebar,
-  app / logic / logging[start_logging, write_log, close_logging]
+  app / logic / logging[start_logging, write_log, close_logging],
+  app / logic / helper_functions[check_github_version, get_latest_release_url],
 )
 
 suppressWarnings(library(logr))
 
 #' @export
 ui <- function(id) {
-  ns <- NS(id)
-
-  tagList(
+  ns <- shiny$NS(id)
+  
+  shiny$tagList(
     dev_utils$add_dev_headers(),
-    div(id = "blocking-overlay"),
+    shiny$div(id = "blocking-overlay"),
     useWaiter(),
     waiterShowOnLoad(
-      html = tags$div(
+      html = shiny$tags$div(
         style = "text-align: center;",
-        tags$img(
+        shiny$tags$img(
           src = "static/logo_animated.svg",
           width = "400px",
           height = "400px"
         ),
-        tags$div(
+        shiny$tags$div(
           style = paste0(
             "font-family: monospace; font-size: 50px; color: blac",
             "k; opacity: 0; animation: fadeIn 1s ease-in forwards",
@@ -50,13 +51,13 @@ ui <- function(id) {
     useShinyjs(),
     bslib$page_navbar(
       id = ns("tabs"),
-      title = tags$div(
-        tags$img(
+      title = shiny$tags$div(
+        shiny$tags$img(
           src = "static/logo.svg",
           height = "42rem",
           style = "margin-right: 5px; margin-top: -2px"
         ),
-        tags$span(
+        shiny$tags$span(
           "KiwiFlow",
           style = "font-size: 21px; font-family: monospace;"
         )
@@ -77,7 +78,7 @@ ui <- function(id) {
       bslib$nav_panel(
         title = "Protein Conversion",
         class = "locked-panel",
-        div(id = "overlay-message", "Module still in work ..."),
+        shiny$div(id = "overlay-message", "Module still in work ..."),
         bslib$page_sidebar(
           sidebar = conversion_sidebar$ui(ns("protein_conversion")),
           bslib$card(
@@ -89,7 +90,7 @@ ui <- function(id) {
       bslib$nav_panel(
         title = "KI/Kinact",
         class = "locked-panel",
-        div(id = "overlay-message", "Module still in work ..."),
+        shiny$div(id = "overlay-message", "Module still in work ..."),
         bslib$page_sidebar(
           sidebar = ki_kinact_sidebar$ui(ns("ki")),
           bslib$navset_card_tab(
@@ -111,11 +112,11 @@ ui <- function(id) {
       bslib$nav_menu(
         title = "Links",
         align = "right",
-        icon = icon("link"),
+        icon = shiny$icon("link"),
         bslib$nav_item(
-          tags$a(
-            tags$span(
-              tags$i(class = "fa-brands fa-github me-1"),
+          shiny$tags$a(
+            shiny$tags$span(
+              shiny$tags$i(class = "fa-brands fa-github me-1"),
               "GitHub"
             ),
             href = "https://github.com/infinity-a11y/MSFlow",
@@ -124,9 +125,9 @@ ui <- function(id) {
           )
         ),
         bslib$nav_item(
-          tags$a(
-            tags$span(
-              tags$img(
+          shiny$tags$a(
+            shiny$tags$span(
+              shiny$tags$img(
                 src = "static/liora_logo.png",
                 style = "height: 1em; margin-right: 5px;"
               ),
@@ -137,6 +138,9 @@ ui <- function(id) {
             class = "nav-link"
           )
         )
+      ),
+      bslib$nav_item(
+        shiny$uiOutput(ns("update_button"))
       )
     )
   )
@@ -144,33 +148,195 @@ ui <- function(id) {
 
 #' @export
 server <- function(id) {
-  moduleServer(id, function(input, output, session) {
+  shiny$moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+    
     # Kill server on session end
     session$onSessionEnded(function() {
       write_log("Session closed")
-      stopApp()
+      shiny$stopApp()
     })
-
+    
     # Initiate logging
     start_logging()
     write_log("Session started")
-
+    
     # Log view server
-    active_tab_reactive <- reactive({
+    active_tab_reactive <- shiny$reactive({
       input$tabs
     })
     log_buttons <- log_sidebar$server("log_sidebar")
     log_view$server("logs", active_tab_reactive, log_buttons)
-
+    
     # Conversion server
     conversion_main$server("conversion_card")
-
+    
     # Deconvolution sidebar server
     dirs <- deconvolution_sidebar$server("deconvolution_pars")
-
+    
     # Deconvolution process server
     deconvolution_process$server("deconvolution_process", dirs)
-
+    
+    version_info <- readLines("version.txt")
+    local_version <- sub(".*=", "", version_info[1])
+    release <- sub(".*=", "", version_info[2])
+    url <- sub(".*=", "", version_info[3])
+    remote_version <- sub(".*=", "", check_github_version())
+    
+    if(identical(local_version, remote_version)) {
+      # Variables for modal
+      message <- "KiwiFlow is up-to-date"
+      hint <- "No action needed. Update anyway?"
+      link <- "https://github.com/infinity-a11y/KiwiFlow/tree/master"
+      
+      # Variables for button
+      icon <- shiny$icon("circle-info")
+      label <- "Version"
+      
+      write_log(paste("KiWiFlow Version", local_version, "-", message))
+    } else {
+      # Variables for modal
+      message <- "Update available"
+      hint <- "Fetch the latest changes by clicking on <strong> Update </strong> "
+      release_url <- get_latest_release_url( )
+      link <- ifelse(is.null(release_url), 
+                     "https://github.com/infinity-a11y/KiwiFlow/tree/master", 
+                     release_url)
+      
+      # Variables for button
+      icon <- shiny$icon("circle-exclamation")
+      label <- "Update"
+      
+      write_log(paste("KiWiFlow Version", local_version, "-", message))
+    }
+    
+    output$update_button <- shiny$renderUI({
+      shiny$req(icon, label)
+      
+      shiny$actionButton(
+        inputId = ns("open_update_modal"),
+        label = label,
+        icon = icon,
+        class = "nav-link"
+      ) 
+    })
+    
+    # Update modal
+    shiny$observeEvent(input$open_update_modal, {
+      shiny$req(local_version, release, message, link, hint)
+      
+      shiny$showModal(
+        shiny$div(
+          class = "start-modal",
+          shiny$modalDialog(
+            shiny$fluidRow(
+              shiny$br(),
+              shiny$column(
+                width = 11,
+                shiny$fluidRow(
+                  shiny$column(
+                    width = 6,
+                    shiny$p("Current Version")
+                  ),
+                  shiny$column(
+                    width = 6,
+                    shiny$p(local_version, style = "font-style: italic")
+                  )
+                ),
+                shiny$fluidRow(
+                  shiny$column(
+                    width = 6,
+                    shiny$p("Release date")
+                  ),
+                  shiny$column(
+                    width = 6,
+                    shiny$p(release, style = "font-style: italic")
+                  )
+                ),
+                shiny$br(),
+                shiny$fluidRow(
+                  shiny$column(
+                    width = 12,
+                    shiny$h6(message, style = "font-weight: bold"),
+                    shiny$tags$a(href = link, link, target = "_blank"),
+                    shiny$br(),
+                    shiny$p(shiny$HTML(hint), 
+                             style = "font-style: italic; margin-top: 1rem;")
+                  )
+                )        
+              )
+            ),
+            title = "Version and Update",
+            easyClose = TRUE,
+            footer = shiny$tagList(
+              shiny$modalButton("Dismiss"),
+              shiny$actionButton(
+                ns("update_kiwiflow"),
+                "Update",
+                class = "load-db",
+                width = "auto"
+              )
+            )
+          )
+        )
+      )
+    })
+    
+    shiny$observeEvent(input$update_kiwiflow, {
+      shiny$showModal(
+        shiny$div(
+          class = "start-modal",
+          shiny$modalDialog(
+            shiny$fluidRow(
+              shiny$br(),
+              shiny$column(
+                width = 11,
+                shiny$p(paste0(
+                  "Updating now will cancel all running processes, close the ", 
+                  "app and initiate the installation of the newest version.")),
+                shiny$p("Continue?")
+              )
+            ),
+            title = "Update KiwiFlow",
+            easyClose = TRUE,
+            footer = shiny$tagList(
+              shiny$modalButton("Cancel"),
+              shiny$actionButton(
+                ns("conf_update_kiwiflow"),
+                "Continue",
+                class = "load-db",
+                width = "auto"
+              )
+            )
+          )
+        )
+      )
+    })
+    
+    shiny$observeEvent(input$conf_update_kiwiflow, {
+      # Path to the update script
+      updateScript <- file.path(getwd(), "update_kiwiflow.ps1")
+      
+      if (!file.exists(updateScript)) {
+        output$updateMessage <- shiny$renderText(
+          "Update script not found. Please ensure update_kiwiflow.ps1 exists.")
+        return()
+      }
+      
+      # Call the update script with the working directory as an argument
+      tryCatch({
+        shiny$system2("powershell", 
+                      args = c("-File", shQuote(updateScript), 
+                               "-WorkingDir", shQuote(workingDir)), 
+                wait = FALSE)
+        output$updateMessage <- shiny$renderText(
+          "Update started. Please approve the UAC prompt if shown and restart the app after the update completes.")
+      }, error = function(e) {
+        output$updateMessage <- shiny$renderText(
+          paste("Error starting update:", e$message))
+      })
+    })
+    
     # Hide waiter
     Sys.sleep(2)
     waiter_hide()
