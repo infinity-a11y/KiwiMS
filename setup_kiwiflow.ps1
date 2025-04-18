@@ -1,5 +1,31 @@
 # setup_kiwiflow.ps1
 
+# Check if running as Administrator
+$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+if (-not $isAdmin) {
+    Write-Host "This script requires administrative privileges. Relaunching as Administrator..."
+    try {
+        # Get the script path and clean arguments
+        $scriptPath = $MyInvocation.MyCommand.Path
+        # Extract arguments, removing the script path and trimming whitespace
+        $arguments = ($MyInvocation.Line -replace [regex]::Escape($MyInvocation.MyCommand.Path), "").Trim()
+        # Construct the argument list for Start-Process
+        $startProcessArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
+        if ($arguments) {
+            $startProcessArgs += " $arguments"
+        }
+        # Relaunch the script as Administrator
+        Start-Process -FilePath "powershell.exe" -ArgumentList $startProcessArgs -Verb RunAs
+        exit
+    } catch {
+        Write-Host "Error: Failed to relaunch as Administrator. $_"
+        Write-Host "Please run this script as Administrator manually."
+        pause
+        exit 1
+    }
+}
+
 # Set base path to the script's directory (e.g., C:\Users\YourName\Apps\KiwiFlow)
 $basePath = $PSScriptRoot
 Start-Transcript -Path "$basePath\kiwiflow_setup.log" -Append
@@ -115,25 +141,6 @@ try {
     Write-Host "Try closing and reopening PowerShell, then run 'conda activate kiwiflow'."
     pause
     exit 1
-}
-
-# Verify key packages
-Write-Host "Verifying key packages..."
-try {
-    & Rscript -e "find.package('shiny')"
-    & Rscript -e "find.package('rhino')"
-} catch {
-    Write-Host "Error: Failed to verify packages. $_"
-}
-
-# Launch app
-Write-Host "Launching KiwiFlow app..."
-try {
-    & conda activate kiwiflow
-    & Rscript -e "shiny::runApp('app.R', port=3838, launch.browser = T)"
-    Write-Host "KiwiFlow should open in your browser at http://localhost:3838."
-} catch {
-    Write-Host "Error: Failed to launch app. $_"
 }
 
 # Create Desktop Shortcut for KiwiFlow with Custom Icon
