@@ -5,43 +5,44 @@ box::use(
   ggplot2,
   parallel[detectCores, makeCluster, parLapply, stopCluster],
   plotly[config, event_register, ggplotly, hide_colorbar, layout, style],
-  reticulate[use_python, py_config, py_run_string],
+  reticulate[use_condaenv, use_python, py_config, py_run_string],
   scales[percent_format],
   utils[read.delim, read.table],
 )
 
 #' @export
 deconvolute <- function(
-  raw_dirs,
-  num_cores = detectCores() - 1,
-  startz = 1,
-  endz = 50,
-  minmz = "",
-  maxmz = "",
-  masslb = 5000,
-  massub = 500000,
-  massbins = 10,
-  peakthresh = 0.1,
-  peakwindow = 500,
-  peaknorm = 1,
-  time_start = "",
-  time_end = ""
+    raw_dirs,
+    num_cores = detectCores() - 1,
+    startz = 1,
+    endz = 50,
+    minmz = "",
+    maxmz = "",
+    masslb = 5000,
+    massub = 500000,
+    massbins = 10,
+    peakthresh = 0.1,
+    peakwindow = 500,
+    peaknorm = 1,
+    time_start = "",
+    time_end = ""
 ) {
   # ensure python path and packages availability
   py_outcome <- tryCatch(
     {
-      use_python(py_config()$python, required = TRUE)
+      use_condaenv("kiwiflow", required = TRUE)
+      #use_python(py_config()$python, required = TRUE)
       TRUE
     },
     error = function(e) {
       FALSE
     }
   )
-
+  
   if (!py_outcome) {
     return()
   }
-
+  
   # Deconvolution function for a single waters .raw
   process_single_dir <- function(
     waters_dir,
@@ -59,7 +60,7 @@ deconvolute <- function(
     time_end
   ) {
     input_path <- gsub("\\\\", "/", waters_dir)
-
+    
     # Function to properly format parameters for Python
     format_param <- function(x) {
       if (is.character(x) && x == "") {
@@ -68,7 +69,7 @@ deconvolute <- function(
         return(as.character(x))
       }
     }
-
+    
     # Create parameters string for Python
     params_string <- sprintf(
       paste0(
@@ -89,7 +90,7 @@ deconvolute <- function(
       format_param(time_start),
       format_param(time_end)
     )
-
+    
     py_run_string(sprintf(
       '
 import sys
@@ -130,20 +131,20 @@ engine.pick_peaks()
       input_path,
       params_string
     ))
-
+    
     # save spectra
     result <- gsub(".raw", "_rawdata_unidecfiles", waters_dir)
-
+    
     if (dir.exists(result)) {
       plots <- list(
         decon_spec = spectrum_plot(result, FALSE),
         raw_spec = spectrum_plot(result, TRUE)
       )
-
+      
       saveRDS(plots, file.path(result, "plots.rds"))
     }
   }
-
+  
   # Pass variables
   startz <- startz
   endz <- endz
@@ -157,14 +158,14 @@ engine.pick_peaks()
   peaknorm <- peaknorm
   time_start <- time_start
   time_end <- time_end
-
+  
   # Evaluate processing mode parallel or sequential
   if (length(raw_dirs) > 20 && num_cores > 1) {
     cl <- makeCluster(num_cores)
     on.exit(stopCluster(cl))
-
+    
     message(paste0(num_cores, " cores detected. Parallel processing started."))
-
+    
     # Create wrapper function that includes all parameters
     process_wrapper <- function(dir) {
       process_single_dir(
@@ -183,11 +184,11 @@ engine.pick_peaks()
         time_end
       )
     }
-
+    
     parLapply(cl, raw_dirs, process_wrapper)
   } else {
     message("Sequential processing started.")
-
+    
     for (dir in seq_along(raw_dirs)) {
       process_single_dir(
         raw_dirs[dir],
@@ -215,10 +216,10 @@ create_384_plate_heatmap <- function(data) {
   cols <- 1:24
   plate_layout <- expand.grid(row = rows, col = cols) |>
     mutate(well_id = paste0(row, col))
-
+  
   # Merge data with plate layout
   plate_data <- left_join(plate_layout, data, by = "well_id")
-
+  
   # Tooltip text creation
   plate_data <- plate_data |>
     mutate(
@@ -231,15 +232,15 @@ create_384_plate_heatmap <- function(data) {
         sample_fmt
       )
     )
-
+  
   num_unique_values <- n_distinct(plate_data$value, na.rm = TRUE)
-
+  
   if (num_unique_values == 1) {
     left <- 80
   } else {
     left <- 0
   }
-
+  
   # Create the heatmap
   plate_plot <- ggplot2$ggplot(
     plate_data,
@@ -289,10 +290,10 @@ create_384_plate_heatmap <- function(data) {
       panel.grid = ggplot2$element_blank(),
       axis.ticks = ggplot2$element_blank()
     )
-
+  
   # Convert to plotly
   interactive_plot <- ggplotly(plate_plot, tooltip = "text")
-
+  
   interactive_plot <- interactive_plot |>
     layout(
       dragmode = FALSE,
@@ -349,7 +350,7 @@ create_384_plate_heatmap <- function(data) {
         filename = paste0(Sys.Date(), "_Plate_Heatmap")
       )
     )
-
+  
   if (num_unique_values == 1) {
     interactive_plot |>
       style(
@@ -369,26 +370,26 @@ create_384_plate_heatmap <- function(data) {
 spectrum_plot <- function(result_path, raw, interactive = TRUE) {
   # Get paths
   base <- gsub("_unidecfiles", "", basename(result_path))
-
+  
   raw_file <- file.path(result_path, paste0(base, "_rawdata.txt"))
   mass_file <- file.path(result_path, paste0(base, "_mass.txt"))
   peaks_file <- file.path(result_path, paste0(base, "_peaks.dat"))
-
+  
   if (!file.exists(mass_file) || !file.exists(peaks_file)) return()
-
+  
   # Read data
   if (raw) {
     mass <- read.delim(raw_file, sep = " ", header = FALSE)
-
+    
     mass$V2 <- (mass$V2 - min(mass$V2)) / (max(mass$V2) - min(mass$V2)) * 100
   } else {
     mass <- read.delim(mass_file, sep = " ", header = FALSE)
     peaks <- read.delim(peaks_file, sep = " ", header = FALSE)
-
+    
     mass$V2 <- (mass$V2 - min(mass$V2)) / (max(mass$V2) - min(mass$V2)) * 100
     highlight_peaks <- mass[mass$V1 %in% peaks$V1, ]
   }
-
+  
   # Create spectrum
   plot <- ggplot2$ggplot(
     mass,
@@ -402,7 +403,7 @@ spectrum_plot <- function(result_path, raw, interactive = TRUE) {
     ggplot2$geom_line() +
     ggplot2$scale_y_continuous(labels = scales::percent_format(scale = 1)) +
     ggplot2$theme_minimal()
-
+  
   if (raw) {
     plot <- plot + ggplot2$labs(y = "Intensity [%]", x = "m/z [Th]")
   } else {
@@ -417,16 +418,16 @@ spectrum_plot <- function(result_path, raw, interactive = TRUE) {
       ) +
       ggplot2$labs(y = "Intensity [%]", x = "Mass [Da]")
   }
-
+  
   # If not interactive return ggplot
   if (!interactive) return(plot)
-
+  
   plot_name <- ifelse(
     raw == TRUE,
     paste0(gsub("_rawdata", "", base), "_raw"),
     paste0(gsub("_rawdata", "", base), "_deconvoluted")
   )
-
+  
   # Convert to interactive plot
   interactive_plot <- ggplotly(plot, tooltip = "text") |>
     layout(
@@ -447,6 +448,6 @@ spectrum_plot <- function(result_path, raw, interactive = TRUE) {
       ),
       toImageButtonOptions = list(filename = paste0(Sys.Date(), "_", plot_name))
     )
-
+  
   return(interactive_plot)
 }
