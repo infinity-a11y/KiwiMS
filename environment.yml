@@ -39,4 +39,4 @@ dependencies:
   - r-waiter=0.2.5
   
   - pip:
-      - unidec=7.0.3
+      - unidec==7.0.3
