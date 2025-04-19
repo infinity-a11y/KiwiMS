@@ -4,23 +4,6 @@ param (
     [string]$WorkingDir = $PSScriptRoot
 )
 
-# Check if running as Administrator
-$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-
-if (-not $isAdmin) {
-    Write-Host "This script requires administrative privileges. Relaunching as Administrator..."
-    try {
-        $scriptPath = $MyInvocation.MyCommand.Path
-        $startProcessArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`" -WorkingDir `"$WorkingDir`""
-        Start-Process -FilePath "powershell.exe" -ArgumentList $startProcessArgs -Verb RunAs
-        exit
-    } catch {
-        Write-Host "Error: Failed to relaunch as Administrator. $_"
-        Write-Host "Please run this script as Administrator manually."
-        exit 1
-    }
-}
-
 # Set base path to the working directory
 $basePath = $WorkingDir
 Start-Transcript -Path "$basePath\kiwiflow_update.log" -Append
@@ -43,14 +26,10 @@ try {
     $localVersionFile = "$basePath\version.txt"
     $localVersion = if (Test-Path $localVersionFile) { (Get-Content $localVersionFile | Where-Object { $_ -match "^version=(.+)$" } | ForEach-Object { $matches[1] }) } else { "0.0.0" }
 
-    if ($localVersion -eq $remoteVersion) {
-        Write-Host "No update needed. Current version: $localVersion"
-        Stop-Transcript
-        exit 0
-    }
-    Write-Host "Update available. Local version: $localVersion, Remote version: $remoteVersion"
+    Write-Host "Local version: $localVersion, Remote version: $remoteVersion"
 } catch {
     Write-Host "Error: Failed to check version. $_"
+    pause
     exit 1
 }
 
@@ -74,6 +53,7 @@ try {
     Write-Host "App files updated successfully."
 } catch {
     Write-Host "Error: Failed to download or extract app files. $_"
+    pause
     exit 1
 }
 
@@ -97,6 +77,7 @@ try {
     }
 } catch {
     Write-Host "Error: Failed to initialize Conda. $_"
+    pause
     exit 1
 }
 
@@ -107,6 +88,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Base environment activation failed with exit code $LASTEXITCODE." }
 } catch {
     Write-Host "Error: Failed to activate base environment. $_"
+    pause
     exit 1
 }
 
@@ -127,6 +109,7 @@ try {
 } catch {
     Write-Host "Error: Failed to update environment. $_"
     Write-Host "Run 'conda env update -n kiwiflow -f $envYmlPath --prune' manually to debug."
+    pause
     exit 1
 }
 
@@ -152,21 +135,11 @@ try {
     $shortcut.Save()
     Write-Host "Desktop shortcut re-created at $shortcutPath."
 } catch {
+    pause
     Write-Host "Error: Failed to re-create desktop shortcut. $_"
 }
 
 Write-Host "Update complete. Check kiwiflow_update.log in $basePath for details."
-Write-Host "Press ENTER to restart the KiwiFlow app with the new version."
-$basePath
+Write-Host "Press ENTER to finish, then restart the KiwiFlow app with the new version."
 pause
-Write-Host "Launching KiwiFlow app..."
-
-try {
-    & cd $basePath
-    & conda deactivate
-    & conda activate kiwiflow
-    & Rscript -e "shiny::runApp('App.R', port = 3838, launch.browser = TRUE)"
-    Write-Host "KiwiFlow should open in your browser at http://localhost:3838."
-} catch {
-    Write-Host "Error: Failed to launch app. $_"
-}
+exit

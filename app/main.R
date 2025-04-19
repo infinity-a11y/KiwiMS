@@ -3,7 +3,7 @@
 box::use(
   bslib,
   shiny,
-  shinyjs[useShinyjs],
+  shinyjs[runjs, useShinyjs],
   waiter[useWaiter, waiter_hide, waiterShowOnLoad],
 )
 
@@ -261,7 +261,7 @@ server <- function(id) {
                     shiny$tags$a(href = link, link, target = "_blank"),
                     shiny$br(),
                     shiny$p(shiny$HTML(hint), 
-                             style = "font-style: italic; margin-top: 1rem;")
+                            style = "font-style: italic; margin-top: 1rem;")
                   )
                 )        
               )
@@ -316,24 +316,35 @@ server <- function(id) {
     shiny$observeEvent(input$conf_update_kiwiflow, {
       # Path to the update script
       updateScript <- file.path(getwd(), "update_kiwiflow.ps1")
+      print(paste("updateScript:", updateScript))
+      print(paste("file exists:", file.exists(updateScript)))
       
       if (!file.exists(updateScript)) {
-        output$updateMessage <- shiny$renderText(
-          "Update script not found. Please ensure update_kiwiflow.ps1 exists.")
         return()
       }
       
-      # Call the update script with the working directory as an argument
+      # Call the update script in a new, visible PowerShell window
       tryCatch({
-        shiny$system2("powershell", 
-                      args = c("-File", shQuote(updateScript), 
-                               "-WorkingDir", shQuote(workingDir)), 
-                wait = FALSE)
-        output$updateMessage <- shiny$renderText(
-          "Update started. Please approve the UAC prompt if shown and restart the app after the update completes.")
+        runjs(paste0(
+          'document.getElementById("blocking-overlay").style.display ',
+          '= "block";'
+        ))
+        
+        psCommand <- paste0(
+          "Start-Process powershell -ArgumentList ",
+          "'-NoExit -ExecutionPolicy Bypass -File ", shQuote(updateScript), "' ",
+          "-Verb RunAs"
+        )
+        cmdArgs <- c("/c", "start", "powershell", "-Command", psCommand)
+        
+        # Run update script
+        base::system2("cmd", args = cmdArgs, wait = TRUE)
+        
+        runjs("window.close();")
+        shiny$stopApp()
       }, error = function(e) {
-        output$updateMessage <- shiny$renderText(
-          paste("Error starting update:", e$message))
+        errorMsg <- paste("Error starting update:", e$message)
+        print(errorMsg)
       })
     })
     
