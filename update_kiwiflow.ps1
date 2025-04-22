@@ -63,6 +63,7 @@ try {
     $condaPath = (Get-Command conda -ErrorAction SilentlyContinue).Source
     if (-not $condaPath) {
         Write-Host "Error: Conda not found. Please run setup_kiwiflow.ps1 first."
+        pause
         exit 1
     }
     & conda init powershell
@@ -74,6 +75,8 @@ try {
         . $condaHook
     } else {
         Write-Host "Warning: conda-hook.ps1 not found. May need manual shell restart."
+        pause
+        exit 1
     }
 } catch {
     Write-Host "Error: Failed to initialize Conda. $_"
@@ -104,6 +107,7 @@ try {
         Write-Host "Environment updated successfully."
     } else {
         Write-Host "Error: kiwiflow environment not found. Please run setup_kiwiflow.ps1 first."
+        pause
         exit 1
     }
 } catch {
@@ -135,8 +139,9 @@ try {
     $shortcut.Save()
     Write-Host "Desktop shortcut re-created at $shortcutPath."
 } catch {
-    pause
     Write-Host "Error: Failed to re-create desktop shortcut. $_"
+    pause
+    exit 1
 }
 
 Write-Host "Update complete. Check kiwiflow_update.log in $basePath for details."

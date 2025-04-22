@@ -3,7 +3,7 @@
 box::use(
   bslib,
   shiny,
-  shinyjs[runjs, useShinyjs],
+  shinyjs[disable, enable, hide, hidden, show, runjs, useShinyjs],
   waiter[useWaiter, waiter_hide, waiterShowOnLoad],
 )
 
@@ -288,13 +288,50 @@ server <- function(id) {
           class = "start-modal",
           shiny$modalDialog(
             shiny$fluidRow(
+              useShinyjs(),
               shiny$br(),
               shiny$column(
                 width = 11,
-                shiny$p(paste0(
-                  "Updating now will cancel all running processes, close the ", 
-                  "app and initiate the installation of the newest version.")),
-                shiny$p("Continue?")
+                hidden(
+                  shiny$div(
+                    id = ns("conf_update_ui_running"),
+                    shiny$column(
+                      width = 11,
+                      shiny$p("Updating ..."),
+                      shiny$HTML(
+                        paste0(
+                          '<i class="fa fa-spinner fa-spin fa-fw fa-2x" style="color: ',
+                          '#38387C; margin-top: 0.5em"></i>'
+                        )
+                      )
+                    )
+                  )
+                ),
+                hidden(
+                  shiny$div(
+                    id = ns("conf_update_ui_failed"),
+                    shiny$column(
+                      width = 11,
+                      shiny$p("Updating to new version failed."),
+                      shiny$HTML(
+                        paste0(
+                          '<i class="fa fa-circle-exlamation" style="color: ',
+                          'black; margin-top: 0.5em"></i>'
+                        )
+                      )
+                    )
+                  )
+                ),
+                shiny$div(
+                  id = ns("conf_update_ui"),
+                  shiny$column(
+                    width = 11,
+                    shiny$p(paste(
+                      "Updating now will cancel all running processes", 
+                      "and initiate the installation of the newest version.")),
+                    shiny$p("Continue?")
+                  )
+                )
               )
             ),
             title = "Update KiwiFlow",
@@ -314,14 +351,17 @@ server <- function(id) {
     })
     
     shiny$observeEvent(input$conf_update_kiwiflow, {
+      
+      write_log("Initiated version update")
+      
+      disable(selector = "#app-conf_update_kiwiflow")
+      disable(selector = paste0("#shiny-modal > div > div > div.modal-footer ", 
+                                "> button:nth-child(1)"))
+      hide(selector = "#app-conf_update_ui")
+      show(selector = "#app-conf_update_ui_running")
+      
       # Path to the update script
       updateScript <- file.path(getwd(), "update_kiwiflow.ps1")
-      print(paste("updateScript:", updateScript))
-      print(paste("file exists:", file.exists(updateScript)))
-      
-      if (!file.exists(updateScript)) {
-        return()
-      }
       
       # Call the update script in a new, visible PowerShell window
       tryCatch({
@@ -332,7 +372,7 @@ server <- function(id) {
         
         psCommand <- paste0(
           "Start-Process powershell -ArgumentList ",
-          "'-NoExit -ExecutionPolicy Bypass -File ", shQuote(updateScript), "' ",
+          "'-ExecutionPolicy Bypass -File ", shQuote(updateScript), "' ",
           "-Verb RunAs"
         )
         cmdArgs <- c("/c", "start", "powershell", "-Command", psCommand)
@@ -343,8 +383,17 @@ server <- function(id) {
         runjs("window.close();")
         shiny$stopApp()
       }, error = function(e) {
-        errorMsg <- paste("Error starting update:", e$message)
-        print(errorMsg)
+        write_log(paste("Failed version update:", e$message))
+        
+        runjs(paste0(
+          'document.getElementById("blocking-overlay").style.display ',
+          '= "none";'
+        ))
+        
+        hide(selector = "#app-conf_update_ui_running")
+        show(selector = "#app-conf_update_ui_failed")
+        
+        enable(selector = "#app-conf_update_kiwiflow")
       })
     })
     
