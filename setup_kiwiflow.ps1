@@ -143,6 +143,31 @@ try {
     exit 1
 }
 
+# Create run_app.vbs for launching the Shiny app
+Write-Host "Creating run_app.vbs script..."
+try {
+    $vbsPath = "$basePath\run_app.vbs"
+    $appPath = "$basePath\app.R" -replace '\\', '\\'
+    $logPath = "$basePath\launch_log.txt" -replace '\\', '\\'
+    $vbsContent = @"
+Option Explicit
+Dim WShell, LaunchCmd, MessageCmd
+
+Set WShell = CreateObject("WScript.Shell")
+
+LaunchCmd = "powershell.exe -NoExit -Command ""conda activate kiwiflow; Rscript -e \""shiny::runApp('$appPath', port=3838, launch.browser = T)\"" > $logPath 2>&1"
+MessageCmd = "wscript.exe //B //E:VBScript -nologo ""mshta vbscript:Execute(""MsgBox ""KiwiFlow will open shortly, please wait..."", 0, ""KiwiFlow"":window.close()"")"""
+WShell.Run MessageCmd, 0, False
+WShell.Run LaunchCmd, 0, False
+"@
+    Set-Content -Path $vbsPath -Value $vbsContent -ErrorAction Stop
+    Write-Host "run_app.vbs created at $vbsPath."
+} catch {
+    Write-Host "Error: Failed to create run_app.vbs. $_"
+    pause
+    exit 1
+}
+
 # Create Desktop Shortcut for KiwiFlow with Custom Icon
 Write-Host "Creating desktop shortcut for KiwiFlow with custom icon..."
 try {
@@ -150,10 +175,11 @@ try {
     $iconPath = "$basePath\app\static\favicon.ico"
     # Construct absolute path to app.R with double backslashes for R
     $appPath = "$basePath\app.R" -replace '\\', '\\'
+    $vbsPath = "$basePath\run_app.vbs" -replace '\\', '\\'
     $wshShell = New-Object -ComObject WScript.Shell
     $shortcut = $wshShell.CreateShortcut($shortcutPath)
-    $shortcut.TargetPath = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
-    $shortcut.Arguments = "-NoExit -Command `"conda activate kiwiflow; Rscript -e \`"shiny::runApp('$appPath', port=3838, launch.browser = T)\`"`""
+    $shortcut.TargetPath = "C:\Windows\System32\wscript.exe"
+    $shortcut.Arguments = """$vbsPath""" 
     $shortcut.WorkingDirectory = $basePath
     $shortcut.Description = "Launch KiwiFlow Shiny App"
     if (Test-Path $iconPath) {

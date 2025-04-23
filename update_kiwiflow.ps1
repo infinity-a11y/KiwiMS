@@ -123,10 +123,11 @@ try {
     $shortcutPath = "$env:USERPROFILE\Desktop\KiwiFlow.lnk"
     $iconPath = "$basePath\app\static\favicon.ico"
     $appPath = "$basePath\app.R" -replace '\\', '\\'
+    $vbsPath = "$basePath\run_app.vbs" -replace '\\', '\\'
     $wshShell = New-Object -ComObject WScript.Shell
     $shortcut = $wshShell.CreateShortcut($shortcutPath)
-    $shortcut.TargetPath = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
-    $shortcut.Arguments = "-NoExit -Command `"conda activate kiwiflow; Rscript -e \`"shiny::runApp('$appPath', port=3838, launch.browser = T)\`"`""
+    $shortcut.TargetPath = "C:\Windows\System32\wscript.exe"
+    $shortcut.Arguments = """$vbsPath""" 
     $shortcut.WorkingDirectory = $basePath
     $shortcut.Description = "Launch KiwiFlow Shiny App"
     if (Test-Path $iconPath) {
