@@ -26,7 +26,7 @@ if (-not $isAdmin) {
     }
 }
 
-# Set base path to the script's directory (e.g., C:\Users\YourName\Apps\KiwiFlow)
+# Set base path to the script's directory
 $basePath = $PSScriptRoot
 Start-Transcript -Path "$basePath\kiwiflow_setup.log" -Append
 Write-Host "Setting up KiwiFlow environment in $basePath..."
@@ -108,7 +108,7 @@ try {
 Set-Location $basePath
 
 # Check and manage kiwiflow environment
-Write-Host "Checking kiwiflow environment..."
+Write-Host "Checking kiwiflow environment in $basePath\environment.yml"
 try {
     $envYmlPath = "$basePath\environment.yml"
     $envExists = & conda env list | Select-String "kiwiflow"
@@ -130,35 +130,17 @@ try {
     exit 1
 }
 
-# Activate environment
-Write-Host "Activating kiwiflow environment..."
-try {
-    & conda activate kiwiflow
-    if ($LASTEXITCODE -ne 0) { throw "Activation failed with exit code $LASTEXITCODE." }
-    Write-Host "Environment activated."
-} catch {
-    Write-Host "Error: Failed to activate environment. $_"
-    Write-Host "Try closing and reopening PowerShell, then run 'conda activate kiwiflow'."
-    pause
-    exit 1
-}
-
-# Create run_app.vbs for launching the Shiny app
+# Create run_app.vbs for launching app
+$basePath = $PSScriptRoot
 Write-Host "Creating run_app.vbs script..."
 try {
     $vbsPath = "$basePath\run_app.vbs"
     $appPath = "$basePath\app.R" -replace '\\', '\\'
     $logPath = "$basePath\launch_log.txt" -replace '\\', '\\'
     $vbsContent = @"
-Option Explicit
-Dim WShell, LaunchCmd, MessageCmd
-
 Set WShell = CreateObject("WScript.Shell")
-
-LaunchCmd = "powershell.exe -NoExit -Command ""conda activate kiwiflow; Rscript -e \""shiny::runApp('$appPath', port=3838, launch.browser = T)\"" > $logPath 2>&1"
-MessageCmd = "wscript.exe //B //E:VBScript -nologo ""mshta vbscript:Execute(""MsgBox ""KiwiFlow will open shortly, please wait..."", 0, ""KiwiFlow"":window.close()"")"""
-WShell.Run MessageCmd, 0, False
-WShell.Run LaunchCmd, 0, False
+WShell.Popup "KiwiFlow will open shortly, please wait...", 3, "KiwiFlow", 0
+WShell.Run "powershell.exe -NoExit -Command ""conda activate kiwiflow; Rscript -e \""shiny::runApp('$appPath', port=3838, launch.browser = T)\"" > $logPath 2>&1", 0
 "@
     Set-Content -Path $vbsPath -Value $vbsContent -ErrorAction Stop
     Write-Host "run_app.vbs created at $vbsPath."

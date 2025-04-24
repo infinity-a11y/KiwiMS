@@ -6,5 +6,6 @@ logs
 results
 kiwiflow_setup.log
 kiwiflow_update.log
+launch_log.txt
 !renv.lock
 ".Rhistory"
