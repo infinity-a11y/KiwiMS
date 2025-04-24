@@ -1,13 +1,42 @@
 # update_kiwiflow.ps1
 
-param (
-    [string]$WorkingDir = $PSScriptRoot
-)
+# Set base path to the directory of the script or executable
+$basePath = [System.AppContext]::BaseDirectory
+if (-not $basePath) {
+    $basePath = Split-Path -Path $PSCommandPath -Parent -ErrorAction SilentlyContinue
+}
+if (-not $basePath) {
+    Write-Host "Error: Could not determine the script/executable directory."
+    Write-Host "Please ensure setup_kiwiflow.exe is run from the KiwiFlow directory."
+    pause
+    Stop-Transcript -ErrorAction SilentlyContinue
+    exit 1
+}
 
-# Set base path to the working directory
-$basePath = $WorkingDir
+# Normalize $basePath to remove trailing backslash
+$basePath = $basePath.TrimEnd('\')
+
+# Validate $basePath
+if (-not (Test-Path $basePath)) {
+    Write-Host "Error: Directory $basePath does not exist."
+    Write-Host "Please ensure setup_kiwiflow.exe is run from the KiwiFlow directory."
+    pause
+    Stop-Transcript -ErrorAction SilentlyContinue
+    exit 1
+}
+
+# Ensure the working directory is set to $basePath
+try {
+    Write-Host "Setting working directory to $basePath"
+    Set-Location -Path $basePath -ErrorAction Stop
+} catch {
+    Write-Host "Error: Failed to set working directory to $basePath. $_"
+    pause
+    Stop-Transcript -ErrorAction SilentlyContinue
+    exit 1
+}
+
 Start-Transcript -Path "$basePath\kiwiflow_update.log" -Append
-Write-Host "Updating KiwiFlow in $basePath..."
 
 # Check version
 Write-Host "Checking for updates..."

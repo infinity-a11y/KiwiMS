@@ -361,7 +361,7 @@ server <- function(id) {
       show(selector = "#app-conf_update_ui_running")
       
       # Path to the update script
-      updateScript <- file.path(getwd(), "update_kiwiflow.ps1")
+      # updateScript <- file.path(getwd(), "update.exe")
       
       # Call the update script in a new, visible PowerShell window
       tryCatch({
@@ -370,15 +370,18 @@ server <- function(id) {
           '= "block";'
         ))
         
-        psCommand <- paste0(
-          "Start-Process powershell -ArgumentList ",
-          "'-ExecutionPolicy Bypass -File ", shQuote(updateScript), "' ",
-          "-Verb RunAs"
-        )
-        cmdArgs <- c("/c", "start", "powershell", "-Command", psCommand)
+        # psCommand <- paste0(
+        #   "Start-Process powershell -ArgumentList ",
+        #   "'-ExecutionPolicy Bypass -File ", shQuote(updateScript), "' ",
+        #   "-Verb RunAs"
+        # )
+        # cmdArgs <- c("/c", "start", "powershell", "-Command", psCommand)
         
         # Run update script
-        base::system2("cmd", args = cmdArgs, wait = TRUE)
+        ps_command <- sprintf('Start-Process -FilePath "%s" -Wait', 
+                              "./update.exe")
+        base::system2("powershell.exe", args = c("-Command", ps_command), 
+                      wait = TRUE, stdout = TRUE, stderr = TRUE)
         
         runjs("window.close();")
         shiny$stopApp()
@@ -392,8 +395,8 @@ server <- function(id) {
         
         hide(selector = "#app-conf_update_ui_running")
         show(selector = "#app-conf_update_ui_failed")
-        
-        enable(selector = "#app-conf_update_kiwiflow")
+        enable(selector = paste0("#shiny-modal > div > div > div.modal-footer ", 
+                                 "> button:nth-child(1)"))
       })
     })
     
