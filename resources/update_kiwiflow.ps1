@@ -86,68 +86,78 @@ try {
     exit 1
 }
 
-# Ensure Conda is initialized
-Write-Host "Initializing Conda for PowerShell..."
+# Check if Conda is installed
+Write-Host "Checking for Conda..."
 try {
     $condaPath = (Get-Command conda -ErrorAction SilentlyContinue).Source
     if (-not $condaPath) {
-        Write-Host "Error: Conda not found. Please run setup_kiwiflow.ps1 first."
+        Write-Host "Error: Conda not found. Please run setup_kiwiflow.exe first."
+        $wShell.Popup("Error: Conda not found. Please run setup_kiwiflow.exe first.", 0, "KiwiFlow Update Error", 16)
         pause
+        Stop-Transcript
         exit 1
     }
-    & conda init powershell
-    $condaHook = "$env:USERPROFILE\Miniconda3\shell\condabin\conda-hook.ps1"
-    if (-not (Test-Path $condaHook)) {
-        $condaHook = "C:\Miniconda3\shell\condabin\conda-hook.ps1"
+    Write-Host "Conda found at $condaPath"
+} catch {
+    Write-Host "Error: Failed to locate Conda. $_"
+    $wShell.Popup("Error: Failed to locate Conda. $_", 0, "KiwiFlow Update Error", 16)
+    pause
+    Stop-Transcript
+    exit 1
+}
+
+# Initialize Conda environment manually
+Write-Host "Initializing Conda environment..."
+try {
+    # Set PATH to include Conda
+    $env:Path = "$condaPath\..\..;$condaPath\..\Scripts;$condaPath\..\Library\bin;" + $env:Path
+    # Verify conda.exe is accessible
+    if (-not (Test-Path $condaPath)) {
+        throw "Conda executable not found at $condaPath."
     }
-    if (Test-Path $condaHook) {
-        . $condaHook
-    } else {
-        Write-Host "Warning: conda-hook.ps1 not found. May need manual shell restart."
-        pause
-        exit 1
-    }
+    Write-Host "Conda environment initialized."
 } catch {
     Write-Host "Error: Failed to initialize Conda. $_"
+    $wShell.Popup("Error: Failed to initialize Conda. $_", 0, "KiwiFlow Update Error", 16)
     pause
+    Stop-Transcript
     exit 1
 }
 
-# Activate Conda base environment
-Write-Host "Activating Conda base environment..."
-try {
-    & conda activate base
-    if ($LASTEXITCODE -ne 0) { throw "Base environment activation failed with exit code $LASTEXITCODE." }
-} catch {
-    Write-Host "Error: Failed to activate base environment. $_"
-    pause
-    exit 1
-}
-
-# Update kiwiflow environment
+# Update kiwiflow environment using conda run
 Write-Host "Updating kiwiflow environment..."
 try {
-    conda update -n base -c defaults conda 
     $envYmlPath = "$basePath\environment.yml"
-    $envExists = & conda env list | Select-String "kiwiflow"
+    # Use conda run to execute commands in the base environment
+    Write-Host "Test1"
+    & $condaPath run -n base conda update -n base -c defaults conda
+    Write-Host "Test2"
+    if ($LASTEXITCODE -ne 0) { throw "Conda base environment update failed with exit code $LASTEXITCODE." }
+    Write-Host "Test3"
+    $envExists = & $condaPath run -n base conda env list | Select-String "kiwiflow"
     if ($envExists) {
-        & conda env update -n kiwiflow -f $envYmlPath --prune
+        Write-Host "Test4"
+        & $condaPath run -n base conda env update -n kiwiflow -f $envYmlPath --prune
+        Write-Host "Test5"
         if ($LASTEXITCODE -ne 0) { throw "Conda environment update failed with exit code $LASTEXITCODE." }
         Write-Host "Environment updated successfully."
     } else {
-        Write-Host "Error: kiwiflow environment not found. Please run setup_kiwiflow.ps1 first."
+        Write-Host "Error: kiwiflow environment not found. Please run setup_kiwiflow.exe first."
+        $wShell.Popup("Error: kiwiflow environment not found. Please run setup_kiwiflow.exe first.", 0, "KiwiFlow Update Error", 16)
         pause
+        Stop-Transcript
         exit 1
     }
 } catch {
     Write-Host "Error: Failed to update environment. $_"
     Write-Host "Run 'conda env update -n kiwiflow -f $envYmlPath --prune' manually to debug."
     pause
+    Stop-Transcript
     exit 1
 }
 
 # Re-create Desktop Shortcut
-Write-Host "Re-creating desktop shortcut for KiwiFlow..."
+Write-Host "Creating desktop shortcut for KiwiFlow..."
 try {
     $shortcutPath = "$env:USERPROFILE\Desktop\KiwiFlow.lnk"
     $iconPath = "$basePath\app\static\favicon.ico"
@@ -156,7 +166,7 @@ try {
     $wshShell = New-Object -ComObject WScript.Shell
     $shortcut = $wshShell.CreateShortcut($shortcutPath)
     $shortcut.TargetPath = "C:\Windows\System32\wscript.exe"
-    $shortcut.Arguments = """$vbsPath""" 
+    $shortcut.Arguments = """$vbsPath"""
     $shortcut.WorkingDirectory = $basePath
     $shortcut.Description = "Launch KiwiFlow Shiny App"
     if (Test-Path $iconPath) {
@@ -167,10 +177,11 @@ try {
         $shortcut.IconLocation = "C:\Windows\System32\shell32.dll,23"
     }
     $shortcut.Save()
-    Write-Host "Desktop shortcut re-created at $shortcutPath."
+    Write-Host "Desktop shortcut created at $shortcutPath."
 } catch {
-    Write-Host "Error: Failed to re-create desktop shortcut. $_"
+    Write-Host "Error: Failed to create desktop shortcut. $_"
     pause
+    Stop-Transcript
     exit 1
 }
 

@@ -354,32 +354,23 @@ server <- function(id) {
       
       write_log("Initiated version update")
       
+      # Make Update UI 
       disable(selector = "#app-conf_update_kiwiflow")
       disable(selector = paste0("#shiny-modal > div > div > div.modal-footer ", 
                                 "> button:nth-child(1)"))
       hide(selector = "#app-conf_update_ui")
       show(selector = "#app-conf_update_ui_running")
       
-      # Path to the update script
-      # updateScript <- file.path(getwd(), "update.exe")
-      
-      # Call the update script in a new, visible PowerShell window
+      # Call update script in  PowerShell window
       tryCatch({
         runjs(paste0(
           'document.getElementById("blocking-overlay").style.display ',
           '= "block";'
         ))
         
-        # psCommand <- paste0(
-        #   "Start-Process powershell -ArgumentList ",
-        #   "'-ExecutionPolicy Bypass -File ", shQuote(updateScript), "' ",
-        #   "-Verb RunAs"
-        # )
-        # cmdArgs <- c("/c", "start", "powershell", "-Command", psCommand)
-        
         # Run update script
         ps_command <- sprintf('Start-Process -FilePath "%s" -Wait', 
-                              "./update.exe")
+                              "./kiwiflow_update.exe")
         base::system2("powershell.exe", args = c("-Command", ps_command), 
                       wait = TRUE, stdout = TRUE, stderr = TRUE)
         
