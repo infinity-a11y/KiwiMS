@@ -2,6 +2,9 @@
 
 # Set base path to the directory of the script or executable
 $basePath = [System.AppContext]::BaseDirectory
+# Remove trailing backslash
+$basePath = $basePath.TrimEnd('\')
+
 if (-not $basePath) {
     $basePath = Split-Path -Path $PSCommandPath -Parent -ErrorAction SilentlyContinue
 }
@@ -12,9 +15,6 @@ if (-not $basePath) {
     Stop-Transcript -ErrorAction SilentlyContinue
     exit 1
 }
-
-# Normalize $basePath to remove trailing backslash
-$basePath = $basePath.TrimEnd('\')
 
 # Validate $basePath
 if (-not (Test-Path $basePath)) {
@@ -56,33 +56,111 @@ try {
     $localVersion = if (Test-Path $localVersionFile) { (Get-Content $localVersionFile | Where-Object { $_ -match "^version=(.+)$" } | ForEach-Object { $matches[1] }) } else { "0.0.0" }
 
     Write-Host "Local version: $localVersion, Remote version: $remoteVersion"
+
+    # Skip update if versions are the same
+    if ($localVersion -eq $remoteVersion) {
+        Write-Host "No update needed. Local version matches remote version."
+    } else {
+        # Download and extract the latest version
+        Write-Host "Downloading latest version..."
+        try {
+            $zipFileName = [System.IO.Path]::GetFileName($zipUrl)
+            $zipPath = "$env:USERPROFILE\Downloads\$zipFileName"
+            $tempDir = "$env:USERPROFILE\Downloads\kiwiflow_temp"
+            Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -ErrorAction Stop
+            Write-Host "Zip file downloaded successfully."
+
+            # Extract to temporary directory
+            Expand-Archive -Path $zipPath -DestinationPath $tempDir -Force
+            Write-Host "Zip file extracted to $tempDir."
+        } catch {
+            Write-Host "Error: Failed to download or extract zip file. $_"
+            pause
+            Stop-Transcript
+            exit 1
+        }
+
+        # Create a batch file to handle file replacement
+        $updaterBatPath = "$env:USERPROFILE\Downloads\kiwiflow_updater.bat"
+        $updaterBatContent = @"
+@echo off
+set "basePath=$basePath"
+set "tempDir=$tempDir"
+set "zipPath=$zipPath"
+
+echo Waiting for kiwiflow_update.exe to close...
+
+:CHECK_PROCESS
+tasklist | findstr /I "kiwiflow_update.exe" >nul
+if %ERRORLEVEL% == 0 (
+    echo Waiting for kiwiflow_update.exe to close...
+    timeout /t 1 /nobreak >nul
+    goto CHECK_PROCESS
+)
+
+echo kiwiflow_update.exe has closed.
+
+:: Find the extracted folder
+for /d %%D in ("%tempDir%\*") do set "extractedFolder=%%D"
+
+:: Debug: Print source and destination paths
+echo Source: %extractedFolder%
+echo Destination: %basePath%
+
+:: Verify extracted folder exists
+if not exist "%extractedFolder%" (
+    echo Error: Extracted folder not found.
+    pause
+    exit /b 1
+)
+
+:: Copy updated files to basePath using robocopy
+echo Copying updated files to %basePath%...
+robocopy "%extractedFolder%" "%basePath%" /MIR /XD "%basePath%" /R:3 /W:1 > "%basePath%\kiwiflow_updater.log" 2>&1
+if %ERRORLEVEL% GEQ 8 (
+    echo Error: Failed to copy updated files. Check kiwiflow_updater.log for details.
+    pause
+    exit /b 1
+)
+
+:: Clean up
+echo Cleaning up...
+rd /s /q "%tempDir%" 2>nul
+del "%zipPath%" 2>nul
+echo Cleanup completed.
+
+:: Relaunch the application
+start "" "%basePath%\kiwiflow_update.exe"
+exit
+"@
+
+        try {
+            Set-Content -Path $updaterBatPath -Value $updaterBatContent -ErrorAction Stop
+            Write-Host "Secondary updater batch file created at $updaterBatPath."
+        } catch {
+            Write-Host "Error: Failed to create secondary updater batch file. $_"
+            pause
+            Stop-Transcript
+            exit 1
+        }
+
+        # Launch the batch file and exit
+        try {
+            Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$updaterBatPath`"" -ErrorAction Stop
+            Write-Host "Launched secondary updater batch file. This process will now exit."
+            Stop-Transcript
+            exit 0
+        } catch {
+            Write-Host "Error: Failed to launch secondary updater batch file. $_"
+            pause
+            Stop-Transcript
+            exit 1
+        }
+    }
 } catch {
     Write-Host "Error: Failed to check version. $_"
     pause
-    exit 1
-}
-
-# Download and extract the latest version
-Write-Host "Downloading latest version..."
-try {
-    $zipFileName = [System.IO.Path]::GetFileName($zipUrl)
-    $zipPath = "$env:USERPROFILE\Downloads\$zipFileName"
-    $tempDir = "$env:USERPROFILE\Downloads\kiwiflow_temp"
-    Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -ErrorAction Stop
-    Write-Host "Zip file downloaded successfully."
-
-    # Extract to temporary directory
-    Expand-Archive -Path $zipPath -DestinationPath $tempDir -Force
-    # Find the root folder in the zip
-    $extractedFolder = Get-ChildItem -Path $tempDir -Directory | Select-Object -First 1
-    # Copy updated files to basePath
-    Copy-Item -Path "$($extractedFolder.FullName)\*" -Destination $basePath -Recurse -Force
-    Remove-Item $tempDir -Recurse -Force
-    Remove-Item $zipPath -ErrorAction SilentlyContinue
-    Write-Host "App files updated successfully."
-} catch {
-    Write-Host "Error: Failed to download or extract app files. $_"
-    pause
+    Stop-Transcript
     exit 1
 }
 
@@ -92,6 +170,7 @@ try {
     $condaPath = (Get-Command conda -ErrorAction SilentlyContinue).Source
     if (-not $condaPath) {
         Write-Host "Error: Conda not found. Please run setup_kiwiflow.exe first."
+        $wShell = New-Object -ComObject WScript.Shell
         $wShell.Popup("Error: Conda not found. Please run setup_kiwiflow.exe first.", 0, "KiwiFlow Update Error", 16)
         pause
         Stop-Transcript
@@ -100,6 +179,7 @@ try {
     Write-Host "Conda found at $condaPath"
 } catch {
     Write-Host "Error: Failed to locate Conda. $_"
+    $wShell = New-Object -ComObject WScript.Shell
     $wShell.Popup("Error: Failed to locate Conda. $_", 0, "KiwiFlow Update Error", 16)
     pause
     Stop-Transcript
@@ -118,6 +198,7 @@ try {
     Write-Host "Conda environment initialized."
 } catch {
     Write-Host "Error: Failed to initialize Conda. $_"
+    $wShell = New-Object -ComObject WScript.Shell
     $wShell.Popup("Error: Failed to initialize Conda. $_", 0, "KiwiFlow Update Error", 16)
     pause
     Stop-Transcript
@@ -143,6 +224,7 @@ try {
         Write-Host "Environment updated successfully."
     } else {
         Write-Host "Error: kiwiflow environment not found. Please run setup_kiwiflow.exe first."
+        $wShell = New-Object -ComObject WScript.Shell
         $wShell.Popup("Error: kiwiflow environment not found. Please run setup_kiwiflow.exe first.", 0, "KiwiFlow Update Error", 16)
         pause
         Stop-Transcript
@@ -188,4 +270,5 @@ try {
 Write-Host "Update complete. Check kiwiflow_update.log in $basePath for details."
 Write-Host "Press ENTER to finish, then restart the KiwiFlow app with the new version."
 pause
-exit
+Stop-Transcript
+exit 0
