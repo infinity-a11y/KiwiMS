@@ -6,6 +6,7 @@ logs
 results
 kiwiflow_setup.log
 kiwiflow_update.log
+update_secondary.log
 launch_log.txt
 run_app.vbs
 !renv.lock

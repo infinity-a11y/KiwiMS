@@ -81,7 +81,7 @@ try {
         }
 
         # Create a batch file to handle file replacement
-        $updaterBatPath = "$env:USERPROFILE\Downloads\kiwiflow_updater.bat"
+        $updaterBatPath = "$env:USERPROFILE\Downloads\update_secondary.bat"
         $updaterBatContent = @"
 @echo off
 set "basePath=$basePath"
@@ -116,9 +116,9 @@ if not exist "%extractedFolder%" (
 
 :: Copy updated files to basePath using robocopy
 echo Copying updated files to %basePath%...
-robocopy "%extractedFolder%" "%basePath%" /MIR /XD "%basePath%" /R:3 /W:1 > "%basePath%\kiwiflow_updater.log" 2>&1
+robocopy "%extractedFolder%" "%basePath%" /MIR /XD "%basePath%" /R:3 /W:1 > "%basePath%\update_secondary.log" 2>&1
 if %ERRORLEVEL% GEQ 8 (
-    echo Error: Failed to copy updated files. Check kiwiflow_updater.log for details.
+    echo Error: Failed to copy updated files. Check update_secondary.log for details.
     pause
     exit /b 1
 )
@@ -210,16 +210,11 @@ Write-Host "Updating kiwiflow environment..."
 try {
     $envYmlPath = "$basePath\environment.yml"
     # Use conda run to execute commands in the base environment
-    Write-Host "Test1"
     & $condaPath run -n base conda update -n base -c defaults conda
-    Write-Host "Test2"
     if ($LASTEXITCODE -ne 0) { throw "Conda base environment update failed with exit code $LASTEXITCODE." }
-    Write-Host "Test3"
     $envExists = & $condaPath run -n base conda env list | Select-String "kiwiflow"
     if ($envExists) {
-        Write-Host "Test4"
         & $condaPath run -n base conda env update -n kiwiflow -f $envYmlPath --prune
-        Write-Host "Test5"
         if ($LASTEXITCODE -ne 0) { throw "Conda environment update failed with exit code $LASTEXITCODE." }
         Write-Host "Environment updated successfully."
     } else {
@@ -233,6 +228,27 @@ try {
 } catch {
     Write-Host "Error: Failed to update environment. $_"
     Write-Host "Run 'conda env update -n kiwiflow -f $envYmlPath --prune' manually to debug."
+    pause
+    Stop-Transcript
+    exit 1
+}
+
+# Create run_app.vbs for launch
+Write-Host "Creating run_app.vbs script..."
+try {
+    $vbsPath = "$basePath\run_app.vbs"
+    $appPath = "$basePath\app.R" -replace '\\', '\\'
+    $logPath = "$basePath\launch_log.txt" -replace '\\', '\\'
+    $condaExe = $condaPath -replace '\\', '\\'
+    $vbsContent = @"
+Set WShell = CreateObject("WScript.Shell")
+WShell.Popup "KiwiFlow will open shortly, please wait...", 3, "KiwiFlow", 0
+WShell.Run "cmd.exe /c ""$condaExe run -n kiwiflow Rscript -e ""shiny::runApp('$appPath', port=3838, launch.browser=TRUE)"" > $logPath 2>&1""", 0
+"@
+    Set-Content -Path $vbsPath -Value $vbsContent -ErrorAction Stop
+    Write-Host "run_app.vbs created at $vbsPath."
+} catch {
+    Write-Host "Error: Failed to create run_app.vbs. $_"
     pause
     Stop-Transcript
     exit 1
