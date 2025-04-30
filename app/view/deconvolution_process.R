@@ -1373,7 +1373,7 @@ server <- function(id, dirs) {
       write("", reactVars$decon_process_out)
 
       rx_process <- process$new(
-        "Rscript",
+        "Rscript.exe",
         args = c(
           "app/logic/deconvolution_execute.R",
           temp,
@@ -1399,7 +1399,7 @@ server <- function(id, dirs) {
         proc <- decon_process_data()
         completed_files <- reactVars$completedFiles
         expected_files <- reactVars$expectedFiles
-
+        
         session$onSessionEnded(function() {
           if (!is.null(proc) && proc$is_alive()) {
             write_log(paste(
@@ -1410,7 +1410,7 @@ server <- function(id, dirs) {
               "target(s) completed"
             ))
 
-            proc$kill()
+            proc$kill_tree()
           }
         })
       })
@@ -2044,9 +2044,9 @@ server <- function(id, dirs) {
     shiny$observeEvent(input$deconvolute_end_conf, {
       proc <- decon_process_data()
       if (!is.null(proc) && proc$is_alive()) {
-        proc$kill()
+        proc$kill_tree()
       }
-
+      
       write_log(paste(
         "Deconvolution cancelled with",
         reactVars$completedFiles,
@@ -2279,7 +2279,7 @@ server <- function(id, dirs) {
           if (!is.null(proc) && proc$is_alive()) {
             write_log("Deconvolution report generation cancelled")
 
-            proc$kill()
+            proc$kill_tree()
           }
 
           updateProgressBar(

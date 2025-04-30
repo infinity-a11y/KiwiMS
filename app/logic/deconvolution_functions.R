@@ -62,7 +62,6 @@ process_single_dir <- function(
   
   # Set up Conda environment
   tryCatch({
-    
     # Run Python code
     reticulate::py_run_string(sprintf(
       '

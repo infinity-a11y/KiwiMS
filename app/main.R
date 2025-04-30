@@ -361,7 +361,7 @@ server <- function(id) {
       hide(selector = "#app-conf_update_ui")
       show(selector = "#app-conf_update_ui_running")
       
-      # Call update script in  PowerShell window
+      # Call update script
       tryCatch({
         runjs(paste0(
           'document.getElementById("blocking-overlay").style.display ',
