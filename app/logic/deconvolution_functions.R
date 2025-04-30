@@ -3,48 +3,17 @@
 box::use(
   dplyr[left_join, mutate, n_distinct],
   ggplot2,
-  parallel[detectCores, makeCluster, parLapply, stopCluster],
+  parallel[clusterExport, clusterEvalQ, detectCores, makeCluster, parLapply, 
+           stopCluster],
   plotly[config, event_register, ggplotly, hide_colorbar, layout, style],
   reticulate[use_condaenv, use_python, py_config, py_run_string],
   scales[percent_format],
   utils[read.delim, read.table],
 )
 
+# Processing a single waters dir
 #' @export
-deconvolute <- function(
-    raw_dirs,
-    num_cores = detectCores() - 1,
-    startz = 1,
-    endz = 50,
-    minmz = "",
-    maxmz = "",
-    masslb = 5000,
-    massub = 500000,
-    massbins = 10,
-    peakthresh = 0.1,
-    peakwindow = 500,
-    peaknorm = 1,
-    time_start = "",
-    time_end = ""
-) {
-  # ensure python path and packages availability
-  py_outcome <- tryCatch(
-    {
-      use_condaenv("kiwiflow", required = TRUE)
-      #use_python(py_config()$python, required = TRUE)
-      TRUE
-    },
-    error = function(e) {
-      FALSE
-    }
-  )
-  
-  if (!py_outcome) {
-    return()
-  }
-  
-  # Deconvolution function for a single waters .raw
-  process_single_dir <- function(
+process_single_dir <- function(
     waters_dir,
     startz,
     endz,
@@ -58,40 +27,44 @@ deconvolute <- function(
     peaknorm,
     time_start,
     time_end
-  ) {
-    input_path <- gsub("\\\\", "/", waters_dir)
-    
-    # Function to properly format parameters for Python
-    format_param <- function(x) {
-      if (is.character(x) && x == "") {
-        return("''")
-      } else {
-        return(as.character(x))
-      }
+) {
+  input_path <- gsub("\\\\", "/", waters_dir)
+  
+  # Function to properly format parameters for Python
+  format_param <- function(x) {
+    if (is.character(x) && x == "") {
+      return("''")
+    } else {
+      return(as.character(x))
     }
+  }
+  
+  # Create parameters string for Python
+  params_string <- sprintf(
+    paste0(
+      '"startz": %s, "endz": %s, "minmz": %s, "maxmz": %s, "masslb": %s',
+      ', "massub": %s, "massbins": %s, "peakthresh": %s, "peakwindow": ',
+      '%s, "peaknorm": %s, "time_start": %s, "time_end": %s'
+    ),
+    format_param(startz),
+    format_param(endz),
+    format_param(minmz),
+    format_param(maxmz),
+    format_param(masslb),
+    format_param(massub),
+    format_param(massbins),
+    format_param(peakthresh),
+    format_param(peakwindow),
+    format_param(peaknorm),
+    format_param(time_start),
+    format_param(time_end)
+  )
+  
+  # Set up Conda environment
+  tryCatch({
     
-    # Create parameters string for Python
-    params_string <- sprintf(
-      paste0(
-        '"startz": %s, "endz": %s, "minmz": %s, "maxmz": %s, "masslb": %s',
-        ', "massub": %s, "massbins": %s, "peakthresh": %s, "peakwindow": ',
-        '%s, "peaknorm": %s, "time_start": %s, "time_end": %s'
-      ),
-      format_param(startz),
-      format_param(endz),
-      format_param(minmz),
-      format_param(maxmz),
-      format_param(masslb),
-      format_param(massub),
-      format_param(massbins),
-      format_param(peakthresh),
-      format_param(peakwindow),
-      format_param(peaknorm),
-      format_param(time_start),
-      format_param(time_end)
-    )
-    
-    py_run_string(sprintf(
+    # Run Python code
+    reticulate::py_run_string(sprintf(
       '
 import sys
 import unidec
@@ -132,7 +105,7 @@ engine.pick_peaks()
       params_string
     ))
     
-    # save spectra
+    # Save spectra
     result <- gsub(".raw", "_rawdata_unidecfiles", waters_dir)
     
     if (dir.exists(result)) {
@@ -140,72 +113,106 @@ engine.pick_peaks()
         decon_spec = spectrum_plot(result, FALSE),
         raw_spec = spectrum_plot(result, TRUE)
       )
-      
       saveRDS(plots, file.path(result, "plots.rds"))
     }
-  }
+  }, error = function(e) {
+    cat("Error in process_single_dir for", waters_dir, ":", e$message, "\n")
+  })
+}
+
+#' @export
+deconvolute <- function(
+    raw_dirs,
+    num_cores = detectCores() - 1,
+    startz = 1,
+    endz = 50,
+    minmz = "",
+    maxmz = "",
+    masslb = 5000,
+    massub = 500000,
+    massbins = 10,
+    peakthresh = 0.1,
+    peakwindow = 500,
+    peaknorm = 1,
+    time_start = "",
+    time_end = ""
+) {
+  # List of all parameters to pass to workers
+  params_list <- list(
+    startz = startz,
+    endz = endz,
+    minmz = minmz,
+    maxmz = maxmz,
+    masslb = masslb,
+    massub = massub,
+    massbins = massbins,
+    peakthresh = peakthresh,
+    peakwindow = peakwindow,
+    peaknorm = peaknorm,
+    time_start = time_start,
+    time_end = time_end
+  )
   
-  # Pass variables
-  startz <- startz
-  endz <- endz
-  minmz <- minmz
-  maxmz <- maxmz
-  masslb <- masslb
-  massub <- massub
-  massbins <- massbins
-  peakthresh <- peakthresh
-  peakwindow <- peakwindow
-  peaknorm <- peaknorm
-  time_start <- time_start
-  time_end <- time_end
-  
-  # Evaluate processing mode parallel or sequential
+  # Evaluate processing mode: parallel or sequential
   if (length(raw_dirs) > 20 && num_cores > 1) {
-    cl <- makeCluster(num_cores)
-    on.exit(stopCluster(cl))
     
-    message(paste0(num_cores, " cores detected. Parallel processing started."))
+    # Set up the cluster
+    cl <- parallel::makeCluster(num_cores)
+    on.exit(parallel::stopCluster(cl))
+    
+    # Initialize workers
+    parallel::clusterEvalQ(cl, {
+      tryCatch({
+        reticulate::use_condaenv("kiwiflow", required = TRUE)
+        TRUE
+      }, error = function(e) FALSE)
+    })
+    
+    # Export only what's needed
+    parallel::clusterExport(cl, c("process_single_dir"), envir = environment())
+    
+    message(paste0("Using ", num_cores, " cores for parallel processing."))
     
     # Create wrapper function that includes all parameters
-    process_wrapper <- function(dir) {
-      process_single_dir(
-        dir,
-        startz,
-        endz,
-        minmz,
-        maxmz,
-        masslb,
-        massub,
-        massbins,
-        peakthresh,
-        peakwindow,
-        peaknorm,
-        time_start,
-        time_end
-      )
+    process_wrapper <- function(dir, params) {
+      do.call(process_single_dir, c(list(waters_dir = dir), params))
     }
     
-    parLapply(cl, raw_dirs, process_wrapper)
+    # Run parLapply with error handling
+    parallel::parLapply(cl, raw_dirs, function(dir) {
+      tryCatch({
+        process_wrapper(dir, params_list)
+      }, error = function(e) {
+        message("Error processing ", dir, ": ", e$message)
+        NULL
+      })
+    })
   } else {
-    message("Sequential processing started.")
+    use_condaenv("kiwiflow", required = TRUE)
     
-    for (dir in seq_along(raw_dirs)) {
-      process_single_dir(
-        raw_dirs[dir],
-        startz,
-        endz,
-        minmz,
-        maxmz,
-        masslb,
-        massub,
-        massbins,
-        peakthresh,
-        peakwindow,
-        peaknorm,
-        time_start,
-        time_end
-      )
-    }
+    message("Sequential processing started.")
+    tryCatch({
+      for (dir in seq_along(raw_dirs)) {
+        process_single_dir(
+          raw_dirs[dir],
+          startz,
+          endz,
+          minmz,
+          maxmz,
+          masslb,
+          massub,
+          massbins,
+          peakthresh,
+          peakwindow,
+          peaknorm,
+          time_start,
+          time_end
+        )
+      }
+    }, error = function(e) {
+      message("Error in sequential processing for dir ", dir, ": ", e$message)
+      return(NULL)
+    })
   }
 }
 
@@ -379,44 +386,44 @@ spectrum_plot <- function(result_path, raw, interactive = TRUE) {
   
   # Read data
   if (raw) {
-    mass <- read.delim(raw_file, sep = " ", header = FALSE)
+    mass <- utils::read.delim(raw_file, sep = " ", header = FALSE)
     
     mass$V2 <- (mass$V2 - min(mass$V2)) / (max(mass$V2) - min(mass$V2)) * 100
   } else {
-    mass <- read.delim(mass_file, sep = " ", header = FALSE)
-    peaks <- read.delim(peaks_file, sep = " ", header = FALSE)
+    mass <- utils::read.delim(mass_file, sep = " ", header = FALSE)
+    peaks <- utils::read.delim(peaks_file, sep = " ", header = FALSE)
     
     mass$V2 <- (mass$V2 - min(mass$V2)) / (max(mass$V2) - min(mass$V2)) * 100
     highlight_peaks <- mass[mass$V1 %in% peaks$V1, ]
   }
   
   # Create spectrum
-  plot <- ggplot2$ggplot(
+  plot <- ggplot2::ggplot(
     mass,
-    ggplot2$aes(
+    ggplot2::aes(
       x = V1,
       y = V2,
       group = 1,
       text = paste0("Mass: ", V1, " Da\nIntensity: ", round(V2, 2), "%")
     )
   ) +
-    ggplot2$geom_line() +
-    ggplot2$scale_y_continuous(labels = scales::percent_format(scale = 1)) +
-    ggplot2$theme_minimal()
+    ggplot2::geom_line() +
+    ggplot2::scale_y_continuous(labels = scales::percent_format(scale = 1)) +
+    ggplot2::theme_minimal()
   
   if (raw) {
-    plot <- plot + ggplot2$labs(y = "Intensity [%]", x = "m/z [Th]")
+    plot <- plot + ggplot2::labs(y = "Intensity [%]", x = "m/z [Th]")
   } else {
     plot <- plot +
-      ggplot2$geom_point(
+      ggplot2::geom_point(
         data = highlight_peaks,
-        ggplot2$aes(x = V1, y = V2),
+        ggplot2::aes(x = V1, y = V2),
         fill = "#e8cb97",
         colour = "#35357A",
         shape = 21,
         size = 2
       ) +
-      ggplot2$labs(y = "Intensity [%]", x = "Mass [Da]")
+      ggplot2::labs(y = "Intensity [%]", x = "Mass [Da]")
   }
   
   # If not interactive return ggplot
@@ -429,11 +436,11 @@ spectrum_plot <- function(result_path, raw, interactive = TRUE) {
   )
   
   # Convert to interactive plot
-  interactive_plot <- ggplotly(plot, tooltip = "text") |>
-    layout(
+  interactive_plot <- plotly::ggplotly(plot, tooltip = "text") |>
+    plotly::layout(
       margin = list(t = 0, r = 0, b = 0, l = 50)
     ) |>
-    config(
+    plotly::config(
       displayModeBar = "hover",
       scrollZoom = FALSE,
       modeBarButtons = list(

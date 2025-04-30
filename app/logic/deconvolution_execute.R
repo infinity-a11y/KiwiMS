@@ -4,7 +4,7 @@ box::use(
   app /
     logic /
     deconvolution_functions[
-      deconvolute,
+      deconvolute, spectrum_plot, process_single_dir
     ],
   app / logic / report_functions[generate_decon_rslt],
 )
