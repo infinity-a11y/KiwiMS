@@ -22,7 +22,7 @@ Follow these steps to set up and launch the application on your Windows system.
    - Extract the files to a writeable and readable directory e.g., `C:\Users\Admin\Desktop\KiwiFlow`.
 2. **Run the Setup**:
    - Navigate to the `KiwiFlow` folder (e.g., `C:\Users\Admin\Desktop\KiwiFlow`).
-   - Double-click `setup_kiwiflow.exe` or right-click and select **"Run as administrator"**.
+   - Double-click `kiwiflow_setup.exe` or right-click and select **"Run as administrator"**.
    - A User Account Control (UAC) prompt will appear. Click **"Yes"**.
 3. **Monitor Progress**:
    - A PowerShell console window will show setup progress.
