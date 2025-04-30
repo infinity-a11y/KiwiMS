@@ -1,6 +1,6 @@
-# <img src="app/static/github_logo.svg" width="55%"/>
+# <img src="app/static/github_logo.svg" align="right" width="20%"/>
 
-KiwiFlow is a pipeline with graphical and interactive user interface to perform proteomics mass spectrometry data analysis. It implements UniDec's (https://github.com/michaelmarty/UniDec) bayesian mass spectra deconvolution method and provides downstream analyses for protein binding studies.  
+KiwiFlow is an interactive pipeline with graphical user interface to perform proteomics mass spectrometry data analysis. It implements UniDec's (https://github.com/michaelmarty/UniDec) bayesian mass spectra deconvolution method and provides downstream analyses for protein binding studies.  
 
 [www.liora-bioinformatics.com](https://www.liora-bioinformatics.com) \|
 [info\@liora-bioinformatics.com](mailto:info@liora-bioinformatics.com)
