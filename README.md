@@ -7,9 +7,9 @@ KiwiFlow is an interactive pipeline with graphical user interface to perform pro
 
 <sup><sup>*_KiwiFlow is supposed to be used for research and academic purposes only._*</sup></sup>
 
-# KiwiFlow Setup and Update Instructions
+# Installation
 
-Follow these steps to set up, update, and launch the application on your Windows system.
+Follow these steps to set up and launch the application on your Windows system.
 
 ### Prerequisites
 - **Operating System**: Windows 10 or later.
