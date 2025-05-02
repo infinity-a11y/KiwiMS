@@ -65,7 +65,7 @@ server <- function(id, active_tab_reactive, log_buttons) {
     })
 
     observeEvent(log_buttons$copy(), {
-      write_clip(log_lines())
+      write_clip(log_lines(), allow_non_interactive = TRUE)
     })
   })
 }
