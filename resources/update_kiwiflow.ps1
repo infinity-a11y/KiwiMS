@@ -1,5 +1,12 @@
 # update_kiwiflow.ps1
 
+$userDataPath = "$env:LOCALAPPDATA\KiwiFlow"
+if (-not (Test-Path $userDataPath)) {
+    New-Item -ItemType Directory -Path $userDataPath -Force
+}
+
+Start-Transcript -Path "$userDataPath\kiwiflow_update.log"
+
 # Set base path to the directory of the script or executable
 $basePath = [System.AppContext]::BaseDirectory
 # Remove trailing backslash
@@ -35,8 +42,6 @@ try {
     Stop-Transcript -ErrorAction SilentlyContinue
     exit 1
 }
-
-Start-Transcript -Path "$basePath\kiwiflow_update.log" -Append
 
 # Check version
 Write-Host "Checking for updates..."
@@ -283,7 +288,7 @@ try {
     exit 1
 }
 
-Write-Host "Update complete. Check kiwiflow_update.log in $basePath for details."
+Write-Host "Update complete. Check kiwiflow_update.log in $userDataPath for details."
 Write-Host "Press ENTER to finish, then restart the KiwiFlow app with the new version."
 pause
 Stop-Transcript

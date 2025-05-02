@@ -49,8 +49,13 @@ try {
     exit 1
 }
 
+$userDataPath = "$env:LOCALAPPDATA\KiwiFlow"
+if (-not (Test-Path $userDataPath)) {
+    New-Item -ItemType Directory -Path $userDataPath -Force
+}
+
 # Start logging
-Start-Transcript -Path "$basePath\kiwiflow_setup.log" -Append
+Start-Transcript -Path "$userDataPath\kiwiflow_setup.log"
 Write-Host "Setting up KiwiFlow environment in $basePath..."
 
 # Verify critical files exist
@@ -209,6 +214,6 @@ try {
     exit 1
 }
 
-Write-Host "Setup complete. Check kiwiflow_setup.log in $basePath for details."
+Write-Host "Setup complete. Check kiwiflow_setup.log in $userDataPath for details."
 pause
 Stop-Transcript
