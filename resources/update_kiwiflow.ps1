@@ -90,6 +90,7 @@ try {
         $updaterBatContent = @"
 @echo off
 set "basePath=$basePath"
+set "userDataPath=$userDataPath"
 set "tempDir=$tempDir"
 set "zipPath=$zipPath"
 
@@ -121,7 +122,7 @@ if not exist "%extractedFolder%" (
 
 :: Copy updated files to basePath using robocopy
 echo Copying updated files to %basePath%...
-robocopy "%extractedFolder%" "%basePath%" /MIR /XD "%basePath%" /R:3 /W:1 > "%basePath%\update_secondary.log" 2>&1
+robocopy "%extractedFolder%" "%basePath%" /MIR /XD "%basePath%" /R:3 /W:1 > "%userDataPath%\update_secondary.log" 2>&1
 if %ERRORLEVEL% GEQ 8 (
     echo Error: Failed to copy updated files. Check update_secondary.log for details.
     pause

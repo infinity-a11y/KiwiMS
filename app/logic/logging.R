@@ -4,20 +4,21 @@ box::use(
   logr[log_open, log_print, log_close, log_warning, log_error]
 )
 
-log_dir <- file.path("logs", Sys.Date())
-
+documents_path <- Sys.getenv("USERPROFILE")
+log_dir <- file.path(documents_path, "Documents", "KiwiFlow", "logs")
+log_daily <- file.path(log_dir, Sys.Date())
 timestamp <- format(Sys.time(), "%Y-%m-%d_%H-%M-%S")
 session_id <- sample(1000:9999, 1) # Random 4-digit session ID
 log_filename <- paste0("KiwiFlow_", timestamp, "_id", session_id, ".log")
-log_path <- file.path(log_dir, log_filename)
+log_path <- file.path(log_daily, log_filename)
 
 # Start logging
 #' @export
 start_logging <- function() {
-  if (!dir.exists("logs")) dir.create("logs", recursive = TRUE)
-  if (!dir.exists(log_dir)) {
-    dir.create(log_dir, recursive = TRUE)
-  }
+  # Create log dir in Documents
+  if (!dir.exists(log_dir)) dir.create(log_dir, recursive = TRUE)
+  # Create daily log dir
+  if (!dir.exists(log_daily)) dir.create(log_daily, recursive = TRUE)
 
   log_open(log_path, logdir = FALSE)
 }
@@ -37,7 +38,7 @@ close_logging <- function() {
 # Get log directory
 #' @export
 get_log <- function() {
-  return(file.path(getwd(), log_path))
+  return(log_path)
 }
 
 # Format log
