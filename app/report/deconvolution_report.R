@@ -4,16 +4,12 @@ box::use(
   quarto[quarto_render],
 )
 
-box::use(
-  app / logic / logging[get_log],
-)
-
-decon_rep_title <- commandArgs(trailingOnly = TRUE)[1]
-decon_rep_author <- commandArgs(trailingOnly = TRUE)[2]
-decon_rep_desc <- commandArgs(trailingOnly = TRUE)[3]
-filename <- commandArgs(trailingOnly = TRUE)[4]
-log_path <- commandArgs(trailingOnly = TRUE)[5]
-
+args <- commandArgs(trailingOnly = TRUE)
+decon_rep_title <- gsub("%~%", " ", args[1])
+decon_rep_author <- gsub("%~%", " ", args[2])
+decon_rep_desc <- gsub("%~%", " ", args[3])
+filename <- args[4]
+log_path <- args[5]
 results_dir <- file.path(Sys.getenv("USERPROFILE"), 
                          "Documents", "KiwiFlow", "results")
 

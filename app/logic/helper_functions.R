@@ -12,6 +12,16 @@ box::use(
 )
 
 #' @export
+fill_empty <- function(string) {
+  if(nchar(string) == 0) {
+    gsub("", "%~%", string)
+  } else {
+    string_pre <- gsub(" ", "%~%", string) 
+    gsub("\n", "%~%", string_pre)
+  }
+}
+
+#' @export
 check_github_version <- function(
     repo_url = "https://raw.githubusercontent.com/infinity-a11y/KiwiFlow/master/version.txt") {
   tryCatch(

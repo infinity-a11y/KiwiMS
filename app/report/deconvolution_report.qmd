@@ -12,7 +12,7 @@ output:
     self_contained: true
     embed-resources: true
 title-block-banner: "#27445C"
-css: app/styles/quarto_styles.css
+css: quarto_styles.css
 format:
   html:
     smooth-scroll: true
@@ -334,7 +334,5 @@ htmltools::tagList(plot_output)
     basename(result$session[3]),
     regexpr("id\\d+", basename(result$session[3]))
 )), "</i>")`
-
-`r paste("Report Path:<i>", result$session[3], "</i>")`
 
 ------------------------------------------------------------------------

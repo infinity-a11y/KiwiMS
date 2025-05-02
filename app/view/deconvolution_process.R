@@ -26,7 +26,7 @@ box::use(
       create_384_plate_heatmap,
       spectrum_plot
     ],
-  app / logic / helper_functions[collapsiblePanelUI],
+  app / logic / helper_functions[collapsiblePanelUI, fill_empty],
   app / logic / logging[write_log, get_log],
 )
 
@@ -2372,23 +2372,29 @@ server <- function(id, dirs) {
             basename(log_path),
             regexpr("id\\d+", basename(log_path))
           )
-
+          
+          # Prepare arguments
+          script_dir <- "app\\report"
+          script <- "deconvolution_report.R"
+          output_file <- paste0("deconvolution_report_", Sys.Date(), "_", 
+                                session_id, ".html")
+          
+          args <- c(
+            script,
+            fill_empty(input$decon_rep_title),
+            fill_empty(input$decon_rep_author),
+            fill_empty(input$decon_rep_desc),
+            output_file,
+            log_path
+          )
+          
+          # Construct the command for Windows
+          cmd <- paste("cd", script_dir, "&& Rscript", paste(args, collapse = " "))
+          
+          # Start the process
           rep_process <- process$new(
-            "Rscript",
-            args = c(
-              "app/logic/deconvolution_report.R",
-              input$decon_rep_title,
-              input$decon_rep_author,
-              input$decon_rep_desc,
-              paste0(
-                "deconvolution_report_",
-                Sys.Date(),
-                "_",
-                session_id,
-                ".html"
-              ),
-              log_path
-            ),
+            command = "cmd.exe",
+            args = c("/c", cmd),
             stdout = reactVars$decon_rep_process_out,
             stderr = reactVars$decon_rep_process_out
           )
