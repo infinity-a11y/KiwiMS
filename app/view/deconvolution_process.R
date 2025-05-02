@@ -2354,7 +2354,7 @@ server <- function(id, dirs) {
           )
 
           if (isTRUE(input$decon_save)) {
-            # Set up settings directory in %LOCALAPPDATA%\KiwiFlow
+            # Set up settings directory
             if (!dir.exists(settings_dir)) {
               dir.create(settings_dir, recursive = TRUE)
             }
