@@ -330,4 +330,11 @@ for (name in names_result) {
 htmltools::tagList(plot_output)
 ```
 
+`r paste("<br><br>Session:<i>", paste0(Sys.Date(), "_", regmatches(
+    basename(result$session[3]),
+    regexpr("id\\d+", basename(result$session[3]))
+)), "</i>")`
+
+`r paste("Report Path:<i>", result$session[3], "</i>")`
+
 ------------------------------------------------------------------------
