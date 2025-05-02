@@ -7,9 +7,8 @@ box::use(
 documents_path <- Sys.getenv("USERPROFILE")
 log_dir <- file.path(documents_path, "Documents", "KiwiFlow", "logs")
 log_daily <- file.path(log_dir, Sys.Date())
-timestamp <- format(Sys.time(), "%Y-%m-%d_%H-%M-%S")
 session_id <- sample(1000:9999, 1) # Random 4-digit session ID
-log_filename <- paste0("KiwiFlow_", timestamp, "_id", session_id, ".log")
+log_filename <- paste0("KiwiFlow_", Sys.Date(), "_id", session_id, ".log")
 log_path <- file.path(log_daily, log_filename)
 
 # Start logging

@@ -46,4 +46,6 @@ result <- generate_decon_rslt(
   output = output
 )
 
-saveRDS(result, file.path(getwd(), "results/result.rds"), compress = FALSE)
+results_dir <- file.path(Sys.getenv("USERPROFILE"), 
+                         "Documents", "KiwiFlow", "results")
+saveRDS(result, file.path(results_dir, "result.rds"), compress = FALSE)

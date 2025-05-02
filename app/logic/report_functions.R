@@ -110,8 +110,11 @@ generate_decon_rslt <- function(
   names(results) <- basename(paths)
   results[["session"]] <- log
   results[["output"]] <- output
-  if (file.exists(file.path(getwd(), "results/heatmap.rds")))
-    results[["heatmap"]] <- readRDS(file.path(getwd(), "results/heatmap.rds"))
+  
+  results_dir <- file.path(Sys.getenv("USERPROFILE"), 
+                           "Documents", "KiwiFlow", "results")
+  if (file.exists(file.path(results_dir, "heatmap.rds")))
+    results[["heatmap"]] <- readRDS(file.path(results_dir, "heatmap.rds"))
 
   return(results)
 }

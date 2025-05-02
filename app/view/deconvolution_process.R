@@ -47,6 +47,12 @@ ui <- function(id) {
 server <- function(id, dirs) {
   shiny$moduleServer(id, function(input, output, session) {
     ns <- session$ns
+    
+    settings_dir <- file.path(Sys.getenv("LOCALAPPDATA"), 
+                              "KiwiFlow", "settings")
+    results_dir <- file.path(Sys.getenv("USERPROFILE"), 
+                             "Documents", "KiwiFlow", "results")
+    log_path <- get_log()
 
     ### Reactive variables declaration ----
     reactVars <- shiny$reactiveValues(
@@ -1208,13 +1214,13 @@ server <- function(id, dirs) {
       shiny$removeModal()
       reset_progress()
       write_log("Deconvolution initiated")
-
-      if (!dir.exists(file.path(getwd(), "results")))
-        dir.create(file.path(getwd(), "results"))
-      if (file.exists(file.path(getwd(), "results/result.rds")))
-        file.remove(file.path(getwd(), "results/result.rds"))
-      if (file.exists(file.path(getwd(), "results/heatmap.rds")))
-        file.remove(file.path(getwd(), "results/heatmap.rds"))
+      
+      if (!dir.exists(results_dir)) dir.create(results_dir)
+    
+      if (file.exists(file.path(results_dir, "result.rds")))
+        file.remove(file.path(results_dir, "result.rds"))
+      if (file.exists(file.path(results_dir, "heatmap.rds")))
+        file.remove(file.path(results_dir, "heatmap.rds"))
 
       # UI changes
       runjs(paste0(
@@ -1377,7 +1383,7 @@ server <- function(id, dirs) {
         args = c(
           "app/logic/deconvolution_execute.R",
           temp,
-          get_log()
+          log_path
         ),
         stdout = reactVars$decon_process_out,
         stderr = reactVars$decon_process_out
@@ -1713,7 +1719,7 @@ server <- function(id, dirs) {
             # check if deconvolution finished for all target files
             if (
               all(file.exists(file.path(result_files, "plots.rds"))) &&
-              file.exists(file.path(getwd(), "results/result.rds"))
+              file.exists(file.path(results_dir, "result.rds"))
             ) {
               # stop observers
               if (!is.null(reactVars$progress_observer)) {
@@ -1816,7 +1822,7 @@ server <- function(id, dirs) {
                 if (!file.exists("results/heatmap.rds")) {
                   heatmap <- create_384_plate_heatmap(reactVars$rslt_df)
 
-                  saveRDS(heatmap, "results/heatmap.rds")
+                  saveRDS(heatmap, file.path(results_dir, "heatmap.rds"))
                 }
               } else {
                 selected_files <- ifelse(
@@ -2238,8 +2244,8 @@ server <- function(id, dirs) {
           }
 
           session_id <- regmatches(
-            basename(get_log()),
-            regexpr("id\\d+", basename(get_log()))
+            basename(log_path),
+            regexpr("id\\d+", basename(log_path))
           )
           report_fin <- paste0(
             "deconvolution_report_",
@@ -2300,19 +2306,15 @@ server <- function(id, dirs) {
           shiny$removeModal()
         } else if (reactVars$deconv_report_status == "finished") {
           session_id <- regmatches(
-            basename(get_log()),
-            regexpr("id\\d+", basename(get_log()))
+            basename(log_path),
+            regexpr("id\\d+", basename(log_path))
           )
 
           # Open in browser
-          filename <- paste0(
-            "deconvolution_report_",
-            Sys.Date(),
-            "_",
-            session_id,
-            ".html"
-          )
-          utils::browseURL(file.path(getwd(), "logs", Sys.Date(), filename))
+          filename <- gsub(".log", "_deconvolution_report.html", 
+                              basename(log_path))
+          filename_path <- file.path(dirname(log_path), filename)
+          utils::browseURL(filename_path)
 
           shiny$removeModal()
         } else {
@@ -2352,19 +2354,23 @@ server <- function(id, dirs) {
           )
 
           if (isTRUE(input$decon_save)) {
-            if (!dir.exists("settings")) dir.create("settings")
-
+            # Set up settings directory in %LOCALAPPDATA%\KiwiFlow
+            if (!dir.exists(settings_dir)) {
+              dir.create(settings_dir, recursive = TRUE)
+            }
+            
+            # Save report input settings
             rep_input <- c(
               input$decon_rep_title,
               input$decon_rep_author,
               input$decon_rep_desc
             )
-            saveRDS(rep_input, "settings/decon_rep_settings.rds")
+            saveRDS(rep_input, file.path(settings_dir, "decon_rep_settings.rds"))
           }
 
           session_id <- regmatches(
-            basename(get_log()),
-            regexpr("id\\d+", basename(get_log()))
+            basename(log_path),
+            regexpr("id\\d+", basename(log_path))
           )
 
           rep_process <- process$new(
@@ -2380,7 +2386,8 @@ server <- function(id, dirs) {
                 "_",
                 session_id,
                 ".html"
-              )
+              ),
+              log_path
             ),
             stdout = reactVars$decon_rep_process_out,
             stderr = reactVars$decon_rep_process_out
@@ -2401,8 +2408,9 @@ server <- function(id, dirs) {
     shiny$observe({
       if (reactVars$deconv_report_status == "idle") {
         output$decon_report_ui <- shiny$renderUI({
-          if (file.exists("settings/decon_rep_settings.rds")) {
-            rep_input <- readRDS("settings/decon_rep_settings.rds")
+          
+          if (file.exists(file.path(settings_dir, "decon_rep_settings.rds"))) {
+            rep_input <- readRDS(file.path(settings_dir, "decon_rep_settings.rds"))
             title <- rep_input[1]
             author <- rep_input[2]
             comment <- rep_input[3]

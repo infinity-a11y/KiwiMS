@@ -169,7 +169,7 @@ Write-Host "Creating run_app.vbs script..."
 try {
     $vbsPath = "$basePath\run_app.vbs"
     $appPath = "$basePath\app.R" -replace '\\', '\\'
-    $logPath = "$basePath\launch_log.txt" -replace '\\', '\\'
+    $logPath = "$userDataPath\launch.log" -replace '\\', '\\'
     $condaExe = $condaPath -replace '\\', '\\'
     $vbsContent = @"
 Set WShell = CreateObject("WScript.Shell")
