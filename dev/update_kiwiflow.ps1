@@ -214,7 +214,7 @@ try {
 # Update kiwiflow environment using conda run
 Write-Host "Updating kiwiflow environment..."
 try {
-    $envYmlPath = "$basePath\environment.yml"
+    $envYmlPath = "$basePath\resources\environment.yml"
     # Use conda run to execute commands in the base environment
     & $condaPath run -n base conda update -n base -c defaults conda
     if ($LASTEXITCODE -ne 0) { throw "Conda base environment update failed with exit code $LASTEXITCODE." }

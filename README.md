@@ -41,7 +41,7 @@ Follow these steps to set up and launch the application on your Windows system.
 - **No Popup or Browser Launch**: Ensure `app.R` is in the `KiwiFlow` folder and Conda is installed at `C:\Miniconda3`.
 - **UAC Prompt Blocked**: Click “Yes” on the UAC prompt. If it doesn’t appear, right-click `setup_kiwiflow.exe` or `update.exe` and select “Run as administrator”.
 - **Antivirus Blocks Executable**: If `setup_kiwiflow.exe` or `update.exe` is quarantined, add an exception for the `KiwiFlow` folder and restore the file.
-- **Setup/Update Fails**: Check `kiwiflow_setup.log` or `kiwiflow_update.log` for errors. Ensure `environment.yml` and `app.R` are in the `KiwiFlow` folder.
+- **Setup/Update Fails**: Check `kiwiflow_setup.log` or `kiwiflow_update.log` for errors. Ensure completeness in the `KiwiFlow` folder, download again if necessary.
 - **Manual Conda Installation**: If Miniconda installation fails, install it manually from [https://docs.conda.io/en/latest/miniconda.html](https://docs.conda.io/en/latest/miniconda.html), then rerun `setup_kiwiflow.exe`.
 
 ### Support

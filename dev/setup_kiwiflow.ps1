@@ -59,7 +59,7 @@ Start-Transcript -Path "$userDataPath\kiwiflow_setup.log"
 Write-Host "Setting up KiwiFlow environment in $basePath..."
 
 # Verify critical files exist
-$criticalFiles = @("environment.yml", "app.R")
+$criticalFiles = @("resources\environment.yml", "app.R")
 foreach ($file in $criticalFiles) {
     if (-not (Test-Path "$basePath\$file")) {
         Write-Host "Error: Required file '$file' not found in $basePath."
@@ -140,9 +140,9 @@ try {
 Set-Location $basePath
 
 # Check and manage kiwiflow environment
-Write-Host "Checking kiwiflow environment in $basePath\environment.yml"
+Write-Host "Checking kiwiflow environment in $basePath\resources\environment.yml"
 try {
-    $envYmlPath = "$basePath\environment.yml"
+    $envYmlPath = "$basePath\resources\environment.yml"
     # Use conda run to execute commands in the base environment
     $envExists = & $condaPath run -n base conda env list | Select-String "kiwiflow"
     if ($envExists) {
