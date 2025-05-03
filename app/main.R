@@ -177,7 +177,7 @@ server <- function(id) {
     # Deconvolution process server
     deconvolution_process$server("deconvolution_process", dirs)
     
-    version_info <- readLines("version.txt")
+    version_info <- readLines("resources/version.txt")
     local_version <- sub(".*=", "", version_info[1])
     release <- sub(".*=", "", version_info[2])
     url <- sub(".*=", "", version_info[3])

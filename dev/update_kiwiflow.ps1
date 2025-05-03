@@ -46,7 +46,7 @@ try {
 # Check version
 Write-Host "Checking for updates..."
 try {
-    $remoteVersionUrl = "https://raw.githubusercontent.com/infinity-a11y/KiwiFlow/master/version.txt"
+    $remoteVersionUrl = "https://raw.githubusercontent.com/infinity-a11y/KiwiFlow/master/resources/version.txt"
     $remoteVersionContent = Invoke-WebRequest -Uri $remoteVersionUrl -ErrorAction Stop | Select-Object -ExpandProperty Content
     $remoteVersionInfo = @{}
     $remoteVersionContent -split "`n" | ForEach-Object {
@@ -57,7 +57,7 @@ try {
     $remoteVersion = $remoteVersionInfo["version"]
     $zipUrl = $remoteVersionInfo["zip_url"]
 
-    $localVersionFile = "$basePath\version.txt"
+    $localVersionFile = "$basePath\resources\version.txt"
     $localVersion = if (Test-Path $localVersionFile) { (Get-Content $localVersionFile | Where-Object { $_ -match "^version=(.+)$" } | ForEach-Object { $matches[1] }) } else { "0.0.0" }
 
     Write-Host "Local version: $localVersion, Remote version: $remoteVersion"

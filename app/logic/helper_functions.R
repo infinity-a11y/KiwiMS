@@ -23,7 +23,7 @@ fill_empty <- function(string) {
 
 #' @export
 check_github_version <- function(
-    repo_url = "https://raw.githubusercontent.com/infinity-a11y/KiwiFlow/master/version.txt") {
+    repo_url = "https://raw.githubusercontent.com/infinity-a11y/KiwiFlow/master/resources/version.txt") {
   tryCatch(
     {
       # Fetch the version.txt file from the GitHub repository
