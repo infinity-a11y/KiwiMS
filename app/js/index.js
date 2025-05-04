@@ -69,8 +69,56 @@ $(document).on('shown.bs.modal', () => {
   });
 });
 
+$(document).on('shown.bs.modal', () => {
+  const button = document.getElementById('app-deconvolution_process-make_deconvolution_report');
+  if (!button) {
+    return;
+  }
+
+  button.addEventListener('click', () => {
+    const modalContent = document.querySelector('.modal-content');
+    if (!modalContent) {
+      return;
+    }
+
+    // Check if the element already exists
+    const preElement = document.getElementById('app-deconvolution_process-decon_rep_logtext');
+    if (preElement) {
+      smartScroll('app-deconvolution_process-decon_rep_logtext');
+      return;
+    }
+
+    // Set up MutationObserver to watch for the element being added
+    const observer = new MutationObserver((mutations, obs) => {
+      const preElement = document.getElementById('app-deconvolution_process-decon_rep_logtext');
+      if (preElement) {
+        smartScroll('app-deconvolution_process-decon_rep_logtext');
+        obs.disconnect(); // Stop observing once the element is found
+      }
+    });
+
+    observer.observe(modalContent, {
+      childList: true,
+      subtree: true
+    });
+
+    // Fallback: Retry after a short delay if the element isn't found immediately
+    setTimeout(() => {
+      const preElement = document.getElementById('app-deconvolution_process-decon_rep_logtext');
+      if (preElement) {
+        smartScroll('app-deconvolution_process-decon_rep_logtext');
+        observer.disconnect();
+      }
+    }, 500);
+  });
+});
+
 export function smartScroll(elementID) {
   const preElement = document.getElementById(elementID);
+  if (!preElement) {
+    return;
+  }
+
   let shouldAutoScroll = true;
 
   preElement.scrollTo({ top: preElement.scrollHeight, behavior: 'smooth' });
@@ -96,16 +144,18 @@ export function smartScroll(elementID) {
 
 export function disableDismiss() {
   const button = document.querySelector('[data-dismiss="modal"]');
-
-  button.style.cursor = 'not-allowed';
-  button.style.pointerEvents = 'none';
-  button.style.opacity = 0.65;
+  if (button) {
+    button.style.cursor = 'not-allowed';
+    button.style.pointerEvents = 'none';
+    button.style.opacity = '0.65';
+  }
 }
 
 export function enableDismiss() {
   const button = document.querySelector('[data-dismiss="modal"]');
-
-  button.style.cursor = 'pointer';
-  button.style.pointerEvents = 'all';
-  button.style.opacity = 1;
+  if (button) {
+    button.style.cursor = 'pointer';
+    button.style.pointerEvents = 'all';
+    button.style.opacity = '1';
+  }
 }

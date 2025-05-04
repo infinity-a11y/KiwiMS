@@ -2170,7 +2170,7 @@ server <- function(id, dirs) {
     shiny$observeEvent(input$copy_deconvolution_log, {
       shiny$req(reactVars$deconvolution_log)
 
-      write_clip(reactVars$deconvolution_log)
+      write_clip(reactVars$deconvolution_log, allow_non_interactive = TRUE)
     })
 
     ### Report events ----
