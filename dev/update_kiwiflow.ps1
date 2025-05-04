@@ -243,13 +243,74 @@ try {
 Write-Host "Creating run_app.vbs script..."
 try {
     $vbsPath = "$basePath\run_app.vbs"
-    $appPath = "$basePath\app.R" -replace '\\', '\\'
-    $logPath = "$basePath\launch_log.txt" -replace '\\', '\\'
-    $condaExe = $condaPath -replace '\\', '\\'
+    $appPath = "$basePath\app.R" -replace '\\', '\\\\'  # Double backslashes for VBS
+    $logPath = "$userDataPath\launch.log" -replace '\\', '\\\\'  # Double backslashes for VBS
+    $condaExe = $condaPath -replace '\\', '\\\\'  # Double backslashes for VBS
     $vbsContent = @"
+Option Explicit
+Dim WShell, WMI, Process, Processes, IsRunning, PortInUse, CmdLine, LogFile
+Dim PopupMsg, PopupTitle, PopupTimeout, AppPath
+
+' Initialize objects
 Set WShell = CreateObject("WScript.Shell")
-WShell.Popup "KiwiFlow will open shortly, please wait...", 3, "KiwiFlow", 0
-WShell.Run "cmd.exe /c ""$condaExe run -n kiwiflow Rscript -e ""shiny::runApp('$appPath', port=3838, launch.browser=TRUE)"" > $logPath 2>&1""", 0
+Set WMI = GetObject("winmgmts:{impersonationLevel=impersonate}!\\.\root\cimv2")
+
+' Configuration
+PopupTitle = "KiwiFlow"
+LogFile = "$logPath"
+AppPath = "$appPath"
+IsRunning = False
+PortInUse = False
+
+' Function to check if a process is running
+Function CheckProcess(processName)
+    Dim procQuery, proc
+    procQuery = "SELECT * FROM Win32_Process WHERE Name = '" & processName & "'"
+    Set Processes = WMI.ExecQuery(procQuery)
+    For Each proc In Processes
+        If InStr(1, proc.CommandLine, "shiny::runApp", 1) > 0 And InStr(1, proc.CommandLine, "port=3838", 1) > 0 Then
+            IsRunning = True
+            Exit For
+        End If
+    Next
+End Function
+
+' Function to check if port 3838 is in use
+Function CheckPort(port)
+    Dim netStat, line, lines
+    ' Run netstat to check for port usage
+    netStat = WShell.Exec("netstat -an -p TCP").StdOut.ReadAll
+    lines = Split(netStat, vbCrLf)
+    For Each line In lines
+        If InStr(line, ":" & port) > 0 And InStr(line, "LISTENING") > 0 Then
+            PortInUse = True
+            Exit For
+        End If
+    Next
+End Function
+
+' Check if Rscript.exe is running the Shiny app
+Call CheckProcess("Rscript.exe")
+Call CheckPort(3838)
+
+' Logic based on process and port status
+If IsRunning And PortInUse Then
+    PopupMsg = "KiwiFlow is already running on port 3838. Please use the existing browser tab."
+    PopupTimeout = 3
+    WShell.Popup PopupMsg, PopupTimeout, PopupTitle, 0
+    ' Do not open a new browser tab
+Else
+    PopupMsg = "KiwiFlow will open shortly, please wait..."
+    PopupTimeout = 3
+    WShell.Popup PopupMsg, PopupTimeout, PopupTitle, 0
+    ' Run the Shiny app with properly escaped path
+    CmdLine = "cmd.exe /c ""$condaExe run -n kiwiflow Rscript -e ""shiny::runApp('"$appPath"', port=3838, launch.browser=TRUE)"" > $logPath 2>&1"""
+    WShell.Run CmdLine, 0
+End If
+
+' Clean up
+Set WShell = Nothing
+Set WMI = Nothing
 "@
     Set-Content -Path $vbsPath -Value $vbsContent -ErrorAction Stop
     Write-Host "run_app.vbs created at $vbsPath."
