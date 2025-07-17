@@ -1,12 +1,11 @@
 # app/logic/deconvolution_execute.R
 
-box::use(
-  app /
-    logic /
-    deconvolution_functions[
-      deconvolute, generate_decon_rslt, spectrum_plot, process_single_dir
-    ],
-)
+message("Initiating deconvolution ...")
+
+# Sourcing deconvolution functions
+source_file <- file.path(commandArgs(trailingOnly = TRUE)[3], "app/logic/deconvolution_functions.R")
+message(paste("Sourcing", source_file))
+source(source_file)
 
 # Get parameters
 temp <- commandArgs(trailingOnly = TRUE)[1]

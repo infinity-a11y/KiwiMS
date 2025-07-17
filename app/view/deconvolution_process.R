@@ -1383,7 +1383,8 @@ server <- function(id, dirs) {
         args = c(
           "app/logic/deconvolution_execute.R",
           temp,
-          log_path
+          log_path,
+          getwd()
         ),
         stdout = reactVars$decon_process_out,
         stderr = reactVars$decon_process_out
