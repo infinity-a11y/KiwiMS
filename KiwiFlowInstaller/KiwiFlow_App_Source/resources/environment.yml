@@ -1,0 +1,19 @@
+name: kiwiflow
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - r-base=4.4.3
+  - numpy>=1.16
+  - scipy>=1.2
+  - matplotlib>=3.7.0
+  - pandas>=2.0.0
+  - plotly>=5.0.0
+  - wxpython>=4.2.0
+  - numba>=0.57.0
+  - llvmlite>=0.40.0
+  - zlib
+  - pip:
+      - unidec==7.0.3

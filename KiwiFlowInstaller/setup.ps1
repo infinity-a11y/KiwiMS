@@ -50,6 +50,12 @@ function Download-File($url, $destination) {
 }
 
 #-----------------------------#
+# Start logging
+#-----------------------------#
+$logFile = "$env:LOCALAPPDATA\KiwiFlow\kiwiflow_setup.log"
+Start-Transcript -Path $logFile
+
+#-----------------------------#
 # Paths and Setup
 #-----------------------------#
 $userDataPath = "$env:LOCALAPPDATA\KiwiFlow"
@@ -59,9 +65,7 @@ $tempPath = "$env:TEMP\kiwiflow_setup"
 $condaPrefix = "$env:USERPROFILE\miniconda3"
 $envName = "kiwiflow"
 $condaEnvPath = "$condaPrefix\envs\$envName"
-$logFile = "$userDataPath\kiwiflow_setup.log"
 
-Start-Transcript -Path $logFile
 
 if (-Not (Test-Path $tempPath)) {
     New-Item -Path $tempPath -ItemType Directory | Out-Null
@@ -122,7 +126,7 @@ if (-Not (Test-Path $condaCmd)) {
 #-----------------------------#
 Write-Host "Creating or updating conda environment..."
 try {
-    #& $condaCmd env create -f "$basePath\env\environment.yml" -n $envName -p $condaEnvPath -y
+    & $condaCmd tos accept
     & $condaCmd env create -f "$basePath\resources\environment.yml" -n $envName -y
 }
 catch {

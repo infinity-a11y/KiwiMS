@@ -1,0 +1,6 @@
+.Rhistory
+.RData
+.renv/**
+run_app.vbs
+!renv.lock
+".Rhistory"
