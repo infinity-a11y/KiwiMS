@@ -36,7 +36,8 @@ if (-not (Test-Path $basePath)) {
 try {
     Write-Host "Setting working directory to $basePath"
     Set-Location -Path $basePath -ErrorAction Stop
-} catch {
+}
+catch {
     Write-Host "Error: Failed to set working directory to $basePath. $_"
     pause
     Stop-Transcript -ErrorAction SilentlyContinue
@@ -65,7 +66,8 @@ try {
     # Skip update if versions are the same
     if ($localVersion -eq $remoteVersion) {
         Write-Host "No update needed. Local version matches remote version."
-    } else {
+    }
+    else {
         # Download and extract the latest version
         Write-Host "Downloading latest version..."
         try {
@@ -78,7 +80,8 @@ try {
             # Extract to temporary directory
             Expand-Archive -Path $zipPath -DestinationPath $tempDir -Force
             Write-Host "Zip file extracted to $tempDir."
-        } catch {
+        }
+        catch {
             Write-Host "Error: Failed to download or extract zip file. $_"
             pause
             Stop-Transcript
@@ -143,7 +146,8 @@ exit
         try {
             Set-Content -Path $updaterBatPath -Value $updaterBatContent -ErrorAction Stop
             Write-Host "Secondary updater batch file created at $updaterBatPath."
-        } catch {
+        }
+        catch {
             Write-Host "Error: Failed to create secondary updater batch file. $_"
             pause
             Stop-Transcript
@@ -156,14 +160,16 @@ exit
             Write-Host "Launched secondary updater batch file. This process will now exit."
             Stop-Transcript
             exit 0
-        } catch {
+        }
+        catch {
             Write-Host "Error: Failed to launch secondary updater batch file. $_"
             pause
             Stop-Transcript
             exit 1
         }
     }
-} catch {
+}
+catch {
     Write-Host "Error: Failed to check version. $_"
     pause
     Stop-Transcript
@@ -183,7 +189,8 @@ try {
         exit 1
     }
     Write-Host "Conda found at $condaPath"
-} catch {
+}
+catch {
     Write-Host "Error: Failed to locate Conda. $_"
     $wShell = New-Object -ComObject WScript.Shell
     $wShell.Popup("Error: Failed to locate Conda. $_", 0, "KiwiFlow Update Error", 16)
@@ -202,7 +209,8 @@ try {
         throw "Conda executable not found at $condaPath."
     }
     Write-Host "Conda environment initialized."
-} catch {
+}
+catch {
     Write-Host "Error: Failed to initialize Conda. $_"
     $wShell = New-Object -ComObject WScript.Shell
     $wShell.Popup("Error: Failed to initialize Conda. $_", 0, "KiwiFlow Update Error", 16)
@@ -223,7 +231,8 @@ try {
         & $condaPath run -n base conda env update -n kiwiflow -f $envYmlPath --prune
         if ($LASTEXITCODE -ne 0) { throw "Conda environment update failed with exit code $LASTEXITCODE." }
         Write-Host "Environment updated successfully."
-    } else {
+    }
+    else {
         Write-Host "Error: kiwiflow environment not found. Please run setup_kiwiflow.exe first."
         $wShell = New-Object -ComObject WScript.Shell
         $wShell.Popup("Error: kiwiflow environment not found. Please run setup_kiwiflow.exe first.", 0, "KiwiFlow Update Error", 16)
@@ -231,12 +240,51 @@ try {
         Stop-Transcript
         exit 1
     }
-} catch {
-    Write-Host "Error: Failed to update environment. $_"
-    Write-Host "Run 'conda env update -n kiwiflow -f $envYmlPath --prune' manually to debug."
-    pause
-    Stop-Transcript
-    exit 1
+}
+catch {
+    try {
+        Write-Host "COnda environment update failed. Retrying."
+        Start-Sleep -Seconds 5
+        if ($envExists) {
+            & $condaPath run -n base conda env update -n kiwiflow -f $envYmlPath --prune
+            if ($LASTEXITCODE -ne 0) { throw "Conda environment update failed with exit code $LASTEXITCODE." }
+            Write-Host "Environment updated successfully."
+        }
+        else {
+            Write-Host "Error: kiwiflow environment not found. Please run setup_kiwiflow.exe first."
+            $wShell = New-Object -ComObject WScript.Shell
+            $wShell.Popup("Error: kiwiflow environment not found. Please run setup_kiwiflow.exe first.", 0, "KiwiFlow Update Error", 16)
+            pause
+            Stop-Transcript
+            exit 1
+        }
+    }
+    catch {
+        Write-Host "Error: Failed to update environment. $_"
+        Write-Host "Run 'conda env update -n kiwiflow -f $envYmlPath --prune' manually to debug."
+        pause
+        Stop-Transcript
+        exit 1
+    }
+}
+
+# Updating R packages
+Write-Host "Updating R packages"
+try {
+    & $condaPath run -n kiwiflow R.exe -e "renv::restore()"
+}
+catch {
+    try {
+        Write-Host "R package update failed. Retrying."
+        Start-Sleep -Seconds 5
+        & $condaPath run -n kiwiflow R.exe -e "renv::restore()"
+    }
+    catch {
+        Write-Host "Error: Failed to update R packages. $_"
+        pause
+        Stop-Transcript
+        exit 1
+    }
 }
 
 # Create run_app.vbs for launch
@@ -314,7 +362,8 @@ Set WMI = Nothing
 "@
     Set-Content -Path $vbsPath -Value $vbsContent -ErrorAction Stop
     Write-Host "run_app.vbs created at $vbsPath."
-} catch {
+}
+catch {
     Write-Host "Error: Failed to create run_app.vbs. $_"
     pause
     Stop-Transcript
@@ -337,13 +386,15 @@ try {
     if (Test-Path $iconPath) {
         $shortcut.IconLocation = $iconPath
         Write-Host "Custom icon applied from $iconPath."
-    } else {
+    }
+    else {
         Write-Host "Warning: Custom icon not found at $iconPath. Using default icon."
         $shortcut.IconLocation = "C:\Windows\System32\shell32.dll,23"
     }
     $shortcut.Save()
     Write-Host "Desktop shortcut created at $shortcutPath."
-} catch {
+}
+catch {
     Write-Host "Error: Failed to create desktop shortcut. $_"
     pause
     Stop-Transcript

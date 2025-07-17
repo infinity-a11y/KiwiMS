@@ -136,12 +136,20 @@ if (-not $condaPath) {
         Write-Host "Miniconda downloaded successfully."
     }
     catch {
-        $errorMsg = "Error: Failed to download Miniconda. $_"
-        Write-Host $errorMsg
-        $wShell.Popup($errorMsg, 0, "KiwiFlow Setup Error", 16)
-        pause
-        Stop-Transcript
-        exit 1
+        try {
+            Write-Host "Miniconda download failed. Retrying."
+            Start-Sleep -Seconds 5
+            Invoke-WebRequest -Uri $minicondaUrl -OutFile $installerPath -ErrorAction Stop
+            Write-Host "Miniconda downloaded successfully."
+        }
+        catch {
+            $errorMsg = "Error: Failed to download Miniconda. $_"
+            Write-Host $errorMsg
+            $wShell.Popup($errorMsg, 0, "KiwiFlow Setup Error", 16)
+            pause
+            Stop-Transcript
+            exit 1
+        }        
     }
 
     Write-Host "Installing Miniconda to $env:USERPROFILE\Miniconda3..."
@@ -221,12 +229,31 @@ try {
     }
 }
 catch {
-    $errorMsg = "Error: Failed to manage environment. $_`nRun 'conda env create -n kiwiflow -f $envYmlPath' or 'conda env update -n kiwiflow -f $envYmlPath --prune' manually to debug."
-    Write-Host $errorMsg
-    $wShell.Popup($errorMsg, 0, "KiwiFlow Setup Error", 16)
-    pause
-    Stop-Transcript
-    exit 1
+    try {
+        Write-Host "Conda environment prompts failed. Retrying."
+        Start-Sleep -Seconds 5
+        $envExists = & $condaPath run -n base conda env list | Select-String "kiwiflow"
+        if ($envExists) {
+            Write-Host "kiwiflow environment already exists. Updating the environment..."
+            & $condaPath run -n base conda env update -n kiwiflow -f $envYmlPath --prune
+            if ($LASTEXITCODE -ne 0) { throw "Conda environment update failed with exit code $LASTEXITCODE." }
+            Write-Host "Environment updated successfully."
+        }
+        else {
+            Write-Host "kiwiflow environment does not exist. Creating the environment..."
+            & $condaPath run -n base conda env create -n kiwiflow -f $envYmlPath
+            if ($LASTEXITCODE -ne 0) { throw "Conda environment creation failed with exit code $LASTEXITCODE." }
+            Write-Host "Environment created successfully."
+        }
+    }
+    catch {
+        $errorMsg = "Error: Failed to manage environment. $_`nRun 'conda env create -n kiwiflow -f $envYmlPath' or 'conda env update -n kiwiflow -f $envYmlPath --prune' manually to debug."
+        Write-Host $errorMsg
+        $wShell.Popup($errorMsg, 0, "KiwiFlow Setup Error", 16)
+        pause
+        Stop-Transcript
+        exit 1
+    }
 }
 
 # --- Configuration ---
@@ -248,8 +275,6 @@ function Test-RtoolsFoundByR {
         $rOutput = & $condaPath run -n $condaEnvName -e "PATH=$system32Path;$env:PATH" R.exe -e "cat(Sys.which('make'))" 2>&1
 
         # Check if the output contains a valid path to make.exe
-        # A successful output usually looks like "C:/Rtools44/usr/bin/make.exe" or similar.
-        # We look for a path that contains "make.exe" and is not empty.
         if ($rOutput -match "make\.exe" -and $rOutput.Trim() -ne "") {
             Write-Host "Rtools 'make.exe' found by R at: $($rOutput.Trim())"
             return $true
@@ -299,7 +324,7 @@ if ($rtoolsFound) {
     Write-Host "Rtools44 appears to be already installed and configured correctly."
 }
 else {
-    Write-Host "Rtools44 not found or not fully installed. Proceeding with installation to default location: $RtoolsDefaultInstallDir..."
+    Write-Host "Rtools44 not found or not fully installed."
 
     # Ensure $RtoolsInstallDir is set to the default for installation if not found
     $RtoolsInstallDir = $RtoolsDefaultInstallDir
@@ -313,6 +338,7 @@ else {
     catch {
         Write-Host "Download failed. Trying again."
         try {
+            Start-Sleep -Seconds 5
             Invoke-WebRequest -Uri $RtoolsInstallerUrl -OutFile $DownloadPath -ErrorAction Stop
             Write-Host "Download complete."
         }
@@ -324,19 +350,18 @@ else {
         }
     }
 
-    # --- Create installation directory if it doesn't exist ---
-    if (-not (Test-Path $RtoolsInstallDir)) {
-        Write-Host "Creating installation directory: $RtoolsInstallDir"
-        New-Item -ItemType Directory -Path $RtoolsInstallDir | Out-Null
-    }
+    # # --- Create installation directory if it doesn't exist ---
+    # if (-not (Test-Path $RtoolsInstallDir)) {
+    #     Write-Host "Creating installation directory: $RtoolsInstallDir"
+    #     New-Item -ItemType Directory -Path $RtoolsInstallDir | Out-Null
+    # }
 
     # --- Run Rtools44 installer silently ---
     Write-Host "Installing Rtools44 ..."
     try {
-        Write-Host "Rtools44 installation initiated. Please wait for it to complete silently."
-        Start-Process -FilePath $DownloadPath -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /DIR=$RtoolsInstallDir" -Wait -Passthru | Out-Null
-        Write-Host "Rtools44 silent installation command sent. Waiting for completion."
-
+        Write-Host "Rtools44 installation initiated. Please follow the instructions from the installer."
+        # Start-Process -FilePath $DownloadPath -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /DIR=$RtoolsInstallDir" -Wait -Passthru | Out-Null
+        Start-Process -FilePath $DownloadPath -Wait -Passthru | Out-Null
         # Add a brief pause to allow the installer process to start and clean up
         Start-Sleep -Seconds 5
 
@@ -382,96 +407,66 @@ else {
     Write-Host "Rtools path already found in session PATH."
 }
 
-# Write-Host "--- Updating Session PATH for R and Rtools ---"
-# try {
-#     $env:PATH = "C:\rtools44\usr\bin;$PATH"
-#     $env:PATH = "$env:USERPROFILE\Miniconda3\envs\kiwiflow\Lib\R\bin;" + $env:PATH
-#     Write-Host "Environment PATH set."
-# }
-# catch {
-#     Write-Host "Environment PATH was not set correctly."
-#     pause
-#     Stop-Transcript
-#     exit 1
-# }
-
 
 # Make R environment
-# --- Configuration (ensure these are defined earlier in your script) ---
-# $condaPath (e.g., C:\Users\Marian\Miniconda3\Scripts\conda.exe)
-# $RtoolsInstallDir (e.g., C:\rtools44)
-# $condaEnvName = "kiwiflow"
 
-# ... (rest of the script) ...
-
-# ... (rest of the script) ...
-
-# --- Running R command: install.packages('renv', repos = 'https://cloud.r-project.org') ---
 Write-Host "Installing renv"
 try {
-    # & $condaPath init
-    # & $condaPath activate kiwiflow
-    # & R.exe -e "install.packages('renv', repos = 'https://cloud.r-project.org')"
     & $condaPath run -n kiwiflow R.exe -e "install.packages('renv', repos = 'https://cloud.r-project.org')"
-    # # CRUCIAL: Capture and temporarily modify the PATH for this command execution.
-    # $originalPath = $env:PATH
-
-    # $system32Path = "$env:SystemRoot\System32"
-    # $rToolsPath = "$RtoolsInstallDir\usr\bin"
-    # $condaScriptsPath = (Split-Path -Path $condaPath -Parent)
-    # $condaLibraryBinPath = "$condaScriptsPath\..\Library\bin"
-
-    # $tempPath = "$system32Path;$rToolsPath;$condaScriptsPath;$condaLibraryBinPath;$originalPath"
-    # [Environment]::SetEnvironmentVariable("Path", $tempPath, [System.EnvironmentVariableTarget]::Process)
-    # Write-Host "Temporarily adjusted PATH for R command execution."
-
-    # # THIS IS THE KEY CHANGE: Wrap the R.exe command and its -e argument in double quotes
-    # # so that 'conda run' treats it as a single command string to execute.
-    # # We use single quotes for the R string itself to avoid conflicts with PowerShell's double quotes.
-    # $rCommand = "R.exe -e 'install.packages(\"renv\", repos = \"https://cloud.r-project.org\")'"
-    # & $condaPath run -n $condaEnvName $rCommand
-
     Write-Host "Installation of 'renv' completed."
 }
 catch {
-    Write-Error "Failed to run R command for 'renv' installation. Error: $($_.Exception.Message)"
-    pause
-    Stop-Transcript
-    exit 1
+    try {
+        Write-Host "Installation of 'renv' failed. Retrying."
+        Start-Sleep -Seconds 5
+        & $condaPath run -n kiwiflow R.exe -e "install.packages('renv', repos = 'https://cloud.r-project.org')"
+        Write-Host "Installation of 'renv' completed."
+    }
+    catch {
+        Write-Error "Failed to run R command for 'renv' installation. Error: $($_.Exception.Message)"
+        pause
+        Stop-Transcript
+        exit 1        
+    }
 }
 
-# --- Running R command: renv::restore() and renv::install('reticulate') ---
 Write-Host "Setting up R packages"
 try {
     & $condaPath run -n kiwiflow R.exe -e "renv::restore()"
-    & $condaPath run -n kiwiflow R.exe -e "renv::install('reticulate')"
-
-    # $originalPath = $env:PATH
-    # $system32Path = "$env:SystemRoot\System32"
-    # $rToolsPath = "$RtoolsInstallDir\usr\bin"
-    # $condaScriptsPath = (Split-Path -Path $condaPath -Parent)
-    # $condaLibraryBinPath = "$condaScriptsPath\..\Library\bin"
-    # $tempPath = "$system32Path;$rToolsPath;$condaScriptsPath;$condaLibraryBinPath;$originalPath"
-    # [Environment]::SetEnvironmentVariable("Path", $tempPath, [System.EnvironmentVariableTarget]::Process)
-    # Write-Host "Temporarily adjusted PATH for R command execution."
-
-    # # KEY CHANGE for renv::install('reticulate')
-    # $rCommandReticulate = "R.exe -e 'renv::install(\"reticulate\")'"
-    # & $condaPath run -n $condaEnvName $rCommandReticulate
-
-    # # KEY CHANGE for renv::restore()
-    # $rCommandRestore = "R.exe -e 'renv::restore()'"
-    # & $condaPath run -n $condaEnvName $rCommandRestore
-
     Write-Host "Setting up R packages completed."
 }
 catch {
-    Write-Error "Failed to run R commands for 'renv'. Error: $($_.Exception.Message)"
-    pause
-    Stop-Transcript
-    exit 1
+    try {
+        Write-Host "Setting up R packages failed. Retrying."
+        Start-Sleep -Seconds 5
+        & $condaPath run -n kiwiflow R.exe -e "renv::restore()"
+    }
+    catch {
+        Write-Error "Failed to run R commands for 'renv'. Error: $($_.Exception.Message)"
+        pause
+        Stop-Transcript
+        exit 1
+    }
 }
 
+Write-Host "Setting up reticulate"
+try {
+    & $condaPath run -n kiwiflow R.exe -e "renv::install('reticulate')"
+    Write-Host "Setting up reticulate completed."
+}
+catch {
+    try {
+        Write-Host "Setting up reticulate failed. Retrying."
+        Start-Sleep -Seconds 5
+        & $condaPath run -n kiwiflow R.exe -e "renv::install('reticulate')"
+    }
+    catch {
+        Write-Error "Failed to setup reticulate. Error: $($_.Exception.Message)"
+        pause
+        Stop-Transcript
+        exit 1
+    }
+}
 
 # Create run_app.vbs for launch
 Write-Host "Creating run_app.vbs script..."
