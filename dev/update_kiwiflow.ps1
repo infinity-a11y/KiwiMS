@@ -243,7 +243,7 @@ try {
 }
 catch {
     try {
-        Write-Host "COnda environment update failed. Retrying."
+        Write-Host "Conda environment update failed. Retrying."
         Start-Sleep -Seconds 5
         if ($envExists) {
             & $condaPath run -n base conda env update -n kiwiflow -f $envYmlPath --prune
@@ -291,9 +291,9 @@ catch {
 Write-Host "Creating run_app.vbs script..."
 try {
     $vbsPath = "$basePath\run_app.vbs"
-    $appPath = "$basePath\app.R" -replace '\\', '\\\\'  # Double backslashes for VBS
-    $logPath = "$userDataPath\launch.log" -replace '\\', '\\\\'  # Double backslashes for VBS
-    $condaExe = $condaPath -replace '\\', '\\\\'  # Double backslashes for VBS
+    $appPath = "$basePath\app.R" -replace '\\', '\\'  # Single to double backslashes
+    $logPath = "$userDataPath\launch.log" -replace '\\', '\\'  # Single to double backslashes
+    $condaExe = $condaPath -replace '\\', '\\'  # Single to double backslashes
     $vbsContent = @"
 Option Explicit
 Dim WShell, WMI, Process, Processes, IsRunning, PortInUse, CmdLine, LogFile
@@ -352,7 +352,7 @@ Else
     PopupTimeout = 3
     WShell.Popup PopupMsg, PopupTimeout, PopupTitle, 0
     ' Run the Shiny app with properly escaped path
-    CmdLine = "cmd.exe /c ""$condaExe run -n kiwiflow Rscript -e ""shiny::runApp('"$appPath"', port=3838, launch.browser=TRUE)"" > $logPath 2>&1"""
+    CmdLine = "cmd.exe /c ""$condaExe run -n kiwiflow Rscript -e ""shiny::runApp('" & AppPath & "', port=3838, launch.browser=TRUE)"" > " & LogFile & " 2>&1"""
     WShell.Run CmdLine, 0
 End If
 
