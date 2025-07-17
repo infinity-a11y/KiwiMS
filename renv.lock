@@ -1,6 +1,6 @@
 {
   "R": {
-    "Version": "4.4.2",
+    "Version": "4.4.3",
     "Repositories": [
       {
         "Name": "CRAN",
@@ -1189,17 +1189,6 @@
       ],
       "Hash": "c84fd4f75ea1f5434735e08b7f50fbca"
     },
-    "ps": {
-      "Package": "ps",
-      "Version": "1.8.1",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "utils"
-      ],
-      "Hash": "b4404b1de13758dea1c0484ad0d48563"
-    },
     "purrr": {
       "Package": "purrr",
       "Version": "1.0.2",
@@ -1290,28 +1279,6 @@
         "utils"
       ],
       "Hash": "47623f66b4e80b3b0587bc5d7b309888"
-    },
-    "reticulate": {
-      "Package": "reticulate",
-      "Version": "1.40.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "Matrix",
-        "R",
-        "Rcpp",
-        "RcppTOML",
-        "graphics",
-        "here",
-        "jsonlite",
-        "methods",
-        "png",
-        "rappdirs",
-        "rlang",
-        "utils",
-        "withr"
-      ],
-      "Hash": "04740f615607c4e6099356ff6d6694ee"
     },
     "rex": {
       "Package": "rex",

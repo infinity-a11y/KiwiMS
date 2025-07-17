@@ -5,38 +5,7 @@ channels:
 dependencies:
   - python=3.11
   - pip
-  - r-base=4.4.2
-  - r-essentials
-  - r-renv=1.0.11
-  - r-clipr=0.8.0
-  - r-data.table=1.17.0
-  - r-dplyr=1.1.4
-  - r-DT=0.33
-  - r-ggplot2=3.5.1
-  - r-gridextra=2.3
-  - r-kableExtra=1.4.0
-  - r-knitr=1.49
-  - r-logr=1.3.8
-  - r-maditr=0.8.4
-  - r-minpack.lm=1.2-4
-  - r-plotly=4.10.4
-  - r-plyr=1.8.9
-  - r-processx=3.8.6
-  - r-promises=1.3.2
-  - r-quarto=1.4.4
-  - r-readxl=1.4.3
-  - r-reticulate=1.40.0
-  - r-rhino=1.9.0
-  - r-rmarkdown=2.29
-  - r-shiny=1.10.0
-  - r-shinyalert=3.1.0
-  - r-shinydashboard=0.7.2
-  - r-shinyFiles=0.9.3
-  - r-shinyjs=2.1.0
-  - r-shinyWidgets=0.8.7
-  - r-stringr=1.5.1
-  - r-tidyr=1.3.1
-  - r-waiter=0.2.5
+  - r-base=4.4.3
   - numpy>=1.16
   - scipy>=1.2
   - matplotlib>=3.7.0
@@ -45,5 +14,6 @@ dependencies:
   - wxpython>=4.2.0
   - numba>=0.57.0
   - llvmlite>=0.40.0
+  - zlib
   - pip:
       - unidec==7.0.3
