@@ -15,68 +15,70 @@ PrivilegesRequired=admin
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-; Main PowerShell setup script
-Source: "setup.ps1"; DestDir: "{app}";
+; PowerShell setup scripts
+Source: "config.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
+Source: "miniconda_installer.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
+Source: "conda_env.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
+Source: "install_rtools.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
+Source: "renv_install.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
+Source: "renv_setup.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
+Source: "reticulate_install.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
+Source: "launcher_create.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 
-; All the R Shiny app files from the 'KiwiFlow_App_Source' directory
-; This line tells Inno Setup to copy everything from 'KiwiFlow_App_Source'
-; into the user's chosen installation directory ({app}).
-; The '*' acts as a wildcard, meaning "all files and folders".
+; R Shiny files
 Source: "KiwiFlow_App_Source\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
 
-; --- OPTIONAL: Refinements and Exclusions ---
-
-; If there are specific files you want to exclude from the source directory,
-; you can use the 'Excludes' flag. For example, to exclude .Rproj files
-; and a '.git' directory if it somehow ended up in your source folder:
-; Source: "KiwiFlow_App_Source\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs; Excludes: "*.Rproj, .git\*"
-
-; If you have other specific files at the root of your installer project
-; that should go into {app}, list them like this:
-; Source: "path\to\License.txt"; DestDir: "{app}";
-; Source: "path\to\ReadMe.md"; DestDir: "{app}";
-
-[Icons]
-; This will be handled by your PowerShell script, but you could create one here too
-; Name: "{group}\KiwiFlow"; Filename: "{app}\run_app.vbs"; WorkingDir: "{app}"; IconFilename: "{app}\app\static\favicon.ico"
-
-[Tasks]
-; Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checked
+; Other files
+Source: "favicon.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Run]
-; Execute the PowerShell script.
-; This will run after all files are copied.
-; You might want to display a custom page before this step.
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\setup.ps1"""; StatusMsg: "Installing KiwiFlow. This may take some time..."; Flags: 
+; Define the shared log file path here as a simple string constant.
+; The PowerShell scripts will need to handle creating/appending to it.
+#define KiwiFlowLogFile "{localappdata}\KiwiFlow\kiwiflow_setup.log"
+
+; Run config
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\config.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "Configuring setup..."; Flags:  shellexec waituntilterminated; Tasks: config_setup; AfterInstall: UpdateProgress(5);
+
+; 1. Install Miniconda
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\miniconda_installer.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "Installing Miniconda (Python Environment)..."; Flags:  shellexec waituntilterminated; Tasks: install_miniconda; AfterInstall: UpdateProgress(25);
+
+; 2. Setup Conda Environment
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\conda_env.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "Setting up Conda Environment..."; Flags:  shellexec waituntilterminated; Tasks: setup_conda_env; AfterInstall: UpdateProgress(50);
+
+; 3. Install Rtools
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\install_rtools.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "Installing Rtools (R Build Tools)..."; Flags:  shellexec waituntilterminated; Tasks: install_rtools; AfterInstall: UpdateProgress(65);
+
+; 4. Install R Packages
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\renv_install.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "Installing renv..."; Flags:  shellexec waituntilterminated; Tasks: renv_install; AfterInstall: UpdateProgress(70);
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\renv_setup.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "Installing R Packages ..."; Flags:  shellexec waituntilterminated; Tasks: renv_setup; AfterInstall: UpdateProgress(90);
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\reticulate_install.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "Installing reticulate ..."; Flags:  shellexec waituntilterminated; Tasks: reticulate_install; AfterInstall: UpdateProgress(95);
+
+; 5. Create Launchers and Shortcut
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\launcher_create.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "Creating Application Launchers and Desktop Shortcut..."; Flags:  shellexec waituntilterminated; Tasks: create_launchers; AfterInstall: UpdateProgress(100);
+
+; After all steps, potentially launch the app or show info
+Filename: "{app}\run_app.vbs"; Description: "{cm:LaunchProgram,KiwiFlow}"; Flags: postinstall skipifsilent shellexec; Tasks: create_launchers
 
 [Code]
-var
-  InstallationProgressPage: TOutputProgressWizardPage;
 
-procedure InitializeWizard;
+procedure SetProgressMax(Ratio: Integer);
 begin
-  InstallationProgressPage := CreateOutputProgressPage('KiwiFlow Installation', 'Please wait while KiwiFlow is being installed. This process may take several minutes depending on your system and internet speed.');
+  WizardForm.ProgressGauge.Max := WizardForm.ProgressGauge.Max * Ratio;
 end;
 
-procedure CurPageChanged(CurPageID: Integer);
+procedure UpdateProgress(Position: Integer);
 begin
-  // Corrected line: Use .ID instead of .PageID
-  if CurPageID = InstallationProgressPage.ID then
-  begin
-    // When this page is displayed, you can update its built-in label and progress bar.
-    // For now, we're relying on the [Run] section's StatusMsg for the main feedback.
-    // If you were to run a process directly here and want to show progress:
-    // InstallationProgressPage.SetProgress(0, 100); // Set initial progress
-    // InstallationProgressPage.SetText('Starting installation process...', False); // Update the status message
-  end;
+  WizardForm.ProgressGauge.Position :=
+    Position * WizardForm.ProgressGauge.Max div 100;
 end;
 
-procedure CurPageBack(CurPageID: Integer);
-begin
-  // Handle back button if needed
-end;
+[Tasks]
+Name: "config_setup"; Description: "Configuring setup"; GroupDescription: "KiwiFlow Components"
+Name: "install_miniconda"; Description: "Install Miniconda"; GroupDescription: "KiwiFlow Components"
+Name: "setup_conda_env"; Description: "Setup KiwiFlow Conda Environment"; GroupDescription: "KiwiFlow Components"
+Name: "install_rtools"; Description: "Install Rtools (R Build Tools)"; GroupDescription: "KiwiFlow Components"
+Name: "renv_install"; Description: "Install R Packages and Configure renv"; GroupDescription: "KiwiFlow Components"
+Name: "renv_setup"; Description: "Install R Packages and Configure renv"; GroupDescription: "KiwiFlow Components"
+Name: "reticulate_install"; Description: "Install R Packages and Configure renv"; GroupDescription: "KiwiFlow Components"
+Name: "create_launchers"; Description: "Create Application Launchers and Desktop Shortcut"; GroupDescription: "KiwiFlow Components"
 
-procedure DeinitializeSetup;
-begin
-  // Clean up temporary files created by the installer if not already handled by Flags: deleteafterinstall
-end;

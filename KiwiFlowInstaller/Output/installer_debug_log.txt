@@ -1,0 +1,590 @@
+﻿2025-07-18 20:27:07.155   Log opened. (Time zone: UTC+02:00)
+2025-07-18 20:27:07.155   Setup version: Inno Setup version 6.4.3
+2025-07-18 20:27:07.155   Original Setup EXE: C:\Users\Marian\Desktop\KiwiFlow\KiwiFlowInstaller\Output\KiwiFlow_Setup.exe
+2025-07-18 20:27:07.155   Setup command line: /SL5="$670730,1031925,827392,C:\Users\Marian\Desktop\KiwiFlow\KiwiFlowInstaller\Output\KiwiFlow_Setup.exe" /LOG=installer_debug_log.txt
+2025-07-18 20:27:07.155   Windows version: 10.0.19045
+2025-07-18 20:27:07.155   Windows architecture: x64 (64-bit)
+2025-07-18 20:27:07.155   Machine types supported by system: x86 x64
+2025-07-18 20:27:07.155   User privileges: Administrative
+2025-07-18 20:27:07.160   Administrative install mode: Yes
+2025-07-18 20:27:07.160   Install mode root key: HKEY_LOCAL_MACHINE
+2025-07-18 20:27:07.160   64-bit install mode: No
+2025-07-18 20:27:07.160   Created protected temporary directory: C:\Users\Marian\AppData\Local\Temp\is-EODVP.tmp
+2025-07-18 20:27:08.665   Found 2 files to register with RestartManager.
+2025-07-18 20:27:08.665   Calling RestartManager's RmGetList.
+2025-07-18 20:27:08.665   RmGetList finished successfully.
+2025-07-18 20:27:08.665   RestartManager found no applications using one of our files.
+2025-07-18 20:27:08.675   Starting the installation process.
+2025-07-18 20:27:08.685   Directory for uninstall files: C:\Program Files\KiwiFlow
+2025-07-18 20:27:08.690   Will append to existing uninstall log: C:\Program Files\KiwiFlow\unins000.dat
+2025-07-18 20:27:08.690   -- File entry --
+2025-07-18 20:27:08.695   Dest filename: C:\Program Files\KiwiFlow\unins000.exe
+2025-07-18 20:27:08.695   Time stamp of our file: 2025-07-18 20:27:07.055
+2025-07-18 20:27:08.695   Dest file exists.
+2025-07-18 20:27:08.695   Time stamp of existing file: 2025-07-18 20:25:37.626
+2025-07-18 20:27:08.695   Version of our file: 51.1052.0.0
+2025-07-18 20:27:08.760   Version of existing file: 51.1052.0.0
+2025-07-18 20:27:08.760   Installing the file.
+2025-07-18 20:27:08.770   Leaving temporary file in place for now.
+2025-07-18 20:27:08.770   -- File entry --
+2025-07-18 20:27:08.770   Dest filename: C:\Program Files\KiwiFlow\config.ps1
+2025-07-18 20:27:08.770   Time stamp of our file: 2025-07-18 20:19:06.000
+2025-07-18 20:27:08.770   Installing the file.
+2025-07-18 20:27:08.770   Successfully installed the file.
+2025-07-18 20:27:08.770   -- File entry --
+2025-07-18 20:27:08.770   Dest filename: C:\Program Files\KiwiFlow\miniconda_installer.ps1
+2025-07-18 20:27:08.770   Time stamp of our file: 2025-07-18 20:25:22.000
+2025-07-18 20:27:08.770   Installing the file.
+2025-07-18 20:27:08.770   Successfully installed the file.
+2025-07-18 20:27:08.775   -- File entry --
+2025-07-18 20:27:08.775   Dest filename: C:\Program Files\KiwiFlow\conda_env.ps1
+2025-07-18 20:27:08.775   Time stamp of our file: 2025-07-18 20:14:50.000
+2025-07-18 20:27:08.775   Installing the file.
+2025-07-18 20:27:08.775   Successfully installed the file.
+2025-07-18 20:27:08.775   -- File entry --
+2025-07-18 20:27:08.775   Dest filename: C:\Program Files\KiwiFlow\install_rtools.ps1
+2025-07-18 20:27:08.775   Time stamp of our file: 2025-07-18 20:14:52.000
+2025-07-18 20:27:08.775   Installing the file.
+2025-07-18 20:27:08.775   Successfully installed the file.
+2025-07-18 20:27:08.775   -- File entry --
+2025-07-18 20:27:08.775   Dest filename: C:\Program Files\KiwiFlow\renv_setup.ps1
+2025-07-18 20:27:08.775   Time stamp of our file: 2025-07-18 20:15:06.000
+2025-07-18 20:27:08.775   Installing the file.
+2025-07-18 20:27:08.775   Successfully installed the file.
+2025-07-18 20:27:08.775   -- File entry --
+2025-07-18 20:27:08.775   Dest filename: C:\Program Files\KiwiFlow\launcher_create.ps1
+2025-07-18 20:27:08.775   Time stamp of our file: 2025-07-18 20:15:14.000
+2025-07-18 20:27:08.775   Installing the file.
+2025-07-18 20:27:08.775   Successfully installed the file.
+2025-07-18 20:27:08.775   -- File entry --
+2025-07-18 20:27:08.775   Dest filename: C:\Program Files\KiwiFlow\.gitignore
+2025-07-18 20:27:08.775   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.775   Dest file exists.
+2025-07-18 20:27:08.775   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.775   Version of our file: (none)
+2025-07-18 20:27:08.775   Version of existing file: (none)
+2025-07-18 20:27:08.775   Installing the file.
+2025-07-18 20:27:08.775   Successfully installed the file.
+2025-07-18 20:27:08.775   -- File entry --
+2025-07-18 20:27:08.775   Dest filename: C:\Program Files\KiwiFlow\.renvignore
+2025-07-18 20:27:08.775   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.775   Dest file exists.
+2025-07-18 20:27:08.775   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.775   Version of our file: (none)
+2025-07-18 20:27:08.775   Version of existing file: (none)
+2025-07-18 20:27:08.775   Installing the file.
+2025-07-18 20:27:08.785   Successfully installed the file.
+2025-07-18 20:27:08.785   -- File entry --
+2025-07-18 20:27:08.785   Dest filename: C:\Program Files\KiwiFlow\activate.R
+2025-07-18 20:27:08.785   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.785   Dest file exists.
+2025-07-18 20:27:08.785   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.785   Version of our file: (none)
+2025-07-18 20:27:08.795   Version of existing file: (none)
+2025-07-18 20:27:08.795   Installing the file.
+2025-07-18 20:27:08.795   Successfully installed the file.
+2025-07-18 20:27:08.795   -- File entry --
+2025-07-18 20:27:08.795   Dest filename: C:\Program Files\KiwiFlow\app.R
+2025-07-18 20:27:08.795   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.795   Dest file exists.
+2025-07-18 20:27:08.795   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.795   Version of our file: (none)
+2025-07-18 20:27:08.795   Version of existing file: (none)
+2025-07-18 20:27:08.795   Installing the file.
+2025-07-18 20:27:08.795   Successfully installed the file.
+2025-07-18 20:27:08.795   -- File entry --
+2025-07-18 20:27:08.795   Dest filename: C:\Program Files\KiwiFlow\config.yml
+2025-07-18 20:27:08.795   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.795   Dest file exists.
+2025-07-18 20:27:08.795   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.795   Version of our file: (none)
+2025-07-18 20:27:08.795   Version of existing file: (none)
+2025-07-18 20:27:08.795   Installing the file.
+2025-07-18 20:27:08.795   Successfully installed the file.
+2025-07-18 20:27:08.795   -- File entry --
+2025-07-18 20:27:08.795   Dest filename: C:\Program Files\KiwiFlow\dependencies.R
+2025-07-18 20:27:08.795   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.795   Dest file exists.
+2025-07-18 20:27:08.795   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.795   Version of our file: (none)
+2025-07-18 20:27:08.795   Version of existing file: (none)
+2025-07-18 20:27:08.795   Installing the file.
+2025-07-18 20:27:08.795   Successfully installed the file.
+2025-07-18 20:27:08.795   -- File entry --
+2025-07-18 20:27:08.805   Dest filename: C:\Program Files\KiwiFlow\kiwiflow_setup.exe
+2025-07-18 20:27:08.805   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.805   Dest file exists.
+2025-07-18 20:27:08.805   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.805   Version of our file: 0.1.0.0
+2025-07-18 20:27:08.805   Version of existing file: 0.1.0.0
+2025-07-18 20:27:08.805   Same version. Skipping.
+2025-07-18 20:27:08.805   -- File entry --
+2025-07-18 20:27:08.805   Dest filename: C:\Program Files\KiwiFlow\kiwiflow_update.exe
+2025-07-18 20:27:08.805   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.805   Dest file exists.
+2025-07-18 20:27:08.805   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.805   Version of our file: 0.1.0.0
+2025-07-18 20:27:08.810   Version of existing file: 0.1.0.0
+2025-07-18 20:27:08.810   Same version. Skipping.
+2025-07-18 20:27:08.810   -- File entry --
+2025-07-18 20:27:08.810   Dest filename: C:\Program Files\KiwiFlow\README.md
+2025-07-18 20:27:08.810   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.810   Dest file exists.
+2025-07-18 20:27:08.810   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.810   Version of our file: (none)
+2025-07-18 20:27:08.810   Version of existing file: (none)
+2025-07-18 20:27:08.810   Installing the file.
+2025-07-18 20:27:08.810   Successfully installed the file.
+2025-07-18 20:27:08.810   -- File entry --
+2025-07-18 20:27:08.810   Dest filename: C:\Program Files\KiwiFlow\renv.lock
+2025-07-18 20:27:08.810   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.810   Dest file exists.
+2025-07-18 20:27:08.810   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.810   Version of our file: (none)
+2025-07-18 20:27:08.820   Version of existing file: (none)
+2025-07-18 20:27:08.820   Installing the file.
+2025-07-18 20:27:08.820   Successfully installed the file.
+2025-07-18 20:27:08.820   -- File entry --
+2025-07-18 20:27:08.820   Dest filename: C:\Program Files\KiwiFlow\rhino.yml
+2025-07-18 20:27:08.825   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.825   Dest file exists.
+2025-07-18 20:27:08.825   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.825   Version of our file: (none)
+2025-07-18 20:27:08.825   Version of existing file: (none)
+2025-07-18 20:27:08.825   Installing the file.
+2025-07-18 20:27:08.825   Successfully installed the file.
+2025-07-18 20:27:08.825   -- File entry --
+2025-07-18 20:27:08.825   Dest filename: C:\Program Files\KiwiFlow\settings.json
+2025-07-18 20:27:08.825   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.825   Dest file exists.
+2025-07-18 20:27:08.825   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.825   Version of our file: (none)
+2025-07-18 20:27:08.825   Version of existing file: (none)
+2025-07-18 20:27:08.825   Installing the file.
+2025-07-18 20:27:08.825   Successfully installed the file.
+2025-07-18 20:27:08.825   -- File entry --
+2025-07-18 20:27:08.825   Dest filename: C:\Program Files\KiwiFlow\app\main.R
+2025-07-18 20:27:08.825   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.825   Dest file exists.
+2025-07-18 20:27:08.825   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.825   Version of our file: (none)
+2025-07-18 20:27:08.840   Version of existing file: (none)
+2025-07-18 20:27:08.840   Installing the file.
+2025-07-18 20:27:08.844   Successfully installed the file.
+2025-07-18 20:27:08.844   -- File entry --
+2025-07-18 20:27:08.844   Dest filename: C:\Program Files\KiwiFlow\app\js\index.js
+2025-07-18 20:27:08.844   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.844   Dest file exists.
+2025-07-18 20:27:08.844   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.844   Version of our file: (none)
+2025-07-18 20:27:08.845   Version of existing file: (none)
+2025-07-18 20:27:08.845   Installing the file.
+2025-07-18 20:27:08.845   Successfully installed the file.
+2025-07-18 20:27:08.845   -- File entry --
+2025-07-18 20:27:08.845   Dest filename: C:\Program Files\KiwiFlow\app\logic\conversion_script.R
+2025-07-18 20:27:08.845   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.845   Dest file exists.
+2025-07-18 20:27:08.845   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.845   Version of our file: (none)
+2025-07-18 20:27:08.855   Version of existing file: (none)
+2025-07-18 20:27:08.855   Installing the file.
+2025-07-18 20:27:08.855   Successfully installed the file.
+2025-07-18 20:27:08.855   -- File entry --
+2025-07-18 20:27:08.855   Dest filename: C:\Program Files\KiwiFlow\app\logic\deconvolution_execute.R
+2025-07-18 20:27:08.855   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.855   Dest file exists.
+2025-07-18 20:27:08.855   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.855   Version of our file: (none)
+2025-07-18 20:27:08.855   Version of existing file: (none)
+2025-07-18 20:27:08.855   Installing the file.
+2025-07-18 20:27:08.855   Successfully installed the file.
+2025-07-18 20:27:08.855   -- File entry --
+2025-07-18 20:27:08.855   Dest filename: C:\Program Files\KiwiFlow\app\logic\deconvolution_functions.R
+2025-07-18 20:27:08.855   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.855   Dest file exists.
+2025-07-18 20:27:08.855   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.855   Version of our file: (none)
+2025-07-18 20:27:08.875   Version of existing file: (none)
+2025-07-18 20:27:08.875   Installing the file.
+2025-07-18 20:27:08.875   Successfully installed the file.
+2025-07-18 20:27:08.875   -- File entry --
+2025-07-18 20:27:08.875   Dest filename: C:\Program Files\KiwiFlow\app\logic\dev_utils.R
+2025-07-18 20:27:08.875   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.875   Dest file exists.
+2025-07-18 20:27:08.875   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.875   Version of our file: (none)
+2025-07-18 20:27:08.875   Version of existing file: (none)
+2025-07-18 20:27:08.875   Installing the file.
+2025-07-18 20:27:08.875   Successfully installed the file.
+2025-07-18 20:27:08.875   -- File entry --
+2025-07-18 20:27:08.875   Dest filename: C:\Program Files\KiwiFlow\app\logic\helper_functions.R
+2025-07-18 20:27:08.875   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.875   Dest file exists.
+2025-07-18 20:27:08.875   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.875   Version of our file: (none)
+2025-07-18 20:27:08.890   Version of existing file: (none)
+2025-07-18 20:27:08.890   Installing the file.
+2025-07-18 20:27:08.890   Successfully installed the file.
+2025-07-18 20:27:08.895   -- File entry --
+2025-07-18 20:27:08.895   Dest filename: C:\Program Files\KiwiFlow\app\logic\logging.R
+2025-07-18 20:27:08.895   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.895   Dest file exists.
+2025-07-18 20:27:08.895   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.895   Version of our file: (none)
+2025-07-18 20:27:08.895   Version of existing file: (none)
+2025-07-18 20:27:08.895   Installing the file.
+2025-07-18 20:27:08.895   Successfully installed the file.
+2025-07-18 20:27:08.895   -- File entry --
+2025-07-18 20:27:08.895   Dest filename: C:\Program Files\KiwiFlow\app\logic\__init__.R
+2025-07-18 20:27:08.895   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.895   Dest file exists.
+2025-07-18 20:27:08.895   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.895   Version of our file: (none)
+2025-07-18 20:27:08.895   Version of existing file: (none)
+2025-07-18 20:27:08.895   Installing the file.
+2025-07-18 20:27:08.895   Successfully installed the file.
+2025-07-18 20:27:08.895   -- File entry --
+2025-07-18 20:27:08.895   Dest filename: C:\Program Files\KiwiFlow\app\report\deconvolution_report.qmd
+2025-07-18 20:27:08.895   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.895   Dest file exists.
+2025-07-18 20:27:08.895   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.895   Version of our file: (none)
+2025-07-18 20:27:08.915   Version of existing file: (none)
+2025-07-18 20:27:08.915   Installing the file.
+2025-07-18 20:27:08.915   Successfully installed the file.
+2025-07-18 20:27:08.915   -- File entry --
+2025-07-18 20:27:08.915   Dest filename: C:\Program Files\KiwiFlow\app\report\deconvolution_report.R
+2025-07-18 20:27:08.915   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.915   Dest file exists.
+2025-07-18 20:27:08.915   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.915   Version of our file: (none)
+2025-07-18 20:27:08.915   Version of existing file: (none)
+2025-07-18 20:27:08.915   Installing the file.
+2025-07-18 20:27:08.915   Successfully installed the file.
+2025-07-18 20:27:08.915   -- File entry --
+2025-07-18 20:27:08.915   Dest filename: C:\Program Files\KiwiFlow\app\report\logo_name.png
+2025-07-18 20:27:08.915   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.915   Dest file exists.
+2025-07-18 20:27:08.915   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.915   Version of our file: (none)
+2025-07-18 20:27:08.925   Version of existing file: (none)
+2025-07-18 20:27:08.925   Installing the file.
+2025-07-18 20:27:08.935   Successfully installed the file.
+2025-07-18 20:27:08.935   -- File entry --
+2025-07-18 20:27:08.935   Dest filename: C:\Program Files\KiwiFlow\app\report\quarto_styles.css
+2025-07-18 20:27:08.935   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.935   Dest file exists.
+2025-07-18 20:27:08.935   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.935   Version of our file: (none)
+2025-07-18 20:27:08.935   Version of existing file: (none)
+2025-07-18 20:27:08.935   Installing the file.
+2025-07-18 20:27:08.935   Successfully installed the file.
+2025-07-18 20:27:08.935   -- File entry --
+2025-07-18 20:27:08.935   Dest filename: C:\Program Files\KiwiFlow\app\static\favicon.ico
+2025-07-18 20:27:08.935   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.935   Dest file exists.
+2025-07-18 20:27:08.935   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.935   Version of our file: (none)
+2025-07-18 20:27:08.945   Version of existing file: (none)
+2025-07-18 20:27:08.945   Installing the file.
+2025-07-18 20:27:08.945   Successfully installed the file.
+2025-07-18 20:27:08.945   -- File entry --
+2025-07-18 20:27:08.945   Dest filename: C:\Program Files\KiwiFlow\app\static\liora_logo.png
+2025-07-18 20:27:08.945   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.945   Dest file exists.
+2025-07-18 20:27:08.945   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.945   Version of our file: (none)
+2025-07-18 20:27:08.945   Version of existing file: (none)
+2025-07-18 20:27:08.945   Installing the file.
+2025-07-18 20:27:08.955   Successfully installed the file.
+2025-07-18 20:27:08.955   -- File entry --
+2025-07-18 20:27:08.955   Dest filename: C:\Program Files\KiwiFlow\app\static\logo.svg
+2025-07-18 20:27:08.955   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.955   Dest file exists.
+2025-07-18 20:27:08.955   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.955   Version of our file: (none)
+2025-07-18 20:27:08.955   Version of existing file: (none)
+2025-07-18 20:27:08.955   Installing the file.
+2025-07-18 20:27:08.955   Successfully installed the file.
+2025-07-18 20:27:08.955   -- File entry --
+2025-07-18 20:27:08.955   Dest filename: C:\Program Files\KiwiFlow\app\static\logo_animated.svg
+2025-07-18 20:27:08.955   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.955   Dest file exists.
+2025-07-18 20:27:08.955   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.955   Version of our file: (none)
+2025-07-18 20:27:08.955   Version of existing file: (none)
+2025-07-18 20:27:08.955   Installing the file.
+2025-07-18 20:27:08.960   Successfully installed the file.
+2025-07-18 20:27:08.960   -- File entry --
+2025-07-18 20:27:08.960   Dest filename: C:\Program Files\KiwiFlow\app\static\logo_name.png
+2025-07-18 20:27:08.960   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.960   Dest file exists.
+2025-07-18 20:27:08.960   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.960   Version of our file: (none)
+2025-07-18 20:27:08.965   Version of existing file: (none)
+2025-07-18 20:27:08.965   Installing the file.
+2025-07-18 20:27:08.965   Successfully installed the file.
+2025-07-18 20:27:08.965   -- File entry --
+2025-07-18 20:27:08.965   Dest filename: C:\Program Files\KiwiFlow\app\static\logo_name.svg
+2025-07-18 20:27:08.965   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.965   Dest file exists.
+2025-07-18 20:27:08.965   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.965   Version of our file: (none)
+2025-07-18 20:27:08.980   Version of existing file: (none)
+2025-07-18 20:27:08.980   Installing the file.
+2025-07-18 20:27:08.985   Successfully installed the file.
+2025-07-18 20:27:08.985   -- File entry --
+2025-07-18 20:27:08.985   Dest filename: C:\Program Files\KiwiFlow\app\static\logo_noname.svg
+2025-07-18 20:27:08.985   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.985   Dest file exists.
+2025-07-18 20:27:08.985   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:08.985   Version of our file: (none)
+2025-07-18 20:27:08.995   Version of existing file: (none)
+2025-07-18 20:27:08.995   Installing the file.
+2025-07-18 20:27:09.000   Successfully installed the file.
+2025-07-18 20:27:09.000   -- File entry --
+2025-07-18 20:27:09.000   Dest filename: C:\Program Files\KiwiFlow\app\static\css\app.min.css
+2025-07-18 20:27:09.000   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.000   Dest file exists.
+2025-07-18 20:27:09.000   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.000   Version of our file: (none)
+2025-07-18 20:27:09.010   Version of existing file: (none)
+2025-07-18 20:27:09.010   Installing the file.
+2025-07-18 20:27:09.010   Successfully installed the file.
+2025-07-18 20:27:09.010   -- File entry --
+2025-07-18 20:27:09.010   Dest filename: C:\Program Files\KiwiFlow\app\static\js\app.min.js
+2025-07-18 20:27:09.010   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.010   Dest file exists.
+2025-07-18 20:27:09.010   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.010   Version of our file: (none)
+2025-07-18 20:27:09.010   Version of existing file: (none)
+2025-07-18 20:27:09.010   Installing the file.
+2025-07-18 20:27:09.010   Successfully installed the file.
+2025-07-18 20:27:09.010   -- File entry --
+2025-07-18 20:27:09.015   Dest filename: C:\Program Files\KiwiFlow\app\styles\logo_name.png
+2025-07-18 20:27:09.015   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.015   Dest file exists.
+2025-07-18 20:27:09.015   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.015   Version of our file: (none)
+2025-07-18 20:27:09.020   Version of existing file: (none)
+2025-07-18 20:27:09.020   Installing the file.
+2025-07-18 20:27:09.025   Successfully installed the file.
+2025-07-18 20:27:09.025   -- File entry --
+2025-07-18 20:27:09.025   Dest filename: C:\Program Files\KiwiFlow\app\styles\main.scss
+2025-07-18 20:27:09.025   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.025   Dest file exists.
+2025-07-18 20:27:09.025   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.025   Version of our file: (none)
+2025-07-18 20:27:09.035   Version of existing file: (none)
+2025-07-18 20:27:09.035   Installing the file.
+2025-07-18 20:27:09.035   Successfully installed the file.
+2025-07-18 20:27:09.035   -- File entry --
+2025-07-18 20:27:09.035   Dest filename: C:\Program Files\KiwiFlow\app\styles\quarto_styles.css
+2025-07-18 20:27:09.035   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.035   Dest file exists.
+2025-07-18 20:27:09.035   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.035   Version of our file: (none)
+2025-07-18 20:27:09.040   Version of existing file: (none)
+2025-07-18 20:27:09.040   Installing the file.
+2025-07-18 20:27:09.040   Successfully installed the file.
+2025-07-18 20:27:09.040   -- File entry --
+2025-07-18 20:27:09.040   Dest filename: C:\Program Files\KiwiFlow\app\view\conversion_main.R
+2025-07-18 20:27:09.040   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.040   Dest file exists.
+2025-07-18 20:27:09.040   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.040   Version of our file: (none)
+2025-07-18 20:27:09.040   Version of existing file: (none)
+2025-07-18 20:27:09.040   Installing the file.
+2025-07-18 20:27:09.040   Successfully installed the file.
+2025-07-18 20:27:09.044   -- File entry --
+2025-07-18 20:27:09.044   Dest filename: C:\Program Files\KiwiFlow\app\view\conversion_sidebar.R
+2025-07-18 20:27:09.044   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.044   Dest file exists.
+2025-07-18 20:27:09.044   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.044   Version of our file: (none)
+2025-07-18 20:27:09.045   Version of existing file: (none)
+2025-07-18 20:27:09.045   Installing the file.
+2025-07-18 20:27:09.045   Successfully installed the file.
+2025-07-18 20:27:09.045   -- File entry --
+2025-07-18 20:27:09.045   Dest filename: C:\Program Files\KiwiFlow\app\view\deconvolution_process.R
+2025-07-18 20:27:09.045   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.045   Dest file exists.
+2025-07-18 20:27:09.045   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.045   Version of our file: (none)
+2025-07-18 20:27:09.060   Version of existing file: (none)
+2025-07-18 20:27:09.060   Installing the file.
+2025-07-18 20:27:09.060   Successfully installed the file.
+2025-07-18 20:27:09.065   -- File entry --
+2025-07-18 20:27:09.065   Dest filename: C:\Program Files\KiwiFlow\app\view\deconvolution_sidebar.R
+2025-07-18 20:27:09.065   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.065   Dest file exists.
+2025-07-18 20:27:09.065   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.065   Version of our file: (none)
+2025-07-18 20:27:09.075   Version of existing file: (none)
+2025-07-18 20:27:09.075   Installing the file.
+2025-07-18 20:27:09.075   Successfully installed the file.
+2025-07-18 20:27:09.075   -- File entry --
+2025-07-18 20:27:09.075   Dest filename: C:\Program Files\KiwiFlow\app\view\ki_kinact_sidebar.R
+2025-07-18 20:27:09.075   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.075   Dest file exists.
+2025-07-18 20:27:09.075   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.075   Version of our file: (none)
+2025-07-18 20:27:09.080   Version of existing file: (none)
+2025-07-18 20:27:09.080   Installing the file.
+2025-07-18 20:27:09.080   Successfully installed the file.
+2025-07-18 20:27:09.080   -- File entry --
+2025-07-18 20:27:09.080   Dest filename: C:\Program Files\KiwiFlow\app\view\log_sidebar.R
+2025-07-18 20:27:09.080   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.080   Dest file exists.
+2025-07-18 20:27:09.080   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.080   Version of our file: (none)
+2025-07-18 20:27:09.080   Version of existing file: (none)
+2025-07-18 20:27:09.080   Installing the file.
+2025-07-18 20:27:09.080   Successfully installed the file.
+2025-07-18 20:27:09.080   -- File entry --
+2025-07-18 20:27:09.080   Dest filename: C:\Program Files\KiwiFlow\app\view\log_view.R
+2025-07-18 20:27:09.080   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.080   Dest file exists.
+2025-07-18 20:27:09.080   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.080   Version of our file: (none)
+2025-07-18 20:27:09.085   Version of existing file: (none)
+2025-07-18 20:27:09.085   Installing the file.
+2025-07-18 20:27:09.085   Successfully installed the file.
+2025-07-18 20:27:09.085   -- File entry --
+2025-07-18 20:27:09.085   Dest filename: C:\Program Files\KiwiFlow\app\view\__init__.R
+2025-07-18 20:27:09.085   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.085   Dest file exists.
+2025-07-18 20:27:09.085   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.085   Version of our file: (none)
+2025-07-18 20:27:09.085   Version of existing file: (none)
+2025-07-18 20:27:09.085   Installing the file.
+2025-07-18 20:27:09.085   Successfully installed the file.
+2025-07-18 20:27:09.085   -- File entry --
+2025-07-18 20:27:09.085   Dest filename: C:\Program Files\KiwiFlow\dev\.lintr
+2025-07-18 20:27:09.085   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.085   Dest file exists.
+2025-07-18 20:27:09.085   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.085   Version of our file: (none)
+2025-07-18 20:27:09.090   Version of existing file: (none)
+2025-07-18 20:27:09.090   Installing the file.
+2025-07-18 20:27:09.090   Successfully installed the file.
+2025-07-18 20:27:09.090   -- File entry --
+2025-07-18 20:27:09.090   Dest filename: C:\Program Files\KiwiFlow\dev\setup_kiwiflow.ps1
+2025-07-18 20:27:09.090   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.090   Dest file exists.
+2025-07-18 20:27:09.090   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.090   Version of our file: (none)
+2025-07-18 20:27:09.110   Version of existing file: (none)
+2025-07-18 20:27:09.110   Installing the file.
+2025-07-18 20:27:09.110   Successfully installed the file.
+2025-07-18 20:27:09.110   -- File entry --
+2025-07-18 20:27:09.110   Dest filename: C:\Program Files\KiwiFlow\dev\update_kiwiflow.ps1
+2025-07-18 20:27:09.110   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.110   Dest file exists.
+2025-07-18 20:27:09.110   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.110   Version of our file: (none)
+2025-07-18 20:27:09.140   Version of existing file: (none)
+2025-07-18 20:27:09.140   Installing the file.
+2025-07-18 20:27:09.140   Successfully installed the file.
+2025-07-18 20:27:09.140   -- File entry --
+2025-07-18 20:27:09.140   Dest filename: C:\Program Files\KiwiFlow\renv\.gitignore
+2025-07-18 20:27:09.140   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.140   Dest file exists.
+2025-07-18 20:27:09.140   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.140   Version of our file: (none)
+2025-07-18 20:27:09.144   Version of existing file: (none)
+2025-07-18 20:27:09.144   Installing the file.
+2025-07-18 20:27:09.145   Successfully installed the file.
+2025-07-18 20:27:09.145   -- File entry --
+2025-07-18 20:27:09.145   Dest filename: C:\Program Files\KiwiFlow\renv\activate.R
+2025-07-18 20:27:09.145   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.145   Dest file exists.
+2025-07-18 20:27:09.145   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.145   Version of our file: (none)
+2025-07-18 20:27:09.155   Version of existing file: (none)
+2025-07-18 20:27:09.155   Installing the file.
+2025-07-18 20:27:09.155   Successfully installed the file.
+2025-07-18 20:27:09.155   -- File entry --
+2025-07-18 20:27:09.155   Dest filename: C:\Program Files\KiwiFlow\resources\environment.yml
+2025-07-18 20:27:09.155   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.155   Dest file exists.
+2025-07-18 20:27:09.155   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.155   Version of our file: (none)
+2025-07-18 20:27:09.155   Version of existing file: (none)
+2025-07-18 20:27:09.155   Installing the file.
+2025-07-18 20:27:09.155   Successfully installed the file.
+2025-07-18 20:27:09.155   -- File entry --
+2025-07-18 20:27:09.155   Dest filename: C:\Program Files\KiwiFlow\resources\hexagon_sticker.R
+2025-07-18 20:27:09.155   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.155   Dest file exists.
+2025-07-18 20:27:09.155   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.155   Version of our file: (none)
+2025-07-18 20:27:09.155   Version of existing file: (none)
+2025-07-18 20:27:09.155   Installing the file.
+2025-07-18 20:27:09.155   Successfully installed the file.
+2025-07-18 20:27:09.155   -- File entry --
+2025-07-18 20:27:09.155   Dest filename: C:\Program Files\KiwiFlow\resources\kiwi.png
+2025-07-18 20:27:09.155   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.155   Dest file exists.
+2025-07-18 20:27:09.155   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.155   Version of our file: (none)
+2025-07-18 20:27:09.165   Version of existing file: (none)
+2025-07-18 20:27:09.165   Installing the file.
+2025-07-18 20:27:09.170   Successfully installed the file.
+2025-07-18 20:27:09.170   -- File entry --
+2025-07-18 20:27:09.170   Dest filename: C:\Program Files\KiwiFlow\resources\version.txt
+2025-07-18 20:27:09.170   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.170   Dest file exists.
+2025-07-18 20:27:09.170   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.170   Version of our file: (none)
+2025-07-18 20:27:09.170   Version of existing file: (none)
+2025-07-18 20:27:09.170   Installing the file.
+2025-07-18 20:27:09.170   Successfully installed the file.
+2025-07-18 20:27:09.170   -- File entry --
+2025-07-18 20:27:09.170   Dest filename: C:\Program Files\KiwiFlow\favicon.ico
+2025-07-18 20:27:09.170   Time stamp of our file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.170   Dest file exists.
+2025-07-18 20:27:09.170   Time stamp of existing file: 2025-07-17 16:09:44.000
+2025-07-18 20:27:09.170   Installing the file.
+2025-07-18 20:27:09.170   Successfully installed the file.
+2025-07-18 20:27:09.175   Saving uninstall information.
+2025-07-18 20:27:09.175   Renaming uninstaller.
+2025-07-18 20:27:09.175   Deleting uninstall key left over from previous administrative 32-bit install.
+2025-07-18 20:27:09.175   Creating new uninstall key: HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall\KiwiFlow_is1
+2025-07-18 20:27:09.175   Writing uninstall key values.
+2025-07-18 20:27:09.175   Detected previous non administrative install? No
+2025-07-18 20:27:09.175   Detected previous administrative 64-bit install? No
+2025-07-18 20:27:09.175   Installation process succeeded.
+2025-07-18 20:27:09.185   -- Run entry --
+2025-07-18 20:27:09.185   Run as: Current user
+2025-07-18 20:27:09.185   Type: ShellExec
+2025-07-18 20:27:09.185   Filename: powershell.exe
+2025-07-18 20:27:09.185   Parameters: -ExecutionPolicy Bypass -File "C:\Program Files\KiwiFlow\config.ps1" -basePath "C:\Program Files\KiwiFlow" -userDataPath "C:\Users\Marian\AppData\Local\KiwiFlow" -condaPrefix "C:\Users\Marian\AppData\Local\miniconda3" -envName "kiwiflow" -logFile "C:\Users\Marian\AppData\Local\KiwiFlow\kiwiflow_setup.log"
+2025-07-18 20:27:10.945   -- Run entry --
+2025-07-18 20:27:10.945   Run as: Current user
+2025-07-18 20:27:10.945   Type: ShellExec
+2025-07-18 20:27:10.945   Filename: powershell.exe
+2025-07-18 20:27:10.945   Parameters: -ExecutionPolicy Bypass -File "C:\Program Files\KiwiFlow\miniconda_installer.ps1" -basePath "C:\Program Files\KiwiFlow" -userDataPath "C:\Users\Marian\AppData\Local\KiwiFlow" -condaPrefix "C:\Users\Marian\AppData\Local\miniconda3" -envName "kiwiflow" -logFile "C:\Users\Marian\AppData\Local\KiwiFlow\kiwiflow_setup.log"
+2025-07-18 20:27:12.120   -- Run entry --
+2025-07-18 20:27:12.120   Run as: Current user
+2025-07-18 20:27:12.120   Type: ShellExec
+2025-07-18 20:27:12.120   Filename: powershell.exe
+2025-07-18 20:27:12.120   Parameters: -ExecutionPolicy Bypass -File "C:\Program Files\KiwiFlow\conda_env.ps1" -basePath "C:\Program Files\KiwiFlow" -userDataPath "C:\Users\Marian\AppData\Local\KiwiFlow" -condaPrefix "C:\Users\Marian\AppData\Local\miniconda3" -envName "kiwiflow" -logFile "C:\Users\Marian\AppData\Local\KiwiFlow\kiwiflow_setup.log"
+2025-07-18 20:27:13.295   -- Run entry --
+2025-07-18 20:27:13.295   Run as: Current user
+2025-07-18 20:27:13.295   Type: ShellExec
+2025-07-18 20:27:13.295   Filename: powershell.exe
+2025-07-18 20:27:13.295   Parameters: -ExecutionPolicy Bypass -File "C:\Program Files\KiwiFlow\install_rtools.ps1" -basePath "C:\Program Files\KiwiFlow" -userDataPath "C:\Users\Marian\AppData\Local\KiwiFlow" -condaPrefix "C:\Users\Marian\AppData\Local\miniconda3" -envName "kiwiflow" -logFile "C:\Users\Marian\AppData\Local\KiwiFlow\kiwiflow_setup.log"
+2025-07-18 20:27:14.627   -- Run entry --
+2025-07-18 20:27:14.627   Run as: Current user
+2025-07-18 20:27:14.627   Type: ShellExec
+2025-07-18 20:27:14.627   Filename: powershell.exe
+2025-07-18 20:27:14.627   Parameters: -ExecutionPolicy Bypass -File "C:\Program Files\KiwiFlow\renv_setup.ps1" -basePath "C:\Program Files\KiwiFlow" -userDataPath "C:\Users\Marian\AppData\Local\KiwiFlow" -condaPrefix "C:\Users\Marian\AppData\Local\miniconda3" -envName "kiwiflow" -logFile "C:\Users\Marian\AppData\Local\KiwiFlow\kiwiflow_setup.log"
+2025-07-18 20:27:15.905   -- Run entry --
+2025-07-18 20:27:15.905   Run as: Current user
+2025-07-18 20:27:15.905   Type: ShellExec
+2025-07-18 20:27:15.905   Filename: powershell.exe
+2025-07-18 20:27:15.905   Parameters: -ExecutionPolicy Bypass -File "C:\Program Files\KiwiFlow\launcher_create.ps1" -basePath "C:\Program Files\KiwiFlow" -userDataPath "C:\Users\Marian\AppData\Local\KiwiFlow" -condaPrefix "C:\Users\Marian\AppData\Local\miniconda3" -envName "kiwiflow" -logFile "C:\Users\Marian\AppData\Local\KiwiFlow\kiwiflow_setup.log"
+2025-07-18 20:27:17.185   Need to restart Windows? No
+2025-07-18 20:27:18.915   Deinitializing Setup.
+2025-07-18 20:27:18.925   Log closed.

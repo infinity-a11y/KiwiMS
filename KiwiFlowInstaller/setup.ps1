@@ -53,7 +53,7 @@ function Download-File($url, $destination) {
 # Start logging
 #-----------------------------#
 $logFile = "$env:LOCALAPPDATA\KiwiFlow\kiwiflow_setup.log"
-Start-Transcript -Path $logFile
+#Start-Transcript -Path $logFile
 
 #-----------------------------#
 # Paths and Setup
