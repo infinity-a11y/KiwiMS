@@ -7,8 +7,8 @@ DefaultGroupName=KiwiFlow
 Compression=lzma2
 SolidCompression=yes
 OutputDir=.\Output
-OutputBaseFilename=Install_KiwiFlow
-SetupIconFile=favicon.ico
+OutputBaseFilename=KiwiFlow_2025-07-22_Setup
+SetupIconFile=setup\favicon.ico
 PrivilegesRequired=admin
 
 [Languages]
@@ -17,23 +17,23 @@ Name: "de"; MessagesFile: "compiler:Languages\German.isl"
 
 [Files]
 ; Setup scripts
-Source: "config.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "miniconda_installer.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "conda_env.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "install_rtools.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "install_renv.R"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "renv_install.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "setup_renv.R"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "renv_setup.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "install_reticulate.R"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "reticulate_install.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "launcher_create.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
+Source: "setup\config.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
+Source: "setup\miniconda_installer.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
+Source: "setup\conda_env.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
+Source: "setup\install_rtools.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
+Source: "setup\install_renv.R"; DestDir: "{app}"; Flags: deleteafterinstall
+Source: "setup\renv_install.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
+Source: "setup\setup_renv.R"; DestDir: "{app}"; Flags: deleteafterinstall
+Source: "setup\renv_setup.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
+Source: "setup\install_reticulate.R"; DestDir: "{app}"; Flags: deleteafterinstall
+Source: "setup\reticulate_install.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
+Source: "setup\launcher_create.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 
 ; App files
-Source: "KiwiFlow_App_Source\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
+Source: "KiwiFlow_App\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
 
 ; Other
-Source: "favicon.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "setup\favicon.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Run]
 #define KiwiFlowLogFile "{localappdata}\KiwiFlow\kiwiflow_setup.log"
@@ -60,9 +60,6 @@ Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\r
 ; 4c. Install reticulate
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\reticulate_install.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "Installing reticulate (R environment setup phase 3/3)..."; Flags: shellexec waituntilterminated runhidden; AfterInstall: UpdateProgress(100);
 
-; 5. Create Launchers and Shortcut
-;Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\launcher_create.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "Creating Application Launchers and Desktop Shortcut..."; Flags: runhidden shellexec waituntilterminated; AfterInstall: UpdateProgress(100);
-
 ; After all steps, potentially launch the app or show info
 Filename: "{app}\KiwiFlow.exe"; Description: "{cm:LaunchProgram,KiwiFlow}"; Flags: postinstall skipifsilent shellexec;
 
@@ -81,7 +78,7 @@ end;
 
 [Icons]
 ; Creates a shortcut in the Start Menu Programs group
-Name: "{group}\KiwiFlow"; Filename: "{app}\KiwiFlow.exe"; WorkingDir: "{app}"; IconFilename: "{app}\favicon.ico"; Comment: "Launch the KiwiFlow Application";
+Name: "{group}\KiwiFlow"; Filename: "{app}\KiwiFlow.exe"; WorkingDir: "{app}"; IconFilename: "{app}\setup\favicon.ico"; Comment: "Launch the KiwiFlow Application";
 
 ; Creates a desktop shortcut
-Name: "{userdesktop}\KiwiFlow"; Filename: "{app}\KiwiFlow.exe"; WorkingDir: "{app}"; IconFilename: "{app}\favicon.ico"; Comment: "Launch the KiwiFlow Application";
+Name: "{userdesktop}\KiwiFlow"; Filename: "{app}\KiwiFlow.exe"; WorkingDir: "{app}"; IconFilename: "{app}\setup\favicon.ico"; Comment: "Launch the KiwiFlow Application";
