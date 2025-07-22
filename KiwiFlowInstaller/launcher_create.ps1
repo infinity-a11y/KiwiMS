@@ -119,7 +119,6 @@ Write-Host "Creating desktop shortcut for KiwiFlow..."
 try {
     $shortcutPath = "$env:USERPROFILE\Desktop\KiwiFlow.lnk"
     $iconPath = "$basePath\app\static\favicon.ico"
-    $appPath = "$basePath\app.R" -replace '\\', '\\'
     $vbsPath = "$basePath\run_app.vbs" -replace '\\', '\\'
     $wshShell = New-Object -ComObject WScript.Shell
     $shortcut = $wshShell.CreateShortcut($shortcutPath)
