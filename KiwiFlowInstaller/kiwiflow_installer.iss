@@ -58,13 +58,13 @@ Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\r
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\renv_setup.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "Restoring R packages (renv environment setup phase 2/3)..."; Flags: shellexec waituntilterminated runhidden; AfterInstall: UpdateProgress(90);
 
 ; 4c. Install reticulate
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\reticulate_install.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "Installing reticulate (R environment setup phase 3/3)..."; Flags: shellexec waituntilterminated runhidden; AfterInstall: UpdateProgress(95);
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\reticulate_install.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "Installing reticulate (R environment setup phase 3/3)..."; Flags: shellexec waituntilterminated runhidden; AfterInstall: UpdateProgress(100);
 
 ; 5. Create Launchers and Shortcut
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\launcher_create.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "Creating Application Launchers and Desktop Shortcut..."; Flags: runhidden shellexec waituntilterminated; AfterInstall: UpdateProgress(100);
+;Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\launcher_create.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "Creating Application Launchers and Desktop Shortcut..."; Flags: runhidden shellexec waituntilterminated; AfterInstall: UpdateProgress(100);
 
 ; After all steps, potentially launch the app or show info
-Filename: "{app}\run_app.vbs"; Description: "{cm:LaunchProgram,KiwiFlow}"; Flags: postinstall skipifsilent shellexec;
+Filename: "{app}\KiwiFlow.exe"; Description: "{cm:LaunchProgram,KiwiFlow}"; Flags: postinstall skipifsilent shellexec;
 
 [Code]
 
@@ -78,3 +78,10 @@ begin
   WizardForm.ProgressGauge.Position :=
     Position * WizardForm.ProgressGauge.Max div 100;
 end;
+
+[Icons]
+; Creates a shortcut in the Start Menu Programs group
+Name: "{group}\KiwiFlow"; Filename: "{app}\KiwiFlow.exe"; WorkingDir: "{app}"; IconFilename: "{app}\favicon.ico"; Comment: "Launch the KiwiFlow Application";
+
+; Creates a desktop shortcut
+Name: "{userdesktop}\KiwiFlow"; Filename: "{app}\KiwiFlow.exe"; WorkingDir: "{app}"; IconFilename: "{app}\favicon.ico"; Comment: "Launch the KiwiFlow Application";
