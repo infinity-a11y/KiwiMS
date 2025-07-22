@@ -20,10 +20,12 @@ Write-Host "userDataPath: $userDataPath"
 Write-Host "envName: $envName"
 Write-Host "logFile: $logFile"
 
-$condaPrefix = "$env:ProgramData\miniconda3"
+# Source functions
+. "$basePath\functions.ps1"
 
 # Path declaration
-$condaCmd = Join-Path $condaPrefix "Scripts\conda.exe"
+$condaCmd = Find-CondaExecutable
+$condaPrefix = [System.IO.Path]::GetDirectoryName([System.IO.Path]::GetDirectoryName($condaCmd))
 $condaEnvPath = Join-Path $condaPrefix "envs\$envName"
 
 # Conda Presence Check
@@ -44,29 +46,6 @@ if (-Not (Test-Path $environmentYmlPath)) {
     Write-Host "ERROR: environment.yml not found at '$environmentYmlPath'. Cannot create Conda environment. Exiting."
     exit 1
 }
-
-# try {
-#     & $condaCmd env create -f "$basePath\resources\environment.yml" -n $envName -y
-#     # Check for success within the output or by path
-#     if (Test-Path $condaEnvPath) {
-#         Write-Host  "Conda environment '$envName' created or updated successfully."
-#         break # Exit the retry loop on success
-#     }
-#     else {
-#         throw "Conda environment '$envName' not found after creation command completed."
-#     }
-# }
-# catch {
-#     try {
-#         Write-Host "Environment clearing conda package cache..."
-#         & $condaCmd clean --all -y
-#         & $condaCmd env create -f "$basePath\resources\environment.yml" -n $envName -y
-#     }
-#     catch {
-#         Write-Error "Failed to manage conda environment. Error: $($_.Exception.Message)"
-#         exit 1
-#     }
-# }
 
 # Creating conda environment
 $maxRetries = 3

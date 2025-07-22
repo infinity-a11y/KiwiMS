@@ -20,31 +20,9 @@ Write-Host "userDataPath: $userDataPath"
 Write-Host "envName: $envName"
 Write-Host "logFile: $logFile"
 
-#-----------------------------#
-# FUNCTION Download with Retry
-#-----------------------------#
-function Download-File($url, $destination) {
-    if (Test-Path $destination) {
-        Remove-Item $destination -Force
-    }
 
-    $success = $false
-    for ($i = 0; $i -lt 3; $i++) {
-        try {
-            Invoke-WebRequest -Uri $url -OutFile $destination -UseBasicParsing
-            $success = $true
-            break
-        }
-        catch {
-            Start-Sleep -Seconds 3
-        }
-    }
-
-    if (-Not $success) {
-        Write-Host "Failed to download: $url"
-        exit 1
-    }
-}
+# Source functions
+. "$basePath\functions.ps1"
 
 #-----------------------------#
 # Ensure Rtools

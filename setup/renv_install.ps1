@@ -20,14 +20,13 @@ Write-Host "userDataPath: $userDataPath"
 Write-Host "envName: $envName"
 Write-Host "logFile: $logFile"
 
-$condaPrefix = "$env:ProgramData\miniconda3"
+# Source functions
+. "$basePath\functions.ps1"
+$condaCmd = Find-CondaExecutable
 
-#-----------------------------#
 # Conda Presence Check
-#-----------------------------#
-$condaCmd = "$condaPrefix\Scripts\conda.exe"
 if (-Not (Test-Path $condaCmd)) {
-    Write-Host "Conda not found after installation. Exiting."
+    Write-Host "Conda not found. Exiting."
     exit 1
 }
 

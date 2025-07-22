@@ -20,40 +20,20 @@ Write-Host "userDataPath: $userDataPath"
 Write-Host "envName: $envName"
 Write-Host "logFile: $logFile"
 
-$condaPrefix = "$env:ProgramData\miniconda3"
-
-#-----------------------------#
-# FUNCTION Download with Retry
-#-----------------------------#
-function Download-File($url, $destination) {
-    if (Test-Path $destination) {
-        Remove-Item $destination -Force
-    }
-
-    $success = $false
-    for ($i = 0; $i -lt 3; $i++) {
-        try {
-            Invoke-WebRequest -Uri $url -OutFile $destination -UseBasicParsing
-            $success = $true
-            break
-        }
-        catch {
-            Start-Sleep -Seconds 3
-        }
-    }
-
-    if (-Not $success) {
-        Write-Host "Failed to download: $url"
-        exit 1
-    }
-}
-
 #-----------------------------#
 # Install Miniconda if Missing
 #-----------------------------#
+
+# Source functions
+. "$basePath\functions.ps1"
+$condaCmd = Find-CondaExecutable
+    
 try {
-    if (-Not (Test-Path "$condaPrefix\Scripts\conda.exe")) {
-        Write-Host "Installing Miniconda..."
+    if (-Not $condaCmd) {
+        $condaPrefix = "$env:ProgramData\miniconda3"
+        $condaCmd = "$condaPrefix\Scripts\conda.exe"
+
+        Write-Host "Conda executable not found. Installing Miniconda in $condaPrefix ..."
 
         # Download installer
         $tempPath = "$env:TEMP\kiwiflow_setup"
@@ -65,7 +45,16 @@ try {
         $env:Path += ";$env:ProgramData\Miniconda3;$env:ProgramData\Miniconda3\Scripts;$env:ProgramData\Miniconda3\Library\bin"
         [Environment]::SetEnvironmentVariable("Path", $env:Path, [System.EnvironmentVariableTarget]::User)
         Write-Host "Miniconda installation completed."   
-    } else {
+
+        # Conda Presence Check
+        Write-Host "Checking for Conda executable at $condaCmd..."
+        if (-Not (Test-Path $condaCmd)) {
+            Write-Host "Miniconda not found after installation. Exiting."
+            exit 1
+        }
+        Write-Host "Conda executable found."
+    }
+    else {
         Write-Host "Miniconda already present."
     }
 }
@@ -73,15 +62,3 @@ catch {
     Write-Host "Miniconda installation failed. Exiting."
     exit 1
 }
-
-#-----------------------------#
-# Conda Presence Check
-#-----------------------------#
-$condaCmd = "$condaPrefix\Scripts\conda.exe"
-Write-Host "Checking for Conda executable at $condaCmd..."
-if (-Not (Test-Path $condaCmd)) {
-    Write-Host "Miniconda not found after installation. Exiting."
-    exit 1
-}
-
-Write-Host "Conda executable found."

@@ -10,7 +10,7 @@ $versionFile = Get-Content -Path "resources\version.txt" | Select-Object -First 
 
 Write-Host ""
 Write-Host "██╗  ██╗ ██╗ ██╗    ██╗ ██╗ ███████╗ ██╗      ██████╗  ██╗    ██╗" -ForegroundColor DarkGreen -BackgroundColor Black
-Write-Host "██║ ██╔╝ ██║ ██║    ██║ ██║ ██╔════╝ ██║     ██║   ██║ ██║    ██║" -ForegroundColor DarkGreen -BackgroundColor Black
+Write-Host "██║ ██╔╝ ██║ ██║    ██║ ██║ ██╔════╝ ██║     ██║   ██╗ ██║    ██║" -ForegroundColor DarkGreen -BackgroundColor Black
 Write-Host "█████╔╝  ██║ ██║ █╗ ██║ ██║ █████╗   ██║     ██║   ██║ ██║ █╗ ██║" -ForegroundColor DarkGreen -BackgroundColor Black
 Write-Host "██╔═██╗  ██║ ██║███╗██║ ██║ ██╔══╝   ██║     ██║   ██║ ██║███╗██║" -ForegroundColor DarkGreen -BackgroundColor Black
 Write-Host "██║  ██╗ ██║ ╚███╔███╔╝ ██║ ██║      ██████╗  ██████╔╝ ╚███╔███╔╝" -ForegroundColor DarkGreen -BackgroundColor Black
@@ -24,7 +24,13 @@ Write-Host "$versionFile"
 Write-Host "Starting application... please wait." -ForegroundColor Yellow  -BackgroundColor Black
 Write-Host ""  -BackgroundColor Black
 
-$condaPrefix = "$env:ProgramData\miniconda3"
+
+# Source functions
+. "$basePath\functions.ps1"
+
+# Path declaration
+$condaCmd = Find-CondaExecutable
+$condaPrefix = [System.IO.Path]::GetDirectoryName([System.IO.Path]::GetDirectoryName($condaCmd))
 $logDirectory = "$env:localappdata\KiwiFlow"
 $logFile = Join-Path $logDirectory "launch.log"
 
@@ -36,7 +42,6 @@ if (-Not (Test-Path $logDirectory)) {
 Clear-Content -Path $logFile -ErrorAction SilentlyContinue
 
 # Conda presence check
-$condaCmd = "$condaPrefix\Scripts\conda.exe"
 if (-Not (Test-Path $condaCmd)) {
     Write-Host "Conda not found. Exiting."
     Write-Host "Check error logfile at: $logFile"

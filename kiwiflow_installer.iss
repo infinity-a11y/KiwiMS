@@ -18,6 +18,7 @@ Name: "de"; MessagesFile: "compiler:Languages\German.isl"
 [Files]
 ; Setup scripts
 Source: "setup\config.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
+Source: "setup\functions.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\miniconda_installer.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\conda_env.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\install_rtools.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
@@ -27,7 +28,6 @@ Source: "setup\setup_renv.R"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\renv_setup.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\install_reticulate.R"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\reticulate_install.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "setup\launcher_create.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 
 ; App files
 Source: "KiwiFlow_App\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
