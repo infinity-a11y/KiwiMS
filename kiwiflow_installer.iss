@@ -11,6 +11,10 @@ OutputDir=.\Output
 OutputBaseFilename=KiwiFlow_2025-07-22_Setup
 SetupIconFile=setup\favicon.ico
 PrivilegesRequired=admin
+FlatComponentsList=no
+WizardImageFile=setup\kiwiflow_big.bmp
+WizardSmallImageFile=setup\kiwiflow_small.bmp
+WizardStyle=modern
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -76,6 +80,8 @@ begin
   WizardForm.ProgressGauge.Position :=
     Position * WizardForm.ProgressGauge.Max div 100;
 end;
+
+function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo, MemoComponentsInfo, MemoGroupInfo, MemoTasksInfo: String): String;
 
 [Icons]
 ; Creates a shortcut in the Start Menu Programs group
