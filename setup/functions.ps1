@@ -25,7 +25,8 @@ function Find-CondaExecutable {
             Write-Host "Found conda.exe in system PATH: $condaCmdInPath"
             return $condaCmdInPath
         }
-    } catch {
+    }
+    catch {
         Write-Warning "Failed to find conda.exe in system PATH using Get-Command. Error: $($_.Exception.Message)"
     }
 
@@ -44,6 +45,29 @@ function Find-CondaExecutable {
 
     Write-Host "ERROR: conda.exe not found in common locations or system PATH." -ForegroundColor Red
     return $null # Return null if conda.exe is not found anywhere
+}
+
+#-----------------------------#
+# FUNCTION Find-RtoolsExecutable
+#-----------------------------#
+function Find-RtoolsExecutable($rtoolsPath) {
+    Write-Host "Find-RtoolsExecutable: Searching for existing Rtools 4.4 installation..."
+
+    $rtoolsBinPath = Join-Path $rtoolsPath "usr\bin"
+    
+    try {
+        if (-not ($env:PATH -like "*$($rtoolsPath )\usr\bin*")) {
+            Write-Host "Rtools not found."
+            $env:PATH = "$rtoolsPath\usr\bin;" + $env:PATH
+            Write-Host "Added $($rtoolsPath )\usr\bin to PATH."
+        }
+        else {
+            Write-Host "$($rtoolsBinPath) is present in PATH."
+        }
+    } 
+    catch {
+        Write-Host "ERROR: Adding $($rtoolsBinPath) to PATH failed."
+    }
 }
 
 #-----------------------------#

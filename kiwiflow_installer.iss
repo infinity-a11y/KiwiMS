@@ -3,6 +3,7 @@ AppName=KiwiFlow
 AppVersion=0.1.0
 AppPublisher=Marian Freisleben
 DefaultDirName={autopf}\KiwiFlow
+DisableDirPage=yes
 DefaultGroupName=KiwiFlow
 Compression=lzma2
 SolidCompression=yes
@@ -18,7 +19,7 @@ Name: "de"; MessagesFile: "compiler:Languages\German.isl"
 [Files]
 ; Setup scripts
 Source: "setup\config.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "setup\functions.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
+Source: "setup\functions.ps1"; DestDir: "{app}";
 Source: "setup\miniconda_installer.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\conda_env.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\install_rtools.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
@@ -78,7 +79,7 @@ end;
 
 [Icons]
 ; Creates a shortcut in the Start Menu Programs group
-Name: "{group}\KiwiFlow"; Filename: "{app}\KiwiFlow.exe"; WorkingDir: "{app}"; IconFilename: "{app}\setup\favicon.ico"; Comment: "Launch the KiwiFlow Application";
+Name: "{group}\KiwiFlow"; Filename: "{app}\KiwiFlow.exe"; WorkingDir: "{app}"; IconFilename: "{app}\favicon.ico"; Comment: "Launch the KiwiFlow Application";
 
 ; Creates a desktop shortcut
-Name: "{userdesktop}\KiwiFlow"; Filename: "{app}\KiwiFlow.exe"; WorkingDir: "{app}"; IconFilename: "{app}\setup\favicon.ico"; Comment: "Launch the KiwiFlow Application";
+Name: "{userdesktop}\KiwiFlow"; Filename: "{app}\KiwiFlow.exe"; WorkingDir: "{app}"; IconFilename: "{app}\favicon.ico"; Comment: "Launch the KiwiFlow Application";

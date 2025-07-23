@@ -1,3 +1,5 @@
+# install_rtools.ps1
+
 #-----------------------------#
 # Script Initialization
 #-----------------------------#
@@ -12,7 +14,7 @@ param(
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
-# Start logging
+# Start logging transcript to the specified log file
 Start-Transcript -Path $logFile -Append
 
 Write-Host "basePath: $basePath"
@@ -20,15 +22,21 @@ Write-Host "userDataPath: $userDataPath"
 Write-Host "envName: $envName"
 Write-Host "logFile: $logFile"
 
-
 # Source functions
 . "$basePath\functions.ps1"
 
 #-----------------------------#
 # Ensure Rtools
 #-----------------------------#
+
+$tempPath = Join-Path $env:TEMP "kiwiflow_setup"
+# Ensure temporary directory exists for downloads
+if (-Not (Test-Path $tempPath)) {
+    New-Item -Path $tempPath -ItemType Directory -Force | Out-Null
+    Write-Host "Created temporary directory: $tempPath"
+}
+
 $rtoolsPath = "C:\rtools44"
-$rtoolsBinPath = Join-Path $rtoolsPath "usr\bin"
 
 try {
     Write-Host "Checking for existing Rtools installation at $rtoolsPath..."
@@ -48,21 +56,18 @@ try {
             Write-Host "ERROR: Rtools installation failed with exit code $($process.ExitCode)."
             exit 1
         }
+        else {
+            Write-Host "Rtools installation completed."
+        }
         
         # Path environment check
-        #Start-Process -Wait -FilePath $rtoolsInstaller -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"
-        Write-Host "Checking if $($rtoolsBinPath) is in PATH..."
-        if (-not ($env:PATH -like "*$($rtoolsPath )\usr\bin*")) {
-            $env:PATH = "$rtoolsPath \usr\bin;" + $env:PATH
-            Write-Host "Added $($rtoolsPath )\usr\bin to PATH."
-        } else {
-            Write-Host "$($rtoolsBinPath) already in PATH."
-        }
-
-        Write-Host "Rtools installation completed."
+        Find-RtoolsExecutable $rtoolsPath
     }
     else {
         Write-Host "Rtools already installed at $rtoolsPath. Skipping installation."
+        
+        # Path environment check
+        Find-RtoolsExecutable $rtoolsPath
     }
 }
 catch {

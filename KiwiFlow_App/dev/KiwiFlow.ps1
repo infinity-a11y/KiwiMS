@@ -26,7 +26,7 @@ Write-Host ""  -BackgroundColor Black
 
 
 # Source functions
-. "$basePath\functions.ps1"
+. "\Program Files (x86)\KiwiFlow\functions.ps1"
 
 # Path declaration
 $condaCmd = Find-CondaExecutable
