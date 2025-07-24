@@ -50,7 +50,7 @@ if (-Not (Test-Path $environmentYmlPath)) {
 # Creating conda environment
 $maxRetries = 3
 for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
-    Write-Host -Message "Attempt $attempt of $maxRetries to manage conda environment."
+    Write-Host "Attempt $attempt of $maxRetries to manage conda environment."
     
     try {
         # Clear conda cache to prevent persistent partial download issues

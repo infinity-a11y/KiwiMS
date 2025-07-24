@@ -1,5 +1,6 @@
 [Setup]
 AppName=KiwiFlow
+AppId=KiwiFlow
 AppVersion=0.1.0
 AppPublisher=Marian Freisleben
 DefaultDirName={autopf}\KiwiFlow
