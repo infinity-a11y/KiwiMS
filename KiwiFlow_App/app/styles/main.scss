@@ -65,6 +65,11 @@ pre::-webkit-scrollbar-thumb:horizontal {
   border: 5px solid #F5F5F5;
 }
 
+#app-deconvolution_process-deconvolute_start_ui,
+#app-deconvolution_process-deconvolute_start_ui > div {
+  padding: 6vh
+}
+
 // ============================
 // MODAL COMPONENTS
 // ============================
@@ -217,6 +222,11 @@ button .sF-modal {
   border-radius: 4px;
 }
 
+.card-custom-plate .bslib-card,
+.card-custom-plate2 .bslib-card {
+  margin-bottom: 0;
+}
+
 .card-custom .bslib-card .card-header,
 .card-custom-plate .bslib-card .card-header,
 .card-custom-plate2 .bslib-card .card-header {
@@ -271,6 +281,12 @@ button .sF-modal {
 // FORM INPUTS & CONTROLS
 // ============================
 
+.form-control:disabled {
+    background-color: transparent;
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
 .shiny-input-container:not(.shiny-input-container-inline) {
   width: 100%
 }
@@ -304,7 +320,6 @@ textarea.form-control {
   overflow: auto;
   margin-bottom: 0;
   padding-bottom: 0;
-  height: 45px;
   max-height: 150px;
 }
 
@@ -329,20 +344,6 @@ textarea.form-control {
 .deconv-param-input-adv .shiny-input-container .control-label,
 .deconv-param-input-time .shiny-input-container .control-label {
   display: none;
-}
-
-.deconv-param-input {
-  margin-left: -2rem;
-  width: 160%;
-}
-
-.deconv-param-input-adv {
-  margin-left: -1rem;
-}
-
-.deconv-param-input-time {
-  margin-left: -22px;
-  width: 160%;
 }
 
 app-deconvolution_pars-vial_column-label,
@@ -389,17 +390,12 @@ app-deconvolution_process-decon_select {
   margin-top: -1em;
 }
 
-#app-deconvolution_process-toggle_result {
-  margin-right: 2em;
-}
-
 .result-picker {
   margin-top: -1.5em;
-  margin-left: 2em;
 }
 
 .result-picker .selectize-control.single .selectize-input {
-  height: 46.6px;
+  height: 47px;
   border: 1px solid black;
 }
 
@@ -578,9 +574,10 @@ deconv-rep-check {
   padding-left: 40px;
 }
 
-#app-deconvolution_process-deconvolute_end {
+#app-deconvolution_process-deconvolute_end,
+#app-deconvolution_process-forward_deconvolution {
   margin-top: 0.5em;
-  margin-left: 3em;
+  width: 100%;
 }
 
 #app-deconvolution_process-copy_deconvolution_log {
@@ -614,6 +611,10 @@ decon-report-modal .btn-default {
   50% {
     box-shadow: 0 0 20px rgba(0, 0, 0, 1), 0 0 16px rgba(0, 0, 0, 0.8);
   }
+}
+
+#app-deconvolution_process-toggle_result .btn-group {
+  width: 100%;
 }
 
 // ======================================
