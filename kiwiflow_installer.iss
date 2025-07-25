@@ -37,7 +37,12 @@ Source: "setup\install_reticulate.R"; DestDir: "{app}"; Flags: deleteafterinstal
 Source: "setup\reticulate_install.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 
 ; App files
-Source: "KiwiFlow_App\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
+Source: "KiwiFlow_App\*"; DestDir: "{app}";
+Source: "KiwiFlow_App\app\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs;
+Source: "KiwiFlow_App\dev\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs;
+Source: "KiwiFlow_App\renv\.gitignore"; DestDir: "{app}";
+Source: "KiwiFlow_App\renv\activate.R"; DestDir: "{app}";
+Source: "KiwiFlow_App\resources\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs;
 
 ; Other
 Source: "setup\favicon.ico"; DestDir: "{app}"; Flags: ignoreversion
