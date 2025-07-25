@@ -21,6 +21,7 @@ Write-Host "       Welcome to KiwiFlow!         " -ForegroundColor White -Backgr
 Write-Host "---------------------------------------------------" -ForegroundColor DarkGray  -BackgroundColor Black
 Write-Host ""  -BackgroundColor Black
 Write-Host "$versionFile"
+Write-Host ""  -BackgroundColor Black 
 Write-Host "Starting application... please wait." -ForegroundColor Yellow  -BackgroundColor Black
 Write-Host ""  -BackgroundColor Black
 
@@ -125,3 +126,5 @@ catch {
     pause
     exit 1
 }
+
+Write-Host "KiwiFlow is up and running in the default browser (localhost:3838)."

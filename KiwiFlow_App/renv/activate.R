@@ -1,8 +1,37 @@
 
 local({
 
-  # the requested version of renv
-  version <- "1.1.4"
+  # the requested version of renv dependend on windows version
+  get_windows_version <- function() {
+    # Get system information
+    sys_info <- Sys.info()
+    
+    # Check if the OS is Windows
+    if (sys_info["sysname"] == "Windows") {
+      # Extract version information
+      version <- sys_info["version"]
+      
+      # Extract build number from version (e.g., "build 19045")
+      build_number <- as.numeric(gsub("build (\\d+)", "\\1", version))
+      
+      # Windows 11 typically has build number >= 22000
+      if (!is.na(build_number) && build_number >= 22000) {
+        return("Windows 11")
+      } else {
+        return("Windows 10")
+      }
+    } else {
+      return("Not running on Windows")
+    }
+  }
+
+  # Call the function
+  if(get_windows_version() == "Windows 11") {
+    version <- "1.0.11"
+  } else {
+    version <- "1.1.4"
+  }
+  
   attr(version, "sha") <- NULL
 
   # the project directory
