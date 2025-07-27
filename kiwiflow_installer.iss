@@ -41,6 +41,7 @@ Source: "KiwiFlow_App\KiwiFlow.exe"; DestDir: "{app}";
 Source: "KiwiFlow_App\app.R"; DestDir: "{app}";
 Source: "KiwiFlow_App\config.yml"; DestDir: "{app}";
 Source: "KiwiFlow_App\renv.lock"; DestDir: "{app}";
+Source: "KiwiFlow_App\renv\activate.R"; DestDir: "{app}\renv";
 Source: "KiwiFlow_App\rhino.yml"; DestDir: "{app}";
 Source: "KiwiFlow_App\app\*"; DestDir: "{app}\app"; Flags: recursesubdirs createallsubdirs;
 Source: "KiwiFlow_App\dev\*"; DestDir: "{app}\dev"; Flags: recursesubdirs createallsubdirs;
