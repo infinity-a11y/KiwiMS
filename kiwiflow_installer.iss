@@ -38,15 +38,11 @@ Source: "setup\reticulate_install.ps1"; DestDir: "{app}"; Flags: deleteafterinst
 
 ; App files
 Source: "KiwiFlow_App\KiwiFlow.exe"; DestDir: "{app}";
-Source: "KiwiFlow_App\.Rprofile"; DestDir: "{app}";
-Source: "KiwiFlow_App\.renvignore"; DestDir: "{app}";
 Source: "KiwiFlow_App\app.R"; DestDir: "{app}";
 Source: "KiwiFlow_App\config.yml"; DestDir: "{app}";
 Source: "KiwiFlow_App\dependencies.R"; DestDir: "{app}";
 Source: "KiwiFlow_App\renv.lock"; DestDir: "{app}";
 Source: "KiwiFlow_App\rhino.yml"; DestDir: "{app}";
-Source: "KiwiFlow_App\renv\.gitignore"; DestDir: "{app}\renv";
-Source: "KiwiFlow_App\renv\activate.R"; DestDir: "{app}\renv";
 Source: "KiwiFlow_App\app\*"; DestDir: "{app}\app"; Flags: recursesubdirs createallsubdirs;
 Source: "KiwiFlow_App\dev\*"; DestDir: "{app}\dev"; Flags: recursesubdirs createallsubdirs;
 Source: "KiwiFlow_App\resources\*"; DestDir: "{app}\resources"; Flags: recursesubdirs createallsubdirs;
@@ -67,7 +63,7 @@ Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\m
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\conda_env.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "Setting up Conda Environment..."; Flags: runhidden shellexec waituntilterminated; AfterInstall: UpdateProgress(50);
 
 ; 3. Install Rtools
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\install_rtools.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "Installing Rtools (R Build Tools)..."; Flags: runhidden shellexec waituntilterminated; AfterInstall: UpdateProgress(65);
+;Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\install_rtools.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "Installing Rtools (R Build Tools)..."; Flags: runhidden shellexec waituntilterminated; AfterInstall: UpdateProgress(65);
 
 ; 4. Install R Packages
 ; 4a. Install renv package
@@ -77,7 +73,7 @@ Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\r
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\renv_setup.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "Restoring R packages (renv environment setup phase 2/3)..."; Flags: shellexec waituntilterminated runhidden; AfterInstall: UpdateProgress(90);
 
 ; 4c. Install reticulate
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\reticulate_install.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "Installing reticulate (R environment setup phase 3/3)..."; Flags: shellexec waituntilterminated runhidden; AfterInstall: UpdateProgress(100);
+;Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\reticulate_install.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "Installing reticulate (R environment setup phase 3/3)..."; Flags: shellexec waituntilterminated runhidden; AfterInstall: UpdateProgress(100);
 
 ; After all steps, potentially launch the app or show info
 Filename: "{app}\KiwiFlow.exe"; Description: "{cm:LaunchProgram,KiwiFlow}"; Flags: postinstall skipifsilent shellexec;
