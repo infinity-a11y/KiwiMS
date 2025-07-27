@@ -25,7 +25,7 @@ Name: "de"; MessagesFile: "compiler:Languages\German.isl"
 [Files]
 ; Setup scripts
 Source: "setup\config.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "setup\functions.ps1"; DestDir: "{app}";
+Source: "setup\functions.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\miniconda_installer.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\conda_env.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\install_rtools.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
@@ -37,12 +37,19 @@ Source: "setup\install_reticulate.R"; DestDir: "{app}"; Flags: deleteafterinstal
 Source: "setup\reticulate_install.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 
 ; App files
-Source: "KiwiFlow_App\*"; DestDir: "{app}";
-Source: "KiwiFlow_App\app\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs;
-Source: "KiwiFlow_App\dev\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs;
-Source: "KiwiFlow_App\renv\.gitignore"; DestDir: "{app}";
-Source: "KiwiFlow_App\renv\activate.R"; DestDir: "{app}";
-Source: "KiwiFlow_App\resources\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs;
+Source: "KiwiFlow_App\KiwiFlow.exe"; DestDir: "{app}";
+Source: "KiwiFlow_App\.Rprofile"; DestDir: "{app}";
+Source: "KiwiFlow_App\.renvignore"; DestDir: "{app}";
+Source: "KiwiFlow_App\app.R"; DestDir: "{app}";
+Source: "KiwiFlow_App\config.yml"; DestDir: "{app}";
+Source: "KiwiFlow_App\dependencies.R"; DestDir: "{app}";
+Source: "KiwiFlow_App\renv.lock"; DestDir: "{app}";
+Source: "KiwiFlow_App\rhino.yml"; DestDir: "{app}";
+Source: "KiwiFlow_App\renv\.gitignore"; DestDir: "{app}\renv";
+Source: "KiwiFlow_App\renv\activate.R"; DestDir: "{app}\renv";
+Source: "KiwiFlow_App\app\*"; DestDir: "{app}\app"; Flags: recursesubdirs createallsubdirs;
+Source: "KiwiFlow_App\dev\*"; DestDir: "{app}\dev"; Flags: recursesubdirs createallsubdirs;
+Source: "KiwiFlow_App\resources\*"; DestDir: "{app}\resources"; Flags: recursesubdirs createallsubdirs;
 
 ; Other
 Source: "setup\favicon.ico"; DestDir: "{app}"; Flags: ignoreversion
