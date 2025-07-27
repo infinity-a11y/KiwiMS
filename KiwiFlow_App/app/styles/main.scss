@@ -185,12 +185,6 @@ button .sF-modal {
   top: 2em;
 }
 
-.bslib-sidebar-layout .sidebar-title {
-  margin-top: -2rem;
-  font-weight: bold;
-  margin-bottom: 0rem;
-}
-
 .navbar + .container-fluid > .tab-content > .tab-pane.active.html-fill-container > .bslib-sidebar-layout:only-child:not([data-bslib-sidebar-border-radius="true"]) {
   --_sidebar-width: 23rem !important;
 }
@@ -213,7 +207,8 @@ button .sF-modal {
 .card-log-output .bslib-card,
 .card-log-control .bslib-card {
   box-shadow: none !important;
-  border-color: black;
+  border-color: #00000070;
+  background-color: #dfdfdf42;
 }
 
 .card-custom .bslib-card,

@@ -102,6 +102,15 @@ server <- function(id, dirs) {
             width = 12,
             shiny$fluidRow(
               shiny$column(
+                width = 12,
+                shiny$div(
+                  class = "sidebar-title",
+                  shiny$HTML("Configure Spectrum Deconvolution")
+                )
+              )
+            ),
+            shiny$fluidRow(
+              shiny$column(
                 width = 8
               ),
               shiny$column(
