@@ -26,7 +26,7 @@ box::use(
       create_384_plate_heatmap,
       spectrum_plot
     ],
-  app / logic / helper_functions[collapsiblePanelUI, fill_empty],
+  app / logic / helper_functions[fill_empty],
   app / logic / logging[write_log, get_log],
 )
 
