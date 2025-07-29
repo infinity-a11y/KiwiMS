@@ -38,6 +38,7 @@ Source: "setup\reticulate_install.ps1"; DestDir: "{app}"; Flags: deleteafterinst
 
 ; App files
 Source: "KiwiFlow_App\KiwiFlow.exe"; DestDir: "{app}";
+Source: "KiwiFlow_App\update.exe"; DestDir: "{app}";
 Source: "KiwiFlow_App\app.R"; DestDir: "{app}";
 Source: "KiwiFlow_App\config.yml"; DestDir: "{app}";
 Source: "KiwiFlow_App\renv.lock"; DestDir: "{app}";
