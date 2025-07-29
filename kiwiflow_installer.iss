@@ -1,7 +1,7 @@
 [Setup]
 AppName=KiwiFlow
 AppId=KiwiFlow
-AppVersion=0.1.0
+AppVersion=0.0.1
 AppPublisher=Marian Freisleben
 DefaultDirName={autopf}\KiwiFlow
 DisableDirPage=yes
@@ -17,9 +17,10 @@ WizardImageFile=setup\kiwiflow_big.bmp
 WizardSmallImageFile=setup\kiwiflow_small.bmp
 WizardStyle=modern
 AlwaysShowDirOnReadyPage=yes
+CloseApplications=yes
 
 [Languages]
-Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "en"; MessagesFile: "compiler:Default.isl"
 Name: "de"; MessagesFile: "compiler:Languages\German.isl"
 
 [Files]
@@ -71,7 +72,7 @@ Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\c
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\renv_install.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "Installing renv package (R environment setup phase 1/3)..."; Flags: shellexec waituntilterminated runhidden; AfterInstall: UpdateProgress(70);
 
 ; 4b. Restore renv environment using dedicated script
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\renv_setup.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "Restoring R packages (renv environment setup phase 2/3)..."; Flags: shellexec waituntilterminated runhidden; AfterInstall: UpdateProgress(90);
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\renv_setup.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "Restoring R packages (renv environment setup phase 2/3)..."; Flags: shellexec waituntilterminated runhidden; AfterInstall: UpdateProgress(100);
 
 ; 4c. Install reticulate
 ;Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\reticulate_install.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "Installing reticulate (R environment setup phase 3/3)..."; Flags: shellexec waituntilterminated runhidden; AfterInstall: UpdateProgress(100);
@@ -98,3 +99,4 @@ Name: "{group}\KiwiFlow"; Filename: "{app}\KiwiFlow.exe"; WorkingDir: "{app}"; I
 
 ; Creates a desktop shortcut
 Name: "{userdesktop}\KiwiFlow"; Filename: "{app}\KiwiFlow.exe"; WorkingDir: "{app}"; IconFilename: "{app}\favicon.ico"; Comment: "Launch the KiwiFlow Application";
+

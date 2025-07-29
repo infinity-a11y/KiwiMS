@@ -117,6 +117,10 @@ pre::-webkit-scrollbar-thumb:horizontal {
   max-height: 85vh;
 }
 
+.modal-content {
+  box-shadow: 0 0 20vh 20px #00000082;
+}
+
 .sF-modal button,
 button .sF-modal {
   text-transform: none;
