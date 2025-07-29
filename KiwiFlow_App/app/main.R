@@ -385,12 +385,16 @@ server <- function(id) {
             '= "block";'
           ))
 
-          update_exe_path <- file.path(
-            get_kiwiflow_install_path(),
-            "update.exe"
+          update_exe_path <- normalizePath(
+            file.path(
+              get_kiwiflow_install_path(),
+              "update.exe"
+            ),
+            winslash = "/",
+            mustWork = TRUE
           )
 
-          system(update_exe_path, wait = TRUE)
+          system(shQuote(update_exe_path), wait = TRUE)
 
           runjs("window.close();")
           shiny$stopApp()

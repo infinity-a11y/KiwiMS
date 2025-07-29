@@ -14,21 +14,27 @@ box::use(
 # Get KiwiFlow install path
 #' @export
 get_kiwiflow_install_path <- function() {
-  program_files_x64 <- Sys.getenv("ProgramFiles")
-  program_files_x86 <- Sys.getenv("ProgramFiles(x86)")
+  program_files_x64 <- Sys.getenv("ProgramFiles") # C:\Program Files
+  program_files_x86 <- Sys.getenv("ProgramFiles(x86)") # C:\Program Files (x86)
   kiwiflow_folder_name <- "KiwiFlow"
 
   path_x64 <- file.path(program_files_x64, kiwiflow_folder_name)
   path_x86 <- file.path(program_files_x86, kiwiflow_folder_name)
 
+  found_path <- NA
+
   if (dir.exists(path_x64)) {
-    return(path_x64)
+    found_path <- path_x64
   } else if (dir.exists(path_x86)) {
-    return(path_x86)
-  } else {
+    found_path <- path_x86
+  }
+
+  if (is.na(found_path)) {
     stop(
       "KiwiFlow installation directory not found in Program Files or Program Files (x86)."
     )
+  } else {
+    return(normalizePath(found_path, winslash = "/", mustWork = TRUE))
   }
 }
 
