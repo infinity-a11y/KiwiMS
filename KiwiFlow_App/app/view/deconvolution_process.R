@@ -26,7 +26,7 @@ box::use(
       create_384_plate_heatmap,
       spectrum_plot
     ],
-  app / logic / helper_functions[collapsiblePanelUI, fill_empty],
+  app / logic / helper_functions[fill_empty],
   app / logic / logging[write_log, get_log],
 )
 
@@ -34,11 +34,14 @@ box::use(
 ui <- function(id) {
   ns <- shiny$NS(id)
 
-  shiny$fluidRow(
-    shiny$column(
-      width = 12,
-      shiny$uiOutput(ns("deconvolution_init_ui")),
-      shiny$uiOutput(ns("deconvolution_running_ui"))
+  shiny$div(
+    class = "row-fullheight",
+    shiny$fluidRow(
+      shiny$column(
+        width = 12,
+        shiny$uiOutput(ns("deconvolution_init_ui")),
+        shiny$uiOutput(ns("deconvolution_running_ui"))
+      )
     )
   )
 }
@@ -94,252 +97,339 @@ server <- function(id, dirs) {
     ### Deconvolution initiation interface ----
 
     deconvolution_init_ui <- shiny$div(
-      class = "full-height",
-      shiny$column(
-        width = 12,
-        shiny$fluidRow(
-          shiny$column(
-            width = 12,
-            shiny$fluidRow(
-              shiny$column(
-                width = 12,
-                shiny$div(
-                  class = "sidebar-title",
-                  shiny$HTML("Configure Spectrum Deconvolution")
+      shiny$fluidRow(
+        shiny$column(
+          width = 12,
+          shiny$fluidRow(
+            shiny$column(
+              width = 12,
+              shiny$div(
+                class = "sidebar-title",
+                shiny$HTML("Configure Spectrum Deconvolution")
+              )
+            )
+          ),
+          shiny$fluidRow(
+            shiny$column(
+              width = 8,
+              shiny$div(
+                class = "deconvolution_info",
+                shiny$HTML(
+                  paste(
+                    "1. Use the sidebar to select the Waters .raw folder(s) for processing.",
+                    "<br/>",
+                    "2. Check and configure parameters in the main panel and start deconvolution."
+                  )
+                )
+              ),
+              shiny$br()
+            ),
+            shiny$column(
+              width = 4,
+              shiny$checkboxInput(
+                ns("show_advanced"),
+                "Edit advanced settings",
+                value = FALSE
+              )
+            )
+          ),
+          shiny$fluidRow(
+            shiny$column(
+              width = 4,
+              shiny$div(
+                class = "card-custom",
+                card(
+                  card_header(
+                    class = "bg-dark",
+                    "Charge state [z]",
+                    tooltip(
+                      shiny$icon("circle-question"),
+                      "The number of charges the ionized molecule is expected to carry.",
+                      placement = "right"
+                    )
+                  ),
+                  card_body(
+                    shiny$fluidRow(
+                      shiny$column(
+                        width = 4,
+                        shiny$h6("Low", style = "margin-top: 8px;")
+                      ),
+                      shiny$column(
+                        width = 6,
+                        shiny$div(
+                          class = "deconv-param-input",
+                          shiny$numericInput(
+                            ns("startz"),
+                            "",
+                            min = 0,
+                            max = 100,
+                            value = 1
+                          )
+                        )
+                      )
+                    ),
+                    shiny$fluidRow(
+                      shiny$column(
+                        width = 4,
+                        shiny$h6("High", style = "margin-top: 8px;")
+                      ),
+                      shiny$column(
+                        width = 6,
+                        shiny$div(
+                          class = "deconv-param-input",
+                          shiny$numericInput(
+                            ns("endz"),
+                            "",
+                            min = 0,
+                            max = 100,
+                            value = 50
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              ),
+              shiny$div(
+                class = "card-custom",
+                card(
+                  card_header(
+                    class = "bg-dark",
+                    "Spectrum range [m/z]",
+                    tooltip(
+                      shiny$icon("circle-question"),
+                      "The span of molecular weights to be analyzed.",
+                      placement = "right"
+                    )
+                  ),
+                  card_body(
+                    shiny$fluidRow(
+                      shiny$column(
+                        width = 4,
+                        shiny$h6("Low", style = "margin-top: 8px;")
+                      ),
+                      shiny$column(
+                        width = 6,
+                        shiny$div(
+                          class = "deconv-param-input",
+                          shiny$numericInput(
+                            ns("minmz"),
+                            "",
+                            min = 0,
+                            max = 100000,
+                            value = 710
+                          )
+                        )
+                      )
+                    ),
+                    shiny$fluidRow(
+                      shiny$column(
+                        width = 4,
+                        shiny$h6("High", style = "margin-top: 8px;")
+                      ),
+                      shiny$column(
+                        width = 6,
+                        shiny$div(
+                          class = "deconv-param-input",
+                          shiny$numericInput(
+                            ns("maxmz"),
+                            "",
+                            min = 0,
+                            max = 100000,
+                            value = 1100
+                          )
+                        )
+                      )
+                    )
+                  )
                 )
               )
             ),
-            shiny$fluidRow(
-              shiny$column(
-                width = 8
-              ),
-              shiny$column(
-                width = 4,
-                shiny$checkboxInput(
-                  ns("show_advanced"),
-                  "Edit advanced settings",
-                  value = FALSE
-                )
-              )
-            ),
-            shiny$fluidRow(
-              shiny$column(
-                width = 4,
-                shiny$div(
-                  class = "card-custom",
-                  card(
-                    card_header(
-                      class = "bg-dark",
-                      "Charge state [z]",
-                      tooltip(
-                        shiny$icon("circle-question"),
-                        "The number of charges the ionized molecule is expected to carry.",
-                        placement = "right"
-                      )
-                    ),
-                    card_body(
-                      shiny$fluidRow(
-                        shiny$column(
-                          width = 4,
-                          shiny$h6("Low", style = "margin-top: 8px;")
-                        ),
-                        shiny$column(
-                          width = 6,
-                          shiny$div(
-                            class = "deconv-param-input",
-                            shiny$numericInput(
-                              ns("startz"),
-                              "",
-                              min = 0,
-                              max = 100,
-                              value = 1
-                            )
+            shiny$column(
+              width = 4,
+              shiny$div(
+                class = "card-custom",
+                card(
+                  card_header(
+                    class = "bg-dark",
+                    "Mass range [Mw]",
+                    tooltip(
+                      shiny$icon("circle-question"),
+                      "The range of mass-to-charge ratios to be detected.",
+                      placement = "right"
+                    )
+                  ),
+                  card_body(
+                    shiny$fluidRow(
+                      shiny$column(
+                        width = 4,
+                        shiny$h6("Low", style = "margin-top: 8px;")
+                      ),
+                      shiny$column(
+                        width = 6,
+                        shiny$div(
+                          class = "deconv-param-input",
+                          shiny$numericInput(
+                            ns("masslb"),
+                            "",
+                            min = 0,
+                            max = 100000,
+                            value = 35000
                           )
                         )
+                      )
+                    ),
+                    shiny$fluidRow(
+                      shiny$column(
+                        width = 4,
+                        shiny$h6("High", style = "margin-top: 8px;")
                       ),
-                      shiny$fluidRow(
-                        shiny$column(
-                          width = 4,
-                          shiny$h6("High", style = "margin-top: 8px;")
-                        ),
-                        shiny$column(
-                          width = 6,
-                          shiny$div(
-                            class = "deconv-param-input",
-                            shiny$numericInput(
-                              ns("endz"),
-                              "",
-                              min = 0,
-                              max = 100,
-                              value = 50
-                            )
+                      shiny$column(
+                        width = 6,
+                        shiny$div(
+                          class = "deconv-param-input",
+                          shiny$numericInput(
+                            ns("massub"),
+                            "",
+                            min = 0,
+                            max = 100000,
+                            value = 42000
                           )
                         )
                       )
                     )
                   )
-                ),
-                shiny$div(
-                  class = "card-custom",
-                  card(
-                    card_header(
-                      class = "bg-dark",
-                      "Spectrum range [m/z]",
-                      tooltip(
-                        shiny$icon("circle-question"),
-                        "The span of molecular weights to be analyzed.",
-                        placement = "right"
-                      )
-                    ),
-                    card_body(
-                      shiny$fluidRow(
-                        shiny$column(
-                          width = 4,
-                          shiny$h6("Low", style = "margin-top: 8px;")
-                        ),
-                        shiny$column(
-                          width = 6,
-                          shiny$div(
-                            class = "deconv-param-input",
-                            shiny$numericInput(
-                              ns("minmz"),
-                              "",
-                              min = 0,
-                              max = 100000,
-                              value = 710
-                            )
+                )
+              ),
+              shiny$div(
+                class = "card-custom",
+                card(
+                  card_header(
+                    class = "bg-dark",
+                    "Retention time [min]",
+                    tooltip(
+                      shiny$icon("circle-question"),
+                      "The anticipated time for the analyte to travel through a chromatography column.",
+                      placement = "right"
+                    )
+                  ),
+                  card_body(
+                    shiny$fluidRow(
+                      shiny$column(
+                        width = 4,
+                        shiny$h6("Start", style = "margin-top: 8px;")
+                      ),
+                      shiny$column(
+                        width = 6,
+                        shiny$div(
+                          class = "deconv-param-input",
+                          shiny$numericInput(
+                            ns("time_start"),
+                            "",
+                            min = 0,
+                            max = 100,
+                            value = 1,
+                            step = 0.05
                           )
                         )
+                      )
+                    ),
+                    shiny$fluidRow(
+                      shiny$column(
+                        width = 4,
+                        shiny$h6("End", style = "margin-top: 8px;")
                       ),
-                      shiny$fluidRow(
-                        shiny$column(
-                          width = 4,
-                          shiny$h6("High", style = "margin-top: 8px;")
-                        ),
-                        shiny$column(
-                          width = 6,
-                          shiny$div(
-                            class = "deconv-param-input",
-                            shiny$numericInput(
-                              ns("maxmz"),
-                              "",
-                              min = 0,
-                              max = 100000,
-                              value = 1100
-                            )
+                      shiny$column(
+                        width = 6,
+                        shiny$div(
+                          class = "deconv-param-input",
+                          shiny$numericInput(
+                            ns("time_end"),
+                            "",
+                            min = 0,
+                            max = 100,
+                            value = 1.35,
+                            step = 0.05
                           )
                         )
                       )
                     )
                   )
                 )
-              ),
-              shiny$column(
-                width = 4,
-                shiny$div(
-                  class = "card-custom",
-                  card(
-                    card_header(
-                      class = "bg-dark",
-                      "Mass range [Mw]",
-                      tooltip(
-                        shiny$icon("circle-question"),
-                        "The range of mass-to-charge ratios to be detected.",
-                        placement = "right"
-                      )
-                    ),
-                    card_body(
-                      shiny$fluidRow(
-                        shiny$column(
-                          width = 4,
-                          shiny$h6("Low", style = "margin-top: 8px;")
-                        ),
-                        shiny$column(
-                          width = 6,
-                          shiny$div(
-                            class = "deconv-param-input",
-                            shiny$numericInput(
-                              ns("masslb"),
-                              "",
-                              min = 0,
-                              max = 100000,
-                              value = 35000
-                            )
-                          )
-                        )
-                      ),
-                      shiny$fluidRow(
-                        shiny$column(
-                          width = 4,
-                          shiny$h6("High", style = "margin-top: 8px;")
-                        ),
-                        shiny$column(
-                          width = 6,
-                          shiny$div(
-                            class = "deconv-param-input",
-                            shiny$numericInput(
-                              ns("massub"),
-                              "",
-                              min = 0,
-                              max = 100000,
-                              value = 42000
-                            )
-                          )
-                        )
-                      )
+              )
+            ),
+            shiny$column(
+              width = 4,
+              shiny$div(
+                class = "card-custom",
+                card(
+                  card_header(
+                    class = "bg-dark",
+                    "Peak parameters",
+                    tooltip(
+                      shiny$icon("circle-question"),
+                      "Expected characteristics of spectral peaks.",
+                      placement = "right"
                     )
-                  )
-                ),
-                shiny$div(
-                  class = "card-custom",
-                  card(
-                    card_header(
-                      class = "bg-dark",
-                      "Retention time [min]",
-                      tooltip(
-                        shiny$icon("circle-question"),
-                        "The anticipated time for the analyte to travel through a chromatography column.",
-                        placement = "right"
-                      )
-                    ),
-                    card_body(
-                      shiny$fluidRow(
-                        shiny$column(
-                          width = 4,
-                          shiny$h6("Start", style = "margin-top: 8px;")
-                        ),
-                        shiny$column(
-                          width = 6,
-                          shiny$div(
-                            class = "deconv-param-input",
-                            shiny$numericInput(
-                              ns("time_start"),
-                              "",
-                              min = 0,
-                              max = 100,
-                              value = 1,
-                              step = 0.05
-                            )
+                  ),
+                  card_body(
+                    shiny$fluidRow(
+                      shiny$column(
+                        width = 4,
+                        shiny$h6("Window", style = "margin-top: 8px;")
+                      ),
+                      shiny$column(
+                        width = 6,
+                        shiny$div(
+                          class = "deconv-param-input-adv",
+                          shiny$numericInput(
+                            ns("peakwindow"),
+                            "",
+                            min = 0,
+                            max = 1000,
+                            value = 40
                           )
                         )
+                      )
+                    ),
+                    shiny$fluidRow(
+                      shiny$column(
+                        width = 4,
+                        shiny$h6("Norm", style = "margin-top: 8px;")
                       ),
-                      shiny$fluidRow(
-                        shiny$column(
-                          width = 4,
-                          shiny$h6("End", style = "margin-top: 8px;")
-                        ),
-                        shiny$column(
-                          width = 6,
-                          shiny$div(
-                            class = "deconv-param-input",
-                            shiny$numericInput(
-                              ns("time_end"),
-                              "",
-                              min = 0,
-                              max = 100,
-                              value = 1.35,
-                              step = 0.05
-                            )
+                      shiny$column(
+                        width = 6,
+                        shiny$div(
+                          class = "deconv-param-input-adv",
+                          shiny$numericInput(
+                            ns("peaknorm"),
+                            "",
+                            min = 0,
+                            max = 100,
+                            value = 2
+                          )
+                        )
+                      )
+                    ),
+                    shiny$fluidRow(
+                      shiny$column(
+                        width = 4,
+                        shiny$h6(
+                          "Threshold",
+                          style = "font-size: 0.9em; margin-top: 8px;"
+                        )
+                      ),
+                      shiny$column(
+                        width = 6,
+                        shiny$div(
+                          class = "deconv-param-input-adv",
+                          shiny$numericInput(
+                            ns("peakthresh"),
+                            "",
+                            min = 0,
+                            max = 1,
+                            value = 0.07,
+                            step = 0.01
                           )
                         )
                       )
@@ -347,115 +437,35 @@ server <- function(id, dirs) {
                   )
                 )
               ),
-              shiny$column(
-                width = 4,
-                shiny$div(
-                  class = "card-custom",
-                  card(
-                    card_header(
-                      class = "bg-dark",
-                      "Peak parameters",
-                      tooltip(
-                        shiny$icon("circle-question"),
-                        "Expected characteristics of spectral peaks.",
-                        placement = "right"
-                      )
-                    ),
-                    card_body(
-                      shiny$fluidRow(
-                        shiny$column(
-                          width = 4,
-                          shiny$h6("Window", style = "margin-top: 8px;")
-                        ),
-                        shiny$column(
-                          width = 6,
-                          shiny$div(
-                            class = "deconv-param-input-adv",
-                            shiny$numericInput(
-                              ns("peakwindow"),
-                              "",
-                              min = 0,
-                              max = 1000,
-                              value = 40
-                            )
-                          )
-                        )
-                      ),
-                      shiny$fluidRow(
-                        shiny$column(
-                          width = 4,
-                          shiny$h6("Norm", style = "margin-top: 8px;")
-                        ),
-                        shiny$column(
-                          width = 6,
-                          shiny$div(
-                            class = "deconv-param-input-adv",
-                            shiny$numericInput(
-                              ns("peaknorm"),
-                              "",
-                              min = 0,
-                              max = 100,
-                              value = 2
-                            )
-                          )
-                        )
-                      ),
-                      shiny$fluidRow(
-                        shiny$column(
-                          width = 4,
-                          shiny$h6(
-                            "Threshold",
-                            style = "font-size: 0.9em; margin-top: 8px;"
-                          )
-                        ),
-                        shiny$column(
-                          width = 6,
-                          shiny$div(
-                            class = "deconv-param-input-adv",
-                            shiny$numericInput(
-                              ns("peakthresh"),
-                              "",
-                              min = 0,
-                              max = 1,
-                              value = 0.07,
-                              step = 0.01
-                            )
-                          )
-                        )
-                      )
+              shiny$div(
+                class = "card-custom",
+                card(
+                  card_header(
+                    class = "bg-dark",
+                    "Mass Bins",
+                    tooltip(
+                      shiny$icon("circle-question"),
+                      "Discrete intervals of mass values for the spectra.",
+                      placement = "right"
                     )
-                  )
-                ),
-                shiny$div(
-                  class = "card-custom",
-                  card(
-                    card_header(
-                      class = "bg-dark",
-                      "Mass Bins",
-                      tooltip(
-                        shiny$icon("circle-question"),
-                        "Discrete intervals of mass values for the spectra.",
-                        placement = "right"
-                      )
-                    ),
-                    card_body(
-                      shiny$fluidRow(
-                        shiny$column(
-                          width = 4,
-                          shiny$h6("Size", style = "margin-top: 8px;")
-                        ),
-                        shiny$column(
-                          width = 6,
-                          shiny$div(
-                            class = "deconv-param-input-adv",
-                            shiny$numericInput(
-                              ns("massbins"),
-                              "",
-                              min = 0,
-                              max = 100,
-                              value = 0.5,
-                              step = 0.1
-                            )
+                  ),
+                  card_body(
+                    shiny$fluidRow(
+                      shiny$column(
+                        width = 4,
+                        shiny$h6("Size", style = "margin-top: 8px;")
+                      ),
+                      shiny$column(
+                        width = 6,
+                        shiny$div(
+                          class = "deconv-param-input-adv",
+                          shiny$numericInput(
+                            ns("massbins"),
+                            "",
+                            min = 0,
+                            max = 100,
+                            value = 0.5,
+                            step = 0.1
                           )
                         )
                       )
@@ -465,7 +475,10 @@ server <- function(id, dirs) {
               )
             )
           )
-        ),
+        )
+      ),
+      shiny$div(
+        class = "align-row",
         shiny$fluidRow(
           shiny$column(
             width = 12,

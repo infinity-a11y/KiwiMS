@@ -65,14 +65,36 @@ pre::-webkit-scrollbar-thumb:horizontal {
   border: 5px solid #F5F5F5;
 }
 
-#app-deconvolution_process-deconvolute_start_ui,
-#app-deconvolution_process-deconvolute_start_ui > div {
-  padding: 6vh
+.card-custom-plate .bslib-card .card-body,
+.card-custom-plate2 .bslib-card .card-body {
+  padding-bottom: 16px;
+}
+
+.row-fullheight > div,
+.row-fullheight {
+  height: 100%;
+}
+
+.align-row {
+  height: 100%;
+  align-content: center;
+}
+
+#app-deconvolution_process-deconvolution_init_ui > div {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 // ============================
 // MODAL COMPONENTS
 // ============================
+
+.modal.show .modal-dialog, .modal.in .modal-dialog {
+  transform: none;
+  height: 100%;
+  align-content: center;
+}
 
 .modal {
   overflow-x: clip;
@@ -86,13 +108,17 @@ pre::-webkit-scrollbar-thumb:horizontal {
 }
 
 .modal-dialog {
-  margin-top: 60px;
+  margin-top: 0;
 }
 
 .sF-modal .modal-content {
   overflow: auto;
   min-width: 276px;
   max-height: 85vh;
+}
+
+.modal-content {
+  box-shadow: 0 0 20vh 20px #00000082;
 }
 
 .sF-modal button,
@@ -189,6 +215,12 @@ button .sF-modal {
   --_sidebar-width: 23rem !important;
 }
 
+.deconvolution_info {
+  font-size: smaller;
+  font-style: italic;
+  line-height: 2;
+}
+
 // ============================
 // CARDS & CONTAINERS
 // ============================
@@ -231,10 +263,12 @@ button .sF-modal {
 
 .card-custom-plate {
   margin-top: -1rem;
+  margin-bottom: 1rem;
 }
 
 .card-custom-plate2 {
   margin-top: 0.5rem;
+  margin-bottom: 1rem;
 }
 
 #app-logs-log-output {

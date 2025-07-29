@@ -17,7 +17,12 @@ box::use(
   app / view / log_view,
   app / view / log_sidebar,
   app / logic / logging[start_logging, write_log, close_logging],
-  app / logic / helper_functions[check_github_version, get_latest_release_url],
+  app /
+    logic /
+    helper_functions[
+      check_github_version,
+      get_latest_release_url
+    ],
 )
 
 suppressWarnings(library(logr))
@@ -25,7 +30,7 @@ suppressWarnings(library(logr))
 #' @export
 ui <- function(id) {
   ns <- shiny$NS(id)
-  
+
   shiny$tagList(
     dev_utils$add_dev_headers(),
     shiny$div(id = "blocking-overlay"),
@@ -150,81 +155,89 @@ ui <- function(id) {
 server <- function(id) {
   shiny$moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    
+
     # Kill server on session end
     session$onSessionEnded(function() {
       write_log("Session closed")
       shiny$stopApp()
     })
-    
+
     # Initiate logging
     start_logging()
     write_log("Session started")
-    
+
     # Log view server
     active_tab_reactive <- shiny$reactive({
       input$tabs
     })
     log_buttons <- log_sidebar$server("log_sidebar")
     log_view$server("logs", active_tab_reactive, log_buttons)
-    
+
     # Conversion server
     conversion_main$server("conversion_card")
-    
+
     # Deconvolution sidebar server
     dirs <- deconvolution_sidebar$server("deconvolution_pars")
-    
+
     # Deconvolution process server
     deconvolution_process$server("deconvolution_process", dirs)
-    
-    version_info <- readLines("resources/version.txt")
+
+    # Check update availability
+    version_info <- readLines("resources/version.txt", warn = FALSE)
+
     local_version <- sub(".*=", "", version_info[1])
     release <- sub(".*=", "", version_info[2])
     url <- sub(".*=", "", version_info[3])
     remote_version <- sub(".*=", "", check_github_version())
-    
-    if(identical(local_version, remote_version)) {
+
+    if (identical(local_version, remote_version)) {
       # Variables for modal
       message <- "KiwiFlow is up-to-date"
       hint <- "No action needed. Update anyway?"
       link <- "https://github.com/infinity-a11y/KiwiFlow/tree/master"
-      
+
       # Variables for button
       icon <- shiny$icon("circle-info")
       label <- "Version"
-      
+
       write_log(paste("KiWiFlow Version", local_version, "-", message))
     } else {
       # Variables for modal
       message <- "Update available"
-      hint <- "Fetch the latest changes by clicking on <strong> Update </strong> "
-      release_url <- get_latest_release_url( )
-      link <- ifelse(is.null(release_url), 
-                     "https://github.com/infinity-a11y/KiwiFlow/tree/master", 
-                     release_url)
-      
+      hint <- paste(
+        "Download the latest version <strong>",
+        remote_version,
+        "</strong>from the release page:"
+      )
+      release_url <- get_latest_release_url()
+      link <- ifelse(
+        is.null(release_url),
+        "https://github.com/infinity-a11y/KiwiFlow/tree/master",
+        release_url
+      )
+
       # Variables for button
       icon <- shiny$icon("circle-exclamation")
       label <- "Update"
-      
+
       write_log(paste("KiWiFlow Version", local_version, "-", message))
     }
-    
+
     output$update_button <- shiny$renderUI({
       shiny$req(icon, label)
-      
+
       shiny$actionButton(
         inputId = ns("open_update_modal"),
         label = label,
         icon = icon,
         class = "nav-link"
-      ) 
+      )
     })
-    
+
     # Update modal
     shiny$observeEvent(input$open_update_modal, {
       shiny$req(local_version, release, message, link, hint)
-      
+
       shiny$showModal(
         shiny$div(
           class = "start-modal",
@@ -258,139 +271,25 @@ server <- function(id) {
                   shiny$column(
                     width = 12,
                     shiny$h6(message, style = "font-weight: bold"),
-                    shiny$tags$a(href = link, link, target = "_blank"),
-                    shiny$br(),
-                    shiny$p(shiny$HTML(hint), 
-                            style = "font-style: italic; margin-top: 1rem;")
+                    shiny$p(
+                      shiny$HTML(hint),
+                      style = "font-style: italic; margin-top: 1rem;"
+                    ),
+                    shiny$tags$a(href = link, link, target = "_blank")
                   )
-                )        
+                )
               )
             ),
             title = "Version and Update",
             easyClose = TRUE,
             footer = shiny$tagList(
-              shiny$modalButton("Dismiss"),
-              shiny$actionButton(
-                ns("update_kiwiflow"),
-                "Update",
-                class = "load-db",
-                width = "auto"
-              )
+              shiny$modalButton("Dismiss")
             )
           )
         )
       )
     })
-    
-    shiny$observeEvent(input$update_kiwiflow, {
-      shiny$showModal(
-        shiny$div(
-          class = "start-modal",
-          shiny$modalDialog(
-            shiny$fluidRow(
-              useShinyjs(),
-              shiny$br(),
-              shiny$column(
-                width = 11,
-                hidden(
-                  shiny$div(
-                    id = ns("conf_update_ui_running"),
-                    shiny$column(
-                      width = 11,
-                      shiny$p("Updating ..."),
-                      shiny$HTML(
-                        paste0(
-                          '<i class="fa fa-spinner fa-spin fa-fw fa-2x" style="color: ',
-                          '#38387C; margin-top: 0.5em"></i>'
-                        )
-                      )
-                    )
-                  )
-                ),
-                hidden(
-                  shiny$div(
-                    id = ns("conf_update_ui_failed"),
-                    shiny$column(
-                      width = 11,
-                      shiny$p("Updating to new version failed."),
-                      shiny$HTML(
-                        paste0(
-                          '<i class="fa fa-circle-exlamation" style="color: ',
-                          'black; margin-top: 0.5em"></i>'
-                        )
-                      )
-                    )
-                  )
-                ),
-                shiny$div(
-                  id = ns("conf_update_ui"),
-                  shiny$column(
-                    width = 11,
-                    shiny$p(paste(
-                      "Updating now will cancel all running processes", 
-                      "and initiate the installation of the newest version.")),
-                    shiny$p("Continue?")
-                  )
-                )
-              )
-            ),
-            title = "Update KiwiFlow",
-            easyClose = TRUE,
-            footer = shiny$tagList(
-              shiny$modalButton("Cancel"),
-              shiny$actionButton(
-                ns("conf_update_kiwiflow"),
-                "Continue",
-                class = "load-db",
-                width = "auto"
-              )
-            )
-          )
-        )
-      )
-    })
-    
-    shiny$observeEvent(input$conf_update_kiwiflow, {
-      
-      write_log("Initiated version update")
-      
-      # Make Update UI 
-      disable(selector = "#app-conf_update_kiwiflow")
-      disable(selector = paste0("#shiny-modal > div > div > div.modal-footer ", 
-                                "> button:nth-child(1)"))
-      hide(selector = "#app-conf_update_ui")
-      show(selector = "#app-conf_update_ui_running")
-      
-      # Call update script
-      tryCatch({
-        runjs(paste0(
-          'document.getElementById("blocking-overlay").style.display ',
-          '= "block";'
-        ))
-        
-        # Run update script
-        ps_command <- sprintf('Start-Process -FilePath "%s" -Wait', 
-                              "./kiwiflow_update.exe")
-        base::system2("powershell.exe", args = c("-Command", ps_command), 
-                      wait = TRUE, stdout = TRUE, stderr = TRUE)
-        
-        runjs("window.close();")
-        shiny$stopApp()
-      }, error = function(e) {
-        write_log(paste("Failed version update:", e$message))
-        
-        runjs(paste0(
-          'document.getElementById("blocking-overlay").style.display ',
-          '= "none";'
-        ))
-        
-        hide(selector = "#app-conf_update_ui_running")
-        show(selector = "#app-conf_update_ui_failed")
-        enable(selector = paste0("#shiny-modal > div > div > div.modal-footer ", 
-                                 "> button:nth-child(1)"))
-      })
-    })
-    
+
     # Hide waiter
     Sys.sleep(2)
     waiter_hide()

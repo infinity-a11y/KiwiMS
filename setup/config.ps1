@@ -30,14 +30,14 @@ if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Adm
 # Make userDataPath
 if (-not (Test-Path $userDataPath)) {
     New-Item -ItemType Directory -Path $userDataPath -Force
-    Write-Host -Message "Created Kiwiflow directory: $userDataPath"
+    Write-Host "Created Kiwiflow directory: $userDataPath"
 }
 
 # Make temp path
 $tempPath = Join-Path $env:TEMP "kiwiflow_setup"
 if (-not (Test-Path $tempPath)) {
     New-Item -Path $tempPath -ItemType Directory -Force | Out-Null
-    Write-Host -Message "Created temporary directory: $tempPath"
+    Write-Host "Created temporary directory: $tempPath"
 }
 
 Write-Host "Config complete"

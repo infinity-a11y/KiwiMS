@@ -23,7 +23,7 @@ fill_empty <- function(string) {
 
 #' @export
 check_github_version <- function(
-  repo_url = "https://raw.githubusercontent.com/infinity-a11y/KiwiFlow/master/resources/version.txt"
+  repo_url = "https://raw.githubusercontent.com/infinity-a11y/KiwiFlow/master/KiwiFlow_App/resources/version.txt"
 ) {
   tryCatch(
     {
@@ -72,19 +72,19 @@ get_latest_release_url <- function(repo = "infinity-a11y/KiwiFlow") {
       # Fetch the latest release data
       response <- httr::GET(
         api_url,
-        add_headers(Accept = "application/vnd.github+json")
+        httr::add_headers(Accept = "application/vnd.github+json")
       )
 
       # Check if the request was successful
-      if (status_code(response) != 200) {
+      if (httr::status_code(response) != 200) {
         stop(
           "Failed to fetch latest release. HTTP status code: ",
-          status_code(response)
+          httr::status_code(response)
         )
       }
 
       # Parse the JSON response
-      release_data <- content(
+      release_data <- httr::content(
         response,
         as = "parsed",
         type = "application/json"
@@ -102,32 +102,6 @@ get_latest_release_url <- function(repo = "infinity-a11y/KiwiFlow") {
       message("Error fetching latest release URL: ", e$message)
       return(NULL)
     }
-  )
-}
-
-#' @export
-collapsiblePanelUI <- function(id, title, content) {
-  ns <- NS(id)
-
-  div(
-    style = "border: 1px solid #ddd; margin: 10px 0; border-radius: 7px",
-    div(
-      style = paste0(
-        "background-color: #f8f9fa; padding: 10px;",
-        " cursor: pointer; border-radius: 7px"
-      ),
-      onclick = sprintf("$('#%s').slideToggle()", ns("content")),
-      span(
-        icon("chevron-right", class = "toggle-icon"),
-        style = "margin-right: 10px;"
-      ),
-      title
-    ),
-    div(
-      id = ns("content"),
-      style = "padding: 15px; display: none;",
-      content
-    )
   )
 }
 
