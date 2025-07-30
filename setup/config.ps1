@@ -41,11 +41,15 @@ if (-not (Test-Path $tempPath)) {
 }
 
 # Make report path
-$documentsPath = [System.Environment]::GetFolderPath("MyDocuments")
-$reportPath = Join-Path  $documentsPath "KiwiFlow\report\"
-if (-not (Test-Path $reportPath)) {
+try {
+    $documentsPath = [System.Environment]::GetFolderPath("MyDocuments")
+    $reportPath = Join-Path  $documentsPath "KiwiFlow\report\"
     New-Item -Path $reportPath -ItemType Directory -Force | Out-Null
     Write-Host "Created KiwiwFlow directory in Documents: $reportPath."
+}
+catch {
+    Write-Host "Creating KiwiwFlow directory in Documents failed."
+    exit 1
 }
 
 # Move report files

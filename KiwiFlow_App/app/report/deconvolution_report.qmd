@@ -284,9 +284,13 @@ for (name in names_result) {
     img1_base64 <- ggplot_to_base64(result[[name]]$decon_spec)
     img2_base64 <- ggplot_to_base64(result[[name]]$raw_spec)
     
-    config <- unlist(result[[name]]$config)
-    names(config) <- gsub("config.", "", names(config))
-    config_path <- dirname(normalizePath(config[names(config) %in% c("input")]))
+    config <- result[[name]]$config
+    
+    config_path <- ifelse(
+      length(config$input) > 1,
+      paste(config$input[1], config$input[2]),
+      config$input
+    )
     
     # Create a linked section header and horizontal separator
     section_html <- htmltools::tagList(
@@ -310,7 +314,7 @@ for (name in names_result) {
         htmltools::div(
           class = "result-path",
           style = "overflow-wrap: anywhere;",
-          htmltools::p(config_path)
+          htmltools::p(normalizePath(dirname(config_path)))
         ),
         # Side-by-side images
         htmltools::div(

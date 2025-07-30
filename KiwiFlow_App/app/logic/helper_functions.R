@@ -51,7 +51,6 @@ check_github_version <- function(
       return(trimws(lines[1]))
     },
     error = function(e) {
-      # Handle errors gracefully
       message("Error fetching version: ", e$message)
       return(NULL)
     }
@@ -62,17 +61,16 @@ check_github_version <- function(
 get_latest_release_url <- function(repo = "infinity-a11y/KiwiFlow") {
   tryCatch(
     {
-      # Construct the GitHub API URL for the latest release
+      # Construct the GitHub URL for the latest release
       api_url <- paste0(
-        "https://api.github.com/repos/",
+        "https://github.com/",
         repo,
         "/releases/latest"
       )
 
       # Fetch the latest release data
       response <- httr::GET(
-        api_url,
-        httr::add_headers(Accept = "application/vnd.github+json")
+        api_url
       )
 
       # Check if the request was successful
@@ -81,31 +79,18 @@ get_latest_release_url <- function(repo = "infinity-a11y/KiwiFlow") {
           "Failed to fetch latest release. HTTP status code: ",
           httr::status_code(response)
         )
-      }
-
-      # Parse the JSON response
-      release_data <- httr::content(
-        response,
-        as = "parsed",
-        type = "application/json"
-      )
-
-      # Extract the html_url of the release
-      if (!is.null(release_data$html_url)) {
-        return(release_data$html_url)
       } else {
-        stop("No release URL found in the response.")
+        return(api_url)
       }
     },
     error = function(e) {
-      # Handle errors gracefully
       message("Error fetching latest release URL: ", e$message)
       return(NULL)
     }
   )
 }
 
-# New version of length which can handle NA's: if na.rm==T, don't count them
+# New version of length which can handle NA's
 length2 <- function(x, na_rm = FALSE) {
   if (na_rm) sum(!is.na(x)) else length(x)
 }
