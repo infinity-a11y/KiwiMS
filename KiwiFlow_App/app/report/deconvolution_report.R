@@ -29,6 +29,7 @@ tryCatch(
 )
 
 message("Started render engine ...")
+Sys.sleep(2)
 tryCatch(
   {
     quarto_render(
@@ -48,7 +49,10 @@ tryCatch(
   }
 )
 
+Sys.sleep(2)
 message("Saving report ...")
+Sys.sleep(2)
+
 tryCatch(
   {
     filename_id <- gsub(

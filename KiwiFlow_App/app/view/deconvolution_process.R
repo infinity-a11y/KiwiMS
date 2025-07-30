@@ -2294,7 +2294,17 @@ server <- function(id, dirs) {
 
           clean_log <- gsub("\\s*\\|[ .]*\\|\\s*", "", log, perl = TRUE)
 
-          if (grepl(paste("Output created:", report_fin), log)) {
+          filename <- gsub(
+            ".log",
+            "_deconvolution_report.html",
+            basename(log_path)
+          )
+          filename_path <- file.path(dirname(log_path), filename)
+
+          if (
+            grepl(paste("Output created:", report_fin), log) &
+              file.exists(filename_path)
+          ) {
             reactVars$deconv_report_status <- "finished"
             title <- "Report Generated!"
             value <- 100
@@ -2342,11 +2352,6 @@ server <- function(id, dirs) {
 
           shiny$removeModal()
         } else if (reactVars$deconv_report_status == "finished") {
-          session_id <- regmatches(
-            basename(log_path),
-            regexpr("id\\d+", basename(log_path))
-          )
-
           # Open in browser
           filename <- gsub(
             ".log",
@@ -2354,7 +2359,10 @@ server <- function(id, dirs) {
             basename(log_path)
           )
           filename_path <- file.path(dirname(log_path), filename)
-          utils::browseURL(filename_path)
+
+          if (file.exists(filename_path)) {
+            utils::browseURL(filename_path)
+          }
 
           shiny$removeModal()
         } else {
@@ -2417,7 +2425,12 @@ server <- function(id, dirs) {
           )
 
           # Prepare arguments
-          script_dir <- "app\\report"
+          script_dir <- file.path(
+            Sys.getenv("USERPROFILE"),
+            "Documents",
+            "KiwiFlow",
+            "report"
+          )
           script <- "deconvolution_report.R"
           output_file <- paste0(
             "deconvolution_report_",

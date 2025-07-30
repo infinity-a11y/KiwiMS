@@ -3,7 +3,10 @@
 message("Initiating deconvolution ...")
 
 # Sourcing deconvolution functions
-source_file <- file.path(commandArgs(trailingOnly = TRUE)[3], "app/logic/deconvolution_functions.R")
+source_file <- file.path(
+  commandArgs(trailingOnly = TRUE)[3],
+  "app/logic/deconvolution_functions.R"
+)
 message(paste("Sourcing", source_file))
 source(source_file)
 
@@ -29,8 +32,11 @@ deconvolute(
 )
 
 logfile <- commandArgs(trailingOnly = TRUE)[2]
-log <- if (file.exists(logfile)) readLines(logfile, warn = FALSE) else
+log <- if (file.exists(logfile)) {
+  readLines(logfile, warn = FALSE)
+} else {
   c("No log")
+}
 
 output <- if (file.exists(file.path(temp, "output.txt"))) {
   readLines(file.path(temp, "output.txt"), warn = FALSE)
@@ -44,6 +50,10 @@ result <- generate_decon_rslt(
   output = output
 )
 
-results_dir <- file.path(Sys.getenv("USERPROFILE"), 
-                         "Documents", "KiwiFlow", "results")
+results_dir <- file.path(
+  Sys.getenv("USERPROFILE"),
+  "Documents",
+  "KiwiFlow",
+  "results"
+)
 saveRDS(result, file.path(results_dir, "result.rds"), compress = FALSE)

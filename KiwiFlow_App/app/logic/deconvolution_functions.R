@@ -4,8 +4,14 @@ box::use(
   data.table[fread, setnames, data.table, as.data.table],
   dplyr[left_join, mutate, n_distinct],
   ggplot2,
-  parallel[clusterExport, clusterEvalQ, detectCores, makeCluster, parLapply, 
-           stopCluster],
+  parallel[
+    clusterExport,
+    clusterEvalQ,
+    detectCores,
+    makeCluster,
+    parLapply,
+    stopCluster
+  ],
   plotly[config, event_register, ggplotly, hide_colorbar, layout, style],
   reticulate[use_condaenv, use_python, py_config, py_run_string],
   scales[percent_format],
@@ -15,22 +21,22 @@ box::use(
 # Processing a single waters dir
 #' @export
 process_single_dir <- function(
-    waters_dir,
-    startz,
-    endz,
-    minmz,
-    maxmz,
-    masslb,
-    massub,
-    massbins,
-    peakthresh,
-    peakwindow,
-    peaknorm,
-    time_start,
-    time_end
+  waters_dir,
+  startz,
+  endz,
+  minmz,
+  maxmz,
+  masslb,
+  massub,
+  massbins,
+  peakthresh,
+  peakwindow,
+  peaknorm,
+  time_start,
+  time_end
 ) {
   input_path <- gsub("\\\\", "/", waters_dir)
-  
+
   # Function to properly format parameters for Python
   format_param <- function(x) {
     if (is.character(x) && x == "") {
@@ -39,7 +45,7 @@ process_single_dir <- function(
       return(as.character(x))
     }
   }
-  
+
   # Create parameters string for Python
   params_string <- sprintf(
     paste0(
@@ -60,12 +66,13 @@ process_single_dir <- function(
     format_param(time_start),
     format_param(time_end)
   )
-  
+
   # Set up Conda environment
-  tryCatch({
-    # Run Python code
-    reticulate::py_run_string(sprintf(
-      '
+  tryCatch(
+    {
+      # Run Python code
+      reticulate::py_run_string(sprintf(
+        '
 import sys
 import unidec
 import re
@@ -101,41 +108,43 @@ engine.process_data()
 engine.run_unidec()
 engine.pick_peaks()
 ',
-      input_path,
-      params_string
-    ))
-    
-    # Save spectra
-    result <- gsub(".raw", "_rawdata_unidecfiles", waters_dir)
-    
-    if (dir.exists(result)) {
-      plots <- list(
-        decon_spec = spectrum_plot(result, FALSE),
-        raw_spec = spectrum_plot(result, TRUE)
-      )
-      saveRDS(plots, file.path(result, "plots.rds"))
+        input_path,
+        params_string
+      ))
+
+      # Save spectra
+      result <- gsub(".raw", "_rawdata_unidecfiles", waters_dir)
+
+      if (dir.exists(result)) {
+        plots <- list(
+          decon_spec = spectrum_plot(result, FALSE),
+          raw_spec = spectrum_plot(result, TRUE)
+        )
+        saveRDS(plots, file.path(result, "plots.rds"))
+      }
+    },
+    error = function(e) {
+      cat("Error in process_single_dir for", waters_dir, ":", e$message, "\n")
     }
-  }, error = function(e) {
-    cat("Error in process_single_dir for", waters_dir, ":", e$message, "\n")
-  })
+  )
 }
 
 #' @export
 deconvolute <- function(
-    raw_dirs,
-    num_cores = detectCores() - 1,
-    startz = 1,
-    endz = 50,
-    minmz = "",
-    maxmz = "",
-    masslb = 5000,
-    massub = 500000,
-    massbins = 10,
-    peakthresh = 0.1,
-    peakwindow = 500,
-    peaknorm = 1,
-    time_start = "",
-    time_end = ""
+  raw_dirs,
+  num_cores = detectCores() - 1,
+  startz = 1,
+  endz = 50,
+  minmz = "",
+  maxmz = "",
+  masslb = 5000,
+  massub = 500000,
+  massbins = 10,
+  peakthresh = 0.1,
+  peakwindow = 500,
+  peaknorm = 1,
+  time_start = "",
+  time_end = ""
 ) {
   # List of all parameters to pass to workers
   params_list <- list(
@@ -152,67 +161,75 @@ deconvolute <- function(
     time_start = time_start,
     time_end = time_end
   )
-  
+
   # Evaluate processing mode: parallel or sequential
   if (length(raw_dirs) > 20 && num_cores > 1) {
-    
     # Set up the cluster
     cl <- parallel::makeCluster(num_cores)
     on.exit(parallel::stopCluster(cl))
-    
+
     # Initialize workers
     parallel::clusterEvalQ(cl, {
-      tryCatch({
-        reticulate::use_condaenv("kiwiflow", required = TRUE)
-        TRUE
-      }, error = function(e) FALSE)
+      tryCatch(
+        {
+          reticulate::use_condaenv("kiwiflow", required = TRUE)
+          TRUE
+        },
+        error = function(e) FALSE
+      )
     })
-    
+
     # Export only what's needed
     parallel::clusterExport(cl, c("process_single_dir"), envir = environment())
-    
+
     message(paste0("Using ", num_cores, " cores for parallel processing."))
-    
+
     # Create wrapper function that includes all parameters
     process_wrapper <- function(dir, params) {
       do.call(process_single_dir, c(list(waters_dir = dir), params))
     }
-    
+
     # Run parLapply with error handling
     parallel::parLapply(cl, raw_dirs, function(dir) {
-      tryCatch({
-        process_wrapper(dir, params_list)
-      }, error = function(e) {
-        message("Error processing ", dir, ": ", e$message)
-        NULL
-      })
+      tryCatch(
+        {
+          process_wrapper(dir, params_list)
+        },
+        error = function(e) {
+          message("Error processing ", dir, ": ", e$message)
+          NULL
+        }
+      )
     })
   } else {
     use_condaenv("kiwiflow", required = TRUE)
-    
+
     message("Sequential processing started.")
-    tryCatch({
-      for (dir in seq_along(raw_dirs)) {
-        process_single_dir(
-          raw_dirs[dir],
-          startz,
-          endz,
-          minmz,
-          maxmz,
-          masslb,
-          massub,
-          massbins,
-          peakthresh,
-          peakwindow,
-          peaknorm,
-          time_start,
-          time_end
-        )
+    tryCatch(
+      {
+        for (dir in seq_along(raw_dirs)) {
+          process_single_dir(
+            raw_dirs[dir],
+            startz,
+            endz,
+            minmz,
+            maxmz,
+            masslb,
+            massub,
+            massbins,
+            peakthresh,
+            peakwindow,
+            peaknorm,
+            time_start,
+            time_end
+          )
+        }
+      },
+      error = function(e) {
+        message("Error in sequential processing for dir ", dir, ": ", e$message)
+        return(NULL)
       }
-    }, error = function(e) {
-      message("Error in sequential processing for dir ", dir, ": ", e$message)
-      return(NULL)
-    })
+    )
   }
 }
 
@@ -223,10 +240,10 @@ create_384_plate_heatmap <- function(data) {
   cols <- 1:24
   plate_layout <- expand.grid(row = rows, col = cols) |>
     mutate(well_id = paste0(row, col))
-  
+
   # Merge data with plate layout
   plate_data <- left_join(plate_layout, data, by = "well_id")
-  
+
   # Tooltip text creation
   plate_data <- plate_data |>
     mutate(
@@ -239,15 +256,15 @@ create_384_plate_heatmap <- function(data) {
         sample_fmt
       )
     )
-  
+
   num_unique_values <- n_distinct(plate_data$value, na.rm = TRUE)
-  
+
   if (num_unique_values == 1) {
     left <- 80
   } else {
     left <- 0
   }
-  
+
   # Create the heatmap
   plate_plot <- ggplot2$ggplot(
     plate_data,
@@ -297,10 +314,10 @@ create_384_plate_heatmap <- function(data) {
       panel.grid = ggplot2$element_blank(),
       axis.ticks = ggplot2$element_blank()
     )
-  
+
   # Convert to plotly
   interactive_plot <- ggplotly(plate_plot, tooltip = "text")
-  
+
   interactive_plot <- interactive_plot |>
     layout(
       dragmode = FALSE,
@@ -357,7 +374,7 @@ create_384_plate_heatmap <- function(data) {
         filename = paste0(Sys.Date(), "_Plate_Heatmap")
       )
     )
-  
+
   if (num_unique_values == 1) {
     interactive_plot |>
       style(
@@ -377,26 +394,28 @@ create_384_plate_heatmap <- function(data) {
 spectrum_plot <- function(result_path, raw, interactive = TRUE) {
   # Get paths
   base <- gsub("_unidecfiles", "", basename(result_path))
-  
+
   raw_file <- file.path(result_path, paste0(base, "_rawdata.txt"))
   mass_file <- file.path(result_path, paste0(base, "_mass.txt"))
   peaks_file <- file.path(result_path, paste0(base, "_peaks.dat"))
-  
-  if (!file.exists(mass_file) || !file.exists(peaks_file)) return()
-  
+
+  if (!file.exists(mass_file) || !file.exists(peaks_file)) {
+    return()
+  }
+
   # Read data
   if (raw) {
     mass <- utils::read.delim(raw_file, sep = " ", header = FALSE)
-    
+
     mass$V2 <- (mass$V2 - min(mass$V2)) / (max(mass$V2) - min(mass$V2)) * 100
   } else {
     mass <- utils::read.delim(mass_file, sep = " ", header = FALSE)
     peaks <- utils::read.delim(peaks_file, sep = " ", header = FALSE)
-    
+
     mass$V2 <- (mass$V2 - min(mass$V2)) / (max(mass$V2) - min(mass$V2)) * 100
     highlight_peaks <- mass[mass$V1 %in% peaks$V1, ]
   }
-  
+
   # Create spectrum
   plot <- ggplot2::ggplot(
     mass,
@@ -410,7 +429,7 @@ spectrum_plot <- function(result_path, raw, interactive = TRUE) {
     ggplot2::geom_line() +
     ggplot2::scale_y_continuous(labels = scales::percent_format(scale = 1)) +
     ggplot2::theme_minimal()
-  
+
   if (raw) {
     plot <- plot + ggplot2::labs(y = "Intensity [%]", x = "m/z [Th]")
   } else {
@@ -425,16 +444,18 @@ spectrum_plot <- function(result_path, raw, interactive = TRUE) {
       ) +
       ggplot2::labs(y = "Intensity [%]", x = "Mass [Da]")
   }
-  
+
   # If not interactive return ggplot
-  if (!interactive) return(plot)
-  
+  if (!interactive) {
+    return(plot)
+  }
+
   plot_name <- ifelse(
     raw == TRUE,
     paste0(gsub("_rawdata", "", base), "_raw"),
     paste0(gsub("_rawdata", "", base), "_deconvoluted")
   )
-  
+
   # Convert to interactive plot
   interactive_plot <- plotly::ggplotly(plot, tooltip = "text") |>
     plotly::layout(
@@ -455,21 +476,23 @@ spectrum_plot <- function(result_path, raw, interactive = TRUE) {
       ),
       toImageButtonOptions = list(filename = paste0(Sys.Date(), "_", plot_name))
     )
-  
+
   return(interactive_plot)
 }
 
 # Generate deconvolution report
 #' @export
 generate_decon_rslt <- function(
-    paths,
-    log = NULL,
-    output = NULL,
-    heatmap = NULL
+  paths,
+  log = NULL,
+  output = NULL,
+  heatmap = NULL
 ) {
   # Optimized file reader function
   read_file_safe <- function(filename, col_names = NULL) {
-    if (!file.exists(filename)) return(data.frame())
+    if (!file.exists(filename)) {
+      return(data.frame())
+    }
     df <- fread(
       filename,
       header = FALSE,
@@ -477,27 +500,32 @@ generate_decon_rslt <- function(
       fill = TRUE,
       showProgress = FALSE
     )
-    if (!is.null(col_names)) setnames(df, col_names)
+    if (!is.null(col_names)) {
+      setnames(df, col_names)
+    }
     return(df)
   }
-  
+
   process_path <- function(path) {
     rslt_folder <- gsub(".raw", "_rawdata_unidecfiles", path)
     raw_name <- gsub("_unidecfiles", "", basename(rslt_folder))
-    
-    if (!dir.exists(rslt_folder)) return(list())
-    
+
+    if (!dir.exists(rslt_folder)) {
+      return(list())
+    }
+
     # Read config file
     conf_df <- read_file_safe(file.path(
       rslt_folder,
       paste0(raw_name, "_conf.dat")
     ))
     if (nrow(conf_df) > 0) {
+      conf_df <- conf_df[, 1:2]
       conf_df <- as.data.table(t(conf_df))
       setnames(conf_df, as.character(conf_df[1, ]))
       conf_df <- conf_df[-1, , drop = FALSE]
     }
-    
+
     # Read other files
     peaks_df <- read_file_safe(
       file.path(rslt_folder, paste0(raw_name, "_peaks.dat")),
@@ -507,7 +535,7 @@ generate_decon_rslt <- function(
       rslt_folder,
       paste0(raw_name, "_error.txt")
     ))
-    
+
     if (nrow(error_df) > 0) {
       key_value_pairs <- strsplit(error_df$V1, " = ")
       error_df <- data.table(
@@ -516,7 +544,7 @@ generate_decon_rslt <- function(
       )
       error_df[, Value := as.numeric(Value)]
     }
-    
+
     # Read large files
     rawdata_df <- read_file_safe(file.path(
       rslt_folder,
@@ -530,7 +558,7 @@ generate_decon_rslt <- function(
       rslt_folder,
       paste0(raw_name, "_input.dat")
     ))
-    
+
     decon_spec <- spectrum_plot(
       rslt_folder,
       raw = FALSE,
@@ -541,7 +569,7 @@ generate_decon_rslt <- function(
       raw = TRUE,
       interactive = FALSE
     )
-    
+
     return(list(
       config = conf_df,
       decon_spec = decon_spec,
@@ -553,16 +581,21 @@ generate_decon_rslt <- function(
       input = input_df
     ))
   }
-  
+
   results <- lapply(paths, process_path)
   names(results) <- basename(paths)
   results[["session"]] <- log
   results[["output"]] <- output
-  
-  results_dir <- file.path(Sys.getenv("USERPROFILE"), 
-                           "Documents", "KiwiFlow", "results")
-  if (file.exists(file.path(results_dir, "heatmap.rds")))
+
+  results_dir <- file.path(
+    Sys.getenv("USERPROFILE"),
+    "Documents",
+    "KiwiFlow",
+    "results"
+  )
+  if (file.exists(file.path(results_dir, "heatmap.rds"))) {
     results[["heatmap"]] <- readRDS(file.path(results_dir, "heatmap.rds"))
-  
+  }
+
   return(results)
 }
