@@ -90,12 +90,6 @@ pre::-webkit-scrollbar-thumb:horizontal {
 // MODAL COMPONENTS
 // ============================
 
-.modal.show .modal-dialog, .modal.in .modal-dialog {
-  transform: none;
-  height: 100%;
-  align-content: center;
-}
-
 .modal {
   overflow-x: clip;
   overflow-y: clip;
@@ -105,10 +99,6 @@ pre::-webkit-scrollbar-thumb:horizontal {
 
 .modal::-webkit-scrollbar-thumb:horizontal {
   border: 5px solid white;
-}
-
-.modal-dialog {
-  margin-top: 0;
 }
 
 .sF-modal .modal-content {
