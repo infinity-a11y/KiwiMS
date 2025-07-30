@@ -48,29 +48,6 @@ function Find-CondaExecutable {
 }
 
 #-----------------------------#
-# FUNCTION Find-RtoolsExecutable
-#-----------------------------#
-function Find-RtoolsExecutable($rtoolsPath) {
-    Write-Host "Find-RtoolsExecutable: Searching for existing Rtools 4.4 installation..."
-
-    $rtoolsBinPath = Join-Path $rtoolsPath "usr\bin"
-    
-    try {
-        if (-not ($env:PATH -like "*$($rtoolsPath )\usr\bin*")) {
-            Write-Host "Rtools not found."
-            $env:PATH = "$rtoolsPath\usr\bin;" + $env:PATH
-            Write-Host "Added $($rtoolsPath )\usr\bin to PATH."
-        }
-        else {
-            Write-Host "$($rtoolsBinPath) is present in PATH."
-        }
-    } 
-    catch {
-        Write-Host "ERROR: Adding $($rtoolsBinPath) to PATH failed."
-    }
-}
-
-#-----------------------------#
 # FUNCTION Download with Retry
 #-----------------------------#
 function Download-File($url, $destination) {
@@ -93,5 +70,142 @@ function Download-File($url, $destination) {
     if (-Not $success) {
         Write-Host "Failed to download: $url"
         exit 1
+    }
+}
+
+#-----------------------------#
+# FUNCTION to install Quarto
+#-----------------------------#
+function Install-Quarto {
+    param (
+        [string]$InstallDir = $DEFAULT_QUARTO_INSTALL_DIR
+    )
+    try {
+        $quartoBinDir = Join-Path $InstallDir "bin"
+        
+        Write-Host "Downloading Quarto v$QUARTO_VERSION..."
+        Invoke-WebRequest -Uri $QUARTO_DOWNLOAD_URL -OutFile $QUARTO_TEMP_ZIP -ErrorAction Stop
+        
+        # Create installation directory if it doesn't exist
+        if (-not (Test-Path $InstallDir)) {
+            New-Item -ItemType Directory -Path $InstallDir -Force -ErrorAction Stop
+        }
+        
+        Write-Host "Extracting Quarto to $InstallDir..."
+        Expand-Archive -Path $QUARTO_TEMP_ZIP -DestinationPath $InstallDir -Force -ErrorAction Stop
+        
+        # Clean up
+        Remove-Item -Path $QUARTO_TEMP_ZIP -Force -ErrorAction Stop
+        
+        Write-Host "Quarto v$QUARTO_VERSION installed successfully to $InstallDir"
+        
+        # Add bin directory to PATH if not already present
+        if (-not (Test-PathInEnvironment -Directory $quartoBinDir)) {
+            Add-ToSystemPath -Directory $quartoBinDir
+        }
+        
+        # Verify installation
+        $quartoInfo = Find-QuartoInstallation
+        if ($quartoInfo.Found) {
+            Write-Host "Quarto installation verified successfully at $($quartoInfo.Path)"
+        } else {
+            Write-Host "Quarto installation completed but verification failed"
+            exit 1
+        }
+    } catch {
+        Write-Host "Error installing Quarto: $_"
+        exit 1
+    }
+}
+
+#-----------------------------#
+# FUNCTION to find Quarto installation
+#-----------------------------#
+function Find-QuartoInstallation {
+    try {
+        $quartoPath = Get-Command quarto -ErrorAction SilentlyContinue
+        if ($quartoPath) {
+            $quartoBinDir = Split-Path $quartoPath.Source -Parent
+            $quartoVersion = & quarto --version
+            Write-Host "Quarto CLI version $quartoVersion found at $quartoBinDir"
+            return @{
+                Found = $true
+                Path = $quartoBinDir
+                Version = $quartoVersion
+            }
+        } else {
+            Write-Host "Quarto CLI is not installed or not found in PATH"
+            return @{
+                Found = $false
+                Path = $null
+                Version = $null
+            }
+        }
+    } catch {
+        Write-Host "Error checking Quarto installation: $_"
+        return @{
+            Found = $false
+            Path = $null
+            Version = $null
+        }
+    }
+}
+
+#-----------------------------#
+# FUNCTION to check if a directory is in PATH
+#-----------------------------#
+function Test-PathInEnvironment {
+    param (
+        [string]$Directory
+    )
+    $currentPath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    if ($currentPath -like "*$Directory*") {
+        Write-Host "Directory $Directory is already in system PATH"
+        return $true
+    } else {
+        Write-Host "Directory $Directory is not in system PATH"
+        return $false
+    }
+}
+
+#-----------------------------#
+# FUNCTION to add a directory to system PATH
+#-----------------------------#
+function Add-ToSystemPath {
+    param (
+        [string]$Directory
+    )
+    try {
+        $currentPath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+        if (-not ($currentPath -like "*$Directory*")) {
+            $newPath = "$currentPath;$Directory"
+            [Environment]::SetEnvironmentVariable("Path", $newPath, "Machine")
+            Write-Host "Added $Directory to system PATH"
+            # Update current session PATH
+            $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine")
+        }
+    } catch {
+        Write-Host "Error adding $Directory to PATH: $_"
+        exit 1
+    }
+}
+
+#-----------------------------#
+# FUNCTION to compare version numbers
+#-----------------------------#
+function Compare-Version {
+    param (
+        [string]$InstalledVersion,
+        [string]$TargetVersion
+    )
+    try {
+        $installed = [version]($InstalledVersion -replace '^v', '')
+        $target = [version]($TargetVersion -replace '^v', '')
+        if ($installed -gt $target) { return 1 }  # Installed is newer
+        elseif ($installed -eq $target) { return 0 }  # Same version
+        else { return -1 }  # Installed is older
+    } catch {
+        Write-Host "Error comparing versions: $_"
+        return $null
     }
 }
