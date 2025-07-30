@@ -2438,6 +2438,7 @@ server <- function(id, dirs) {
 
           # Construct the command for Windows
           cmd <- paste(
+            "conda activate kiwiflow &&",
             "cd",
             script_dir,
             "&& Rscript",
