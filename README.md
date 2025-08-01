@@ -2,17 +2,49 @@
 
 KiwiFlow is an interactive pipeline with graphical user interface to perform proteomics mass spectrometry data analysis. It implements UniDec's (https://github.com/michaelmarty/UniDec) bayesian mass spectra deconvolution method and provides downstream analyses for protein binding studies.  
 
-[www.liora-bioinformatics.com](https://www.liora-bioinformatics.com) \|
-[info\@liora-bioinformatics.com](mailto:info@liora-bioinformatics.com)
+![Windows](https://img.shields.io/badge/Windows-339033?style=flat&logo=windows&logoColor=white)  [![Version](https://img.shields.io/badge/Version-1.6.1-659DA3)](https://github.com/infinity-a11y/KiwiFlow/releases/tag/v0.0.1)
 
 <sup><sup>*_KiwiFlow is supposed to be used for research and academic purposes only._*</sup></sup>
+<br>
 
-# Installation
+Developed by research group <b>Data Science for Life Science</b> at Hochschule Furtwangen University (HFU).
+<br><br>
+<img src= "Hochschule_Furtwangen_HFU_logo.png" align="left" width="20%"/>
+<br><br><br><br>
+<hr>
+<br>
 
-Follow these steps to set up and launch the application on your Windows system.
+### Current Version: KiwiFlow 0.0.1 - Hello World! (Pre-Release)
+<i> 2025-08-01 </i>
+<br>
+<b>KiwiFlow 0.0.1 - Hello World!</b>
+<br>
+[https://github.com/infinity-a11y/KiwiFlow/releases/tag/0.0.1](https://github.com/infinity-a11y/KiwiFlow/releases/tag/0.0.1)
 
-### Prerequisites
-- **Operating System**: Windows 10 or later.
+<br>
+
+### Installation
+
+1. Download the KiwiFlow installer from the release page. <br>
+
+| Operating System | Download | SHA256 |
+| ------------- | ------------- | ------------- |
+| Windows 10/11 | [KiwiFlow_2025-07-29_Setup.exe](https://github.com/infinity-a11y/KiwiFlow/releases/download/0.0.1/KiwiFlow_2025-07-29_Setup.exe) | 3298623efaedf6caa21505a1074554cd599ad5d029ff4f168b35d06f4b58a6cf |
+
+2. Run the installer to set KiwiFlow up.
+
+> [!NOTE]
+> <i>You may see a security warning from Windows Defender SmartScreen. This is a standard notification that appears because the installer is new and does not yet have a widely recognized digital signature.</i>
+
+3. Launching the installer, a blue window titled "Windows protected your PC" may appear.
+4. On this window, click the small text link that says "More info."
+5. The window will expand to show more details. You will see that the "Publisher" is listed as "Unknown publisher."
+6. Below this information, a new button will appear. Click the "Run anyway" button to start the installation.
+
+<br>
+
+### System Requirements
+- **Operating System**: Windows 10/11.
 - **Browser**: KiwiFlow is running in the default browser. 
 - **Administrative Privileges**: Required for setup and updates. A UAC prompt will appear.
 - **Internet Connection**: Required to download Miniconda, updates, and packages.
