@@ -29,7 +29,7 @@ Developed by research group <b>Data Science for Life Science</b> at Hochschule F
 
 | Operating System | Download | SHA256 |
 | ------------- | ------------- | ------------- |
-| Windows 10/11 | [KiwiFlow_2025-07-29_Setup.exe](https://github.com/infinity-a11y/KiwiFlow/releases/download/0.0.1/KiwiFlow_2025-07-29_Setup.exe) | 3298623efaedf6caa21505a1074554cd599ad5d029ff4f168b35d06f4b58a6cf |
+| Windows 10/11 | [KiwiFlow_2025-08-02_Setup.exe](https://github.com/infinity-a11y/KiwiFlow/releases/download/0.1.0/KiwiFlow_2025-08-02_Setup.exe) | AF8FE2D6CCE7470388FB21226C53F34C5DF50DD3CE9C2A5A9275FAE550D63D19 |
 
 2. Run the installer to set KiwiFlow up.
 
