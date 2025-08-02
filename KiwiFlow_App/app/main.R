@@ -194,7 +194,12 @@ server <- function(id) {
       # Variables for modal
       message <- "KiwiFlow is up-to-date"
       hint <- "No action needed. Update anyway?"
-      link <- "https://github.com/infinity-a11y/KiwiFlow/tree/master"
+      release_url <- get_latest_release_url()
+      link <- ifelse(
+        is.null(release_url),
+        "https://github.com/infinity-a11y/KiwiFlow/tree/master",
+        release_url
+      )
 
       # Variables for button
       icon <- shiny$icon("circle-info")
