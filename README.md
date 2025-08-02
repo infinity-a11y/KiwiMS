@@ -2,7 +2,7 @@
 
 KiwiFlow is an interactive pipeline with graphical user interface to perform proteomics mass spectrometry data analysis. It implements UniDec's (https://github.com/michaelmarty/UniDec) bayesian mass spectra deconvolution method and provides downstream analyses for protein binding studies.  
 
-![Windows](https://img.shields.io/badge/Windows-339033?style=flat&logo=windows&logoColor=white)  [![Version](https://img.shields.io/badge/Version-0.0.1-E8CB98)](https://github.com/infinity-a11y/KiwiFlow/releases/tag/v0.0.1)
+![Windows](https://img.shields.io/badge/Windows-339033?style=flat&logo=windows&logoColor=white)  [![Version](https://img.shields.io/badge/Version-0.1.0-E8CB98)](https://github.com/infinity-a11y/KiwiFlow/releases/tag/v0.1.0)
 
 <sup><sup>*_KiwiFlow is supposed to be used for research and academic purposes only._*</sup></sup>
 <br>
@@ -14,12 +14,12 @@ Developed by research group <b>Data Science for Life Science</b> at Hochschule F
 <hr>
 <br>
 
-### Current Version: KiwiFlow 0.0.1 - Hello World! (Pre-Release)
-<i> 2025-08-01 </i>
+### Current Version: KiwiFlow 0.1.0 - Setup & Update Capabilities (Pre-Release)
+<i> 2025-08-02 </i>
 <br>
-<b>KiwiFlow 0.0.1 - Hello World!</b>
+<b>KiwiFlow 0.1.0 - Setup & Update Capabilities</b>
 <br>
-[https://github.com/infinity-a11y/KiwiFlow/releases/tag/0.0.1](https://github.com/infinity-a11y/KiwiFlow/releases/tag/0.0.1)
+[https://github.com/infinity-a11y/KiwiFlow/releases/tag/0.1.0](https://github.com/infinity-a11y/KiwiFlow/releases/tag/0.1.0)
 
 <br>
 
