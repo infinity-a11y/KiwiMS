@@ -1,18 +1,12 @@
-# <img src="KiwiFlow_App/app/static/logo_name.svg" align="right" width="20%"/>
+<img src="KiwiFlow_App/app/static/logo_name.svg" align="right" width="20%"/>
 
 KiwiFlow is an interactive pipeline with graphical user interface to perform proteomics mass spectrometry data analysis. It implements UniDec's (https://github.com/michaelmarty/UniDec) bayesian mass spectra deconvolution method and provides downstream analyses for protein binding studies.  
 
 ![Windows](https://img.shields.io/badge/Windows-339033?style=flat&logo=windows&logoColor=white)  [![Version](https://img.shields.io/badge/Version-0.1.0-E8CB98)](https://github.com/infinity-a11y/KiwiFlow/releases/tag/0.1.0)
 
 <sup>*_KiwiFlow is supposed to be used for research and academic purposes only._*</sup>
-<br>
 
-Developed by research group <b>Data Science for Life Science</b> at Hochschule Furtwangen University (HFU).
-<br><br>
-<img src= "Hochschule_Furtwangen_HFU_logo.png" align="left" width="20%"/>
-<br><br><br><br>
-<hr>
-<br>
+<br><br><hr><br>
 
 ### Current Version: KiwiFlow 0.1.0 - Setup & Update Capabilities (Pre-Release)
 <i> 2025-08-02 </i>
@@ -48,3 +42,14 @@ Developed by research group <b>Data Science for Life Science</b> at Hochschule F
 - **Browser**: KiwiFlow is running in the default browser. 
 - **Administrative Privileges**: Required for setup and updates. A UAC prompt will appear.
 - **Internet Connection**: Required to download Miniconda, updates, and packages.
+
+<br><hr><br>
+
+<img src= "Hochschule_Furtwangen_HFU_logo.png" align="right" width="33%"/>
+
+Developed by Marian Freisleben from research group Data Science for Life Science at the Institute of Precision Medicine of Hochschule Furtwangen University (HFU). <br>
+
+[https://life-data-science.org/](https://life-data-science.org/) <br>
+[https://institute-precision-medicine.org/working-groups_new/kohl-group/](https://institute-precision-medicine.org/working-groups_new/kohl-group/) <br>
+[https://www.hs-furtwangen.de/en/](https://www.hs-furtwangen.de/en/)
+<br><br>
