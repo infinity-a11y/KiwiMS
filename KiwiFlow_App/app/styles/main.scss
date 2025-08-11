@@ -95,8 +95,10 @@ pre::-webkit-scrollbar-thumb:horizontal {
   overflow-y: clip;
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);
-  display: flex !important;
-  align-items: center;
+}
+
+.modal {
+  --bs-modal-margin: 5%;
 }
 
 .modal::-webkit-scrollbar-thumb:horizontal {
@@ -107,10 +109,6 @@ pre::-webkit-scrollbar-thumb:horizontal {
   overflow: auto;
   min-width: 276px;
   max-height: 85vh;
-}
-
-.modal.in .modal-dialog {
-  width: 60vw;
 }
 
 .modal-content {
