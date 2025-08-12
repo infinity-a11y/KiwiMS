@@ -68,6 +68,7 @@ pre::-webkit-scrollbar-thumb:horizontal {
 .card-custom-plate .bslib-card .card-body,
 .card-custom-plate2 .bslib-card .card-body {
   padding-bottom: 16px;
+  overflow: hidden;
 }
 
 .row-fullheight > div,
@@ -319,6 +320,7 @@ button .sF-modal {
   height: 2em;
   border: none;
   --bs-progress-bar-bg: #8BC34A;
+  --bs-progress-bg: #F7F7F7;
 }
 
 input[type="number"]::-webkit-inner-spin-button {
@@ -638,6 +640,14 @@ decon-report-modal .btn-default {
 
 #app-deconvolution_process-toggle_result .btn-group {
   width: 100%;
+}
+
+// ======================================
+// Plotly graphs
+// ======================================
+
+.js-plotly-plot .plotly svg {
+  background: none !important;
 }
 
 // ======================================

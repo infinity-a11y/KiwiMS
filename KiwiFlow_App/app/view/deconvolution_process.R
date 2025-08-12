@@ -8,7 +8,6 @@ box::use(
   shiny,
   shinyjs[delay, disable, disabled, enable, hide, show, hidden, runjs],
   shinyWidgets[
-    addSpinner,
     pickerInput,
     progressBar,
     radioGroupButtons,
@@ -556,7 +555,11 @@ server <- function(id, dirs) {
         ),
         shiny$column(
           width = 2,
-          shiny$actionButton(ns("deconvolute_end"), "Abort")
+          shiny$actionButton(
+            ns("deconvolute_end"),
+            "Abort",
+            icon = shiny$icon("circle-stop")
+          )
         ),
         shiny$column(
           width = 2,
@@ -628,11 +631,7 @@ server <- function(id, dirs) {
               ),
               card_body(
                 withWaiter(
-                  addSpinner(
-                    plotlyOutput(ns("heatmap")),
-                    spin = "cube",
-                    color = "#38387c"
-                  )
+                  plotlyOutput(ns("heatmap"))
                 )
               )
             )
@@ -648,11 +647,7 @@ server <- function(id, dirs) {
                 "Spectrum"
               ),
               card_body(
-                addSpinner(
-                  plotlyOutput(ns("spectrum")),
-                  spin = "cube",
-                  color = "#38387c"
-                )
+                plotlyOutput(ns("spectrum"))
               )
             )
           )
@@ -713,7 +708,11 @@ server <- function(id, dirs) {
         shiny$column(
           width = 2,
           align = "left",
-          shiny$actionButton(ns("deconvolute_end"), "Abort")
+          shiny$actionButton(
+            ns("deconvolute_end"),
+            "Abort",
+            icon = shiny$icon("circle-stop")
+          )
         ),
         shiny$column(
           width = 2,
@@ -784,11 +783,7 @@ server <- function(id, dirs) {
                 "Spectrum"
               ),
               card_body(
-                addSpinner(
-                  plotlyOutput(ns("spectrum")),
-                  spin = "cube",
-                  color = "#38387c"
-                )
+                plotlyOutput(ns("spectrum"))
               )
             )
           )
@@ -1374,6 +1369,7 @@ server <- function(id, dirs) {
           disabled(shiny$selectInput(ns("result_picker"), "", choices = ""))
         )
       )
+
       # Apply JS modifications for picker
       session$sendCustomMessage("selectize-init", "result_picker")
 
@@ -1862,17 +1858,19 @@ server <- function(id, dirs) {
                   saveRDS(heatmap, file.path(results_dir, "heatmap.rds"))
                 }
               } else {
-                selected_files <- ifelse(
-                  dirs$selected() == "folder",
-                  file.path(dirs$dir(), target_selector_sel()),
-                  raw_dirs
-                )
+                if (dirs$selected() == "folder") {
+                  selected_files <- file.path(dirs$dir(), target_selector_sel())
+                } else {
+                  selected_files <- raw_dirs
+                }
+
                 fin_dirs <- gsub(".raw", "_rawdata_unidecfiles", selected_files)
                 peak_files <- file.path(fin_dirs, "plots.rds")
                 finished_files <- file.exists(peak_files)
 
                 if (sum(finished_files) > 0) {
                   choices <- basename(selected_files)[finished_files]
+
                   selected <- ifelse(
                     is.null(result_files_sel()),
                     choices[1],
@@ -1900,7 +1898,8 @@ server <- function(id, dirs) {
               shiny$updateActionButton(
                 session,
                 "deconvolute_end",
-                label = "Reset"
+                label = "Reset",
+                icon = shiny$icon("repeat")
               )
 
               title <- "Finalized!"
@@ -2111,7 +2110,8 @@ server <- function(id, dirs) {
       shiny$updateActionButton(
         session,
         "deconvolute_end",
-        label = "Reset"
+        label = "Reset",
+        icon = shiny$icon("repeat")
       )
 
       if (!is.null(reactVars$progress_observer)) {
