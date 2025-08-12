@@ -505,12 +505,12 @@ server <- function(id, dirs) {
     # Conditional enabling of advanced settings
     shiny$observe({
       if (isTRUE(input$show_advanced)) {
-        shinyjs::enable(
+        enable(
           selector = ".deconv-param-input-adv",
           asis = TRUE
         )
       } else {
-        shinyjs::disable(
+        disable(
           selector = ".deconv-param-input-adv",
           asis = TRUE
         )

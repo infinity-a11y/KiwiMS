@@ -391,10 +391,13 @@ create_384_plate_heatmap <- function(data) {
 }
 
 #' @export
-spectrum_plot <- function(result_path, raw, interactive = TRUE) {
-  # Get paths
+spectrum_plot <- function(
+  result_path,
+  raw,
+  interactive = TRUE,
+  bin_width = 0.01
+) {
   base <- gsub("_unidecfiles", "", basename(result_path))
-
   raw_file <- file.path(result_path, paste0(base, "_rawdata.txt"))
   mass_file <- file.path(result_path, paste0(base, "_mass.txt"))
   peaks_file <- file.path(result_path, paste0(base, "_peaks.dat"))
@@ -403,81 +406,156 @@ spectrum_plot <- function(result_path, raw, interactive = TRUE) {
     return()
   }
 
-  # Read data
   if (raw) {
-    mass <- utils::read.delim(raw_file, sep = " ", header = FALSE)
-
+    mass <- fread(raw_file, sep = " ", col.names = c("V1", "V2"))
+    mass[, bin := floor(V1 / bin_width) * bin_width + bin_width / 2]
+    mass <- mass[, .(V2 = sum(V2)), by = bin]
+    setnames(mass, "bin", "V1")
     mass$V2 <- (mass$V2 - min(mass$V2)) / (max(mass$V2) - min(mass$V2)) * 100
   } else {
     mass <- utils::read.delim(mass_file, sep = " ", header = FALSE)
     peaks <- utils::read.delim(peaks_file, sep = " ", header = FALSE)
-
     mass$V2 <- (mass$V2 - min(mass$V2)) / (max(mass$V2) - min(mass$V2)) * 100
     highlight_peaks <- mass[mass$V1 %in% peaks$V1, ]
   }
 
-  # Create spectrum
-  plot <- ggplot2::ggplot(
-    mass,
-    ggplot2::aes(
-      x = V1,
-      y = V2,
-      group = 1,
-      text = paste0("Mass: ", V1, " Da\nIntensity: ", round(V2, 2), "%")
-    )
-  ) +
-    ggplot2::geom_line() +
-    ggplot2::scale_y_continuous(labels = scales::percent_format(scale = 1)) +
-    ggplot2::theme_minimal()
-
-  if (raw) {
-    plot <- plot + ggplot2::labs(y = "Intensity [%]", x = "m/z [Th]")
-  } else {
-    plot <- plot +
-      ggplot2::geom_point(
-        data = highlight_peaks,
-        ggplot2::aes(x = V1, y = V2),
-        fill = "#e8cb97",
-        colour = "#35357A",
-        shape = 21,
-        size = 2
-      ) +
-      ggplot2::labs(y = "Intensity [%]", x = "Mass [Da]")
-  }
-
-  # If not interactive return ggplot
   if (!interactive) {
+    plot <- ggplot2::ggplot(
+      mass,
+      ggplot2::aes(
+        x = V1,
+        y = V2,
+        group = 1,
+        text = paste0("Mass: ", V1, " Da\nIntensity: ", round(V2, 2))
+      )
+    ) +
+      ggplot2::geom_line() +
+      ggplot2::scale_y_continuous(labels = scales::percent_format(scale = 1)) +
+      ggplot2::theme_minimal()
+
+    if (raw) {
+      plot <- plot + ggplot2::labs(y = "Intensity [%]", x = "m/z [Th]")
+    } else {
+      plot <- plot +
+        ggplot2::geom_point(
+          data = highlight_peaks,
+          ggplot2::aes(x = V1, y = V2),
+          fill = "#e8cb97",
+          colour = "#35357A",
+          shape = 21,
+          size = 2
+        ) +
+        ggplot2::labs(y = "Intensity [%]", x = "Mass [Da]")
+    }
     return(plot)
   }
 
-  plot_name <- ifelse(
-    raw == TRUE,
-    paste0(gsub("_rawdata", "", base), "_raw"),
-    paste0(gsub("_rawdata", "", base), "_deconvoluted")
-  )
-
-  # Convert to interactive plot
-  interactive_plot <- plotly::ggplotly(plot, tooltip = "text") |>
-    plotly::layout(
-      margin = list(t = 0, r = 0, b = 0, l = 50)
+  if (raw) {
+    plot <- plotly::plot_ly(
+      mass,
+      x = ~V1,
+      y = ~V2,
+      type = "scattergl",
+      mode = "lines",
+      color = I("black"),
+      hoverinfo = "text",
+      text = ~ paste0("Mass: ", V1, " Da\nIntensity: ", round(V2, 2), "%")
     ) |>
-    plotly::config(
-      displayModeBar = "hover",
-      scrollZoom = FALSE,
-      modeBarButtons = list(
-        list(
+      plotly::layout(
+        yaxis = list(
+          title = "Intensity [%]",
+          showgrid = TRUE,
+          zeroline = FALSE,
+          ticks = "outside",
+          tickcolor = "transparent"
+        ),
+        xaxis = list(title = "m/z [Th]", showgrid = TRUE, zeroline = FALSE),
+        margin = list(t = 0, r = 0, b = 0, l = 50),
+        paper_bgcolor = "white",
+        plot_bgcolor = "white"
+      ) |>
+      plotly::config(
+        displayModeBar = "hover",
+        scrollZoom = FALSE,
+        modeBarButtons = list(list(
           "zoom2d",
           "toImage",
           "autoScale2d",
           "resetScale2d",
           "zoomIn2d",
           "zoomOut2d"
+        )),
+        toImageButtonOptions = list(
+          filename = paste0(Sys.Date(), "_", gsub("_rawdata", "", base), "_raw")
         )
-      ),
-      toImageButtonOptions = list(filename = paste0(Sys.Date(), "_", plot_name))
-    )
+      ) |>
+      plotly::partial_bundle()
+  } else {
+    plot <- plotly::plot_ly(
+      mass,
+      x = ~V1,
+      y = ~V2,
+      type = "scattergl",
+      mode = "lines",
+      color = I("black"),
+      hoverinfo = "text",
+      text = ~ paste0("Mass: ", V1, " Da\nIntensity: ", round(V2, 2), "%")
+    ) |>
+      plotly::add_markers(
+        data = highlight_peaks,
+        x = ~V1,
+        y = ~V2,
+        marker = list(
+          color = "#e8cb97",
+          line = list(
+            color = "#35357A",
+            width = 2
+          ),
+          symbol = "circle",
+          size = 10,
+          zindex = 100
+        ),
+        hoverinfo = "text",
+        text = ~ paste0("Mass: ", V1, " Da\nIntensity: ", round(V2, 2), "%"),
+        showlegend = FALSE
+      ) |>
+      plotly::layout(
+        yaxis = list(
+          title = "Intensity [%]",
+          showgrid = TRUE,
+          zeroline = FALSE,
+          ticks = "outside",
+          tickcolor = "transparent"
+        ),
+        xaxis = list(title = "Mass [Da]", showgrid = TRUE, zeroline = FALSE),
+        margin = list(t = 0, r = 0, b = 0, l = 80),
+        paper_bgcolor = "white",
+        plot_bgcolor = "white"
+      ) |>
+      plotly::config(
+        displayModeBar = "hover",
+        scrollZoom = FALSE,
+        modeBarButtons = list(list(
+          "zoom2d",
+          "toImage",
+          "autoScale2d",
+          "resetScale2d",
+          "zoomIn2d",
+          "zoomOut2d"
+        )),
+        toImageButtonOptions = list(
+          filename = paste0(
+            Sys.Date(),
+            "_",
+            gsub("_rawdata", "", base),
+            "_deconvoluted"
+          )
+        )
+      ) |>
+      plotly::partial_bundle()
+  }
 
-  return(interactive_plot)
+  return(plot)
 }
 
 # Generate deconvolution report
