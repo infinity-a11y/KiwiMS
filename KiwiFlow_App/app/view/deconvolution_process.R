@@ -381,12 +381,14 @@ server <- function(id, dirs) {
                         width = 6,
                         shiny$div(
                           class = "deconv-param-input-adv",
-                          shiny$numericInput(
-                            ns("peakwindow"),
-                            "",
-                            min = 0,
-                            max = 1000,
-                            value = 40
+                          disabled(
+                            shiny$numericInput(
+                              ns("peakwindow"),
+                              "",
+                              min = 0,
+                              max = 1000,
+                              value = 40
+                            )
                           )
                         )
                       )
@@ -400,12 +402,14 @@ server <- function(id, dirs) {
                         width = 6,
                         shiny$div(
                           class = "deconv-param-input-adv",
-                          shiny$numericInput(
-                            ns("peaknorm"),
-                            "",
-                            min = 0,
-                            max = 100,
-                            value = 2
+                          disabled(
+                            shiny$numericInput(
+                              ns("peaknorm"),
+                              "",
+                              min = 0,
+                              max = 100,
+                              value = 2
+                            )
                           )
                         )
                       )
@@ -422,13 +426,15 @@ server <- function(id, dirs) {
                         width = 6,
                         shiny$div(
                           class = "deconv-param-input-adv",
-                          shiny$numericInput(
-                            ns("peakthresh"),
-                            "",
-                            min = 0,
-                            max = 1,
-                            value = 0.07,
-                            step = 0.01
+                          disabled(
+                            shiny$numericInput(
+                              ns("peakthresh"),
+                              "",
+                              min = 0,
+                              max = 1,
+                              value = 0.07,
+                              step = 0.01
+                            )
                           )
                         )
                       )
@@ -458,13 +464,15 @@ server <- function(id, dirs) {
                         width = 6,
                         shiny$div(
                           class = "deconv-param-input-adv",
-                          shiny$numericInput(
-                            ns("massbins"),
-                            "",
-                            min = 0,
-                            max = 100,
-                            value = 0.5,
-                            step = 0.1
+                          disabled(
+                            shiny$numericInput(
+                              ns("massbins"),
+                              "",
+                              min = 0,
+                              max = 100,
+                              value = 0.5,
+                              step = 0.1
+                            )
                           )
                         )
                       )
@@ -495,11 +503,18 @@ server <- function(id, dirs) {
     })
 
     # Conditional enabling of advanced settings
-    shiny$observeEvent(input$show_advanced, {
-      shinyjs::toggleState(
-        selector = ".deconv-param-input-adv",
-        asis = TRUE
-      )
+    shiny$observe({
+      if (isTRUE(input$show_advanced)) {
+        shinyjs::enable(
+          selector = ".deconv-param-input-adv",
+          asis = TRUE
+        )
+      } else {
+        shinyjs::disable(
+          selector = ".deconv-param-input-adv",
+          asis = TRUE
+        )
+      }
     })
 
     ### Deconvolution running interface ----
@@ -2067,6 +2082,7 @@ server <- function(id, dirs) {
 
         output$deconvolution_running_ui <- NULL
         output$heatmap <- NULL
+
         output$deconvolution_init_ui <- shiny$renderUI(
           deconvolution_init_ui
         )
