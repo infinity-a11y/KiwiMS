@@ -46,21 +46,18 @@ ui <- function(id) {
 }
 
 #' @export
-server <- function(id, dirs) {
+server <- function(id, dirs, reset_button) {
   shiny$moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
+    # Get kiwiflow user settings
     settings_dir <- file.path(
       Sys.getenv("LOCALAPPDATA"),
       "KiwiFlow",
       "settings"
     )
-    results_dir <- file.path(
-      Sys.getenv("USERPROFILE"),
-      "Documents",
-      "KiwiFlow",
-      "results"
-    )
+
+    # Define log location
     log_path <- get_log()
 
     ### Reactive variables declaration ----
@@ -808,11 +805,33 @@ server <- function(id, dirs) {
 
     ### Validate start button ----
     output$deconvolute_start_ui <- shiny$renderUI({
+      reset_button()
+
       shiny$validate(
         shiny$need(
           ((!is.null(dirs$file()) && length(dirs$file()) > 0) ||
             (!is.null(dirs$dir()) && length(dirs$dir()) > 0)),
           "Select target file(s) from the sidebar to start"
+        )
+      )
+
+      if (!is.null(dirs$targetpath()) && length(dirs$targetpath()) > 0) {
+        sessionId <- gsub(".log", "", basename(log_path))
+        result_files <- list.files(dirs$targetpath())
+
+        if (any(grepl(sessionId, gsub("_RESULT.rds", "", result_files)))) {
+          valid_destination <- FALSE
+        } else {
+          valid_destination <- TRUE
+        }
+      } else {
+        valid_destination <- FALSE
+      }
+
+      shiny$validate(
+        shiny$need(
+          valid_destination,
+          "Select destination for result file(s) from the sidebar to start"
         )
       )
 
@@ -879,7 +898,14 @@ server <- function(id, dirs) {
     #### check_progress ----
     check_progress <- function(raw_dirs) {
       message("Checking progress at: ", Sys.time())
-      fin_dirs <- gsub(".raw", "_rawdata_unidecfiles", raw_dirs)
+      fin_dirs <- file.path(
+        dirs$targetpath(),
+        basename(gsub(
+          ".raw",
+          "_rawdata_unidecfiles",
+          raw_dirs
+        ))
+      )
       peak_files <- file.path(fin_dirs, "plots.rds")
       finished_files <- file.exists(peak_files)
       count <- sum(finished_files)
@@ -946,7 +972,7 @@ server <- function(id, dirs) {
 
       if (dirs$selected() == "folder") {
         finished_files <- dir_ls(
-          dirs$dir(),
+          dirs$targetpath(),
           glob = "*_rawdata_unidecfiles"
         )
 
@@ -999,7 +1025,7 @@ server <- function(id, dirs) {
 
       if (dirs$selected() == "folder") {
         raw_dirs <- dir_ls(
-          dirs$dir(),
+          dirs$targetpath(),
           glob = "*.raw"
         )
 
@@ -1107,12 +1133,13 @@ server <- function(id, dirs) {
       warning <- NULL
       reactVars$overwrite <- FALSE
 
-      if (dirs$selected() == "folder") {
-        finished_files <- dir_ls(
-          dirs$dir(),
-          glob = "*_rawdata_unidecfiles"
-        )
+      # Get finished files in destination path
+      finished_files <- dir_ls(
+        dirs$targetpath(),
+        glob = "*_rawdata_unidecfiles"
+      )
 
+      if (dirs$selected() == "folder") {
         if (
           isTRUE(dirs$batch_mode()) &&
             length(dirs$batch_file())
@@ -1197,7 +1224,8 @@ server <- function(id, dirs) {
           }
         }
       } else if (
-        dir.exists(gsub(".raw", "_rawdata_unidecfiles", dirs$file()))
+        gsub(".raw", "_rawdata_unidecfiles", basename(dirs$file())) %in%
+          basename(finished_files)
       ) {
         reactVars$overwrite <- gsub(".raw", "_rawdata_unidecfiles", dirs$file())
         reactVars$duplicated <- "Overwrite Files"
@@ -1208,7 +1236,7 @@ server <- function(id, dirs) {
               'm; color:black; margin-right: 10px;"></i>',
               "The file queried for deconvolution appears to have already",
               " been processed. Choosing to continue will overwrite",
-              " already the present result."
+              " the present result."
             )
           )
         )
@@ -1257,16 +1285,16 @@ server <- function(id, dirs) {
       reset_progress()
       write_log("Deconvolution initiated")
 
-      if (!dir.exists(results_dir)) {
-        dir.create(results_dir)
-      }
+      # if (!dir.exists(results_dir)) {
+      #   dir.create(results_dir)
+      # }
 
-      if (file.exists(file.path(results_dir, "result.rds"))) {
-        file.remove(file.path(results_dir, "result.rds"))
-      }
-      if (file.exists(file.path(results_dir, "heatmap.rds"))) {
-        file.remove(file.path(results_dir, "heatmap.rds"))
-      }
+      # if (file.exists(file.path(results_dir, "result.rds"))) {
+      #   file.remove(file.path(results_dir, "result.rds"))
+      # }
+      # if (file.exists(file.path(results_dir, "heatmap.rds"))) {
+      #   file.remove(file.path(results_dir, "heatmap.rds"))
+      # }
 
       # UI changes
       runjs(paste0(
@@ -1331,21 +1359,20 @@ server <- function(id, dirs) {
         raw_dirs <- dirs$file()
         write_log(paste("Target:", dirs$file()))
       }
+      write_log(paste("Destination path:", dirs$targetpath()))
 
       # Overwrite or skip already present result dirs
       if (!isFALSE(reactVars$overwrite)) {
         if (reactVars$duplicated == "Overwrite Files") {
           # Remove result files and dirs
-          if (dirs$selected() == "file") {
-            rslt_dirs <- gsub(".raw", "_rawdata_unidecfiles", dirs$file())
+          rslt_dirs <- file.path(
+            dirs$targetpath(),
+            basename(reactVars$overwrite)
+          )
 
+          if (dirs$selected() == "file") {
             write_log(paste("Overwriting existing", rslt_dirs))
           } else {
-            rslt_dirs <- file.path(
-              dirs$dir(),
-              reactVars$overwrite
-            )
-
             write_log(paste(
               "Overwriting",
               length(rslt_dirs),
@@ -1431,7 +1458,8 @@ server <- function(id, dirs) {
           "app/logic/deconvolution_execute.R",
           temp,
           log_path,
-          getwd()
+          getwd(),
+          dirs$targetpath()
         ),
         stdout = reactVars$decon_process_out,
         stderr = reactVars$decon_process_out
@@ -1495,7 +1523,7 @@ server <- function(id, dirs) {
               shiny$req(reactVars$sample_names, reactVars$wells)
 
               results_all <- dir_ls(
-                dirs$dir(),
+                dirs$targetpath(),
                 glob = "*_rawdata_unidecfiles"
               )
 
@@ -1664,7 +1692,14 @@ server <- function(id, dirs) {
               }
             } else {
               selected_files <- file.path(dirs$dir(), target_selector_sel())
-              fin_dirs <- gsub(".raw", "_rawdata_unidecfiles", selected_files)
+              fin_dirs <- file.path(
+                dirs$targetpath(),
+                basename(gsub(
+                  ".raw",
+                  "_rawdata_unidecfiles",
+                  selected_files
+                ))
+              )
               peak_files <- file.path(fin_dirs, "plots.rds")
               finished_files <- file.exists(peak_files)
 
@@ -1762,12 +1797,22 @@ server <- function(id, dirs) {
               paste0(rep(".", reactVars$count), collapse = "")
             )
 
-            result_files <- gsub(".raw", "_rawdata_unidecfiles", raw_dirs)
+            result_files <- file.path(
+              dirs$targetpath(),
+              basename(gsub(".raw", "_rawdata_unidecfiles", raw_dirs))
+            )
 
             # check if deconvolution finished for all target files
             if (
               all(file.exists(file.path(result_files, "plots.rds"))) &&
-                file.exists(file.path(results_dir, "result.rds"))
+                file.exists(file.path(
+                  dirs$targetpath(),
+                  gsub(
+                    ".log",
+                    "_RESULT.rds",
+                    basename(log_path)
+                  )
+                ))
             ) {
               # stop observers
               if (!is.null(reactVars$progress_observer)) {
@@ -1879,7 +1924,10 @@ server <- function(id, dirs) {
                   selected_files <- raw_dirs
                 }
 
-                fin_dirs <- gsub(".raw", "_rawdata_unidecfiles", selected_files)
+                fin_dirs <- file.path(
+                  dirs$targetpath(),
+                  basename(gsub(".raw", "_rawdata_unidecfiles", selected_files))
+                )
                 peak_files <- file.path(fin_dirs, "plots.rds")
                 finished_files <- file.exists(peak_files)
 
@@ -1983,7 +2031,7 @@ server <- function(id, dirs) {
 
       delay(1000, show(selector = "#app-deconvolution_process-processing"))
 
-      ### Render result spectrum ----
+      # ### Render result spectrum ----
       output$spectrum <- renderPlotly({
         waiter_show(id = ns("spectrum"), html = spin_wandering_cubes())
 
@@ -1993,19 +2041,20 @@ server <- function(id, dirs) {
 
         if (dirs$selected() == "folder") {
           result_dir <- file.path(
-            dirs$dir(),
+            dirs$targetpath(),
             gsub(".raw", "_rawdata_unidecfiles", result_files_sel())
           )
         } else if (dirs$selected() == "file") {
-          result_dir <- gsub(".raw", "_rawdata_unidecfiles", dirs$file())
+          result_dir <- file.path(
+            dirs$targetpath(),
+            basename(gsub(".raw", "_rawdata_unidecfiles", dirs$file()))
+          )
         }
 
         if (dir.exists(result_dir)) {
           # Generate the spectrum plot
           spectrum <- spectrum_plot(result_dir, input$toggle_result)
-
           waiter_hide(id = ns("spectrum"))
-
           return(spectrum)
         }
       })
@@ -2096,6 +2145,8 @@ server <- function(id, dirs) {
           "apsed>.collapse-toggle').style.display = 'block';"
         ))
         runjs("document.querySelector('button.collapse-toggle').click();")
+
+        reset_button(reset_button() + 1)
       }
     })
 
@@ -2227,7 +2278,6 @@ server <- function(id, dirs) {
     })
 
     ### Report events ----
-
     shiny$observeEvent(input$deconvolution_report, {
       if (reactVars$deconv_report_status == "running") {
         label <- "Cancel"
@@ -2281,6 +2331,14 @@ server <- function(id, dirs) {
           shiny$verbatimTextOutput(ns("decon_rep_logtext"))
         )
 
+        # Define report filename
+        filename <- gsub(
+          ".log",
+          "_deconvolution_report.html",
+          basename(log_path)
+        )
+        filename_path <- file.path(dirs$targetpath(), filename)
+
         output$decon_rep_logtext <- shiny$renderText({
           shiny$invalidateLater(1000)
 
@@ -2309,13 +2367,6 @@ server <- function(id, dirs) {
           )
 
           clean_log <- gsub("\\s*\\|[ .]*\\|\\s*", "", log, perl = TRUE)
-
-          filename <- gsub(
-            ".log",
-            "_deconvolution_report.html",
-            basename(log_path)
-          )
-          filename_path <- file.path(dirname(log_path), filename)
 
           if (
             grepl(paste("Output created:", report_fin), log) &
@@ -2368,14 +2419,6 @@ server <- function(id, dirs) {
 
           shiny$removeModal()
         } else if (reactVars$deconv_report_status == "finished") {
-          # Open in browser
-          filename <- gsub(
-            ".log",
-            "_deconvolution_report.html",
-            basename(log_path)
-          )
-          filename_path <- file.path(dirname(log_path), filename)
-
           if (file.exists(filename_path)) {
             utils::browseURL(filename_path)
           }
@@ -2462,7 +2505,8 @@ server <- function(id, dirs) {
             fill_empty(input$decon_rep_author),
             fill_empty(input$decon_rep_desc),
             output_file,
-            log_path
+            log_path,
+            dirs$targetpath()
           )
 
           # Construct the command for Windows

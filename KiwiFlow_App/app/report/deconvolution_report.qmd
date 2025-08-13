@@ -7,6 +7,7 @@ params:
   report_author: ""
   comment: ""
   result_path: ""
+  result_file: ""
 output:
   html_document:
     self_contained: true
@@ -75,7 +76,7 @@ format:
 #| include: false
 
 # Load the result list from RDS file
-result <- readRDS(file.path(params$result_path, "result.rds"))
+result <- readRDS(file.path(params$result_file))
 names_result <- names(result)[!names(result) %in% c("session", "output")]
 ```
 

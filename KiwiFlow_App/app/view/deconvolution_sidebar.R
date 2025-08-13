@@ -15,8 +15,13 @@ box::use(
     reactiveValues
   ],
   shinyFiles[parseDirPath, shinyDirButton, shinyDirChoose],
-  shinyjs[disable, disabled, enable],
+  shinyjs[disable, disabled, enable, runjs],
   shinyWidgets[radioGroupButtons],
+)
+
+box::use(
+  app / logic / helper_functions[get_volumes],
+  app / logic / logging[get_log],
 )
 
 #' @export
@@ -24,90 +29,83 @@ ui <- function(id) {
   ns <- NS(id)
 
   sidebar(
-    title = "Select Target Files",
-    h6(
-      "Select Deconvolution Mode",
-      style = "color: RGBA(var(--bs-emphasis-color-rgb, 0, 0, 0), 0.5); font-style: italic;"
-    ),
-    radioGroupButtons(
-      ns("deconvolution_mode"),
-      "",
-      c("Multiple", "Single")
-    ),
-    shiny::hr(style = "margin: 0.5rem 0; opacity: 0.8;"),
-    shiny::conditionalPanel(
-      condition = sprintf(
-        "input['%s'] == 'Multiple'",
-        ns("deconvolution_mode")
-      ),
+    title = "Select Files",
+    shiny::tags$div(
+      style = "display: flex; gap: 0.5em;",
       shinyDirButton(
         ns("folder"),
-        "Select Root Folder",
+        "Multiple",
         icon = shiny::icon("folder-open"),
-        title = "Select Folder",
+        title = "Select location with multiple Waters .raw folders",
         buttonType = "default",
         root = path_home()
       ),
-      shiny::verbatimTextOutput(ns("path_selected")),
-      shiny::uiOutput(ns("multi_dir_check")),
-      shiny::fluidRow(
-        shiny::column(
-          width = 10,
+      shinyDirButton(
+        ns("file"),
+        "Single",
+        multiple = TRUE,
+        icon = shiny::icon("file"),
+        title = "Select individual Waters .raw folder",
+        buttonType = "default",
+        root = path_home()
+      )
+    ),
+    shiny::verbatimTextOutput(ns("path_selected")),
+    shiny::uiOutput(ns("dir_check")),
+    shiny::hr(style = "margin: 0.5rem 0; opacity: 0.8;"),
+    shinyDirButton(
+      ns("target_folder"),
+      "Select Destination Folder",
+      icon = shiny::icon("download"),
+      title = "Select destination folder",
+      buttonType = "default",
+      root = path_home()
+    ),
+    shiny::verbatimTextOutput(ns("targetpath_selected")),
+    shiny::uiOutput(ns("targetpath_check")),
+    shiny::hr(style = "margin: 0.5rem 0; opacity: 0.8;"),
+    shiny::fluidRow(
+      shiny::column(
+        width = 10,
+        disabled(
           shiny::checkboxInput(
             ns("batch_mode"),
             "Batch Processing Mode",
             value = FALSE
           )
-        ),
-        shiny::column(
-          width = 2,
-          tooltip(
-            icon("circle-question"),
-            "Upload a batch file specifying ID and position of samples on a microtiter plate.",
-            placement = "right",
-            options = list(customClass = "tool-tip")
-          )
         )
       ),
-      shiny::conditionalPanel(
-        condition = sprintf(
-          "input['%s'] == true",
-          ns("batch_mode")
-        ),
-        shiny::uiOutput(ns("batch_file_ui")),
-        shiny::uiOutput(ns("batch_id_col_ui")),
-        shiny::uiOutput(ns("batch_vial_col_ui"))
+      shiny::column(
+        width = 2,
+        tooltip(
+          icon("circle-question"),
+          "Upload a batch file specifying ID and position of samples on a microtiter plate.",
+          placement = "right",
+          options = list(customClass = "tool-tip")
+        )
       )
     ),
     shiny::conditionalPanel(
       condition = sprintf(
-        "input['%s'] == 'Single'",
-        ns("deconvolution_mode")
+        "input['%s'] == true",
+        ns("batch_mode")
       ),
-      shinyDirButton(
-        ns("file"),
-        "Select Single File",
-        multiple = TRUE,
-        icon = shiny::icon("file"),
-        title = "Select Waters .raw Folder",
-        buttonType = "default",
-        root = path_home()
-      ),
-      shiny::verbatimTextOutput(ns("file_selected")),
-      shiny::uiOutput(ns("single_dir_check"))
+      shiny::uiOutput(ns("batch_file_ui")),
+      shiny::uiOutput(ns("batch_id_col_ui")),
+      shiny::uiOutput(ns("batch_vial_col_ui"))
     )
   )
 }
 
 #' @export
-server <- function(id) {
+server <- function(id, reset_button) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
     selected <- shiny::reactiveVal("")
 
     # Define roots for directory browsing
-    roots <- c(Home = path_home(), C = "C:/", D = "D:/")
+    roots <- get_volumes()
 
     # Initialize root folder selection
     shinyDirChoose(
@@ -122,6 +120,15 @@ server <- function(id) {
     shinyDirChoose(
       input,
       id = "file",
+      roots = roots,
+      defaultRoot = "Home",
+      session = session
+    )
+
+    # Specify destination path for results
+    shinyDirChoose(
+      input,
+      id = "target_folder",
       roots = roots,
       defaultRoot = "Home",
       session = session
@@ -144,6 +151,14 @@ server <- function(id) {
       }
     })
 
+    target_path <- reactive({
+      if (is.null(input$target_folder)) {
+        character()
+      } else {
+        parseDirPath(roots, input$target_folder)
+      }
+    })
+
     batch_file <- reactive({
       if (is.null(input$batch_selection)) {
         character()
@@ -160,97 +175,13 @@ server <- function(id) {
     rootdir <- shiny::reactiveVal(character())
     filepath <- shiny::reactiveVal(character())
     batchfile <- shiny::reactiveVal(character())
+    targetpath <- shiny::reactiveVal(character())
 
     shiny::observe({
       filepath(file_path())
       rootdir(root_dir())
       batchfile(batch_file())
-    })
-
-    output$multi_dir_check <- shiny::renderUI({
-      if (!is.null(rootdir()) && length(rootdir()) > 0) {
-        raw_dirs <- list.dirs(
-          rootdir(),
-          full.names = TRUE,
-          recursive = FALSE
-        )
-        raw_dirs <- raw_dirs[grep("\\.raw$", raw_dirs)]
-
-        if (length(raw_dirs)) {
-          enable(selector = "#deconvolution_pars-batch_mode")
-
-          shiny::p(
-            shiny::HTML(
-              paste0(
-                '<i class="fa-solid fa-circle-check" style="font-size:1em; col',
-                'or:#8BC34A; margin-right: 10px;"></i>',
-                paste(
-                  "<b>",
-                  length(raw_dirs),
-                  "</b> .raw directories in directory"
-                )
-              )
-            )
-          )
-        } else {
-          shiny::updateCheckboxInput(session, "batch_mode", value = FALSE)
-          disable(selector = "#deconvolution_pars-batch_mode")
-
-          shiny::p(
-            shiny::HTML(
-              paste0(
-                '<i class="fa-solid fa-circle-exclamation" style="font-size:1e',
-                'm; color:black; margin-right: 10px;"></i>',
-                "<b>No</b> .raw directories in directory"
-              )
-            )
-          )
-        }
-      } else {
-        shiny::updateCheckboxInput(session, "batch_mode", value = FALSE)
-        disable(selector = "#deconvolution_pars-batch_mode")
-
-        shiny::p(
-          shiny::HTML(
-            "Select directory containing .raw result folders"
-          )
-        )
-      }
-    })
-
-    output$single_dir_check <- shiny::renderUI({
-      if (length(filepath())) {
-        if (
-          grepl("\\.raw$", filepath(), ignore.case = TRUE) &&
-            dir.exists(filepath())
-        ) {
-          shiny::p(
-            shiny::HTML(
-              paste0(
-                '<i class="fa-solid fa-circle-check" style="font-size:1em; c',
-                'olor:#8BC34A; margin-right: 10px;"></i>',
-                "Directory is a valid .raw result folder"
-              )
-            )
-          )
-        } else {
-          shiny::p(
-            shiny::HTML(
-              paste0(
-                '<i class="fa-solid fa-circle-exclamation" style="font-size:1e',
-                'm; color:black; margin-right: 10px;"></i>',
-                "Directory is <b>not</b> a .raw result folder"
-              )
-            )
-          )
-        }
-      } else {
-        shiny::p(
-          shiny::HTML(
-            "Select directory containing .raw result folder"
-          )
-        )
-      }
+      targetpath(target_path())
     })
 
     # Render batch selection input element
@@ -267,18 +198,136 @@ server <- function(id) {
       batch_selection
     )
 
-    # File selection feedback
-    output$file_selected <- shiny::renderPrint(cat("Nothing selected"))
+    # Render initial file selection information field
+    output$dir_check <- shiny::renderUI(
+      shiny::p(
+        shiny::HTML(
+          "Select either multiple or one individual .raw folder."
+        )
+      )
+    )
+
+    output$targetpath_check <- shiny::renderUI({
+      reset_button()
+
+      if (!is.null(target_path()) && length(target_path())) {
+        # Check if result files already present
+        sessionId <- gsub(".log", "", basename(get_log()))
+        result_files <- list.files(target_path())
+
+        if (any(grepl(sessionId, gsub("_RESULT.rds", "", result_files)))) {
+          runjs(paste0(
+            '$("#app-deconvolution_pars-targetpath_selected").css({"border-color": "#D17050"})'
+          ))
+
+          shiny::p(
+            shiny::HTML(
+              paste0(
+                '<i class="fa-solid fa-circle-exclamation" style="font-size:1e',
+                'm; color:black; margin-right: 10px;"></i>',
+                "Destination already has results from this session."
+              )
+            )
+          )
+        } else {
+          runjs(paste0(
+            '$("#app-deconvolution_pars-targetpath_selected").css({"border-color": "#8BC34A"})'
+          ))
+
+          shiny::p(
+            shiny::HTML(
+              paste0(
+                '<i class="fa-solid fa-circle-check" style="font-size:1em; c',
+                'olor:#8BC34A; margin-right: 10px;"></i>',
+                "Destination path is valid."
+              )
+            )
+          )
+        }
+      } else {
+        runjs(paste0(
+          '$("#app-deconvolution_pars-targetpath_selected").css({"border-color": "#D17050"})'
+        ))
+
+        shiny::p(
+          shiny::HTML(
+            "Choose where to save the resulting files."
+          )
+        )
+      }
+    })
+
+    # Initial file selection feedback
     output$path_selected <- shiny::renderPrint(cat("Nothing selected"))
+    output$targetpath_selected <- shiny::renderPrint({
+      if (!is.null(targetpath()) && length(targetpath()) > 0) {
+        targetpath()
+      } else {
+        cat("Nothing selected")
+      }
+    })
 
     shiny::observeEvent(input$file, {
       selected("file")
-      shiny::updateCheckboxInput(session, "batch_mode", value = FALSE)
-      disable(selector = "#deconvolution_pars-batch_mode")
       output$batch_file_ui <- shiny::renderUI(
         batch_selection
       )
       rootdir(character())
+
+      # Disable batch processing field
+      shiny::updateCheckboxInput(inputId = "batch_mode", value = FALSE)
+      disable("batch_mode")
+
+      # Render information field
+      output$dir_check <- shiny::renderUI({
+        if (length(filepath())) {
+          if (
+            grepl("\\.raw$", filepath(), ignore.case = TRUE) &&
+              dir.exists(filepath())
+          ) {
+            # Highlight path field border color
+            runjs(paste0(
+              '$("#app-deconvolution_pars-path_selected").css({"border-color": "#8BC34A"})'
+            ))
+
+            shiny::p(
+              shiny::HTML(
+                paste0(
+                  '<i class="fa-solid fa-circle-check" style="font-size:1em; c',
+                  'olor:#8BC34A; margin-right: 10px;"></i>',
+                  "Directory is a valid .raw result folder."
+                )
+              )
+            )
+          } else {
+            # Highlight path field border color
+            runjs(paste0(
+              '$("#app-deconvolution_pars-path_selected").css({"border-color": "#D17050"})'
+            ))
+
+            shiny::p(
+              shiny::HTML(
+                paste0(
+                  '<i class="fa-solid fa-circle-exclamation" style="font-size:1e',
+                  'm; color:black; margin-right: 10px;"></i>',
+                  "Directory is <b>not</b> a .raw result folder."
+                )
+              )
+            )
+          }
+        } else {
+          # Highlight path field border color
+          runjs(paste0(
+            '$("#app-deconvolution_pars-path_selected").css({"border-color": "#D17050"})'
+          ))
+
+          shiny::p(
+            shiny::HTML(
+              "Select directory containing .raw result folder."
+            )
+          )
+        }
+      })
 
       # Adjust UI elements
       output$path_selected <- shiny::renderPrint(cat("Nothing selected"))
@@ -298,15 +347,29 @@ server <- function(id) {
       )
       shinyjs::disable("id_column")
 
-      output$file_selected <- shiny::renderPrint({
+      output$path_selected <- shiny::renderPrint({
         input$file
         if (!is.null(filepath()) && length(filepath()) > 0) {
           filepath()
         } else {
+          runjs(paste0(
+            '$("#app-deconvolution_pars-path_selected").css({"border-color": "#D17050"})'
+          ))
           cat("Nothing selected")
         }
       })
+
+      # Focus file button
+      runjs(paste0(
+        '$("#app-deconvolution_pars-file").css({"background": "#DDDDDE"})'
+      ))
+
+      # Unfocus folder button
+      runjs(paste0(
+        '$("#app-deconvolution_pars-folder").css({"background": "#FFFFFF"})'
+      ))
     })
+
     shiny::observeEvent(input$folder, {
       selected("folder")
       filepath(character())
@@ -314,21 +377,99 @@ server <- function(id) {
         batch_selection
       )
 
-      # Adjust UI elements
-      output$file_selected <- shiny::renderPrint(cat("Nothing selected"))
+      # Enable batch mode
+      enable("batch_mode")
 
+      # Render information field
+      output$dir_check <- shiny::renderUI({
+        if (!is.null(rootdir()) && length(rootdir()) > 0) {
+          raw_dirs <- list.dirs(
+            rootdir(),
+            full.names = TRUE,
+            recursive = FALSE
+          )
+          raw_dirs <- raw_dirs[grep("\\.raw$", raw_dirs)]
+
+          if (length(raw_dirs)) {
+            enable(selector = "#deconvolution_pars-batch_mode")
+
+            # Highlight path field border color
+            runjs(paste0(
+              '$("#app-deconvolution_pars-path_selected").css({"border-color": "#8BC34A"})'
+            ))
+
+            # Inform # of valid raw files
+            shiny::p(
+              shiny::HTML(
+                paste0(
+                  '<i class="fa-solid fa-circle-check" style="font-size:1em; col',
+                  'or:#8BC34A; margin-right: 10px;"></i>',
+                  paste(
+                    "<b>",
+                    length(raw_dirs),
+                    "</b> .raw directories in directory."
+                  )
+                )
+              )
+            )
+          } else {
+            shiny::updateCheckboxInput(session, "batch_mode", value = FALSE)
+            disable(selector = "#deconvolution_pars-batch_mode")
+
+            # Highlight path field border color
+            runjs(paste0(
+              '$("#app-deconvolution_pars-path_selected").css({"border-color": "#D17050"})'
+            ))
+
+            shiny::p(
+              shiny::HTML(
+                paste0(
+                  '<i class="fa-solid fa-circle-exclamation" style="font-size:1e',
+                  'm; color:black; margin-right: 10px;"></i>',
+                  "<b>No</b> .raw directories in directory."
+                )
+              )
+            )
+          }
+        } else {
+          shiny::updateCheckboxInput(session, "batch_mode", value = FALSE)
+          disable(selector = "#deconvolution_pars-batch_mode")
+
+          # Highlight path field border color
+          runjs(paste0(
+            '$("#app-deconvolution_pars-path_selected").css({"border-color": "#D17050"})'
+          ))
+
+          shiny::p(
+            shiny::HTML(
+              "Select directory containing .raw result folders."
+            )
+          )
+        }
+      })
+
+      # Adjust UI elements
       output$path_selected <- shiny::renderPrint({
         input$folder
         if (!is.null(root_dir()) && length(root_dir()) > 0) {
           root_dir()
         } else {
+          runjs(paste0(
+            '$("#app-deconvolution_pars-path_selected").css({"border-color": "#D17050"})'
+          ))
           cat("Nothing selected")
         }
       })
-    })
 
-    shiny::observeEvent(input$batch_selection, {
-      output$file_selected <- shiny::renderPrint(cat("Nothing selected"))
+      # Focus folder button
+      runjs(paste0(
+        '$("#app-deconvolution_pars-folder").css({"background": "#DDDDDE"})'
+      ))
+
+      # Unfocus file button
+      runjs(paste0(
+        '$("#app-deconvolution_pars-file").css({"background": "#FFFFFF"})'
+      ))
     })
 
     # Render batch column selection UI
@@ -415,6 +556,7 @@ server <- function(id) {
     reactiveValues(
       dir = rootdir,
       file = filepath,
+      targetpath = targetpath,
       batch_file = batchfile,
       selected = selected,
       batch_mode = batchmode,

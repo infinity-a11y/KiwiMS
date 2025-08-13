@@ -176,11 +176,20 @@ server <- function(id) {
     # Conversion server
     conversion_main$server("conversion_card")
 
+    reset_button <- shiny$reactiveVal(0)
+
     # Deconvolution sidebar server
-    dirs <- deconvolution_sidebar$server("deconvolution_pars")
+    dirs <- deconvolution_sidebar$server(
+      "deconvolution_pars",
+      reset_button = reset_button
+    )
 
     # Deconvolution process server
-    deconvolution_process$server("deconvolution_process", dirs)
+    deconvolution_process$server(
+      "deconvolution_process",
+      dirs,
+      reset_button = reset_button
+    )
 
     # Check update availability
     version_info <- readLines("resources/version.txt", warn = FALSE)

@@ -22,6 +22,7 @@ box::use(
 #' @export
 process_single_dir <- function(
   waters_dir,
+  result_dir,
   startz,
   endz,
   minmz,
@@ -36,6 +37,7 @@ process_single_dir <- function(
   time_end
 ) {
   input_path <- gsub("\\\\", "/", waters_dir)
+  result_dir <- gsub("\\\\", "/", result_dir)
 
   # Function to properly format parameters for Python
   format_param <- function(x) {
@@ -76,18 +78,26 @@ process_single_dir <- function(
 import sys
 import unidec
 import re
+import os
 
+# Parameters passed from R
+params = {%s}
+input_file = r"%s"
+result_dir = r"%s"
+      
 # Initialize UniDec engine
 engine = unidec.UniDec()
 
 # Convert Waters .raw to txt
-input_file = r"%s"
 engine.raw_process(input_file)
-txt_file = re.sub(r"\\.raw$", "_rawdata.txt", input_file)
-engine.open_file(txt_file)
+    
+# Move processed file to output directory
+txt_file = input_file.removesuffix(".raw") + "_rawdata.txt"
+output = os.path.join(result_dir, os.path.basename(txt_file))
+os.rename(txt_file, output)
 
-# Parameters passed from R
-params = {%s}
+# Make result directory
+engine.open_file(output)
 
 # Set configuration parameters
 engine.config.startz = params["startz"]
@@ -108,12 +118,16 @@ engine.process_data()
 engine.run_unidec()
 engine.pick_peaks()
 ',
+        params_string,
         input_path,
-        params_string
+        result_dir
       ))
 
       # Save spectra
-      result <- gsub(".raw", "_rawdata_unidecfiles", waters_dir)
+      result <- file.path(
+        result_dir,
+        gsub(".raw", "_rawdata_unidecfiles", basename(waters_dir))
+      )
 
       if (dir.exists(result)) {
         plots <- list(
@@ -132,6 +146,7 @@ engine.pick_peaks()
 #' @export
 deconvolute <- function(
   raw_dirs,
+  result_dir,
   num_cores = detectCores() - 1,
   startz = 1,
   endz = 50,
@@ -148,6 +163,7 @@ deconvolute <- function(
 ) {
   # List of all parameters to pass to workers
   params_list <- list(
+    result_dir = result_dir,
     startz = startz,
     endz = endz,
     minmz = minmz,
@@ -210,6 +226,7 @@ deconvolute <- function(
         for (dir in seq_along(raw_dirs)) {
           process_single_dir(
             raw_dirs[dir],
+            result_dir,
             startz,
             endz,
             minmz,
@@ -564,7 +581,8 @@ generate_decon_rslt <- function(
   paths,
   log = NULL,
   output = NULL,
-  heatmap = NULL
+  heatmap = NULL,
+  result_dir
 ) {
   # Optimized file reader function
   read_file_safe <- function(filename, col_names = NULL) {
@@ -660,19 +678,14 @@ generate_decon_rslt <- function(
     ))
   }
 
+  paths <- file.path(result_dir, basename(paths))
   results <- lapply(paths, process_path)
   names(results) <- basename(paths)
   results[["session"]] <- log
   results[["output"]] <- output
 
-  results_dir <- file.path(
-    Sys.getenv("USERPROFILE"),
-    "Documents",
-    "KiwiFlow",
-    "results"
-  )
-  if (file.exists(file.path(results_dir, "heatmap.rds"))) {
-    results[["heatmap"]] <- readRDS(file.path(results_dir, "heatmap.rds"))
+  if (file.exists(file.path(result_dir, "heatmap.rds"))) {
+    results[["heatmap"]] <- readRDS(file.path(result_dir, "heatmap.rds"))
   }
 
   return(results)

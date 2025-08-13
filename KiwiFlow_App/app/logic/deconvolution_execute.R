@@ -14,9 +14,13 @@ source(source_file)
 temp <- commandArgs(trailingOnly = TRUE)[1]
 conf <- readRDS(file.path(temp, "config.rds"))
 
+# Get result destination path
+result_dir <- commandArgs(trailingOnly = TRUE)[4]
+
 # Start deconvolution
 deconvolute(
   conf$dirs,
+  result_dir,
   startz = conf$params$startz,
   endz = conf$params$endz,
   minmz = conf$params$minmz,
@@ -47,13 +51,14 @@ output <- if (file.exists(file.path(temp, "output.txt"))) {
 result <- generate_decon_rslt(
   paths = conf$dirs,
   log = log,
-  output = output
+  output = output,
+  result_dir = result_dir
 )
 
-results_dir <- file.path(
-  Sys.getenv("USERPROFILE"),
-  "Documents",
-  "KiwiFlow",
-  "results"
+result_id <- gsub(
+  ".log",
+  "_RESULT.rds",
+  basename(logfile)
 )
-saveRDS(result, file.path(results_dir, "result.rds"), compress = FALSE)
+
+saveRDS(result, file.path(result_dir, result_id), compress = FALSE)

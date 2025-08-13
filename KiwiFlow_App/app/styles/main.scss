@@ -65,6 +65,10 @@ pre::-webkit-scrollbar-thumb:horizontal {
   border: 5px solid #F5F5F5;
 }
 
+pre {
+  background-color: #F7F7F7;
+}
+
 .card-custom-plate .bslib-card .card-body,
 .card-custom-plate2 .bslib-card .card-body {
   padding-bottom: 16px;
@@ -124,17 +128,21 @@ button .sF-modal {
 }
 
 #app-deconvolution_pars-folder-modal .modal-header,
+#app-deconvolution_pars-target_folder-modal .modal-header,
 #app-deconvolution_pars-file-modal .modal-header {
   padding-bottom: 0;
 }
 
 #app-deconvolution_pars-folder-modal > div > div > div.modal-body > div.sF-navigation.btn-toolbar > select,
+#app-deconvolution_pars-target_folder-modal > div > div > div.modal-body > div.sF-navigation.btn-toolbar > select,
 #app-deconvolution_pars-file-modal > div > div > div.modal-body > div.sF-navigation.btn-toolbar > select {
   width: calc(70% - 340px);
 }
 
 #app-deconvolution_pars-folder-modal *::-webkit-scrollbar-track,
 #app-deconvolution_pars-folder-modal::-webkit-scrollbar-track,
+#app-deconvolution_pars-target_folder-modal *::-webkit-scrollbar-track,
+#app-deconvolution_pars-target_folder-modal::-webkit-scrollbar-track,
 #app-deconvolution_pars-file-modal *::-webkit-scrollbar-track,
 #app-deconvolution_pars-file-modal::-webkit-scrollbar-track {
   border-top-right-radius: 7px;
@@ -142,7 +150,8 @@ button .sF-modal {
 }
 
 #app-deconvolution_pars-path_selected,
-#app-deconvolution_pars-file_selected {
+#app-deconvolution_pars-targetpath_selected {
+  border-color: #D17050;
   margin-top: -20px;
   margin-bottom: -1em;
 }
@@ -305,6 +314,19 @@ button .sF-modal {
 // FORM INPUTS & CONTROLS
 // ============================
 
+#app-deconvolution_pars-folder,
+#app-deconvolution_pars-file {
+  width: 100%;
+  min-width: max-content;
+}
+
+#app-deconvolution_pars-folder:hover,
+#app-deconvolution_pars-file:hover {
+  background-color: var(--bs-btn-hover-bg) !important;
+  border-color: var(--bs-btn-hover-border-color) !important;
+  color: var(--bs-btn-hover-color) !important;
+}
+
 .form-control:disabled {
     background-color: transparent;
     opacity: 0.3;
@@ -380,8 +402,8 @@ app-deconvolution_pars-id_column-label {
   margin-top: -3em;
 }
 
-#app-deconvolution_pars-multi_dir_check,
-#app-deconvolution_pars-single_dir_check {
+#app-deconvolution_pars-dir_check,
+#app-deconvolution_pars-targetpath_check {
   font-style: italic;
   font-size: 14px;
   color: black;

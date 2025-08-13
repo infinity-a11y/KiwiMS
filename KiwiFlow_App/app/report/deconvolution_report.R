@@ -15,18 +15,23 @@ tryCatch(
     decon_rep_desc <- gsub("%~%", " ", args[3])
     filename <- args[4]
     log_path <- args[5]
-    results_dir <- file.path(
-      Sys.getenv("USERPROFILE"),
-      "Documents",
-      "KiwiFlow",
-      "results"
-    )
+    results_dir <- args[6]
   },
   error = function(e) {
     message("Error setting render parameters: ", e$message)
     stop("Report generation failed.")
   }
 )
+
+result_file <-
+  file.path(
+    results_dir,
+    gsub(
+      ".log",
+      "_RESULT.rds",
+      basename(log_path)
+    )
+  )
 
 message("Started render engine ...")
 Sys.sleep(2)
@@ -39,7 +44,8 @@ tryCatch(
         report_title = decon_rep_title,
         report_author = decon_rep_author,
         comment = decon_rep_desc,
-        result_path = results_dir
+        result_path = results_dir,
+        result_file = result_file
       )
     )
   },
@@ -61,7 +67,7 @@ tryCatch(
       basename(log_path)
     )
 
-    file.rename(from = filename, to = file.path(dirname(log_path), filename_id))
+    file.rename(from = filename, to = file.path(results_dir, filename_id))
   },
   error = function(e) {
     message("Error saving report: ", e$message)
