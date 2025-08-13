@@ -811,7 +811,7 @@ server <- function(id, dirs, reset_button) {
         shiny$need(
           ((!is.null(dirs$file()) && length(dirs$file()) > 0) ||
             (!is.null(dirs$dir()) && length(dirs$dir()) > 0)),
-          "Select target file(s) from the sidebar to start"
+          "Select target file(s) from the sidebar to start ..."
         )
       )
 
@@ -831,35 +831,35 @@ server <- function(id, dirs, reset_button) {
       shiny$validate(
         shiny$need(
           valid_destination,
-          "Select destination for result file(s) from the sidebar to start"
+          "Select destination for result file(s) from the sidebar to start ..."
         )
       )
 
       shiny$validate(
         shiny$need(
           input$startz < input$endz,
-          "High charge z must be greater than low charge z"
+          "High charge z must be greater than low charge z ..."
         )
       )
 
       shiny$validate(
         shiny$need(
           input$minmz < input$maxmz,
-          "High m/z must be greater than low m/z"
+          "High m/z must be greater than low m/z ..."
         )
       )
 
       shiny$validate(
         shiny$need(
           input$masslb < input$massub,
-          "High mass Mw must be greater than low mass Mw"
+          "High mass Mw must be greater than low mass Mw ..."
         )
       )
 
       shiny$validate(
         shiny$need(
           input$time_start < input$time_end,
-          "Retention start time must be earlier than end time"
+          "Retention start time must be earlier than end time ..."
         )
       )
 
@@ -873,7 +873,7 @@ server <- function(id, dirs, reset_button) {
         shiny$validate(
           shiny$need(
             valid_folder,
-            "No valid target folder selected"
+            "No valid target folder selected ..."
           )
         )
       } else if (dirs$selected() == "file") {
@@ -884,7 +884,7 @@ server <- function(id, dirs, reset_button) {
         shiny$validate(
           shiny$need(
             valid_file,
-            "No valid target file selected"
+            "No valid target file selected ..."
           )
         )
       }
