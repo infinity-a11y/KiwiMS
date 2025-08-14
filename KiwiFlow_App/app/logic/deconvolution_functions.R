@@ -407,6 +407,7 @@ create_384_plate_heatmap <- function(data) {
   }
 }
 
+# Make spectrum plot interactively (plotly) or non-interactively (ggplot2)
 #' @export
 spectrum_plot <- function(
   result_path,
@@ -505,8 +506,7 @@ spectrum_plot <- function(
         toImageButtonOptions = list(
           filename = paste0(Sys.Date(), "_", gsub("_rawdata", "", base), "_raw")
         )
-      ) |>
-      plotly::partial_bundle()
+      )
   } else {
     plot <- plotly::plot_ly(
       mass,
@@ -545,7 +545,7 @@ spectrum_plot <- function(
           tickcolor = "transparent"
         ),
         xaxis = list(title = "Mass [Da]", showgrid = TRUE, zeroline = FALSE),
-        margin = list(t = 0, r = 0, b = 0, l = 80),
+        margin = list(t = 0, r = 0, b = 0, l = 50),
         paper_bgcolor = "white",
         plot_bgcolor = "white"
       ) |>
@@ -568,8 +568,7 @@ spectrum_plot <- function(
             "_deconvoluted"
           )
         )
-      ) |>
-      plotly::partial_bundle()
+      )
   }
 
   return(plot)
