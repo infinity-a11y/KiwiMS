@@ -698,6 +698,17 @@ server <- function(id, dirs, reset_button) {
           ),
           shinyjs::hidden(
             shiny$div(
+              id = ns("processing_error"),
+              shiny$HTML(
+                paste0(
+                  '<i class="fa-solid fa-circle-exclamation fa-2x" style="color: ',
+                  '#D17050; margin-top: 0.5em"></i>'
+                )
+              )
+            )
+          ),
+          shinyjs::hidden(
+            shiny$div(
               id = ns("processing_fin"),
               shiny$HTML(
                 paste0(
@@ -1415,10 +1426,9 @@ server <- function(id, dirs, reset_button) {
       # Apply JS modifications for picker
       session$sendCustomMessage("selectize-init", "result_picker")
 
-      reactVars$trigger <- TRUE
-
       # Initialization variables
       reactVars$isRunning <- TRUE
+      reactVars$catch_error <- FALSE
       reactVars$expectedFiles <- length(raw_dirs)
       reactVars$initialFileCount <- check_progress(raw_dirs)
       message("Initial file count: ", reactVars$initialFileCount)
@@ -1445,27 +1455,135 @@ server <- function(id, dirs, reset_button) {
         selected = dirs$selected()
       )
 
+      # Place config parameter in temporary file
       temp <- tempdir()
       config_path <- file.path(temp, "config.rds")
       saveRDS(config, config_path)
 
+      # Initiate output file
       reactVars$decon_process_out <- file.path(temp, "output.txt")
       write("", reactVars$decon_process_out)
 
-      rx_process <- process$new(
-        "Rscript.exe",
-        args = c(
-          "app/logic/deconvolution_execute.R",
-          temp,
-          log_path,
-          getwd(),
-          dirs$targetpath()
-        ),
-        stdout = reactVars$decon_process_out,
-        stderr = reactVars$decon_process_out
+      # Launch external deconvolution process
+      tryCatch(
+        {
+          rx_process <- process$new(
+            "Rscript.exe",
+            args = c(
+              "app/logic/deconvolution_execute.R",
+              temp,
+              log_path,
+              getwd(),
+              dirs$targetpath()
+            ),
+            stdout = reactVars$decon_process_out,
+            stderr = reactVars$decon_process_out
+          )
+        },
+        error = function(e) {
+          # Activate error catching variable
+          reactVars$catch_error <- TRUE
+
+          error_msg <- paste("Failed to start deconvolution:", e$message)
+          write_log(error_msg)
+
+          # Show error notification
+          shiny$showNotification(
+            error_msg,
+            type = "error",
+            duration = 5
+          )
+        }
       )
 
+      # Abort deconvolution if process initiation fails
+      if (reactVars$catch_error == TRUE) {
+        # Reset reactive error catch variable
+        reactVars$catch_error <- FALSE
+
+        # Set deconvolution process status to isRunning = FALSE
+        reactVars$isRunning <- FALSE
+
+        # End mouse pointer blocking overlay
+        runjs(paste0(
+          'document.getElementById("blocking-overlay").style.display ',
+          '= "none";'
+        ))
+
+        # Stop execution of following expressions
+        return()
+      }
+
+      # Track process metadata in reactive variable
       decon_process_data(rx_process)
+
+      # Track process exit status for errors
+      shiny$observe({
+        shiny$req(decon_process_data())
+
+        if (isTRUE(reactVars$isRunning)) {
+          shiny$invalidateLater(2000)
+
+          # Check if the process is still alive
+          if (!decon_process_data()$is_alive()) {
+            # Retrieve exit status
+            exit_status <- decon_process_data()$get_exit_status()
+
+            # Check if the exit status indicates an error (non-zero)
+            if (exit_status != 0) {
+              write_log("Error in deconvolution execution")
+
+              # Change UI elements to indicate error
+              shiny$updateActionButton(
+                session,
+                "deconvolute_end",
+                label = "Reset",
+                icon = shiny$icon("repeat")
+              )
+
+              updateProgressBar(
+                session = session,
+                id = ns("progressBar"),
+                value = 0,
+                title = "Deconvolution aborted ..."
+              )
+
+              hide(selector = "#app-deconvolution_process-processing")
+              show(selector = "#app-deconvolution_process-processing_error")
+
+              shiny$showNotification(
+                "Deconvolution execution failed",
+                type = "error",
+                duration = 5
+              )
+
+              delay(
+                1000,
+                runjs(
+                  "document.querySelector('#app-deconvolution_process-show_log').click();"
+                )
+              )
+
+              # Stop observers
+              if (!is.null(reactVars$progress_observer)) {
+                reactVars$progress_observer$destroy()
+              }
+              if (!is.null(reactVars$process_observer)) {
+                reactVars$process_observer$destroy()
+              }
+              if (
+                dirs$selected() == "folder" &&
+                  !is.null(reactVars$results_observer)
+              ) {
+                reactVars$results_observer$destroy()
+              }
+            }
+
+            # Set deconvolution process status to isRunning = FALSE
+            reactVars$isRunning <- FALSE
+          }
+        }
+      })
 
       # Log
       write_log("Deconvolution started")
@@ -1687,7 +1805,6 @@ server <- function(id, dirs, reset_button) {
                   })
 
                   reactVars$heatmap_ready <- TRUE
-                  reactVars$trigger <- TRUE
                 }
               }
             } else {
@@ -2037,8 +2154,6 @@ server <- function(id, dirs, reset_button) {
 
         shiny$req(result_files_sel(), input$toggle_result)
 
-        reactVars$trigger
-
         if (dirs$selected() == "folder") {
           result_dir <- file.path(
             dirs$targetpath(),
@@ -2327,219 +2442,274 @@ server <- function(id, dirs, reset_button) {
     shiny$observeEvent(
       input$make_deconvolution_report,
       {
-        output$decon_rep_logtext_ui <- shiny$renderUI(
-          shiny$verbatimTextOutput(ns("decon_rep_logtext"))
-        )
+        if (reactVars$deconv_report_status != "error") {
+          output$decon_rep_logtext_ui <- shiny$renderUI(
+            shiny$verbatimTextOutput(ns("decon_rep_logtext"))
+          )
 
-        # Define report filename
-        filename <- gsub(
-          ".log",
-          "_deconvolution_report.html",
-          basename(log_path)
-        )
-        filename_path <- file.path(dirs$targetpath(), filename)
+          # Define report filename
+          filename <- gsub(
+            ".log",
+            "_deconvolution_report.html",
+            basename(log_path)
+          )
+          filename_path <- file.path(dirs$targetpath(), filename)
 
-        output$decon_rep_logtext <- shiny$renderText({
-          shiny$invalidateLater(1000)
+          output$decon_rep_logtext <- shiny$renderText({
+            shiny$invalidateLater(1000)
 
-          if (
-            !is.null(reactVars$decon_rep_process_out) &&
-              file.exists(reactVars$decon_rep_process_out)
-          ) {
-            log <- paste(
-              readLines(reactVars$decon_rep_process_out, warn = FALSE),
-              collapse = "\n"
+            if (
+              !is.null(reactVars$decon_rep_process_out) &&
+                file.exists(reactVars$decon_rep_process_out)
+            ) {
+              log <- paste(
+                readLines(reactVars$decon_rep_process_out, warn = FALSE),
+                collapse = "\n"
+              )
+            } else {
+              log <- "Initiating Report Generation ..."
+            }
+
+            session_id <- regmatches(
+              basename(log_path),
+              regexpr("id\\d+", basename(log_path))
             )
+            report_fin <- paste0(
+              "deconvolution_report_",
+              Sys.Date(),
+              "_",
+              session_id,
+              ".html"
+            )
+
+            clean_log <- gsub("\\s*\\|[ .]*\\|\\s*", "", log, perl = TRUE)
+
+            if (
+              grepl(paste("Output created:", report_fin), log) &
+                file.exists(filename_path)
+            ) {
+              reactVars$deconv_report_status <- "finished"
+              title <- "Report Generated!"
+              value <- 100
+            } else {
+              value <- regmatches(
+                clean_log,
+                gregexpr("(?<=\\|)\\d+%", clean_log, perl = TRUE)
+              )[[1]]
+              title <- "Generating Report ..."
+            }
+
+            updateProgressBar(
+              session = session,
+              id = ns("progressBar"),
+              value = tail(as.integer(gsub("%", "", value)), 1),
+              title = title
+            )
+
+            clean_log
+          })
+
+          if (reactVars$deconv_report_status == "running") {
+            proc <- decon_rep_process_data()
+
+            if (!is.null(proc) && proc$is_alive()) {
+              write_log("Deconvolution report generation cancelled")
+
+              proc$kill_tree()
+            }
+
+            updateProgressBar(
+              session = session,
+              id = ns("progressBar"),
+              value = 0,
+              title = "Report Generation Aborted"
+            )
+
+            output$decon_rep_logtext <- NULL
+            output$decon_rep_logtext_ui <- NULL
+
+            hide(selector = "#app-deconvolution_process-processing")
+            show(selector = "#app-deconvolution_process-processing_stop")
+
+            reactVars$deconv_report_status <- "idle"
+
+            shiny$removeModal()
+          } else if (reactVars$deconv_report_status == "finished") {
+            if (file.exists(filename_path)) {
+              utils::browseURL(filename_path)
+            }
+
+            shiny$removeModal()
           } else {
-            log <- "Initiating Report Generation ..."
-          }
+            write_log("Deconvolution report generation initiated")
 
-          session_id <- regmatches(
-            basename(log_path),
-            regexpr("id\\d+", basename(log_path))
-          )
-          report_fin <- paste0(
-            "deconvolution_report_",
-            Sys.Date(),
-            "_",
-            session_id,
-            ".html"
-          )
+            # Initialization variables
+            reactVars$deconv_report_status <- "running"
+            reactVars$catch_error <- FALSE
 
-          clean_log <- gsub("\\s*\\|[ .]*\\|\\s*", "", log, perl = TRUE)
+            # Initiate output file
+            reactVars$decon_rep_process_out <- file.path(
+              tempdir(),
+              "rep_output.txt"
+            )
+            write("", reactVars$decon_rep_process_out)
 
-          if (
-            grepl(paste("Output created:", report_fin), log) &
-              file.exists(filename_path)
-          ) {
-            reactVars$deconv_report_status <- "finished"
-            title <- "Report Generated!"
-            value <- 100
-          } else {
-            value <- regmatches(
-              clean_log,
-              gregexpr("(?<=\\|)\\d+%", clean_log, perl = TRUE)
-            )[[1]]
-            title <- "Generating Report ..."
-          }
-
-          updateProgressBar(
-            session = session,
-            id = ns("progressBar"),
-            value = tail(as.integer(gsub("%", "", value)), 1),
-            title = title
-          )
-
-          clean_log
-        })
-
-        if (reactVars$deconv_report_status == "running") {
-          proc <- decon_rep_process_data()
-
-          if (!is.null(proc) && proc$is_alive()) {
-            write_log("Deconvolution report generation cancelled")
-
-            proc$kill_tree()
-          }
-
-          updateProgressBar(
-            session = session,
-            id = ns("progressBar"),
-            value = 0,
-            title = "Report Generation Aborted"
-          )
-
-          output$decon_rep_logtext <- NULL
-          output$decon_rep_logtext_ui <- NULL
-
-          hide(selector = "#app-deconvolution_process-processing")
-          show(selector = "#app-deconvolution_process-processing_stop")
-
-          reactVars$deconv_report_status <- "idle"
-
-          shiny$removeModal()
-        } else if (reactVars$deconv_report_status == "finished") {
-          if (file.exists(filename_path)) {
-            utils::browseURL(filename_path)
-          }
-
-          shiny$removeModal()
-        } else {
-          write_log("Deconvolution report generation initiated")
-          reactVars$deconv_report_status <- "running"
-
-          reactVars$decon_rep_process_out <- file.path(
-            tempdir(),
-            "rep_output.txt"
-          )
-          write("", reactVars$decon_rep_process_out)
-
-          output$decon_report_ui <- shiny$renderUI(
-            shiny$fluidRow(
-              shiny$br(),
+            # Render report generation interface
+            output$decon_report_ui <- shiny$renderUI(
               shiny$fluidRow(
-                shiny$column(
-                  width = 2,
-                  shiny$div(
-                    id = ns("generating_report"),
-                    shiny$HTML(
-                      paste0(
-                        '<i class="fa fa-spinner fa-spin fa-fw fa-2x" style="color: ',
-                        '#38387C; margin-top: 0.25em"></i>'
+                shiny$br(),
+                shiny$fluidRow(
+                  shiny$column(
+                    width = 2,
+                    shiny$div(
+                      id = ns("generating_report"),
+                      shiny$HTML(
+                        paste0(
+                          '<i class="fa fa-spinner fa-spin fa-fw fa-2x" style="color: ',
+                          '#38387C; margin-top: 0.25em"></i>'
+                        )
                       )
                     )
-                  )
-                ),
-                shiny$column(
-                  width = 10,
-                  shiny$p(
-                    "Generating this report might take some time. Please wait ..."
+                  ),
+                  shiny$column(
+                    width = 10,
+                    shiny$p(
+                      "Generating this report might take some time. Please wait ..."
+                    )
                   )
                 )
               )
             )
-          )
-
-          if (isTRUE(input$decon_save)) {
-            # Set up settings directory
-            if (!dir.exists(settings_dir)) {
-              dir.create(settings_dir, recursive = TRUE)
-            }
 
             # Save report input settings
-            rep_input <- c(
-              input$decon_rep_title,
-              input$decon_rep_author,
-              input$decon_rep_desc
+            if (isTRUE(input$decon_save)) {
+              # Set up settings directory
+              if (!dir.exists(settings_dir)) {
+                dir.create(settings_dir, recursive = TRUE)
+              }
+
+              rep_input <- c(
+                input$decon_rep_title,
+                input$decon_rep_author,
+                input$decon_rep_desc
+              )
+
+              # Save report settings in user settings
+              saveRDS(
+                rep_input,
+                file.path(settings_dir, "decon_rep_settings.rds")
+              )
+            }
+
+            ### Prepare process parameter
+            # Get isolated session id
+            session_id <- regmatches(
+              basename(log_path),
+              regexpr("id\\d+", basename(log_path))
             )
-            saveRDS(
-              rep_input,
-              file.path(settings_dir, "decon_rep_settings.rds")
+
+            # Get user documents path to retrieve files needed for report generation
+            script_dir <- file.path(
+              Sys.getenv("USERPROFILE"),
+              "Documents",
+              "KiwiFlow",
+              "report"
             )
+
+            # Set html report output filename
+            output_file <- paste0(
+              "deconvolution_report_",
+              Sys.Date(),
+              "_",
+              session_id,
+              ".html"
+            )
+
+            # Summarize args in vector
+            args <- c(
+              "deconvolution_report.R",
+              fill_empty(input$decon_rep_title),
+              fill_empty(input$decon_rep_author),
+              fill_empty(input$decon_rep_desc),
+              output_file,
+              log_path,
+              dirs$targetpath(),
+              get_kiwiflow_version()["version"],
+              get_kiwiflow_version()["date"]
+            )
+
+            # Construct the system command
+            cmd <- paste(
+              "conda activate kiwiflow &&",
+              "cd",
+              script_dir,
+              "&& Rscript",
+              paste(args, collapse = " ")
+            )
+
+            # Start external report generation process
+            tryCatch(
+              {
+                rep_process <- process$new(
+                  command = "cmd.exeAAAAAAAAA",
+                  args = c("/c", cmd),
+                  stdout = reactVars$decon_rep_process_out,
+                  stderr = reactVars$decon_rep_process_out
+                )
+              },
+              error = function(e) {
+                # Activate error catching variable
+                reactVars$catch_error <- TRUE
+
+                # Get error message
+                error_msg <- paste(
+                  "Failed to generate deconvolution report:",
+                  e$message
+                )
+
+                write_log(error_msg)
+
+                # Display error message on modal window
+                output$decon_rep_logtext <- shiny$renderText(error_msg)
+              }
+            )
+
+            # Abort deconvolution if process initiation fails
+            if (reactVars$catch_error == TRUE) {
+              # Reset reactive error catch variable
+              reactVars$catch_error <- FALSE
+
+              # Set report generation status to "idle"
+              reactVars$deconv_report_status <- "error"
+
+              # Show error notification
+              shiny$showNotification(
+                "Report generation failed",
+                type = "error",
+                duration = 5
+              )
+
+              # Stop execution of following expressions
+              return()
+            }
+
+            decon_rep_process_data(rep_process)
           }
 
-          session_id <- regmatches(
-            basename(log_path),
-            regexpr("id\\d+", basename(log_path))
+          delay(
+            2000,
+            runjs(
+              "App.smartScroll('deconvolution_process-decon_rep_logtext')"
+            )
           )
-
-          # Prepare arguments
-          script_dir <- file.path(
-            Sys.getenv("USERPROFILE"),
-            "Documents",
-            "KiwiFlow",
-            "report"
-          )
-          script <- "deconvolution_report.R"
-          output_file <- paste0(
-            "deconvolution_report_",
-            Sys.Date(),
-            "_",
-            session_id,
-            ".html"
-          )
-
-          args <- c(
-            script,
-            fill_empty(input$decon_rep_title),
-            fill_empty(input$decon_rep_author),
-            fill_empty(input$decon_rep_desc),
-            output_file,
-            log_path,
-            dirs$targetpath(),
-            get_kiwiflow_version()["version"],
-            get_kiwiflow_version()["date"]
-          )
-
-          # Construct the command for Windows
-          cmd <- paste(
-            "conda activate kiwiflow &&",
-            "cd",
-            script_dir,
-            "&& Rscript",
-            paste(args, collapse = " ")
-          )
-
-          # Start the process
-          rep_process <- process$new(
-            command = "cmd.exe",
-            args = c("/c", cmd),
-            stdout = reactVars$decon_rep_process_out,
-            stderr = reactVars$decon_rep_process_out
-          )
-
-          decon_rep_process_data(rep_process)
+        } else {
+          # If report generation erroneous remove modal on button click
+          shiny$removeModal()
         }
-
-        delay(
-          2000,
-          runjs(
-            "App.smartScroll('deconvolution_process-decon_rep_logtext')"
-          )
-        )
       }
     )
 
+    # Observe report generation
     shiny$observe({
       if (reactVars$deconv_report_status == "idle") {
         output$decon_report_ui <- shiny$renderUI({
@@ -2599,7 +2769,21 @@ server <- function(id, dirs, reset_button) {
             )
           )
         })
+      } else if (reactVars$deconv_report_status == "running") {
+        hide(selector = "#app-deconvolution_process-processing_stop")
+        hide(selector = "#app-deconvolution_process-processing_fin")
+        show(selector = "#app-deconvolution_process-processing")
+
+        runjs("App.disableDismiss()")
+
+        shiny$updateActionButton(
+          session,
+          "make_deconvolution_report",
+          label = "Cancel"
+        )
       } else if (reactVars$deconv_report_status == "finished") {
+        write_log("Deconvolution report generation finalized")
+
         output$decon_report_ui <- shiny$renderUI(
           shiny$fluidRow(
             shiny$br(),
@@ -2626,24 +2810,6 @@ server <- function(id, dirs, reset_button) {
             )
           )
         )
-      }
-    })
-
-    shiny$observe({
-      if (reactVars$deconv_report_status == "running") {
-        hide(selector = "#app-deconvolution_process-processing_stop")
-        hide(selector = "#app-deconvolution_process-processing_fin")
-        show(selector = "#app-deconvolution_process-processing")
-
-        runjs("App.disableDismiss()")
-
-        shiny$updateActionButton(
-          session,
-          "make_deconvolution_report",
-          label = "Cancel"
-        )
-      } else if (reactVars$deconv_report_status == "finished") {
-        write_log("Deconvolution report generation finalized")
 
         hide(selector = "#app-deconvolution_process-processing")
         show(selector = "#app-deconvolution_process-processing_fin")
@@ -2655,6 +2821,44 @@ server <- function(id, dirs, reset_button) {
           "make_deconvolution_report",
           label = "Open"
         )
+      } else if (reactVars$deconv_report_status == "error") {
+        # Change UI elements to indicate error
+        hide(selector = "#app-deconvolution_process-processing")
+        show(selector = "#app-deconvolution_process-processing_fin")
+
+        output$decon_report_ui <- shiny$renderUI(
+          shiny$fluidRow(
+            shiny$br(),
+            shiny$fluidRow(
+              shiny$column(
+                width = 2,
+                shiny$div(
+                  id = ns("generating_report"),
+                  shiny$HTML(
+                    paste0(
+                      '<i class="fa-solid fa-circle-exclamation fa-2x" style="color: ',
+                      '#D17050; margin-top: 0.5em"></i>'
+                    )
+                  )
+                )
+              ),
+              shiny$column(
+                width = 10,
+                shiny$p(
+                  "Initating the report generation process failed ..."
+                )
+              )
+            )
+          )
+        )
+
+        shiny$updateActionButton(
+          session,
+          "make_deconvolution_report",
+          label = "Cancel"
+        )
+
+        runjs("App.enableDismiss()")
       }
     })
   })
