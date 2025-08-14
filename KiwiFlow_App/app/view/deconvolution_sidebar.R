@@ -52,7 +52,6 @@ ui <- function(id) {
     ),
     shiny::verbatimTextOutput(ns("path_selected")),
     shiny::uiOutput(ns("dir_check")),
-    shiny::hr(style = "margin: 0.5rem 0; opacity: 0.8;"),
     shinyDirButton(
       ns("target_folder"),
       "Select Destination Folder",
@@ -63,7 +62,6 @@ ui <- function(id) {
     ),
     shiny::verbatimTextOutput(ns("targetpath_selected")),
     shiny::uiOutput(ns("targetpath_check")),
-    shiny::hr(style = "margin: 0.5rem 0; opacity: 0.8;"),
     shiny::fluidRow(
       shiny::column(
         width = 10,

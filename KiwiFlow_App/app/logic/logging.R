@@ -7,17 +7,38 @@ box::use(
 documents_path <- Sys.getenv("USERPROFILE")
 log_dir <- file.path(documents_path, "Documents", "KiwiFlow", "logs")
 log_daily <- file.path(log_dir, Sys.Date())
-session_id <- sample(1000:9999, 1) # Random 4-digit session ID
-log_filename <- paste0("KiwiFlow_", Sys.Date(), "_id", session_id, ".log")
-log_path <- file.path(log_daily, log_filename)
+
+# Get new session id return log path
+new_session_path <- function() {
+  valid_id <- FALSE
+  while (!valid_id) {
+    session_id <- sample(1000:9999, 1) # Random 4-digit session ID
+    log_filename <- paste0("KiwiFlow_", Sys.Date(), "_id", session_id, ".log")
+
+    if (!log_filename %in% list.files(log_daily)) {
+      valid_id <- TRUE
+      log_path <- file.path(log_daily, log_filename)
+      message(paste("Assigned ID", session_id, "to current session."))
+      return(log_path)
+    } else {
+      message(paste("Session ID", session_id, "already present. Redrawing ..."))
+    }
+  }
+}
+
+log_path <- new_session_path()
 
 # Start logging
 #' @export
 start_logging <- function() {
   # Create log dir in Documents
-  if (!dir.exists(log_dir)) dir.create(log_dir, recursive = TRUE)
+  if (!dir.exists(log_dir)) {
+    dir.create(log_dir, recursive = TRUE)
+  }
   # Create daily log dir
-  if (!dir.exists(log_daily)) dir.create(log_daily, recursive = TRUE)
+  if (!dir.exists(log_daily)) {
+    dir.create(log_daily, recursive = TRUE)
+  }
 
   log_open(log_path, logdir = FALSE)
 }
