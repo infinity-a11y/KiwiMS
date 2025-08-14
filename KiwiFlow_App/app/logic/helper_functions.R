@@ -13,6 +13,22 @@ box::use(
 )
 
 #' @export
+get_kiwiflow_version <- function() {
+  # Get version file from static directory
+  version_file <- readLines("app/static/version.txt")
+
+  # Assign names
+  names(version_file) <- c("version", "date", "url")
+
+  # Clean values
+  version_file[1] <- gsub("version=", "", version_file[1])
+  version_file[2] <- gsub("release_date=", "", version_file[2])
+  version_file[3] <- gsub("zip_url=", "", version_file[1])
+
+  return(version_file)
+}
+
+#' @export
 get_volumes <- function() {
   # Get the path to the user's home directory
   home_path <- path_home()

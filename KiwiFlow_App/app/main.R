@@ -21,7 +21,8 @@ box::use(
     logic /
     helper_functions[
       check_github_version,
-      get_latest_release_url
+      get_kiwiflow_version,
+      get_latest_release_url,
     ],
 )
 
@@ -67,7 +68,7 @@ ui <- function(id) {
           style = "font-size: 21px; font-family: monospace;"
         )
       ),
-      window_title = "KiwiFlow 0.1.0",
+      window_title = paste("KiwiFlow", get_kiwiflow_version()["version"]),
       underline = TRUE,
       bslib$nav_panel(
         title = "Deconvolution",

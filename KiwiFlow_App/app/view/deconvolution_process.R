@@ -25,7 +25,7 @@ box::use(
       create_384_plate_heatmap,
       spectrum_plot
     ],
-  app / logic / helper_functions[fill_empty],
+  app / logic / helper_functions[fill_empty, get_kiwiflow_version],
   app / logic / logging[write_log, get_log],
 )
 
@@ -2506,7 +2506,9 @@ server <- function(id, dirs, reset_button) {
             fill_empty(input$decon_rep_desc),
             output_file,
             log_path,
-            dirs$targetpath()
+            dirs$targetpath(),
+            get_kiwiflow_version()["version"],
+            get_kiwiflow_version()["date"]
           )
 
           # Construct the command for Windows

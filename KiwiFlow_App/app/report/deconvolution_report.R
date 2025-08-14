@@ -16,6 +16,8 @@ tryCatch(
     filename <- args[4]
     log_path <- args[5]
     results_dir <- args[6]
+    kiwiflow_version <- args[7]
+    kiwiflow_date <- args[8]
   },
   error = function(e) {
     message("Error setting render parameters: ", e$message)
@@ -34,7 +36,8 @@ result_file <-
   )
 
 message("Started render engine ...")
-Sys.sleep(2)
+Sys.sleep(1)
+
 tryCatch(
   {
     quarto_render(
@@ -45,7 +48,9 @@ tryCatch(
         report_author = decon_rep_author,
         comment = decon_rep_desc,
         result_path = results_dir,
-        result_file = result_file
+        result_file = result_file,
+        version = kiwiflow_version,
+        date = kiwiflow_date
       )
     )
   },
@@ -55,9 +60,9 @@ tryCatch(
   }
 )
 
-Sys.sleep(2)
+Sys.sleep(1)
 message("Saving report ...")
-Sys.sleep(2)
+Sys.sleep(1)
 
 tryCatch(
   {
