@@ -92,8 +92,12 @@ pre {
 }
 
 .shiny-output-error-validation {
-  font-weight: bold;
-  color: black;
+  font-weight: 600;
+  color: var(--bs-card-color);
+  box-shadow: inset 0 0 13px 1px #35357a4a;
+  max-width: fit-content;
+  padding: 1em;
+  border-radius: 10px;
 }
 
 // ============================

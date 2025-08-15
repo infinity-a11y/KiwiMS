@@ -5,8 +5,9 @@ box::use(
 )
 
 message("Initiating report generation ...")
-
+Sys.sleep(1)
 message("Setting render parameters ...")
+
 tryCatch(
   {
     args <- commandArgs(trailingOnly = TRUE)
@@ -35,6 +36,7 @@ result_file <-
     )
   )
 
+Sys.sleep(1)
 message("Started render engine ...")
 Sys.sleep(1)
 
