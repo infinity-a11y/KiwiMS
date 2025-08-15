@@ -2538,6 +2538,81 @@ server <- function(id, dirs, reset_button) {
               shiny$verbatimTextOutput(ns("decon_rep_logtext"))
             )
 
+            # Render report generation logtext and progress bar
+            output$decon_rep_logtext <- shiny$renderText({
+              shiny$req(reactVars$deconv_report_status)
+
+              shiny$invalidateLater(1000)
+
+              if (
+                !is.null(reactVars$decon_rep_process_out) &&
+                  file.exists(reactVars$decon_rep_process_out)
+              ) {
+                log <- paste(
+                  readLines(reactVars$decon_rep_process_out, warn = FALSE),
+                  collapse = "\n"
+                )
+              } else {
+                log <- "Initiating Report Generation ..."
+              }
+
+              session_id <- regmatches(
+                basename(log_path),
+                regexpr("id\\d+", basename(log_path))
+              )
+              report_fin <- paste0(
+                "deconvolution_report_",
+                Sys.Date(),
+                "_",
+                session_id,
+                ".html"
+              )
+
+              clean_log <- gsub("\\s*\\|[ .]*\\|\\s*", "", log, perl = TRUE)
+
+              # Define report filename
+              filename <- gsub(
+                ".log",
+                "_deconvolution_report.html",
+                basename(log_path)
+              )
+              filename_path <- file.path(dirs$targetpath(), filename)
+
+              if (
+                grepl(paste("Output created:", report_fin), log) &
+                  file.exists(filename_path)
+              ) {
+                reactVars$deconv_report_status <- "finished"
+                title <- "Report Generated!"
+                value <- 100
+              } else {
+                value <- regmatches(
+                  clean_log,
+                  gregexpr("(?<=\\|)\\d+%", clean_log, perl = TRUE)
+                )[[1]]
+                title <- "Generating Report ..."
+              }
+
+              # Update progress bar according to report render progress
+              if (reactVars$deconv_report_status != "error") {
+                updateProgressBar(
+                  session = session,
+                  id = ns("progressBar"),
+                  value = tail(as.integer(gsub("%", "", value)), 1),
+                  title = title
+                )
+              } else {
+                updateProgressBar(
+                  session = session,
+                  id = ns("progressBar"),
+                  value = tail(as.integer(gsub("%", "", value)), 1),
+                  title = "Report Generation Failed."
+                )
+              }
+
+              clean_log
+            })
+
             # Initialization variables
             reactVars$deconv_report_status <- "running"
             reactVars$catch_error <- FALSE
@@ -2690,32 +2765,6 @@ server <- function(id, dirs, reset_button) {
               # Stop execution of following expressions
               return()
             }
-
-            # Track process exit status for errors
-            shiny$observe({
-              shiny$req(
-                decon_rep_process_data(),
-                reactVars$deconv_report_status
-              )
-
-              if (reactVars$deconv_report_status == "running") {
-                shiny$invalidateLater(2000)
-
-                # Check if the process is still alive
-                if (!decon_rep_process_data()$is_alive()) {
-                  # Retrieve exit status
-                  exit_status <- decon_rep_process_data()$get_exit_status()
-
-                  # Check if the exit status indicates an error (non-zero)
-                  if (exit_status != 0) {
-                    write_log("Failed to generate deconvolution report")
-
-                    reactVars$deconv_report_status <- "error"
-                    decon_rep_process_data(NULL)
-                  }
-                }
-              }
-            })
           }
 
           # Activate smart scroll on reevaluating logtext
@@ -2732,79 +2781,30 @@ server <- function(id, dirs, reset_button) {
       }
     )
 
-    # Render report generation logtext and progress bar
-    output$decon_rep_logtext <- shiny$renderText({
-      shiny$req(reactVars$deconv_report_status)
-
-      shiny$invalidateLater(1000)
-
-      if (
-        !is.null(reactVars$decon_rep_process_out) &&
-          file.exists(reactVars$decon_rep_process_out)
-      ) {
-        log <- paste(
-          readLines(reactVars$decon_rep_process_out, warn = FALSE),
-          collapse = "\n"
-        )
-      } else {
-        log <- "Initiating Report Generation ..."
-      }
-
-      session_id <- regmatches(
-        basename(log_path),
-        regexpr("id\\d+", basename(log_path))
-      )
-      report_fin <- paste0(
-        "deconvolution_report_",
-        Sys.Date(),
-        "_",
-        session_id,
-        ".html"
+    # Track process exit status for errors in report generation
+    shiny$observe({
+      shiny$req(
+        decon_rep_process_data(),
+        reactVars$deconv_report_status
       )
 
-      clean_log <- gsub("\\s*\\|[ .]*\\|\\s*", "", log, perl = TRUE)
+      if (reactVars$deconv_report_status == "running") {
+        shiny$invalidateLater(2000)
 
-      # Define report filename
-      filename <- gsub(
-        ".log",
-        "_deconvolution_report.html",
-        basename(log_path)
-      )
-      filename_path <- file.path(dirs$targetpath(), filename)
+        # Check if the process is still alive
+        if (!decon_rep_process_data()$is_alive()) {
+          # Retrieve exit status
+          exit_status <- decon_rep_process_data()$get_exit_status()
 
-      if (
-        grepl(paste("Output created:", report_fin), log) &
-          file.exists(filename_path)
-      ) {
-        reactVars$deconv_report_status <- "finished"
-        title <- "Report Generated!"
-        value <- 100
-      } else {
-        value <- regmatches(
-          clean_log,
-          gregexpr("(?<=\\|)\\d+%", clean_log, perl = TRUE)
-        )[[1]]
-        title <- "Generating Report ..."
+          # Check if the exit status indicates an error (non-zero)
+          if (exit_status != 0) {
+            write_log("Failed to generate deconvolution report")
+
+            reactVars$deconv_report_status <- "error"
+            decon_rep_process_data(NULL)
+          }
+        }
       }
-
-      # Update progress bar according to report render progress
-      if (reactVars$deconv_report_status != "error") {
-        updateProgressBar(
-          session = session,
-          id = ns("progressBar"),
-          value = tail(as.integer(gsub("%", "", value)), 1),
-          title = title
-        )
-      } else {
-        updateProgressBar(
-          session = session,
-          id = ns("progressBar"),
-          value = tail(as.integer(gsub("%", "", value)), 1),
-          title = "Report Generation Failed."
-        )
-      }
-
-      clean_log
     })
 
     # Observe report generation to adapt UI
