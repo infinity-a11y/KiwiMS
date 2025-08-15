@@ -75,11 +75,6 @@ pre {
   overflow: hidden;
 }
 
-.row-fullheight > div,
-.row-fullheight {
-  height: 100%;
-}
-
 .align-row {
   height: 100%;
   align-content: center;
@@ -169,6 +164,33 @@ button .sF-modal {
   background: #35357a !important;
 }
 
+.deconvolution-process-spinner {
+  height: 100%;
+}
+
+.deconvolution-process-spinner > div {
+  display: flex;
+  justify-content: center;
+  height: 100%;
+  flex-wrap: wrap;
+  align-content: center;
+}
+
+.progress-group {
+  height: 47px;
+}
+
+#app-deconvolution_process-processing_stop,
+#app-deconvolution_process-processing_fin,
+#app-deconvolution_process-processing_stop,
+#app-deconvolution_process-processing_error {
+  display: flex;
+  justify-content: center;
+  height: 100%;
+  flex-wrap: wrap;
+  align-content: center;
+}
+
 // ============================
 // NAVIGATION & LAYOUT
 // ============================
@@ -245,8 +267,31 @@ button .sF-modal {
   box-shadow: 4px 4px 10px 4px rgb(0 0 0 / 55%) !important;
 }
 
-.bslib-card .card-body {
-  padding-bottom: 0px;
+.deconvolution-parent-card {
+  display: contents;
+}
+
+.deconvolution-running-interface {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.deconvolution-parent-card > div {
+  margin-top: auto;
+  margin-bottom: auto;
+  flex: 1 1 auto;
+  display: contents;
+}
+
+.deconvolution-running-control-card {
+  min-height: fit-content;
+}
+
+.deconvolution-running-result-card {
+  flex-grow: 1;
+  overflow-y: auto;
+  margin-bottom: 0;
 }
 
 .card-custom .bslib-card,
@@ -639,7 +684,6 @@ deconv-rep-check {
 
 #app-deconvolution_process-deconvolute_end,
 #app-deconvolution_process-forward_deconvolution {
-  margin-top: 0.5em;
   width: 100%;
 }
 
@@ -651,10 +695,6 @@ deconv-rep-check {
 #app-deconvolution_process-copy_deconvolution_log:hover {
   color: white;
   background: #404040;
-}
-
-.decon-btn .btn-default {
-  width: 100%;
 }
 
 .decon-btn .btn-default .fas {
