@@ -45,27 +45,6 @@ ui <- function(id) {
     shiny$uiOutput(ns("deconvolution_init_ui")),
     shiny$uiOutput(ns("deconvolution_running_ui"))
   )
-
-  # shiny$div(
-  #   class = "row-fullheight",
-  #   shiny$fluidRow(
-  #     shiny$column(
-  #       width = 12,
-  #       shiny$uiOutput(ns("deconvolution_init_ui")),
-  #       shiny$uiOutput(ns("deconvolution_running_ui"))
-  #     )
-  #   )
-  # )
-  # shiny$div(
-  #   class = "row-fullheight",
-  #   shiny$fluidRow(
-  #     shiny$column(
-  #       width = 12,
-  #       shiny$uiOutput(ns("deconvolution_init_ui")),
-  #       shiny$uiOutput(ns("deconvolution_running_ui"))
-  #     )
-  #   )
-  # )
 }
 
 #' @export
@@ -1484,12 +1463,19 @@ server <- function(id, dirs, reset_button) {
         }
       })
 
-      # Render spinner icon
+      # Render status spinner icon
       delay(1000, show(selector = "#app-deconvolution_process-processing"))
 
       ### Render result spectrum ----
+      # Define reactive helper variable to control spinner display
+      allow_spinner <- shiny$reactiveVal(TRUE)
+
       output$spectrum <- renderPlotly({
-        waiter_show(id = ns("spectrum"), html = spin_wandering_cubes())
+        # Show spinner only once before plot fully rendered
+        if (shiny$isolate(allow_spinner()) == TRUE) {
+          waiter_show(id = ns("spectrum"), html = spin_wandering_cubes())
+          allow_spinner(FALSE)
+        }
 
         shiny$req(result_files_sel(), input$toggle_result)
 
@@ -1508,7 +1494,11 @@ server <- function(id, dirs, reset_button) {
         if (dir.exists(result_dir)) {
           # Generate the spectrum plot
           spectrum <- spectrum_plot(result_dir, input$toggle_result)
+
+          # Hide spinner and activate reactive spinner variable again
           waiter_hide(id = ns("spectrum"))
+          allow_spinner(TRUE)
+
           return(spectrum)
         }
       })
@@ -1590,7 +1580,7 @@ server <- function(id, dirs, reset_button) {
 
         # Render deconvolution initiation UI
         output$deconvolution_init_ui <- shiny$renderUI(
-          deconvolution_init_ui
+          deconvolution_init_ui(ns)
         )
 
         # Unblock mouse pointer

@@ -76,15 +76,9 @@ ui <- function(id) {
           sidebar = deconvolution_sidebar$ui(
             ns("deconvolution_pars")
           ),
-          bslib$card(
-            class = "deconvolution-parent-card",
-            deconvolution_process$ui(
-              ns("deconvolution_process")
-            )
+          deconvolution_process$ui(
+            ns("deconvolution_process")
           )
-          # deconvolution_process$ui(
-          #   ns("deconvolution_process")
-          # )
         )
       ),
       bslib$nav_panel(

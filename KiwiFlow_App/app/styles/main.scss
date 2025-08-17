@@ -8,7 +8,7 @@ body > div.waiter-overlay.waiter-fullscreen {
 }
 
 .waiter-overlay {
-  background-color: #ffffffe3 !important;
+  background-color: transparent !important;
 }
 
 .wandering-cubes div {
@@ -28,7 +28,7 @@ body > div.waiter-overlay.waiter-fullscreen {
   width: 100%;
   height: 100%;
   background: rgba(0, 0, 0, 0);
-  z-index: 99999 !important;
+  //z-index: 99999 !important;
   cursor: wait;
 }
 
@@ -75,15 +75,15 @@ pre {
   overflow: hidden;
 }
 
-.align-row {
+#app-deconvolution_process-deconvolution_init_ui > div {
   height: 100%;
-  align-content: center;
+  margin-bottom: unset;
 }
 
-#app-deconvolution_process-deconvolution_init_ui > div {
+.deconvolution-init-ui-wrapper {
   display: flex;
-  flex-direction: column;
   height: 100%;
+  flex-direction: column;
 }
 
 .shiny-output-error-validation {
@@ -104,10 +104,8 @@ pre {
   overflow-y: clip;
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);
-}
-
-.modal {
   --bs-modal-margin: 5%;
+  z-index: 99999;
 }
 
 .modal::-webkit-scrollbar-thumb:horizontal {
@@ -180,7 +178,7 @@ button .sF-modal {
   height: 47px;
 }
 
-#app-deconvolution_process-processing_stop,
+#app-deconvolution_process-processing,
 #app-deconvolution_process-processing_fin,
 #app-deconvolution_process-processing_stop,
 #app-deconvolution_process-processing_error {
@@ -294,9 +292,20 @@ button .sF-modal {
   margin-bottom: 0;
 }
 
+.full-height-row,
+.full-height-row > div {
+  height: 100%;
+}
+
+.full-height-row > div > div {
+  display: flex;
+  flex-direction: column;
+  align-content: space-evenly;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 .card-custom .bslib-card,
-.card-custom-plate .bslib-card,
-.card-custom-plate2 .bslib-card,
 .card-log-output .bslib-card,
 .card-log-control .bslib-card {
   box-shadow: none !important;
@@ -313,6 +322,13 @@ button .sF-modal {
 .card-custom-plate .bslib-card,
 .card-custom-plate2 .bslib-card {
   margin-bottom: 0;
+  box-shadow: none !important;
+  border-color: #00000070;
+}
+
+.card-custom-plate .bslib-card .card-body,
+.card-custom-plate2 .bslib-card .card-body {
+  background-color: #dfdfdf42;
 }
 
 .card-custom .bslib-card .card-header,
@@ -332,12 +348,45 @@ button .sF-modal {
   margin-bottom: 1rem;
 }
 
+.deconvolution-result-content {
+  height: 100%;
+}
+
+.deconvolution-result-content > div {
+  height: 100%;
+  align-content: center;
+}
+
+.deconvolution-result-content > div > div {
+  height: 100%;
+  align-content: center;
+}
+
 #app-logs-log-output {
   font-family: monospace;
   padding-bottom: 2rem;
   max-height: 26rem;
   padding-left: 5rem;
   padding-right: 10rem;
+}
+
+.spectrum-plot,
+#app-deconvolution_process-spectrum {
+  height: 100% !important;
+}
+
+.spectrum-plot {
+  height: 90% !important;
+}
+
+#app-deconvolution_process-spectrum {
+  visibility: unset !important;
+}
+
+.deconvolution-result-controls {
+  height: 90%;
+  padding-left: 3rem;
+  padding-right: 3rem;
 }
 
 #app-deconvolution_process-logtext {
@@ -492,8 +541,7 @@ app-deconvolution_pars-id_column-label {
   width: inherit;
 }
 
-#app-deconvolution_process-decon_select,
-app-deconvolution_process-decon_select {
+#app-deconvolution_process-decon_select {
   margin-top: -1em;
 }
 
@@ -667,19 +715,14 @@ deconv-rep-check {
   color: white;
   box-shadow: 0 0 12px rgb(0 0 0 / 80%);
   animation: pulsate-shadow 2s infinite ease-in-out;
-  padding: 20px;
+  padding: 15px;
   padding-right: 40px;
   padding-left: 40px;
 }
 
 #app-deconvolution_process-deconvolute_start:hover {
   background: #404040;
-  color: white;
-  box-shadow: 0 0 12px rgb(0 0 0 / 80%);
   animation: pulsate-shadow 2s infinite ease-in-out;
-  padding: 20px;
-  padding-right: 40px;
-  padding-left: 40px;
 }
 
 #app-deconvolution_process-deconvolute_end,
