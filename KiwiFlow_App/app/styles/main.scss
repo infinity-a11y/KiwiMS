@@ -28,7 +28,6 @@ body > div.waiter-overlay.waiter-fullscreen {
   width: 100%;
   height: 100%;
   background: rgba(0, 0, 0, 0);
-  //z-index: 99999 !important;
   cursor: wait;
 }
 
@@ -72,6 +71,16 @@ pre {
 #app-deconvolution_process-deconvolution_init_ui > div {
   height: 100%;
   margin-bottom: unset;
+}
+
+.selectize-control.single .selectize-input:hover {
+  background-color: #404040;
+  color: white;
+  border-color: #404040;
+}
+
+.shinyjs-disabled label {
+  pointer-events: none;
 }
 
 .deconvolution-init-ui-wrapper {
@@ -341,11 +350,6 @@ button .sF-modal {
   padding-right: 10rem;
 }
 
-//.spectrum-plot-noplate,
-//#app-deconvolution_process-spectrum {
-//  height: 100% !important;
-//}
-
 .spectrum-plot-plate,
 .heatmap-plot {
   padding-right: 3rem;
@@ -420,7 +424,7 @@ button .sF-modal {
 .form-control:disabled {
   background-color: transparent;
   opacity: 0.3;
-  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .shiny-input-container:not(.shiny-input-container-inline) {
@@ -481,11 +485,6 @@ textarea.form-control {
 .deconv-param-input .shiny-input-container .control-label,
 .deconv-param-input-adv .shiny-input-container .control-label,
 .deconv-param-input-time .shiny-input-container .control-label {
-  display: none;
-}
-
-app-deconvolution_pars-vial_column-label,
-app-deconvolution_pars-id_column-label {
   display: none;
 }
 
@@ -624,9 +623,8 @@ deconv-rep-check {
 // BUTTONS
 // ============================
 
-.btn:disabled,
-.btn.disabled {
-  cursor: not-allowed;
+.btn {
+  --bs-btn-disabled-opacity: 0.3;
 }
 
 .btn-primary,
