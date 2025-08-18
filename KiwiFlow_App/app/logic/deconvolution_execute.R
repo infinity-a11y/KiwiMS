@@ -52,7 +52,8 @@ result <- generate_decon_rslt(
   paths = conf$dirs,
   log = log,
   output = output,
-  result_dir = result_dir
+  result_dir = result_dir,
+  temp_dir = temp
 )
 
 result_id <- gsub(

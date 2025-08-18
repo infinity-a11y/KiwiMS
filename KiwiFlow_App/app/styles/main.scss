@@ -69,12 +69,6 @@ pre {
   background-color: #f7f7f7;
 }
 
-.card-custom-plate .bslib-card .card-body,
-.card-custom-plate2 .bslib-card .card-body {
-  padding-bottom: 16px;
-  overflow: hidden;
-}
-
 #app-deconvolution_process-deconvolution_init_ui > div {
   height: 100%;
   margin-bottom: unset;
@@ -313,51 +307,28 @@ button .sF-modal {
   background-color: #dfdfdf42;
 }
 
-.card-custom .bslib-card,
-.card-custom-plate .bslib-card,
-.card-custom-plate2 .bslib-card {
+.card-custom .bslib-card {
   border-radius: 4px;
 }
 
-.card-custom-plate .bslib-card,
-.card-custom-plate2 .bslib-card {
-  margin-bottom: 0;
-  box-shadow: none !important;
-  border-color: #00000070;
-}
-
-.card-custom-plate .bslib-card .card-body,
-.card-custom-plate2 .bslib-card .card-body {
-  background-color: #dfdfdf42;
-}
-
-.card-custom .bslib-card .card-header,
-.card-custom-plate .bslib-card .card-header,
-.card-custom-plate2 .bslib-card .card-header {
+.card-custom .bslib-card .card-header {
   border-top-left-radius: 4px;
   border-top-right-radius: 4px;
 }
 
-.card-custom-plate {
-  margin-top: -1rem;
-  margin-bottom: 1rem;
-}
-
-.card-custom-plate2 {
-  margin-top: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.deconvolution-result-content {
+.deconvolution-result-content-noplate {
   height: 100%;
 }
 
-.deconvolution-result-content > div {
-  height: 100%;
+.deconvolution-result-content-plate {
+  flex-grow: 1;
   align-content: center;
 }
 
-.deconvolution-result-content > div > div {
+.deconvolution-result-content-noplate > div,
+.deconvolution-result-content-plate > div,
+.deconvolution-result-content-plate > div > div,
+.deconvolution-result-content-noplate > div > div {
   height: 100%;
   align-content: center;
 }
@@ -370,21 +341,34 @@ button .sF-modal {
   padding-right: 10rem;
 }
 
-.spectrum-plot,
-#app-deconvolution_process-spectrum {
-  height: 100% !important;
+//.spectrum-plot-noplate,
+//#app-deconvolution_process-spectrum {
+//  height: 100% !important;
+//}
+
+.spectrum-plot-plate,
+.heatmap-plot {
+  padding-right: 3rem;
+  padding-left: 3rem;
 }
 
-.spectrum-plot {
+.spectrum-plot-noplate,
+.spectrum-plot-plate,
+.heatmap-plot {
   height: 90% !important;
 }
 
-#app-deconvolution_process-spectrum {
+#app-deconvolution_process-spectrum,
+#app-deconvolution_process-heatmap {
   visibility: unset !important;
 }
 
-.deconvolution-result-controls {
+.deconvolution-result-controls,
+.deconvolution-result-controls-noplate {
   height: 90%;
+}
+
+.deconvolution-result-controls {
   padding-left: 3rem;
   padding-right: 3rem;
 }

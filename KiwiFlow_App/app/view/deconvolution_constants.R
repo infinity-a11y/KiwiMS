@@ -426,156 +426,189 @@ deconvolution_init_ui <- function(ns) {
   )
 }
 
+# Deconvolution result controls interface
+deconvolution_status_controls <- function(ns) {
+  shiny$fluidRow(
+    shiny$column(
+      width = 5,
+      card(
+        class = "deconvolution-running-control-card",
+        shiny$fluidRow(
+          shiny$column(
+            width = 3,
+            align = "center",
+            shinyjs::hidden(
+              shiny$div(
+                id = ns("processing"),
+                shiny$HTML(
+                  paste0(
+                    '<i class="fa fa-spinner fa-spin fa-fw fa-2x" style="color: ',
+                    '#38387C;"></i>'
+                  )
+                )
+              )
+            ),
+            shinyjs::hidden(
+              shiny$div(
+                id = ns("processing_stop"),
+                shiny$HTML(
+                  paste0(
+                    '<i class="fa-solid fa-spinner fa-2x" style="color: ',
+                    '#38387C;"></i>'
+                  )
+                )
+              )
+            ),
+            shinyjs::hidden(
+              shiny$div(
+                id = ns("processing_error"),
+                shiny$HTML(
+                  paste0(
+                    '<i class="fa-solid fa-circle-exclamation fa-2x" style="color: ',
+                    '#D17050;"></i>'
+                  )
+                )
+              )
+            ),
+            shinyjs::hidden(
+              shiny$div(
+                id = ns("processing_fin"),
+                shiny$HTML(
+                  paste0(
+                    '<i class="fa-solid fa-circle-check fa-2x" style="color: ',
+                    '#38387C;"></i>'
+                  )
+                )
+              )
+            )
+          ),
+          shiny$column(
+            width = 8,
+            progressBar(
+              id = ns("progressBar"),
+              value = 0,
+              title = "Initiating Deconvolution",
+              display_pct = TRUE
+            )
+          )
+        )
+      )
+    ),
+    shiny$column(
+      width = 7,
+      card(
+        class = "deconvolution-running-control-card",
+        shiny$fluidRow(
+          shiny$column(
+            width = 3,
+            shiny$actionButton(
+              ns("deconvolute_end"),
+              "Abort",
+              icon = shiny$icon("circle-stop"),
+              width = "100%"
+            )
+          ),
+          shiny$column(
+            width = 3,
+            shiny$div(
+              class = "decon-btn",
+              shiny$actionButton(
+                ns("show_log"),
+                "Output",
+                icon = shiny$icon("code"),
+                width = "100%"
+              )
+            )
+          ),
+          shiny$column(
+            width = 3,
+            shiny$div(
+              class = "decon-btn",
+              disabled(
+                shiny$actionButton(
+                  ns("deconvolution_report"),
+                  "Report",
+                  icon = shiny$icon("square-poll-vertical"),
+                  width = "100%"
+                )
+              )
+            )
+          ),
+          shiny$column(
+            width = 3,
+            shiny$div(
+              class = "decon-btn",
+              disabled(
+                shiny$actionButton(
+                  ns("forward_deconvolution"),
+                  "Continue",
+                  icon = shiny$icon("forward-fast"),
+                  width = "100%"
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+}
+
 # Deconvolution running interface (batch mode)
 #' @export
 deconvolution_running_ui_plate <- function(ns) {
-  shiny$column(
-    width = 12,
-    useWaiter(),
-    shiny$fluidRow(
-      shiny$column(
-        width = 2,
-        align = "center",
-        shinyjs::hidden(
-          shiny$div(
-            id = ns("processing"),
-            shiny$HTML(
-              paste0(
-                '<i class="fa fa-spinner fa-spin fa-fw fa-2x" style="color: ',
-                '#38387C; margin-top: 0.5em"></i>'
+  card(
+    class = "deconvolution-parent-card",
+    shiny$div(
+      class = "deconvolution-running-interface",
+      deconvolution_status_controls(ns),
+      card(
+        class = "deconvolution-running-result-card",
+        shiny$fluidRow(
+          shiny$column(
+            width = 6
+          ),
+          shiny$column(
+            width = 3,
+            align = "center",
+            shiny$div(
+              class = "deconvolution-result-controls-noplate",
+              disabled(
+                radioGroupButtons(
+                  ns("toggle_result"),
+                  choiceNames = c("Deconvoluted", "Raw m/z"),
+                  choiceValues = c(FALSE, TRUE)
+                )
               )
+            )
+          ),
+          shiny$column(
+            width = 3,
+            align = "center",
+            shiny$div(
+              class = "deconvolution-result-controls-noplate",
+              shiny$uiOutput(ns("result_picker_ui"))
             )
           )
         ),
-        shinyjs::hidden(
-          shiny$div(
-            id = ns("processing_stop"),
-            shiny$HTML(
-              paste0(
-                '<i class="fa-solid fa-spinner fa-2x" style="color: ',
-                '#38387C; margin-top: 0.5em"></i>'
+        shiny$div(
+          class = "deconvolution-result-content-plate",
+          shiny$fluidRow(
+            shiny$column(
+              width = 6,
+              shiny$div(
+                class = "heatmap-plot",
+                withWaiter(
+                  plotlyOutput(ns("heatmap"), height = "100%")
+                )
               )
-            )
-          )
-        ),
-        shinyjs::hidden(
-          shiny$div(
-            id = ns("processing_fin"),
-            shiny$HTML(
-              paste0(
-                '<i class="fa-solid fa-circle-check fa-2x" style="color: ',
-                '#38387C; margin-top: 0.5em"></i>'
-              )
-            )
-          )
-        )
-      ),
-      shiny$column(
-        width = 6,
-        progressBar(
-          id = ns("progressBar"),
-          value = 0,
-          title = "Initiating Deconvolution",
-          display_pct = TRUE
-        )
-      ),
-      shiny$column(
-        width = 2,
-        shiny$actionButton(
-          ns("deconvolute_end"),
-          "Abort",
-          icon = shiny$icon("circle-stop")
-        )
-      ),
-      shiny$column(
-        width = 2,
-        shiny$div(
-          class = "decon-btn",
-          disabled(
-            shiny$actionButton(
-              ns("forward_deconvolution"),
-              "Next Step",
-              icon = shiny$icon("forward-fast")
-            )
-          )
-        )
-      )
-    ),
-    shiny$hr(style = "margin: 1.5rem 0; opacity: 0.8;"),
-    shiny$fluidRow(
-      shiny$column(
-        width = 3,
-        shiny$div(
-          class = "decon-btn",
-          shiny$actionButton(
-            ns("show_log"),
-            "Output",
-            icon = shiny$icon("code"),
-            width = "100%"
-          )
-        )
-      ),
-      shiny$column(
-        width = 3,
-        shiny$div(
-          class = "decon-btn",
-          disabled(
-            shiny$actionButton(
-              ns("deconvolution_report"),
-              "Report",
-              icon = shiny$icon("square-poll-vertical")
-            )
-          )
-        )
-      ),
-      shiny$column(
-        width = 3,
-        align = "center",
-        shiny$uiOutput(ns("result_picker_ui"))
-      ),
-      shiny$column(
-        width = 3,
-        align = "center",
-        disabled(
-          radioGroupButtons(
-            ns("toggle_result"),
-            choiceNames = c("Deconvoluted", "Raw m/z"),
-            choiceValues = c(FALSE, TRUE)
-          )
-        )
-      )
-    ),
-    shiny$fluidRow(
-      shiny$column(
-        width = 6,
-        shiny$br(),
-        shiny$div(
-          class = "card-custom-plate",
-          card(
-            card_header(
-              class = "bg-dark",
-              "384-Well Plate Heatmap"
             ),
-            card_body(
-              withWaiter(
-                plotlyOutput(ns("heatmap"))
+            shiny$column(
+              width = 6,
+              shiny$div(
+                class = "spectrum-plot-plate",
+                plotlyOutput(ns("spectrum"), height = "100%")
               )
-            )
-          )
-        )
-      ),
-      shiny$column(
-        width = 6,
-        shiny$div(
-          class = "card-custom-plate2",
-          card(
-            full_screen = TRUE,
-            card_header(
-              class = "bg-dark",
-              "Spectrum"
-            ),
-            card_body(
-              plotlyOutput(ns("spectrum"))
             )
           )
         )
@@ -591,134 +624,11 @@ deconvolution_running_ui_noplate <- function(ns) {
     class = "deconvolution-parent-card",
     shiny$div(
       class = "deconvolution-running-interface",
-      shiny$fluidRow(
-        shiny$column(
-          width = 5,
-          card(
-            class = "deconvolution-running-control-card",
-            shiny$fluidRow(
-              shiny$column(
-                width = 3,
-                align = "center",
-                shinyjs::hidden(
-                  shiny$div(
-                    id = ns("processing"),
-                    shiny$HTML(
-                      paste0(
-                        '<i class="fa fa-spinner fa-spin fa-fw fa-2x" style="color: ',
-                        '#38387C;"></i>'
-                      )
-                    )
-                  )
-                ),
-                shinyjs::hidden(
-                  shiny$div(
-                    id = ns("processing_stop"),
-                    shiny$HTML(
-                      paste0(
-                        '<i class="fa-solid fa-spinner fa-2x" style="color: ',
-                        '#38387C;"></i>'
-                      )
-                    )
-                  )
-                ),
-                shinyjs::hidden(
-                  shiny$div(
-                    id = ns("processing_error"),
-                    shiny$HTML(
-                      paste0(
-                        '<i class="fa-solid fa-circle-exclamation fa-2x" style="color: ',
-                        '#D17050;"></i>'
-                      )
-                    )
-                  )
-                ),
-                shinyjs::hidden(
-                  shiny$div(
-                    id = ns("processing_fin"),
-                    shiny$HTML(
-                      paste0(
-                        '<i class="fa-solid fa-circle-check fa-2x" style="color: ',
-                        '#38387C;"></i>'
-                      )
-                    )
-                  )
-                )
-              ),
-              shiny$column(
-                width = 8,
-                progressBar(
-                  id = ns("progressBar"),
-                  value = 0,
-                  title = "Initiating Deconvolution",
-                  display_pct = TRUE
-                )
-              )
-            )
-          )
-        ),
-        shiny$column(
-          width = 7,
-          card(
-            class = "deconvolution-running-control-card",
-            shiny$fluidRow(
-              shiny$column(
-                width = 3,
-                shiny$actionButton(
-                  ns("deconvolute_end"),
-                  "Abort",
-                  icon = shiny$icon("circle-stop"),
-                  width = "100%"
-                )
-              ),
-              shiny$column(
-                width = 3,
-                shiny$div(
-                  class = "decon-btn",
-                  shiny$actionButton(
-                    ns("show_log"),
-                    "Output",
-                    icon = shiny$icon("code"),
-                    width = "100%"
-                  )
-                )
-              ),
-              shiny$column(
-                width = 3,
-                shiny$div(
-                  class = "decon-btn",
-                  disabled(
-                    shiny$actionButton(
-                      ns("deconvolution_report"),
-                      "Report",
-                      icon = shiny$icon("square-poll-vertical"),
-                      width = "100%"
-                    )
-                  )
-                )
-              ),
-              shiny$column(
-                width = 3,
-                shiny$div(
-                  class = "decon-btn",
-                  disabled(
-                    shiny$actionButton(
-                      ns("forward_deconvolution"),
-                      "Continue",
-                      icon = shiny$icon("forward-fast"),
-                      width = "100%"
-                    )
-                  )
-                )
-              )
-            )
-          )
-        )
-      ),
+      deconvolution_status_controls(ns),
       card(
         class = "deconvolution-running-result-card",
         shiny$div(
-          class = "deconvolution-result-content",
+          class = "deconvolution-result-content-noplate",
           shiny$fluidRow(
             shiny$column(
               width = 4,
@@ -740,22 +650,9 @@ deconvolution_running_ui_noplate <- function(ns) {
               width = 7,
               align = "center",
               shiny$div(
-                class = "spectrum-plot",
+                class = "spectrum-plot-noplate",
                 plotlyOutput(ns("spectrum"), height = "100%")
               )
-              # shiny$div(
-              #   class = "card-custom-plate2",
-              #   card(
-              #     full_screen = TRUE,
-              #     card_header(
-              #       class = "bg-dark",
-              #       "Spectrum"
-              #     ),
-              #     card_body(
-              #       plotlyOutput(ns("spectrum"))
-              #     )
-              #   )
-              # )
             )
           )
         )

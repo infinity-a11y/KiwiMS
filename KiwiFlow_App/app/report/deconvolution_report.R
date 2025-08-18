@@ -19,6 +19,7 @@ tryCatch(
     results_dir <- args[6]
     kiwiflow_version <- args[7]
     kiwiflow_date <- args[8]
+    temp_dir <- args[9]
   },
   error = function(e) {
     message("Error setting render parameters: ", e$message)
@@ -52,7 +53,8 @@ tryCatch(
         result_path = results_dir,
         result_file = result_file,
         version = kiwiflow_version,
-        date = kiwiflow_date
+        date = kiwiflow_date,
+        temp_dir = temp_dir
       )
     )
   },

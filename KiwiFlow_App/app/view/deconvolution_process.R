@@ -62,6 +62,9 @@ server <- function(id, dirs, reset_button) {
     # Define log location
     log_path <- get_log()
 
+    # Make temp dir for session
+    temp <- tempdir()
+
     ### Reactive variables declaration ----
     reactVars <- shiny$reactiveValues(
       isRunning = FALSE,
@@ -337,7 +340,7 @@ server <- function(id, dirs, reset_button) {
 
       if (dirs$selected() == "folder") {
         raw_dirs <- dir_ls(
-          dirs$targetpath(),
+          dirs$dir(),
           glob = "*.raw"
         )
 
@@ -597,17 +600,6 @@ server <- function(id, dirs, reset_button) {
       reset_progress()
       write_log("Deconvolution initiated")
 
-      # if (!dir.exists(results_dir)) {
-      #   dir.create(results_dir)
-      # }
-
-      # if (file.exists(file.path(results_dir, "result.rds"))) {
-      #   file.remove(file.path(results_dir, "result.rds"))
-      # }
-      # if (file.exists(file.path(results_dir, "heatmap.rds"))) {
-      #   file.remove(file.path(results_dir, "heatmap.rds"))
-      # }
-
       # UI changes
       runjs(paste0(
         'document.getElementById("blocking-overlay").style.display ',
@@ -757,7 +749,6 @@ server <- function(id, dirs, reset_button) {
       )
 
       # Place config parameter in temporary file
-      temp <- tempdir()
       config_path <- file.path(temp, "config.rds")
       saveRDS(config, config_path)
 
@@ -784,6 +775,9 @@ server <- function(id, dirs, reset_button) {
         error = function(e) {
           # Activate error catching variable
           reactVars$catch_error <- TRUE
+
+          # Stop spinner for spectrum plot
+          waiter_hide(id = ns("spectrum"))
 
           error_msg <- paste("Failed to start deconvolution:", e$message)
           write_log(error_msg)
@@ -865,6 +859,9 @@ server <- function(id, dirs, reset_button) {
                   "document.querySelector('#app-deconvolution_process-show_log').click();"
                 )
               )
+
+              # Stop spinner for spectrum plot
+              waiter_hide(id = ns("spectrum"))
 
               # Stop observers
               if (!is.null(reactVars$progress_observer)) {
@@ -1097,19 +1094,6 @@ server <- function(id, dirs, reset_button) {
                   )
                   # Apply JS modifications for picker
                   session$sendCustomMessage("selectize-init", "result_picker")
-
-                  output$heatmap <- renderPlotly({
-                    waiter_show(
-                      id = ns("heatmap"),
-                      html = spin_wandering_cubes()
-                    )
-                    heatmap <- create_384_plate_heatmap(reactVars$rslt_df) |>
-                      event_register("plotly_click")
-                    waiter_hide(id = ns("heatmap"))
-                    heatmap
-                  })
-
-                  reactVars$heatmap_ready <- TRUE
                 }
               }
             } else {
@@ -1334,10 +1318,9 @@ server <- function(id, dirs, reset_button) {
                 }
 
                 # Save heatmap
-                if (!file.exists("results/heatmap.rds")) {
+                if (!file.exists(file.path(temp, "heatmap.rds"))) {
                   heatmap <- create_384_plate_heatmap(reactVars$rslt_df)
-
-                  saveRDS(heatmap, file.path(results_dir, "heatmap.rds"))
+                  saveRDS(heatmap, file.path(temp, "heatmap.rds"))
                 }
               } else {
                 if (dirs$selected() == "folder") {
@@ -1466,15 +1449,15 @@ server <- function(id, dirs, reset_button) {
       # Render status spinner icon
       delay(1000, show(selector = "#app-deconvolution_process-processing"))
 
-      ### Render result spectrum ----
+      ### Render result spectrum
       # Define reactive helper variable to control spinner display
-      allow_spinner <- shiny$reactiveVal(TRUE)
+      allow_spinner_spectrum <- shiny$reactiveVal(TRUE)
 
       output$spectrum <- renderPlotly({
         # Show spinner only once before plot fully rendered
-        if (shiny$isolate(allow_spinner()) == TRUE) {
+        if (shiny$isolate(allow_spinner_spectrum()) == TRUE) {
           waiter_show(id = ns("spectrum"), html = spin_wandering_cubes())
-          allow_spinner(FALSE)
+          allow_spinner_spectrum(FALSE)
         }
 
         shiny$req(result_files_sel(), input$toggle_result)
@@ -1497,11 +1480,49 @@ server <- function(id, dirs, reset_button) {
 
           # Hide spinner and activate reactive spinner variable again
           waiter_hide(id = ns("spectrum"))
-          allow_spinner(TRUE)
+          allow_spinner_spectrum(TRUE)
 
           return(spectrum)
         }
       })
+
+      ### Render heatmap for batch mode
+      if (
+        dirs$selected() == "folder" &&
+          isTRUE(dirs$batch_mode()) &&
+          length(dirs$batch_file())
+      ) {
+        # Define reactive helper variable to control spinner display
+        allow_spinner_heatmap <- shiny$reactiveVal(TRUE)
+
+        output$heatmap <- renderPlotly({
+          if (shiny$isolate(allow_spinner_heatmap()) == TRUE) {
+            waiter_show(
+              id = ns("heatmap"),
+              html = spin_wandering_cubes()
+            )
+            allow_spinner_heatmap(FALSE)
+          }
+
+          shiny$req(reactVars$rslt_df)
+
+          if (nrow(reactVars$rslt_df) > 0) {
+            heatmap <- create_384_plate_heatmap(reactVars$rslt_df) |>
+              event_register("plotly_click")
+
+            # Hide spinner
+            waiter_hide(id = ns("heatmap"))
+
+            # Activate spinner reactivation
+            allow_spinner_heatmap(TRUE)
+
+            # Activate click observer
+            reactVars$heatmap_ready <- TRUE
+
+            return(heatmap)
+          }
+        })
+      }
 
       # Unblock mouse pointer
       runjs(paste0(
@@ -1647,6 +1668,10 @@ server <- function(id, dirs, reset_button) {
 
       # Remove modal dialogue window
       shiny$removeModal()
+
+      # Stop spinner for spectrum and heatmap plot
+      waiter_hide(id = ns("spectrum"))
+      waiter_hide(id = ns("heatmap"))
 
       write_log(paste(
         "Deconvolution cancelled with",
@@ -1928,7 +1953,7 @@ server <- function(id, dirs, reset_button) {
 
             # Define temporary output file location
             reactVars$decon_rep_process_out <- file.path(
-              tempdir(),
+              temp,
               "rep_output.txt"
             )
             write("", reactVars$decon_rep_process_out)
@@ -2014,7 +2039,8 @@ server <- function(id, dirs, reset_button) {
               log_path,
               dirs$targetpath(),
               get_kiwiflow_version()["version"],
-              get_kiwiflow_version()["date"]
+              get_kiwiflow_version()["date"],
+              temp
             )
 
             # Construct the system command

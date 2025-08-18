@@ -11,6 +11,7 @@ params:
   result_file: ""
   version: ""
   date: ""
+  temp_dir: ""
 output:
   html_document:
     self_contained: true
@@ -216,8 +217,8 @@ cat("</details>")
 ```{r echo=FALSE, results="asis"}
 #| label: Heatmap
 
-if (file.exists(file.path(params$result_path, "heatmap.rds"))) {
-  heatmap <- readRDS(file.path(params$result_path, "heatmap.rds"))
+if (file.exists(file.path(params$temp_dir, "heatmap.rds"))) {
+  heatmap <- readRDS(file.path(params$temp_dir, "heatmap.rds"))
   htmltools::tagList(
   htmltools::div(
     style = "max-width: 65%;",

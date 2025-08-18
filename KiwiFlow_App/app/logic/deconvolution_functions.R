@@ -370,7 +370,8 @@ create_384_plate_heatmap <- function(data) {
         tickfont = list(size = 12),
         tickangle = 0
       ),
-      margin = list(t = 40, r = 60, b = 0, l = left),
+      # margin = list(t = 40, r = 60, b = 0, l = left),
+      margin = list(t = 0, r = 60, b = 0, l = left),
       plot_bgcolor = "white",
       paper_bgcolor = "white"
     ) |>
@@ -581,7 +582,8 @@ generate_decon_rslt <- function(
   log = NULL,
   output = NULL,
   heatmap = NULL,
-  result_dir
+  result_dir,
+  temp_dir
 ) {
   # Optimized file reader function
   read_file_safe <- function(filename, col_names = NULL) {
@@ -683,8 +685,8 @@ generate_decon_rslt <- function(
   results[["session"]] <- log
   results[["output"]] <- output
 
-  if (file.exists(file.path(result_dir, "heatmap.rds"))) {
-    results[["heatmap"]] <- readRDS(file.path(result_dir, "heatmap.rds"))
+  if (file.exists(file.path(temp_dir, "heatmap.rds"))) {
+    results[["heatmap"]] <- readRDS(file.path(temp_dir, "heatmap.rds"))
   }
 
   return(results)
