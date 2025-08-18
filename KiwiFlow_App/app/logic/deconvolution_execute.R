@@ -1,15 +1,13 @@
 # app/logic/deconvolution_execute.R
 
-message("Initiating deconvolution ...")
-
 # Sourcing deconvolution functions
+source_file <- file.path(
+  commandArgs(trailingOnly = TRUE)[3],
+  "app/logic/deconvolution_functions.R"
+)
+message(paste("Sourcing", source_file))
 tryCatch(
   {
-    source_file <- file.path(
-      commandArgs(trailingOnly = TRUE)[3],
-      "app/logic/deconvolution_functions.R"
-    )
-    message(paste("Sourcing", source_file))
     source(source_file)
   },
   error = function(e) {
@@ -18,7 +16,8 @@ tryCatch(
   }
 )
 
-# Setting deconvolution parameters
+# Setting deconvolution parameter
+message("Setting deconvolution parameter ...")
 tryCatch(
   {
     temp <- commandArgs(trailingOnly = TRUE)[1]
@@ -27,8 +26,8 @@ tryCatch(
     result_dir <- commandArgs(trailingOnly = TRUE)[4]
   },
   error = function(e) {
-    message("Error setting deconvolution parameters: ", e$message)
-    stop("Error setting deconvolution parameters.")
+    message("Error setting deconvolution parameter: ", e$message)
+    stop("Error setting deconvolution parameter.")
   }
 )
 

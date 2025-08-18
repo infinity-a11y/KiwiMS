@@ -280,6 +280,7 @@ server <- function(id, dirs, reset_button) {
       )
     })
 
+    # Dynamic rendering of skip/overwrite selection button
     output$selector_ui <- shiny$renderUI({
       input$deconvolute_start
 
@@ -331,6 +332,7 @@ server <- function(id, dirs, reset_button) {
       return(select)
     })
 
+    # Dynamic rendering of message with info for selected files
     output$message_ui <- shiny$renderUI({
       input$deconvolute_start
       enable(
@@ -442,6 +444,7 @@ server <- function(id, dirs, reset_button) {
       return(message)
     })
 
+    # Dynamic rendering of warnings for file selection
     output$warning_ui <- shiny$renderUI({
       input$deconvolute_start
 
@@ -560,6 +563,7 @@ server <- function(id, dirs, reset_button) {
       return(warning)
     })
 
+    # Dynamic rendering of target file selector
     output$target_sel_ui <- shiny$renderUI({
       input$deconvolute_start
 
@@ -587,6 +591,7 @@ server <- function(id, dirs, reset_button) {
       return(picker)
     })
 
+    # Observe choice for overwrite/skip already present results
     shiny$observe({
       if (!is.null(input$decon_select)) {
         reactVars$duplicated <- input$decon_select
@@ -715,7 +720,6 @@ server <- function(id, dirs, reset_button) {
           disabled(shiny$selectInput(ns("result_picker"), "", choices = ""))
         )
       )
-
       # Apply JS modifications for picker
       session$sendCustomMessage("selectize-init", "result_picker")
 
@@ -776,7 +780,8 @@ server <- function(id, dirs, reset_button) {
           # Activate error catching variable
           reactVars$catch_error <- TRUE
 
-          # Stop spinner for spectrum plot
+          # Stop spinner for spectrum and heatmap plot
+          waiter_hide(id = ns("heatmap"))
           waiter_hide(id = ns("spectrum"))
 
           error_msg <- paste("Failed to start deconvolution:", e$message)
@@ -860,7 +865,8 @@ server <- function(id, dirs, reset_button) {
                 )
               )
 
-              # Stop spinner for spectrum plot
+              # Stop spinner for spectrum and heatmap plot
+              waiter_hide(id = ns("heatmap"))
               waiter_hide(id = ns("spectrum"))
 
               # Stop observers
@@ -960,6 +966,7 @@ server <- function(id, dirs, reset_button) {
                   well <- character()
                   value <- numeric()
                   sample_names <- character()
+
                   for (i in seq_along(results)) {
                     sample_names[i] <- gsub(
                       "_rawdata_unidecfiles",
@@ -1072,7 +1079,7 @@ server <- function(id, dirs, reset_button) {
                   }
                 }
 
-                ##### Render heatmap & result picker ----
+                ##### Render result picker with updated choices ----
                 if (nrow(reactVars$rslt_df) > 0) {
                   enable(selector = "#app-deconvolution_process-toggle_result")
 
@@ -1410,6 +1417,10 @@ server <- function(id, dirs, reset_button) {
         reactVars$click_observer <- shiny$observe({
           if (isTRUE(reactVars$heatmap_ready)) {
             click_data <- event_data("plotly_click")
+
+            #TODO
+            waiter_show(id = ns("spectrum"), html = spin_wandering_cubes())
+
             if (!is.null(click_data)) {
               # Get the clicked point's row and column
               row <- LETTERS[16 - floor(click_data$y) + 1]
@@ -1450,6 +1461,13 @@ server <- function(id, dirs, reset_button) {
       delay(1000, show(selector = "#app-deconvolution_process-processing"))
 
       ### Render result spectrum
+
+      # TODO
+      # Reducing perceived waiting time by showing spinner on input change
+      shiny$observeEvent(input$toggle_result, {
+        waiter_show(id = ns("spectrum"), html = spin_wandering_cubes())
+      })
+
       # Define reactive helper variable to control spinner display
       allow_spinner_spectrum <- shiny$reactiveVal(TRUE)
 
