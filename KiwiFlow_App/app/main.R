@@ -21,7 +21,8 @@ box::use(
     logic /
     helper_functions[
       check_github_version,
-      get_latest_release_url
+      get_kiwiflow_version,
+      get_latest_release_url,
     ],
 )
 
@@ -67,7 +68,7 @@ ui <- function(id) {
           style = "font-size: 21px; font-family: monospace;"
         )
       ),
-      window_title = "KiwiFlow 0.1.0",
+      window_title = paste("KiwiFlow", get_kiwiflow_version()["version"]),
       underline = TRUE,
       bslib$nav_panel(
         title = "Deconvolution",
@@ -75,9 +76,9 @@ ui <- function(id) {
           sidebar = deconvolution_sidebar$ui(
             ns("deconvolution_pars")
           ),
-          bslib$card(deconvolution_process$ui(
+          deconvolution_process$ui(
             ns("deconvolution_process")
-          ))
+          )
         )
       ),
       bslib$nav_panel(
@@ -176,11 +177,20 @@ server <- function(id) {
     # Conversion server
     conversion_main$server("conversion_card")
 
+    reset_button <- shiny$reactiveVal(0)
+
     # Deconvolution sidebar server
-    dirs <- deconvolution_sidebar$server("deconvolution_pars")
+    dirs <- deconvolution_sidebar$server(
+      "deconvolution_pars",
+      reset_button = reset_button
+    )
 
     # Deconvolution process server
-    deconvolution_process$server("deconvolution_process", dirs)
+    deconvolution_process$server(
+      "deconvolution_process",
+      dirs,
+      reset_button = reset_button
+    )
 
     # Check update availability
     version_info <- readLines("resources/version.txt", warn = FALSE)

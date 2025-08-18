@@ -1,6 +1,7 @@
 # app/logic/helper_functions.R
 
 box::use(
+  fs[path_home, dir_ls],
   ggplot2,
   grid[gpar, grid.text, unit],
   httr[add_headers, content, GET, status_code],
@@ -10,6 +11,64 @@ box::use(
   shiny[div, icon, NS, span],
   stringr[str_split_fixed],
 )
+
+#' @export
+get_kiwiflow_version <- function() {
+  # Get version file from static directory
+  version_file <- readLines("app/static/version.txt")
+
+  # Assign names
+  names(version_file) <- c("version", "date", "url")
+
+  # Clean values
+  version_file[1] <- gsub("version=", "", version_file[1])
+  version_file[2] <- gsub("release_date=", "", version_file[2])
+  version_file[3] <- gsub("zip_url=", "", version_file[1])
+
+  return(version_file)
+}
+
+#' @export
+get_volumes <- function() {
+  # Get the path to the user's home directory
+  home_path <- path_home()
+
+  # Initialize an empty named vector for the roots
+  roots <- c(Home = home_path)
+
+  # Detect the operating system
+  os <- Sys.info()['sysname']
+
+  if (os == "Windows") {
+    # Get the list of drives using wmic
+    drives_raw <- system("wmic logicaldisk get caption", intern = TRUE)
+
+    # Clean the output to get just the drive letters (e.g., "C:")
+    drives_list <- drives_raw[drives_raw != ""]
+    drives_list <- trimws(drives_list)
+    drives_list <- drives_list[grepl("^[A-Z]:$", drives_list)]
+
+    # Create a named vector from the list of drives
+    drive_names <- substr(drives_list, 1, 1)
+    drive_values <- paste0(drives_list, "/")
+
+    # Set the names and append to the roots vector
+    names(drive_values) <- drive_names
+    roots <- c(roots, drive_values)
+  } else {
+    # For macOS/Linux, drives are at the root level
+    drives_list <- dir_ls(path = "/", type = "directory")
+
+    # Base name of the path as the name for the vector
+    drives_names <- basename(drives_list)
+    names(drives_list) <- drives_names
+
+    # Append the detected drives to the roots vector
+    roots <- c(roots, drives_list)
+  }
+
+  return(roots)
+}
 
 #' @export
 fill_empty <- function(string) {

@@ -22,6 +22,7 @@ box::use(
 #' @export
 process_single_dir <- function(
   waters_dir,
+  result_dir,
   startz,
   endz,
   minmz,
@@ -36,6 +37,7 @@ process_single_dir <- function(
   time_end
 ) {
   input_path <- gsub("\\\\", "/", waters_dir)
+  result_dir <- gsub("\\\\", "/", result_dir)
 
   # Function to properly format parameters for Python
   format_param <- function(x) {
@@ -67,27 +69,40 @@ process_single_dir <- function(
     format_param(time_end)
   )
 
+  writeLines(
+    "test",
+    "C:\\Users\\Marian\\Desktop\\analysisTEST\\test1.txt"
+  )
+
   # Set up Conda environment
   tryCatch(
     {
-      # Run Python code
+      # Run unidec with python
       reticulate::py_run_string(sprintf(
         '
 import sys
 import unidec
 import re
+import os
 
+# Parameters passed from R
+params = {%s}
+input_file = r"%s"
+result_dir = r"%s"
+      
 # Initialize UniDec engine
 engine = unidec.UniDec()
 
 # Convert Waters .raw to txt
-input_file = r"%s"
 engine.raw_process(input_file)
-txt_file = re.sub(r"\\.raw$", "_rawdata.txt", input_file)
-engine.open_file(txt_file)
+    
+# Move processed file to output directory
+txt_file = input_file.removesuffix(".raw") + "_rawdata.txt"
+output = os.path.join(result_dir, os.path.basename(txt_file))
+os.rename(txt_file, output)
 
-# Parameters passed from R
-params = {%s}
+# Make result directory
+engine.open_file(output)
 
 # Set configuration parameters
 engine.config.startz = params["startz"]
@@ -108,19 +123,26 @@ engine.process_data()
 engine.run_unidec()
 engine.pick_peaks()
 ',
+        params_string,
         input_path,
-        params_string
+        result_dir
       ))
 
       # Save spectra
-      result <- gsub(".raw", "_rawdata_unidecfiles", waters_dir)
+      result <- file.path(
+        result_dir,
+        gsub(".raw", "_rawdata_unidecfiles", basename(input_path))
+      )
 
       if (dir.exists(result)) {
         plots <- list(
-          decon_spec = spectrum_plot(result, FALSE),
-          raw_spec = spectrum_plot(result, TRUE)
+          decon_spec = spectrum_plot(result, raw = FALSE, interactive = FALSE),
+          raw_spec = spectrum_plot(result, raw = TRUE, interactive = FALSE)
         )
+
         saveRDS(plots, file.path(result, "plots.rds"))
+      } else {
+        stop()
       }
     },
     error = function(e) {
@@ -132,7 +154,8 @@ engine.pick_peaks()
 #' @export
 deconvolute <- function(
   raw_dirs,
-  num_cores = detectCores() - 1,
+  result_dir,
+  num_cores = detectCores() - 2,
   startz = 1,
   endz = 50,
   minmz = "",
@@ -146,63 +169,262 @@ deconvolute <- function(
   time_start = "",
   time_end = ""
 ) {
-  # List of all parameters to pass to workers
-  params_list <- list(
-    startz = startz,
-    endz = endz,
-    minmz = minmz,
-    maxmz = maxmz,
-    masslb = masslb,
-    massub = massub,
-    massbins = massbins,
-    peakthresh = peakthresh,
-    peakwindow = peakwindow,
-    peaknorm = peaknorm,
-    time_start = time_start,
-    time_end = time_end
-  )
-
   # Evaluate processing mode: parallel or sequential
   if (length(raw_dirs) > 20 && num_cores > 1) {
-    # Set up the cluster
-    cl <- parallel::makeCluster(num_cores)
-    on.exit(parallel::stopCluster(cl))
+    message("Initiating ", num_cores, " cores for parallel processing ...")
 
-    # Initialize workers
-    parallel::clusterEvalQ(cl, {
-      tryCatch(
-        {
-          reticulate::use_condaenv("kiwiflow", required = TRUE)
-          TRUE
-        },
-        error = function(e) FALSE
+    Sys.setenv(RENV_CONFIG_SYNCHRONIZED_CHECK = "FALSE")
+    on.exit(Sys.unsetenv("RENV_CONFIG_SYNCHRONIZED_CHECK"), add = TRUE)
+
+    # Validate Conda environment
+    library(reticulate)
+    if (!"kiwiflow" %in% conda_list()$name) {
+      stop(
+        "Conda environment 'kiwiflow' not found. Create it with conda_create('kiwiflow')."
       )
-    })
+    } else {
+      message("Conda environment 'kiwiflow' found.")
+    }
 
-    # Export only what's needed
-    parallel::clusterExport(cl, c("process_single_dir"), envir = environment())
+    # Create log directory and define outfile
+    outfile <- file.path(
+      Sys.getenv("USERPROFILE"),
+      "Documents",
+      "KiwiFlow",
+      "logs",
+      "last_cluster_log.txt"
+    )
+    writeLines(paste("Deconvolution Cluster Output", Sys.time()), outfile)
 
-    message(paste0("Using ", num_cores, " cores for parallel processing."))
+    # Set up the cluster
+    message("Inducing cluster ...")
+    cl <- parallel::makeCluster(num_cores, outfile = outfile)
+    on.exit(parallel::stopCluster(cl), add = TRUE)
+
+    # Initialize reticulate and Conda environment in each worker
+    message("Setting python environment for each worker ...")
+    invisible(capture.output(
+      {
+        clusterEvalQ(cl, {
+          library(reticulate)
+
+          # Create and set a unique temp dir for this worker to avoid Conda file conflicts
+          unique_temp_dir <- file.path(
+            tempdir(),
+            paste0("conda_worker_", Sys.getpid())
+          )
+          dir.create(unique_temp_dir, showWarnings = FALSE, recursive = TRUE)
+          Sys.setenv(TEMP = unique_temp_dir)
+          Sys.setenv(TMP = unique_temp_dir)
+
+          tryCatch(
+            {
+              use_condaenv("kiwiflow", required = TRUE)
+              NULL
+            },
+            error = function(e) {
+              message("Error in worker ", Sys.getpid(), ": ", e$message)
+              return(NULL)
+            }
+          )
+        })
+      },
+      type = "output"
+    ))
 
     # Create wrapper function that includes all parameters
     process_wrapper <- function(dir, params) {
       do.call(process_single_dir, c(list(waters_dir = dir), params))
     }
 
-    # Run parLapply with error handling
-    parallel::parLapply(cl, raw_dirs, function(dir) {
-      tryCatch(
-        {
-          process_wrapper(dir, params_list)
-        },
-        error = function(e) {
-          message("Error processing ", dir, ": ", e$message)
-          NULL
-        }
+    # List of all parameters to pass to workers
+    params_list <- list(
+      result_dir = result_dir,
+      startz = startz,
+      endz = endz,
+      minmz = minmz,
+      maxmz = maxmz,
+      masslb = masslb,
+      massub = massub,
+      massbins = massbins,
+      peakthresh = peakthresh,
+      peakwindow = peakwindow,
+      peaknorm = peaknorm,
+      time_start = time_start,
+      time_end = time_end
+    )
+
+    # Export environment
+    message("Passing functions and parameter to the workers ...")
+    parallel::clusterExport(
+      cl,
+      c(
+        "process_single_dir",
+        "spectrum_plot",
+        "process_wrapper",
+        "params_list"
+      ),
+      envir = environment()
+    )
+
+    # Run parLapply with error handling and collect results
+    message("Running parallel deconvolution ...")
+    results <- invisible(capture.output(
+      {
+        parallel::parLapply(cl, raw_dirs, function(dir) {
+          tryCatch(
+            {
+              process_wrapper(dir, params_list)
+            },
+            error = function(e) {
+              message("Error processing ", dir, ": ", e$message)
+              NULL
+            }
+          )
+        })
+      },
+      type = "output"
+    ))
+
+    message("Parallel processing finalized.")
+
+    # Check for errors in results
+    errors <- vapply(results, is.character, logical(1))
+    if (any(errors)) {
+      warning(
+        "Errors occurred in processing: ",
+        paste(results[errors], collapse = "; ")
       )
-    })
+    }
+    # Deavtivate redundant renv warnings
+    # Sys.setenv(RENV_CONFIG_SYNCHRONIZED_CHECK = "FALSE")
+
+    # # Define cluster output file for debugging
+    # outfile <- file.path(
+    #   Sys.getenv("USERPROFILE"),
+    #   "Documents",
+    #   "KiwiFlow",
+    #   "logs",
+    #   "last_cluster_log.txt"
+    # )
+
+    # # Set up the cluster
+    # cl <- parallel::makeCluster(
+    #   num_cores,
+    #   outfile = outfile
+    # )
+    # on.exit(parallel::stopCluster(cl))
+
+    # # Initialize reticulate and Conda environment in each worker
+    # invisible(capture.output(
+    #   {
+    #     clusterEvalQ(cl, {
+    #       library(reticulate)
+
+    #       # Create and set a unique temp dir for this worker to avoid Conda file conflicts
+    #       unique_temp_dir <- file.path(
+    #         tempdir(),
+    #         paste0("conda_worker_", Sys.getpid())
+    #       )
+    #       dir.create(unique_temp_dir, showWarnings = FALSE, recursive = TRUE)
+    #       Sys.setenv(TEMP = unique_temp_dir)
+    #       Sys.setenv(TMP = unique_temp_dir)
+
+    #       tryCatch(
+    #         {
+    #           use_condaenv("kiwiflow", required = TRUE)
+    #           NULL # Return NULL on success
+    #         },
+    #         error = function(e) {
+    #           message("Error in worker ", Sys.getpid(), ": ", e$message)
+    #           return(NULL)
+    #         }
+    #       )
+    #     })
+    #   },
+    #   type = "output"
+    # ))
+
+    # # Create wrapper function that includes all parameters
+    # process_wrapper <- function(dir, params) {
+    #   do.call(
+    #     process_single_dir,
+    #     c(list(waters_dir = dir), params)
+    #   )
+    # }
+
+    # # List of all parameters to pass to workers
+    # params_list <- list(
+    #   result_dir = result_dir,
+    #   startz = startz,
+    #   endz = endz,
+    #   minmz = minmz,
+    #   maxmz = maxmz,
+    #   masslb = masslb,
+    #   massub = massub,
+    #   massbins = massbins,
+    #   peakthresh = peakthresh,
+    #   peakwindow = peakwindow,
+    #   peaknorm = peaknorm,
+    #   time_start = time_start,
+    #   time_end = time_end
+    # )
+
+    # # Export environment
+    # parallel::clusterExport(
+    #   cl,
+    #   c(
+    #     "process_single_dir",
+    #     "spectrum_plot",
+    #     "process_wrapper",
+    #     "params_list"
+    #   ),
+    #   envir = environment()
+    # )
+
+    # message(paste0("Using ", num_cores, " cores for parallel processing."))
+
+    # # Run parLapply with error handling
+    # invisible(capture.output(
+    #   parallel::parLapply(cl, raw_dirs, function(dir) {
+    #     tryCatch(
+    #       {
+    #         process_wrapper(dir, params_list)
+    #       },
+    #       error = function(e) {
+    #         message("Error processing ", dir, ": ", e$message)
+    #         e$message
+    #       }
+    #     )
+    #   }),
+    #   type = "output"
+    # ))
+
+    # # Reenable renv warnings
+    # Sys.unsetenv("RENV_CONFIG_SYNCHRONIZED_CHECK")
   } else {
-    use_condaenv("kiwiflow", required = TRUE)
+    Sys.setenv(RENV_CONFIG_SYNCHRONIZED_CHECK = "FALSE")
+    on.exit(Sys.unsetenv("RENV_CONFIG_SYNCHRONIZED_CHECK"), add = TRUE)
+
+    # Validate Conda environment
+    library(reticulate)
+    if (!"kiwiflow" %in% conda_list()$name) {
+      stop(
+        "Conda environment 'kiwiflow' not found. Create it with conda_create('kiwiflow')."
+      )
+    } else {
+      message("Conda environment 'kiwiflow' found.")
+    }
+
+    tryCatch(
+      {
+        use_condaenv("kiwiflow", required = TRUE)
+      },
+      error = function(e) {
+        message("Error activating 'kiwiflow' environment: ", e$message)
+        return(NULL)
+      }
+    )
 
     message("Sequential processing started.")
     tryCatch(
@@ -210,6 +432,7 @@ deconvolute <- function(
         for (dir in seq_along(raw_dirs)) {
           process_single_dir(
             raw_dirs[dir],
+            result_dir,
             startz,
             endz,
             minmz,
@@ -224,6 +447,8 @@ deconvolute <- function(
             time_end
           )
         }
+
+        message("Sequential processing finalized.")
       },
       error = function(e) {
         message("Error in sequential processing for dir ", dir, ": ", e$message)
@@ -353,7 +578,8 @@ create_384_plate_heatmap <- function(data) {
         tickfont = list(size = 12),
         tickangle = 0
       ),
-      margin = list(t = 40, r = 60, b = 0, l = left),
+      # margin = list(t = 40, r = 60, b = 0, l = left),
+      margin = list(t = 0, r = 60, b = 0, l = left),
       plot_bgcolor = "white",
       paper_bgcolor = "white"
     ) |>
@@ -390,6 +616,7 @@ create_384_plate_heatmap <- function(data) {
   }
 }
 
+# Make spectrum plot interactively (plotly) or non-interactively (ggplot2)
 #' @export
 spectrum_plot <- function(
   result_path,
@@ -407,10 +634,10 @@ spectrum_plot <- function(
   }
 
   if (raw) {
-    mass <- fread(raw_file, sep = " ", col.names = c("V1", "V2"))
+    mass <- data.table::fread(raw_file, sep = " ", col.names = c("V1", "V2"))
     mass[, bin := floor(V1 / bin_width) * bin_width + bin_width / 2]
     mass <- mass[, .(V2 = sum(V2)), by = bin]
-    setnames(mass, "bin", "V1")
+    data.table::setnames(mass, "bin", "V1")
     mass$V2 <- (mass$V2 - min(mass$V2)) / (max(mass$V2) - min(mass$V2)) * 100
   } else {
     mass <- utils::read.delim(mass_file, sep = " ", header = FALSE)
@@ -488,8 +715,7 @@ spectrum_plot <- function(
         toImageButtonOptions = list(
           filename = paste0(Sys.Date(), "_", gsub("_rawdata", "", base), "_raw")
         )
-      ) |>
-      plotly::partial_bundle()
+      )
   } else {
     plot <- plotly::plot_ly(
       mass,
@@ -528,7 +754,7 @@ spectrum_plot <- function(
           tickcolor = "transparent"
         ),
         xaxis = list(title = "Mass [Da]", showgrid = TRUE, zeroline = FALSE),
-        margin = list(t = 0, r = 0, b = 0, l = 80),
+        margin = list(t = 0, r = 0, b = 0, l = 50),
         paper_bgcolor = "white",
         plot_bgcolor = "white"
       ) |>
@@ -551,8 +777,7 @@ spectrum_plot <- function(
             "_deconvoluted"
           )
         )
-      ) |>
-      plotly::partial_bundle()
+      )
   }
 
   return(plot)
@@ -564,7 +789,9 @@ generate_decon_rslt <- function(
   paths,
   log = NULL,
   output = NULL,
-  heatmap = NULL
+  heatmap = NULL,
+  result_dir,
+  temp_dir
 ) {
   # Optimized file reader function
   read_file_safe <- function(filename, col_names = NULL) {
@@ -660,19 +887,14 @@ generate_decon_rslt <- function(
     ))
   }
 
+  paths <- file.path(result_dir, basename(paths))
   results <- lapply(paths, process_path)
   names(results) <- basename(paths)
   results[["session"]] <- log
   results[["output"]] <- output
 
-  results_dir <- file.path(
-    Sys.getenv("USERPROFILE"),
-    "Documents",
-    "KiwiFlow",
-    "results"
-  )
-  if (file.exists(file.path(results_dir, "heatmap.rds"))) {
-    results[["heatmap"]] <- readRDS(file.path(results_dir, "heatmap.rds"))
+  if (file.exists(file.path(temp_dir, "heatmap.rds"))) {
+    results[["heatmap"]] <- readRDS(file.path(temp_dir, "heatmap.rds"))
   }
 
   return(results)

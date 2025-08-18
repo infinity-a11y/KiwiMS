@@ -5,8 +5,9 @@ box::use(
 )
 
 message("Initiating report generation ...")
-
+Sys.sleep(1)
 message("Setting render parameters ...")
+
 tryCatch(
   {
     args <- commandArgs(trailingOnly = TRUE)
@@ -15,12 +16,10 @@ tryCatch(
     decon_rep_desc <- gsub("%~%", " ", args[3])
     filename <- args[4]
     log_path <- args[5]
-    results_dir <- file.path(
-      Sys.getenv("USERPROFILE"),
-      "Documents",
-      "KiwiFlow",
-      "results"
-    )
+    results_dir <- args[6]
+    kiwiflow_version <- args[7]
+    kiwiflow_date <- args[8]
+    temp_dir <- args[9]
   },
   error = function(e) {
     message("Error setting render parameters: ", e$message)
@@ -28,8 +27,20 @@ tryCatch(
   }
 )
 
+result_file <-
+  file.path(
+    results_dir,
+    gsub(
+      ".log",
+      "_RESULT.rds",
+      basename(log_path)
+    )
+  )
+
+Sys.sleep(1)
 message("Started render engine ...")
-Sys.sleep(2)
+Sys.sleep(1)
+
 tryCatch(
   {
     quarto_render(
@@ -39,7 +50,11 @@ tryCatch(
         report_title = decon_rep_title,
         report_author = decon_rep_author,
         comment = decon_rep_desc,
-        result_path = results_dir
+        result_path = results_dir,
+        result_file = result_file,
+        version = kiwiflow_version,
+        date = kiwiflow_date,
+        temp_dir = temp_dir
       )
     )
   },
@@ -49,9 +64,9 @@ tryCatch(
   }
 )
 
-Sys.sleep(2)
+Sys.sleep(1)
 message("Saving report ...")
-Sys.sleep(2)
+Sys.sleep(1)
 
 tryCatch(
   {
@@ -61,7 +76,7 @@ tryCatch(
       basename(log_path)
     )
 
-    file.rename(from = filename, to = file.path(dirname(log_path), filename_id))
+    file.rename(from = filename, to = file.path(results_dir, filename_id))
   },
   error = function(e) {
     message("Error saving report: ", e$message)

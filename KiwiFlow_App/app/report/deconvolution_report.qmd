@@ -1,5 +1,6 @@
 ---
 title: "`r params$report_title`"
+subtitle: "KiwiFlow `r params$version`  -  Released `r params$date`"
 author: "`r params$report_author`"
 date: "`r Sys.Date()`"
 params:
@@ -7,6 +8,10 @@ params:
   report_author: ""
   comment: ""
   result_path: ""
+  result_file: ""
+  version: ""
+  date: ""
+  temp_dir: ""
 output:
   html_document:
     self_contained: true
@@ -75,7 +80,7 @@ format:
 #| include: false
 
 # Load the result list from RDS file
-result <- readRDS(file.path(params$result_path, "result.rds"))
+result <- readRDS(file.path(params$result_file))
 names_result <- names(result)[!names(result) %in% c("session", "output")]
 ```
 
@@ -212,8 +217,8 @@ cat("</details>")
 ```{r echo=FALSE, results="asis"}
 #| label: Heatmap
 
-if (file.exists(file.path(params$result_path, "heatmap.rds"))) {
-  heatmap <- readRDS(file.path(params$result_path, "heatmap.rds"))
+if (file.exists(file.path(params$temp_dir, "heatmap.rds"))) {
+  heatmap <- readRDS(file.path(params$temp_dir, "heatmap.rds"))
   htmltools::tagList(
   htmltools::div(
     style = "max-width: 65%;",
