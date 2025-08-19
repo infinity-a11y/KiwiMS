@@ -1418,9 +1418,6 @@ server <- function(id, dirs, reset_button) {
           if (isTRUE(reactVars$heatmap_ready)) {
             click_data <- event_data("plotly_click")
 
-            #TODO
-            waiter_show(id = ns("spectrum"), html = spin_wandering_cubes())
-
             if (!is.null(click_data)) {
               # Get the clicked point's row and column
               row <- LETTERS[16 - floor(click_data$y) + 1]
@@ -1461,12 +1458,6 @@ server <- function(id, dirs, reset_button) {
       delay(1000, show(selector = "#app-deconvolution_process-processing"))
 
       ### Render result spectrum
-
-      # TODO
-      # Reducing perceived waiting time by showing spinner on input change
-      shiny$observeEvent(input$toggle_result, {
-        waiter_show(id = ns("spectrum"), html = spin_wandering_cubes())
-      })
 
       # Define reactive helper variable to control spinner display
       allow_spinner_spectrum <- shiny$reactiveVal(TRUE)
