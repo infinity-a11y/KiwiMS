@@ -40,8 +40,11 @@ get_volumes <- function() {
   os <- Sys.info()['sysname']
 
   if (os == "Windows") {
-    # Get the list of drives using wmic
-    drives_raw <- system("wmic logicaldisk get caption", intern = TRUE)
+    # Use PowerShell with Get-CimInstance to get logical disk drives
+    drives_raw <- system(
+      "powershell -command \"Get-CimInstance Win32_LogicalDisk | Select-Object DeviceID | ForEach-Object { $_.DeviceID }\"",
+      intern = TRUE
+    )
 
     # Clean the output to get just the drive letters (e.g., "C:")
     drives_list <- drives_raw[drives_raw != ""]
