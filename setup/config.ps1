@@ -54,8 +54,10 @@ catch {
 
 # Move report files
 try {
-    mv "$basePath\app\report\*" $reportPath
-    Write-Host "Set up reports directory in Documents."
+    #mv "$basePath\app\report\*" $reportPath
+    $sourcePath = Join-Path $basePath "app\report\*"
+    Move-Item -Path $sourcePath -Destination $reportPath -Force -ErrorAction Stop
+    Write-Host "Set up reports directory in Documents."    
 }
 catch {
     Write-Host "Setting up reports directory in Documents failed."

@@ -69,11 +69,6 @@ process_single_dir <- function(
     format_param(time_end)
   )
 
-  writeLines(
-    "test",
-    "C:\\Users\\Marian\\Desktop\\analysisTEST\\test1.txt"
-  )
-
   # Set up Conda environment
   tryCatch(
     {
@@ -296,112 +291,6 @@ deconvolute <- function(
         paste(results[errors], collapse = "; ")
       )
     }
-    # Deavtivate redundant renv warnings
-    # Sys.setenv(RENV_CONFIG_SYNCHRONIZED_CHECK = "FALSE")
-
-    # # Define cluster output file for debugging
-    # outfile <- file.path(
-    #   Sys.getenv("USERPROFILE"),
-    #   "Documents",
-    #   "KiwiFlow",
-    #   "logs",
-    #   "last_cluster_log.txt"
-    # )
-
-    # # Set up the cluster
-    # cl <- parallel::makeCluster(
-    #   num_cores,
-    #   outfile = outfile
-    # )
-    # on.exit(parallel::stopCluster(cl))
-
-    # # Initialize reticulate and Conda environment in each worker
-    # invisible(capture.output(
-    #   {
-    #     clusterEvalQ(cl, {
-    #       library(reticulate)
-
-    #       # Create and set a unique temp dir for this worker to avoid Conda file conflicts
-    #       unique_temp_dir <- file.path(
-    #         tempdir(),
-    #         paste0("conda_worker_", Sys.getpid())
-    #       )
-    #       dir.create(unique_temp_dir, showWarnings = FALSE, recursive = TRUE)
-    #       Sys.setenv(TEMP = unique_temp_dir)
-    #       Sys.setenv(TMP = unique_temp_dir)
-
-    #       tryCatch(
-    #         {
-    #           use_condaenv("kiwiflow", required = TRUE)
-    #           NULL # Return NULL on success
-    #         },
-    #         error = function(e) {
-    #           message("Error in worker ", Sys.getpid(), ": ", e$message)
-    #           return(NULL)
-    #         }
-    #       )
-    #     })
-    #   },
-    #   type = "output"
-    # ))
-
-    # # Create wrapper function that includes all parameters
-    # process_wrapper <- function(dir, params) {
-    #   do.call(
-    #     process_single_dir,
-    #     c(list(waters_dir = dir), params)
-    #   )
-    # }
-
-    # # List of all parameters to pass to workers
-    # params_list <- list(
-    #   result_dir = result_dir,
-    #   startz = startz,
-    #   endz = endz,
-    #   minmz = minmz,
-    #   maxmz = maxmz,
-    #   masslb = masslb,
-    #   massub = massub,
-    #   massbins = massbins,
-    #   peakthresh = peakthresh,
-    #   peakwindow = peakwindow,
-    #   peaknorm = peaknorm,
-    #   time_start = time_start,
-    #   time_end = time_end
-    # )
-
-    # # Export environment
-    # parallel::clusterExport(
-    #   cl,
-    #   c(
-    #     "process_single_dir",
-    #     "spectrum_plot",
-    #     "process_wrapper",
-    #     "params_list"
-    #   ),
-    #   envir = environment()
-    # )
-
-    # message(paste0("Using ", num_cores, " cores for parallel processing."))
-
-    # # Run parLapply with error handling
-    # invisible(capture.output(
-    #   parallel::parLapply(cl, raw_dirs, function(dir) {
-    #     tryCatch(
-    #       {
-    #         process_wrapper(dir, params_list)
-    #       },
-    #       error = function(e) {
-    #         message("Error processing ", dir, ": ", e$message)
-    #         e$message
-    #       }
-    #     )
-    #   }),
-    #   type = "output"
-    # ))
-
-    # # Reenable renv warnings
-    # Sys.unsetenv("RENV_CONFIG_SYNCHRONIZED_CHECK")
   } else {
     Sys.setenv(RENV_CONFIG_SYNCHRONIZED_CHECK = "FALSE")
     on.exit(Sys.unsetenv("RENV_CONFIG_SYNCHRONIZED_CHECK"), add = TRUE)
@@ -426,7 +315,7 @@ deconvolute <- function(
       }
     )
 
-    message("Sequential processing started.")
+    message("Sequential processing started ...")
     tryCatch(
       {
         for (dir in seq_along(raw_dirs)) {
