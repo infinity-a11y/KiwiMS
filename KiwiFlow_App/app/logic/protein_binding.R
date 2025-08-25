@@ -1,4 +1,4 @@
-# Define reuslt path
+# Define result path
 result <- "C:\\Users\\marian\\Desktop\\VALB0008_VALX+BAY-6666666_1_1_rawdata_unidecfiles"
 
 # Read peaks.dat file
@@ -70,6 +70,8 @@ add_peak_tolerance <- function(peak_mass, tolerance = 1) {
 peaks_tolerance <- add_peak_tolerance(peaks$mass)
 
 check_hits <- function(masses, peaks) {
+  # Include option for "Favored Match" parameter, see config example files
+
   # Check argument validity
   if (length(masses) == 0) {
     warning("Zero length masses mw.")
