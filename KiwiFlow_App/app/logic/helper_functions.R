@@ -5,7 +5,6 @@ box::use(
   ggplot2,
   grid[gpar, grid.text, unit],
   httr[add_headers, content, GET, status_code],
-  maditr[dcast],
   minpack.lm[nlsLM],
   plyr[ddply, rename],
   shiny[div, icon, NS, span],
@@ -237,11 +236,12 @@ kobs_matrix <- function(kobs_input, units, tmp_dir) {
     row.names = FALSE,
     quote = FALSE
   )
-  kobs_matrix_final <- dcast(
-    kobs_matrix,
-    formula = sample ~ conc,
-    value.var = "kobs"
-  )
+  # maditr function maditr::dcast() not compatible with project due to license incompatibilities (GPL-2 only)
+  # kobs_matrix_final <- dcast(
+  #   kobs_matrix,
+  #   formula = sample ~ conc,
+  #   value.var = "kobs"
+  # )
   replace_colnames <- paste0(
     "concentration ",
     colnames(kobs_matrix_final)[2:ncol(kobs_matrix_final)]
