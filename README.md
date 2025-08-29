@@ -2,7 +2,10 @@
 
 KiwiFlow is an interactive pipeline with graphical user interface to perform proteomics mass spectrometry data analysis. It implements UniDec's (https://github.com/michaelmarty/UniDec) bayesian mass spectra deconvolution method and provides downstream analyses for protein binding studies.  
 
-![Windows](https://img.shields.io/badge/Windows-339033?style=flat&logo=windows&logoColor=white)  [![Version](https://img.shields.io/badge/Version-0.2.0-E8CB98)](https://github.com/infinity-a11y/KiwiFlow/releases/tag/0.2.0)  [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.16575977.svg)](https://doi.org/10.5281/zenodo.16575976)
+![Windows](https://img.shields.io/badge/Windows-339033?style=flat&logo=windows&logoColor=white)
+[![Version](https://img.shields.io/badge/Version-0.2.0-E8CB98)](https://github.com/infinity-a11y/KiwiFlow/releases/tag/0.2.0)
+[![License: GPLv3](https://img.shields.io/badge/License-GPLv3-659DA3.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.16575977.svg)](https://doi.org/10.5281/zenodo.16575976)
 
 <sup>*_KiwiFlow is supposed to be used for research and academic purposes only._*</sup>
 
