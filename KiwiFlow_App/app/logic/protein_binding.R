@@ -1,23 +1,32 @@
 ### Script collecting all functions related to calculate protein binding per sample
 
 # Read in file containing the peaks picked from spectrum
-get_peaks <- function(peak_file) {
-  # Check if path valid
-  if (!file.exists(peak_file)) {
-    warning("File does not exist.")
-    return(NULL)
-  }
-
-  # Read peaks.dat file
-  tryCatch(
-    {
-      peaks <- read.delim(peak_file, header = F, sep = " ")
-    },
-    error = function(e) {
-      warning("Error reading peaks file: ", e$message)
+get_peaks <- function(peak_file = NULL, result_sample, results) {
+  if (
+    is.null(peak_file) &
+      is.character(result_sample) &
+      is.list(results)
+  ) {
+    result_sample == names(results)
+    peaks <- results[[which(result_sample == names(results))]]$peaks
+  } else {
+    # Check if path valid
+    if (!file.exists(peak_file)) {
+      warning("File does not exist.")
       return(NULL)
     }
-  )
+
+    # Read peaks.dat file
+    tryCatch(
+      {
+        peaks <- read.delim(peak_file, header = F, sep = " ")
+      },
+      error = function(e) {
+        warning("Error reading peaks file: ", e$message)
+        return(NULL)
+      }
+    )
+  }
 
   # Check if data frame valid
   if (ncol(peaks) < 2) {
@@ -56,8 +65,7 @@ get_peaks <- function(peak_file) {
     " Da and intensities ranging from ",
     min(peaks$intensity),
     " to ",
-    max(peaks$intensity),
-    "."
+    max(peaks$intensity)
   )
 
   return(peaks)
@@ -204,134 +212,6 @@ add_compound_mw <- function(protein_mw, compound_mw, tolerance = 1) {
   return(protein_mw)
 }
 
-# Workflow
-peaks <- get_peaks(
-  peak_file = "C:\\Users\\Marian\\Desktop\\KF_Testing\\new_results\\2025-08-12_RACA+P1-10_20250731_50_1h_01_rawdata_unidecfiles\\2025-08-12_RACA+P1-10_20250731_50_1h_01_rawdata_peaks.dat"
-)
-
-protein_mw <- get_protein_mw(
-  mw_file = "C:\\Users\\Marian\\Desktop\\KF_Testing\\HiDrive-2025-09-04_New-Test-data\\RACA_Mw.txt"
-)
-
-compound_mw <- get_compound_matrix(
-  compound_file = "C:\\Users\\Marian\\Desktop\\KF_Testing\\HiDrive-2025-09-04_New-Test-data\\Molecular-weight-list.txt"
-)
-
-# protein_mw <- add_compound_mw(
-#   protein_mw = protein_mw,
-#   compound_mw = compound_mw
-# )
-
-# check_hits <- function(protein_mw, peaks) {
-#   #TODO Include option for "Favored Match" parameter, see config example files
-
-#   # Check complex_mw
-#   if (!is.list(protein_mw) && length(protein_mw)) {
-#     warning("'complex_mw' needs to be a non-empty list object.")
-#     return(NULL)
-#   }
-
-#   # Check peaks
-#   if (!is.data.frame(peaks) && nrow(peaks)) {
-#     warning("'peaks' needs to be a non-empty data frame object.")
-#     return(NULL)
-#   } else if (ncol(peaks) != 2) {
-#     warning(
-#       "'peaks' does not have the expected mass and intensity variables."
-#     )
-#     return(NULL)
-#   } else if (!all(sapply(peaks, class) == "numeric")) {
-#     warning(
-#       "Wrong data type(s) in 'peaks' detected: ",
-#       paste(sapply(peaks, class), collapse = ", "),
-#       ". Only numeric is allowed."
-#     )
-#     return(NULL)
-#   }
-
-#   for (protein in seq_along(names(protein_mw))) {
-#     for (variant in 2:(length(protein_mw[[protein]]))) {
-#       protein_mw[["RACA"]][[variant]][["lower"]]
-#       protein_mw[["RACA"]][[variant]][["upper"]]
-
-#       hits_df <- data.frame()
-#       for (i in 1:nrow(peaks)) {
-#         hits <- peaks$mass[1] >= protein_mw[["RACA"]][[variant]][["lower"]] &
-#           peaks$mass[1] <= protein_mw[["RACA"]][[variant]][["upper"]]
-
-#         if (any(hits, na.rm = TRUE)) {
-#           which(hits, na.rm = TRUE)
-#         }
-#       }
-
-#       # Initially NA for peak mass values
-#       lower_range <- NA
-#       upper_range <- NA
-#       hits <- 0
-
-#       # Check if hits in tolerance range
-#       hits <- masses[[i]][j] >= lower & masses[[i]][j] <= upper
-
-#       if (any(hits)) {
-#         if (!sum(hits) > 1) {
-#           lower_range <- lower[which(hits)]
-#           upper_range <- upper[which(hits)]
-#         }
-#       }
-
-#       protein_mw[["RACA"]][[variant]][["hits"]] <- data.frame(
-#         mass = masses[[i]],
-#         n_hits = sum(hits),
-#         lower = lower_range,
-#         upper = upper_range
-#       )
-#     }
-#   }
-
-#   # Declare lower and upper peak tolerance values
-#   # if (length(peaks) == 2) {
-#   #   lower <- peaks[[1]]
-#   #   upper <- peaks[[2]]
-#   # } else if (length(peaks) == 1) {
-#   #   upper <- lower <- peaks[[1]]
-#   # } else {
-#   #   warning("Invalid peak list length.")
-#   #   return(NULL)
-#   # }
-
-#   # hit_list <- list()
-
-#   # for (i in seq_along(names(masses))) {
-#   #   for (j in seq_along(masses[[i]])) {
-#   #     # Initially NA for peak mass values
-#   #     lower_range <- NA
-#   #     upper_range <- NA
-#   #     hits <- 0
-
-#   #     # Check if hits in tolerance range
-#   #     hits <- masses[[i]][j] >= lower & masses[[i]][j] <= upper
-
-#   #     if (any(hits)) {
-#   #       if (!sum(hits) > 1) {
-#   #         lower_range <- lower[which(hits)]
-#   #         upper_range <- upper[which(hits)]
-#   #       }
-#   #     }
-#   #   }
-
-#   #   hit_df <- data.frame(
-#   #     mass = masses[[i]],
-#   #     n_hits = sum(hits),
-#   #     lower = lower_range,
-#   #     upper = upper_range
-#   #   )
-
-#   #   hit_list[[names(masses)[i]]] <- hit_df
-#   # }
-
-#   # return(hit_list)
-# }
-
 check_hits <- function(
   protein_mw,
   compound_mw,
@@ -342,37 +222,92 @@ check_hits <- function(
   # Keep only peaks above protein mw
   peaks_valid <- peaks$mass >= protein_mw - peak_tolerance
   if (!any(peaks_valid)) {
-    warning("No peaks are detecting the protein.")
+    warning("No protein peak detected.")
     return(NULL)
   }
-
   peaks_filtered <- peaks[peaks_valid, ]
 
-  # Make compound matrix multiples
-  mat <- compound_mw
-  for (i in 2:max_multiples) {
-    multiple <- compound_mw * i
-    colnames(multiple) <- paste0(colnames(multiple), "*", i)
-
-    mat <- cbind(mat, multiple)
+  # Fill multiples matrix
+  for (i in 1:max_multiples) {
+    if (i == 1) {
+      mat <- compound_mw * i
+      colnames(mat) <- paste0(colnames(compound_mw), "*", i)
+    } else {
+      multiple <- compound_mw * i
+      colnames(multiple) <- paste0(colnames(multiple), "*", i)
+      mat <- cbind(mat, multiple)
+    }
   }
+  # Addition of protein mw with multiples matrix
+  complex_mat <- mat + protein_mw
 
+  # Prepare empy hits_df
+  hits_df <- data.frame(
+    peak = numeric(),
+    intensity = numeric(),
+    compound = character(),
+    cmp_mass = character(),
+    multiple = integer()
+  )
+
+  # Fill hits_df
   for (j in 1:nrow(peaks_filtered)) {
     upper <- peaks_filtered$mass[j] + peak_tolerance
     lower <- peaks_filtered$mass[j] - peak_tolerance
 
-    hits <- mat >= lower & mat <= upper
+    hits <- complex_mat >= lower & complex_mat <= upper
 
     if (any(hits, na.rm = TRUE)) {
-      print("YES")
+      indices <- which(hits, arr.ind = TRUE)
+      indices <- indices[order(rownames(indices)), ]
+
+      for (k in 1:nrow(indices)) {
+        multiple <- as.numeric(sub(".*\\*", "", colnames(hits)[k]))
+
+        hits_add <- data.frame(
+          peak = peaks_filtered[j, "mass"],
+          intensity = peaks_filtered[j, "intensity"],
+          compound = rownames(indices)[k],
+          cmp_mass = mat[indices[k, 1], indices[k, 2]],
+          multiple = multiple
+        )
+
+        hits_df <- rbind(hits_df, hits_add)
+      }
     }
   }
+
+  return(hits_df)
 }
 
-# protein_hits <- check_hits(protein_mw, peaks_tolerance)
-# compound_hits <- check_hits(compound_mw, peaks_tolerance)
-# complex_hits <- check_hits(complex_mw, peaks_tolerance)
+get_result_hits <- function(
+  results,
+  protein_mw_file,
+  compound_mw_file,
+  peak_tolerance,
+  max_multiples
+) {
+  samples <- head(names(results), -2)
+  protein_mw <- get_protein_mw(protein_mw_file)
+  compound_mw <- get_compound_matrix(compound_mw_file)
 
+  for (i in seq_along(samples)) {
+    message("Checking hits for ", samples[i])
+    results[[samples[i]]][["hits"]] <- check_hits(
+      protein_mw = protein_mw,
+      compound_mw = compound_mw,
+      peaks = get_peaks(result_sample = samples[i], results = results),
+      peak_tolerance = peak_tolerance,
+      max_multiples = max_multiples
+    )
+
+    message(nrow(results[[samples[i]]][["hits"]]), " hit(s) found in peaks")
+  }
+
+  return(results)
+}
+
+###################################################
 # intensitäten aufsummieren -> 100 %
 # prot signal intenstität (einzeln) / gesamtintensität
 
