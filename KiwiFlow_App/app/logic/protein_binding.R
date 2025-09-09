@@ -1,5 +1,7 @@
 ### Script collecting all functions related to calculate protein binding per sample
 
+warning_sym <- "\u26A0"
+
 # Read in file containing the peaks picked from spectrum
 get_peaks <- function(peak_file = NULL, result_sample, results) {
   if (
@@ -57,6 +59,7 @@ get_peaks <- function(peak_file = NULL, result_sample, results) {
 
   # Message information
   message(
+    "-> ",
     nrow(peaks),
     " mass peaks detected ranging from ",
     min(peaks$mass),
@@ -84,9 +87,9 @@ get_protein_mw <- function(mw_file) {
 
   if (length(protein_mw)) {
     message(
-      "Protein Mw file contains ",
+      "-> Protein Mw file contains ",
       length(protein_mw),
-      " molecular weight value(s)."
+      " molecular weight value(s)"
     )
   } else {
     warning("Protein Mw file is empty")
@@ -162,54 +165,13 @@ get_compound_matrix <- function(compound_file) {
 
   # Inform comopund list dimensions
   message(
+    "-> ",
     nrow(compounds),
     " compounds with up to ",
     ncol(compounds) - 1,
-    " mass shifts imported."
+    " mass shifts imported"
   )
   return(compounds_matrix)
-}
-
-# Fill out all possible complex mw
-add_compound_mw <- function(protein_mw, compound_mw, tolerance = 1) {
-  # Check protein_mw
-  if (!is.list(protein_mw) && length(protein_mw)) {
-    warning("'protein_mw' needs to be a non-empty list object.")
-    return(NULL)
-  }
-
-  # Check compound_mw
-  if (!is.data.frame(compound_mw) && length(compound_mw)) {
-    warning("'protein_mw' needs to be a non-empty data frame.")
-    return(NULL)
-  }
-
-  # Check tolerance
-  if (tolerance <= 0) {
-    warning("Tolerance can not be zero or negative.")
-    return(NULL)
-  }
-
-  # Extend protein list with complex mw data frame
-  for (protein in seq_along(names(protein_mw))) {
-    for (prot_variant in 1:length(protein_mw[[protein]]$MolWeightDa)) {
-      variant_name <- paste0(names(protein_mw)[protein], "_", prot_variant)
-
-      protein_mw[[protein]][[variant_name]] <- list()
-
-      # Add protein Mw to compound Mw's
-      complex_mw <- compound_mw[, -compound] +
-        protein_mw[[protein]]$MolWeightDa[prot_variant]
-
-      upper <- complex_mw + tolerance
-      lower <- complex_mw - tolerance
-      rownames(lower) <- rownames(upper) <- compound_mw$compound
-      protein_mw[[protein]][[variant_name]] <- complex_mw
-    }
-  }
-
-  message("Added compound masses to ", length(protein_mw), " protein(s).")
-  return(protein_mw)
 }
 
 check_hits <- function(
@@ -219,13 +181,24 @@ check_hits <- function(
   peak_tolerance = 2,
   max_multiples = 4
 ) {
-  # Keep only peaks above protein mw
-  peaks_valid <- peaks$mass >= protein_mw - peak_tolerance
-  if (!any(peaks_valid)) {
-    warning("No protein peak detected.")
+  # Find protein peak
+  protein_peak <- peaks$mass >= protein_mw - peak_tolerance &
+    peaks$mass <= protein_mw + peak_tolerance
+
+  # Abort if peaks show invalid peaks
+  if (!any(protein_peak)) {
+    message(warning_sym, " No protein peak detected")
     return(NULL)
   }
-  peaks_filtered <- peaks[peaks_valid, ]
+
+  # Keep only peaks above protein mw
+  peaks_valid <- peaks$mass >= protein_mw - peak_tolerance
+  if (any(peaks_valid) && sum(peaks_valid) > 1) {
+    peaks_filtered <- as.data.frame(peaks[peaks_valid, ])
+  } else {
+    message(warning_sym, " No peaks other than the protein were detected")
+    return(NULL)
+  }
 
   # Fill multiples matrix
   for (i in 1:max_multiples) {
@@ -238,16 +211,17 @@ check_hits <- function(
       mat <- cbind(mat, multiple)
     }
   }
+
   # Addition of protein mw with multiples matrix
   complex_mat <- mat + protein_mw
 
   # Prepare empy hits_df
   hits_df <- data.frame(
-    peak = numeric(),
-    intensity = numeric(),
-    compound = character(),
-    cmp_mass = character(),
-    multiple = integer()
+    peak = peaks$mass[which(protein_peak)],
+    intensity = peaks$intensity[which(protein_peak)],
+    compound = "Protein",
+    cmp_mass = as.character(protein_mw),
+    multiple = as.integer(1)
   )
 
   # Fill hits_df
@@ -262,13 +236,19 @@ check_hits <- function(
       indices <- indices[order(rownames(indices)), ]
 
       for (k in 1:nrow(indices)) {
-        multiple <- as.numeric(sub(".*\\*", "", colnames(hits)[k]))
+        # Retrieve compound mass from hit on complex
+        multiple <- as.integer(sub(".*\\*", "", colnames(hits)[indices[k, 2]]))
+        cmp_mass <- mat[
+          indices[k, 1],
+          indices[k, 2] - (ncol(hits) / max_multiples) * (multiple - 1)
+        ]
 
+        # Construct new entry for hits_df data frame
         hits_add <- data.frame(
           peak = peaks_filtered[j, "mass"],
           intensity = peaks_filtered[j, "intensity"],
           compound = rownames(indices)[k],
-          cmp_mass = mat[indices[k, 1], indices[k, 2]],
+          cmp_mass = cmp_mass,
           multiple = multiple
         )
 
@@ -277,7 +257,93 @@ check_hits <- function(
     }
   }
 
+  message("-> ", nrow(hits_df) - 1, " hits detected.")
   return(hits_df)
+}
+
+###################################################
+# intensitäten aufsummieren -> 100 %
+# prot signal intenstität (einzeln) / gesamtintensität
+
+# Compounds
+# 1. Unterschiedliche massenshifts
+# 2. multiple bindungen -> vielfache von compound MW (! jeweils pro massenshift)
+
+# Protein MW = 1000
+# Compound MW = 10|11
+
+conversion <- function(hits) {
+  # Check 'hits' argument validity
+  if (!is.data.frame(hits) || nrow(hits) < 2) {
+    message(
+      warning_sym,
+      " 'hits' argument has to be a data frame with at least two rows"
+    )
+    return(NULL)
+  } else if (ncol(hits) != 5) {
+    message(
+      warning_sym,
+      " 'hits' data frame has ",
+      ncol(hits),
+      " columns, but five are required."
+    )
+    return(NULL)
+  }
+
+  # Peaks: 1000(IA), 1010(IB), 1020(IC), 1011(ID)
+  # Peaks are in hits data frame
+
+  # Gesamtintensität: IA + IB + IC + ID = Itotal
+  I_total <- sum(unique(hits$intensity))
+  message("-> Total intensity = ", I_total)
+
+  # nicht umgesetztes / ungebundenes Protein: IA / Itotal * 100
+
+  # %BinIB = IB / Itotal * 100
+  # %BinIC = IC / Itotal * 100
+  # usw ....
+
+  # %Bintotal = %BinIB + %BinIC + %BinID  (alles was nicht freies Prot ist)
+
+  # Adding %Binding values to hit data frame
+  hits <- hits |>
+    dplyr::mutate(
+      `%binding` = intensity / I_total
+    )
+  hits <- hits |>
+    dplyr::mutate(
+      `%binding_tot` = sum(tail(unique(hits$`%binding`), -1))
+    )
+
+  # Plausibilitätscheck check result < 100 - richtig so?
+  total_relBinding <- hits$`%binding_tot`[1] + hits$`%binding`[1]
+  if (!all.equal(total_relBinding, 1)) {
+    message(
+      warning_sym,
+      " total relative binding is not 100%."
+    )
+    return(NULL)
+  }
+
+  # Inform unbound protein intensity
+  message(
+    "-> Unbound protein intensity = ",
+    hits$intensity[1],
+    " (",
+    scales::label_percent(accuracy = 0.1)(hits$`%binding`[1]),
+    ")"
+  )
+
+  # Inform %binding except protein
+  message(
+    "-> Total binding compounds intensity = ",
+    sum(tail(unique(hits$intensity), -1)),
+    " (",
+    scales::label_percent(accuracy = 0.1)(hits$`%binding_tot`[1]),
+    ")"
+  )
+
+  return(hits)
 }
 
 get_result_hits <- function(
@@ -292,7 +358,7 @@ get_result_hits <- function(
   compound_mw <- get_compound_matrix(compound_mw_file)
 
   for (i in seq_along(samples)) {
-    message("Checking hits for ", samples[i])
+    message("### Checking hits for ", samples[i])
     results[[samples[i]]][["hits"]] <- check_hits(
       protein_mw = protein_mw,
       compound_mw = compound_mw,
@@ -301,32 +367,28 @@ get_result_hits <- function(
       max_multiples = max_multiples
     )
 
-    message(nrow(results[[samples[i]]][["hits"]]), " hit(s) found in peaks")
+    results[[samples[i]]][["hits"]] <- conversion(results[[samples[i]]][[
+      "hits"
+    ]])
   }
 
+  message("Search for hits in ", length(samples), " samples completed.")
   return(results)
 }
 
-###################################################
-# intensitäten aufsummieren -> 100 %
-# prot signal intenstität (einzeln) / gesamtintensität
+###########
+# Testing #
+###########
 
-# Compounds
-# 1. Unterschiedliche massenshifts
-# 2. multiple bindungen -> vielfache von compound MW (! jeweils pro massenshift)
+result_path <- "C:\\Users\\Marian\\Desktop\\KF_Testing"
 
-# Protein MW = 1000
-# Compound MW = 10|11
+# Read from rds
+results <- readRDS(list.files(result_path, full.names = TRUE, pattern = "rds"))
 
-# Peaks: 1000(IA), 1010(IB), 1020(IC), 1011(ID)
-
-# Gesamtintensität: IA + IB + IC + ID = Itotal
-
-# nicht umgesetztes / ungebundenes Protein: IA / Itotal * 100
-# Plausibilitätscheck check result < 100
-
-# %BinIB = IB / Itotal * 100
-# %BinIC = IC / Itotal * 100
-# usw ....
-#
-# %Bintotal = %BinIB + %BinIC + %BinID  (alles was nicht freies Prot ist)
+results_with_hits <- get_result_hits(
+  results = results,
+  protein_mw_file = "C:\\Users\\Marian\\Desktop\\KF_Testing\\HiDrive-2025-09-04_New-Test-data\\RACA_Mw.txt",
+  compound_mw_file = "C:\\Users\\Marian\\Desktop\\KF_Testing\\HiDrive-2025-09-04_New-Test-data\\Molecular-weight-list.txt",
+  peak_tolerance = 3,
+  max_multiples = 8
+)
