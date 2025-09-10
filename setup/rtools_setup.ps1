@@ -13,7 +13,7 @@ $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
 # Start logging transcript to the specified log file
-Start-Transcript -Path $logFile -Append
+Start-Transcript -Path $logFile -Append | Out-Null
 
 Write-Host "### Rtools setup (rtools_setup.ps1)"
 
@@ -72,5 +72,5 @@ try {
 }
 catch {
     Write-Host "Failed to ensure Rtools installation. Error: $($_.Exception.Message)"
-    Exit 1
+    exit 1
 }
