@@ -13,7 +13,9 @@ $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
 # Start logging
-Start-Transcript -Path $logFile -Append
+Start-Transcript -Path $logFile -Append | Out-Null
+
+Write-Host "### Miniconda setup (miniconda_installer.ps1)"
 
 Write-Host "basePath: $basePath"
 Write-Host "userDataPath: $userDataPath"

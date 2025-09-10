@@ -178,8 +178,8 @@ check_hits <- function(
   protein_mw,
   compound_mw,
   peaks,
-  peak_tolerance = 2,
-  max_multiples = 4
+  peak_tolerance,
+  max_multiples
 ) {
   # Find protein peak
   protein_peak <- peaks$mass >= protein_mw - peak_tolerance &
@@ -390,5 +390,5 @@ results_with_hits <- get_result_hits(
   protein_mw_file = "C:\\Users\\Marian\\Desktop\\KF_Testing\\HiDrive-2025-09-04_New-Test-data\\RACA_Mw.txt",
   compound_mw_file = "C:\\Users\\Marian\\Desktop\\KF_Testing\\HiDrive-2025-09-04_New-Test-data\\Molecular-weight-list.txt",
   peak_tolerance = 3,
-  max_multiples = 8
+  max_multiples = 4
 )

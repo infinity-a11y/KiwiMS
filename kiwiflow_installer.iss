@@ -29,6 +29,7 @@ Source: "setup\config.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\functions.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\miniconda_installer.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\conda_env.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
+Source: "setup\rtools_setup.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\install_renv.R"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\renv_install.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\setup_renv.R"; DestDir: "{app}"; Flags: deleteafterinstall
@@ -56,6 +57,7 @@ Source: "setup\favicon.ico"; DestDir: "{app}"; Flags: ignoreversion
 StatusMsg_Configuring=Configuring setup...
 StatusMsg_InstallMiniconda=Installing Miniconda (Python Environment)...
 StatusMsg_SetupCondaEnv=Setting up Conda Environment...
+StatusMsg_SetupRtools=Setting up rtools44...
 StatusMsg_InstallRenv=Installing renv package (R environment setup phase 1/2)...
 StatusMsg_RestoreRenv=Restoring R packages (renv environment setup phase 2/2)...
 StatusMsg_InstallQuarto=Installing Quarto...
@@ -67,6 +69,7 @@ Description_Launch=Launch KiwiFlow
 de.StatusMsg_Configuring=Setup wird konfiguriert...
 de.StatusMsg_InstallMiniconda=Miniconda wird installiert (Python Umgebung)...
 de.StatusMsg_SetupCondaEnv=Conda Umgebung wird eingerichtet...
+de.StatusMsg_SetupRtools=Installiere rtools44...
 de.StatusMsg_InstallRenv=renv Paket wird installiert (R Umgebung Einrichtung Phase 1/2)...
 de.StatusMsg_RestoreRenv=R-Pakete werden wiederhergestellt (renv Umgebung Einrichtung Phase 2/2)...
 de.StatusMsg_InstallQuarto=Quarto wird installiert...
@@ -84,19 +87,22 @@ Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\c
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\miniconda_installer.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "{cm:StatusMsg_InstallMiniconda}"; Flags: runhidden shellexec waituntilterminated; AfterInstall: UpdateProgress(20);
 
 ; 2. Setup Conda Environment
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\conda_env.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "{cm:StatusMsg_SetupCondaEnv}"; Flags: runhidden shellexec waituntilterminated; AfterInstall: UpdateProgress(45);
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\conda_env.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "{cm:StatusMsg_SetupCondaEnv}"; Flags: runhidden shellexec waituntilterminated; AfterInstall: UpdateProgress(40);
 
-; 3. Install R Packages
-; 3a. Install renv package
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\renv_install.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "{cm:StatusMsg_InstallRenv}"; Flags: shellexec waituntilterminated runhidden; AfterInstall: UpdateProgress(50);
+; 2. Setup Conda Environment
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\rtools_setup.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "{cm:StatusMsg_SetupRtools}"; Flags: runhidden shellexec waituntilterminated; AfterInstall: UpdateProgress(55);
 
-; 3b. Restore renv environment
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\renv_setup.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "{cm:StatusMsg_RestoreRenv}"; Flags: shellexec waituntilterminated runhidden; AfterInstall: UpdateProgress(75);
+; 4. Install R Packages
+; 4a. Install renv package
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\renv_install.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "{cm:StatusMsg_InstallRenv}"; Flags: shellexec waituntilterminated runhidden; AfterInstall: UpdateProgress(60);
 
-; 4. Install Quarto
+; 4b. Restore renv environment
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\renv_setup.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "{cm:StatusMsg_RestoreRenv}"; Flags: shellexec waituntilterminated runhidden; AfterInstall: UpdateProgress(85);
+
+; 5. Install Quarto
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\quarto_install.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "{cm:StatusMsg_InstallQuarto}"; Flags: shellexec waituntilterminated runhidden; AfterInstall: UpdateProgress(95);
 
-; 5. Summarize setup
+; 6. Summarize setup
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\summarize_setup.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "{cm:StatusMsg_SummarizeSetup}"; Flags: shellexec waituntilterminated runhidden; AfterInstall: UpdateProgress(100);
 
 ; After all steps, potentially launch the app or show info
