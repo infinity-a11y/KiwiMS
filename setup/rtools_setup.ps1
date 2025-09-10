@@ -1,5 +1,3 @@
-# install_rtools.ps1
-
 #-----------------------------#
 # Script Initialization
 #-----------------------------#
@@ -16,6 +14,8 @@ $ProgressPreference = "SilentlyContinue"
 
 # Start logging transcript to the specified log file
 Start-Transcript -Path $logFile -Append
+
+Write-Host "### Rtools setup (rtools_setup.ps1)"
 
 Write-Host "basePath: $basePath"
 Write-Host "userDataPath: $userDataPath"
