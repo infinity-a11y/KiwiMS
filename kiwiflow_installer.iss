@@ -18,6 +18,7 @@ WizardSmallImageFile=setup\kiwiflow_small.bmp
 WizardStyle=modern
 AlwaysShowDirOnReadyPage=yes
 CloseApplications=yes
+RestartIfNeededByRun=no
 
 [Languages]
 Name: "en"; MessagesFile: "compiler:Default.isl"
