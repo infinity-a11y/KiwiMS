@@ -1,7 +1,7 @@
 [Setup]
 AppName=KiwiFlow
 AppId=KiwiFlow
-AppVersion=0.2.0
+AppVersion=0.2.1
 AppPublisher=Marian Freisleben
 DefaultDirName={autopf}\KiwiFlow
 DisableDirPage=yes
@@ -18,7 +18,6 @@ WizardSmallImageFile=setup\kiwiflow_small.bmp
 WizardStyle=modern
 AlwaysShowDirOnReadyPage=yes
 CloseApplications=yes
-RestartIfNeededByRun=no
 
 [Languages]
 Name: "en"; MessagesFile: "compiler:Default.isl"
