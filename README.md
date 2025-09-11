@@ -16,7 +16,7 @@ KiwiFlow is an interactive pipeline with graphical user interface to perform pro
 <br>
 <b>KiwiFlow 0.2.1 - Robustified Installation</b>
 <br>
-[https://github.com/infinity-a11y/KiwiFlow/releases/tag/0.2.0](https://github.com/infinity-a11y/KiwiFlow/releases/tag/0.2.1)
+[https://github.com/infinity-a11y/KiwiFlow/releases/tag/0.2.1](https://github.com/infinity-a11y/KiwiFlow/releases/tag/0.2.1)
 
 <br><hr><br>
 
