@@ -1,6 +1,32 @@
 ### Script collecting all functions related to calculate protein binding per sample
 
+# Get unicode character for warning symbols
 warning_sym <- "\u26A0"
+
+# Parse filename according to nomenclature of test files
+parse_filename <- function(s) {
+  # Remove file extension if present
+  s <- sub("\\.[^\\.]+$", "", s)
+
+  # Split on + (corrected escaping for fixed=TRUE)
+  parts <- strsplit(s, "+", fixed = TRUE)[[1]]
+
+  if (length(parts) != 2) {
+    stop("String does not contain exactly one +")
+  }
+
+  before <- parts[1]
+
+  after <- parts[2]
+
+  # Now split after on _
+  after_parts <- strsplit(after, "_", fixed = TRUE)[[1]]
+
+  # Combine into a vector
+  result <- c(before, after_parts)
+
+  return(result)
+}
 
 # Read in file containing the peaks picked from spectrum
 get_peaks <- function(peak_file = NULL, result_sample, results) {
@@ -179,7 +205,8 @@ check_hits <- function(
   compound_mw,
   peaks,
   peak_tolerance,
-  max_multiples
+  max_multiples,
+  sample
 ) {
   # Find protein peak
   protein_peak <- peaks$mass >= protein_mw - peak_tolerance &
@@ -200,13 +227,18 @@ check_hits <- function(
     return(NULL)
   }
 
+  # Only keelp compounds that are in sample
+  cmp_name <- parse_filename(sample)[2]
+  cmp_mat <- t(as.matrix(compound_mw[cmp_name, ]))
+  dimnames(cmp_mat) <- list(cmp_name, colnames(compound_mw))
+
   # Fill multiples matrix
   for (i in 1:max_multiples) {
     if (i == 1) {
-      mat <- compound_mw * i
-      colnames(mat) <- paste0(colnames(compound_mw), "*", i)
+      mat <- cmp_mat * i
+      colnames(mat) <- paste0(colnames(cmp_mat), "*", i)
     } else {
-      multiple <- compound_mw * i
+      multiple <- cmp_mat * i
       colnames(multiple) <- paste0(colnames(multiple), "*", i)
       mat <- cbind(mat, multiple)
     }
@@ -215,11 +247,11 @@ check_hits <- function(
   # Addition of protein mw with multiples matrix
   complex_mat <- mat + protein_mw
 
-  # Prepare empy hits_df
+  # Prepare hits_df with protein as first entry
   hits_df <- data.frame(
     peak = peaks$mass[which(protein_peak)],
     intensity = peaks$intensity[which(protein_peak)],
-    compound = "Protein",
+    compound = parse_filename(sample)[1], # Protein name extracted from sample filename
     cmp_mass = as.character(protein_mw),
     multiple = as.integer(1)
   )
@@ -233,7 +265,6 @@ check_hits <- function(
 
     if (any(hits, na.rm = TRUE)) {
       indices <- which(hits, arr.ind = TRUE)
-      indices <- indices[order(rownames(indices)), ]
 
       for (k in 1:nrow(indices)) {
         # Retrieve compound mass from hit on complex
@@ -364,7 +395,8 @@ get_result_hits <- function(
       compound_mw = compound_mw,
       peaks = get_peaks(result_sample = samples[i], results = results),
       peak_tolerance = peak_tolerance,
-      max_multiples = max_multiples
+      max_multiples = max_multiples,
+      sample = names(results)[i]
     )
 
     results[[samples[i]]][["hits"]] <- conversion(results[[samples[i]]][[
@@ -375,20 +407,3 @@ get_result_hits <- function(
   message("Search for hits in ", length(samples), " samples completed.")
   return(results)
 }
-
-###########
-# Testing #
-###########
-
-result_path <- "C:\\Users\\Marian\\Desktop\\KF_Testing"
-
-# Read from rds
-results <- readRDS(list.files(result_path, full.names = TRUE, pattern = "rds"))
-
-results_with_hits <- get_result_hits(
-  results = results,
-  protein_mw_file = "C:\\Users\\Marian\\Desktop\\KF_Testing\\HiDrive-2025-09-04_New-Test-data\\RACA_Mw.txt",
-  compound_mw_file = "C:\\Users\\Marian\\Desktop\\KF_Testing\\HiDrive-2025-09-04_New-Test-data\\Molecular-weight-list.txt",
-  peak_tolerance = 3,
-  max_multiples = 4
-)
