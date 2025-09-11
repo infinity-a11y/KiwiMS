@@ -13,8 +13,9 @@ $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
 # Start logging
-Start-Transcript -Path $logFile -Append
+Start-Transcript -Path $logFile -Append | Out-Null
 
+Write-Host "### Setting up Conda Environment (conda_env.ps1)"
 Write-Host "basePath: $basePath"
 Write-Host "userDataPath: $userDataPath"
 Write-Host "envName: $envName"

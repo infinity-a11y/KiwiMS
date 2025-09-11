@@ -15,6 +15,7 @@ $ProgressPreference = "SilentlyContinue"
 # Start logging
 Start-Transcript -Path $logFile
 
+Write-Host "### Configuring setup (config.ps1)"
 Write-Host "basePath: $basePath"
 Write-Host "userDataPath: $userDataPath"
 Write-Host "envName: $envName"

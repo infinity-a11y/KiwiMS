@@ -1,4 +1,3 @@
-
 #-----------------------------#
 # FUNCTION Find Conda
 #-----------------------------#
@@ -45,6 +44,45 @@ function Find-CondaExecutable {
 
     Write-Host "ERROR: conda.exe not found in common locations or system PATH." -ForegroundColor Red
     return $null # Return null if conda.exe is not found anywhere
+}
+
+#-----------------------------#
+# FUNCTION Find Rtools
+#-----------------------------#
+function Find-RtoolsExecutable {
+    param (
+        [string]$rtoolsPath
+    )
+
+    # Check if the provided path exists
+    if (-Not (Test-Path $rtoolsPath)) {
+        Write-Host "ERROR: Rtools path '$rtoolsPath' does not exist."
+        return $null
+    }
+
+    # Check for Rtools executable in the bin directory
+    $rtoolsBinPath = Join-Path $rtoolsPath "usr\bin"
+    $rtoolsExePath = Join-Path $rtoolsBinPath "make.exe"  # Common executable to check
+    if (Test-Path $rtoolsExePath) {
+        Write-Host "Found Rtools executable at: $rtoolsExePath"
+
+        # Add to PATH if not already present
+        $currentPath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+        if ($currentPath -notlike "*$rtoolsBinPath*") {
+            $newPath = "$currentPath;$rtoolsBinPath"
+            [Environment]::SetEnvironmentVariable("Path", $newPath, "Machine")
+            Write-Host "Added Rtools bin directory to system PATH: $rtoolsBinPath"
+            # Update current session PATH
+            $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine")
+        } else {
+            Write-Host "Rtools bin directory is already in system PATH."
+        }
+
+        return $rtoolsExePath
+    } else {
+        Write-Host "ERROR: Rtools executable not found in expected location: $rtoolsExePath"
+        return $null
+    }
 }
 
 #-----------------------------#
