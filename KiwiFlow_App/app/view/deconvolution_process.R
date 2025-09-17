@@ -2319,5 +2319,161 @@ server <- function(id, dirs, reset_button) {
         )
       }
     })
+
+    ### Tooltip events ----
+    shiny$observeEvent(input$detection_window_tooltip_bttn, {
+      shiny$showModal(
+        shiny$div(
+          class = "start-modal",
+          shiny$modalDialog(
+            shiny$fluidRow(
+              shiny$br(),
+              shiny$column(
+                width = 11,
+                shiny$div(
+                  class = "tooltip-text",
+                  "The peak detection range specifies the local window to consider when detecting a peak. A peak needs to be the local max within a window of +/- this range to be considered a peak. For example, if you set the window as 10 Da, only peaks within a window of +/- 10 Da will be considered peak. Any other local maximum are ignored."
+                ),
+                shiny$br(),
+                shiny$a(
+                  href = "https://github.com/michaelmarty/UniDec/wiki/Peak-Selection-and-Plotting#picking-peaks",
+                  "UniDec Wiki - Picking Peaks",
+                  target = "_blank"
+                )
+              )
+            ),
+            title = "Peak Detection Range (Da)",
+            easyClose = TRUE,
+            footer = shiny$tagList(
+              shiny$modalButton("Dismiss")
+            )
+          )
+        )
+      )
+    })
+
+    shiny$observeEvent(input$threshold_tooltip_bttn, {
+      shiny$showModal(
+        shiny$div(
+          class = "start-modal",
+          shiny$modalDialog(
+            shiny$fluidRow(
+              shiny$br(),
+              shiny$column(
+                width = 11,
+                shiny$div(
+                  class = "tooltip-text",
+                  "The peak detection threshold specifies how tall the relative peak height (normalized to a max spectrum intensity of 1) needs to be to considered a peak. For example, a threshold of 0.1 would mean that any peaks below a 10% max intensity would be ignored. If you set this to 0, any local maximum (within the defined detection range) are counted."
+                ),
+                shiny$br(),
+                shiny$a(
+                  href = "https://github.com/michaelmarty/UniDec/wiki/Peak-Selection-and-Plotting#picking-peaks",
+                  "UniDec Wiki - Picking Peaks",
+                  target = "_blank"
+                )
+              )
+            ),
+            title = "Peak Detection Threshold",
+            easyClose = TRUE,
+            footer = shiny$tagList(
+              shiny$modalButton("Dismiss")
+            )
+          )
+        )
+      )
+    })
+
+    shiny$observeEvent(input$charge_range_tooltip_bttn, {
+      shiny$showModal(
+        shiny$div(
+          class = "start-modal",
+          shiny$modalDialog(
+            shiny$fluidRow(
+              shiny$br(),
+              shiny$column(
+                width = 11,
+                shiny$div(
+                  class = "tooltip-text",
+                  "The charge range sets a range of charges that can be assigned for the m/z peaks in the mass spectrum. If we set a minimum of 10 and a maximum of 25, then UniDec cannot assign a charge state of 9 or lower, nor a charge state of 26 or higher. Picking a charge range that does not include the true charge states for the m/z peaks will result in a distorted deconvolved mass spectrum or an error message (see video: Deconvolution Parameters Part 1, for an example). It is often better to start with a wider range of charge states and then narrow the range to the charge state distribution of interest. You can also narrow the charge range to remove artifacts."
+                ),
+                shiny$br(),
+                shiny$a(
+                  href = "https://github.com/michaelmarty/UniDec/wiki/Deconvolution-Parameters#charge-range",
+                  "UniDec Wiki - Charge Range",
+                  target = "_blank"
+                )
+              )
+            ),
+            title = "Charge Range",
+            easyClose = TRUE,
+            footer = shiny$tagList(
+              shiny$modalButton("Dismiss")
+            )
+          )
+        )
+      )
+    })
+
+    shiny$observeEvent(input$mass_range_tooltip_bttn, {
+      shiny$showModal(
+        shiny$div(
+          class = "start-modal",
+          shiny$modalDialog(
+            shiny$fluidRow(
+              shiny$br(),
+              shiny$column(
+                width = 11,
+                shiny$div(
+                  class = "tooltip-text",
+                  "Like the charge range, the mass range sets a range of masses, in Da, that can be assigned for the m/z peaks in the spectrum. Unlike zooming into the m/z range (see data processing for more info), the mass range sets the allowed deconvolved masses for the available data. Setting this mass range lower or higher than the true masses will either create artifacts, cut off certain analytes, or give an error message. Similar to the charge range, it is often better to start with a wider range then narrow the range later. Narrowing the mass range can help remove artifacts."
+                ),
+                shiny$br(),
+                shiny$a(
+                  href = "https://github.com/michaelmarty/UniDec/wiki/Deconvolution-Parameters#mass-range",
+                  "UniDec Wiki - Mass Range",
+                  target = "_blank"
+                )
+              )
+            ),
+            title = "Mass Range",
+            easyClose = TRUE,
+            footer = shiny$tagList(
+              shiny$modalButton("Dismiss")
+            )
+          )
+        )
+      )
+    })
+
+    shiny$observeEvent(input$sample_rate_tooltip_bttn, {
+      shiny$showModal(
+        shiny$div(
+          class = "start-modal",
+          shiny$modalDialog(
+            shiny$fluidRow(
+              shiny$br(),
+              shiny$column(
+                width = 11,
+                shiny$div(
+                  class = "tooltip-text",
+                  "Like the charge range, the mass range sets a range of masses, in Da, that can be assigned for the m/z peaks in the spectrum. Unlike zooming into the m/z range (see data processing for more info), the mass range sets the allowed deconvolved masses for the available data. Setting this mass range lower or higher than the true masses will either create artifacts, cut off certain analytes, or give an error message. Similar to the charge range, it is often better to start with a wider range then narrow the range later. Narrowing the mass range can help remove artifacts."
+                ),
+                shiny$br(),
+                shiny$a(
+                  href = "https://github.com/michaelmarty/UniDec/wiki/Deconvolution-Parameters#sample-rate",
+                  "UniDec Wiki - Sample Rate",
+                  target = "_blank"
+                )
+              )
+            ),
+            title = "Sample Rate",
+            easyClose = TRUE,
+            footer = shiny$tagList(
+              shiny$modalButton("Dismiss")
+            )
+          )
+        )
+      )
+    })
   })
 }

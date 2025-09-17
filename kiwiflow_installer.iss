@@ -1,7 +1,7 @@
 [Setup]
 AppName=KiwiFlow
 AppId=KiwiFlow
-AppVersion=0.2.1
+AppVersion=0.2.2
 AppPublisher=Marian Freisleben
 DefaultDirName={autopf}\KiwiFlow
 DisableDirPage=yes

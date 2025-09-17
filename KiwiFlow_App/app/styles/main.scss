@@ -20,6 +20,23 @@ body > div.waiter-overlay.waiter-fullscreen {
   background-color: #ddddde !important;
 }
 
+h6 {
+  font-size: 1vw;
+}
+
+.tooltip-bttn .btn {
+  width: fit-content;
+  max-width: fit-content;
+  padding: 0;
+  border: none;
+  margin-top: 8px;
+}
+
+.tooltip-bttn .btn:hover {
+  color: unset;
+  background-color: unset;
+}
+
 #blocking-overlay {
   display: none;
   position: fixed;

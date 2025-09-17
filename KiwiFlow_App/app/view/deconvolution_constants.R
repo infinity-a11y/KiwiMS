@@ -122,7 +122,7 @@ deconvolution_init_ui <- function(ns) {
                 card(
                   card_header(
                     class = "bg-dark",
-                    "Spectrum range [m/z]",
+                    "Deconvolution range [m/z]",
                     tooltip(
                       shiny$icon("circle-question"),
                       "The span of molecular weights to be analyzed.",
@@ -179,7 +179,7 @@ deconvolution_init_ui <- function(ns) {
                 card(
                   card_header(
                     class = "bg-dark",
-                    "Mass range [Mw]",
+                    "Mass range [Da]",
                     tooltip(
                       shiny$icon("circle-question"),
                       "The range of mass-to-charge ratios to be detected.",
@@ -201,7 +201,7 @@ deconvolution_init_ui <- function(ns) {
                             "",
                             min = 0,
                             max = 100000,
-                            value = 35000
+                            value = 10000
                           )
                         )
                       )
@@ -220,7 +220,7 @@ deconvolution_init_ui <- function(ns) {
                             "",
                             min = 0,
                             max = 100000,
-                            value = 42000
+                            value = 60000
                           )
                         )
                       )
@@ -255,7 +255,7 @@ deconvolution_init_ui <- function(ns) {
                             "",
                             min = 0,
                             max = 100,
-                            value = 1,
+                            value = 0.5,
                             step = 0.05
                           )
                         )
@@ -275,7 +275,7 @@ deconvolution_init_ui <- function(ns) {
                             "",
                             min = 0,
                             max = 100,
-                            value = 1.35,
+                            value = 1.5,
                             step = 0.05
                           )
                         )
@@ -302,68 +302,126 @@ deconvolution_init_ui <- function(ns) {
                   card_body(
                     shiny$fluidRow(
                       shiny$column(
-                        width = 4,
-                        shiny$h6("Window", style = "margin-top: 8px;")
+                        width = 6,
+                        tooltip(
+                          shiny$h6(
+                            "Detection\n window [Da]",
+                            style = "margin-top: 8px;"
+                          ),
+                          shiny$HTML(
+                            ""
+                          ),
+                          placement = "left"
+                        )
                       ),
                       shiny$column(
-                        width = 6,
-                        shiny$div(
-                          class = "deconv-param-input-adv",
-                          disabled(
-                            shiny$numericInput(
-                              ns("peakwindow"),
-                              "",
-                              min = 0,
-                              max = 1000,
-                              value = 40
+                        width = 4,
+                        tooltip(
+                          shiny$div(
+                            class = "deconv-param-input-adv",
+                            disabled(
+                              shiny$numericInput(
+                                ns("peakwindow"),
+                                "",
+                                min = 0,
+                                max = 1000,
+                                value = 40
+                              )
                             )
+                          ),
+                          "",
+                          placement = "bottom"
+                        )
+                      ),
+                      shiny$column(
+                        width = 2,
+                        shiny$div(
+                          class = "tooltip-bttn",
+                          shiny$actionButton(
+                            ns("detection_window_tooltip_bttn"),
+                            label = "",
+                            icon = shiny$icon("circle-question")
                           )
                         )
                       )
                     ),
                     shiny$fluidRow(
                       shiny$column(
-                        width = 4,
-                        shiny$h6("Norm", style = "margin-top: 8px;")
+                        width = 6,
+                        tooltip(
+                          shiny$h6(
+                            "Peak\n normalization",
+                            style = "margin-top: 8px;"
+                          ),
+                          shiny$HTML(
+                            "Peak intensity normalization mode:<br> 0 = no normalization<br> 1 = max normalization<br> 2 = normalization to the sum"
+                          ),
+                          placement = "left"
+                        )
                       ),
                       shiny$column(
-                        width = 6,
-                        shiny$div(
-                          class = "deconv-param-input-adv",
-                          disabled(
-                            shiny$numericInput(
-                              ns("peaknorm"),
-                              "",
-                              min = 0,
-                              max = 100,
-                              value = 2
+                        width = 4,
+                        tooltip(
+                          shiny$div(
+                            class = "deconv-param-input-adv",
+                            disabled(
+                              shiny$numericInput(
+                                ns("peaknorm"),
+                                "",
+                                min = 0,
+                                max = 100,
+                                value = 2
+                              )
                             )
+                          ),
+                          shiny$HTML(
+                            "Peak intensity normalization mode:<br> 0 = no normalization<br> 1 = max normalization<br> 2 = normalization to the sum"
+                          ),
+                          placement = "bottom"
+                        )
+                      ),
+                      shiny$column(
+                        width = 2,
+                        shiny$div(
+                          class = "tooltip-bttn",
+                          shiny$actionButton(
+                            ns("threshold_window_tooltip_bttn"),
+                            label = "",
+                            icon = shiny$icon("circle-question")
                           )
                         )
                       )
                     ),
                     shiny$fluidRow(
                       shiny$column(
-                        width = 4,
-                        shiny$h6(
-                          "Threshold",
-                          style = "font-size: 0.9em; margin-top: 8px;"
+                        width = 6,
+                        tooltip(
+                          shiny$h6(
+                            "Threshold",
+                            style = "font-size: 1vw; margin-top: 8px;"
+                          ),
+                          "",
+                          placement = "left"
                         )
                       ),
                       shiny$column(
-                        width = 6,
-                        shiny$div(
-                          class = "deconv-param-input-adv",
-                          disabled(
-                            shiny$numericInput(
-                              ns("peakthresh"),
-                              "",
-                              min = 0,
-                              max = 1,
-                              value = 0.07,
-                              step = 0.01
+                        width = 5,
+                        tooltip(
+                          shiny$div(
+                            class = "deconv-param-input-adv",
+                            disabled(
+                              shiny$numericInput(
+                                ns("peakthresh"),
+                                "",
+                                min = 0,
+                                max = 1,
+                                value = 0.07,
+                                step = 0.01
+                              )
                             )
-                          )
+                          ),
+                          "The peak detection threshold specifies how tall the relative peak height (normalized to a max spectrum intensity of 1) needs to be to considered a peak. For example, a threshold of 0.1 would mean that any peaks below a 10% max intensity would be ignored. If you set this to 0, any local maximum (within the defined detection range) are counted.",
+                          placement = "bottom"
                         )
                       )
                     )
@@ -375,21 +433,21 @@ deconvolution_init_ui <- function(ns) {
                 card(
                   card_header(
                     class = "bg-dark",
-                    "Mass Bins",
+                    "Mass bins (Resolution)",
                     tooltip(
                       shiny$icon("circle-question"),
                       "Discrete intervals of mass values for the spectra.",
-                      placement = "right"
+                      placement = "bottom"
                     )
                   ),
                   card_body(
                     shiny$fluidRow(
                       shiny$column(
-                        width = 4,
-                        shiny$h6("Size", style = "margin-top: 8px;")
+                        width = 6,
+                        shiny$h6("Size [Da]", style = "margin-top: 8px;")
                       ),
                       shiny$column(
-                        width = 6,
+                        width = 5,
                         shiny$div(
                           class = "deconv-param-input-adv",
                           disabled(
@@ -500,24 +558,24 @@ deconvolution_status_controls <- function(ns) {
         class = "deconvolution-running-control-card",
         shiny$fluidRow(
           shiny$column(
+            width = 2,
+            shiny$div(
+              class = "decon-btn",
+              shiny$actionButton(
+                ns("show_log"),
+                "",
+                icon = shiny$icon("code"),
+                width = "100%"
+              )
+            )
+          ),
+          shiny$column(
             width = 3,
             shiny$actionButton(
               ns("deconvolute_end"),
               "Abort",
               icon = shiny$icon("circle-stop"),
               width = "100%"
-            )
-          ),
-          shiny$column(
-            width = 3,
-            shiny$div(
-              class = "decon-btn",
-              shiny$actionButton(
-                ns("show_log"),
-                "Output",
-                icon = shiny$icon("code"),
-                width = "100%"
-              )
             )
           ),
           shiny$column(

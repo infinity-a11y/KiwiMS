@@ -94,7 +94,7 @@ ui <- function(id) {
         )
       ),
       bslib$nav_panel(
-        title = "KI/Kinact",
+        title = "kinact/KI",
         class = "locked-panel",
         shiny$div(id = "overlay-message", "Module still in work ..."),
         bslib$page_sidebar(
