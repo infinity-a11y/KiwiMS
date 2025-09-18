@@ -313,9 +313,17 @@ button .sF-modal {
 }
 
 .deconvolution_info {
-  font-size: smaller;
+  font-size: 0.8vw;
   font-style: italic;
   line-height: 2;
+}
+
+.bslib-sidebar-layout .sidebar-title {
+  font-size: 1.4vw;
+}
+
+:root {
+  --bs-body-font-size: 1vw;
 }
 
 // ============================
@@ -381,6 +389,10 @@ button .sF-modal {
 .card-custom .bslib-card .card-header {
   border-top-left-radius: 4px;
   border-top-right-radius: 4px;
+}
+
+.bslib-card .card-header {
+  font-size: 1vw;
 }
 
 .deconvolution-result-content-noplate {
