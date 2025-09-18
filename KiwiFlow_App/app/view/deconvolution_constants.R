@@ -67,12 +67,19 @@ deconvolution_init_ui <- function(ns) {
                 class = "card-custom",
                 card(
                   card_header(
-                    class = "bg-dark",
-                    "Charge state [z]",
+                    class = "bg-dark help-header",
                     tooltip(
-                      shiny$icon("circle-question"),
+                      "Charge state [z]",
                       "The number of charges the ionized molecule is expected to carry.",
-                      placement = "right"
+                      placement = "bottom"
+                    ),
+                    shiny$div(
+                      class = "tooltip-bttn",
+                      shiny$actionButton(
+                        ns("charge_range_tooltip_bttn"),
+                        label = "",
+                        icon = shiny$icon("circle-question")
+                      )
                     )
                   ),
                   card_body(
@@ -112,17 +119,6 @@ deconvolution_init_ui <- function(ns) {
                             value = 50
                           )
                         )
-                      ),
-                      shiny$column(
-                        width = 2,
-                        shiny$div(
-                          class = "tooltip-bttn",
-                          shiny$actionButton(
-                            ns("charge_range_tooltip_bttn"),
-                            label = "",
-                            icon = shiny$icon("circle-question")
-                          )
-                        )
                       )
                     )
                   )
@@ -132,12 +128,19 @@ deconvolution_init_ui <- function(ns) {
                 class = "card-custom",
                 card(
                   card_header(
-                    class = "bg-dark",
-                    "Deconvolution range [m/z]",
+                    class = "bg-dark help-header",
                     tooltip(
-                      shiny$icon("circle-question"),
-                      "The span of molecular weights to be analyzed.",
-                      placement = "right"
+                      "Deconvolution range [m/z]",
+                      "The span of molecular weights to be deconvoluted.",
+                      placement = "bottom"
+                    ),
+                    shiny$div(
+                      class = "tooltip-bttn",
+                      shiny$actionButton(
+                        ns("mass_range_tooltip_bttn"),
+                        label = "",
+                        icon = shiny$icon("circle-question")
+                      )
                     )
                   ),
                   card_body(
@@ -177,17 +180,6 @@ deconvolution_init_ui <- function(ns) {
                             value = 1100
                           )
                         )
-                      ),
-                      shiny$column(
-                        width = 2,
-                        shiny$div(
-                          class = "tooltip-bttn",
-                          shiny$actionButton(
-                            ns("mass_range_tooltip_bttn"),
-                            label = "",
-                            icon = shiny$icon("circle-question")
-                          )
-                        )
                       )
                     )
                   )
@@ -200,7 +192,7 @@ deconvolution_init_ui <- function(ns) {
                 class = "card-custom",
                 card(
                   card_header(
-                    class = "bg-dark",
+                    class = "bg-dark help-header",
                     "Mass range [Da]",
                     tooltip(
                       shiny$icon("circle-question"),
@@ -254,7 +246,7 @@ deconvolution_init_ui <- function(ns) {
                 class = "card-custom",
                 card(
                   card_header(
-                    class = "bg-dark",
+                    class = "bg-dark help-header",
                     "Retention time [min]",
                     tooltip(
                       shiny$icon("circle-question"),
@@ -313,7 +305,7 @@ deconvolution_init_ui <- function(ns) {
                 class = "card-custom",
                 card(
                   card_header(
-                    class = "bg-dark",
+                    class = "bg-dark help-header",
                     "Peak parameters",
                     tooltip(
                       shiny$icon("circle-question"),
@@ -400,22 +392,18 @@ deconvolution_init_ui <- function(ns) {
                       ),
                       shiny$column(
                         width = 4,
-                        tooltip(
-                          shiny$div(
-                            class = "deconv-param-input-adv",
-                            disabled(
-                              shiny$numericInput(
-                                ns("peakthresh"),
-                                "",
-                                min = 0,
-                                max = 1,
-                                value = 0.07,
-                                step = 0.01
-                              )
+                        shiny$div(
+                          class = "deconv-param-input-adv",
+                          disabled(
+                            shiny$numericInput(
+                              ns("peakthresh"),
+                              "",
+                              min = 0,
+                              max = 1,
+                              value = 0.07,
+                              step = 0.01
                             )
-                          ),
-                          "The peak detection threshold specifies how tall the relative peak height (normalized to a max spectrum intensity of 1) needs to be to considered a peak. For example, a threshold of 0.1 would mean that any peaks below a 10% max intensity would be ignored. If you set this to 0, any local maximum (within the defined detection range) are counted.",
-                          placement = "bottom"
+                          )
                         )
                       ),
                       shiny$column(
@@ -437,12 +425,19 @@ deconvolution_init_ui <- function(ns) {
                 class = "card-custom",
                 card(
                   card_header(
-                    class = "bg-dark",
-                    "Mass bins (Resolution)",
+                    class = "bg-dark help-header",
                     tooltip(
-                      shiny$icon("circle-question"),
+                      "Mass bins (Resolution)",
                       "Discrete intervals of mass values for the spectra.",
                       placement = "bottom"
+                    ),
+                    shiny$div(
+                      class = "tooltip-bttn",
+                      shiny$actionButton(
+                        ns("sample_rate_tooltip_bttn"),
+                        label = "",
+                        icon = shiny$icon("circle-question")
+                      )
                     )
                   ),
                   card_body(
@@ -454,7 +449,7 @@ deconvolution_init_ui <- function(ns) {
                       shiny$column(
                         width = 4,
                         shiny$div(
-                          class = "deconv-param-input-adv",
+                          class = "deconv-param-input-adv mass-bin-input",
                           disabled(
                             shiny$numericInput(
                               ns("massbins"),
@@ -464,17 +459,6 @@ deconvolution_init_ui <- function(ns) {
                               value = 0.5,
                               step = 0.1
                             )
-                          )
-                        )
-                      ),
-                      shiny$column(
-                        width = 2,
-                        shiny$div(
-                          class = "tooltip-bttn",
-                          shiny$actionButton(
-                            ns("sample_rate_tooltip_bttn"),
-                            label = "",
-                            icon = shiny$icon("circle-question")
                           )
                         )
                       )

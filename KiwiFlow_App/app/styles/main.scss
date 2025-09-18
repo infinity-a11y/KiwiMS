@@ -39,15 +39,38 @@ h6 {
   max-height: 200px;
   overflow-scrolling: touch;
   min-width: fit-content;
-  background: white;
+  background: #fff;
   text-align: end;
   position: absolute;
   right: 0%;
-  padding: 5px;
+  border-radius: 5px;
+  box-shadow: 0 0 9px 0 #00000094;
 }
 
 .selectize-input.dropdown-active {
   border: none;
+}
+
+.help-header {
+  display: flex;
+  justify-content: space-between;
+  height: 38px;
+}
+
+.help-header .tooltip-bttn .btn {
+  margin: unset;
+}
+
+.card-custom .card-body {
+  gap: 1vw;
+}
+
+.far .fa-circle-question {
+  align-self: center;
+}
+
+.mass-bin-input .form-group {
+  margin-bottom: 12px;
 }
 
 .tooltip-bttn .btn {
