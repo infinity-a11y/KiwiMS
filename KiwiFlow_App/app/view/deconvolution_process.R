@@ -2456,7 +2456,7 @@ server <- function(id, dirs, reset_button) {
                 width = 11,
                 shiny$div(
                   class = "tooltip-text",
-                  "Like the charge range, the mass range sets a range of masses, in Da, that can be assigned for the m/z peaks in the spectrum. Unlike zooming into the m/z range (see data processing for more info), the mass range sets the allowed deconvolved masses for the available data. Setting this mass range lower or higher than the true masses will either create artifacts, cut off certain analytes, or give an error message. Similar to the charge range, it is often better to start with a wider range then narrow the range later. Narrowing the mass range can help remove artifacts."
+                  "The Sample Mass Every parameter sets a sample rate for the deconvolved mass spectrum. If a sample rate of 10 Da is set, then there will be a mass data point every 10 Da. Every mass data point would fall on an even 10, such that a data point would not appear at 66,417 Da but rather would appear at 66,420 Da in the resulting deconvolved mass spectrum. Thus, each peak will be rounded to the nearest 10 Da in this example. A sample rate of 1 Da would be needed to read a mass peak at 66,417 Da. Note: setting a smaller sample rate will slow down the algorithm in UniDec but will improve the precision."
                 ),
                 shiny$br(),
                 shiny$a(
