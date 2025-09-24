@@ -127,6 +127,7 @@ get_protein_mw <- function(mw_file) {
 }
 
 # Read file containing compound mass and mass shifts
+# Read in compound files in different formats
 get_compound_matrix <- function(compound_file) {
   # Check if path valid
   if (!file.exists(compound_file)) {
@@ -190,6 +191,109 @@ get_compound_matrix <- function(compound_file) {
   row.names(compounds_matrix) <- compounds$compound
 
   # Inform comopund list dimensions
+  message(
+    "-> ",
+    nrow(compounds),
+    " compounds with up to ",
+    ncol(compounds) - 1,
+    " mass shifts imported"
+  )
+  return(compounds_matrix)
+}
+
+# Read file containing compound mass and mass shifts
+# Read in compound files in different formats (CSV, TSV, Excel)
+get_compound_matrix2 <- function(compound_file, header = TRUE) {
+  # Check if path valid
+  if (!file.exists(compound_file)) {
+    warning("File does not exist.")
+    return(NULL)
+  }
+
+  # Skip header row
+  skip <- ifelse(header, 1, 0)
+
+  # Determine file extension
+  file_ext <- tolower(tools::file_ext(compound_file))
+
+  # Read file based on extension
+  tryCatch(
+    {
+      if (file_ext == "csv") {
+        compounds <- readr::read_csv(
+          compound_file,
+          col_names = FALSE,
+          skip = skip
+        )
+      } else if (file_ext == "tsv" || file_ext == "txt") {
+        compounds <- readr::read_tsv(
+          compound_file,
+          col_names = FALSE,
+          skip = skip
+        )
+      } else if (file_ext %in% c("xls", "xlsx")) {
+        compounds <- readxl::read_excel(
+          compound_file,
+          col_names = FALSE,
+          skip = skip
+        )
+      } else {
+        warning("Unsupported file format: ", file_ext)
+        return(NULL)
+      }
+    },
+    error = function(e) {
+      warning("Error reading compounds file: ", e$message)
+      return(NULL)
+    }
+  )
+
+  # Check if data frame valid
+  if (ncol(compounds) < 2) {
+    warning(
+      "Compounds file contains just one field. Expected at least two: Compound_Name, Compound_Mass."
+    )
+    return(NULL)
+  } else if (ncol(compounds) > 10) {
+    warning(
+      "Compounds file contains ",
+      ncol(compounds),
+      " fields. Only the compound name and nine mass shifts are allowed."
+    )
+    return(NULL)
+  }
+
+  # Check if data types correct
+  if (!is.character(compounds[[1]])) {
+    warning(
+      "First field (compound name) has the data type: ",
+      class(compounds[[1]]),
+      ". Allowed are only characters."
+    )
+    return(NULL)
+  }
+
+  if (!all(sapply(compounds[-1], function(x) is.numeric(x) || all(is.na(x))))) {
+    warning(
+      "Mass fields have the data type(s): ",
+      paste(unique(sapply(compounds[-1], class)), collapse = ", "),
+      ". Allowed are only numeric."
+    )
+    return(NULL)
+  }
+
+  # Fill mass shift names
+  field_names <- c("compound")
+  for (i in 1:(ncol(compounds) - 1)) {
+    field_names[i + 1] <- paste0("mass_", letters[i])
+  }
+  names(compounds) <- field_names
+
+  # Make matrix
+  compounds_matrix <- as.matrix(compounds[, -1])
+  row.names(compounds_matrix) <- compounds$compound
+
+  # Inform compound list dimensions
   message(
     "-> ",
     nrow(compounds),
