@@ -2394,7 +2394,7 @@ server <- function(id, dirs, reset_button) {
                 width = 11,
                 shiny$div(
                   class = "tooltip-text",
-                  "The charge range sets a range of charges that can be assigned for the m/z peaks in the mass spectrum. If we set a minimum of 10 and a maximum of 25, then UniDec cannot assign a charge state of 9 or lower, nor a charge state of 26 or higher. Picking a charge range that does not include the true charge states for the m/z peaks will result in a distorted deconvolved mass spectrum or an error message (see video: Deconvolution Parameters Part 1, for an example). It is often better to start with a wider range of charge states and then narrow the range to the charge state distribution of interest. You can also narrow the charge range to remove artifacts."
+                  "The charge range sets a range of charges that can be assigned for the m/z peaks in the mass spectrum. If we set a minimum of 10 and a maximum of 25, then UniDec cannot assign a charge state of 9 or lower, nor a charge state of 26 or higher. Picking a charge range that does not include the true charge states for the m/z peaks will result in a distorted deconvolved mass spectrum or an error message. It is often better to start with a wider range of charge states and then narrow the range to the charge state distribution of interest. You can also narrow the charge range to remove artifacts."
                 ),
                 shiny$br(),
                 shiny$a(
@@ -2425,7 +2425,7 @@ server <- function(id, dirs, reset_button) {
                 width = 11,
                 shiny$div(
                   class = "tooltip-text",
-                  "Like the charge range, the mass range sets a range of masses, in Da, that can be assigned for the m/z peaks in the spectrum. Unlike zooming into the m/z range (see data processing for more info), the mass range sets the allowed deconvolved masses for the available data. Setting this mass range lower or higher than the true masses will either create artifacts, cut off certain analytes, or give an error message. Similar to the charge range, it is often better to start with a wider range then narrow the range later. Narrowing the mass range can help remove artifacts."
+                  "Like the charge range, the mass range sets a range of masses, in Da, that can be assigned for the m/z peaks in the spectrum. Unlike zooming into the m/z range, the mass range sets the allowed deconvolved masses for the available data. Setting this mass range lower or higher than the true masses will either create artifacts, cut off certain analytes, or give an error message. Similar to the charge range, it is often better to start with a wider range then narrow the range later. Narrowing the mass range can help remove artifacts."
                 ),
                 shiny$br(),
                 shiny$a(
