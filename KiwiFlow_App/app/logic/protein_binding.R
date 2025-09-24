@@ -279,19 +279,7 @@ check_hits <- function(
   # Addition of protein mw with multiples matrix
   complex_mat <- mat + protein_mw
 
-  hits_df <- data.frame(
-    well = character(),
-    sample = character(),
-    protein = character(),
-    compound = character(),
-    theor_prot = character(),
-    measured_prot = numeric(),
-    delta_prot = numeric(),
-    peak = numeric(),
-    intensity = numeric(),
-    cmp_mass = character(),
-    multiple = integer()
-  )
+  hits_df <- data.frame()
 
   # Fill hits_df
   for (j in 1:nrow(peaks_filtered)) {
@@ -316,14 +304,15 @@ check_hits <- function(
           well = "A1",
           sample = sample,
           protein = parse_filename(sample)[1],
-          compound = rownames(indices)[k],
           theor_prot = as.numeric(protein_mw),
           measured_prot = peaks$mass[which(protein_peak)],
           delta_prot = abs(
             as.numeric(protein_mw) - peaks$mass[which(protein_peak)]
           ),
+          prot_intensity = peaks$intensity[which(protein_peak)],
           peak = peaks_filtered[j, "mass"],
           intensity = peaks_filtered[j, "intensity"],
+          compound = rownames(indices)[k],
           cmp_mass = cmp_mass,
           multiple = multiple
         )
@@ -356,7 +345,7 @@ conversion <- function(hits) {
       " 'hits' argument has to be a data frame with at least two rows"
     )
     return(NULL)
-  } else if (ncol(hits) != 11) {
+  } else if (ncol(hits) != 12) {
     message(
       warning_sym,
       " 'hits' data frame has ",
@@ -370,7 +359,8 @@ conversion <- function(hits) {
   # Peaks are in hits data frame
 
   # Gesamtintensität: IA + IB + IC + ID = Itotal
-  I_total <- sum(unique(hits$intensity))
+  I_total <- sum(unique(hits$intensity)) + unique(hits$prot_intensity)
+  perc_bind_prot <- unique(hits$prot_intensity) / I_total
   message("-> Total intensity = ", I_total)
 
   # nicht umgesetztes / ungebundenes Protein: IA / Itotal * 100
@@ -388,11 +378,12 @@ conversion <- function(hits) {
     )
   hits <- hits |>
     dplyr::mutate(
-      `%binding_tot` = sum(tail(unique(hits$`%binding`), -1))
+      `%binding_tot` = sum(unique(hits$`%binding`)),
+      .before = peak
     )
 
   # Plausibilitätscheck check result < 100 - richtig so?
-  total_relBinding <- hits$`%binding_tot`[1] + hits$`%binding`[1]
+  total_relBinding <- hits$`%binding_tot`[1] + perc_bind_prot
   if (!all.equal(total_relBinding, 1)) {
     message(
       warning_sym,
@@ -422,7 +413,7 @@ conversion <- function(hits) {
   return(hits)
 }
 
-get_result_hits <- function(
+add_hits <- function(
   results,
   protein_mw_file,
   compound_mw_file,
@@ -451,4 +442,20 @@ get_result_hits <- function(
 
   message("Search for hits in ", length(samples), " samples completed.")
   return(results)
+}
+
+# Concatenate and extract all hits data frames from all samples
+summarize_hits <- function(result_list) {
+  # Get samples from result list without session and output elements
+  samples <- head(names(result_list), -2)
+
+  # Prepare empty hits data frame
+  hits_summarized <- data.frame()
+
+  for (i in samples) {
+    message(i)
+    hits_summarized <- rbind(hits_summarized, result_list[[i]]$hits)
+  }
+
+  return(hits_summarized)
 }
