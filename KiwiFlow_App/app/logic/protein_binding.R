@@ -127,83 +127,9 @@ get_protein_mw <- function(mw_file) {
 }
 
 # Read file containing compound mass and mass shifts
-# Read in compound files in different formats
-get_compound_matrix <- function(compound_file) {
-  # Check if path valid
-  if (!file.exists(compound_file)) {
-    warning("File does not exist.")
-    return(NULL)
-  }
-
-  # Read peaks.dat file
-  tryCatch(
-    {
-      compounds <- read.delim(compound_file, header = F)
-    },
-    error = function(e) {
-      warning("Error reading compounds file: ", e$message)
-      return(NULL)
-    }
-  )
-
-  # Check if data frame valid
-  if (ncol(compounds) < 2) {
-    warning(
-      "Compounds file contains just one fields. Expected at least two: Compound_Name, Compound_Mass."
-    )
-    return(NULL)
-  } else if (ncol(compounds) > 10) {
-    warning(
-      "Peaks file contains ",
-      ncol(compounds),
-      " fields. Only the compound name and nine mass shifts are allowed."
-    )
-    return(NULL)
-  }
-
-  # Check if data types correct
-  if (class(compounds[, 1]) != "character") {
-    warning(
-      "First field (compound name) has the data type: ",
-      class(compounds[, 1], ". Allowed are only characters.")
-    )
-    return(NULL)
-  }
-
-  if (!all(sapply(compounds[, -1], class) == "numeric")) {
-    warning(
-      "Mass fields have the data type(s): ",
-      paste(unique(sapply(compounds[, -1], class)), collapse = ", "),
-      ". Allowed are only numeric."
-    )
-    return(NULL)
-  }
-
-  # Fill mass shift names
-  field_names <- c("compound")
-  for (i in 1:(ncol(compounds) - 1)) {
-    field_names[i + 1] <- paste0("mass_", letters[i])
-  }
-  names(compounds) <- field_names
-
-  # Make matrix
-  compounds_matrix <- as.matrix(compounds[, -1])
-  row.names(compounds_matrix) <- compounds$compound
-
-  # Inform comopund list dimensions
-  message(
-    "-> ",
-    nrow(compounds),
-    " compounds with up to ",
-    ncol(compounds) - 1,
-    " mass shifts imported"
-  )
-  return(compounds_matrix)
-}
-
-# Read file containing compound mass and mass shifts
 # Read in compound files in different formats (CSV, TSV, Excel)
-get_compound_matrix2 <- function(compound_file, header = TRUE) {
+# Specify header = TRUE if file contains header and header = FALSE if file has no header
+get_compound_matrix <- function(compound_file, header = TRUE) {
   # Check if path valid
   if (!file.exists(compound_file)) {
     warning("File does not exist.")
