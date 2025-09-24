@@ -149,13 +149,15 @@ get_compound_matrix <- function(compound_file, header = TRUE) {
         compounds <- readr::read_csv(
           compound_file,
           col_names = FALSE,
-          skip = skip
+          skip = skip,
+          show_col_types = FALSE
         )
       } else if (file_ext == "tsv" || file_ext == "txt") {
         compounds <- readr::read_tsv(
           compound_file,
           col_names = FALSE,
-          skip = skip
+          skip = skip,
+          show_col_types = FALSE
         )
       } else if (file_ext %in% c("xls", "xlsx")) {
         compounds <- readxl::read_excel(
@@ -257,7 +259,7 @@ check_hits <- function(
     return(NULL)
   }
 
-  # Only keelp compounds that are in sample
+  # Only keep compounds that are in sample
   cmp_name <- parse_filename(sample)[2]
   cmp_mat <- t(as.matrix(compound_mw[cmp_name, ]))
   dimnames(cmp_mat) <- list(cmp_name, colnames(compound_mw))
@@ -277,13 +279,18 @@ check_hits <- function(
   # Addition of protein mw with multiples matrix
   complex_mat <- mat + protein_mw
 
-  # Prepare hits_df with protein as first entry
   hits_df <- data.frame(
-    peak = peaks$mass[which(protein_peak)],
-    intensity = peaks$intensity[which(protein_peak)],
-    compound = parse_filename(sample)[1], # Protein name extracted from sample filename
-    cmp_mass = as.character(protein_mw),
-    multiple = as.integer(1)
+    well = character(),
+    sample = character(),
+    protein = character(),
+    compound = character(),
+    theor_prot = character(),
+    measured_prot = numeric(),
+    delta_prot = numeric(),
+    peak = numeric(),
+    intensity = numeric(),
+    cmp_mass = character(),
+    multiple = integer()
   )
 
   # Fill hits_df
@@ -306,9 +313,17 @@ check_hits <- function(
 
         # Construct new entry for hits_df data frame
         hits_add <- data.frame(
+          well = "A1",
+          sample = sample,
+          protein = parse_filename(sample)[1],
+          compound = rownames(indices)[k],
+          theor_prot = as.numeric(protein_mw),
+          measured_prot = peaks$mass[which(protein_peak)],
+          delta_prot = abs(
+            as.numeric(protein_mw) - peaks$mass[which(protein_peak)]
+          ),
           peak = peaks_filtered[j, "mass"],
           intensity = peaks_filtered[j, "intensity"],
-          compound = rownames(indices)[k],
           cmp_mass = cmp_mass,
           multiple = multiple
         )
@@ -341,7 +356,7 @@ conversion <- function(hits) {
       " 'hits' argument has to be a data frame with at least two rows"
     )
     return(NULL)
-  } else if (ncol(hits) != 5) {
+  } else if (ncol(hits) != 11) {
     message(
       warning_sym,
       " 'hits' data frame has ",
