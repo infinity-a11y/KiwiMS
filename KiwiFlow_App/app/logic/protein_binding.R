@@ -127,17 +127,48 @@ get_protein_mw <- function(mw_file) {
 }
 
 # Read file containing compound mass and mass shifts
-get_compound_matrix <- function(compound_file) {
+# Read in compound files in different formats (CSV, TSV, Excel)
+# Specify header = TRUE if file contains header and header = FALSE if file has no header
+get_compound_matrix <- function(compound_file, header = TRUE) {
   # Check if path valid
   if (!file.exists(compound_file)) {
     warning("File does not exist.")
     return(NULL)
   }
 
-  # Read peaks.dat file
+  # Skip header row
+  skip <- ifelse(header, 1, 0)
+
+  # Determine file extension
+  file_ext <- tolower(tools::file_ext(compound_file))
+
+  # Read file based on extension
   tryCatch(
     {
-      compounds <- read.delim(compound_file, header = F)
+      if (file_ext == "csv") {
+        compounds <- readr::read_csv(
+          compound_file,
+          col_names = FALSE,
+          skip = skip,
+          show_col_types = FALSE
+        )
+      } else if (file_ext == "tsv" || file_ext == "txt") {
+        compounds <- readr::read_tsv(
+          compound_file,
+          col_names = FALSE,
+          skip = skip,
+          show_col_types = FALSE
+        )
+      } else if (file_ext %in% c("xls", "xlsx")) {
+        compounds <- readxl::read_excel(
+          compound_file,
+          col_names = FALSE,
+          skip = skip
+        )
+      } else {
+        warning("Unsupported file format: ", file_ext)
+        return(NULL)
+      }
     },
     error = function(e) {
       warning("Error reading compounds file: ", e$message)
@@ -148,12 +179,12 @@ get_compound_matrix <- function(compound_file) {
   # Check if data frame valid
   if (ncol(compounds) < 2) {
     warning(
-      "Compounds file contains just one fields. Expected at least two: Compound_Name, Compound_Mass."
+      "Compounds file contains just one field. Expected at least two: Compound_Name, Compound_Mass."
     )
     return(NULL)
   } else if (ncol(compounds) > 10) {
     warning(
-      "Peaks file contains ",
+      "Compounds file contains ",
       ncol(compounds),
       " fields. Only the compound name and nine mass shifts are allowed."
     )
@@ -161,18 +192,19 @@ get_compound_matrix <- function(compound_file) {
   }
 
   # Check if data types correct
-  if (class(compounds[, 1]) != "character") {
+  if (!is.character(compounds[[1]])) {
     warning(
       "First field (compound name) has the data type: ",
-      class(compounds[, 1], ". Allowed are only characters.")
+      class(compounds[[1]]),
+      ". Allowed are only characters."
     )
     return(NULL)
   }
 
-  if (!all(sapply(compounds[, -1], class) == "numeric")) {
+  if (!all(sapply(compounds[-1], function(x) is.numeric(x) || all(is.na(x))))) {
     warning(
       "Mass fields have the data type(s): ",
-      paste(unique(sapply(compounds[, -1], class)), collapse = ", "),
+      paste(unique(sapply(compounds[-1], class)), collapse = ", "),
       ". Allowed are only numeric."
     )
     return(NULL)
@@ -189,7 +221,7 @@ get_compound_matrix <- function(compound_file) {
   compounds_matrix <- as.matrix(compounds[, -1])
   row.names(compounds_matrix) <- compounds$compound
 
-  # Inform comopund list dimensions
+  # Inform compound list dimensions
   message(
     "-> ",
     nrow(compounds),
@@ -227,7 +259,7 @@ check_hits <- function(
     return(NULL)
   }
 
-  # Only keelp compounds that are in sample
+  # Only keep compounds that are in sample
   cmp_name <- parse_filename(sample)[2]
   cmp_mat <- t(as.matrix(compound_mw[cmp_name, ]))
   dimnames(cmp_mat) <- list(cmp_name, colnames(compound_mw))
@@ -247,14 +279,7 @@ check_hits <- function(
   # Addition of protein mw with multiples matrix
   complex_mat <- mat + protein_mw
 
-  # Prepare hits_df with protein as first entry
-  hits_df <- data.frame(
-    peak = peaks$mass[which(protein_peak)],
-    intensity = peaks$intensity[which(protein_peak)],
-    compound = parse_filename(sample)[1], # Protein name extracted from sample filename
-    cmp_mass = as.character(protein_mw),
-    multiple = as.integer(1)
-  )
+  hits_df <- data.frame()
 
   # Fill hits_df
   for (j in 1:nrow(peaks_filtered)) {
@@ -276,6 +301,15 @@ check_hits <- function(
 
         # Construct new entry for hits_df data frame
         hits_add <- data.frame(
+          well = "A1",
+          sample = sample,
+          protein = parse_filename(sample)[1],
+          theor_prot = as.numeric(protein_mw),
+          measured_prot = peaks$mass[which(protein_peak)],
+          delta_prot = abs(
+            as.numeric(protein_mw) - peaks$mass[which(protein_peak)]
+          ),
+          prot_intensity = peaks$intensity[which(protein_peak)],
           peak = peaks_filtered[j, "mass"],
           intensity = peaks_filtered[j, "intensity"],
           compound = rownames(indices)[k],
@@ -311,7 +345,7 @@ conversion <- function(hits) {
       " 'hits' argument has to be a data frame with at least two rows"
     )
     return(NULL)
-  } else if (ncol(hits) != 5) {
+  } else if (ncol(hits) != 12) {
     message(
       warning_sym,
       " 'hits' data frame has ",
@@ -325,7 +359,8 @@ conversion <- function(hits) {
   # Peaks are in hits data frame
 
   # Gesamtintensität: IA + IB + IC + ID = Itotal
-  I_total <- sum(unique(hits$intensity))
+  I_total <- sum(unique(hits$intensity)) + unique(hits$prot_intensity)
+  perc_bind_prot <- unique(hits$prot_intensity) / I_total
   message("-> Total intensity = ", I_total)
 
   # nicht umgesetztes / ungebundenes Protein: IA / Itotal * 100
@@ -343,11 +378,12 @@ conversion <- function(hits) {
     )
   hits <- hits |>
     dplyr::mutate(
-      `%binding_tot` = sum(tail(unique(hits$`%binding`), -1))
+      `%binding_tot` = sum(unique(hits$`%binding`)),
+      .before = peak
     )
 
   # Plausibilitätscheck check result < 100 - richtig so?
-  total_relBinding <- hits$`%binding_tot`[1] + hits$`%binding`[1]
+  total_relBinding <- hits$`%binding_tot`[1] + perc_bind_prot
   if (!all.equal(total_relBinding, 1)) {
     message(
       warning_sym,
@@ -377,7 +413,7 @@ conversion <- function(hits) {
   return(hits)
 }
 
-get_result_hits <- function(
+add_hits <- function(
   results,
   protein_mw_file,
   compound_mw_file,
@@ -406,4 +442,20 @@ get_result_hits <- function(
 
   message("Search for hits in ", length(samples), " samples completed.")
   return(results)
+}
+
+# Concatenate and extract all hits data frames from all samples
+summarize_hits <- function(result_list) {
+  # Get samples from result list without session and output elements
+  samples <- head(names(result_list), -2)
+
+  # Prepare empty hits data frame
+  hits_summarized <- data.frame()
+
+  for (i in samples) {
+    message(i)
+    hits_summarized <- rbind(hits_summarized, result_list[[i]]$hits)
+  }
+
+  return(hits_summarized)
 }

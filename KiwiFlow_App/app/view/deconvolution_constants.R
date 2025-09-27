@@ -133,14 +133,6 @@ deconvolution_init_ui <- function(ns) {
                       "Deconvolution range [m/z]",
                       "The span of molecular weights to be deconvoluted.",
                       placement = "bottom"
-                    ),
-                    shiny$div(
-                      class = "tooltip-bttn",
-                      shiny$actionButton(
-                        ns("mass_range_tooltip_bttn"),
-                        label = "",
-                        icon = shiny$icon("circle-question")
-                      )
                     )
                   ),
                   card_body(
@@ -193,11 +185,18 @@ deconvolution_init_ui <- function(ns) {
                 card(
                   card_header(
                     class = "bg-dark help-header",
-                    "Mass range [Da]",
                     tooltip(
-                      shiny$icon("circle-question"),
-                      "The range of mass-to-charge ratios to be detected.",
-                      placement = "right"
+                      "Mass range [Da]",
+                      "The span of molecular weights to be deconvoluted.",
+                      placement = "bottom"
+                    ),
+                    shiny$div(
+                      class = "tooltip-bttn",
+                      shiny$actionButton(
+                        ns("mass_range_tooltip_bttn"),
+                        label = "",
+                        icon = shiny$icon("circle-question")
+                      )
                     )
                   ),
                   card_body(
@@ -247,11 +246,10 @@ deconvolution_init_ui <- function(ns) {
                 card(
                   card_header(
                     class = "bg-dark help-header",
-                    "Retention time [min]",
                     tooltip(
-                      shiny$icon("circle-question"),
+                      "Retention time [min]",
                       "The anticipated time for the analyte to travel through a chromatography column.",
-                      placement = "right"
+                      placement = "bottom"
                     )
                   ),
                   card_body(
@@ -306,9 +304,8 @@ deconvolution_init_ui <- function(ns) {
                 card(
                   card_header(
                     class = "bg-dark help-header",
-                    "Peak parameters",
                     tooltip(
-                      shiny$icon("circle-question"),
+                      "Peak parameters",
                       "Expected characteristics of spectral peaks.",
                       placement = "right"
                     )
@@ -427,7 +424,7 @@ deconvolution_init_ui <- function(ns) {
                   card_header(
                     class = "bg-dark help-header",
                     tooltip(
-                      "Mass bins (Resolution)",
+                      "Sample Rate (Resolution)",
                       "Discrete intervals of mass values for the spectra.",
                       placement = "bottom"
                     ),
