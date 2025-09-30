@@ -19,6 +19,7 @@ ui <- function(id) {
   ns <- NS(id)
 
   bslib::navset_card_tab(
+    id = ns("tabs"),
     bslib::nav_panel(
       "Proteins",
       rHandsontableOutput(ns("protein_table"))
@@ -59,6 +60,15 @@ server <- function(id, conversion_dirs) {
 
     # Set file upload limit
     options(shiny.maxRequestSize = 1000 * 1024^2)
+
+    # Function to set the selected tab
+    set_selected_tab <- function(tab_name) {
+      bslib::nav_select(
+        id = "tabs",
+        selected = tab_name,
+        session = session
+      )
+    }
 
     # Define reactive variables
     vars <- shiny::reactiveValues()
@@ -122,21 +132,21 @@ server <- function(id, conversion_dirs) {
     })
 
     # Observe sample input
-    shiny::observe({
-      shiny::req(conversion_dirs$result())
+    # shiny::observe({
+    #   shiny::req(conversion_dirs$result())
 
-      file_path <- file.path(conversion_dirs$result())
-      result <- readRDS(file_path)
+    #   file_path <- file.path(conversion_dirs$result())
+    #   result <- readRDS(file_path)
 
-      protein <- ifelse(length(vars$proteins) == 1, vars$proteins, "")
-      compound <- ifelse(length(vars$compounds) == 1, vars$compounds, "")
+    #   protein <- ifelse(length(vars$proteins) == 1, vars$proteins, "")
+    #   compound <- ifelse(length(vars$compounds) == 1, vars$compounds, "")
 
-      vars$sample_tab <- data.frame(
-        Sample = head(names(result), -2),
-        Protein = protein,
-        Compound = compound
-      )
-    })
+    #   vars$sample_tab <- data.frame(
+    #     Sample = head(names(result), -2),
+    #     Protein = protein,
+    #     Compound = compound
+    #   )
+    # })
 
     # Render sample table
     shiny::observe({
@@ -254,5 +264,11 @@ server <- function(id, conversion_dirs) {
           )
       })
     })
+
+    # Return currently selected tab
+    list(
+      selected_tab = shiny::reactive(input$tabs),
+      set_selected_tab = set_selected_tab
+    )
   })
 }

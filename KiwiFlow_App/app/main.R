@@ -186,11 +186,13 @@ server <- function(id) {
 
     # Conversion sidebar server
     conversion_dirs <- conversion_sidebar$server(
-      "conversion_sidebar"
+      "conversion_sidebar",
+      selected_tab = conversion_main_vars$selected_tab,
+      set_selected_tab = conversion_main_vars$set_selected_tab
     )
 
     # Conversion main server
-    conversion_main$server(
+    conversion_main_vars <- conversion_main$server(
       "conversion_main",
       conversion_dirs
     )
