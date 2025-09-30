@@ -322,7 +322,7 @@ check_hits <- function(
     }
   }
 
-  message("-> ", nrow(hits_df) - 1, " hits detected.")
+  message("-> ", nrow(hits_df), " hits detected.")
   return(hits_df)
 }
 
@@ -339,10 +339,10 @@ check_hits <- function(
 
 conversion <- function(hits) {
   # Check 'hits' argument validity
-  if (!is.data.frame(hits) || nrow(hits) < 2) {
+  if (!is.data.frame(hits) || nrow(hits) < 1) {
     message(
       warning_sym,
-      " 'hits' argument has to be a data frame with at least two rows"
+      " 'hits' argument has to be a data frame with at least one row"
     )
     return(NULL)
   } else if (ncol(hits) != 12) {
@@ -404,10 +404,28 @@ conversion <- function(hits) {
   # Inform %binding except protein
   message(
     "-> Total binding compounds intensity = ",
-    sum(tail(unique(hits$intensity), -1)),
+    sum(unique(hits$intensity)),
     " (",
     scales::label_percent(accuracy = 0.1)(hits$`%binding_tot`[1]),
     ")"
+  )
+
+  # Change column names
+  colnames(hits) <- c(
+    "Well",
+    "Sample",
+    "Protein",
+    "Mw Protein [Da]",
+    "Measured Mw Protein [Da]",
+    "Delta Mw Protein [Da]",
+    "Protein Intensity",
+    "Total % Binding",
+    "Peak [Da]",
+    "Intensity",
+    "Compound",
+    "Compound Mw [Da]",
+    "Binding Stoichiometry",
+    "% Binding"
   )
 
   return(hits)
@@ -453,7 +471,6 @@ summarize_hits <- function(result_list) {
   hits_summarized <- data.frame()
 
   for (i in samples) {
-    message(i)
     hits_summarized <- rbind(hits_summarized, result_list[[i]]$hits)
   }
 

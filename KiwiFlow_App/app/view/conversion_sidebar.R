@@ -2,7 +2,7 @@
 
 box::use(
   bslib[card, card_body, card_header, sidebar],
-  shiny[actionButton, fileInput, NS, textInput],
+  shiny[actionButton, fileInput, NS, textInput, moduleServer, reactive],
 )
 
 #' @export
@@ -12,38 +12,21 @@ ui <- function(id) {
   sidebar(
     title = "File Upload",
     fileInput(
-      ns("raw_input"),
-      "Select Input File",
+      ns("result_input"),
+      "Select Results File",
       multiple = FALSE,
-      accept = c(".txt", ".tab")
-    ),
-    fileInput(
-      ns("mass_input"),
-      "Select ExpMW File",
-      multiple = FALSE,
-      accept = c("text/tab-separated-values")
-    ),
-    textInput(ns("protein_mass"), "Protein Mass", ""),
-    card(
-      card_header(
-        class = "bg-dark",
-        "Set noise level (+/-)"
-      ),
-      card_body(
-        textInput(ns("cmpd_label"), "Compound Labeling", "4"),
-        textInput(ns("prot_peak"), "Protein Peak", "10")
-      )
-    ),
-    card(
-      card_header(
-        class = "bg-dark",
-        "Customize"
-      ),
-      card_body(
-        textInput(ns("n_label"), "Considered number of labeling", "4"),
-        textInput(ns("n_spectra"), "Considered number of spectra", "20")
-      )
-    ),
-    actionButton(ns("run_conversion_function"), "Calculate Conversions")
+      accept = c(".rds")
+    )
   )
+}
+
+#' @export
+server <- function(id) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+
+    shiny::reactiveValues(
+      result = reactive(input$result_input$datapath)
+    )
+  })
 }

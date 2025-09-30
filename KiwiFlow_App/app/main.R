@@ -83,14 +83,9 @@ ui <- function(id) {
       ),
       bslib$nav_panel(
         title = "Protein Conversion",
-        class = "locked-panel",
-        shiny$div(id = "overlay-message", "Module still in work ..."),
         bslib$page_sidebar(
-          sidebar = conversion_sidebar$ui(ns("protein_conversion")),
-          bslib$card(
-            bslib$card_header("Conversion Table"),
-            conversion_main$ui(ns("conversion_card"))
-          )
+          sidebar = conversion_sidebar$ui(ns("conversion_sidebar")),
+          conversion_main$ui(ns("conversion_main"))
         )
       ),
       bslib$nav_panel(
@@ -139,7 +134,7 @@ ui <- function(id) {
               ),
               "Liora Bioinformatics"
             ),
-            href = "https://www.liora-bioinformatics.com/home",
+            href = "https://www.liora-bioinformatics.com",
             target = "_blank",
             class = "nav-link"
           )
@@ -174,9 +169,6 @@ server <- function(id) {
     log_buttons <- log_sidebar$server("log_sidebar")
     log_view$server("logs", active_tab_reactive, log_buttons)
 
-    # Conversion server
-    conversion_main$server("conversion_card")
-
     reset_button <- shiny$reactiveVal(0)
 
     # Deconvolution sidebar server
@@ -190,6 +182,17 @@ server <- function(id) {
       "deconvolution_process",
       dirs,
       reset_button = reset_button
+    )
+
+    # Conversion sidebar server
+    conversion_dirs <- conversion_sidebar$server(
+      "conversion_sidebar"
+    )
+
+    # Conversion main server
+    conversion_main$server(
+      "conversion_main",
+      conversion_dirs
     )
 
     # Check update availability

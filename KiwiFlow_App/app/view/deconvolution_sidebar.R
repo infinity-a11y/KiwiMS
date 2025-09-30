@@ -182,6 +182,11 @@ server <- function(id, reset_button) {
       targetpath(target_path())
     })
 
+    #TODO test
+    shiny::observe({
+      test3 <<- batchfile()
+    })
+
     # Render batch selection input element
     batch_selection <- div(
       class = "batch-file",
