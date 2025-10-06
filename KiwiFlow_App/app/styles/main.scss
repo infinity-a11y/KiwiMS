@@ -110,18 +110,18 @@ a {
   color: #38387c;
 }
 
-*::-webkit-scrollbar {
-  width: 15px;
-  height: 15px;
-}
+// *::-webkit-scrollbar {
+//   width: 15px;
+//   height: 15px;
+// }
 
-*::-webkit-scrollbar-track {
-  background: white;
-}
+// *::-webkit-scrollbar-track {
+//   background: white;
+// }
 
-*::-webkit-scrollbar-track:horizontal {
-  background: transparent;
-}
+// *::-webkit-scrollbar-track:horizontal {
+//   background: transparent;
+// }
 
 *::-webkit-scrollbar-thumb {
   background-color: #35357a;
@@ -131,13 +131,13 @@ a {
   overflow-y: scroll;
 }
 
-*::-webkit-scrollbar-corner {
-  background: transparent;
-}
+// *::-webkit-scrollbar-corner {
+//   background: transparent;
+// }
 
-pre::-webkit-scrollbar-thumb:horizontal {
-  border: 5px solid #f5f5f5;
-}
+// pre::-webkit-scrollbar-thumb:horizontal {
+//   border: 5px solid #f5f5f5;
+// }
 
 pre {
   background-color: #f7f7f7;
@@ -182,9 +182,9 @@ pre {
   z-index: 99999;
 }
 
-.modal::-webkit-scrollbar-thumb:horizontal {
-  border: 5px solid white;
-}
+// .modal::-webkit-scrollbar-thumb:horizontal {
+//   border: 5px solid white;
+// }
 
 .sF-modal .modal-content {
   overflow: auto;
@@ -992,4 +992,36 @@ decon-report-modal .btn-default {
 
 .modal-header {
   background-color: #ddddde;
+}
+
+#app-conversion_main-protein_table_info,
+#app-conversion_main-compound_table_info,
+#app-conversion_main-sample_table_info {
+  font-style: italic;
+  margin-top: auto;
+  height: 100%;
+  justify-self: center;
+  align-content: center;
+  font-size: 14px;
+  width: 100%;
+  text-align: center;
+  border-radius: var(--bs-border-radius);
+  background: rgba(223, 223, 223, 0.2588235294);
+}
+
+.handsontable .wtHider {
+  height: fit-content !important;
+}
+
+.ht_clone_top .wtHolder {
+  max-width: fit-content !important;
+}
+
+#app-conversion_main-protein_table,
+#app-conversion_main-compound_table,
+#app-conversion_main-sample_table {
+  height: 65vh !important;
+  overflow-y: overlay;
+  overflow-x: auto;
+  max-width: fit-content !important;
 }

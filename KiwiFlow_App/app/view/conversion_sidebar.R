@@ -97,82 +97,6 @@ server <- function(id, selected_tab, set_selected_tab) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
-    module_status <- shiny::reactiveValues(
-      proteins = FALSE,
-      compounds = FALSE,
-      samples = FALSE
-    )
-
-    # Check and confirm module entries
-    shiny::observeEvent(input$confirm_module, {
-      shiny::req(selected_tab())
-
-      if (selected_tab() == "Proteins") {
-        # Here check if proteins declared correctly
-        # Set status variable accordingly
-
-        module_status$proteins <- TRUE
-        shinyjs::runjs(
-          'document.querySelector(".nav-link[data-value=\'Proteins\']").classList.add("done");'
-        )
-        set_selected_tab("Compounds")
-      } else if (selected_tab() == "Compounds") {
-        module_status$proteins <- TRUE
-        shinyjs::runjs(
-          'document.querySelector(".nav-link[data-value=\'Compounds\']").classList.add("done");'
-        )
-        set_selected_tab("Samples")
-      } else if (selected_tab() == "Samples") {
-        module_status$proteins <- TRUE
-        shinyjs::runjs(
-          'document.querySelector(".nav-link[data-value=\'Samples\']").classList.add("done");'
-        )
-      }
-
-      # Toggle class on button click
-      id_module <- paste0("module_", selected_tab(), "_box")
-
-      shinyjs::addClass(id = id_module, class = "done")
-    })
-
-    # Edit modules
-    shiny::observeEvent(input$edit_module, {
-      shiny::req(selected_tab())
-
-      if (selected_tab() == "Proteins") {
-        module_status$proteins <- FALSE
-        shinyjs::runjs(
-          'document.querySelector(".nav-link[data-value=\'Proteins\']").classList.remove("done");'
-        )
-      } else if (selected_tab() == "Compounds") {
-        module_status$proteins <- FALSE
-        shinyjs::runjs(
-          'document.querySelector(".nav-link[data-value=\'Compounds\']").classList.remove("done");'
-        )
-      } else if (selected_tab() == "Samples") {
-        module_status$proteins <- FALSE
-        shinyjs::runjs(
-          'document.querySelector(".nav-link[data-value=\'Samples\']").classList.remove("done");'
-        )
-      }
-
-      # Toggle class on button click
-      id_module <- paste0("module_", selected_tab(), "_box")
-
-      shinyjs::removeClass(id = id_module, class = "done")
-    })
-
-    # Handle clicks on module boxes to switch tabs
-    shinyjs::onclick(id = "module_Proteins_box", {
-      set_selected_tab("Proteins")
-    })
-    shinyjs::onclick(id = "module_Compounds_box", {
-      set_selected_tab("Compounds")
-    })
-    shinyjs::onclick(id = "module_Samples_box", {
-      set_selected_tab("Samples")
-    })
-
     output$module_sidebar <- shiny::renderUI({
       shiny::req(selected_tab())
 
@@ -218,7 +142,7 @@ server <- function(id, selected_tab, set_selected_tab) {
         )
       } else if (selected_tab() == "Samples") {
         file_select_ui <- fileInput(
-          ns("samples_fileinput"),
+          ns("result_input"),
           "Select File",
           multiple = FALSE,
           accept = c(".rds")
@@ -250,30 +174,6 @@ server <- function(id, selected_tab, set_selected_tab) {
             shiny::div(
               class = "file-select-nomargin",
               file_select_ui
-            )
-          )
-        ),
-        shiny::fluidRow(
-          shiny::column(
-            width = 6,
-            shiny::div(
-              class = "full-width-btn",
-              shiny::actionButton(
-                ns("confirm_module"),
-                label = "Confirm",
-                icon = shiny::icon("check")
-              )
-            )
-          ),
-          shiny::column(
-            width = 6,
-            shiny::div(
-              class = "full-width-btn",
-              shiny::actionButton(
-                ns("edit_module"),
-                label = "Edit",
-                icon = shiny::icon("pen-to-square")
-              )
             )
           )
         )
@@ -416,7 +316,7 @@ server <- function(id, selected_tab, set_selected_tab) {
 
     # Reactive value for uploaded result list path
     shiny::reactiveValues(
-      result = shiny::reactive(input$samples_fileinput$datapath)
+      result = shiny::reactive(input$result_input$datapath)
     )
   })
 }

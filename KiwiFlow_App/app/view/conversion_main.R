@@ -11,6 +11,9 @@ box::use(
     logic /
     conversion_functions[
       sample_handsontable,
+      prot_comp_handsontable,
+      check_table,
+      slice_tab,
     ],
 )
 
@@ -24,6 +27,34 @@ ui <- function(id) {
       "Proteins",
       shiny::fluidRow(
         shiny::column(
+          width = 3,
+          shiny::div(
+            class = "full-width-btn",
+            shiny::actionButton(
+              ns("confirm_proteins"),
+              label = "Confirm",
+              icon = shiny::icon("check")
+            )
+          )
+        ),
+        shiny::column(
+          width = 2,
+          shiny::div(
+            class = "full-width-btn",
+            shiny::actionButton(
+              ns("edit_proteins"),
+              label = "Edit",
+              icon = shiny::icon("pen-to-square")
+            )
+          )
+        ),
+        shiny::column(
+          width = 3,
+          shiny::textOutput(ns("protein_table_info"))
+        )
+      ),
+      shiny::fluidRow(
+        shiny::column(
           width = 12,
           rHandsontableOutput(ns("protein_table"))
         )
@@ -31,6 +62,34 @@ ui <- function(id) {
     ),
     bslib::nav_panel(
       "Compounds",
+      shiny::fluidRow(
+        shiny::column(
+          width = 3,
+          shiny::div(
+            class = "full-width-btn",
+            shiny::actionButton(
+              ns("confirm_compounds"),
+              label = "Confirm",
+              icon = shiny::icon("check")
+            )
+          )
+        ),
+        shiny::column(
+          width = 2,
+          shiny::div(
+            class = "full-width-btn",
+            shiny::actionButton(
+              ns("edit_compounds"),
+              label = "Edit",
+              icon = shiny::icon("pen-to-square")
+            )
+          )
+        ),
+        shiny::column(
+          width = 3,
+          shiny::textOutput(ns("compound_table_info"))
+        )
+      ),
       shiny::fluidRow(
         shiny::column(
           width = 12,
@@ -41,6 +100,32 @@ ui <- function(id) {
     bslib::nav_panel(
       "Samples",
       shiny::fluidRow(
+        shiny::column(
+          width = 3,
+          shiny::div(
+            class = "full-width-btn",
+            shiny::actionButton(
+              ns("confirm_samples"),
+              label = "Confirm",
+              icon = shiny::icon("check")
+            )
+          )
+        ),
+        shiny::column(
+          width = 2,
+          shiny::div(
+            class = "full-width-btn",
+            shiny::actionButton(
+              ns("edit_samples"),
+              label = "Edit",
+              icon = shiny::icon("pen-to-square")
+            )
+          )
+        ),
+        shiny::column(
+          width = 3,
+          shiny::textOutput(ns("sample_table_info"))
+        ),
         shiny::column(
           width = 2,
           shiny::actionButton(
@@ -58,7 +143,12 @@ ui <- function(id) {
           )
         )
       ),
-      rHandsontableOutput(ns("sample_table"))
+      shiny::fluidRow(
+        shiny::column(
+          width = 12,
+          rHandsontableOutput(ns("sample_table"))
+        )
+      )
     )
   )
 }
@@ -71,6 +161,12 @@ server <- function(id, conversion_dirs) {
     # Set file upload limit
     options(shiny.maxRequestSize = 1000 * 1024^2)
 
+    # Preefine reactive variables
+    vars <- shiny::reactiveValues(
+      protein_table = NULL,
+      sample_tab = NULL
+    )
+
     # Function to set the selected tab
     set_selected_tab <- function(tab_name) {
       bslib::nav_select(
@@ -80,9 +176,159 @@ server <- function(id, conversion_dirs) {
       )
     }
 
-    # Define reactive variables
-    vars <- shiny::reactiveValues()
-    vars$sample_tab <- NULL
+    # Render table information
+    output$compound_table_info <- output$sample_table_info <- output$protein_table_info <- shiny::renderText(
+      "Editing table ..."
+    )
+
+    # Actions on edit button click
+    shiny::observeEvent(
+      input$edit_proteins | input$edit_compounds | input$edit_samples,
+      {
+        shiny::req(input$tabs)
+
+        if (input$tabs == "Proteins") {
+          # Mark tab as undone
+          shinyjs::runjs(
+            'document.querySelector(".nav-link[data-value=\'Proteins\']").classList.remove("done");'
+          )
+
+          # Render editable table
+          output$protein_table <- rhandsontable::renderRHandsontable(
+            prot_comp_handsontable(vars$protein_table, disabled = FALSE)
+          )
+
+          # Message info
+          output$protein_table_info <- shiny::renderText(
+            "Editing table ..."
+          )
+        } else if (input$tabs == "Compounds") {
+          # Mark tab as undone
+          shinyjs::runjs(
+            'document.querySelector(".nav-link[data-value=\'Compounds\']").classList.remove("done");'
+          )
+
+          # Render editable table
+          output$compound_table <- rhandsontable::renderRHandsontable(
+            prot_comp_handsontable(vars$compound_table, disabled = FALSE)
+          )
+
+          # Message info
+          output$compound_table_info <- shiny::renderText(
+            "Editing table ..."
+          )
+        } else if (input$tabs == "Samples") {
+          shinyjs::runjs(
+            'document.querySelector(".nav-link[data-value=\'Samples\']").classList.remove("done");'
+          )
+
+          # Message info
+          output$sample_table_info <- shiny::renderText(
+            "Editing table ..."
+          )
+        }
+
+        # Toggle class on button click
+        id_module <- paste0("module_", input$tabs, "_box")
+
+        shinyjs::removeClass(id = id_module, class = "done")
+      }
+    )
+
+    # Actions on confirming input table
+    shiny::observeEvent(
+      input$confirm_proteins |
+        input$confirm_compounds |
+        input$confirm_samples,
+      {
+        if (input$tabs == "Proteins") {
+          shiny::req(input$protein_table)
+
+          # Retrieve sliced user input table
+          protein_table <- slice_tab(rhandsontable::hot_to_r(
+            input$protein_table
+          ))
+
+          # Validate correct input
+          protein_table_status <- check_table(
+            protein_table,
+            col_limit = 10
+          )
+
+          if (isTRUE(protein_table_status)) {
+            # If table validation successful
+
+            # Mark as done
+            shinyjs::runjs(
+              'document.querySelector(".nav-link[data-value=\'Proteins\']").classList.add("done");'
+            )
+
+            # Message success
+            output$protein_table_info <- shiny::renderText("Table saved!")
+
+            # Render table disabled
+            output$protein_table <- rhandsontable::renderRHandsontable(
+              prot_comp_handsontable(protein_table, disabled = TRUE)
+            )
+
+            # Assign user input to reactive table variable
+            vars$protein_table <- protein_table
+
+            # Jump to next tab module
+            set_selected_tab("Compounds")
+          } else {
+            # If protein table validation unsuccessful
+
+            output$protein_table_info <- shiny::renderText(protein_table_status)
+          }
+        } else if (input$tabs == "Compounds") {
+          shiny::req(input$compound_table)
+
+          # Retrieve sliced user input table
+          compound_table <- slice_tab(rhandsontable::hot_to_r(
+            input$compound_table
+          ))
+
+          # Validate correct input
+          compound_table_status <- check_table(
+            compound_table,
+            col_limit = 10
+          )
+
+          if (isTRUE(compound_table_status)) {
+            # If table validation successful
+
+            # Mark as done
+            shinyjs::runjs(
+              'document.querySelector(".nav-link[data-value=\'Compounds\']").classList.add("done");'
+            )
+
+            # Message success
+            output$compound_table_info <- shiny::renderText("Table saved!")
+
+            # Render table disabled
+            output$compound_table <- rhandsontable::renderRHandsontable(
+              prot_comp_handsontable(compound_table, disabled = TRUE)
+            )
+
+            # Jump to next tab module
+            set_selected_tab("Samples")
+
+            # Assign user input to reactive table variable
+            vars$compound_table <- compound_table
+          } else {
+            # If protein table validation unsuccessful
+            output$compound_table_info <- shiny::renderText(
+              compound_table_status
+            )
+          }
+        } else if (input$tabs == "Samples") {
+          shinyjs::runjs(
+            'document.querySelector(".nav-link[data-value=\'Samples\']").classList.add("done");'
+          )
+        }
+      }
+    )
 
     # Add/Remove compound columns
     shiny::observeEvent(input$add_compound, {
@@ -222,27 +468,7 @@ server <- function(id, conversion_dirs) {
       )
 
       output$compound_table <- renderRHandsontable({
-        rhandsontable(
-          tab,
-          rowHeaders = NULL,
-          stretchH = "all",
-          width = "100%"
-        ) |>
-          rhandsontable::hot_cols(fixedColumnsLeft = 1) |>
-          rhandsontable::hot_table(
-            contextMenu = TRUE,
-            highlightCol = TRUE,
-            highlightRow = TRUE
-          ) |>
-          rhandsontable::hot_context_menu(
-            allowRowEdit = TRUE,
-            allowColEdit = FALSE
-          ) |>
-          rhandsontable::hot_validate_numeric(
-            cols = 2:ncol(tab),
-            min = 1,
-            allowInvalid = TRUE
-          )
+        prot_comp_handsontable(tab)
       })
     })
 
@@ -284,29 +510,7 @@ server <- function(id, conversion_dirs) {
       )
 
       output$protein_table <- renderRHandsontable({
-        output_tab <- rhandsontable(
-          tab,
-          rowHeaders = NULL,
-          stretchH = "all",
-          width = "100%"
-        ) |>
-          rhandsontable::hot_cols(fixedColumnsLeft = 1, ) |>
-          rhandsontable::hot_table(
-            contextMenu = TRUE,
-            highlightCol = TRUE,
-            highlightRow = TRUE
-          ) |>
-          rhandsontable::hot_context_menu(
-            allowRowEdit = TRUE,
-            allowColEdit = FALSE
-          ) |>
-          rhandsontable::hot_validate_numeric(
-            cols = 2:ncol(tab),
-            min = 1,
-            allowInvalid = TRUE
-          )
-
-        return(output_tab)
+        prot_comp_handsontable(tab)
       })
     })
 
