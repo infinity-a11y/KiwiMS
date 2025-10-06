@@ -307,7 +307,7 @@ server <- function(id, selected_tab, set_selected_tab) {
                   shiny::tags$strong("maximum number of compound molecules"),
                   " that are assumed or allowed to bind to a single protein molecule in this calculation or model (",
                   shiny::tags$em("N"),
-                  shiny::tags$sub("max"), # <-- CHANGED: Use tags$sub() for subscript
+                  shiny::tags$sub("max"),
                   ")."
                 ),
                 shiny::br()
@@ -362,23 +362,20 @@ server <- function(id, selected_tab, set_selected_tab) {
         shiny::div(
           class = "start-modal",
           shiny::modalDialog(
-            shiny::fluidRow(
+            shiny::column(
+              width = 12,
+              shiny::div(
+                class = "tooltip-text",
+                "One or more proteins can be screened for. The protein names/IDs together with their Mw values [Da] can be defined either via file upload or by entering the values into the table. The table also supports copy/paste for efficient filling."
+              ),
               shiny::br(),
-              shiny::column(
-                width = 10,
-                shiny::div(
-                  class = "tooltip-text",
-                  "One or more proteins can be screened for. The protein names/IDs together with their Mw values [Da] can be defined either via file upload or by entering the values into the table. The table also supports copy/paste for efficient filling."
-                ),
-                shiny::br(),
-                shiny::div(
-                  class = "tooltip-img-text",
-                  "The format requires the name/ID as first column and up to nine columns the theoretical mass as well as any mass shifts per protein. Headers are optional."
-                ),
-                shiny::br(),
-                shiny::tags$img(src = "static/protein_table.png"),
-                shiny::br()
-              )
+              shiny::div(
+                class = "tooltip-img-text",
+                "The format requires the name/ID as first column and up to nine columns the theoretical mass as well as any mass shifts per protein. Headers are optional."
+              ),
+              shiny::br(),
+              shiny::tags$img(src = "static/protein_table.png"),
+              shiny::br()
             ),
             title = "Peak Tolerance",
             easyClose = TRUE,
@@ -395,25 +392,22 @@ server <- function(id, selected_tab, set_selected_tab) {
         shiny::div(
           class = "start-modal",
           shiny::modalDialog(
-            shiny::fluidRow(
+            shiny::column(
+              width = 12,
+              shiny::div(
+                class = "tooltip-text",
+                "One or more compounds can be screened for. The compound names/IDs together with their Mw values [Da] can be defined either via file upload or by entering the values into the table. The table also supports copy/paste for efficient filling."
+              ),
               shiny::br(),
-              shiny::column(
-                width = 10,
-                shiny::div(
-                  class = "tooltip-text",
-                  "One or more compounds can be screened for. The compound names/IDs together with their Mw values [Da] can be defined either via file upload or by entering the values into the table. The table also supports copy/paste for efficient filling."
-                ),
-                shiny::br(),
-                shiny::div(
-                  class = "tooltip-img-text",
-                  "The format requires the name/ID as first column and up to nine columns the theoretical mass as well as any mass shifts per compound. Headers are optional."
-                ),
-                shiny::br(),
-                shiny::tags$img(
-                  src = "static/compound_table.png"
-                ),
-                shiny::br()
-              )
+              shiny::div(
+                class = "tooltip-img-text",
+                "The format requires the name/ID as first column and up to nine columns the theoretical mass as well as any mass shifts per compound. Headers are optional."
+              ),
+              shiny::br(),
+              shiny::tags$img(
+                src = "static/compound_table.png"
+              ),
+              shiny::br()
             ),
             title = "Peak Tolerance",
             easyClose = TRUE,

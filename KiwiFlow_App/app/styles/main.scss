@@ -194,6 +194,8 @@ pre {
 
 .modal-content {
   box-shadow: 0 0 20vh 20px #00000082;
+  width: fit-content;
+  justify-items: center;
 }
 
 .sF-modal button,
@@ -977,5 +979,17 @@ decon-report-modal .btn-default {
 }
 
 .modal-dialog {
-  max-width: 65vw;
+  max-width: 90vw;
+  justify-items: center;
+  width: 60vw;
+}
+
+.modal-body {
+  max-height: 60vh;
+  overflow-y: scroll;
+  justify-items: center;
+}
+
+.modal-header {
+  background-color: #ddddde;
 }
