@@ -143,14 +143,8 @@ server <- function(id, conversion_dirs) {
 
     # Observe sample input
     shiny::observe({
-      # if (is.null(conversion_dirs)) {
-      #   message("NULL")
-      # } else {
-      #   message(class(conversion_dirs))
-      # }
-      # message(class(conversion_dirs$result()))
       shiny::req(conversion_dirs$result())
-      # message(conversion_dirs$result())
+
       file_path <- file.path(conversion_dirs$result())
       message(file_path)
       result <- readRDS(file_path)

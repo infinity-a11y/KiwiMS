@@ -218,7 +218,7 @@ server <- function(id, selected_tab, set_selected_tab) {
         )
       } else if (selected_tab() == "Samples") {
         file_select_ui <- fileInput(
-          ns("Samples_fileinput"),
+          ns("samples_fileinput"),
           "Select File",
           multiple = FALSE,
           accept = c(".rds")
@@ -413,10 +413,10 @@ server <- function(id, selected_tab, set_selected_tab) {
         )
       )
     })
-  })
 
-  # Reactive value for uploaded result list path
-  shiny::reactiveValues(
-    result = shiny::reactive(input$result_input$datapath)
-  )
+    # Reactive value for uploaded result list path
+    shiny::reactiveValues(
+      result = shiny::reactive(input$samples_fileinput$datapath)
+    )
+  })
 }
