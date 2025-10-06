@@ -173,11 +173,6 @@ server <- function(id, selected_tab, set_selected_tab) {
       set_selected_tab("Samples")
     })
 
-    # Reactive value for uploaded result list path
-    shiny::reactiveValues(
-      result = shiny::reactive(input$result_input$datapath)
-    )
-
     output$module_sidebar <- shiny::renderUI({
       shiny::req(selected_tab())
 
@@ -419,4 +414,9 @@ server <- function(id, selected_tab, set_selected_tab) {
       )
     })
   })
+
+  # Reactive value for uploaded result list path
+  shiny::reactiveValues(
+    result = shiny::reactive(input$result_input$datapath)
+  )
 }

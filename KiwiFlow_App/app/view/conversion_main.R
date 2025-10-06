@@ -22,11 +22,21 @@ ui <- function(id) {
     id = ns("tabs"),
     bslib::nav_panel(
       "Proteins",
-      rHandsontableOutput(ns("protein_table"))
+      shiny::fluidRow(
+        shiny::column(
+          width = 12,
+          rHandsontableOutput(ns("protein_table"))
+        )
+      )
     ),
     bslib::nav_panel(
       "Compounds",
-      rHandsontableOutput(ns("compound_table"))
+      shiny::fluidRow(
+        shiny::column(
+          width = 12,
+          rHandsontableOutput(ns("compound_table"))
+        )
+      )
     ),
     bslib::nav_panel(
       "Samples",
@@ -89,7 +99,7 @@ server <- function(id, conversion_dirs) {
       output$sample_table <- renderRHandsontable({
         sample_handsontable(
           tab = tab,
-          proteins = vars$proteins,
+          proteins = vars$protein_table$Protein,
           compounds = vars$compounds
         )
       })
@@ -108,7 +118,7 @@ server <- function(id, conversion_dirs) {
       output$sample_table <- renderRHandsontable({
         sample_handsontable(
           tab = tab,
-          proteins = vars$proteins,
+          proteins = vars$protein_table$Protein,
           compounds = vars$compounds
         )
       })
@@ -132,21 +142,28 @@ server <- function(id, conversion_dirs) {
     })
 
     # Observe sample input
-    # shiny::observe({
-    #   shiny::req(conversion_dirs$result())
+    shiny::observe({
+      # if (is.null(conversion_dirs)) {
+      #   message("NULL")
+      # } else {
+      #   message(class(conversion_dirs))
+      # }
+      # message(class(conversion_dirs$result()))
+      shiny::req(conversion_dirs$result())
+      # message(conversion_dirs$result())
+      file_path <- file.path(conversion_dirs$result())
+      message(file_path)
+      result <- readRDS(file_path)
 
-    #   file_path <- file.path(conversion_dirs$result())
-    #   result <- readRDS(file_path)
+      protein <- ifelse(length(vars$protein_table) == 1, vars$protein_table, "")
+      compound <- ifelse(length(vars$compounds) == 1, vars$compounds, "")
 
-    #   protein <- ifelse(length(vars$proteins) == 1, vars$proteins, "")
-    #   compound <- ifelse(length(vars$compounds) == 1, vars$compounds, "")
-
-    #   vars$sample_tab <- data.frame(
-    #     Sample = head(names(result), -2),
-    #     Protein = protein,
-    #     Compound = compound
-    #   )
-    # })
+      vars$sample_tab <- data.frame(
+        Sample = head(names(result), -2),
+        Protein = protein,
+        Compound = compound
+      )
+    })
 
     # Render sample table
     shiny::observe({
@@ -171,7 +188,7 @@ server <- function(id, conversion_dirs) {
       output$sample_table <- renderRHandsontable({
         sample_handsontable(
           tab = tab,
-          proteins = vars$proteins,
+          proteins = vars$protein_table$Protein,
           compounds = vars$compounds
         )
       })
@@ -185,83 +202,117 @@ server <- function(id, conversion_dirs) {
     # Render compound table
     shiny::observe({
       tab <- data.frame(
-        Compound = "",
-        mass_shift1 = "",
-        mass_shift3 = "",
-        mass_shift3 = "",
-        mass_shift4 = "",
-        mass_shift5 = "",
-        mass_shift6 = "",
-        mass_shift7 = "",
-        mass_shift8 = "",
-        mass_shift9 = ""
+        Compound = as.character(rep(NA, 9)),
+        mass_shift1 = as.numeric(rep(NA, 9)),
+        mass_shift3 = as.numeric(rep(NA, 9)),
+        mass_shift3 = as.numeric(rep(NA, 9)),
+        mass_shift4 = as.numeric(rep(NA, 9)),
+        mass_shift5 = as.numeric(rep(NA, 9)),
+        mass_shift6 = as.numeric(rep(NA, 9)),
+        mass_shift7 = as.numeric(rep(NA, 9)),
+        mass_shift8 = as.numeric(rep(NA, 9)),
+        mass_shift9 = as.numeric(rep(NA, 9))
       )
 
       colnames(tab) <- c(
         "Compound",
-        "Mass Shift #1",
-        "Mass Shift #2",
-        "Mass Shift #3",
-        "Mass Shift #4",
-        "Mass Shift #5",
-        "Mass Shift #6",
-        "Mass Shift #7",
-        "Mass Shift #8",
-        "Mass Shift #9"
+        "Mass 1",
+        "Mass 2",
+        "Mass 3",
+        "Mass 4",
+        "Mass 5",
+        "Mass 6",
+        "Mass 7",
+        "Mass 8",
+        "Mass 9"
       )
 
       output$compound_table <- renderRHandsontable({
-        rhandsontable(tab, rowHeaders = NULL) |>
+        rhandsontable(
+          tab,
+          rowHeaders = NULL,
+          stretchH = "all",
+          width = "100%"
+        ) |>
           rhandsontable::hot_cols(fixedColumnsLeft = 1) |>
           rhandsontable::hot_table(
-            contextMenu = FALSE,
+            contextMenu = TRUE,
             highlightCol = TRUE,
             highlightRow = TRUE
+          ) |>
+          rhandsontable::hot_context_menu(
+            allowRowEdit = TRUE,
+            allowColEdit = FALSE
+          ) |>
+          rhandsontable::hot_validate_numeric(
+            cols = 2:ncol(tab),
+            min = 1,
+            allowInvalid = TRUE
           )
       })
     })
 
     # Observe protein IDs
     shiny::observe({
-      vars$proteins <- rhandsontable::hot_to_r(input$protein_table)$Protein
+      tryCatch(
+        {
+          vars$protein_table <- rhandsontable::hot_to_r(input$protein_table)
+        }
+      )
     })
 
     # Render compound table
     shiny::observe({
       tab <- data.frame(
-        Protein = "",
-        mass_shift1 = "",
-        mass_shift3 = "",
-        mass_shift3 = "",
-        mass_shift4 = "",
-        mass_shift5 = "",
-        mass_shift6 = "",
-        mass_shift7 = "",
-        mass_shift8 = "",
-        mass_shift9 = ""
+        Protein = as.character(rep(NA, 9)),
+        mass_shift1 = as.numeric(rep(NA, 9)),
+        mass_shift3 = as.numeric(rep(NA, 9)),
+        mass_shift3 = as.numeric(rep(NA, 9)),
+        mass_shift4 = as.numeric(rep(NA, 9)),
+        mass_shift5 = as.numeric(rep(NA, 9)),
+        mass_shift6 = as.numeric(rep(NA, 9)),
+        mass_shift7 = as.numeric(rep(NA, 9)),
+        mass_shift8 = as.numeric(rep(NA, 9)),
+        mass_shift9 = as.numeric(rep(NA, 9))
       )
 
       colnames(tab) <- c(
         "Protein",
-        "Mass Shift #1",
-        "Mass Shift #2",
-        "Mass Shift #3",
-        "Mass Shift #4",
-        "Mass Shift #5",
-        "Mass Shift #6",
-        "Mass Shift #7",
-        "Mass Shift #8",
-        "Mass Shift #9"
+        "Mass 1",
+        "Mass 2",
+        "Mass 3",
+        "Mass 4",
+        "Mass 5",
+        "Mass 6",
+        "Mass 7",
+        "Mass 8",
+        "Mass 9"
       )
 
       output$protein_table <- renderRHandsontable({
-        rhandsontable(tab, rowHeaders = NULL) |>
-          rhandsontable::hot_cols(fixedColumnsLeft = 1) |>
+        output_tab <- rhandsontable(
+          tab,
+          rowHeaders = NULL,
+          stretchH = "all",
+          width = "100%"
+        ) |>
+          rhandsontable::hot_cols(fixedColumnsLeft = 1, ) |>
           rhandsontable::hot_table(
-            contextMenu = FALSE,
+            contextMenu = TRUE,
             highlightCol = TRUE,
             highlightRow = TRUE
+          ) |>
+          rhandsontable::hot_context_menu(
+            allowRowEdit = TRUE,
+            allowColEdit = FALSE
+          ) |>
+          rhandsontable::hot_validate_numeric(
+            cols = 2:ncol(tab),
+            min = 1,
+            allowInvalid = TRUE
           )
+
+        return(output_tab)
       })
     })
 
