@@ -34,48 +34,80 @@ prot_comp_handsontable <- function(tab, disabled = FALSE) {
 sample_handsontable <- function(tab, proteins, compounds) {
   cmp_cols <- grep("Compound", colnames(tab))
 
-  tab <- rhandsontable::rhandsontable(tab, rowHeaders = NULL) |>
+  # Allowed protein and compound values
+  allowed_per_col <- list(
+    NULL,
+    proteins,
+    compounds
+  )
+
+  # Custom renderer
+  renderer_js <- "function(instance, td, row, col, prop, value, cellProperties) {
+    Handsontable.renderers.TextRenderer.apply(this, arguments);
+    
+    var allowedPerCol = instance.params ? instance.params.allowed_per_col : null;
+    
+    var allowedRaw;
+    if (col === 1) {
+      allowedRaw = allowedPerCol ? allowedPerCol[1] : null; 
+    } else if (col >= 2) {
+      allowedRaw = allowedPerCol ? allowedPerCol[2] : null; 
+    } else {
+      return;
+    }
+    
+    var normalizedValue = value == null ? '' : String(value).trim();
+    
+    var allowedList = [];
+    
+    if (Array.isArray(allowedRaw)) {
+      allowedList = allowedRaw;
+    } else if (typeof allowedRaw === 'string' && allowedRaw.length > 0) {
+      allowedList = [allowedRaw];
+    } else if (allowedRaw && Array.isArray(allowedRaw) === false) {
+      allowedList = [allowedRaw];
+    }
+    
+    
+    if (allowedList.length > 0) {
+      var isValid = allowedList.includes(normalizedValue) || normalizedValue === '';
+      
+      if (!isValid) {
+        td.style.background = 'red';
+      }
+    }
+  }"
+
+  handsontable <- rhandsontable::rhandsontable(
+    tab,
+    rowHeaders = NULL,
+    allowed_per_col = allowed_per_col,
+  ) |>
     rhandsontable::hot_col("Sample", readOnly = TRUE) |>
-    rhandsontable::hot_cols(fixedColumnsLeft = 1) |>
+    rhandsontable::hot_cols(fixedColumnsLeft = 1, renderer = renderer_js) |>
     rhandsontable::hot_table(
-      contextMenu = FALSE,
-      highlightCol = TRUE,
-      highlightRow = TRUE
+      contextMenu = FALSE
     )
 
   if (length(proteins) > 1) {
-    tab <- tab |>
+    handsontable <- handsontable |>
       rhandsontable::hot_col(
         col = "Protein",
         type = "dropdown",
-        source = proteins,
-        strict = TRUE
-      )
-  } else {
-    tab <- tab |>
-      rhandsontable::hot_col(
-        col = "Protein",
-        readOnly = TRUE
+        source = proteins
       )
   }
 
   if (length(compounds) > 1) {
-    tab <- tab |>
+    handsontable <- handsontable |>
       rhandsontable::hot_col(
         col = min(cmp_cols):max(cmp_cols),
         type = "dropdown",
-        source = compounds,
-        strict = TRUE
-      )
-  } else {
-    tab <- tab |>
-      rhandsontable::hot_col(
-        col = "Compound",
-        readOnly = TRUE
+        source = compounds
       )
   }
 
-  return(tab)
+  return(handsontable)
 }
 
 #' @export

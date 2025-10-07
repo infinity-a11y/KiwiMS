@@ -272,11 +272,25 @@ server <- function(id, conversion_dirs) {
               prot_comp_handsontable(protein_table, disabled = TRUE)
             )
 
+            # Render sample table with new input
+            if (!is.null(input$sample_table)) {
+              output$sample_table <- rhandsontable::renderRHandsontable(
+                sample_handsontable(
+                  tab = rhandsontable::hot_to_r(input$sample_table),
+                  proteins = protein_table$Protein,
+                  compounds = vars$compound_table$Compound
+                )
+              )
+
+              # Jump to next tab module
+              set_selected_tab("Samples")
+            } else {
+              # Jump to next tab module
+              set_selected_tab("Compounds")
+            }
+
             # Assign user input to reactive table variable
             vars$protein_table <- protein_table
-
-            # Jump to next tab module
-            set_selected_tab("Compounds")
           } else {
             # If protein table validation unsuccessful
 
@@ -312,21 +326,28 @@ server <- function(id, conversion_dirs) {
               prot_comp_handsontable(compound_table, disabled = TRUE)
             )
 
-            # Jump to next tab module
-            set_selected_tab("Samples")
+            # Render sample table with new input
+            if (!is.null(input$sample_table)) {
+              output$sample_table <- rhandsontable::renderRHandsontable({
+                sample_handsontable(
+                  tab = rhandsontable::hot_to_r(input$sample_table),
+                  proteins = vars$protein_table$Protein,
+                  compounds = compound_table$Compound
+                )
+              })
+            }
 
             # Assign user input to reactive table variable
             vars$compound_table <- compound_table
+
+            # Jump to next tab module
+            set_selected_tab("Samples")
           } else {
             # If protein table validation unsuccessful
             output$compound_table_info <- shiny::renderText(
               compound_table_status
             )
           }
-        } else if (input$tabs == "Samples") {
-          shinyjs::runjs(
-            'document.querySelector(".nav-link[data-value=\'Samples\']").classList.add("done");'
-          )
         }
       }
     )
@@ -343,7 +364,7 @@ server <- function(id, conversion_dirs) {
       colname <- paste0("Compound#", n + 1)
       tab[[colname]] <- ""
 
-      output$sample_table <- renderRHandsontable({
+      output$sample_table <- rhandsontable::renderRHandsontable({
         sample_handsontable(
           tab = tab,
           proteins = vars$protein_table$Protein,
@@ -362,7 +383,7 @@ server <- function(id, conversion_dirs) {
       remove <- utils::tail(grep("Compound", colnames(tab)), 1)
       tab <- tab[, -(remove)]
 
-      output$sample_table <- renderRHandsontable({
+      output$sample_table <- rhandsontable::renderRHandsontable({
         sample_handsontable(
           tab = tab,
           proteins = vars$protein_table$Protein,
@@ -401,7 +422,6 @@ server <- function(id, conversion_dirs) {
         vars$protein_table,
         vars$compound_table
       )
-
       file_path <- file.path(conversion_dirs$result())
       result <- readRDS(file_path)
 
@@ -410,30 +430,21 @@ server <- function(id, conversion_dirs) {
         vars$protein_table$Protein,
         ""
       )
-      protein_test <<- protein
 
       compound <- ifelse(
         length(vars$compound_table$Compound) == 1,
         vars$compound_table$Compound,
         ""
       )
-      compound_test <<- compound
 
       sample_tab <- data.frame(
         Sample = head(names(result), -2),
         Protein = protein,
         Compound = compound
       )
-      sample_tab_test <<- sample_tab
 
-      if (!isTRUE(vars$sample_tab_rendered)) {
-        message(TRUE)
-        output$sample_table <- renderRHandsontable({
-          test <<- sample_handsontable(
-            tab = sample_tab,
-            proteins = protein,
-            compounds = compound
-          )
+      if (!isTRUE(vars$sample_tab_initial)) {
+        output$sample_table <- rhandsontable::renderRHandsontable({
           sample_handsontable(
             tab = sample_tab,
             proteins = protein,
@@ -442,7 +453,7 @@ server <- function(id, conversion_dirs) {
         })
       }
 
-      vars$sample_tab_rendered <- TRUE
+      vars$sample_tab_initial <- TRUE
     })
 
     # Render compound table
@@ -473,7 +484,7 @@ server <- function(id, conversion_dirs) {
         "Mass 9"
       )
 
-      output$compound_table <- renderRHandsontable({
+      output$compound_table <- rhandsontable::renderRHandsontable({
         prot_comp_handsontable(tab)
       })
     })
@@ -506,7 +517,7 @@ server <- function(id, conversion_dirs) {
         "Mass 9"
       )
 
-      output$protein_table <- renderRHandsontable({
+      output$protein_table <- rhandsontable::renderRHandsontable({
         prot_comp_handsontable(tab)
       })
     })
