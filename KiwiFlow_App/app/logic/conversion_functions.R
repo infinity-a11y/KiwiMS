@@ -76,12 +76,19 @@ sample_handsontable <- function(tab, proteins, compounds) {
         td.style.background = 'red';
       }
     }
+    
+    // Re-apply DropdownRenderer if the cell properties indicate a dropdown type.
+    // This is necessary to force the rendering of the dropdown arrow, which is 
+    // often suppressed when a custom renderer is used via hot_cols().
+    if (cellProperties.type === 'dropdown') {
+        Handsontable.renderers.DropdownRenderer.apply(this, arguments);
+    }
   }"
-
   handsontable <- rhandsontable::rhandsontable(
     tab,
     rowHeaders = NULL,
     allowed_per_col = allowed_per_col,
+    overflow = "visible"
   ) |>
     rhandsontable::hot_col("Sample", readOnly = TRUE) |>
     rhandsontable::hot_cols(fixedColumnsLeft = 1, renderer = renderer_js) |>

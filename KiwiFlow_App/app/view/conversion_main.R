@@ -425,30 +425,26 @@ server <- function(id, conversion_dirs) {
       file_path <- file.path(conversion_dirs$result())
       result <- readRDS(file_path)
 
-      protein <- ifelse(
-        length(vars$protein_table$Protein) == 1,
-        vars$protein_table$Protein,
-        ""
-      )
-
-      compound <- ifelse(
-        length(vars$compound_table$Compound) == 1,
-        vars$compound_table$Compound,
-        ""
-      )
-
       sample_tab <- data.frame(
         Sample = head(names(result), -2),
-        Protein = protein,
-        Compound = compound
+        Protein = ifelse(
+          length(vars$protein_table$Protein) == 1,
+          vars$protein_table$Protein,
+          ""
+        ),
+        Compound = ifelse(
+          length(vars$compound_table$Compound) == 1,
+          vars$compound_table$Compound,
+          ""
+        )
       )
 
       if (!isTRUE(vars$sample_tab_initial)) {
         output$sample_table <- rhandsontable::renderRHandsontable({
           sample_handsontable(
             tab = sample_tab,
-            proteins = protein,
-            compounds = compound
+            proteins = vars$protein_table$Protein,
+            compounds = vars$compound_table$Compound
           )
         })
       }
