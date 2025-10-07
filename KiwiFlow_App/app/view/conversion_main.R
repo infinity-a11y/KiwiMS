@@ -178,8 +178,12 @@ server <- function(id, conversion_dirs) {
     }
 
     # Render table information
-    output$compound_table_info <- output$sample_table_info <- output$protein_table_info <- shiny::renderText(
+    output$compound_table_info <- output$protein_table_info <- shiny::renderText(
       "Editing table ..."
+    )
+
+    output$sample_table_info <- shiny::renderText(
+      "Enter Proteins and Compounds first"
     )
 
     # Actions on edit button click
@@ -187,6 +191,10 @@ server <- function(id, conversion_dirs) {
       input$edit_proteins | input$edit_compounds | input$edit_samples,
       {
         shiny::req(input$tabs)
+
+        output$sample_table_info <- shiny::renderText({
+          "Enter Proteins and Compounds first"
+        })
 
         if (input$tabs == "Proteins") {
           # Mark tab as undone
@@ -417,39 +425,48 @@ server <- function(id, conversion_dirs) {
 
     # Observe sample input
     shiny::observe({
-      shiny::req(
-        conversion_dirs$result(),
-        vars$protein_table,
-        vars$compound_table
-      )
-      file_path <- file.path(conversion_dirs$result())
-      result <- readRDS(file_path)
-
-      sample_tab <- data.frame(
-        Sample = head(names(result), -2),
-        Protein = ifelse(
-          length(vars$protein_table$Protein) == 1,
-          vars$protein_table$Protein,
-          ""
-        ),
-        Compound = ifelse(
-          length(vars$compound_table$Compound) == 1,
-          vars$compound_table$Compound,
-          ""
-        )
-      )
-
-      if (!isTRUE(vars$sample_tab_initial)) {
-        output$sample_table <- rhandsontable::renderRHandsontable({
-          sample_handsontable(
-            tab = sample_tab,
-            proteins = vars$protein_table$Protein,
-            compounds = vars$compound_table$Compound
-          )
+      if (is.null(vars$protein_table) || is.null(vars$compound_table)) {
+        output$sample_table_info <- shiny::renderText({
+          "Enter Proteins and Compounds first"
         })
-      }
+      } else if (is.null(conversion_dirs$result())) {
+        output$sample_table_info <- shiny::renderText({
+          "Upload result file"
+        })
+      } else {
+        output$sample_table_info <- shiny::renderText({
+          "Editing table ..."
+        })
 
-      vars$sample_tab_initial <- TRUE
+        file_path <- file.path(conversion_dirs$result())
+        result <- readRDS(file_path)
+
+        sample_tab <- data.frame(
+          Sample = head(names(result), -2),
+          Protein = ifelse(
+            length(vars$protein_table$Protein) == 1,
+            vars$protein_table$Protein,
+            ""
+          ),
+          Compound = ifelse(
+            length(vars$compound_table$Compound) == 1,
+            vars$compound_table$Compound,
+            ""
+          )
+        )
+
+        if (!isTRUE(vars$sample_tab_initial)) {
+          output$sample_table <- rhandsontable::renderRHandsontable({
+            sample_handsontable(
+              tab = sample_tab,
+              proteins = vars$protein_table$Protein,
+              compounds = vars$compound_table$Compound
+            )
+          })
+        }
+
+        vars$sample_tab_initial <- TRUE
+      }
     })
 
     # Render compound table
