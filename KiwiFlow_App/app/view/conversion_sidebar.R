@@ -187,75 +187,10 @@ server <- function(id, selected_tab, set_selected_tab) {
     })
 
     # Tooltip events
-    shiny::observeEvent(input$max_mult_tooltip_bttn, {
-      shiny::showModal(
-        shiny::div(
-          class = "start-modal",
-          shiny::modalDialog(
-            shiny::fluidRow(
-              shiny::br(),
-              shiny::column(
-                width = 11,
-                shiny::div(
-                  class = "tooltip-text",
-                  "The ",
-                  shiny::tags$strong("maximum number of compound molecules"),
-                  " that are assumed or allowed to bind to a single protein molecule in this calculation or model (",
-                  shiny::tags$em("N"),
-                  shiny::tags$sub("max"),
-                  ")."
-                ),
-                shiny::br()
-              )
-            ),
-            title = "Maximum Stoichiometry",
-            easyClose = TRUE,
-            footer = shiny::tagList(
-              shiny::modalButton("Dismiss")
-            )
-          )
-        )
-      )
-    })
-
-    shiny::observeEvent(input$peak_tol_tooltip_bttn, {
-      shiny::showModal(
-        shiny::div(
-          class = "start-modal",
-          shiny::modalDialog(
-            shiny::fluidRow(
-              shiny::br(),
-              shiny::column(
-                width = 11,
-                shiny::div(
-                  class = "tooltip-text",
-                  "Defines a ",
-                  shiny::tags$strong("tolerance range (in Da)"),
-                  " around the theoretical molecular weight (",
-                  shiny::tags$em("MW"),
-                  ") of a protein or compound. A peak is considered a 'hit' if its signal falls within ",
-                  shiny::HTML("&plusmn;"), # HTML entity for plus-minus
-                  " the Peak Tolerance of the theoretical ",
-                  shiny::tags$em("MW"),
-                  "."
-                ),
-                shiny::br()
-              )
-            ),
-            title = "Peak Tolerance",
-            easyClose = TRUE,
-            footer = shiny::tagList(
-              shiny::modalButton("Dismiss")
-            )
-          )
-        )
-      )
-    })
-
     shiny::observeEvent(input$declaration_prot_tooltip_bttn, {
       shiny::showModal(
         shiny::div(
-          class = "start-modal",
+          class = "tip-modal",
           shiny::modalDialog(
             shiny::column(
               width = 12,
@@ -285,7 +220,7 @@ server <- function(id, selected_tab, set_selected_tab) {
     shiny::observeEvent(input$declaration_cmp_tooltip_bttn, {
       shiny::showModal(
         shiny::div(
-          class = "start-modal",
+          class = "tip-modal",
           shiny::modalDialog(
             shiny::column(
               width = 12,

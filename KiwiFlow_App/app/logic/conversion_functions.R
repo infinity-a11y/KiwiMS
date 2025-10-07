@@ -48,7 +48,14 @@ sample_handsontable <- function(tab, proteins, compounds) {
       rhandsontable::hot_col(
         col = "Protein",
         type = "dropdown",
-        source = proteins
+        source = proteins,
+        strict = TRUE
+      )
+  } else {
+    tab <- tab |>
+      rhandsontable::hot_col(
+        col = "Protein",
+        readOnly = TRUE
       )
   }
 
@@ -57,7 +64,14 @@ sample_handsontable <- function(tab, proteins, compounds) {
       rhandsontable::hot_col(
         col = min(cmp_cols):max(cmp_cols),
         type = "dropdown",
-        source = compounds
+        source = compounds,
+        strict = TRUE
+      )
+  } else {
+    tab <- tab |>
+      rhandsontable::hot_col(
+        col = "Compound",
+        readOnly = TRUE
       )
   }
 

@@ -1,6 +1,11 @@
 startShiny <- function() {
+  paths <- c(
+    "C:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe",
+    "C:/Users/marian/AppData/Local/BraveSoftware/Brave-Browser/Application/brave.exe"
+  )
+
   options(
-    browser = "C:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe"
+    browser = paths[which(file.exists(paths))]
   )
   if (basename(getwd()) != "KiwiFlow_App") {
     setwd("KiwiFlow_App")

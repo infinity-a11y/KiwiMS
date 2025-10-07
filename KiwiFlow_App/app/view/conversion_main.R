@@ -164,6 +164,7 @@ server <- function(id, conversion_dirs) {
     # Preefine reactive variables
     vars <- shiny::reactiveValues(
       protein_table = NULL,
+      compound_table = NULL,
       sample_tab = NULL
     )
 
@@ -346,7 +347,7 @@ server <- function(id, conversion_dirs) {
         sample_handsontable(
           tab = tab,
           proteins = vars$protein_table$Protein,
-          compounds = vars$compounds
+          compounds = vars$compound_table$Compound
         )
       })
     })
@@ -365,7 +366,7 @@ server <- function(id, conversion_dirs) {
         sample_handsontable(
           tab = tab,
           proteins = vars$protein_table$Protein,
-          compounds = vars$compounds
+          compounds = vars$compound_table$Compound
         )
       })
     })
@@ -374,69 +375,74 @@ server <- function(id, conversion_dirs) {
     shiny::observe({
       shiny::req(input$sample_table)
 
-      tab <- rhandsontable::hot_to_r(input$sample_table)
-
       shinyjs::toggleState(
         id = "add_compound",
-        condition = length(grep("Compound", colnames(tab))) < 9
+        condition = length(grep(
+          "Compound",
+          colnames(rhandsontable::hot_to_r(input$sample_table))
+        )) <
+          9
       )
 
       shinyjs::toggleState(
         id = "remove_compound",
-        condition = length(grep("Compound", colnames(tab))) > 1
+        condition = length(grep(
+          "Compound",
+          colnames(rhandsontable::hot_to_r(input$sample_table))
+        )) >
+          1
       )
     })
 
     # Observe sample input
     shiny::observe({
-      shiny::req(conversion_dirs$result())
+      shiny::req(
+        conversion_dirs$result(),
+        vars$protein_table,
+        vars$compound_table
+      )
 
       file_path <- file.path(conversion_dirs$result())
-      message(file_path)
       result <- readRDS(file_path)
 
-      protein <- ifelse(length(vars$protein_table) == 1, vars$protein_table, "")
-      compound <- ifelse(length(vars$compounds) == 1, vars$compounds, "")
+      protein <- ifelse(
+        length(vars$protein_table$Protein) == 1,
+        vars$protein_table$Protein,
+        ""
+      )
+      protein_test <<- protein
 
-      vars$sample_tab <- data.frame(
+      compound <- ifelse(
+        length(vars$compound_table$Compound) == 1,
+        vars$compound_table$Compound,
+        ""
+      )
+      compound_test <<- compound
+
+      sample_tab <- data.frame(
         Sample = head(names(result), -2),
         Protein = protein,
         Compound = compound
       )
-    })
+      sample_tab_test <<- sample_tab
 
-    # Render sample table
-    shiny::observe({
-      shiny::req(vars$sample_tab)
-
-      # If already present render only client side state
-      if (is.null(input$sample_table)) {
-        tab <- vars$sample_tab
-      } else {
-        tab <- rhandsontable::hot_to_r(input$sample_table)
+      if (!isTRUE(vars$sample_tab_rendered)) {
+        message(TRUE)
+        output$sample_table <- renderRHandsontable({
+          test <<- sample_handsontable(
+            tab = sample_tab,
+            proteins = protein,
+            compounds = compound
+          )
+          sample_handsontable(
+            tab = sample_tab,
+            proteins = protein,
+            compounds = compound
+          )
+        })
       }
 
-      vars$trigger
-      shiny::isolate(
-        if (isTRUE(vars$col_add)) {
-          tab[[vars$test]] <- ""
-
-          vars$col_add <- FALSE
-        }
-      )
-
-      output$sample_table <- renderRHandsontable({
-        sample_handsontable(
-          tab = tab,
-          proteins = vars$protein_table$Protein,
-          compounds = vars$compounds
-        )
-      })
-    })
-
-    # Observe compound IDs
-    shiny::observe({
-      vars$compounds <- rhandsontable::hot_to_r(input$compound_table)$Compound
+      vars$sample_tab_rendered <- TRUE
     })
 
     # Render compound table
@@ -470,15 +476,6 @@ server <- function(id, conversion_dirs) {
       output$compound_table <- renderRHandsontable({
         prot_comp_handsontable(tab)
       })
-    })
-
-    # Observe protein IDs
-    shiny::observe({
-      tryCatch(
-        {
-          vars$protein_table <- rhandsontable::hot_to_r(input$protein_table)
-        }
-      )
     })
 
     # Render compound table
