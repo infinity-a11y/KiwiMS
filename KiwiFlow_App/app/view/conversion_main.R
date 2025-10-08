@@ -33,6 +33,22 @@ ui <- function(id) {
       "Proteins",
       shiny::fluidRow(
         shiny::column(
+          width = 3,
+          shiny::div(
+            class = "table-input",
+            shiny::fileInput(
+              ns("proteins_fileinput"),
+              "",
+              multiple = FALSE,
+              accept = c(".csv", ".tsv", ".xlsx", ".xls", ".txt")
+            )
+          )
+        ),
+        shiny::column(
+          width = 3,
+          shiny::textOutput(ns("protein_table_info"))
+        ),
+        shiny::column(
           width = 2,
           shiny::div(
             class = "full-width-btn",
@@ -57,10 +73,6 @@ ui <- function(id) {
               )
             )
           )
-        ),
-        shiny::column(
-          width = 3,
-          shiny::textOutput(ns("protein_table_info"))
         )
       ),
       shiny::fluidRow(
@@ -73,6 +85,22 @@ ui <- function(id) {
     bslib::nav_panel(
       "Compounds",
       shiny::fluidRow(
+        shiny::column(
+          width = 3,
+          shiny::div(
+            class = "table-input",
+            shiny::fileInput(
+              ns("compounds_fileinput"),
+              "",
+              multiple = FALSE,
+              accept = c(".csv", ".tsv", ".xlsx", ".xls", ".txt")
+            )
+          )
+        ),
+        shiny::column(
+          width = 3,
+          shiny::textOutput(ns("compound_table_info"))
+        ),
         shiny::column(
           width = 2,
           shiny::div(
@@ -96,10 +124,6 @@ ui <- function(id) {
               )
             )
           )
-        ),
-        shiny::column(
-          width = 3,
-          shiny::textOutput(ns("compound_table_info"))
         )
       ),
       shiny::fluidRow(
@@ -113,6 +137,16 @@ ui <- function(id) {
       "Samples",
       shiny::fluidRow(
         shiny::column(
+          width = 3,
+          shiny::div(
+            class = "table-input",
+            fileInput(
+              ns("result_input"),
+              "Select File",
+              multiple = FALSE,
+              accept = c(".rds")
+            )
+          ),
           width = 2,
           shiny::div(
             class = "full-width-btn",
