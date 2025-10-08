@@ -786,77 +786,60 @@ server <- function(id, conversion_dirs) {
 
     # Render compound table
     shiny::observe({
-      tab <- data.frame(
-        Compound = as.character(rep(NA, 9)),
-        mass_shift1 = as.numeric(rep(NA, 9)),
-        mass_shift3 = as.numeric(rep(NA, 9)),
-        mass_shift3 = as.numeric(rep(NA, 9)),
-        mass_shift4 = as.numeric(rep(NA, 9)),
-        mass_shift5 = as.numeric(rep(NA, 9)),
-        mass_shift6 = as.numeric(rep(NA, 9)),
-        mass_shift7 = as.numeric(rep(NA, 9)),
-        mass_shift8 = as.numeric(rep(NA, 9)),
-        mass_shift9 = as.numeric(rep(NA, 9))
-      )
+      if (is.null(vars$compound_table)) {
+        tab <- data.frame(
+          Compound = as.character(rep(NA, 9)),
+          mass_shift1 = as.numeric(rep(NA, 9)),
+          mass_shift3 = as.numeric(rep(NA, 9)),
+          mass_shift3 = as.numeric(rep(NA, 9)),
+          mass_shift4 = as.numeric(rep(NA, 9)),
+          mass_shift5 = as.numeric(rep(NA, 9)),
+          mass_shift6 = as.numeric(rep(NA, 9)),
+          mass_shift7 = as.numeric(rep(NA, 9)),
+          mass_shift8 = as.numeric(rep(NA, 9)),
+          mass_shift9 = as.numeric(rep(NA, 9))
+        )
 
-      colnames(tab) <- c(
-        "Compound",
-        "Mass 1",
-        "Mass 2",
-        "Mass 3",
-        "Mass 4",
-        "Mass 5",
-        "Mass 6",
-        "Mass 7",
-        "Mass 8",
-        "Mass 9"
-      )
+        colnames(tab) <- c(
+          "Compound",
+          "Mass 1",
+          "Mass 2",
+          "Mass 3",
+          "Mass 4",
+          "Mass 5",
+          "Mass 6",
+          "Mass 7",
+          "Mass 8",
+          "Mass 9"
+        )
 
-      output$compound_table <- rhandsontable::renderRHandsontable({
-        prot_comp_handsontable(tab)
-      })
+        output$compound_table <- rhandsontable::renderRHandsontable({
+          prot_comp_handsontable(tab)
+        })
+      }
     })
 
     # Render protein table
     shiny::observe({
-      empty_protein_tab <- empty_tab
-      colnames(empty_protein_tab) <- c(
-        "Protein",
-        "Mass 1",
-        "Mass 2",
-        "Mass 3",
-        "Mass 4",
-        "Mass 5",
-        "Mass 6",
-        "Mass 7",
-        "Mass 8",
-        "Mass 9"
-      )
+      if (is.null(vars$protein_table)) {
+        empty_protein_tab <- empty_tab
+        colnames(empty_protein_tab) <- c(
+          "Protein",
+          "Mass 1",
+          "Mass 2",
+          "Mass 3",
+          "Mass 4",
+          "Mass 5",
+          "Mass 6",
+          "Mass 7",
+          "Mass 8",
+          "Mass 9"
+        )
 
-      output$protein_table <- rhandsontable::renderRHandsontable(
-        prot_comp_handsontable(empty_protein_tab)
-      )
-    })
-
-    # Render compound table
-    shiny::observe({
-      empty_compound_tab <- empty_tab
-      colnames(empty_compound_tab) <- c(
-        "Compound",
-        "Mass 1",
-        "Mass 2",
-        "Mass 3",
-        "Mass 4",
-        "Mass 5",
-        "Mass 6",
-        "Mass 7",
-        "Mass 8",
-        "Mass 9"
-      )
-
-      output$compound_table <- rhandsontable::renderRHandsontable(
-        prot_comp_handsontable(empty_compound_tab)
-      )
+        output$protein_table <- rhandsontable::renderRHandsontable(
+          prot_comp_handsontable(empty_protein_tab)
+        )
+      }
     })
 
     # Return currently selected tab
