@@ -1,5 +1,15 @@
 # app/logic/conversion_functions.R
 
+# Function to set the selected tab
+#' @export
+set_selected_tab <- function(tab_name, session) {
+  bslib::nav_select(
+    id = "tabs",
+    selected = tab_name,
+    session = session
+  )
+}
+
 #' @export
 prot_comp_handsontable <- function(tab, disabled = FALSE) {
   renderer_js <- "function(instance, td, row, col, prop, value, cellProperties) {
@@ -98,7 +108,7 @@ prot_comp_handsontable <- function(tab, disabled = FALSE) {
     rowHeaders = NULL,
     stretchH = "all"
   ) |>
-    rhandsontable::hot_cols(fixedColumnsLeft = 1, , renderer = renderer_js) |>
+    rhandsontable::hot_cols(fixedColumnsLeft = 1, renderer = renderer_js) |>
     rhandsontable::hot_table(
       contextMenu = TRUE,
       highlightCol = TRUE,

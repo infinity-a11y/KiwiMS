@@ -14,6 +14,12 @@ box::use(
       prot_comp_handsontable,
       check_table,
       slice_tab,
+      set_selected_tab
+    ],
+  app /
+    logic /
+    conversion_constants[
+      empty_tab,
     ],
 )
 
@@ -167,24 +173,18 @@ server <- function(id, conversion_dirs) {
     # Set file upload limit
     options(shiny.maxRequestSize = 1000 * 1024^2)
 
-    # Preefine reactive variables
+    # Predefine reactive variables
     vars <- shiny::reactiveValues(
       protein_table = NULL,
       protein_table_active = TRUE,
+      protein_table_status = FALSE,
       compound_table = NULL,
+      compound_table_active = TRUE,
+      compound_table_status = FALSE,
       sample_tab = NULL
     )
 
-    # Function to set the selected tab
-    set_selected_tab <- function(tab_name) {
-      bslib::nav_select(
-        id = "tabs",
-        selected = tab_name,
-        session = session
-      )
-    }
-
-    # Observe table status
+    # Observe table status for protein table
     shiny::observe({
       shiny::req(input$protein_table, vars$protein_table_active)
 
@@ -193,9 +193,12 @@ server <- function(id, conversion_dirs) {
         input$protein_table
       ))
 
+      # If table non-empty check for correctness
       if (nrow(protein_table) < 1) {
+        # Set status variable to FALSE
         vars$protein_table_status <- FALSE
 
+        # UI feedback
         shinyjs::removeClass(
           "protein_table_info",
           "table-info-green"
@@ -204,10 +207,10 @@ server <- function(id, conversion_dirs) {
           "protein_table_info",
           "table-info-red"
         )
-
         output$protein_table_info <- shiny::renderText(
           "Fill table ..."
         )
+        shinyjs::disable("confirm_proteins")
       } else {
         # Validate correct input
         protein_table_status <- check_table(
@@ -216,8 +219,10 @@ server <- function(id, conversion_dirs) {
         )
 
         if (isTRUE(protein_table_status)) {
+          # Set status variable to TRUE
           vars$protein_table_status <- TRUE
 
+          # UI feedback
           shinyjs::removeClass(
             "protein_table_info",
             "table-info-red"
@@ -229,13 +234,12 @@ server <- function(id, conversion_dirs) {
           output$protein_table_info <- shiny::renderText(
             "Table can be saved"
           )
-
           shinyjs::enable("confirm_proteins")
         } else {
+          # Set status variable to FALSE
           vars$protein_table_status <- FALSE
 
-          shinyjs::disable("confirm_proteins")
-
+          # UI feedback
           shinyjs::removeClass(
             "protein_table_info",
             "table-info-green"
@@ -245,6 +249,81 @@ server <- function(id, conversion_dirs) {
             "table-info-red"
           )
           output$protein_table_info <- shiny::renderText(protein_table_status)
+          shinyjs::disable("confirm_proteins")
+        }
+      }
+    })
+
+    # Observe table status for compound table
+    shiny::observe({
+      shiny::req(input$compound_table, vars$compound_table_active)
+
+      test <<- rhandsontable::hot_to_r(
+        input$compound_table
+      )
+
+      # Retrieve sliced user input table
+      compound_table <- slice_tab(rhandsontable::hot_to_r(
+        input$compound_table
+      ))
+
+      # If table non-empty check for correctness
+      if (nrow(compound_table) < 1) {
+        # Set status variable to FALSE
+        vars$compound_table_status <- FALSE
+
+        # UI feedback
+        shinyjs::removeClass(
+          "compound_table_info",
+          "table-info-green"
+        )
+        shinyjs::addClass(
+          "compound_table_info",
+          "table-info-red"
+        )
+        output$compound_table_info <- shiny::renderText(
+          "Fill table ..."
+        )
+        shinyjs::disable("confirm_compounds")
+      } else {
+        # Validate correct input
+        compound_table_status <- check_table(
+          compound_table,
+          col_limit = 10
+        )
+
+        if (isTRUE(compound_table_status)) {
+          # Set status variable to TRUE
+          vars$compound_table_status <- TRUE
+
+          # UI feedback
+          shinyjs::removeClass(
+            "compound_table_info",
+            "table-info-red"
+          )
+          shinyjs::addClass(
+            "compound_table_info",
+            "table-info-green"
+          )
+          output$compound_table_info <- shiny::renderText(
+            "Table can be saved"
+          )
+          shinyjs::enable("confirm_compounds")
+        } else {
+          # Set status variable to FALSE
+          vars$compound_table_status <- FALSE
+
+          # UI feedback
+          shinyjs::removeClass(
+            "compound_table_info",
+            "table-info-green"
+          )
+          shinyjs::addClass(
+            "compound_table_info",
+            "table-info-red"
+          )
+          output$compound_table_info <- shiny::renderText(compound_table_status)
+          shinyjs::disable("confirm_compounds")
         }
       }
     })
@@ -254,10 +333,6 @@ server <- function(id, conversion_dirs) {
       input$edit_proteins | input$edit_compounds | input$edit_samples,
       {
         shiny::req(input$tabs)
-
-        output$sample_table_info <- shiny::renderText({
-          "Enter Proteins and Compounds first"
-        })
 
         if (input$tabs == "Proteins") {
           # Make table observer active
@@ -273,7 +348,7 @@ server <- function(id, conversion_dirs) {
             prot_comp_handsontable(vars$protein_table, disabled = FALSE)
           )
 
-          # Change confirm button
+          # Change buttons
           shiny::updateActionButton(
             session = session,
             "confirm_proteins",
@@ -283,6 +358,9 @@ server <- function(id, conversion_dirs) {
           shinyjs::enable("confirm_proteins")
           shinyjs::disable("edit_proteins")
         } else if (input$tabs == "Compounds") {
+          # Make table observer active
+          vars$compound_table_active <- TRUE
+
           # Mark tab as undone
           shinyjs::runjs(
             'document.querySelector(".nav-link[data-value=\'Compounds\']").classList.remove("done");'
@@ -293,11 +371,7 @@ server <- function(id, conversion_dirs) {
             prot_comp_handsontable(vars$compound_table, disabled = FALSE)
           )
 
-          # Message info
-          output$compound_table_info <- shiny::renderText(
-            "Editing table ..."
-          )
-
+          # Change buttons
           shiny::updateActionButton(
             session = session,
             "confirm_compounds",
@@ -307,20 +381,11 @@ server <- function(id, conversion_dirs) {
           shinyjs::enable("confirm_compounds")
           shinyjs::disable("edit_compounds")
         } else if (input$tabs == "Samples") {
+          # Mark tab as undone
           shinyjs::runjs(
             'document.querySelector(".nav-link[data-value=\'Samples\']").classList.remove("done");'
           )
-
-          # Message info
-          output$sample_table_info <- shiny::renderText(
-            "Editing table ..."
-          )
         }
-
-        # Toggle class on button click
-        id_module <- paste0("module_", input$tabs, "_box")
-
-        shinyjs::removeClass(id = id_module, class = "done")
       }
     )
 
@@ -331,35 +396,18 @@ server <- function(id, conversion_dirs) {
         input$confirm_samples,
       {
         if (input$tabs == "Proteins") {
-          shiny::req(input$protein_table)
+          # If table can be saved perform actions
+          if (vars$protein_table_status) {
+            shiny::req(input$protein_table)
 
-          # Retrieve sliced user input table
-          protein_table <- slice_tab(rhandsontable::hot_to_r(
-            input$protein_table
-          ))
+            # Retrieve sliced user input table
+            protein_table <- slice_tab(rhandsontable::hot_to_r(
+              input$protein_table
+            ))
 
-          # Validate correct input
-          protein_table_status <- check_table(
-            protein_table,
-            col_limit = 10
-          )
-
-          if (isTRUE(protein_table_status)) {
-            # If table validation successful
-
-            # Mark as done
+            # Mark UI as done
             shinyjs::runjs(
               'document.querySelector(".nav-link[data-value=\'Proteins\']").classList.add("done");'
-            )
-
-            # Message success
-            shinyjs::removeClass(
-              "sample_table_info",
-              "table-info-red"
-            )
-            shinyjs::addClass(
-              "sample_table_info",
-              "table-info-green"
             )
             shinyWidgets::show_toast(
               "Table saved!",
@@ -399,59 +447,29 @@ server <- function(id, conversion_dirs) {
               )
 
               # Jump to next tab module
-              set_selected_tab("Samples")
+              set_selected_tab("Samples", session)
             } else {
               # Jump to next tab module
-              set_selected_tab("Compounds")
+              set_selected_tab("Compounds", session)
             }
 
             # Assign user input to reactive table variable
             vars$protein_table <- protein_table
-          } else {
-            # If protein table validation unsuccessful
-
-            shinyjs::addClass(
-              "sample_table_info",
-              "table-info-red"
-            )
-            shinyjs::removeClass(
-              "sample_table_info",
-              "table-info-green"
-            )
-            output$protein_table_info <- shiny::renderText(protein_table_status)
           }
         } else if (input$tabs == "Compounds") {
-          shiny::req(input$compound_table)
+          # If table can be saved perform actions
+          if (vars$compound_table_status) {
+            shiny::req(input$compound_table)
 
-          # Retrieve sliced user input table
-          compound_table <- slice_tab(rhandsontable::hot_to_r(
-            input$compound_table
-          ))
+            # Retrieve sliced user input table
+            compound_table <- slice_tab(rhandsontable::hot_to_r(
+              input$compound_table
+            ))
 
-          # Validate correct input
-          compound_table_status <- check_table(
-            compound_table,
-            col_limit = 10
-          )
-
-          if (isTRUE(compound_table_status)) {
-            # If table validation successful
-
-            # Mark as done
+            # Mark UI as done
             shinyjs::runjs(
               'document.querySelector(".nav-link[data-value=\'Compounds\']").classList.add("done");'
             )
-
-            # Message success
-            shinyjs::removeClass(
-              "sample_table_info",
-              "table-info-red"
-            )
-            shinyjs::addClass(
-              "sample_table_info",
-              "table-info-green"
-            )
-            output$compound_table_info <- shiny::renderText("Table saved!")
             shinyWidgets::show_toast(
               "Table saved!",
               text = NULL,
@@ -473,35 +491,28 @@ server <- function(id, conversion_dirs) {
               prot_comp_handsontable(compound_table, disabled = TRUE)
             )
 
+            # Inactivate table observer
+            vars$compound_table_active <- FALSE
+
+            # Show table message
+            output$compound_table_info <- shiny::renderText("Table saved!")
+
             # Render sample table with new input
             if (!is.null(input$sample_table)) {
-              output$sample_table <- rhandsontable::renderRHandsontable({
+              output$sample_table <- rhandsontable::renderRHandsontable(
                 sample_handsontable(
                   tab = rhandsontable::hot_to_r(input$sample_table),
                   proteins = vars$protein_table$Protein,
                   compounds = compound_table$Compound
                 )
-              })
+              )
             }
+
+            # Jump to next tab module
+            set_selected_tab("Samples", session)
 
             # Assign user input to reactive table variable
             vars$compound_table <- compound_table
-
-            # Jump to next tab module
-            set_selected_tab("Samples")
-          } else {
-            # If protein table validation unsuccessful
-            shinyjs::addClass(
-              "sample_table_info",
-              "table-info-red"
-            )
-            shinyjs::removeClass(
-              "sample_table_info",
-              "table-info-green"
-            )
-            output$compound_table_info <- shiny::renderText(
-              compound_table_status
-            )
           }
         }
       }
@@ -669,22 +680,10 @@ server <- function(id, conversion_dirs) {
       })
     })
 
-    # Render compound table
+    # Render protein table
     shiny::observe({
-      tab <- data.frame(
-        Protein = as.character(rep(NA, 9)),
-        mass_shift1 = as.numeric(rep(NA, 9)),
-        mass_shift3 = as.numeric(rep(NA, 9)),
-        mass_shift3 = as.numeric(rep(NA, 9)),
-        mass_shift4 = as.numeric(rep(NA, 9)),
-        mass_shift5 = as.numeric(rep(NA, 9)),
-        mass_shift6 = as.numeric(rep(NA, 9)),
-        mass_shift7 = as.numeric(rep(NA, 9)),
-        mass_shift8 = as.numeric(rep(NA, 9)),
-        mass_shift9 = as.numeric(rep(NA, 9))
-      )
-
-      colnames(tab) <- c(
+      empty_protein_tab <- empty_tab
+      colnames(empty_protein_tab) <- c(
         "Protein",
         "Mass 1",
         "Mass 2",
@@ -697,9 +696,30 @@ server <- function(id, conversion_dirs) {
         "Mass 9"
       )
 
-      output$protein_table <- rhandsontable::renderRHandsontable({
-        prot_comp_handsontable(tab)
-      })
+      output$protein_table <- rhandsontable::renderRHandsontable(
+        prot_comp_handsontable(empty_protein_tab)
+      )
+    })
+
+    # Render compound table
+    shiny::observe({
+      empty_compound_tab <- empty_tab
+      colnames(empty_compound_tab) <- c(
+        "Compound",
+        "Mass 1",
+        "Mass 2",
+        "Mass 3",
+        "Mass 4",
+        "Mass 5",
+        "Mass 6",
+        "Mass 7",
+        "Mass 8",
+        "Mass 9"
+      )
+
+      output$compound_table <- rhandsontable::renderRHandsontable(
+        prot_comp_handsontable(empty_compound_tab)
+      )
     })
 
     # Return currently selected tab
