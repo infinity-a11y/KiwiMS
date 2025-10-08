@@ -292,7 +292,9 @@ server <- function(id, conversion_dirs) {
       shiny::req(input$compounds_fileinput)
       file <- input$compounds_fileinput
       ext <- tolower(file_ext(file$name))
+      test1 <<- ext
       df <- read_uploaded_file(file$datapath, ext)
+      test2 <<- df
       if (!is.null(df)) {
         # Validate and adjust columns if necessary
         expected_cols <- c("Compound", paste("Mass", 1:9))
@@ -303,6 +305,7 @@ server <- function(id, conversion_dirs) {
           }
         }
         df <- df[, expected_cols, drop = FALSE]
+        test3 <<- df
         vars$compound_table <- df
         vars$compound_table_status <- TRUE
         output$compound_table <- rhandsontable::renderRHandsontable(
