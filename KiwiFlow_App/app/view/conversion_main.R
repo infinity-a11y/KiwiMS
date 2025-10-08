@@ -144,13 +144,15 @@ ui <- function(id) {
           width = 3,
           shiny::div(
             class = "table-input",
-            fileInput(
+            shiny::fileInput(
               ns("result_input"),
               "Select File",
               multiple = FALSE,
               accept = c(".rds")
             )
-          ),
+          )
+        ),
+        shiny::column(
           width = 2,
           shiny::div(
             class = "full-width-btn",
