@@ -220,18 +220,24 @@ prot_comp_handsontable <- function(tab, disabled = FALSE) {
 }
 
 #' @export
-sample_handsontable <- function(tab, proteins, compounds, disabled = FALSE) {
+sample_handsontable <- function(
+  tab,
+  proteins = NULL,
+  compounds = NULL,
+  disabled = FALSE
+) {
   cmp_cols <- grep("Compound", colnames(tab))
 
   # Allowed protein and compound values
-  allowed_per_col <- list(
-    NULL,
-    proteins,
-    compounds
-  )
+  if (!is.null(proteins) && !is.null(compounds)) {
+    allowed_per_col <- list(
+      NULL,
+      proteins,
+      compounds
+    )
 
-  # Custom renderer
-  renderer_js <- "function(instance, td, row, col, prop, value, cellProperties) {
+    # Custom renderer
+    renderer_js <- "function(instance, td, row, col, prop, value, cellProperties) {
     Handsontable.renderers.TextRenderer.apply(this, arguments);
     
     td.style.background = ''; // Clear existing background for new rendering
@@ -297,6 +303,10 @@ sample_handsontable <- function(tab, proteins, compounds, disabled = FALSE) {
         Handsontable.renderers.DropdownRenderer.apply(this, arguments);
     }
   }"
+  } else {
+    allowed_per_col <- list(NULL)
+    renderer_js <- ""
+  }
 
   handsontable <- rhandsontable::rhandsontable(
     tab,
@@ -340,6 +350,31 @@ slice_tab <- function(tab) {
   return(tab[row_contain, ])
 }
 
+# Validate sample table
+#' @export
+check_sample_table <- function(sample_table, proteins, compounds) {
+  if (any(!sample_table$Protein %in% proteins)) {
+    return("Protein name not found")
+  }
+
+  if (any(!sample_table$Compound %in% compounds)) {
+    return("Compound name not found")
+  }
+
+  if (
+    any(apply(
+      as.data.frame(sample_table[, 3:ncol(sample_table)]),
+      1,
+      duplicated
+    ))
+  ) {
+    return("Duplicated compounds")
+  }
+
+  return(TRUE)
+}
+
+# Validate protein/compound table
 #' @export
 check_table <- function(tab, col_limit) {
   if (!nrow(tab)) {

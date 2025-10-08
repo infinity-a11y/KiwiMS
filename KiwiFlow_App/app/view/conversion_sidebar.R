@@ -101,13 +101,6 @@ server <- function(id, selected_tab, set_selected_tab) {
       shiny::req(selected_tab())
 
       if (selected_tab() == "Proteins") {
-        file_select_ui <- fileInput(
-          ns("proteins_fileinput"),
-          "Select File",
-          multiple = FALSE,
-          accept = c(".csv", ".tsv", ".xlsx", ".xls", ".txt")
-        )
-
         hints <- shiny::div(
           class = "conversion-hint",
           "Upload a CSV|TSV|TXT|Excel file or manually enter names and mass values of the proteins into the table.",
@@ -121,13 +114,6 @@ server <- function(id, selected_tab, set_selected_tab) {
           )
         )
       } else if (selected_tab() == "Compounds") {
-        file_select_ui <- fileInput(
-          ns("compounds_fileinput"),
-          "Select File",
-          multiple = FALSE,
-          accept = c(".csv", ".tsv", ".xlsx", ".xls", ".txt")
-        )
-
         hints <- shiny::div(
           class = "conversion-hint",
           "Upload a CSV|TSV|TXT|Excel file or manually enter names and mass values of the compounds into the table.",
@@ -141,13 +127,6 @@ server <- function(id, selected_tab, set_selected_tab) {
           )
         )
       } else if (selected_tab() == "Samples") {
-        file_select_ui <- fileInput(
-          ns("result_input"),
-          "Select File",
-          multiple = FALSE,
-          accept = c(".rds")
-        )
-
         hints <- shiny::div(class = "conversion-hint", "")
       }
 
@@ -166,15 +145,6 @@ server <- function(id, selected_tab, set_selected_tab) {
           shiny::column(
             width = 12,
             hints
-          )
-        ),
-        shiny::fluidRow(
-          shiny::column(
-            width = 12,
-            shiny::div(
-              class = "file-select-nomargin",
-              file_select_ui
-            )
           )
         )
       )
