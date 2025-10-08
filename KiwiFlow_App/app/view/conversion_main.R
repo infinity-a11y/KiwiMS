@@ -48,6 +48,14 @@ ui <- function(id) {
         ),
         shiny::column(
           width = 3,
+          shiny::checkboxInput(
+            ns("proteins_header_checkbox"),
+            "Has header",
+            value = TRUE
+          )
+        ),
+        shiny::column(
+          width = 3,
           shiny::textOutput(ns("protein_table_info"))
         ),
         shiny::column(
@@ -64,7 +72,7 @@ ui <- function(id) {
           )
         ),
         shiny::column(
-          width = 2,
+          width = 1,
           shiny::div(
             class = "full-width-btn",
             shinyjs::disabled(
@@ -101,6 +109,14 @@ ui <- function(id) {
         ),
         shiny::column(
           width = 3,
+          shiny::checkboxInput(
+            ns("compounds_header_checkbox"),
+            "Has header",
+            value = TRUE
+          )
+        ),
+        shiny::column(
+          width = 3,
           shiny::textOutput(ns("compound_table_info"))
         ),
         shiny::column(
@@ -117,7 +133,7 @@ ui <- function(id) {
           )
         ),
         shiny::column(
-          width = 2,
+          width = 1,
           shiny::div(
             class = "full-width-btn",
             shinyjs::disabled(
@@ -185,14 +201,6 @@ ui <- function(id) {
             label = "",
             icon = shiny::icon("plus")
           )
-        ),
-        shiny::column(
-          width = 2,
-          shiny::actionButton(
-            ns("remove_compound"),
-            label = "",
-            icon = shiny::icon("minus")
-          )
         )
       ),
       shiny::fluidRow(
@@ -225,52 +233,23 @@ server <- function(id, conversion_dirs) {
     )
 
     # Helper function to read uploaded files
-    read_uploaded_file <- function(file_path, ext) {
+    read_uploaded_file <- function(file_path, ext, has_header) {
       tryCatch(
         {
           if (ext %in% c("csv", "txt")) {
-            # Try reading with header first
-            df_header <- read.csv(
+            df <- read.csv(
               file_path,
               stringsAsFactors = FALSE,
-              header = TRUE
+              header = has_header
             )
-            has_header <- any(is.na(as.numeric(colnames(df_header)[-1])))
-            if (!has_header) {
-              df <- read.csv(
-                file_path,
-                stringsAsFactors = FALSE,
-                header = FALSE
-              )
-            } else {
-              df <- df_header
-            }
           } else if (ext == "tsv") {
-            df_header <- read.delim(
+            df <- read.delim(
               file_path,
               stringsAsFactors = FALSE,
-              header = TRUE
+              header = has_header
             )
-            has_header <- any(is.na(as.numeric(colnames(df_header)[-1])))
-            if (!has_header) {
-              df <- read.delim(
-                file_path,
-                stringsAsFactors = FALSE,
-                header = FALSE
-              )
-            } else {
-              df <- df_header
-            }
           } else if (ext %in% c("xlsx", "xls")) {
-            df_header <- read_excel(file_path, col_names = TRUE)
-            df_header_test <<- df_header
-            has_header <- any(is.na(as.numeric(colnames(df_header)[-1])))
-            has_header_test <<- has_header
-            if (!has_header) {
-              df <- read_excel(file_path, col_names = FALSE)
-            } else {
-              df <- df_header
-            }
+            df <- read_excel(file_path, col_names = has_header)
           } else {
             stop("Unsupported file format")
           }
@@ -291,8 +270,7 @@ server <- function(id, conversion_dirs) {
     }
 
     # Helper function to process uploaded table
-    process_uploaded_table <- function(df, type, header) {
-      testest <<- df
+    process_uploaded_table <- function(df, type) {
       if (is.null(df) || nrow(df) == 0) {
         return(NULL)
       }
@@ -349,10 +327,9 @@ server <- function(id, conversion_dirs) {
 
       df <- read_uploaded_file(
         input$proteins_fileinput$datapath,
-        tolower(file_ext(input$proteins_fileinput$name))
+        tolower(file_ext(input$proteins_fileinput$name)),
+        input$proteins_header_checkbox
       )
-
-      file_path <<- input$proteins_fileinput$datapath
 
       df <- process_uploaded_table(df, "protein")
 
@@ -384,7 +361,8 @@ server <- function(id, conversion_dirs) {
 
       df <- read_uploaded_file(
         input$compounds_fileinput$datapath,
-        tolower(file_ext(input$compounds_fileinput$name))
+        tolower(file_ext(input$compounds_fileinput$name)),
+        input$compounds_header_checkbox
       )
 
       df <- process_uploaded_table(df, "compound")
