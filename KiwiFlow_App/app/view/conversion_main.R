@@ -4,6 +4,8 @@ box::use(
   shiny[moduleServer, NS],
   rhandsontable[rhandsontable, rHandsontableOutput, renderRHandsontable],
   utils[head],
+  readxl[read_excel],
+  tools[file_ext],
 )
 
 box::use(
@@ -105,10 +107,12 @@ ui <- function(id) {
           width = 2,
           shiny::div(
             class = "full-width-btn",
-            shiny::actionButton(
-              ns("confirm_compounds"),
-              label = "Save",
-              icon = shiny::icon("bookmark")
+            shinyjs::disabled(
+              shiny::actionButton(
+                ns("confirm_compounds"),
+                label = "Save",
+                icon = shiny::icon("bookmark")
+              )
             )
           )
         ),
@@ -218,6 +222,100 @@ server <- function(id, conversion_dirs) {
       sample_tab = NULL
     )
 
+    # Helper function to read uploaded files
+    read_uploaded_file <- function(file_path, ext) {
+      tryCatch({
+        if (ext %in% c("csv", "txt")) {
+          df <- read.csv(file_path, stringsAsFactors = FALSE)
+        } else if (ext == "tsv") {
+          df <- read.delim(file_path, stringsAsFactors = FALSE)
+        } else if (ext %in% c("xlsx", "xls")) {
+          df <- read_excel(file_path)
+        } else {
+          stop("Unsupported file format")
+        }
+        # Ensure column names are standardized
+        colnames(df) <- trimws(colnames(df))
+        return(df)
+      }, error = function(e) {
+        shinyWidgets::show_toast(
+          "Error reading file",
+          text = e$message,
+          type = "error",
+          timer = 5000
+        )
+        return(NULL)
+      })
+    }
+
+    # Observe protein file upload
+    shiny::observeEvent(input$proteins_fileinput, {
+      shiny::req(input$proteins_fileinput)
+      file <- input$proteins_fileinput
+      ext <- tolower(file_ext(file$name))
+      df <- read_uploaded_file(file$datapath, ext)
+      if (!is.null(df)) {
+        # Validate and adjust columns if necessary
+        expected_cols <- c("Protein", paste("Mass", 1:9))
+        if (!all(expected_cols %in% colnames(df))) {
+          # Add missing columns with NA
+          for (col in expected_cols[!expected_cols %in% colnames(df)]) {
+            df[[col]] <- NA
+          }
+        }
+        df <- df[, expected_cols, drop = FALSE]
+        vars$protein_table <- df
+        vars$protein_table_status <- TRUE
+        output$protein_table <- rhandsontable::renderRHandsontable(
+          prot_comp_handsontable(df, disabled = FALSE)
+        )
+        shinyjs::removeClass("protein_table_info", "table-info-red")
+        shinyjs::addClass("protein_table_info", "table-info-green")
+        output$protein_table_info <- shiny::renderText("Tabelle geladen!")
+        shinyjs::enable("confirm_proteins")
+        shinyjs::enable("edit_proteins")
+        shinyWidgets::show_toast(
+          "Protein table loaded!",
+          type = "success",
+          timer = 3000
+        )
+      }
+    })
+
+    # Observe compound file upload
+    shiny::observeEvent(input$compounds_fileinput, {
+      shiny::req(input$compounds_fileinput)
+      file <- input$compounds_fileinput
+      ext <- tolower(file_ext(file$name))
+      df <- read_uploaded_file(file$datapath, ext)
+      if (!is.null(df)) {
+        # Validate and adjust columns if necessary
+        expected_cols <- c("Compound", paste("Mass", 1:9))
+        if (!all(expected_cols %in% colnames(df))) {
+          # Add missing columns with NA
+          for (col in expected_cols[!expected_cols %in% colnames(df)]) {
+            df[[col]] <- NA
+          }
+        }
+        df <- df[, expected_cols, drop = FALSE]
+        vars$compound_table <- df
+        vars$compound_table_status <- TRUE
+        output$compound_table <- rhandsontable::renderRHandsontable(
+          prot_comp_handsontable(df, disabled = FALSE)
+        )
+        shinyjs::removeClass("compound_table_info", "table-info-red")
+        shinyjs::addClass("compound_table_info", "table-info-green")
+        output$compound_table_info <- shiny::renderText("Tabelle geladen!")
+        shinyjs::enable("confirm_compounds")
+        shinyjs::enable("edit_compounds")
+        shinyWidgets::show_toast(
+          "Compound table loaded!",
+          type = "success",
+          timer = 3000
+        )
+      }
+    })
+
     # Observe table status for protein table
     shiny::observe({
       shiny::req(input$protein_table, vars$protein_table_active)
@@ -309,7 +407,7 @@ server <- function(id, conversion_dirs) {
         # UI feedback
         shinyjs::removeClass(
           "compound_table_info",
-          "table-info-green"
+          "table-info-red"
         )
         shinyjs::addClass(
           "compound_table_info",
