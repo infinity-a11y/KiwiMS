@@ -224,16 +224,49 @@ server <- function(id, conversion_dirs) {
       sample_tab = NULL
     )
 
+    # Helper function to detect if file has header
+    detect_header <- function(df) {
+      if (ncol(df) < 2) return(TRUE)  # Assume header if less than 2 columns
+      # Check if columns 2 to min(10, ncol) can be numeric
+      mass_cols <- 2:min(10, ncol(df))
+      numeric_check <- sapply(mass_cols, function(col) {
+        vals <- na.omit(df[[col]])
+        if (length(vals) == 0) return(TRUE)
+        !any(is.na(suppressWarnings(as.numeric(vals))))
+      })
+      # If most mass columns are numeric, assume header
+      mean(numeric_check) > 0.5
+    }
+
     # Helper function to read uploaded files
     read_uploaded_file <- function(file_path, ext) {
       tryCatch(
         {
           if (ext %in% c("csv", "txt")) {
-            df <- read.csv(file_path, stringsAsFactors = FALSE, header = TRUE)
+            # Try reading with header first
+            df_header <- read.csv(file_path, stringsAsFactors = FALSE, header = TRUE)
+            has_header <- detect_header(df_header)
+            if (!has_header) {
+              df <- read.csv(file_path, stringsAsFactors = FALSE, header = FALSE)
+            } else {
+              df <- df_header
+            }
           } else if (ext == "tsv") {
-            df <- read.delim(file_path, stringsAsFactors = FALSE, header = TRUE)
+            df_header <- read.delim(file_path, stringsAsFactors = FALSE, header = TRUE)
+            has_header <- detect_header(df_header)
+            if (!has_header) {
+              df <- read.delim(file_path, stringsAsFactors = FALSE, header = FALSE)
+            } else {
+              df <- df_header
+            }
           } else if (ext %in% c("xlsx", "xls")) {
-            df <- read_excel(file_path, col_names = TRUE)
+            df_header <- read_excel(file_path, col_names = TRUE)
+            has_header <- detect_header(df_header)
+            if (!has_header) {
+              df <- read_excel(file_path, col_names = FALSE)
+            } else {
+              df <- df_header
+            }
           } else {
             stop("Unsupported file format")
           }
@@ -276,6 +309,25 @@ server <- function(id, conversion_dirs) {
       if (num_cols < 10) {
         for (i in (num_cols + 1):10) {
           df[[expected_cols[i]]] <- NA
+        }
+      }
+
+      # Convert mass columns to numeric
+      mass_cols <- paste("Mass", 1:9)
+      for (col in mass_cols) {
+        if (col %in% colnames(df)) {
+          original <- df[[col]]
+          numeric_vals <- suppressWarnings(as.numeric(original))
+          if (any(is.na(numeric_vals) & !is.na(original))) {
+            shinyWidgets::show_toast(
+              "Conversion error",
+              text = paste("Column", col, "contains non-numeric values that cannot be converted."),
+              type = "error",
+              timer = 5000
+            )
+            return(NULL)
+          }
+          df[[col]] <- numeric_vals
         }
       }
 
