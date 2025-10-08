@@ -224,44 +224,48 @@ server <- function(id, conversion_dirs) {
       sample_tab = NULL
     )
 
-    # Helper function to detect if file has header
-    detect_header <- function(df) {
-      if (ncol(df) < 2) return(TRUE)  # Assume header if less than 2 columns
-      # Check if columns 2 to min(10, ncol) can be numeric
-      mass_cols <- 2:min(10, ncol(df))
-      numeric_check <- sapply(mass_cols, function(col) {
-        vals <- na.omit(df[[col]])
-        if (length(vals) == 0) return(TRUE)
-        !any(is.na(suppressWarnings(as.numeric(vals))))
-      })
-      # If most mass columns are numeric, assume header
-      mean(numeric_check) > 0.5
-    }
-
     # Helper function to read uploaded files
     read_uploaded_file <- function(file_path, ext) {
       tryCatch(
         {
           if (ext %in% c("csv", "txt")) {
             # Try reading with header first
-            df_header <- read.csv(file_path, stringsAsFactors = FALSE, header = TRUE)
-            has_header <- detect_header(df_header)
+            df_header <- read.csv(
+              file_path,
+              stringsAsFactors = FALSE,
+              header = TRUE
+            )
+            has_header <- any(is.na(as.numeric(colnames(df_header)[-1])))
             if (!has_header) {
-              df <- read.csv(file_path, stringsAsFactors = FALSE, header = FALSE)
+              df <- read.csv(
+                file_path,
+                stringsAsFactors = FALSE,
+                header = FALSE
+              )
             } else {
               df <- df_header
             }
           } else if (ext == "tsv") {
-            df_header <- read.delim(file_path, stringsAsFactors = FALSE, header = TRUE)
-            has_header <- detect_header(df_header)
+            df_header <- read.delim(
+              file_path,
+              stringsAsFactors = FALSE,
+              header = TRUE
+            )
+            has_header <- any(is.na(as.numeric(colnames(df_header)[-1])))
             if (!has_header) {
-              df <- read.delim(file_path, stringsAsFactors = FALSE, header = FALSE)
+              df <- read.delim(
+                file_path,
+                stringsAsFactors = FALSE,
+                header = FALSE
+              )
             } else {
               df <- df_header
             }
           } else if (ext %in% c("xlsx", "xls")) {
             df_header <- read_excel(file_path, col_names = TRUE)
-            has_header <- detect_header(df_header)
+            df_header_test <<- df_header
+            has_header <- any(is.na(as.numeric(colnames(df_header)[-1])))
+            has_header_test <<- has_header
             if (!has_header) {
               df <- read_excel(file_path, col_names = FALSE)
             } else {
@@ -287,7 +291,8 @@ server <- function(id, conversion_dirs) {
     }
 
     # Helper function to process uploaded table
-    process_uploaded_table <- function(df, type) {
+    process_uploaded_table <- function(df, type, header) {
+      testest <<- df
       if (is.null(df) || nrow(df) == 0) {
         return(NULL)
       }
@@ -321,7 +326,11 @@ server <- function(id, conversion_dirs) {
           if (any(is.na(numeric_vals) & !is.na(original))) {
             shinyWidgets::show_toast(
               "Conversion error",
-              text = paste("Column", col, "contains non-numeric values that cannot be converted."),
+              text = paste(
+                "Column",
+                col,
+                "contains non-numeric values that cannot be converted."
+              ),
               type = "error",
               timer = 5000
             )
@@ -337,22 +346,33 @@ server <- function(id, conversion_dirs) {
     # Observe protein file upload
     shiny::observeEvent(input$proteins_fileinput, {
       shiny::req(input$proteins_fileinput)
-      file <- input$proteins_fileinput
-      ext <- tolower(file_ext(file$name))
-      df <- read_uploaded_file(file$datapath, ext)
+
+      df <- read_uploaded_file(
+        input$proteins_fileinput$datapath,
+        tolower(file_ext(input$proteins_fileinput$name))
+      )
+
+      file_path <<- input$proteins_fileinput$datapath
+
       df <- process_uploaded_table(df, "protein")
+
       if (!is.null(df)) {
         vars$protein_table <- df
         vars$protein_table_status <- TRUE
+
         output$protein_table <- rhandsontable::renderRHandsontable(
           prot_comp_handsontable(df, disabled = FALSE)
         )
-        shinyjs::removeClass("protein_table_info", "table-info-red")
-        shinyjs::addClass("protein_table_info", "table-info-green")
-        output$protein_table_info <- shiny::renderText("Tabelle geladen!")
+
         shinyWidgets::show_toast(
           "Protein table loaded!",
           type = "success",
+          timer = 3000
+        )
+      } else {
+        shinyWidgets::show_toast(
+          "Loading protein table failed!",
+          type = "error",
           timer = 3000
         )
       }
@@ -361,22 +381,31 @@ server <- function(id, conversion_dirs) {
     # Observe compound file upload
     shiny::observeEvent(input$compounds_fileinput, {
       shiny::req(input$compounds_fileinput)
-      file <- input$compounds_fileinput
-      ext <- tolower(file_ext(file$name))
-      df <- read_uploaded_file(file$datapath, ext)
+
+      df <- read_uploaded_file(
+        input$compounds_fileinput$datapath,
+        tolower(file_ext(input$compounds_fileinput$name))
+      )
+
       df <- process_uploaded_table(df, "compound")
+
       if (!is.null(df)) {
         vars$compound_table <- df
         vars$compound_table_status <- TRUE
+
         output$compound_table <- rhandsontable::renderRHandsontable(
           prot_comp_handsontable(df, disabled = FALSE)
         )
-        # shinyjs::removeClass("compound_table_info", "table-info-red")
-        # shinyjs::addClass("compound_table_info", "table-info-green")
-        output$compound_table_info <- shiny::renderText("Tabelle geladen!")
+
         shinyWidgets::show_toast(
           "Compound table loaded!",
           type = "success",
+          timer = 3000
+        )
+      } else {
+        shinyWidgets::show_toast(
+          "Loading compound table failed!",
+          type = "error",
           timer = 3000
         )
       }
@@ -625,7 +654,7 @@ server <- function(id, conversion_dirs) {
 
             # Keep table editable
             output$protein_table <- rhandsontable::renderRHandsontable(
-              prot_comp_handsontable(protein_table, disabled = FALSE)
+              prot_comp_handsontable(protein_table, disabled = TRUE)
             )
 
             # Inactivate table observer
@@ -686,7 +715,7 @@ server <- function(id, conversion_dirs) {
 
             # Keep table editable
             output$compound_table <- rhandsontable::renderRHandsontable(
-              prot_comp_handsontable(compound_table, disabled = FALSE)
+              prot_comp_handsontable(compound_table, disabled = TRUE)
             )
 
             # Inactivate table observer
