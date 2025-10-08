@@ -54,10 +54,12 @@ ui <- function(id) {
           width = 2,
           shiny::div(
             class = "full-width-btn",
-            shiny::actionButton(
-              ns("confirm_proteins"),
-              label = "Save",
-              icon = shiny::icon("bookmark")
+            shinyjs::disabled(
+              shiny::actionButton(
+                ns("confirm_proteins"),
+                label = "Save",
+                icon = shiny::icon("bookmark")
+              )
             )
           )
         ),
@@ -65,10 +67,12 @@ ui <- function(id) {
           width = 2,
           shiny::div(
             class = "full-width-btn",
-            shiny::actionButton(
-              ns("edit_proteins"),
-              label = "Edit",
-              icon = shiny::icon("pen-to-square")
+            shinyjs::disabled(
+              shiny::actionButton(
+                ns("edit_proteins"),
+                label = "Edit",
+                icon = shiny::icon("pen-to-square")
+              )
             )
           )
         )
@@ -103,10 +107,12 @@ ui <- function(id) {
           width = 2,
           shiny::div(
             class = "full-width-btn",
-            shiny::actionButton(
-              ns("confirm_compounds"),
-              label = "Save",
-              icon = shiny::icon("bookmark")
+            shinyjs::disabled(
+              shiny::actionButton(
+                ns("confirm_compounds"),
+                label = "Save",
+                icon = shiny::icon("bookmark")
+              )
             )
           )
         ),
@@ -114,10 +120,12 @@ ui <- function(id) {
           width = 2,
           shiny::div(
             class = "full-width-btn",
-            shiny::actionButton(
-              ns("edit_compounds"),
-              label = "Edit",
-              icon = shiny::icon("pen-to-square")
+            shinyjs::disabled(
+              shiny::actionButton(
+                ns("edit_compounds"),
+                label = "Edit",
+                icon = shiny::icon("pen-to-square")
+              )
             )
           )
         )
@@ -247,7 +255,9 @@ server <- function(id, conversion_dirs) {
 
     # Helper function to process uploaded table
     process_uploaded_table <- function(df, type) {
-      if (is.null(df) || nrow(df) == 0) return(NULL)
+      if (is.null(df) || nrow(df) == 0) {
+        return(NULL)
+      }
 
       expected_cols <- if (type == "protein") {
         c("Protein", paste("Mass", 1:9))
@@ -309,8 +319,8 @@ server <- function(id, conversion_dirs) {
         output$compound_table <- rhandsontable::renderRHandsontable(
           prot_comp_handsontable(df, disabled = FALSE)
         )
-        shinyjs::removeClass("compound_table_info", "table-info-red")
-        shinyjs::addClass("compound_table_info", "table-info-green")
+        # shinyjs::removeClass("compound_table_info", "table-info-red")
+        # shinyjs::addClass("compound_table_info", "table-info-green")
         output$compound_table_info <- shiny::renderText("Tabelle geladen!")
         shinyWidgets::show_toast(
           "Compound table loaded!",
@@ -346,6 +356,7 @@ server <- function(id, conversion_dirs) {
         output$protein_table_info <- shiny::renderText(
           "Fill table ..."
         )
+        shinyjs::disable("confirm_proteins")
       } else {
         # Validate correct input
         protein_table_status <- check_table(
@@ -369,6 +380,7 @@ server <- function(id, conversion_dirs) {
           output$protein_table_info <- shiny::renderText(
             "Table can be saved"
           )
+          shinyjs::enable("confirm_proteins")
         } else {
           # Set status variable to FALSE
           vars$protein_table_status <- FALSE
@@ -383,6 +395,7 @@ server <- function(id, conversion_dirs) {
             "table-info-red"
           )
           output$protein_table_info <- shiny::renderText(protein_table_status)
+          shinyjs::disable("confirm_proteins")
         }
       }
     })
@@ -417,6 +430,7 @@ server <- function(id, conversion_dirs) {
         output$compound_table_info <- shiny::renderText(
           "Fill table ..."
         )
+        shinyjs::disable("confirm_compounds")
       } else {
         # Validate correct input
         compound_table_status <- check_table(
@@ -440,6 +454,7 @@ server <- function(id, conversion_dirs) {
           output$compound_table_info <- shiny::renderText(
             "Table can be saved"
           )
+          shinyjs::enable("confirm_compounds")
         } else {
           # Set status variable to FALSE
           vars$compound_table_status <- FALSE
@@ -454,6 +469,7 @@ server <- function(id, conversion_dirs) {
             "table-info-red"
           )
           output$compound_table_info <- shiny::renderText(compound_table_status)
+          shinyjs::disable("confirm_compounds")
         }
       }
     })
@@ -477,6 +493,16 @@ server <- function(id, conversion_dirs) {
           output$protein_table <- rhandsontable::renderRHandsontable(
             prot_comp_handsontable(vars$protein_table, disabled = FALSE)
           )
+
+          # Change buttons
+          shiny::updateActionButton(
+            session = session,
+            "confirm_proteins",
+            label = "Save",
+            icon = shiny::icon("bookmark")
+          )
+          shinyjs::enable("confirm_proteins")
+          shinyjs::disable("edit_proteins")
         } else if (input$tabs == "Compounds") {
           # Make table observer active
           vars$compound_table_active <- TRUE
@@ -490,6 +516,16 @@ server <- function(id, conversion_dirs) {
           output$compound_table <- rhandsontable::renderRHandsontable(
             prot_comp_handsontable(vars$compound_table, disabled = FALSE)
           )
+
+          # Change buttons
+          shiny::updateActionButton(
+            session = session,
+            "confirm_compounds",
+            label = "Save",
+            icon = shiny::icon("bookmark")
+          )
+          shinyjs::enable("confirm_compounds")
+          shinyjs::disable("edit_compounds")
         } else if (input$tabs == "Samples") {
           # Mark tab as undone
           shinyjs::runjs(
@@ -532,6 +568,8 @@ server <- function(id, conversion_dirs) {
               label = "Saved",
               icon = shiny::icon("check")
             )
+            shinyjs::disable("confirm_proteins")
+            shinyjs::enable("edit_proteins")
 
             # Keep table editable
             output$protein_table <- rhandsontable::renderRHandsontable(
@@ -591,6 +629,8 @@ server <- function(id, conversion_dirs) {
               label = "Saved",
               icon = shiny::icon("check")
             )
+            shinyjs::disable("confirm_compounds")
+            shinyjs::enable("edit_compounds")
 
             # Keep table editable
             output$compound_table <- rhandsontable::renderRHandsontable(
