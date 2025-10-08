@@ -30,10 +30,12 @@ ui <- function(id) {
           width = 2,
           shiny::div(
             class = "full-width-btn",
-            shiny::actionButton(
-              ns("confirm_proteins"),
-              label = "Save",
-              icon = shiny::icon("bookmark")
+            shinyjs::disabled(
+              shiny::actionButton(
+                ns("confirm_proteins"),
+                label = "Save",
+                icon = shiny::icon("bookmark")
+              )
             )
           )
         ),
@@ -168,6 +170,7 @@ server <- function(id, conversion_dirs) {
     # Preefine reactive variables
     vars <- shiny::reactiveValues(
       protein_table = NULL,
+      protein_table_active = TRUE,
       compound_table = NULL,
       sample_tab = NULL
     )
@@ -183,16 +186,55 @@ server <- function(id, conversion_dirs) {
 
     # Observe table status
     shiny::observe({
-      if (input$tabs == "Proteins") {
-        shiny::req(input$protein_table)
+      shiny::req(input$protein_table, vars$protein_table_active)
 
-        # Retrieve sliced user input table
-        protein_table <- slice_tab(rhandsontable::hot_to_r(
-          input$protein_table
-        ))
+      # Retrieve sliced user input table
+      protein_table <- slice_tab(rhandsontable::hot_to_r(
+        input$protein_table
+      ))
 
-        if (nrow(protein_table) < 1) {
+      if (nrow(protein_table) < 1) {
+        vars$protein_table_status <- FALSE
+
+        shinyjs::removeClass(
+          "protein_table_info",
+          "table-info-green"
+        )
+        shinyjs::addClass(
+          "protein_table_info",
+          "table-info-red"
+        )
+
+        output$protein_table_info <- shiny::renderText(
+          "Fill table ..."
+        )
+      } else {
+        # Validate correct input
+        protein_table_status <- check_table(
+          protein_table,
+          col_limit = 10
+        )
+
+        if (isTRUE(protein_table_status)) {
+          vars$protein_table_status <- TRUE
+
+          shinyjs::removeClass(
+            "protein_table_info",
+            "table-info-red"
+          )
+          shinyjs::addClass(
+            "protein_table_info",
+            "table-info-green"
+          )
+          output$protein_table_info <- shiny::renderText(
+            "Table can be saved"
+          )
+
+          shinyjs::enable("confirm_proteins")
+        } else {
           vars$protein_table_status <- FALSE
+
+          shinyjs::disable("confirm_proteins")
 
           shinyjs::removeClass(
             "protein_table_info",
@@ -202,55 +244,10 @@ server <- function(id, conversion_dirs) {
             "protein_table_info",
             "table-info-red"
           )
-
-          shiny::renderText(
-            "Fill table ..."
-          )
-        } else {
-          # Validate correct input
-          protein_table_status <- check_table(
-            protein_table,
-            col_limit = 10
-          )
-
-          if (isTRUE(protein_table_status)) {
-            vars$protein_table_status <- TRUE
-
-            shinyjs::removeClass(
-              "protein_table_info",
-              "table-info-red"
-            )
-            shinyjs::addClass(
-              "protein_table_info",
-              "table-info-green"
-            )
-            shiny::renderText(
-              "Table can be saved"
-            )
-          } else {
-            vars$protein_table_status <- FALSE
-
-            shinyjs::removeClass(
-              "protein_table_info",
-              "table-info-green"
-            )
-            shinyjs::addClass(
-              "protein_table_info",
-              "table-info-red"
-            )
-            output$protein_table_info <- shiny::renderText(protein_table_status)
-          }
+          output$protein_table_info <- shiny::renderText(protein_table_status)
         }
       }
     })
-    # Render table information
-    output$compound_table_info <- output$protein_table_info <- shiny::renderText(
-      "Editing table ..."
-    )
-
-    # output$sample_table_info <- shiny::renderText(
-    #   "Enter Proteins and Compounds first"
-    # )
 
     # Actions on edit button click
     shiny::observeEvent(
@@ -263,6 +260,9 @@ server <- function(id, conversion_dirs) {
         })
 
         if (input$tabs == "Proteins") {
+          # Make table observer active
+          vars$protein_table_active <- TRUE
+
           # Mark tab as undone
           shinyjs::runjs(
             'document.querySelector(".nav-link[data-value=\'Proteins\']").classList.remove("done");'
@@ -273,10 +273,7 @@ server <- function(id, conversion_dirs) {
             prot_comp_handsontable(vars$protein_table, disabled = FALSE)
           )
 
-          # Message info
-          output$protein_table_info <- shiny::renderText(
-            "Editing table ..."
-          )
+          # Change confirm button
           shiny::updateActionButton(
             session = session,
             "confirm_proteins",
@@ -364,7 +361,6 @@ server <- function(id, conversion_dirs) {
               "sample_table_info",
               "table-info-green"
             )
-            output$protein_table_info <- shiny::renderText("Table saved!")
             shinyWidgets::show_toast(
               "Table saved!",
               text = NULL,
@@ -385,6 +381,12 @@ server <- function(id, conversion_dirs) {
             output$protein_table <- rhandsontable::renderRHandsontable(
               prot_comp_handsontable(protein_table, disabled = TRUE)
             )
+
+            # Inactivate table observer
+            vars$protein_table_active <- FALSE
+
+            # Show table message
+            output$protein_table_info <- shiny::renderText("Table saved!")
 
             # Render sample table with new input
             if (!is.null(input$sample_table)) {

@@ -7,7 +7,28 @@ prot_comp_handsontable <- function(tab, disabled = FALSE) {
     
     td.style.background = ''; // Clear existing background for new rendering
     
-    var normalizedValue = value == null ? '' : String(value).trim();
+    // Function to get the value rounded to 3 digits (or empty string if non-numeric/NA)
+    var getNormalizedValue = function(val) {
+        if (val == null || val === '') {
+            return '';
+        }
+        
+        // 1. Try to parse as a float
+        var floatVal = parseFloat(val);
+        
+        // 2. Check if it's a valid number (i.e., not NaN)
+        if (isNaN(floatVal)) {
+            // For non-numeric text, return the trimmed string itself (for column 0 check)
+            return String(val).trim(); 
+        } else {
+            // 3. Round to 3 decimal places and return as a string
+            // This handles floating-point precision issues
+            return floatVal.toFixed(3); 
+        }
+    };
+
+    // Get the normalized/rounded value for the current cell
+    var normalizedValue = getNormalizedValue(value);
     
     if (normalizedValue === '') {
         // Skip all duplication checks and styling for empty cells
@@ -16,10 +37,10 @@ prot_comp_handsontable <- function(tab, disabled = FALSE) {
 
     var isDuplicated = false;
     
-    // --- A. Column 0 Duplication Check ('Sample' column) ---
-    // Check if the current cell (if in column 0) is duplicated in the column
+    // --- A. Column 0 Duplication Check ('Sample' column - likely non-numeric) ---
+    // This check uses the string value, as it's the 'Sample' column
     if (col === 0) {
-        var colData = instance.getDataAtCol(0); // Get all values in column 0
+        var colData = instance.getDataAtCol(0); 
         var valueCounts = {};
         
         // Count frequencies of non-empty values in the entire column 0
@@ -37,23 +58,25 @@ prot_comp_handsontable <- function(tab, disabled = FALSE) {
         }
     }
     
-    // --- B. Row Duplication Check (Columns 1 and greater) ---
-    // Check if the current cell (if in column 1+) is duplicated in its row (excluding col 0)
+    // --- B. Row Duplication Check (Columns 1 and greater - numeric/mass columns) ---
+    // This check uses the 3-digit rounded value
     if (col >= 1) {
       var rowData = instance.getDataAtRow(row);
       var valueCounts = {};
-      var startCol = 1; // Start from Protein (col 1) to exclude 'Sample' (col 0)
+      var startCol = 1; // Start from the second column
       
-      // Count frequencies of non-empty values in the current row (from col 1 onwards)
+      // Count frequencies of non-empty/rounded values in the current row (from col 1 onwards)
       for (var i = startCol; i < rowData.length; i++) {
           var cellValue = rowData[i];
-          var trimmedValue = cellValue == null ? '' : String(cellValue).trim();
+          // Use the rounding function for mass columns
+          var roundedValue = getNormalizedValue(cellValue);
           
-          if (trimmedValue !== '') {
-              valueCounts[trimmedValue] = (valueCounts[trimmedValue] || 0) + 1;
+          if (roundedValue !== '') {
+              valueCounts[roundedValue] = (valueCounts[roundedValue] || 0) + 1;
           }
       }
       
+      // The current cell's value (normalizedValue) is already rounded via getNormalizedValue(value)
       if (valueCounts[normalizedValue] > 1) {
           isDuplicated = true;
       }
@@ -114,43 +137,6 @@ sample_handsontable <- function(tab, proteins, compounds, disabled = FALSE) {
   )
 
   # Custom renderer
-  # renderer_js <- "function(instance, td, row, col, prop, value, cellProperties) {
-  #   Handsontable.renderers.TextRenderer.apply(this, arguments);
-
-  #   var allowedPerCol = instance.params ? instance.params.allowed_per_col : null;
-
-  #   var allowedRaw;
-  #   if (col === 1) {
-  #     allowedRaw = allowedPerCol ? allowedPerCol[1] : null;
-  #   } else if (col >= 2) {
-  #     allowedRaw = allowedPerCol ? allowedPerCol[2] : null;
-  #   } else {
-  #     return;
-  #   }
-
-  #   var normalizedValue = value == null ? '' : String(value).trim();
-
-  #   var allowedList = [];
-
-  #   if (Array.isArray(allowedRaw)) {
-  #     allowedList = allowedRaw;
-  #   } else if (typeof allowedRaw === 'string' && allowedRaw.length > 0) {
-  #     allowedList = [allowedRaw];
-  #   } else if (allowedRaw && Array.isArray(allowedRaw) === false) {
-  #     allowedList = [allowedRaw];
-  #   }
-
-  #   if (allowedList.length > 0) {
-  #     var isValid = allowedList.includes(normalizedValue) || normalizedValue === '';
-
-  #     if (!isValid) {
-  #       td.style.background = 'red';
-  #     }
-  #   }
-  #   if (cellProperties.type === 'dropdown') {
-  #       Handsontable.renderers.DropdownRenderer.apply(this, arguments);
-  #   }
-  # }"
   renderer_js <- "function(instance, td, row, col, prop, value, cellProperties) {
     Handsontable.renderers.TextRenderer.apply(this, arguments);
     
@@ -290,7 +276,9 @@ check_table <- function(tab, col_limit) {
 
   # Check duplicated masses
   if (
-    any(apply(tab[, -1], 1, function(x) any(duplicated(stats::na.omit(x)))))
+    any(apply(tab[, -1], 1, function(x) {
+      any(duplicated(round(stats::na.omit(x), digits = 3)))
+    }))
   ) {
     return("Duplicated mass shift")
   }
