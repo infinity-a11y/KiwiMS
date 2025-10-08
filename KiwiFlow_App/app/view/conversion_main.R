@@ -224,28 +224,31 @@ server <- function(id, conversion_dirs) {
 
     # Helper function to read uploaded files
     read_uploaded_file <- function(file_path, ext) {
-      tryCatch({
-        if (ext %in% c("csv", "txt")) {
-          df <- read.csv(file_path, stringsAsFactors = FALSE)
-        } else if (ext == "tsv") {
-          df <- read.delim(file_path, stringsAsFactors = FALSE)
-        } else if (ext %in% c("xlsx", "xls")) {
-          df <- read_excel(file_path)
-        } else {
-          stop("Unsupported file format")
+      tryCatch(
+        {
+          if (ext %in% c("csv", "txt")) {
+            df <- read.csv(file_path, stringsAsFactors = FALSE)
+          } else if (ext == "tsv") {
+            df <- read.delim(file_path, stringsAsFactors = FALSE)
+          } else if (ext %in% c("xlsx", "xls")) {
+            df <- read_excel(file_path)
+          } else {
+            stop("Unsupported file format")
+          }
+          # Ensure column names are standardized
+          colnames(df) <- trimws(colnames(df))
+          return(df)
+        },
+        error = function(e) {
+          shinyWidgets::show_toast(
+            "Error reading file",
+            text = e$message,
+            type = "error",
+            timer = 5000
+          )
+          return(NULL)
         }
-        # Ensure column names are standardized
-        colnames(df) <- trimws(colnames(df))
-        return(df)
-      }, error = function(e) {
-        shinyWidgets::show_toast(
-          "Error reading file",
-          text = e$message,
-          type = "error",
-          timer = 5000
-        )
-        return(NULL)
-      })
+      )
     }
 
     # Observe protein file upload
@@ -407,7 +410,7 @@ server <- function(id, conversion_dirs) {
         # UI feedback
         shinyjs::removeClass(
           "compound_table_info",
-          "table-info-red"
+          "table-info-green"
         )
         shinyjs::addClass(
           "compound_table_info",
