@@ -1030,3 +1030,17 @@ decon-report-modal .btn-default {
   overflow-x: auto;
   max-width: fit-content !important;
 }
+
+// #app-conversion_main-protein_table_info,
+// #app-conversion_main-compound_table_info,
+// #app-conversion_main-sample_table_info 
+
+.table-info-red {
+  border: 1px solid #d17050;
+  font-family: monospace;
+}
+
+.table-info-green {
+  border: 1px solid rgb(139, 195, 74);
+  font-family: monospace;
+}

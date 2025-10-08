@@ -177,14 +177,76 @@ server <- function(id, conversion_dirs) {
       )
     }
 
+    # Observe table status
+    shiny::observe({
+      if (input$tabs == "Proteins") {
+        shiny::req(input$protein_table)
+
+        # Retrieve sliced user input table
+        protein_table <- slice_tab(rhandsontable::hot_to_r(
+          input$protein_table
+        ))
+
+        if (nrow(protein_table) < 1) {
+          vars$protein_table_status <- FALSE
+
+          shinyjs::removeClass(
+            "protein_table_info",
+            "table-info-green"
+          )
+          shinyjs::addClass(
+            "protein_table_info",
+            "table-info-red"
+          )
+
+          shiny::renderText(
+            "Fill table ..."
+          )
+        } else {
+          # Validate correct input
+          protein_table_status <- check_table(
+            protein_table,
+            col_limit = 10
+          )
+
+          if (isTRUE(protein_table_status)) {
+            vars$protein_table_status <- TRUE
+
+            shinyjs::removeClass(
+              "protein_table_info",
+              "table-info-red"
+            )
+            shinyjs::addClass(
+              "protein_table_info",
+              "table-info-green"
+            )
+            shiny::renderText(
+              "Table can be saved"
+            )
+          } else {
+            vars$protein_table_status <- FALSE
+
+            shinyjs::removeClass(
+              "protein_table_info",
+              "table-info-green"
+            )
+            shinyjs::addClass(
+              "protein_table_info",
+              "table-info-red"
+            )
+            output$protein_table_info <- shiny::renderText(protein_table_status)
+          }
+        }
+      }
+    })
     # Render table information
     output$compound_table_info <- output$protein_table_info <- shiny::renderText(
       "Editing table ..."
     )
 
-    output$sample_table_info <- shiny::renderText(
-      "Enter Proteins and Compounds first"
-    )
+    # output$sample_table_info <- shiny::renderText(
+    #   "Enter Proteins and Compounds first"
+    # )
 
     # Actions on edit button click
     shiny::observeEvent(
@@ -273,6 +335,14 @@ server <- function(id, conversion_dirs) {
             )
 
             # Message success
+            shinyjs::removeClass(
+              "sample_table_info",
+              "table-info-red"
+            )
+            shinyjs::addClass(
+              "sample_table_info",
+              "table-info-green"
+            )
             output$protein_table_info <- shiny::renderText("Table saved!")
 
             # Render table disabled
@@ -302,6 +372,14 @@ server <- function(id, conversion_dirs) {
           } else {
             # If protein table validation unsuccessful
 
+            shinyjs::addClass(
+              "sample_table_info",
+              "table-info-red"
+            )
+            shinyjs::removeClass(
+              "sample_table_info",
+              "table-info-green"
+            )
             output$protein_table_info <- shiny::renderText(protein_table_status)
           }
         } else if (input$tabs == "Compounds") {
@@ -327,6 +405,14 @@ server <- function(id, conversion_dirs) {
             )
 
             # Message success
+            shinyjs::removeClass(
+              "sample_table_info",
+              "table-info-red"
+            )
+            shinyjs::addClass(
+              "sample_table_info",
+              "table-info-green"
+            )
             output$compound_table_info <- shiny::renderText("Table saved!")
 
             # Render table disabled
@@ -352,6 +438,14 @@ server <- function(id, conversion_dirs) {
             set_selected_tab("Samples")
           } else {
             # If protein table validation unsuccessful
+            shinyjs::addClass(
+              "sample_table_info",
+              "table-info-red"
+            )
+            shinyjs::removeClass(
+              "sample_table_info",
+              "table-info-green"
+            )
             output$compound_table_info <- shiny::renderText(
               compound_table_status
             )
@@ -426,14 +520,34 @@ server <- function(id, conversion_dirs) {
     # Observe sample input
     shiny::observe({
       if (is.null(vars$protein_table) || is.null(vars$compound_table)) {
+        shinyjs::addClass(
+          "sample_table_info",
+          "table-info-red"
+        )
         output$sample_table_info <- shiny::renderText({
           "Enter Proteins and Compounds first"
         })
       } else if (is.null(conversion_dirs$result())) {
+        shinyjs::removeClass(
+          "sample_table_info",
+          "table-info-green"
+        )
+        shinyjs::addClass(
+          "sample_table_info",
+          "table-info-red"
+        )
         output$sample_table_info <- shiny::renderText({
           "Upload result file"
         })
       } else {
+        shinyjs::removeClass(
+          "sample_table_info",
+          "table-info-red"
+        )
+        shinyjs::removeClass(
+          "sample_table_info",
+          "table-info-green"
+        )
         output$sample_table_info <- shiny::renderText({
           "Editing table ..."
         })
