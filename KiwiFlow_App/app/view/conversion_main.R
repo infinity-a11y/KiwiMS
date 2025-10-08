@@ -2,10 +2,6 @@
 
 box::use(
   shiny[moduleServer, NS],
-  rhandsontable[rhandsontable, rHandsontableOutput, renderRHandsontable],
-  utils[head],
-  readxl[read_excel],
-  tools[file_ext],
 )
 
 box::use(
@@ -16,7 +12,9 @@ box::use(
       prot_comp_handsontable,
       check_table,
       slice_tab,
-      set_selected_tab
+      set_selected_tab,
+      read_uploaded_file,
+      process_uploaded_table,
     ],
   app /
     logic /
@@ -47,15 +45,18 @@ ui <- function(id) {
           )
         ),
         shiny::column(
-          width = 3,
-          shiny::checkboxInput(
-            ns("proteins_header_checkbox"),
-            "Has header",
-            value = TRUE
+          width = 2,
+          shiny::div(
+            class = "conversion-checkbox",
+            shiny::checkboxInput(
+              ns("proteins_header_checkbox"),
+              "Has header",
+              value = FALSE
+            )
           )
         ),
         shiny::column(
-          width = 3,
+          width = 2,
           shiny::textOutput(ns("protein_table_info"))
         ),
         shiny::column(
@@ -72,7 +73,7 @@ ui <- function(id) {
           )
         ),
         shiny::column(
-          width = 1,
+          width = 2,
           shiny::div(
             class = "full-width-btn",
             shinyjs::disabled(
@@ -88,7 +89,7 @@ ui <- function(id) {
       shiny::fluidRow(
         shiny::column(
           width = 12,
-          rHandsontableOutput(ns("protein_table"))
+          rhandsontable::rHandsontableOutput(ns("protein_table"))
         )
       )
     ),
@@ -108,15 +109,18 @@ ui <- function(id) {
           )
         ),
         shiny::column(
-          width = 3,
-          shiny::checkboxInput(
-            ns("compounds_header_checkbox"),
-            "Has header",
-            value = TRUE
+          width = 2,
+          shiny::div(
+            class = "conversion-checkbox",
+            shiny::checkboxInput(
+              ns("compounds_header_checkbox"),
+              "Has header",
+              value = FALSE
+            )
           )
         ),
         shiny::column(
-          width = 3,
+          width = 2,
           shiny::textOutput(ns("compound_table_info"))
         ),
         shiny::column(
@@ -133,7 +137,7 @@ ui <- function(id) {
           )
         ),
         shiny::column(
-          width = 1,
+          width = 2,
           shiny::div(
             class = "full-width-btn",
             shinyjs::disabled(
@@ -149,7 +153,7 @@ ui <- function(id) {
       shiny::fluidRow(
         shiny::column(
           width = 12,
-          rHandsontableOutput(ns("compound_table"))
+          rhandsontable::rHandsontableOutput(ns("compound_table"))
         )
       )
     ),
@@ -171,42 +175,61 @@ ui <- function(id) {
         shiny::column(
           width = 2,
           shiny::div(
+            class = "conversion-checkbox",
+            shiny::checkboxInput(
+              ns("compounds_header_checkbox"),
+              "Has header",
+              value = FALSE
+            )
+          )
+        ),
+        shiny::column(
+          width = 1,
+          shiny::div(
             class = "full-width-btn",
             shiny::actionButton(
               ns("confirm_samples"),
-              label = "Save",
+              label = "",
               icon = shiny::icon("bookmark")
             )
           )
         ),
         shiny::column(
-          width = 2,
+          width = 1,
           shiny::div(
             class = "full-width-btn",
             shiny::actionButton(
               ns("edit_samples"),
-              label = "Edit",
+              label = "",
               icon = shiny::icon("pen-to-square")
             )
           )
         ),
         shiny::column(
-          width = 3,
+          width = 2,
           shiny::textOutput(ns("sample_table_info"))
         ),
         shiny::column(
-          width = 2,
+          width = 1,
           shiny::actionButton(
             ns("add_compound"),
             label = "",
             icon = shiny::icon("plus")
+          )
+        ),
+        shiny::column(
+          width = 1,
+          shiny::actionButton(
+            ns("remove_compound"),
+            label = "",
+            icon = shiny::icon("minus")
           )
         )
       ),
       shiny::fluidRow(
         shiny::column(
           width = 12,
-          rHandsontableOutput(ns("sample_table"))
+          rhandsontable::rHandsontableOutput(ns("sample_table"))
         )
       )
     )
@@ -232,113 +255,24 @@ server <- function(id, conversion_dirs) {
       sample_tab = NULL
     )
 
-    # Helper function to read uploaded files
-    read_uploaded_file <- function(file_path, ext, has_header) {
-      tryCatch(
-        {
-          if (ext %in% c("csv", "txt")) {
-            df <- read.csv(
-              file_path,
-              stringsAsFactors = FALSE,
-              header = has_header
-            )
-          } else if (ext == "tsv") {
-            df <- read.delim(
-              file_path,
-              stringsAsFactors = FALSE,
-              header = has_header
-            )
-          } else if (ext %in% c("xlsx", "xls")) {
-            df <- read_excel(file_path, col_names = has_header)
-          } else {
-            stop("Unsupported file format")
-          }
-          # Ensure column names are standardized
-          colnames(df) <- trimws(colnames(df))
-          return(df)
-        },
-        error = function(e) {
-          shinyWidgets::show_toast(
-            "Error reading file",
-            text = e$message,
-            type = "error",
-            timer = 5000
-          )
-          return(NULL)
-        }
-      )
-    }
-
-    # Helper function to process uploaded table
-    process_uploaded_table <- function(df, type) {
-      if (is.null(df) || nrow(df) == 0) {
-        return(NULL)
-      }
-
-      expected_cols <- if (type == "protein") {
-        c("Protein", paste("Mass", 1:9))
-      } else {
-        c("Compound", paste("Mass", 1:9))
-      }
-
-      # Take first up to 10 columns
-      num_cols <- min(ncol(df), 10)
-      df <- df[, 1:num_cols, drop = FALSE]
-
-      # Rename columns to expected
-      colnames(df) <- expected_cols[1:num_cols]
-
-      # Add missing columns with NAs if less than 10
-      if (num_cols < 10) {
-        for (i in (num_cols + 1):10) {
-          df[[expected_cols[i]]] <- NA
-        }
-      }
-
-      # Convert mass columns to numeric
-      mass_cols <- paste("Mass", 1:9)
-      for (col in mass_cols) {
-        if (col %in% colnames(df)) {
-          original <- df[[col]]
-          numeric_vals <- suppressWarnings(as.numeric(original))
-          if (any(is.na(numeric_vals) & !is.na(original))) {
-            shinyWidgets::show_toast(
-              "Conversion error",
-              text = paste(
-                "Column",
-                col,
-                "contains non-numeric values that cannot be converted."
-              ),
-              type = "error",
-              timer = 5000
-            )
-            return(NULL)
-          }
-          df[[col]] <- numeric_vals
-        }
-      }
-
-      return(df)
-    }
-
     # Observe protein file upload
     shiny::observeEvent(input$proteins_fileinput, {
       shiny::req(input$proteins_fileinput)
 
-      df <- read_uploaded_file(
+      table_upload <- read_uploaded_file(
         input$proteins_fileinput$datapath,
-        tolower(file_ext(input$proteins_fileinput$name)),
+        tolower(tools::file_ext(input$proteins_fileinput$name)),
         input$proteins_header_checkbox
       )
 
-      df <- process_uploaded_table(df, "protein")
+      table_upload_processed <- process_uploaded_table(table_upload, "protein")
 
-      if (!is.null(df)) {
-        vars$protein_table <- df
+      if (!is.null(table_upload_processed)) {
+        vars$protein_table <- table_upload_processed
         vars$protein_table_status <- TRUE
 
         output$protein_table <- rhandsontable::renderRHandsontable(
-          prot_comp_handsontable(df, disabled = FALSE)
+          prot_comp_handsontable(table_upload_processed, disabled = FALSE)
         )
 
         shinyWidgets::show_toast(
@@ -361,7 +295,7 @@ server <- function(id, conversion_dirs) {
 
       df <- read_uploaded_file(
         input$compounds_fileinput$datapath,
-        tolower(file_ext(input$compounds_fileinput$name)),
+        tolower(tools::file_ext(input$compounds_fileinput$name)),
         input$compounds_header_checkbox
       )
 
@@ -825,7 +759,7 @@ server <- function(id, conversion_dirs) {
         result <- readRDS(file_path)
 
         sample_tab <- data.frame(
-          Sample = head(names(result), -2),
+          Sample = utils::head(names(result), -2),
           Protein = ifelse(
             length(vars$protein_table$Protein) == 1,
             vars$protein_table$Protein,

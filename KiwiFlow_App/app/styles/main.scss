@@ -1039,6 +1039,8 @@ decon-report-modal .btn-default {
   text-align: center;
   border-radius: var(--bs-border-radius);
   background: rgba(223, 223, 223, 0.2588235294);
+  padding-left: 1em;
+  padding-right: 1em;
 }
 
 .handsontable .wtHider {
@@ -1058,10 +1060,6 @@ decon-report-modal .btn-default {
   max-width: fit-content !important;
 }
 
-// #app-conversion_main-protein_table_info,
-// #app-conversion_main-compound_table_info,
-// #app-conversion_main-sample_table_info
-
 .table-info-red {
   border: 1px solid #d17050;
   font-family: monospace;
@@ -1070,4 +1068,15 @@ decon-report-modal .btn-default {
 .table-info-green {
   border: 1px solid rgb(139, 195, 74);
   font-family: monospace;
+}
+
+.conversion-checkbox .form-group,
+.conversion-checkbox {
+  margin: 0;
+  height: 100%;
+  align-content: center;
+}
+
+.conversion-checkbox .checkbox {
+  margin: 0;
 }

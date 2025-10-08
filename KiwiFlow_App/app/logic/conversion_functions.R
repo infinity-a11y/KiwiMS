@@ -1,5 +1,89 @@
 # app/logic/conversion_functions.R
 
+# Helper function to process uploaded table
+#' @export
+process_uploaded_table <- function(df, type) {
+  if (is.null(df) || nrow(df) == 0) {
+    return(NULL)
+  }
+
+  expected_cols <- if (type == "protein") {
+    c("Protein", paste("Mass", 1:9))
+  } else {
+    c("Compound", paste("Mass", 1:9))
+  }
+
+  # Take first up to 10 columns
+  num_cols <- min(ncol(df), 10)
+  df <- df[, 1:num_cols, drop = FALSE]
+
+  # Rename columns to expected
+  colnames(df) <- expected_cols[1:num_cols]
+
+  # Add missing columns with NAs if less than 10
+  if (num_cols < 10) {
+    for (i in (num_cols + 1):10) {
+      df[[expected_cols[i]]] <- NA
+    }
+  }
+
+  # Convert mass columns to numeric
+  mass_cols <- paste("Mass", 1:9)
+  for (col in mass_cols) {
+    if (col %in% colnames(df)) {
+      original <- df[[col]]
+      numeric_vals <- suppressWarnings(as.numeric(original))
+      if (any(is.na(numeric_vals) & !is.na(original))) {
+        shinyWidgets::show_toast(
+          "Conversion error",
+          text = paste(
+            "Column",
+            col,
+            "contains non-numeric values that cannot be converted."
+          ),
+          type = "error",
+          timer = 5000
+        )
+        return(NULL)
+      }
+      df[[col]] <- numeric_vals
+    }
+  }
+
+  return(df)
+}
+
+# Helper function to read uploaded files
+#' @export
+read_uploaded_file <- function(file_path, ext, has_header) {
+  if (ext %in% c("csv", "txt")) {
+    df <- utils::read.csv(
+      file_path,
+      stringsAsFactors = FALSE,
+      header = has_header
+    )
+  } else if (ext == "tsv") {
+    df <- readr::read_tsv(
+      file_path,
+      col_names = has_header,
+      show_col_types = FALSE
+    )
+  } else if (ext == "tsv") {
+    df <- utils::read.delim(
+      file_path,
+      stringsAsFactors = FALSE,
+      header = has_header
+    )
+  } else if (ext %in% c("xlsx", "xls")) {
+    df <- readxl::read_excel(file_path, col_names = has_header)
+  } else {
+    stop("Unsupported file format")
+  }
+  # Ensure column names are standardized
+  colnames(df) <- trimws(colnames(df))
+  return(df)
+}
+
 # Function to set the selected tab
 #' @export
 set_selected_tab <- function(tab_name, session) {
