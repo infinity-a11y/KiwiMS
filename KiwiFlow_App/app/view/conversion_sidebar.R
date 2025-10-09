@@ -180,8 +180,8 @@ server <- function(
         ),
         shiny::fluidRow(
           shiny::column(
-            width = 12,
-            hints
+            width = 12
+            # ,hints
           )
         )
       )

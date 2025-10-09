@@ -239,18 +239,39 @@ server <- function(id, conversion_dirs) {
       conversion_ready = FALSE
     )
 
-    shiny::observe({
-      shiny::req(conversion_dirs)
-      # Beobachte run_conversion und hits aus conversion_dirs
-      if (conversion_dirs$run_conversion()) {
-        message(TRUE)
-        hits <- conversion_dirs$hits()
+    shiny::observeEvent(conversion_dirs$hits(), {
+      # shiny::req(conversion_dirs())
+      # # conversion_dirs()$run_conversion, {
 
-        bslib::nav_insert(
-          ns("tabs"),
-          bslib::nav_panel(title = "Results")
+      hits <- conversion_dirs$hits()
+
+      bslib::nav_insert(
+        "tabs",
+        bslib::nav_panel(
+          title = "Results",
+          shiny::fluidRow(
+            shiny::column(width = 1),
+            shiny::column(
+              width = 10,
+              rhandsontable::rHandsontableOutput(
+                ns("conversion_result_table")
+              )
+            )
+          )
         )
-      }
+      )
+
+      set_selected_tab("Results", session)
+    })
+
+    shiny::observe({
+      shiny::req(conversion_dirs$hits())
+
+      message(TRUE)
+
+      output$conversion_result_table <- rhandsontable::renderRHandsontable({
+        rhandsontable::rhandsontable(conversion_dirs$hits())
+      })
     })
 
     # Observe protein file upload
@@ -424,11 +445,11 @@ server <- function(id, conversion_dirs) {
         # UI feedback
         shinyjs::removeClass(
           "compound_table_info",
-          "table-info-red"
+          "table-info-green"
         )
         shinyjs::addClass(
           "compound_table_info",
-          "table-info-green"
+          "table-info-red"
         )
         output$compound_table_info <- shiny::renderText(
           "Fill table ..."
