@@ -439,8 +439,11 @@ add_hits <- function(
   max_multiples
 ) {
   samples <- head(names(results), -2)
-  protein_mw <- get_protein_mw(protein_mw_file)
-  compound_mw <- get_compound_matrix(compound_mw_file)
+  # protein_mw <- get_protein_mw(protein_mw_file)
+  protein_mw <- protein_table$`Mass 1`
+  # compound_mw <- get_compound_matrix(compound_mw_file)
+  compound_mw <- as.matrix(compound_table[, -1])
+  rownames(compound_mw) <- compound_table[, 1]
 
   for (i in seq_along(samples)) {
     message("### Checking hits for ", samples[i])

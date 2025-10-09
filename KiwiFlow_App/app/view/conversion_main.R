@@ -13,6 +13,7 @@ box::use(
       check_table,
       check_sample_table,
       slice_tab,
+      slice_sample_tab,
       set_selected_tab,
       read_uploaded_file,
       process_uploaded_table,
@@ -21,6 +22,7 @@ box::use(
     logic /
     conversion_constants[
       empty_tab,
+      keybind_menu_ui,
     ],
 )
 
@@ -57,8 +59,8 @@ ui <- function(id) {
           )
         ),
         shiny::column(
-          width = 2,
-          shiny::textOutput(ns("protein_table_info"))
+          width = 3,
+          shiny::textOutput(ns("protein_table_info")),
         ),
         shiny::column(
           width = 2,
@@ -92,7 +94,8 @@ ui <- function(id) {
           width = 12,
           rhandsontable::rHandsontableOutput(ns("protein_table"))
         )
-      )
+      ),
+      keybind_menu_ui
     ),
     bslib::nav_panel(
       "Compounds",
@@ -121,7 +124,7 @@ ui <- function(id) {
           )
         ),
         shiny::column(
-          width = 2,
+          width = 3,
           shiny::textOutput(ns("compound_table_info"))
         ),
         shiny::column(
@@ -156,7 +159,8 @@ ui <- function(id) {
           width = 12,
           rhandsontable::rHandsontableOutput(ns("compound_table"))
         )
-      )
+      ),
+      keybind_menu_ui
     ),
     bslib::nav_panel(
       "Samples",
@@ -172,6 +176,10 @@ ui <- function(id) {
               accept = c(".rds")
             )
           )
+        ),
+        shiny::column(
+          width = 3,
+          shiny::textOutput(ns("sample_table_info"))
         ),
         shiny::column(
           width = 2,
@@ -192,29 +200,9 @@ ui <- function(id) {
             class = "full-width-btn",
             shiny::actionButton(
               ns("edit_samples"),
-              label = "Edit",
+              label = "",
               icon = shiny::icon("pen-to-square")
             )
-          )
-        ),
-        shiny::column(
-          width = 2,
-          shiny::textOutput(ns("sample_table_info"))
-        ),
-        shiny::column(
-          width = 1,
-          shiny::actionButton(
-            ns("add_compound"),
-            label = "",
-            icon = shiny::icon("plus")
-          )
-        ),
-        shiny::column(
-          width = 1,
-          shiny::actionButton(
-            ns("remove_compound"),
-            label = "",
-            icon = shiny::icon("minus")
           )
         )
       ),
@@ -223,7 +211,8 @@ ui <- function(id) {
           width = 12,
           rhandsontable::rHandsontableOutput(ns("sample_table"))
         )
-      )
+      ),
+      keybind_menu_ui
     )
   )
 }
@@ -248,19 +237,6 @@ server <- function(id, conversion_dirs) {
       sample_table_active = FALSE,
       sample_table_status = FALSE
     )
-
-    # Observe sample upload
-    shiny::observeEvent(input$result_input, {
-      sample_tab <- base::readRDS(input$result_input$datapath)
-
-      output$sample_table <- rhandsontable::renderRHandsontable({
-        sample_handsontable(
-          tab = sample_tab,
-          proteins = vars$protein_table$Protein,
-          compounds = vars$compound_table$Compound
-        )
-      })
-    })
 
     # Observe protein file upload
     shiny::observeEvent(input$proteins_fileinput, {
@@ -330,9 +306,16 @@ server <- function(id, conversion_dirs) {
       }
     })
 
-    # Observe table status for protein table
+    # Observe table status for compound table
     shiny::observe({
       shiny::req(input$protein_table, vars$protein_table_active)
+
+      # Show waiter
+      waiter::waiter_show(
+        id = ns("protein_table_info"),
+        html = waiter::spin_throbber()
+      )
+      Sys.sleep(0.5)
 
       # Retrieve sliced user input table
       protein_table <- slice_tab(rhandsontable::hot_to_r(
@@ -398,11 +381,20 @@ server <- function(id, conversion_dirs) {
           shinyjs::disable("confirm_proteins")
         }
       }
+
+      waiter::waiter_hide(id = ns("protein_table_info"))
     })
 
     # Observe table status for compound table
     shiny::observe({
       shiny::req(input$compound_table, vars$compound_table_active)
+
+      # Show waiter
+      waiter::waiter_show(
+        id = ns("compound_table_info"),
+        html = waiter::spin_throbber()
+      )
+      Sys.sleep(0.5)
 
       # Retrieve sliced user input table
       compound_table <- slice_tab(rhandsontable::hot_to_r(
@@ -468,16 +460,24 @@ server <- function(id, conversion_dirs) {
           shinyjs::disable("confirm_compounds")
         }
       }
+
+      waiter::waiter_hide(id = ns("compound_table_info"))
     })
 
     # Observe table status for samples table
     shiny::observe({
       shiny::req(input$sample_table)
-      protein_table <<- vars$protein_table
-      compound_table <<- vars$compound_table
 
-      sample_table <- rhandsontable::hot_to_r(input$sample_table)
-      sample_table_test <<- sample_table
+      # Show waiter
+      waiter::waiter_show(
+        id = ns("sample_table_info"),
+        html = waiter::spin_throbber()
+      )
+      Sys.sleep(0.5)
+
+      sample_table <- rhandsontable::hot_to_r(
+        input$sample_table
+      )
 
       # If table non-empty check for correctness
       if (is.null(sample_table) || nrow(sample_table) < 1) {
@@ -539,6 +539,8 @@ server <- function(id, conversion_dirs) {
           shinyjs::disable("confirm_samples")
         }
       }
+
+      waiter::waiter_hide(id = ns("sample_table_info"))
     })
 
     # Actions on edit button click
@@ -713,7 +715,9 @@ server <- function(id, conversion_dirs) {
             if (!is.null(input$sample_table)) {
               output$sample_table <- rhandsontable::renderRHandsontable(
                 sample_handsontable(
-                  tab = rhandsontable::hot_to_r(input$sample_table),
+                  tab = slice_sample_tab(rhandsontable::hot_to_r(
+                    input$sample_table
+                  )),
                   proteins = protein_table$Protein,
                   compounds = vars$compound_table$Compound
                 )
@@ -783,7 +787,9 @@ server <- function(id, conversion_dirs) {
             if (!is.null(input$sample_table)) {
               output$sample_table <- rhandsontable::renderRHandsontable(
                 sample_handsontable(
-                  tab = rhandsontable::hot_to_r(input$sample_table),
+                  tab = slice_sample_tab(rhandsontable::hot_to_r(
+                    input$sample_table
+                  )),
                   proteins = vars$protein_table$Protein,
                   compounds = compound_table$Compound
                 )
@@ -800,11 +806,6 @@ server <- function(id, conversion_dirs) {
           # If table can be saved perform actions
           if (vars$sample_table_status) {
             shiny::req(input$sample_table)
-
-            # Retrieve sliced user input table
-            sample_table <- slice_tab(rhandsontable::hot_to_r(
-              input$sample_table
-            ))
 
             # Mark UI as done
             shinyjs::runjs(
@@ -835,6 +836,11 @@ server <- function(id, conversion_dirs) {
               class = "custom-disable"
             )
 
+            # Retrieve sliced user input table
+            sample_table <- slice_sample_tab(rhandsontable::hot_to_r(
+              input$sample_table
+            ))
+
             # Render table uneditable
             output$sample_table <- rhandsontable::renderRHandsontable(
               sample_handsontable(sample_table, disabled = TRUE)
@@ -853,67 +859,18 @@ server <- function(id, conversion_dirs) {
       }
     )
 
-    # Add/Remove compound columns
-    shiny::observeEvent(input$add_compound, {
-      shiny::req(input$sample_table)
-
-      # Get client side table
-      tab <- rhandsontable::hot_to_r(input$sample_table)
-
-      # Add compound column to table
-      n <- sum(grepl("Compound", colnames(tab)))
-      colname <- paste0("Compound#", n + 1)
-      tab[[colname]] <- ""
-
-      output$sample_table <- rhandsontable::renderRHandsontable({
-        sample_handsontable(
-          tab = tab,
-          proteins = vars$protein_table$Protein,
-          compounds = vars$compound_table$Compound
-        )
-      })
-    })
-
-    shiny::observeEvent(input$remove_compound, {
-      shiny::req(input$sample_table)
-
-      # Get client side table
-      tab <- rhandsontable::hot_to_r(input$sample_table)
-
-      # Remove last compound column from table
-      remove <- utils::tail(grep("Compound", colnames(tab)), 1)
-      tab <- tab[, -(remove)]
-
-      output$sample_table <- rhandsontable::renderRHandsontable({
-        sample_handsontable(
-          tab = tab,
-          proteins = vars$protein_table$Protein,
-          compounds = vars$compound_table$Compound
-        )
-      })
-    })
-
-    # Deactivate add/remove buttons when limits reached
     shiny::observe({
-      shiny::req(input$sample_table)
-
-      shinyjs::toggleState(
-        id = "add_compound",
-        condition = length(grep(
-          "Compound",
-          colnames(rhandsontable::hot_to_r(input$sample_table))
-        )) <
-          9
+      shiny::req(
+        vars$protein_table,
+        vars$compound_table,
+        vars$sample_table,
+        vars$result
       )
 
-      shinyjs::toggleState(
-        id = "remove_compound",
-        condition = length(grep(
-          "Compound",
-          colnames(rhandsontable::hot_to_r(input$sample_table))
-        )) >
-          1
-      )
+      protein_table <<- vars$protein_table
+      compound_table <<- vars$compound_table
+      sample_table <<- vars$sample_table
+      result <<- vars$result
     })
 
     # Observe sample input
@@ -952,10 +909,10 @@ server <- function(id, conversion_dirs) {
         })
 
         file_path <- file.path(input$result_input$datapath)
-        result <- readRDS(file_path)
+        vars$result <- readRDS(file_path)
 
         sample_tab <- data.frame(
-          Sample = utils::head(names(result), -2),
+          Sample = utils::head(names(vars$result), -2),
           Protein = ifelse(
             length(vars$protein_table$Protein) == 1,
             vars$protein_table$Protein,
@@ -965,8 +922,18 @@ server <- function(id, conversion_dirs) {
             length(vars$compound_table$Compound) == 1,
             vars$compound_table$Compound,
             ""
-          )
+          ),
+          cmp2 = NA,
+          cmp3 = NA,
+          cmp4 = NA,
+          cmp5 = NA,
+          cmp6 = NA,
+          cmp7 = NA,
+          cmp8 = NA,
+          cmp9 = NA
         )
+
+        colnames(sample_tab) <- c("Sample", "Protein", paste("Compound", 1:9))
 
         if (!isTRUE(vars$sample_tab_initial)) {
           output$sample_table <- rhandsontable::renderRHandsontable({

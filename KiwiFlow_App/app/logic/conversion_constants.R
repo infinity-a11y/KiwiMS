@@ -14,3 +14,48 @@ empty_tab <- data.frame(
   mass_shift8 = as.numeric(rep(NA, 9)),
   mass_shift9 = as.numeric(rep(NA, 9))
 )
+
+# keybind menu ui
+#' @export
+keybind_menu_ui <- shiny::div(
+  class = "shortcut-bar",
+  shiny::div(
+    class = "shortcut-item",
+    shiny::span(class = "key", "Ctrl"),
+    " + ",
+    shiny::span(class = "key", "C"),
+    " Copy"
+  ),
+  shiny::div(
+    class = "shortcut-item",
+    shiny::span(class = "key", "Ctrl"),
+    " + ",
+    shiny::span(class = "key", "V"),
+    " Paste"
+  ),
+  shiny::div(
+    class = "shortcut-item",
+    shiny::span(class = "key", "Ctrl"),
+    " + ",
+    shiny::span(class = "key", "X"),
+    " Cut"
+  ),
+  shiny::div(
+    class = "shortcut-item",
+    shiny::span(class = "key", "←"),
+    shiny::span(class = "key", "↑"),
+    shiny::span(class = "key", "→"),
+    shiny::span(class = "key", "↓"),
+    " Move"
+  ),
+  shiny::div(
+    class = "shortcut-item",
+    shiny::span(class = "key", "Tab"),
+    " Move Columns"
+  ),
+  shiny::div(
+    class = "shortcut-item",
+    shiny::span(class = "key", "Enter"),
+    " Move Rows"
+  )
+)

@@ -350,23 +350,39 @@ slice_tab <- function(tab) {
   return(tab[row_contain, ])
 }
 
+#' @export
+slice_sample_tab <- function(sample_table) {
+  non_empty <- which(
+    colSums(is.na(sample_table) | sample_table == "") != nrow(sample_table)
+  )
+  return(sample_table[, non_empty])
+}
+
 # Validate sample table
 #' @export
 check_sample_table <- function(sample_table, proteins, compounds) {
-  if (any(!sample_table$Protein %in% proteins)) {
-    return("Protein name not found")
-  }
+  # sample_table <<- sample_table
+  # proteins <<- proteins
+  # compounds <<- compounds
 
   if (any(!sample_table$Compound %in% compounds)) {
     return("Compound name not found")
   }
 
+  # if (
+  #   any(apply(
+  #     as.data.frame(sample_table[, 3:ncol(sample_table)]),
+  #     1,
+  #     duplicated
+  #   ))
+  # ) {
+  #   return("Duplicated compounds")
+  # }
+  ####
   if (
-    any(apply(
-      as.data.frame(sample_table[, 3:ncol(sample_table)]),
-      1,
-      duplicated
-    ))
+    any(apply(as.data.frame(sample_table[, c(-1, -2)]), 1, function(x) {
+      any(duplicated(stats::na.omit(x)))
+    }))
   ) {
     return("Duplicated compounds")
   }
@@ -405,7 +421,7 @@ check_table <- function(tab, col_limit) {
 
   # Check duplicated masses
   if (
-    any(apply(tab[, -1], 1, function(x) {
+    any(apply(as.data.frame(tab[, -1]), 1, function(x) {
       any(duplicated(round(stats::na.omit(x), digits = 3)))
     }))
   ) {
