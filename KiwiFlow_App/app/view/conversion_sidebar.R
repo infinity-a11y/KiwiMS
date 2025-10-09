@@ -256,10 +256,12 @@ server <- function(
       )
     })
 
-    # Reactive value for uploaded result list path
-    shiny::reactiveValues(
-      run_conversion = shiny::reactive(input$run_binding_analysis),
-      hits = shiny::reactive(hits())
+    # Rückgabe des reactiveValues-Objekts, damit es an den übergeordneten Server übergeben werden kann
+    return(
+      shiny::reactiveValues(
+        run_conversion = shiny::reactive(input$run_binding_analysis),
+        hits = shiny::reactive(hits())
+      )
     )
   })
 }

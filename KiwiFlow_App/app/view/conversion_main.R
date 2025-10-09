@@ -241,14 +241,16 @@ server <- function(id, conversion_dirs) {
 
     shiny::observe({
       shiny::req(conversion_dirs)
-      # conversion_dirs()$run_conversion, {
-      message(TRUE)
-      hits <- conversion_dirs$hits
+      # Beobachte run_conversion und hits aus conversion_dirs
+      if (conversion_dirs$run_conversion()) {
+        message(TRUE)
+        hits <- conversion_dirs$hits()
 
-      bslib::nav_insert(
-        ns("tabs"),
-        bslib::nav_panel(title = "Results")
-      )
+        bslib::nav_insert(
+          ns("tabs"),
+          bslib::nav_panel(title = "Results")
+        )
+      }
     })
 
     # Observe protein file upload
@@ -422,11 +424,11 @@ server <- function(id, conversion_dirs) {
         # UI feedback
         shinyjs::removeClass(
           "compound_table_info",
-          "table-info-green"
+          "table-info-red"
         )
         shinyjs::addClass(
           "compound_table_info",
-          "table-info-red"
+          "table-info-green"
         )
         output$compound_table_info <- shiny::renderText(
           "Fill table ..."
