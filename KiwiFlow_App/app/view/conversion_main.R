@@ -235,8 +235,21 @@ server <- function(id, conversion_dirs) {
       compound_table_status = FALSE,
       sample_tab = NULL,
       sample_table_active = FALSE,
-      sample_table_status = FALSE
+      sample_table_status = FALSE,
+      conversion_ready = FALSE
     )
+
+    shiny::observe({
+      shiny::req(conversion_dirs)
+      # conversion_dirs()$run_conversion, {
+      message(TRUE)
+      hits <- conversion_dirs$hits
+
+      bslib::nav_insert(
+        ns("tabs"),
+        bslib::nav_panel(title = "Results")
+      )
+    })
 
     # Observe protein file upload
     shiny::observeEvent(input$proteins_fileinput, {
@@ -860,17 +873,22 @@ server <- function(id, conversion_dirs) {
     )
 
     shiny::observe({
-      shiny::req(
-        vars$protein_table,
-        vars$compound_table,
-        vars$sample_table,
-        vars$result
-      )
+      if (
+        isTRUE(vars$protein_table_status) &
+          isTRUE(
+            vars$compound_table_status
+          ) &
+          isTRUE(vars$sample_table_status)
+      ) {
+        protein_table <<- vars$protein_table
+        compound_table <<- vars$compound_table
+        sample_table <<- vars$sample_table
+        result <<- vars$result
 
-      protein_table <<- vars$protein_table
-      compound_table <<- vars$compound_table
-      sample_table <<- vars$sample_table
-      result <<- vars$result
+        vars$conversion_ready <- TRUE
+      } else {
+        vars$conversion_ready <- FALSE
+      }
     })
 
     # Observe sample input
@@ -1010,7 +1028,14 @@ server <- function(id, conversion_dirs) {
     # Return currently selected tab
     list(
       selected_tab = shiny::reactive(input$tabs),
-      set_selected_tab = set_selected_tab
+      set_selected_tab = set_selected_tab,
+      conversion_ready = shiny::reactive(vars$conversion_ready),
+      input_list = shiny::reactive(list(
+        Protein_Table = vars$protein_table,
+        Compound_Table = vars$compound_table,
+        Samples_Table = vars$sample_table,
+        result = vars$result
+      ))
     )
   })
 }

@@ -5,6 +5,15 @@ box::use(
   shiny[actionButton, fileInput, NS, textInput, moduleServer, reactive],
 )
 
+box::use(
+  app /
+    logic /
+    conversion_functions[
+      add_hits,
+      summarize_hits,
+    ]
+)
+
 #' @export
 ui <- function(id) {
   ns <- NS(id)
@@ -93,9 +102,37 @@ ui <- function(id) {
 }
 
 #' @export
-server <- function(id, selected_tab, set_selected_tab) {
+server <- function(
+  id,
+  selected_tab,
+  set_selected_tab,
+  conversion_ready,
+  input_list
+) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+
+    hits <- shiny::reactiveVal(NULL)
+
+    shiny::observe({
+      shiny::req(conversion_ready(), input_list())
+
+      shinyjs::toggleState("run_binding_analysis", conversion_ready())
+    })
+
+    shiny::observeEvent(input$run_binding_analysis, {
+      shiny::req(input_list())
+
+      result_hits <- add_hits(
+        input_list()$result,
+        protein_table = input_list()$Protein_Table,
+        compound_table = input_list()$Compound_Table,
+        peak_tolerance = 3,
+        max_multiples = 4
+      )
+
+      hits(summarize_hits(result_hits))
+    })
 
     output$module_sidebar <- shiny::renderUI({
       shiny::req(selected_tab())
@@ -221,7 +258,8 @@ server <- function(id, selected_tab, set_selected_tab) {
 
     # Reactive value for uploaded result list path
     shiny::reactiveValues(
-      result = shiny::reactive(input$result_input$datapath)
+      run_conversion = shiny::reactive(input$run_binding_analysis),
+      hits = shiny::reactive(hits())
     )
   })
 }
