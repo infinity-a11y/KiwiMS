@@ -469,8 +469,8 @@ create_384_plate_heatmap <- function(data) {
       ),
       # margin = list(t = 40, r = 60, b = 0, l = left),
       margin = list(t = 0, r = 60, b = 0, l = left),
-      plot_bgcolor = "white",
-      paper_bgcolor = "white"
+      plot_bgcolor = "#dfdfdf42",
+      paper_bgcolor = "#dfdfdf42"
     ) |>
     config(
       displayModeBar = "hover",
@@ -505,57 +505,124 @@ create_384_plate_heatmap <- function(data) {
   }
 }
 
+# Helper function to harmonize data for plotting
+process_plot_data <- function(sample = NULL, result_path = NULL) {
+  if (is.null(sample) & is.null(result_path)) {
+    message(
+      "Provide either the path to a '.rds' result file or a list object carrying sample results"
+    )
+    return(NULL)
+  }
+
+  if (!is.null(result_path)) {
+    base <- gsub("_unidecfiles", "", basename(result_path))
+    raw_file <- file.path(result_path, paste0(base, "_rawdata.txt"))
+    mass_file <- file.path(result_path, paste0(base, "_mass.txt"))
+    peaks_file <- file.path(result_path, paste0(base, "_peaks.dat"))
+
+    if (!file.exists(mass_file) || !file.exists(peaks_file)) {
+      message("Mass or peak file missing in ", result_path)
+      return()
+    }
+
+    if (raw) {
+      mass <- data.table::fread(
+        raw_file,
+        sep = " ",
+        col.names = c("mass", "intensity")
+      )
+      mass[, bin := floor(mass / bin_width) * bin_width + bin_width / 2]
+      mass <- mass[, .(intensity = sum(intensity)), by = bin]
+      data.table::setnames(mass, "bin", "mass")
+      mass$intensity <- (mass$intensity - min(mass$intensity)) /
+        (max(mass$intensity) - min(mass$intensity)) *
+        100
+    } else {
+      mass <- utils::read.delim(mass_file, sep = " ", header = FALSE)
+      peaks <- utils::read.delim(peaks_file, sep = " ", header = FALSE)
+      mass$intensity <- (mass$intensity - min(mass$intensity)) /
+        (max(mass$intensity) - min(mass$intensity)) *
+        100
+      highlight_peaks <- mass[mass$mass %in% peaks$mass, ]
+    }
+  } else if (!is.null(sample)) {
+    if (is.null(sample$hits)) {
+      message(
+        "Sample has no annotated hits. See: 'add_hits()' applied to a result list."
+      )
+      return()
+    }
+    mass <- sample$mass
+    mass$intensity <- (mass$intensity - min(mass$intensity)) /
+      (max(mass$intensity) - min(mass$intensity)) *
+      100
+
+    peaks <- c(
+      unique(
+        sample$hits$`Measured Mw Protein [Da]`
+      ),
+      sample$hits$`Peak [Da]`
+    )
+
+    hits <- which(mass$mass %in% peaks)
+    peak_df <- mass[hits, ]
+
+    name <- c(
+      unique(
+        sample$hits$Protein
+      ),
+      sample$hits$Compound
+    )
+
+    mw <- c(
+      unique(
+        sample$hits$`Mw Protein [Da]`
+      ),
+      sample$hits$`Compound Mw [Da]`
+    )
+
+    highlight_peaks <- cbind(peak_df, name, mw)
+  }
+
+  return(list(mass = mass, highlight_peaks = highlight_peaks))
+}
+
 # Make spectrum plot interactively (plotly) or non-interactively (ggplot2)
 #' @export
 spectrum_plot <- function(
-  result_path,
-  raw,
+  result_path = NULL,
+  sample = NULL,
+  raw = FALSE,
   interactive = TRUE,
   bin_width = 0.01
 ) {
-  base <- gsub("_unidecfiles", "", basename(result_path))
-  raw_file <- file.path(result_path, paste0(base, "_rawdata.txt"))
-  mass_file <- file.path(result_path, paste0(base, "_mass.txt"))
-  peaks_file <- file.path(result_path, paste0(base, "_peaks.dat"))
-
-  if (!file.exists(mass_file) || !file.exists(peaks_file)) {
-    return()
-  }
-
-  if (raw) {
-    mass <- data.table::fread(raw_file, sep = " ", col.names = c("V1", "V2"))
-    mass[, bin := floor(V1 / bin_width) * bin_width + bin_width / 2]
-    mass <- mass[, .(V2 = sum(V2)), by = bin]
-    data.table::setnames(mass, "bin", "V1")
-    mass$V2 <- (mass$V2 - min(mass$V2)) / (max(mass$V2) - min(mass$V2)) * 100
-  } else {
-    mass <- utils::read.delim(mass_file, sep = " ", header = FALSE)
-    peaks <- utils::read.delim(peaks_file, sep = " ", header = FALSE)
-    mass$V2 <- (mass$V2 - min(mass$V2)) / (max(mass$V2) - min(mass$V2)) * 100
-    highlight_peaks <- mass[mass$V1 %in% peaks$V1, ]
-  }
+  plot_data <- process_plot_data(sample, result_path)
 
   if (!interactive) {
     plot <- ggplot2::ggplot(
-      mass,
+      plot_data$mass$mass,
       ggplot2::aes(
-        x = V1,
-        y = V2,
+        x = mass,
+        y = intensity,
         group = 1,
-        text = paste0("Mass: ", V1, " Da\nIntensity: ", round(V2, 2))
+        text = paste0(
+          "Mass: ",
+          mass,
+          " Da\nIntensity: ",
+          round(intensity, 2)
+        )
       )
     ) +
       ggplot2::geom_line() +
       ggplot2::scale_y_continuous(labels = scales::percent_format(scale = 1)) +
       ggplot2::theme_minimal()
-
     if (raw) {
       plot <- plot + ggplot2::labs(y = "Intensity [%]", x = "m/z [Th]")
     } else {
       plot <- plot +
         ggplot2::geom_point(
-          data = highlight_peaks,
-          ggplot2::aes(x = V1, y = V2),
+          data = plot_data$highlight_peaks,
+          ggplot2::aes(x = mass, y = intensity),
           fill = "#e8cb97",
           colour = "#35357A",
           shape = 21,
@@ -568,14 +635,20 @@ spectrum_plot <- function(
 
   if (raw) {
     plot <- plotly::plot_ly(
-      mass,
-      x = ~V1,
-      y = ~V2,
+      plot_data$mass,
+      x = ~mass,
+      y = ~intensity,
       type = "scattergl",
       mode = "lines",
       color = I("black"),
       hoverinfo = "text",
-      text = ~ paste0("Mass: ", V1, " Da\nIntensity: ", round(V2, 2), "%")
+      text = ~ paste0(
+        "Mass: ",
+        mass,
+        " Da\nIntensity: ",
+        round(intensity, 2),
+        "%"
+      )
     ) |>
       plotly::layout(
         yaxis = list(
@@ -587,8 +660,8 @@ spectrum_plot <- function(
         ),
         xaxis = list(title = "m/z [Th]", showgrid = TRUE, zeroline = FALSE),
         margin = list(t = 0, r = 0, b = 0, l = 50),
-        paper_bgcolor = "white",
-        plot_bgcolor = "white"
+        paper_bgcolor = "#dfdfdf42",
+        plot_bgcolor = "#dfdfdf42"
       ) |>
       plotly::config(
         displayModeBar = "hover",
@@ -600,26 +673,36 @@ spectrum_plot <- function(
           "resetScale2d",
           "zoomIn2d",
           "zoomOut2d"
-        )),
-        toImageButtonOptions = list(
-          filename = paste0(Sys.Date(), "_", gsub("_rawdata", "", base), "_raw")
-        )
+        ))
+        # ,
+        # toImageButtonOptions = list(
+        #   filename = paste0(Sys.Date(), "_", gsub("_rawdata", "", base), "_raw")
+        # )
       )
   } else {
+    test <<- plot_data$highlight_peaks
     plot <- plotly::plot_ly(
-      mass,
-      x = ~V1,
-      y = ~V2,
+      plot_data$mass,
+      x = ~mass,
+      y = ~intensity,
       type = "scattergl",
       mode = "lines",
       color = I("black"),
       hoverinfo = "text",
-      text = ~ paste0("Mass: ", V1, " Da\nIntensity: ", round(V2, 2), "%")
-    ) |>
+      text = ~ paste0(
+        "Mass: ",
+        mass,
+        " Da\nIntensity: ",
+        round(intensity, 2),
+        "%"
+      )
+    )
+
+    if (!is.null(result_path)) {
       plotly::add_markers(
-        data = highlight_peaks,
-        x = ~V1,
-        y = ~V2,
+        data = plot_data$highlight_peaks,
+        x = ~mass,
+        y = ~intensity,
         marker = list(
           color = "#e8cb97",
           line = list(
@@ -631,22 +714,61 @@ spectrum_plot <- function(
           zindex = 100
         ),
         hoverinfo = "text",
-        text = ~ paste0("Mass: ", V1, " Da\nIntensity: ", round(V2, 2), "%"),
-        showlegend = FALSE
-      ) |>
-      plotly::layout(
-        yaxis = list(
-          title = "Intensity [%]",
-          showgrid = TRUE,
-          zeroline = FALSE,
-          ticks = "outside",
-          tickcolor = "transparent"
+        text = ~ paste0(
+          "Mass: ",
+          ~mass,
+          " Da\nIntensity: ",
+          round(~intensity, 2),
+          "%"
         ),
-        xaxis = list(title = "Mass [Da]", showgrid = TRUE, zeroline = FALSE),
-        margin = list(t = 0, r = 0, b = 0, l = 50),
-        paper_bgcolor = "white",
-        plot_bgcolor = "white"
-      ) |>
+        showlegend = FALSE
+      )
+    } else {
+      plot <- plotly::add_markers(
+        plot,
+        data = plot_data$highlight_peaks,
+        x = ~mass,
+        y = ~intensity,
+        marker = list(
+          color = "#e8cb97",
+          line = list(
+            color = "#35357A",
+            width = 2
+          ),
+          symbol = "circle",
+          size = 10,
+          zindex = 100
+        ),
+        hoverinfo = "text",
+        text = ~ paste0(
+          "Name: ",
+          name,
+          "\nMeasured: ",
+          mass,
+          " Da\nIntensity: ",
+          round(intensity, 2),
+          "%\n",
+          "Theor. Mw: ",
+          mw
+        ),
+        showlegend = FALSE
+      )
+    }
+
+    plot <- plotly::layout(
+      plot,
+      yaxis = list(
+        title = "Intensity [%]",
+        showgrid = TRUE,
+        zeroline = FALSE,
+        ticks = "outside",
+        tickcolor = "transparent"
+      ),
+      xaxis = list(title = "Mass [Da]", showgrid = TRUE, zeroline = FALSE),
+      margin = list(t = 0, r = 0, b = 0, l = 50),
+      paper_bgcolor = "#dfdfdf42",
+      plot_bgcolor = "#dfdfdf42"
+    ) |>
       plotly::config(
         displayModeBar = "hover",
         scrollZoom = FALSE,
@@ -657,15 +779,16 @@ spectrum_plot <- function(
           "resetScale2d",
           "zoomIn2d",
           "zoomOut2d"
-        )),
-        toImageButtonOptions = list(
-          filename = paste0(
-            Sys.Date(),
-            "_",
-            gsub("_rawdata", "", base),
-            "_deconvoluted"
-          )
-        )
+        ))
+        # ,
+        # toImageButtonOptions = list(
+        #   filename = paste0(
+        #     Sys.Date(),
+        #     "_",
+        #     gsub("_rawdata", "", base),
+        #     "_deconvoluted"
+        #   )
+        # )
       )
   }
 

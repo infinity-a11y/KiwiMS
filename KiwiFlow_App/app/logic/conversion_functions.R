@@ -1,5 +1,9 @@
 # app/logic/conversion_functions.R
 
+box::use(
+  app / logic / deconvolution_functions[spectrum_plot, ],
+)
+
 # Helper function to process uploaded table
 #' @export
 process_uploaded_table <- function(df, type) {
@@ -430,6 +434,7 @@ check_table <- function(tab, col_limit) {
 
   return(TRUE)
 }
+
 
 # Get unicode character for warning symbols
 warning_sym <- "\u26A0"
@@ -891,9 +896,17 @@ add_hits <- function(
       sample = names(results)[i]
     )
 
+    # Add hits data frame to sample
     results[[samples[i]]][["hits"]] <- conversion(results[[samples[i]]][[
       "hits"
     ]])
+
+    # Add plot to sample
+    if (!is.null(results[[samples[i]]][["hits"]])) {
+      results[[samples[i]]][["hits_spectrum"]] <- spectrum_plot(
+        sample = results[[samples[i]]]
+      )
+    }
   }
 
   message("Search for hits in ", length(samples), " samples completed.")

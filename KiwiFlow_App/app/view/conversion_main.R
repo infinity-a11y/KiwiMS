@@ -249,12 +249,31 @@ server <- function(id, conversion_dirs) {
         "tabs",
         bslib::nav_panel(
           title = "Results",
-          shiny::fluidRow(
-            shiny::column(width = 1),
-            shiny::column(
-              width = 10,
-              rhandsontable::rHandsontableOutput(
-                ns("conversion_result_table")
+          shiny::column(
+            width = 12,
+            shiny::fluidRow(
+              shiny::column(width = 1),
+              shiny::column(
+                width = 12,
+                shiny::tableOutput(
+                  ns("conversion_result_table")
+                )
+              )
+            ),
+            shiny::fluidRow(
+              shiny::column(
+                width = 6,
+                bslib::card(
+                  full_screen = TRUE,
+                  plotly::plotlyOutput(ns("hits_spectrum"))
+                )
+              ),
+              shiny::column(
+                width = 6,
+                bslib::card(
+                  full_screen = TRUE,
+                  shiny::tableOutput(ns("hits_table"))
+                )
               )
             )
           )
@@ -264,10 +283,37 @@ server <- function(id, conversion_dirs) {
       set_selected_tab("Results", session)
     })
 
+    output$hits_table <- shiny::renderTable({
+      shiny::req(
+        conversion_dirs$sample_picker(),
+        conversion_dirs$result_hits(),
+        conversion_dirs$hits()
+      )
+
+      conversion_dirs$hits()
+    })
+
+    output$hits_spectrum <- plotly::renderPlotly({
+      shiny::req(
+        conversion_dirs$sample_picker(),
+        conversion_dirs$result_hits(),
+        conversion_dirs$hits()
+      )
+      sample_picker_test <<- conversion_dirs$sample_picker()
+      result_hits_test <<- conversion_dirs$result_hits()
+      hits_test <<- conversion_dirs$hits()
+      if (
+        conversion_dirs$sample_picker() %in%
+          names(conversion_dirs$result_hits())
+      ) {
+        conversion_dirs$result_hits()[[conversion_dirs$sample_picker()]]$hits_spectrum
+      }
+    })
+
     shiny::observe({
       shiny::req(conversion_dirs$hits())
 
-      message(TRUE)
+      hits <<- conversion_dirs$hits()
 
       output$conversion_result_table <- rhandsontable::renderRHandsontable({
         rhandsontable::rhandsontable(conversion_dirs$hits())

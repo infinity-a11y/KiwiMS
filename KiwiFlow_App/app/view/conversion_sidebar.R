@@ -96,7 +96,9 @@ ui <- function(id) {
             )
           )
         )
-      )
+      ),
+      shiny::hr(style = "margin: 1em 0;"),
+      shiny::uiOutput(ns("result_menu"))
     )
   )
 }
@@ -112,7 +114,22 @@ server <- function(
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
-    hits <- shiny::reactiveVal(NULL)
+    # Render result menu
+    output$result_menu <- shiny::renderUI({
+      shiny::req(result_hits_test(), hits())
+
+      shiny::fluidRow(
+        shiny::column(
+          width = 12,
+          align = "center",
+          shinyWidgets::pickerInput(
+            ns("sample_picker"),
+            "Sample",
+            choices = names(result_hits_test())
+          )
+        )
+      )
+    })
 
     shiny::observe({
       shiny::req(conversion_ready(), input_list())
@@ -120,18 +137,26 @@ server <- function(
       shinyjs::toggleState("run_binding_analysis", conversion_ready())
     })
 
+    result_hits_test <- shiny::reactiveVal(NULL)
+    hits <- shiny::reactiveVal(NULL)
+
     shiny::observeEvent(input$run_binding_analysis, {
       shiny::req(input_list())
 
-      result_hits <- add_hits(
+      result_with_hits <- add_hits(
         input_list()$result,
         protein_table = input_list()$Protein_Table,
         compound_table = input_list()$Compound_Table,
         peak_tolerance = 3,
         max_multiples = 4
       )
+      compound_table <<- input_list()$Compound_Table
+      protein_table <<- input_list()$Protein_Table
+      result_hits <<- result_with_hits
 
-      hits(summarize_hits(result_hits))
+      result_hits_test(result_with_hits)
+
+      hits(summarize_hits(result_with_hits))
     })
 
     output$module_sidebar <- shiny::renderUI({
@@ -260,7 +285,9 @@ server <- function(
     return(
       shiny::reactiveValues(
         run_conversion = shiny::reactive(input$run_binding_analysis),
-        hits = shiny::reactive(hits())
+        result_hits = shiny::reactive(result_hits_test()),
+        hits = shiny::reactive(hits()),
+        sample_picker = shiny::reactive(input$sample_picker)
       )
     )
   })
