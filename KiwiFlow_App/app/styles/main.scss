@@ -339,10 +339,6 @@ button .sF-modal {
   border-bottom-right-radius: 7px;
 }
 
-.bslib-sidebar-layout>.collapse-toggle {
-  color: transparent;
-}
-
 .navbar+.container-fluid>.tab-content>.tab-pane.active.html-fill-container>.bslib-sidebar-layout:only-child:not([data-bslib-sidebar-border-radius="true"]) {
   --_sidebar-width: 23rem !important;
 }
@@ -903,7 +899,22 @@ decon-report-modal .btn-default {
   display: none;
 }
 
+div[data-value="Protein Conversion"] .collapse-toggle {
+  color: #000;
+  display: block;
+  border: 1px solid #000;
+  position: absolute;
+  top: 35px;
+}
+
+div[data-value="Protein Conversion"] .bslib-sidebar-layout.sidebar-collapsed>.collapse-toggle {
+  color: white;
+  top: 35px;
+  border-color: white;
+}
+
 .bslib-sidebar-layout>.collapse-toggle {
+  color: transparent;
   display: none;
 }
 
@@ -1151,10 +1162,27 @@ decon-report-modal .btn-default {
 }
 
 .transparent-box {
-  border: none !important;
+  border: 1px solid black !important;
   box-shadow: none !important;
 }
 
 .conversion-result-wrapper {
   padding: 15px;
+  // display: flex;
+  // flex-direction: row;
+  // justify-content: space-between;
+  // gap: 5%;
+}
+
+// .conversion-result-wrapper .card {
+//   min-width: 47.5%;
+// }
+
+.toggle-show {
+  display: block;
+  color: black;
+  position: absolute;
+  right: 10px;
+  top: 35px;
+  border: 1px solid black;
 }

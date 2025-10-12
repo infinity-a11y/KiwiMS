@@ -251,39 +251,38 @@ server <- function(id, conversion_dirs) {
           title = "Results",
           shiny::div(
             class = "conversion-result-wrapper",
-            shiny::column(
-              width = 12,
-              shiny::fluidRow(
-                shiny::column(
-                  width = 6,
+            shiny::fluidRow(
+              shiny::column(
+                width = 6,
+                shiny::div(
+                  class = "card-custom",
                   bslib::card(
                     full_screen = TRUE,
-                    class = "transparent-box",
-                    plotly::plotlyOutput(ns("hits_spectrum"))
-                  )
-                ),
-                shiny::column(
-                  width = 6,
-                  bslib::card(
-                    full_screen = TRUE,
-                    class = "transparent-box",
-                    DT::DTOutput(
-                      ns("conversion_result_table")
+                    bslib::card_header(
+                      class = "bg-dark help-header",
+                      "Annotated Hits",
+                    ),
+                    bslib::card_body(
+                      plotly::plotlyOutput(ns("hits_spectrum"))
                     )
                   )
                 )
               ),
-
-              shiny::hr(style = "margin: 1em 0;"),
-              shiny::fluidRow(
-                shiny::column(
-                  width = 12,
+              shiny::column(
+                width = 6,
+                shiny::div(
+                  class = "card-custom",
                   bslib::card(
                     full_screen = TRUE,
-                    class = "transparent-box",
-                    # DT::DTOutput(
-                    #   ns("conversion_result_table")
-                    # )
+                    bslib::card_header(
+                      class = "bg-dark help-header",
+                      "Hits Table",
+                    ),
+                    bslib::card_body(
+                      DT::DTOutput(
+                        ns("conversion_result_table")
+                      )
+                    )
                   )
                 )
               )
@@ -301,20 +300,21 @@ server <- function(id, conversion_dirs) {
         conversion_dirs$result_hits(),
         conversion_dirs$hits()
       )
-
-      test1 <<- conversion_dirs$result_hits()[[conversion_dirs$sample_picker()]]$hits
-      test2 <<- conversion_dirs$result_hits()[[conversion_dirs$sample_picker()]]
       hits_table <- conversion_dirs$result_hits()[[conversion_dirs$sample_picker()]]$hits
 
-      output$conversion_result_table <- DT::renderDT(
+      output$conversion_result_table <- DT::renderDT({
+        data_for_table <- hits_table |>
+          dplyr::select(-c("Well", "Sample"))
         DT::datatable(
-          hits_table,
+          data_for_table,
+          rownames = FALSE,
+          options = list(
+            pageLength = 5,
+            dom = 'tpi'
+          )
         ) |>
-          DT::formatRound(columns = c(7, 8, 10, 14), digits = 2),
-        options = list(
-          pageLength = 5
-        )
-      )
+          DT::formatRound(columns = c(5, 6, 8, 12), digits = 2)
+      })
     })
 
     output$hits_spectrum <- plotly::renderPlotly({
