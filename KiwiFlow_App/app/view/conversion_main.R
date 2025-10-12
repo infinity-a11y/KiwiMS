@@ -249,30 +249,42 @@ server <- function(id, conversion_dirs) {
         "tabs",
         bslib::nav_panel(
           title = "Results",
-          shiny::column(
-            width = 12,
-            shiny::fluidRow(
-              shiny::column(width = 1),
-              shiny::column(
-                width = 12,
-                shiny::tableOutput(
-                  ns("conversion_result_table")
-                )
-              )
-            ),
-            shiny::fluidRow(
-              shiny::column(
-                width = 6,
-                bslib::card(
-                  full_screen = TRUE,
-                  plotly::plotlyOutput(ns("hits_spectrum"))
+          shiny::div(
+            class = "conversion-result-wrapper",
+            shiny::column(
+              width = 12,
+              shiny::fluidRow(
+                shiny::column(
+                  width = 6,
+                  bslib::card(
+                    full_screen = TRUE,
+                    class = "transparent-box",
+                    plotly::plotlyOutput(ns("hits_spectrum"))
+                  )
+                ),
+                shiny::column(
+                  width = 6,
+                  bslib::card(
+                    full_screen = TRUE,
+                    class = "transparent-box",
+                    DT::DTOutput(
+                      ns("conversion_result_table")
+                    )
+                  )
                 )
               ),
-              shiny::column(
-                width = 6,
-                bslib::card(
-                  full_screen = TRUE,
-                  shiny::tableOutput(ns("hits_table"))
+
+              shiny::hr(style = "margin: 1em 0;"),
+              shiny::fluidRow(
+                shiny::column(
+                  width = 12,
+                  bslib::card(
+                    full_screen = TRUE,
+                    class = "transparent-box",
+                    # DT::DTOutput(
+                    #   ns("conversion_result_table")
+                    # )
+                  )
                 )
               )
             )
@@ -283,14 +295,26 @@ server <- function(id, conversion_dirs) {
       set_selected_tab("Results", session)
     })
 
-    output$hits_table <- shiny::renderTable({
+    shiny::observe({
       shiny::req(
         conversion_dirs$sample_picker(),
         conversion_dirs$result_hits(),
         conversion_dirs$hits()
       )
 
-      conversion_dirs$hits()
+      test1 <<- conversion_dirs$result_hits()[[conversion_dirs$sample_picker()]]$hits
+      test2 <<- conversion_dirs$result_hits()[[conversion_dirs$sample_picker()]]
+      hits_table <- conversion_dirs$result_hits()[[conversion_dirs$sample_picker()]]$hits
+
+      output$conversion_result_table <- DT::renderDT(
+        DT::datatable(
+          hits_table,
+        ) |>
+          DT::formatRound(columns = c(7, 8, 10, 14), digits = 2),
+        options = list(
+          pageLength = 5
+        )
+      )
     })
 
     output$hits_spectrum <- plotly::renderPlotly({
