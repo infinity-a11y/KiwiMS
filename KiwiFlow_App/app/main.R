@@ -69,7 +69,7 @@ ui <- function(id) {
         )
       ),
       window_title = paste("KiwiFlow", get_kiwiflow_version()["version"]),
-      underline = TRUE,
+      navbar_options = bslib$navbar_options(underline = TRUE), # Updated line
       bslib$nav_panel(
         title = "Deconvolution",
         bslib$page_sidebar(

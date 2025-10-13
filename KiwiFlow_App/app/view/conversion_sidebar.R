@@ -91,8 +91,7 @@ ui <- function(id) {
           shinyjs::disabled(
             shiny::actionButton(
               ns("run_binding_analysis"),
-              "Run Analysis",
-              icon = shiny::icon("play")
+              "Run Analysis"
             )
           )
         )
@@ -114,6 +113,10 @@ server <- function(
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
+    # Declare reactive vars
+    result_hits_test <- shiny::reactiveVal(NULL)
+    hits <- shiny::reactiveVal(NULL)
+
     # Render result menu
     output$result_menu <- shiny::renderUI({
       shiny::req(result_hits_test(), hits())
@@ -125,21 +128,27 @@ server <- function(
           shinyWidgets::pickerInput(
             ns("sample_picker"),
             "Sample",
-            choices = names(result_hits_test())
+            choices = head(names(result_hits_test()), -2)
           )
         )
       )
     })
 
+    # Enable/Disable conversion parameter and launch input UI
     shiny::observe({
       shiny::req(conversion_ready(), input_list())
 
+      shinyjs::toggleState("max_multiples", conversion_ready())
+      shinyjs::toggleState("peak_tolerance", conversion_ready())
       shinyjs::toggleState("run_binding_analysis", conversion_ready())
+      shinyjs::toggleClass(
+        "run_binding_analysis",
+        "btn-highlight",
+        conversion_ready()
+      )
     })
 
-    result_hits_test <- shiny::reactiveVal(NULL)
-    hits <- shiny::reactiveVal(NULL)
-
+    # Event run conversion
     shiny::observeEvent(input$run_binding_analysis, {
       shiny::req(input_list())
 
@@ -147,15 +156,12 @@ server <- function(
         input_list()$result,
         protein_table = input_list()$Protein_Table,
         compound_table = input_list()$Compound_Table,
-        peak_tolerance = 3,
-        max_multiples = 4
+        peak_tolerance = input$peak_tolerance,
+        max_multiples = input$max_multiples
       )
-      compound_table <<- input_list()$Compound_Table
-      protein_table <<- input_list()$Protein_Table
-      result_hits <<- result_with_hits
 
+      # Assign result list and hits table to reactive vars
       result_hits_test(result_with_hits)
-
       hits(summarize_hits(result_with_hits))
     })
 
@@ -188,7 +194,7 @@ server <- function(
             )
           )
         )
-      } else if (selected_tab() == "Samples") {
+      } else {
         hints <- shiny::div(class = "conversion-hint", "")
       }
 
@@ -205,8 +211,8 @@ server <- function(
         ),
         shiny::fluidRow(
           shiny::column(
-            width = 12
-            # ,hints
+            width = 12,
+            hints
           )
         )
       )
@@ -239,7 +245,7 @@ server <- function(
               shiny::tags$img(src = "static/protein_table.png"),
               shiny::br()
             ),
-            title = "Peak Tolerance",
+            title = "Protein Input",
             easyClose = TRUE,
             footer = shiny::tagList(
               shiny::modalButton("Dismiss")
@@ -271,7 +277,7 @@ server <- function(
               ),
               shiny::br()
             ),
-            title = "Peak Tolerance",
+            title = "Compound Input",
             easyClose = TRUE,
             footer = shiny::tagList(
               shiny::modalButton("Dismiss")

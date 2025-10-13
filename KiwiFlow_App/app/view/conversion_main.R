@@ -242,9 +242,6 @@ server <- function(id, conversion_dirs) {
     )
 
     shiny::observeEvent(conversion_dirs$hits(), {
-      # shiny::req(conversion_dirs())
-      # # conversion_dirs()$run_conversion, {
-
       hits <- conversion_dirs$hits()
 
       bslib::nav_insert(
@@ -411,7 +408,7 @@ server <- function(id, conversion_dirs) {
 
     # Observe table status for compound table
     shiny::observe({
-      shiny::req(input$protein_table, vars$protein_table_active)
+      shiny::req(input$protein_table, shiny::isolate(vars$protein_table_active))
 
       # Show waiter
       waiter::waiter_show(
@@ -490,7 +487,10 @@ server <- function(id, conversion_dirs) {
 
     # Observe table status for compound table
     shiny::observe({
-      shiny::req(input$compound_table, vars$compound_table_active)
+      shiny::req(
+        input$compound_table,
+        shiny::isolate(vars$compound_table_active)
+      )
 
       # Show waiter
       waiter::waiter_show(
@@ -569,7 +569,7 @@ server <- function(id, conversion_dirs) {
 
     # Observe table status for samples table
     shiny::observe({
-      shiny::req(input$sample_table, vars$sample_table_active)
+      shiny::req(input$sample_table, shiny::isolate(vars$sample_table_active))
 
       # Show waiter
       waiter::waiter_show(
@@ -652,6 +652,44 @@ server <- function(id, conversion_dirs) {
       {
         shiny::req(input$tabs)
 
+        # If edit applied always activate edit mode for sample table if present
+        if (!is.null(vars$sample_table)) {
+          # Make table observer active
+          vars$sample_table_active <- TRUE
+
+          # Enable file upload
+          shinyjs::enable("result_input")
+          shinyjs::removeClass(
+            selector = ".btn-file:has(#app-conversion_main-result_input)",
+            class = "custom-disable"
+          )
+          shinyjs::removeClass(
+            selector = ".input-group:has(#app-conversion_main-result_input) > .form-control",
+            class = "custom-disable"
+          )
+
+          # Mark tab as undone
+          shinyjs::runjs(
+            'document.querySelector(".nav-link[data-value=\'Samples\']").classList.remove("done");'
+          )
+
+          # Render editable table
+          output$compound_table <- rhandsontable::renderRHandsontable(
+            sample_handsontable(vars$sample_table, disabled = FALSE)
+          )
+
+          # Change buttons
+          shiny::updateActionButton(
+            session = session,
+            "confirm_samples",
+            label = "Save",
+            icon = shiny::icon("bookmark")
+          )
+          shinyjs::enable("confirm_samples")
+          shinyjs::disable("edit_samples")
+        }
+
+        # Edit Protein/Compound
         if (input$tabs == "Proteins") {
           # Make table observer active
           vars$protein_table_active <- TRUE
@@ -720,40 +758,6 @@ server <- function(id, conversion_dirs) {
           )
           shinyjs::enable("confirm_compounds")
           shinyjs::disable("edit_compounds")
-        } else if (input$tabs == "Samples") {
-          # Make table observer active
-          vars$sample_table_active <- TRUE
-
-          # Enable file upload
-          shinyjs::enable("result_input")
-          shinyjs::removeClass(
-            selector = ".btn-file:has(#app-conversion_main-result_input)",
-            class = "custom-disable"
-          )
-          shinyjs::removeClass(
-            selector = ".input-group:has(#app-conversion_main-result_input) > .form-control",
-            class = "custom-disable"
-          )
-
-          # Mark tab as undone
-          shinyjs::runjs(
-            'document.querySelector(".nav-link[data-value=\'Samples\']").classList.remove("done");'
-          )
-
-          # Render editable table
-          output$compound_table <- rhandsontable::renderRHandsontable(
-            sample_handsontable(vars$sample_table, disabled = FALSE)
-          )
-
-          # Change buttons
-          shiny::updateActionButton(
-            session = session,
-            "confirm_samples",
-            label = "Save",
-            icon = shiny::icon("bookmark")
-          )
-          shinyjs::enable("confirm_samples")
-          shinyjs::disable("edit_samples")
         }
       }
     )
@@ -979,11 +983,21 @@ server <- function(id, conversion_dirs) {
 
     # Observe sample input
     shiny::observe({
-      if (is.null(vars$protein_table) || is.null(vars$compound_table)) {
+      if (
+        is.null(vars$protein_table) ||
+          is.null(vars$compound_table) ||
+          isTRUE(vars$protein_table_active) ||
+          isTRUE(vars$compound_table_active)
+      ) {
+        shinyjs::removeClass(
+          "sample_table_info",
+          "table-info-green"
+        )
         shinyjs::addClass(
           "sample_table_info",
           "table-info-red"
         )
+        shinyjs::disable("confirm_samples")
         output$sample_table_info <- shiny::renderText({
           "Enter Proteins and Compounds first"
         })
@@ -996,6 +1010,7 @@ server <- function(id, conversion_dirs) {
           "sample_table_info",
           "table-info-red"
         )
+        shinyjs::disable("confirm_samples")
         output$sample_table_info <- shiny::renderText({
           "Upload result file"
         })

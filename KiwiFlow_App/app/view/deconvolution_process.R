@@ -338,6 +338,8 @@ server <- function(id, dirs, reset_button) {
       enable(
         selector = "#app-deconvolution_process-deconvolute_start_conf"
       )
+      shinyjs::addClass("deconvolute_start_conf", "btn-highlight")
+
       message <- NULL
 
       if (dirs$selected() == "folder") {
@@ -365,6 +367,7 @@ server <- function(id, dirs, reset_button) {
             disable(
               selector = "#app-deconvolution_process-deconvolute_start_conf"
             )
+            shinyjs::removeClass("deconvolute_start_conf", "btn-highlight")
 
             message <- shiny$p(
               shiny$HTML(
@@ -400,6 +403,7 @@ server <- function(id, dirs, reset_button) {
             disable(
               selector = "#app-deconvolution_process-deconvolute_start_conf"
             )
+            shinyjs::removeClass("deconvolute_start_conf", "btn-highlight")
           }
         } else {
           if (is.null(input$target_selector)) {
@@ -412,6 +416,7 @@ server <- function(id, dirs, reset_button) {
             disable(
               selector = "#app-deconvolution_process-deconvolute_start_conf"
             )
+            shinyjs::removeClass("deconvolute_start_conf", "btn-highlight")
           }
 
           message <- shiny$p(

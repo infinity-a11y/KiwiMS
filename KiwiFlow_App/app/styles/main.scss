@@ -110,19 +110,6 @@ a {
   color: #38387c;
 }
 
-// *::-webkit-scrollbar {
-//   width: 15px;
-//   height: 15px;
-// }
-
-// *::-webkit-scrollbar-track {
-//   background: white;
-// }
-
-// *::-webkit-scrollbar-track:horizontal {
-//   background: transparent;
-// }
-
 *::-webkit-scrollbar-thumb {
   background-color: #35357a;
   border: 5px solid white;
@@ -130,14 +117,6 @@ a {
   min-height: 50px;
   overflow-y: scroll;
 }
-
-// *::-webkit-scrollbar-corner {
-//   background: transparent;
-// }
-
-// pre::-webkit-scrollbar-thumb:horizontal {
-//   border: 5px solid #f5f5f5;
-// }
 
 pre {
   background-color: #f7f7f7;
@@ -182,10 +161,6 @@ pre {
   z-index: 99999;
 }
 
-// .modal::-webkit-scrollbar-thumb:horizontal {
-//   border: 5px solid white;
-// }
-
 .sF-modal .modal-content {
   overflow: auto;
   min-width: 276px;
@@ -214,7 +189,7 @@ pre {
 
 .tip-modal .modal-body {
   max-height: 60vh;
-  overflow-y: scroll;
+  overflow-y: auto;
   justify-items: center;
 }
 
@@ -818,8 +793,7 @@ deconv-rep-check {
   border-radius: 0;
 }
 
-#app-deconvolution_process-deconvolute_start,
-#app-conversion_sidebar-run_binding_analysis {
+.btn-highlight {
   background: #38387c;
   color: white;
   box-shadow: 0 0 12px rgb(0 0 0 / 80%);
@@ -1000,6 +974,7 @@ div[data-value="Protein Conversion"] .bslib-sidebar-layout.sidebar-collapsed>.co
   font-weight: 300;
   font-style: normal;
   display: flex;
+  gap: 1em;
 }
 
 .file-selection-flex,
@@ -1168,15 +1143,7 @@ div[data-value="Protein Conversion"] .bslib-sidebar-layout.sidebar-collapsed>.co
 
 .conversion-result-wrapper {
   padding: 15px;
-  // display: flex;
-  // flex-direction: row;
-  // justify-content: space-between;
-  // gap: 5%;
 }
-
-// .conversion-result-wrapper .card {
-//   min-width: 47.5%;
-// }
 
 .toggle-show {
   display: block;
@@ -1185,4 +1152,22 @@ div[data-value="Protein Conversion"] .bslib-sidebar-layout.sidebar-collapsed>.co
   right: 10px;
   top: 35px;
   border: 1px solid black;
+}
+
+.handsontable th {
+  background: #ddddde;
+}
+
+.handsontable td {
+  background: #F7F7F7;
+}
+
+.handsontable tbody th.ht__active_highlight,
+.handsontable thead th.ht__active_highlight {
+  background: #35357A !important;
+  color: white;
+}
+
+.dropdown-menu .show {
+  width: 100%;
 }
