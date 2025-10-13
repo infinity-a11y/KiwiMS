@@ -198,10 +198,12 @@ ui <- function(id) {
           width = 2,
           shiny::div(
             class = "full-width-btn",
-            shiny::actionButton(
-              ns("edit_samples"),
-              label = "",
-              icon = shiny::icon("pen-to-square")
+            shinyjs::disabled(
+              shiny::actionButton(
+                ns("edit_samples"),
+                label = "",
+                icon = shiny::icon("pen-to-square")
+              )
             )
           )
         )
@@ -234,7 +236,7 @@ server <- function(id, conversion_dirs) {
       compound_table_active = TRUE,
       compound_table_status = FALSE,
       sample_tab = NULL,
-      sample_table_active = FALSE,
+      sample_table_active = TRUE,
       sample_table_status = FALSE,
       conversion_ready = FALSE
     )
@@ -323,9 +325,6 @@ server <- function(id, conversion_dirs) {
         conversion_dirs$result_hits(),
         conversion_dirs$hits()
       )
-      sample_picker_test <<- conversion_dirs$sample_picker()
-      result_hits_test <<- conversion_dirs$result_hits()
-      hits_test <<- conversion_dirs$hits()
       if (
         conversion_dirs$sample_picker() %in%
           names(conversion_dirs$result_hits())
@@ -336,8 +335,6 @@ server <- function(id, conversion_dirs) {
 
     shiny::observe({
       shiny::req(conversion_dirs$hits())
-
-      hits <<- conversion_dirs$hits()
 
       output$conversion_result_table <- rhandsontable::renderRHandsontable({
         rhandsontable::rhandsontable(conversion_dirs$hits())
@@ -572,7 +569,7 @@ server <- function(id, conversion_dirs) {
 
     # Observe table status for samples table
     shiny::observe({
-      shiny::req(input$sample_table)
+      shiny::req(input$sample_table, vars$sample_table_active)
 
       # Show waiter
       waiter::waiter_show(
@@ -725,7 +722,7 @@ server <- function(id, conversion_dirs) {
           shinyjs::disable("edit_compounds")
         } else if (input$tabs == "Samples") {
           # Make table observer active
-          vars$compound_table_active <- TRUE
+          vars$sample_table_active <- TRUE
 
           # Enable file upload
           shinyjs::enable("result_input")
@@ -971,13 +968,9 @@ server <- function(id, conversion_dirs) {
           isTRUE(
             vars$compound_table_status
           ) &
-          isTRUE(vars$sample_table_status)
+          isTRUE(vars$sample_table_status) &
+          isFALSE(vars$sample_table_active)
       ) {
-        protein_table <<- vars$protein_table
-        compound_table <<- vars$compound_table
-        sample_table <<- vars$sample_table
-        result <<- vars$result
-
         vars$conversion_ready <- TRUE
       } else {
         vars$conversion_ready <- FALSE

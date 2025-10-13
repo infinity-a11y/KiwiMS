@@ -365,24 +365,54 @@ slice_sample_tab <- function(sample_table) {
 # Validate sample table
 #' @export
 check_sample_table <- function(sample_table, proteins, compounds) {
-  # sample_table <<- sample_table
-  # proteins <<- proteins
-  # compounds <<- compounds
+  sample_table <<- sample_table
+  proteins <<- proteins
+  compounds <<- compounds
+  # Check if protein names valid
+  if (
+    !all(
+      unlist(
+        sample_table |>
+          dplyr::select("Protein") |>
+          dplyr::select(where(~ !all(is.na(.))))
+      ) %in%
+        proteins
+    )
+  ) {
+    return("Protein name not found")
+  }
 
-  if (any(!sample_table$Compound %in% compounds)) {
+  # Check if compound names valid
+  if (
+    !all(
+      unlist(
+        sample_table |>
+          dplyr::select(-c("Sample", "Protein")) |>
+          dplyr::select(where(~ !all(is.na(.))))
+      ) %in%
+        compounds
+    )
+  ) {
     return("Compound name not found")
   }
 
-  # if (
-  #   any(apply(
-  #     as.data.frame(sample_table[, 3:ncol(sample_table)]),
-  #     1,
-  #     duplicated
-  #   ))
-  # ) {
-  #   return("Duplicated compounds")
-  # }
-  ####
+  # Check if compounds are defined
+  if (all(is.na(sample_table[, -c(1, 2)]))) {
+    # Reject only NA
+    return("Enter compounds")
+  } else {
+    nonEmpty_cmps <- sample_table |>
+      dplyr::select(where(~ !all(is.na(.)))) |>
+      dplyr::select(-c(1, 2)) !=
+      ""
+
+    if (!all(nonEmpty_cmps)) {
+      # Reject empty names
+      return("Compound names missing")
+    }
+  }
+
+  # Check duplicated compounds
   if (
     any(apply(as.data.frame(sample_table[, c(-1, -2)]), 1, function(x) {
       any(duplicated(stats::na.omit(x)))

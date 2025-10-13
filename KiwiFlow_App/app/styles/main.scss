@@ -1090,11 +1090,11 @@ div[data-value="Protein Conversion"] .bslib-sidebar-layout.sidebar-collapsed>.co
 }
 
 .custom-disable {
-  color: var(--bs-btn-disabled-color);
+  color: #404040;
   pointer-events: none;
-  background-color: var(--bs-btn-disabled-bg);
-  border-color: var(--bs-btn-disabled-border-color);
-  opacity: var(--bs-btn-disabled-opacity);
+  background-color: transparent;
+  border-color: 404040;
+  opacity: 0.3;
 }
 
 .waiter-overlay {
