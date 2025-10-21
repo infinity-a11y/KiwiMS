@@ -128,7 +128,7 @@ server <- function(
           shinyWidgets::pickerInput(
             ns("sample_picker"),
             "Sample",
-            choices = head(names(result_hits_test()), -2)
+            choices = utils::head(names(result_hits_test()), -2)
           )
         )
       )
@@ -162,6 +162,7 @@ server <- function(
 
       # Assign result list and hits table to reactive vars
       result_hits_test(result_with_hits)
+      test <<- summarize_hits(result_with_hits)
       hits(summarize_hits(result_with_hits))
     })
 
