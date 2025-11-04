@@ -157,34 +157,17 @@ server <- function(
     shiny::observeEvent(input$run_binding_analysis, {
       shiny::req(input_list())
 
-      # Add hits to all samples from result file
-      # Assign to result_with_hits() reactive var
-      result_with_hits(
-        add_hits(
-          input_list()$result,
-          sample_table = input_list()$Samples_Table,
-          protein_table = input_list()$Protein_Table,
-          compound_table = input_list()$Compound_Table,
-          peak_tolerance = input$peak_tolerance,
-          max_multiples = input$max_multiples
-        )
+      result_with_hits <- add_hits(
+        input_list()$result,
+        protein_table = input_list()$Protein_Table,
+        compound_table = input_list()$Compound_Table,
+        peak_tolerance = input$peak_tolerance,
+        max_multiples = input$max_multiples
       )
-      result_hits <<- result_with_hits()
 
-      # Create summarized hit table
-      # Assign to hits() reactive var
-      hits(summarize_hits(result_with_hits()))
-      summarized_hits <<- hits()
-
-      if (nrow(hits()) == 0) {
-        write_log(level = "ERROR", "No hits detected")
-        shinyWidgets::show_toast(
-          "Conversion error",
-          text = "No hits detected",
-          type = "error",
-          timer = 5000
-        )
-      }
+      # Assign result list and hits table to reactive vars
+      result_hits_test(result_with_hits)
+      hits(summarize_hits(result_with_hits))
     })
 
     output$module_sidebar <- shiny::renderUI({
