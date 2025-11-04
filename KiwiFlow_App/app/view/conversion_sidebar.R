@@ -11,6 +11,11 @@ box::use(
     conversion_functions[
       add_hits,
       summarize_hits,
+    ],
+  app /
+    logic /
+    logging[
+      write_log,
     ]
 )
 
@@ -114,12 +119,12 @@ server <- function(
     ns <- session$ns
 
     # Declare reactive vars
-    result_hits_test <- shiny::reactiveVal(NULL)
+    result_with_hits <- shiny::reactiveVal(NULL)
     hits <- shiny::reactiveVal(NULL)
 
     # Render result menu
     output$result_menu <- shiny::renderUI({
-      shiny::req(result_hits_test(), hits())
+      shiny::req(result_with_hits(), nrow(hits()) > 0)
 
       shiny::fluidRow(
         shiny::column(
@@ -128,7 +133,7 @@ server <- function(
           shinyWidgets::pickerInput(
             ns("sample_picker"),
             "Sample",
-            choices = head(names(result_hits_test()), -2)
+            choices = utils::head(names(result_with_hits()), -2)
           )
         )
       )
@@ -152,17 +157,34 @@ server <- function(
     shiny::observeEvent(input$run_binding_analysis, {
       shiny::req(input_list())
 
-      result_with_hits <- add_hits(
-        input_list()$result,
-        protein_table = input_list()$Protein_Table,
-        compound_table = input_list()$Compound_Table,
-        peak_tolerance = input$peak_tolerance,
-        max_multiples = input$max_multiples
+      # Add hits to all samples from result file
+      # Assign to result_with_hits() reactive var
+      result_with_hits(
+        add_hits(
+          input_list()$result,
+          sample_table = input_list()$Samples_Table,
+          protein_table = input_list()$Protein_Table,
+          compound_table = input_list()$Compound_Table,
+          peak_tolerance = input$peak_tolerance,
+          max_multiples = input$max_multiples
+        )
       )
+      result_hits <<- result_with_hits()
 
-      # Assign result list and hits table to reactive vars
-      result_hits_test(result_with_hits)
-      hits(summarize_hits(result_with_hits))
+      # Create summarized hit table
+      # Assign to hits() reactive var
+      hits(summarize_hits(result_with_hits()))
+      summarized_hits <<- hits()
+
+      if (nrow(hits()) == 0) {
+        write_log(level = "ERROR", "No hits detected")
+        shinyWidgets::show_toast(
+          "Conversion error",
+          text = "No hits detected",
+          type = "error",
+          timer = 5000
+        )
+      }
     })
 
     output$module_sidebar <- shiny::renderUI({
@@ -287,11 +309,10 @@ server <- function(
       )
     })
 
-    # Rückgabe des reactiveValues-Objekts, damit es an den übergeordneten Server übergeben werden kann
+    # Server return values
     return(
       shiny::reactiveValues(
-        run_conversion = shiny::reactive(input$run_binding_analysis),
-        result_hits = shiny::reactive(result_hits_test()),
+        result_hits = shiny::reactive(result_with_hits()),
         hits = shiny::reactive(hits()),
         sample_picker = shiny::reactive(input$sample_picker)
       )

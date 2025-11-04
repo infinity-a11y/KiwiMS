@@ -680,7 +680,6 @@ spectrum_plot <- function(
         # )
       )
   } else {
-    test <<- plot_data$highlight_peaks
     plot <- plotly::plot_ly(
       plot_data$mass,
       x = ~mass,

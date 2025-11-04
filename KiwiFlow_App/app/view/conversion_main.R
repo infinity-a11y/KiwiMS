@@ -244,6 +244,9 @@ server <- function(id, conversion_dirs) {
     shiny::observeEvent(conversion_dirs$hits(), {
       hits <- conversion_dirs$hits()
 
+      # If table is null dont continue
+      shiny::req(nrow(hits) > 0)
+
       bslib::nav_insert(
         "tabs",
         bslib::nav_panel(
@@ -301,19 +304,22 @@ server <- function(id, conversion_dirs) {
       )
       hits_table <- conversion_dirs$result_hits()[[conversion_dirs$sample_picker()]]$hits
 
-      output$conversion_result_table <- DT::renderDT({
-        data_for_table <- hits_table |>
-          dplyr::select(-c("Well", "Sample"))
-        DT::datatable(
-          data_for_table,
-          rownames = FALSE,
-          options = list(
-            pageLength = 5,
-            dom = 'tpi'
-          )
-        ) |>
+      if (!is.null(hits_table) && nrow(hits_table) > 0) {
+        hits_table <- hits_table |>
+          dplyr::select(-c("Well", "Sample")) |>
+          DT::datatable(
+            rownames = FALSE,
+            options = list(
+              pageLength = 5,
+              dom = 'tpi'
+            )
+          ) |>
           DT::formatRound(columns = c(5, 6, 8, 12), digits = 2)
-      })
+      } else {
+        hits_table <- data.frame()
+      }
+
+      output$conversion_result_table <- DT::renderDT(hits_table)
     })
 
     output$hits_spectrum <- plotly::renderPlotly({

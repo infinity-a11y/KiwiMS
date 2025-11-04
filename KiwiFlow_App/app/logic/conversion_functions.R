@@ -365,9 +365,6 @@ slice_sample_tab <- function(sample_table) {
 # Validate sample table
 #' @export
 check_sample_table <- function(sample_table, proteins, compounds) {
-  sample_table <<- sample_table
-  proteins <<- proteins
-  compounds <<- compounds
   # Check if protein names valid
   if (
     !all(
@@ -699,6 +696,7 @@ get_compound_matrix <- function(compound_file, header = TRUE) {
 }
 
 check_hits <- function(
+  sample_table,
   protein_mw,
   compound_mw,
   peaks,
@@ -726,9 +724,19 @@ check_hits <- function(
   }
 
   # Only keep compounds that are in sample
-  cmp_name <- parse_filename(sample)[2]
-  cmp_mat <- t(as.matrix(compound_mw[cmp_name, ]))
-  dimnames(cmp_mat) <- list(cmp_name, colnames(compound_mw))
+  test <<- compound_mw
+
+  if (nrow(compound_mw) == 1) {
+    cmp_mat <- t(compound_mw)
+    test7 <<- cmp_mat
+  } else {
+    sample_compounds <- sample_table[which(sample == sample_table$Sample), ]
+    sample_compound_vector <- unlist(sample_compounds[-c(1, 2)])
+    test2 <<- sample_compounds
+    test3 <<- sample_compound_vector
+    cmp_mat <- t(as.matrix(compound_mw[sample_compound_vector, ]))
+    test4 <<- cmp_mat
+  }
 
   # Fill multiples matrix
   for (i in 1:max_multiples) {
@@ -744,7 +752,9 @@ check_hits <- function(
 
   # Addition of protein mw with multiples matrix
   complex_mat <- mat + protein_mw
+  test5 <<- complex_mat
 
+  # Initiate empty hits data frame
   hits_df <- data.frame()
 
   # Fill hits_df
@@ -753,6 +763,7 @@ check_hits <- function(
     lower <- peaks_filtered$mass[j] - peak_tolerance
 
     hits <- complex_mat >= lower & complex_mat <= upper
+    test6 <<- hits
 
     if (any(hits, na.rm = TRUE)) {
       indices <- which(hits, arr.ind = TRUE)
@@ -778,7 +789,7 @@ check_hits <- function(
           prot_intensity = peaks$intensity[which(protein_peak)],
           peak = peaks_filtered[j, "mass"],
           intensity = peaks_filtered[j, "intensity"],
-          compound = rownames(indices)[k],
+          compound = sub("\\*.*", "", colnames(hits)[indices[k, 2]]),
           cmp_mass = cmp_mass,
           multiple = multiple
         )
@@ -900,6 +911,7 @@ conversion <- function(hits) {
 #' @export
 add_hits <- function(
   results,
+  sample_table,
   protein_table,
   compound_table,
   peak_tolerance,
@@ -908,6 +920,8 @@ add_hits <- function(
   results <<- results
   protein_table <<- protein_table
   compound_table <<- compound_table
+  sample_table <<- sample_table
+
   samples <- utils::head(names(results), -2)
   # protein_mw <- get_protein_mw(protein_mw_file)
   protein_mw <- protein_table$`Mass 1`
@@ -918,6 +932,7 @@ add_hits <- function(
   for (i in seq_along(samples)) {
     message("### Checking hits for ", samples[i])
     results[[samples[i]]][["hits"]] <- check_hits(
+      sample_table = sample_table,
       protein_mw = protein_mw,
       compound_mw = compound_mw,
       peaks = get_peaks(result_sample = samples[i], results = results),
@@ -957,4 +972,100 @@ summarize_hits <- function(result_list) {
   }
 
   return(hits_summarized)
+}
+
+# Function to extract minutes information from sample names
+extract_minutes <- function(strings) {
+  # Find pattern: one or more digits followed by "min"
+  minutes <- regmatches(strings, regexpr("\\d+(?=min)", strings, perl = TRUE))
+
+  # Convert to numeric, replace empty matches with NA
+  minutes <- ifelse(minutes == "", NA, minutes)
+  as.numeric(minutes)
+}
+
+calculate_kobs <- function(hit_summary) {
+  hits <- hit_summary |>
+    dplyr::mutate(
+      time = extract_minutes(Sample),
+      binding = `Total % Binding` * 100
+    ) |>
+    dplyr::arrange(time)
+
+  # Compute Kobs
+  kobs_result <- compute_kobs(hits, units = "uM - minutes")
+  kobs_result$predictions <- predict_binding(hits, kobs_result$nlm)
+  kobs_result$hits <- hits
+
+  # Plot single concentration with kobs
+  kobs_result$plot <- ggplot2::ggplot() +
+    geom_point(data = kobs_result$hits, mapping = aes(time, binding)) +
+    geom_line(
+      data = kobs_result$predictions,
+      mapping = aes(time, predicted_binding)
+    ) +
+    geom_text(
+      mapping = aes(
+        label = paste("k[obs] ==", round(kobs_result$kobs, 2)),
+        x = mean(kobs_result$hits$time),
+        y = mean((kobs_result$hits$binding))
+      ),
+      parse = TRUE
+    )
+
+  print(kobs_result$plot)
+
+  return(kobs_result)
+}
+
+compute_kobs <- function(data, units = "uM - minutes") {
+  # Make dummy row to anchor fitting in (time=0, Binding=0)
+  dummy_row <- data[1, ] # Copy structure from first row
+  dummy_row$binding <- 0.0
+  dummy_row$time <- 0
+  if ("Well" %in% colnames(data)) {
+    dummy_row$Well <- "XX"
+  } # If Well column exists
+  data <- rbind(data, dummy_row)
+
+  # Starting values based on units
+  if (units == "M - seconds") {
+    start_vals <- c(v = 1, kobs = 0.001)
+  } else {
+    start_vals <- c(v = 1, kobs = 0.001) # Adjust when needed
+  }
+
+  # Nonlinear fit
+  nonlin_mod <- nlsLM(
+    formula = binding ~ 100 * (v / kobs * (1 - exp(-kobs * time))),
+    start = start_vals,
+    data = data
+  )
+
+  # Extract parameters
+  params <- summary(nonlin_mod)$parameters
+  result <- list(
+    kobs = params[2, 1], # Kobs value
+    v = params[1, 1], # v parameter
+    plateau = 100 * (params[1, 1] / params[2, 1]), # Computed max binding %
+    nlm = nonlin_mod
+  )
+
+  return(result)
+}
+
+# Simplified function to get predicted binding values for plotting or validation
+predict_binding <- function(data, fitted_model, units = "uM - minutes") {
+  # Sequence of times for predictions
+  time_seq <- seq(0, max(data$time), by = 1)
+
+  # Predict using the fitted model
+  predicted <- predict(fitted_model, newdata = data.frame(time = time_seq))
+
+  result <- data.frame(
+    time = time_seq,
+    predicted_binding = predicted
+  )
+
+  return(result)
 }
