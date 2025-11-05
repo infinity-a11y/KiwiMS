@@ -119,12 +119,12 @@ server <- function(
     ns <- session$ns
 
     # Declare reactive vars
-    result_with_hits <- shiny::reactiveVal(NULL)
+    result_list <- shiny::reactiveVal(NULL)
     hits <- shiny::reactiveVal(NULL)
 
     # Render result menu
     output$result_menu <- shiny::renderUI({
-      shiny::req(result_with_hits(), nrow(hits()) > 0)
+      shiny::req(result_list(), nrow(hits()) > 0)
 
       shiny::fluidRow(
         shiny::column(
@@ -133,7 +133,7 @@ server <- function(
           shinyWidgets::pickerInput(
             ns("sample_picker"),
             "Sample",
-            choices = utils::head(names(result_with_hits()), -2)
+            choices = utils::head(names(result_list()), -2)
           )
         )
       )
@@ -159,6 +159,7 @@ server <- function(
 
       result_with_hits <- add_hits(
         input_list()$result,
+        sample_table = input_list()$Samples_Table,
         protein_table = input_list()$Protein_Table,
         compound_table = input_list()$Compound_Table,
         peak_tolerance = input$peak_tolerance,
@@ -166,8 +167,9 @@ server <- function(
       )
 
       # Assign result list and hits table to reactive vars
-      result_hits_test(result_with_hits)
+      result_list(result_with_hits)
       hits(summarize_hits(result_with_hits))
+      hits_summary <<- summarize_hits(result_with_hits)
     })
 
     output$module_sidebar <- shiny::renderUI({
@@ -295,7 +297,7 @@ server <- function(
     # Server return values
     return(
       shiny::reactiveValues(
-        result_hits = shiny::reactive(result_with_hits()),
+        result_hits = shiny::reactive(result_list()),
         hits = shiny::reactive(hits()),
         sample_picker = shiny::reactive(input$sample_picker)
       )

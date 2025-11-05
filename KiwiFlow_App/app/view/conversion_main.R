@@ -826,7 +826,12 @@ server <- function(id, conversion_dirs) {
 
             # Render sample table with new input
             if (!is.null(input$sample_table)) {
-              output$sample_table <- rhandsontable::renderRHandsontable(
+              output$sample_table <- rhandsontable::renderRHandsontable({
+                waiter::waiter_show(
+                  id = ns("sample_table"),
+                  html = waiter::spin_throbber()
+                )
+
                 sample_handsontable(
                   tab = slice_sample_tab(rhandsontable::hot_to_r(
                     input$sample_table
@@ -834,7 +839,9 @@ server <- function(id, conversion_dirs) {
                   proteins = protein_table$Protein,
                   compounds = vars$compound_table$Compound
                 )
-              )
+
+                waiter::waiter_hide(id = ns("sample_table"))
+              })
 
               # Jump to next tab module
               set_selected_tab("Samples", session)
@@ -1062,11 +1069,18 @@ server <- function(id, conversion_dirs) {
 
         if (!isTRUE(vars$sample_tab_initial)) {
           output$sample_table <- rhandsontable::renderRHandsontable({
+            waiter::waiter_show(
+              id = ns("sample_table"),
+              html = waiter::spin_throbber()
+            )
+
             sample_handsontable(
               tab = sample_tab,
               proteins = vars$protein_table$Protein,
               compounds = vars$compound_table$Compound
             )
+
+            waiter::waiter_hide(id = ns("sample_table"))
           })
         }
 

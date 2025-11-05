@@ -988,70 +988,167 @@ calculate_kobs <- function(hit_summary) {
   hits <- hit_summary |>
     dplyr::mutate(
       time = extract_minutes(Sample),
-      binding = `Total % Binding` * 100
+      binding = `Total % Binding` * 100,
+      concentration = gsub(
+        "o",
+        ".",
+        sapply(strsplit(hits_summary$Sample, "_"), `[`, 3)
+      )
     ) |>
-    dplyr::arrange(time)
+    dplyr::group_by(concentration) |>
+    dplyr::arrange(as.numeric(concentration), time)
 
   # Compute Kobs
   kobs_result <- compute_kobs(hits, units = "uM - minutes")
-  kobs_result$predictions <- predict_binding(hits, kobs_result$nlm)
-  kobs_result$hits <- hits
 
-  # Plot single concentration with kobs
-  kobs_result$plot <- ggplot2::ggplot() +
-    geom_point(data = kobs_result$hits, mapping = aes(time, binding)) +
-    geom_line(
-      data = kobs_result$predictions,
-      mapping = aes(time, predicted_binding)
-    ) +
-    geom_text(
-      mapping = aes(
-        label = paste("k[obs] ==", round(kobs_result$kobs, 2)),
-        x = mean(kobs_result$hits$time),
-        y = mean((kobs_result$hits$binding))
+  # Modify predictions data frame for plotting
+  df <- kobs_result$predictions_df
+  df_points <- df[!(df$time == 0 | df$binding == 0), ] # keep only non-zero points
+
+  # Make plotly plot
+  kobs_result$plot <- plotly::plot_ly() %>%
+    plotly::add_lines(
+      data = df,
+      x = ~time,
+      y = ~predicted_binding,
+      color = ~concentration,
+      colors = "Set1",
+      line = list(width = 2, opacity = 0.6),
+      legendgroup = ~concentration,
+      hovertemplate = paste(
+        "Time: %{x}<br>",
+        "Predicted: %{y:.3f}<br>",
+        "Conc: %{customdata}<extra></extra>"
       ),
-      parse = TRUE
+      customdata = ~concentration
+    ) %>%
+    # add_text(
+    #   data = df[df$time == max(df$time), ],
+    #   x = ~time + 10,
+    #   y = ~predicted_binding,
+    #   text = ~paste("kobs = ", round(kobs, 2)),
+    # ) %>%
+    add_text(
+      data = df[df$time == max(df$time), ],
+      x = ~ time + 2,
+      y = ~predicted_binding,
+      text = ~ paste("k<sub>obs</sub> = ", round(kobs, 2)),
+      textposition = "middle right",
+      xanchor = "right",
+      cliponaxis = FALSE,
+      showarrow = FALSE
+    ) %>%
+    plotly::add_markers(
+      data = df_points,
+      x = ~time,
+      y = ~binding,
+      color = ~concentration,
+      colors = "Set1",
+      symbol = ~concentration,
+      marker = list(
+        size = 12,
+        opacity = 0.9,
+        line = list(width = 1.5, color = "black")
+      ),
+      legendgroup = ~concentration,
+      hovertemplate = paste(
+        "<b>Observed</b><br>",
+        "Time: %{x}<br>",
+        "Binding: %{y:.3f}<br>",
+        "Conc: %{customdata}<extra></extra>",
+        "Kobs = "
+      ),
+      customdata = ~concentration
+    ) %>%
+    plotly::layout(
+      hovermode = "closest",
+      legend = list(title = list(text = "<b>Concentration</b>")),
+      xaxis = list(title = "Time [min]"),
+      yaxis = list(title = "Binding [%]"),
+      font = list(size = 14)
     )
 
   print(kobs_result$plot)
-
   return(kobs_result)
 }
 
-compute_kobs <- function(data, units = "uM - minutes") {
-  # Make dummy row to anchor fitting in (time=0, Binding=0)
-  dummy_row <- data[1, ] # Copy structure from first row
-  dummy_row$binding <- 0.0
-  dummy_row$time <- 0
-  if ("Well" %in% colnames(data)) {
-    dummy_row$Well <- "XX"
-  } # If Well column exists
-  data <- rbind(data, dummy_row)
+compute_kobs <- function(hits, units = "uM - minutes") {
+  concentration_list <- list()
+  predictions_df <- data.frame()
 
-  # Starting values based on units
-  if (units == "M - seconds") {
-    start_vals <- c(v = 1, kobs = 0.001)
-  } else {
-    start_vals <- c(v = 1, kobs = 0.001) # Adjust when needed
+  for (i in unique(hits$concentration)) {
+    data <- hits |>
+      dplyr::filter(concentration == i, !duplicated(time))
+
+    # Make dummy row to anchor fitting in (time=0, Binding=0)
+    dummy_row <- data[1, ] # Copy structure from first row
+    dummy_row$binding <- 0.0
+    dummy_row$time <- 0
+    if ("Well" %in% colnames(data)) {
+      dummy_row$Well <- "XX"
+    } # If Well column exists
+    data <- rbind(data, dummy_row)
+
+    # Starting values based on units
+    if (units == "M - seconds") {
+      start_vals <- c(v = 1, kobs = 0.001)
+    } else {
+      start_vals <- c(v = 1, kobs = 0.001) # Adjust when needed
+    }
+
+    # Nonlinear fit
+    nonlin_mod <- minpack.lm::nlsLM(
+      formula = binding ~ 100 * (v / kobs * (1 - exp(-kobs * time))),
+      start = start_vals,
+      data = data
+    )
+
+    # Extract parameters
+    params <- summary(nonlin_mod)$parameters
+    result <- list(
+      kobs = params[2, 1], # Kobs value
+      v = params[1, 1], # v parameter
+      plateau = 100 * (params[1, 1] / params[2, 1]), # Computed max binding %
+      nlm = nonlin_mod
+    )
+
+    concentration_list[[i]] <- result
+
+    # Predict concentration
+    predictions <- predict_binding(
+      data,
+      nonlin_mod
+    )
+
+    # if (i == unique(hits$concentration)[1]) {
+    #   predictions_df <- mutate(predictions, concentration = i)
+    # } else {
+    predictions_df <- rbind(
+      predictions_df,
+      dplyr::left_join(
+        predictions,
+        dplyr::select(data, c("time", "binding")),
+        by = "time"
+      ) |>
+        dplyr::mutate(concentration = i, kobs = result$kobs)
+    )
+    # }
+    concentration_list[[i]][["predictions"]] <- predictions
+
+    # Save hits for concentration
+    concentration_list[[i]][["hits"]] <- data
   }
 
-  # Nonlinear fit
-  nonlin_mod <- nlsLM(
-    formula = binding ~ 100 * (v / kobs * (1 - exp(-kobs * time))),
-    start = start_vals,
-    data = data
+  predictions_df$concentration <- factor(
+    predictions_df$concentration,
+    levels = sort(
+      as.numeric(unique(predictions_df$concentration)),
+      decreasing = TRUE
+    )
   )
+  concentration_list[["predictions_df"]] <- predictions_df
 
-  # Extract parameters
-  params <- summary(nonlin_mod)$parameters
-  result <- list(
-    kobs = params[2, 1], # Kobs value
-    v = params[1, 1], # v parameter
-    plateau = 100 * (params[1, 1] / params[2, 1]), # Computed max binding %
-    nlm = nonlin_mod
-  )
-
-  return(result)
+  return(concentration_list)
 }
 
 # Simplified function to get predicted binding values for plotting or validation
