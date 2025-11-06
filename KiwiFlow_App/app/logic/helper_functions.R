@@ -203,12 +203,12 @@ kobs_matrix <- function(kobs_input, units, tmp_dir) {
     nonlin_mod <- nlsLM(
       formula = as.numeric(Binding) ~
         100 *
-          (v /
-            kobs *
-            (1 -
-              exp(
-                -kobs * as.numeric(time_plot)
-              ))),
+        (v /
+          kobs *
+          (1 -
+            exp(
+              -kobs * as.numeric(time_plot)
+            ))),
       start = c(v = 1, kobs = 0.001),
       data = subset
     )
@@ -289,12 +289,12 @@ kobs_modelled <- function(kobs_input) {
     nonlin_mod <- nlsLM(
       formula = as.numeric(Binding) ~
         100 *
-          (v /
-            kobs *
-            (1 -
-              exp(
-                -kobs * as.numeric(time_plot)
-              ))),
+        (v /
+          kobs *
+          (1 -
+            exp(
+              -kobs * as.numeric(time_plot)
+            ))),
       start = c(v = 1, kobs = 0.001),
       data = subset
     )
@@ -363,7 +363,7 @@ make_kinact_matrix <- function(kobs, units, tmp_dir) {
       subset <- subset[-which(subset$kobs > 1), ]
     }
 
-    nonlin_mod2 <- nlsLM(
+    nonlin_mod2 <- minpack.lm::nlsLM(
       formula = kobs ~ (kinact * conc) / (KI + conc),
       data = subset,
       start = start_values

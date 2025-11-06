@@ -999,14 +999,14 @@ calculate_kobs <- function(hit_summary) {
     dplyr::arrange(as.numeric(concentration), time)
 
   # Compute Kobs
-  kobs_result <- compute_kobs(hits, units = "uM - minutes")
+  kobs_result <- compute_kobs(hits, units = "µM - minutes")
 
   # Modify predictions data frame for plotting
   df <- kobs_result$predictions_df
   df_points <- df[!(df$time == 0 | df$binding == 0), ] # keep only non-zero points
 
   # Make plotly plot
-  kobs_result$plot <- plotly::plot_ly() %>%
+  kobs_result$plot <- plotly::plot_ly() |>
     plotly::add_lines(
       data = df,
       x = ~time,
@@ -1018,26 +1018,10 @@ calculate_kobs <- function(hit_summary) {
       hovertemplate = paste(
         "Time: %{x}<br>",
         "Predicted: %{y:.3f}<br>",
-        "Conc: %{customdata}<extra></extra>"
+        "K<sub>obs</sub>: %{customdata:.4f}<extra></extra>"
       ),
-      customdata = ~concentration
-    ) %>%
-    # add_text(
-    #   data = df[df$time == max(df$time), ],
-    #   x = ~time + 10,
-    #   y = ~predicted_binding,
-    #   text = ~paste("kobs = ", round(kobs, 2)),
-    # ) %>%
-    add_text(
-      data = df[df$time == max(df$time), ],
-      x = ~ time + 2,
-      y = ~predicted_binding,
-      text = ~ paste("k<sub>obs</sub> = ", round(kobs, 2)),
-      textposition = "middle right",
-      xanchor = "right",
-      cliponaxis = FALSE,
-      showarrow = FALSE
-    ) %>%
+      customdata = ~kobs
+    ) |>
     plotly::add_markers(
       data = df_points,
       x = ~time,
@@ -1055,11 +1039,10 @@ calculate_kobs <- function(hit_summary) {
         "<b>Observed</b><br>",
         "Time: %{x}<br>",
         "Binding: %{y:.3f}<br>",
-        "Conc: %{customdata}<extra></extra>",
-        "Kobs = "
+        "K<sub>obs</sub>: %{customdata:.4f}<extra></extra>"
       ),
-      customdata = ~concentration
-    ) %>%
+      customdata = ~kobs
+    ) |>
     plotly::layout(
       hovermode = "closest",
       legend = list(title = list(text = "<b>Concentration</b>")),
@@ -1069,10 +1052,146 @@ calculate_kobs <- function(hit_summary) {
     )
 
   print(kobs_result$plot)
+
+  # Calculcate Ki/Kinact
+  ki_kinact_result <- compute_ki_kinact(kobs_result)
+
+  # Modify predictions data frame for plotting
+  kobs_data <- ki_kinact_result$Kobs_Data
+
+  # Predicted line trace
+  df <- kobs_data[!is.na(kobs_data$predicted_kobs), ]
+  # df$conc <- factor(df$conc)
+
+  # True kobs points
+  df_points <- kobs_data[!is.na(kobs_data$kobs) & kobs_data$kobs != 0, ]
+  df_points$kobs <- factor(
+    df_points$kobs,
+    levels = sort(df_points$kobs, decreasing = TRUE)
+  )
+
+  discrete_colors <- RColorBrewer::brewer.pal(n = 6, name = "Set1") |>
+    plotly::toRGB() # Ensures colors are in a format plotly accepts
+
+  ki_kinact_result$plot <- plotly::plot_ly() |>
+    plotly::add_lines(
+      data = df,
+      x = ~conc,
+      y = ~predicted_kobs,
+      line = list(width = 2, opacity = 0.6, color = "black"),
+      showlegend = FALSE
+    ) |>
+    plotly::add_trace(
+      data = dplyr::group_by(df_points, kobs),
+      x = ~conc,
+      y = ~kobs,
+      type = "scatter",
+      mode = "markers",
+      name = ~kobs,
+      symbol = ~kobs,
+      marker = list(
+        size = 12,
+        opacity = 0.9,
+        line = list(width = 1.5, color = "black")
+      )
+    ) |>
+    plotly::layout(
+      hovermode = "closest",
+      legend = list(title = list(text = "<b>k<sub>obs</sub></b>")),
+      yaxis = list(title = "k<sub>obs</sub>"),
+      xaxis = list(title = "Compound [µM]"),
+      font = list(size = 14),
+      colorway = discrete_colors
+    )
+
+  print(ki_kinact_result$plot)
+
+  kobs_result$predictions_df |>
+    dplyr::filter(!duplicated(kobs_result$predictions_df$kobs)) |>
+    dplyr::mutate(
+      concentration = factor(concentration, levels = rev(levels(concentration)))
+    ) |>
+    ggplot2::ggplot() +
+    ggplot2::geom_point(
+      mapping = ggplot2::aes(x = concentration, y = kobs)
+    )
+
   return(kobs_result)
 }
 
-compute_kobs <- function(hits, units = "uM - minutes") {
+compute_ki_kinact <- function(kobs_result, units = "µM - minutes") {
+  # Get kobs subset
+  kobs <- kobs_result$predictions_df |>
+    dplyr::filter(!duplicated(kobs_result$predictions_df$kobs)) |>
+    dplyr::mutate(conc = as.numeric(as.character(concentration))) |>
+    dplyr::select(conc, kobs)
+
+  # Adjust start values to units
+  if (units == "M - seconds") {
+    start_values <- c(kinact = 0.001, KI = 0.000001)
+  } else {
+    start_values <- c(kinact = 1000, KI = 10)
+  }
+
+  # Add dummy row x,y = 0
+  kobs_dummy <- kobs[1, ]
+  kobs_dummy$kobs <- 0
+  kobs_dummy$conc <- 0
+  kobs <- rbind(kobs, kobs_dummy)
+  kobs <- kobs[order(kobs$conc), ]
+
+  # Nonlinear regression
+  nonlin_mod <- minpack.lm::nlsLM(
+    formula = kobs ~ (kinact * conc) / (KI + conc),
+    data = kobs,
+    start = start_values
+  )
+
+  # Predict kobs values with NLM
+  kobs_predicted <- predict_values(
+    data = kobs,
+    predict = "kobs",
+    x = "conc",
+    interval = 0.1,
+    fitted_model = nonlin_mod
+  )
+
+  # Join with true data
+  kobs_data <- dplyr::full_join(kobs_predicted, kobs, by = "conc")
+
+  # Return complete list
+  ki_kinact_result <- list(
+    "Params" = summary(nonlin_mod)$parameters,
+    "Kobs_Data" = kobs_data
+  )
+
+  return(ki_kinact_result)
+}
+
+# Function to predict binding/kobs values
+predict_values <- function(
+  data,
+  predict,
+  x,
+  interval,
+  fitted_model
+) {
+  # Prepare sequence of predictions
+  prediction_df <- data.frame(seq(0, max(data[[x]]), by = interval))
+  colnames(prediction_df) <- x
+
+  # Predict using the fitted model
+  predicted <- stats::predict(
+    fitted_model,
+    prediction_df
+  )
+
+  prediction_df[[paste0("predicted_", predict)]] <- predicted
+
+  return(prediction_df)
+}
+
+compute_kobs <- function(hits, units = "µM - minutes") {
   concentration_list <- list()
   predictions_df <- data.frame()
 
@@ -1096,7 +1215,7 @@ compute_kobs <- function(hits, units = "uM - minutes") {
       start_vals <- c(v = 1, kobs = 0.001) # Adjust when needed
     }
 
-    # Nonlinear fit
+    # Nonlinear regression
     nonlin_mod <- minpack.lm::nlsLM(
       formula = binding ~ 100 * (v / kobs * (1 - exp(-kobs * time))),
       start = start_vals,
@@ -1111,18 +1230,19 @@ compute_kobs <- function(hits, units = "uM - minutes") {
       plateau = 100 * (params[1, 1] / params[2, 1]), # Computed max binding %
       nlm = nonlin_mod
     )
-
+    # Add parameters to concentration list
     concentration_list[[i]] <- result
 
     # Predict concentration
-    predictions <- predict_binding(
-      data,
-      nonlin_mod
+    predictions <- predict_values(
+      data = data,
+      fitted_model = nonlin_mod,
+      predict = "binding",
+      x = "time",
+      interval = 1
     )
 
-    # if (i == unique(hits$concentration)[1]) {
-    #   predictions_df <- mutate(predictions, concentration = i)
-    # } else {
+    # Append predictions to predictions data frame
     predictions_df <- rbind(
       predictions_df,
       dplyr::left_join(
@@ -1132,37 +1252,25 @@ compute_kobs <- function(hits, units = "uM - minutes") {
       ) |>
         dplyr::mutate(concentration = i, kobs = result$kobs)
     )
-    # }
+
+    # Add predictions specific for concentration
     concentration_list[[i]][["predictions"]] <- predictions
 
     # Save hits for concentration
     concentration_list[[i]][["hits"]] <- data
   }
 
-  predictions_df$concentration <- factor(
-    predictions_df$concentration,
-    levels = sort(
-      as.numeric(unique(predictions_df$concentration)),
-      decreasing = TRUE
+  # Reorder concentrations as factor
+  concentration_list[["predictions_df"]] <- predictions_df |>
+    dplyr::mutate(
+      concentration = factor(
+        concentration,
+        levels = sort(
+          as.numeric(unique(concentration)),
+          decreasing = TRUE
+        )
+      )
     )
-  )
-  concentration_list[["predictions_df"]] <- predictions_df
 
   return(concentration_list)
-}
-
-# Simplified function to get predicted binding values for plotting or validation
-predict_binding <- function(data, fitted_model, units = "uM - minutes") {
-  # Sequence of times for predictions
-  time_seq <- seq(0, max(data$time), by = 1)
-
-  # Predict using the fitted model
-  predicted <- predict(fitted_model, newdata = data.frame(time = time_seq))
-
-  result <- data.frame(
-    time = time_seq,
-    predicted_binding = predicted
-  )
-
-  return(result)
 }
