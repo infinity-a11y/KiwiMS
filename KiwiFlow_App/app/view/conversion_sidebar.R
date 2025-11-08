@@ -11,6 +11,8 @@ box::use(
     conversion_functions[
       add_hits,
       summarize_hits,
+      add_kobs_binding_result,
+      add_ki_kinact_result,
     ],
   app /
     logic /
@@ -155,8 +157,9 @@ server <- function(
 
     # Event run conversion
     shiny::observeEvent(input$run_binding_analysis, {
-      shiny::req(input_list())
+      shiny::req(input_list(), input$peak_tolerance, input$max_multiples)
 
+      # Search and add hits
       result_with_hits <- add_hits(
         input_list()$result,
         sample_table = input_list()$Samples_Table,
@@ -166,10 +169,35 @@ server <- function(
         max_multiples = input$max_multiples
       )
 
+      test1 <<- result_with_hits
+      test2 <<- summarize_hits(result_with_hits)
+
+      # Add summarized hits table to result list
+      result_with_hits$hits_summary <- summarize_hits(result_with_hits)
+      test3 <<- result_with_hits
+
+      # Add binding/kobs results to result list
+      test4 <<- add_kobs_binding_result(
+        result_with_hits
+      )
+      result_with_hits$binding_kobs_result <- add_kobs_binding_result(
+        result_with_hits
+      )
+
+      test5 <<- result_with_hits$binding_kobs_result
+      test6 <<- add_ki_kinact_result(
+        result_with_hits
+      )
+
+      # Add Ki/kinact results to result list
+      result_with_hits$ki_kinact_result <- add_ki_kinact_result(
+        result_with_hits
+      )
+
       # Assign result list and hits table to reactive vars
       result_list(result_with_hits)
-      hits(summarize_hits(result_with_hits))
-      hits_summary <<- summarize_hits(result_with_hits)
+
+      test <<- result_with_hits
     })
 
     output$module_sidebar <- shiny::renderUI({

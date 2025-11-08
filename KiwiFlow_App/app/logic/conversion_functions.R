@@ -909,11 +909,6 @@ add_hits <- function(
   peak_tolerance,
   max_multiples
 ) {
-  results <<- results
-  protein_table <<- protein_table
-  compound_table <<- compound_table
-  sample_table <<- sample_table
-
   samples <- utils::head(names(results), -2)
   # protein_mw <- get_protein_mw(protein_mw_file)
   protein_mw <- protein_table$`Mass 1`
@@ -976,31 +971,56 @@ extract_minutes <- function(strings) {
   as.numeric(minutes)
 }
 
-add_binding_params <- function(hit_summary) {
-  hits <- hit_summary |>
+# Function to add binding/kobs results to result list
+#' @export
+add_kobs_binding_result <- function(result_list) {
+  binding_kobs_result <- result_list[["hits_summary"]] |>
+    # Add concentration, time and binding columns to hits summary
     dplyr::mutate(
       time = extract_minutes(Sample),
       binding = `Total % Binding` * 100,
       concentration = gsub(
         "o",
         ".",
-        sapply(strsplit(hits_summary$Sample, "_"), `[`, 3)
+        sapply(strsplit(result_list[["hits_summary"]]$Sample, "_"), `[`, 3)
       )
     ) |>
     dplyr::group_by(concentration) |>
-    dplyr::arrange(as.numeric(concentration), time)
+    dplyr::arrange(as.numeric(concentration), time) |>
+    # Compute and model kobs values
+    compute_kobs(units = "µM - minutes")
 
-  # Compute Kobs
-  kobs_result <- compute_kobs(hits, units = "µM - minutes")
+  # Add and display binding plot
+  binding_kobs_result$binding_plot <- make_binding_plot(binding_kobs_result)
 
-  # Modify predictions data frame for plotting
-  df <- kobs_result$predictions_df
-  df_points <- df[!(df$time == 0 | df$binding == 0), ] # keep only non-zero points
+  return(binding_kobs_result)
+}
 
-  # Make plotly plot
-  kobs_result$plot <- plotly::plot_ly() |>
+# Function to add Ki/kinact results to result list
+#' @export
+add_ki_kinact_result <- function(result_list) {
+  # Calculcate Ki/kinact from binding/kobs result
+  ki_kinact_result <- compute_ki_kinact(result_list[["binding_kobs_result"]])
+
+  # Add and display kobs plot to Ki/kinact results
+  ki_kinact_result$kobs_plot <- make_kobs_plot(ki_kinact_result)
+
+  return(ki_kinact_result)
+}
+
+# Function to generate and display binding plot
+make_binding_plot <- function(kobs_result) {
+  # Keep only non-zero observed data points
+  df_points <- kobs_result$binding_table[
+    !(kobs_result$binding_table$time == 0 |
+      kobs_result$binding_table$binding == 0),
+  ]
+
+  # Generate plot
+  binding_plot <- plotly::plot_ly() |>
+    # Predicted/modeled binding
     plotly::add_lines(
-      data = df,
+      data = kobs_result$binding_table,
       x = ~time,
       y = ~predicted_binding,
       color = ~concentration,
@@ -1008,12 +1028,14 @@ add_binding_params <- function(hit_summary) {
       line = list(width = 2, opacity = 0.6),
       legendgroup = ~concentration,
       hovertemplate = paste(
+        "<b>Predicted</b><br>",
         "Time: %{x}<br>",
-        "Predicted: %{y:.3f}<br>",
-        "K<sub>obs</sub>: %{customdata:.4f}<extra></extra>"
+        "%-Binding: %{y:.2f}<br>",
+        "K<sub>obs</sub>: %{customdata:.2f}<extra></extra>"
       ),
       customdata = ~kobs
     ) |>
+    # Observed binding
     plotly::add_markers(
       data = df_points,
       x = ~time,
@@ -1030,11 +1052,12 @@ add_binding_params <- function(hit_summary) {
       hovertemplate = paste(
         "<b>Observed</b><br>",
         "Time: %{x}<br>",
-        "Binding: %{y:.3f}<br>",
-        "K<sub>obs</sub>: %{customdata:.4f}<extra></extra>"
+        "%-Binding: %{y:.2f}<br>",
+        "K<sub>obs</sub>: %{customdata:.2f}<extra></extra>"
       ),
       customdata = ~kobs
     ) |>
+    # Layout changes
     plotly::layout(
       hovermode = "closest",
       legend = list(title = list(text = "<b>Concentration</b>")),
@@ -1043,29 +1066,35 @@ add_binding_params <- function(hit_summary) {
       font = list(size = 14)
     )
 
-  print(kobs_result$plot)
+  # Print plot
+  print(binding_plot)
 
-  # Calculcate Ki/Kinact
-  ki_kinact_result <- compute_ki_kinact(kobs_result)
+  # Return plot
+  return(binding_plot)
+}
 
-  # Modify predictions data frame for plotting
-  kobs_data <- ki_kinact_result$Kobs_Data
+# Function to generate and display kobs plot
+make_kobs_plot <- function(ki_kinact_result) {
+  # Get predicted/modeled kobs
+  df <- ki_kinact_result$Kobs_Data[
+    !is.na(ki_kinact_result$Kobs_Data$predicted_kobs),
+  ]
 
-  # Predicted line trace
-  df <- kobs_data[!is.na(kobs_data$predicted_kobs), ]
-  # df$conc <- factor(df$conc)
-
-  # True kobs points
-  df_points <- kobs_data[!is.na(kobs_data$kobs) & kobs_data$kobs != 0, ]
+  # Get observed kobs data points
+  df_points <- ki_kinact_result$Kobs_Data[
+    !is.na(ki_kinact_result$Kobs_Data$kobs) &
+      ki_kinact_result$Kobs_Data$kobs != 0,
+  ]
   df_points$kobs <- factor(
     df_points$kobs,
     levels = sort(df_points$kobs, decreasing = TRUE)
   )
 
+  # Prepare color scale
   discrete_colors <- RColorBrewer::brewer.pal(n = 6, name = "Set1") |>
-    plotly::toRGB() # Ensures colors are in a format plotly accepts
+    plotly::toRGB()
 
-  ki_kinact_result$plot <- plotly::plot_ly() |>
+  kobs_plot <- plotly::plot_ly() |>
     plotly::add_lines(
       data = df,
       x = ~conc,
@@ -1096,19 +1125,11 @@ add_binding_params <- function(hit_summary) {
       colorway = discrete_colors
     )
 
-  print(ki_kinact_result$plot)
+  # Print plot
+  print(kobs_plot)
 
-  kobs_result$predictions_df |>
-    dplyr::filter(!duplicated(kobs_result$predictions_df$kobs)) |>
-    dplyr::mutate(
-      concentration = factor(concentration, levels = rev(levels(concentration)))
-    ) |>
-    ggplot2::ggplot() +
-    ggplot2::geom_point(
-      mapping = ggplot2::aes(x = concentration, y = kobs)
-    )
-
-  return(kobs_result)
+  # Return plot
+  return(kobs_plot)
 }
 
 # Function to predict binding/kobs values
@@ -1135,8 +1156,12 @@ predict_values <- function(
 }
 
 compute_kobs <- function(hits, units = "µM - minutes") {
+  requireNamespace("stats", quietly = TRUE)
+  library(stats)
+  library(dplyr)
+
   concentration_list <- list()
-  predictions_df <- data.frame()
+  binding_table <- data.frame()
 
   for (i in unique(hits$concentration)) {
     data <- hits |>
@@ -1186,8 +1211,8 @@ compute_kobs <- function(hits, units = "µM - minutes") {
     )
 
     # Append predictions to predictions data frame
-    predictions_df <- rbind(
-      predictions_df,
+    binding_table <- rbind(
+      binding_table,
       dplyr::left_join(
         predictions,
         dplyr::select(data, c("time", "binding")),
@@ -1204,7 +1229,7 @@ compute_kobs <- function(hits, units = "µM - minutes") {
   }
 
   # Reorder concentrations as factor
-  concentration_list[["predictions_df"]] <- predictions_df |>
+  concentration_list[["binding_table"]] <- binding_table |>
     dplyr::mutate(
       concentration = factor(
         concentration,
@@ -1220,8 +1245,8 @@ compute_kobs <- function(hits, units = "µM - minutes") {
 
 compute_ki_kinact <- function(kobs_result, units = "µM - minutes") {
   # Get kobs subset
-  kobs <- kobs_result$predictions_df |>
-    dplyr::filter(!duplicated(kobs_result$predictions_df$kobs)) |>
+  kobs <- kobs_result$binding_table |>
+    dplyr::filter(!duplicated(kobs_result$binding_table$kobs)) |>
     dplyr::mutate(conc = as.numeric(as.character(concentration))) |>
     dplyr::select(conc, kobs)
 
