@@ -724,18 +724,12 @@ check_hits <- function(
   }
 
   # Only keep compounds that are in sample
-  test <<- compound_mw
-
   if (nrow(compound_mw) == 1) {
     cmp_mat <- t(compound_mw)
-    test7 <<- cmp_mat
   } else {
     sample_compounds <- sample_table[which(sample == sample_table$Sample), ]
     sample_compound_vector <- unlist(sample_compounds[-c(1, 2)])
-    test2 <<- sample_compounds
-    test3 <<- sample_compound_vector
     cmp_mat <- t(as.matrix(compound_mw[sample_compound_vector, ]))
-    test4 <<- cmp_mat
   }
 
   # Fill multiples matrix
@@ -752,7 +746,6 @@ check_hits <- function(
 
   # Addition of protein mw with multiples matrix
   complex_mat <- mat + protein_mw
-  test5 <<- complex_mat
 
   # Initiate empty hits data frame
   hits_df <- data.frame()
@@ -763,7 +756,6 @@ check_hits <- function(
     lower <- peaks_filtered$mass[j] - peak_tolerance
 
     hits <- complex_mat >= lower & complex_mat <= upper
-    test6 <<- hits
 
     if (any(hits, na.rm = TRUE)) {
       indices <- which(hits, arr.ind = TRUE)
@@ -984,7 +976,7 @@ extract_minutes <- function(strings) {
   as.numeric(minutes)
 }
 
-calculate_kobs <- function(hit_summary) {
+add_binding_params <- function(hit_summary) {
   hits <- hit_summary |>
     dplyr::mutate(
       time = extract_minutes(Sample),
@@ -1119,55 +1111,6 @@ calculate_kobs <- function(hit_summary) {
   return(kobs_result)
 }
 
-compute_ki_kinact <- function(kobs_result, units = "µM - minutes") {
-  # Get kobs subset
-  kobs <- kobs_result$predictions_df |>
-    dplyr::filter(!duplicated(kobs_result$predictions_df$kobs)) |>
-    dplyr::mutate(conc = as.numeric(as.character(concentration))) |>
-    dplyr::select(conc, kobs)
-
-  # Adjust start values to units
-  if (units == "M - seconds") {
-    start_values <- c(kinact = 0.001, KI = 0.000001)
-  } else {
-    start_values <- c(kinact = 1000, KI = 10)
-  }
-
-  # Add dummy row x,y = 0
-  kobs_dummy <- kobs[1, ]
-  kobs_dummy$kobs <- 0
-  kobs_dummy$conc <- 0
-  kobs <- rbind(kobs, kobs_dummy)
-  kobs <- kobs[order(kobs$conc), ]
-
-  # Nonlinear regression
-  nonlin_mod <- minpack.lm::nlsLM(
-    formula = kobs ~ (kinact * conc) / (KI + conc),
-    data = kobs,
-    start = start_values
-  )
-
-  # Predict kobs values with NLM
-  kobs_predicted <- predict_values(
-    data = kobs,
-    predict = "kobs",
-    x = "conc",
-    interval = 0.1,
-    fitted_model = nonlin_mod
-  )
-
-  # Join with true data
-  kobs_data <- dplyr::full_join(kobs_predicted, kobs, by = "conc")
-
-  # Return complete list
-  ki_kinact_result <- list(
-    "Params" = summary(nonlin_mod)$parameters,
-    "Kobs_Data" = kobs_data
-  )
-
-  return(ki_kinact_result)
-}
-
 # Function to predict binding/kobs values
 predict_values <- function(
   data,
@@ -1273,4 +1216,53 @@ compute_kobs <- function(hits, units = "µM - minutes") {
     )
 
   return(concentration_list)
+}
+
+compute_ki_kinact <- function(kobs_result, units = "µM - minutes") {
+  # Get kobs subset
+  kobs <- kobs_result$predictions_df |>
+    dplyr::filter(!duplicated(kobs_result$predictions_df$kobs)) |>
+    dplyr::mutate(conc = as.numeric(as.character(concentration))) |>
+    dplyr::select(conc, kobs)
+
+  # Adjust start values to units
+  if (units == "M - seconds") {
+    start_values <- c(kinact = 0.001, KI = 0.000001)
+  } else {
+    start_values <- c(kinact = 1000, KI = 10)
+  }
+
+  # Add dummy row x,y = 0
+  kobs_dummy <- kobs[1, ]
+  kobs_dummy$kobs <- 0
+  kobs_dummy$conc <- 0
+  kobs <- rbind(kobs, kobs_dummy)
+  kobs <- kobs[order(kobs$conc), ]
+
+  # Nonlinear regression
+  nonlin_mod <- minpack.lm::nlsLM(
+    formula = kobs ~ (kinact * conc) / (KI + conc),
+    data = kobs,
+    start = start_values
+  )
+
+  # Predict kobs values with NLM
+  kobs_predicted <- predict_values(
+    data = kobs,
+    predict = "kobs",
+    x = "conc",
+    interval = 0.1,
+    fitted_model = nonlin_mod
+  )
+
+  # Join with true data
+  kobs_data <- dplyr::full_join(kobs_predicted, kobs, by = "conc")
+
+  # Return complete list
+  ki_kinact_result <- list(
+    "Params" = summary(nonlin_mod)$parameters,
+    "Kobs_Data" = kobs_data
+  )
+
+  return(ki_kinact_result)
 }
