@@ -169,23 +169,12 @@ server <- function(
         max_multiples = input$max_multiples
       )
 
-      test1 <<- result_with_hits
-      test2 <<- summarize_hits(result_with_hits)
-
       # Add summarized hits table to result list
       result_with_hits$hits_summary <- summarize_hits(result_with_hits)
-      test3 <<- result_with_hits
+      test <<- result_with_hits
 
       # Add binding/kobs results to result list
-      test4 <<- add_kobs_binding_result(
-        result_with_hits
-      )
       result_with_hits$binding_kobs_result <- add_kobs_binding_result(
-        result_with_hits
-      )
-
-      test5 <<- result_with_hits$binding_kobs_result
-      test6 <<- add_ki_kinact_result(
         result_with_hits
       )
 

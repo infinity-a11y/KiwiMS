@@ -1038,8 +1038,8 @@ div[data-value="Protein Conversion"] .bslib-sidebar-layout.sidebar-collapsed>.co
 #app-conversion_main-compound_table,
 #app-conversion_main-sample_table {
   height: 60vh !important;
-  overflow-y: overlay;
-  overflow-x: auto;
+  // overflow-y: overlay;
+  // overflow-x: auto;
   max-width: fit-content !important;
 }
 
@@ -1170,4 +1170,8 @@ div[data-value="Protein Conversion"] .bslib-sidebar-layout.sidebar-collapsed>.co
 
 .dropdown-menu .show {
   width: 100%;
+}
+
+.listbox {
+  background: pink !important;
 }

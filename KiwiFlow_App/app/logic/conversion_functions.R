@@ -1163,12 +1163,14 @@ compute_kobs <- function(hits, units = "µM - minutes") {
   concentration_list <- list()
   binding_table <- data.frame()
 
+  hits <- dplyr::filter(hits, concentration != "0")
+
   for (i in unique(hits$concentration)) {
     data <- hits |>
       dplyr::filter(concentration == i, !duplicated(time))
 
-    # Make dummy row to anchor fitting in (time=0, Binding=0)
-    dummy_row <- data[1, ] # Copy structure from first row
+    # Make dummy row to anchor fitting at 0
+    dummy_row <- data[1, ]
     dummy_row$binding <- 0.0
     dummy_row$time <- 0
     if ("Well" %in% colnames(data)) {
@@ -1177,10 +1179,11 @@ compute_kobs <- function(hits, units = "µM - minutes") {
     data <- rbind(data, dummy_row)
 
     # Starting values based on units
+    # TODO
     if (units == "M - seconds") {
       start_vals <- c(v = 1, kobs = 0.001)
     } else {
-      start_vals <- c(v = 1, kobs = 0.001) # Adjust when needed
+      start_vals <- c(v = 1, kobs = 0.001)
     }
 
     # Nonlinear regression
