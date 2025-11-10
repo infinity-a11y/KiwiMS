@@ -977,7 +977,7 @@ add_kobs_binding_result <- function(result_list) {
   binding_kobs_result <- result_list[["hits_summary"]] |>
     # Add concentration, time and binding columns to hits summary
     dplyr::mutate(
-      time = extract_minutes(Sample),
+      time = extract_minutes(Sample) * 60,
       binding = `Total % Binding` * 100,
       concentration = gsub(
         "o",
@@ -988,7 +988,7 @@ add_kobs_binding_result <- function(result_list) {
     dplyr::group_by(concentration) |>
     dplyr::arrange(as.numeric(concentration), time) |>
     # Compute and model kobs values
-    compute_kobs(units = "µM - minutes")
+    compute_binding_kobs(units = "M - seconds")
 
   # Add and display binding plot
   binding_kobs_result$binding_plot <- make_binding_plot(binding_kobs_result)
@@ -1085,13 +1085,25 @@ make_kobs_plot <- function(ki_kinact_result) {
     !is.na(ki_kinact_result$Kobs_Data$kobs) &
       ki_kinact_result$Kobs_Data$kobs != 0,
   ]
+
+  concentration_levels <- test <- df_points |>
+    dplyr::arrange(dplyr::desc(conc)) |>
+    dplyr::reframe(kobs) |>
+    unlist()
+
   df_points$kobs <- factor(
     df_points$kobs,
-    levels = sort(df_points$kobs, decreasing = TRUE)
+    levels = concentration_levels
   )
 
   # Prepare color scale
-  discrete_colors <- RColorBrewer::brewer.pal(n = 6, name = "Set1") |>
+  # concentrations <- sort(df_points$conc, decreasing = TRUE)
+  # concentration_map <- RColorBrewer::brewer.pal(n = 6, name = "Set1")
+  # names(concentration_map) <- sort(df_points$conc, decreasing = TRUE)
+  # colors <- concentration_map[as.character(df_points$conc)] |>
+  #   plotly::toRGB()
+
+  colors <- RColorBrewer::brewer.pal(n = 6, name = "Set1") |>
     plotly::toRGB()
 
   kobs_plot <- plotly::plot_ly() |>
@@ -1100,7 +1112,13 @@ make_kobs_plot <- function(ki_kinact_result) {
       x = ~conc,
       y = ~predicted_kobs,
       line = list(width = 2, opacity = 0.6, color = "black"),
-      showlegend = FALSE
+      showlegend = FALSE,
+      hovertemplate = paste(
+        "<b>Predicted</b><br>",
+        "Concentration: %{x:..2f}<br>",
+        "K<sub>obs</sub>: %{y:.2f}<extra></extra>"
+      ),
+      customdata = ~kobs
     ) |>
     plotly::add_trace(
       data = dplyr::group_by(df_points, kobs),
@@ -1108,12 +1126,19 @@ make_kobs_plot <- function(ki_kinact_result) {
       y = ~kobs,
       type = "scatter",
       mode = "markers",
+      color = ~kobs,
+      colors = concentration_map,
       name = ~kobs,
       symbol = ~kobs,
       marker = list(
         size = 12,
         opacity = 0.9,
         line = list(width = 1.5, color = "black")
+      ),
+      hovertemplate = paste(
+        "<b>Observed</b><br>",
+        "Concentration: %{x:..2f}<br>",
+        "K<sub>obs</sub>: %{y:.2f}<extra></extra>"
       )
     ) |>
     plotly::layout(
@@ -1121,8 +1146,7 @@ make_kobs_plot <- function(ki_kinact_result) {
       legend = list(title = list(text = "<b>k<sub>obs</sub></b>")),
       yaxis = list(title = "k<sub>obs</sub>"),
       xaxis = list(title = "Compound [µM]"),
-      font = list(size = 14),
-      colorway = discrete_colors
+      font = list(size = 14)
     )
 
   # Print plot
@@ -1155,7 +1179,7 @@ predict_values <- function(
   return(prediction_df)
 }
 
-compute_kobs <- function(hits, units = "µM - minutes") {
+compute_binding_kobs <- function(hits, units = "M - seconds") {
   # Prepare empty objects
   concentration_list <- list()
   binding_table <- data.frame()
@@ -1247,12 +1271,13 @@ compute_kobs <- function(hits, units = "µM - minutes") {
   return(concentration_list)
 }
 
-compute_ki_kinact <- function(kobs_result, units = "µM - minutes") {
+compute_ki_kinact <- function(kobs_result, units = "M - seconds") {
   # Get kobs subset
   kobs <- kobs_result$binding_table |>
     dplyr::filter(!duplicated(kobs_result$binding_table$kobs)) |>
     dplyr::mutate(conc = as.numeric(as.character(concentration))) |>
-    dplyr::select(conc, kobs)
+    dplyr::select(conc, kobs) |>
+    dplyr::filter(conc != 2.1875)
 
   # Adjust start values to units
   if (units == "M - seconds") {

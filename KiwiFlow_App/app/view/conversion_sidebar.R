@@ -178,6 +178,8 @@ server <- function(
       # Add summarized hits table to result list
       result_with_hits$hits_summary <- summarize_hits(result_with_hits)
 
+      result_with_hits <<- result_with_hits
+
       # Add binding/kobs results to result list
       result_with_hits$binding_kobs_result <- add_kobs_binding_result(
         result_with_hits
