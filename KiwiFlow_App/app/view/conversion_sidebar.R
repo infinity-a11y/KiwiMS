@@ -122,11 +122,11 @@ server <- function(
 
     # Declare reactive vars
     result_list <- shiny::reactiveVal(NULL)
-    hits <- shiny::reactiveVal(NULL)
 
     # Render result menu
     output$result_menu <- shiny::renderUI({
-      shiny::req(result_list(), nrow(hits()) > 0)
+      seee <<- result_list()
+      shiny::req(nrow(result_list()[["hits_summary"]]) > 0)
 
       shiny::fluidRow(
         shiny::column(
@@ -135,7 +135,7 @@ server <- function(
           shinyWidgets::pickerInput(
             ns("sample_picker"),
             "Sample",
-            choices = utils::head(names(result_list()), -2)
+            choices = utils::head(names(result_list()), -5)
           )
         )
       )
@@ -159,7 +159,13 @@ server <- function(
     shiny::observeEvent(input$run_binding_analysis, {
       shiny::req(input_list(), input$peak_tolerance, input$max_multiples)
 
-      # Search and add hits
+      # Block UI
+      shinyjs::runjs(paste0(
+        'document.getElementById("blocking-overlay").style.display ',
+        '= "block";'
+      ))
+
+      # Search and add hits to result list
       result_with_hits <- add_hits(
         input_list()$result,
         sample_table = input_list()$Samples_Table,
@@ -171,7 +177,6 @@ server <- function(
 
       # Add summarized hits table to result list
       result_with_hits$hits_summary <- summarize_hits(result_with_hits)
-      test <<- result_with_hits
 
       # Add binding/kobs results to result list
       result_with_hits$binding_kobs_result <- add_kobs_binding_result(
@@ -186,7 +191,12 @@ server <- function(
       # Assign result list and hits table to reactive vars
       result_list(result_with_hits)
 
-      test <<- result_with_hits
+      results <<- result_with_hits
+      # Unlock UI
+      shinyjs::runjs(paste0(
+        'document.getElementById("blocking-overlay").style.display ',
+        '= "none";'
+      ))
     })
 
     output$module_sidebar <- shiny::renderUI({
@@ -314,8 +324,7 @@ server <- function(
     # Server return values
     return(
       shiny::reactiveValues(
-        result_hits = shiny::reactive(result_list()),
-        hits = shiny::reactive(hits()),
+        result_list = shiny::reactive(result_list()),
         sample_picker = shiny::reactive(input$sample_picker)
       )
     )

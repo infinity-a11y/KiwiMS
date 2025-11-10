@@ -241,8 +241,8 @@ server <- function(id, conversion_dirs) {
       conversion_ready = FALSE
     )
 
-    shiny::observeEvent(conversion_dirs$hits(), {
-      hits <- conversion_dirs$hits()
+    shiny::observeEvent(conversion_dirs$result_list(), {
+      hits <- conversion_dirs$result_list()[["hits_summary"]]
 
       # If table is null dont continue
       shiny::req(nrow(hits) > 0)
@@ -299,10 +299,9 @@ server <- function(id, conversion_dirs) {
     shiny::observe({
       shiny::req(
         conversion_dirs$sample_picker(),
-        conversion_dirs$result_hits(),
-        conversion_dirs$hits()
+        conversion_dirs$result_list()
       )
-      hits_table <- conversion_dirs$result_hits()[[conversion_dirs$sample_picker()]]$hits
+      hits_table <- conversion_dirs$result_list()[[conversion_dirs$sample_picker()]]$hits
 
       if (!is.null(hits_table) && nrow(hits_table) > 0) {
         hits_table <- hits_table |>
@@ -325,22 +324,23 @@ server <- function(id, conversion_dirs) {
     output$hits_spectrum <- plotly::renderPlotly({
       shiny::req(
         conversion_dirs$sample_picker(),
-        conversion_dirs$result_hits(),
-        conversion_dirs$hits()
+        conversion_dirs$result_list()
       )
       if (
         conversion_dirs$sample_picker() %in%
-          names(conversion_dirs$result_hits())
+          names(conversion_dirs$result_list())
       ) {
-        conversion_dirs$result_hits()[[conversion_dirs$sample_picker()]]$hits_spectrum
+        conversion_dirs$result_list()[[conversion_dirs$sample_picker()]]$hits_spectrum
       }
     })
 
     shiny::observe({
-      shiny::req(conversion_dirs$hits())
+      shiny::req(conversion_dirs$result_list())
 
       output$conversion_result_table <- rhandsontable::renderRHandsontable({
-        rhandsontable::rhandsontable(conversion_dirs$hits())
+        rhandsontable::rhandsontable(conversion_dirs$result_list()[[
+          "hits_summary"
+        ]])
       })
     })
 

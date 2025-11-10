@@ -152,13 +152,6 @@ server <- function(id) {
   shiny$moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
-    #TODO
-    #test<<
-    library(shiny)
-    library(dplyr)
-    library(minpack.lm)
-    library(stats)
-
     # Kill server on session end
     session$onSessionEnded(function() {
       write_log("Session closed")

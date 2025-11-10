@@ -1156,16 +1156,17 @@ predict_values <- function(
 }
 
 compute_kobs <- function(hits, units = "µM - minutes") {
-  requireNamespace("stats", quietly = TRUE)
-  library(stats)
-  library(dplyr)
-
+  # Prepare empty objects
   concentration_list <- list()
   binding_table <- data.frame()
 
+  # Filter non-zero concentrations
   hits <- dplyr::filter(hits, concentration != "0")
 
+  # Loop over each unique concentration
   for (i in unique(hits$concentration)) {
+    # TODO
+    # Currently no duplicates/triplicates considered
     data <- hits |>
       dplyr::filter(concentration == i, !duplicated(time))
 
@@ -1186,8 +1187,8 @@ compute_kobs <- function(hits, units = "µM - minutes") {
       start_vals <- c(v = 1, kobs = 0.001)
     }
 
-    # Nonlinear regression
-    nonlin_mod <- minpack.lm::nlsLM(
+    # Nonlinear regression with customized minpack.lm::nlsLM() function
+    nonlin_mod <- nlsLM_fixed(
       formula = binding ~ 100 * (v / kobs * (1 - exp(-kobs * time))),
       start = start_vals,
       data = data
@@ -1268,7 +1269,7 @@ compute_ki_kinact <- function(kobs_result, units = "µM - minutes") {
   kobs <- kobs[order(kobs$conc), ]
 
   # Nonlinear regression
-  nonlin_mod <- minpack.lm::nlsLM(
+  nonlin_mod <- nlsLM_fixed(
     formula = kobs ~ (kinact * conc) / (KI + conc),
     data = kobs,
     start = start_values
@@ -1293,4 +1294,240 @@ compute_ki_kinact <- function(kobs_result, units = "µM - minutes") {
   )
 
   return(ki_kinact_result)
+}
+
+# Modified minpack.lm::nlsLM() function due to namespace issues with stats::model.frame()
+nlsLM_fixed <- function(
+  formula,
+  data = base::parent.frame(),
+  start,
+  jac = NULL,
+  algorithm = "LM",
+  control = minpack.lm::nls.lm.control(),
+  lower = NULL,
+  upper = NULL,
+  trace = FALSE,
+  subset,
+  weights,
+  na.action,
+  model = FALSE,
+  ...
+) {
+  formula <- stats::as.formula(formula)
+  if (!base::is.list(data) && !base::is.environment(data)) {
+    base::stop("'data' must be a list or an environment")
+  }
+  mf <- base::match.call()
+  varNames <- base::all.vars(formula)
+  if (base::length(formula) == 2L) {
+    formula[[3L]] <- formula[[2L]]
+    formula[[2L]] <- 0
+  }
+  form2 <- formula
+  form2[[2L]] <- 0
+  varNamesRHS <- base::all.vars(form2)
+  mWeights <- base::missing(weights)
+  if (trace) {
+    control$nprint <- 1
+  }
+  pnames <- if (base::missing(start)) {
+    if (!base::is.null(base::attr(data, "parameters"))) {
+      base::names(base::attr(data, "parameters"))
+    } else {
+      cll <- formula[[base::length(formula)]]
+      func <- base::get(base::as.character(cll[[1L]]))
+      if (!base::is.null(pn <- base::attr(func, "pnames"))) {
+        base::as.character(base::as.list(base::match.call(
+          func,
+          call = cll
+        ))[-1L][pn])
+      }
+    }
+  } else {
+    base::names(start)
+  }
+  env <- base::environment(formula)
+  if (base::is.null(env)) {
+    env <- base::parent.frame()
+  }
+  if (base::length(pnames)) {
+    varNames <- varNames[base::is.na(base::match(varNames, pnames))]
+  }
+  lenVar <- function(var) {
+    base::tryCatch(
+      base::length(base::eval(base::as.name(var), data, env)),
+      error = function(e) -1
+    )
+  }
+  if (base::length(varNames)) {
+    n <- base::sapply(varNames, lenVar)
+    if (base::any(not.there <- n == -1)) {
+      nnn <- base::names(n[not.there])
+      if (base::missing(start)) {
+        base::warning(
+          "No starting values specified for some parameters.\n",
+          "Initializing ",
+          base::paste(base::sQuote(nnn), collapse = ", "),
+          " to '1.'.\n",
+          "Consider specifying 'start' or using a selfStart model"
+        )
+        start <- base::as.list(base::rep(1, base::length(nnn)))
+        base::names(start) <- nnn
+        varNames <- varNames[i <- base::is.na(base::match(varNames, nnn))]
+        n <- n[i]
+      } else {
+        base::stop(
+          "parameters without starting value in 'data': ",
+          base::paste(nnn, collapse = ", ")
+        )
+      }
+    }
+  } else {
+    if (
+      base::length(pnames) &&
+        base::any((np <- base::sapply(pnames, lenVar)) == -1)
+    ) {
+      base::message(
+        "fitting parameters ",
+        base::paste(base::sQuote(pnames[np == -1]), collapse = ", "),
+        " without any variables"
+      )
+      n <- base::integer()
+    } else {
+      base::stop("no parameters to fit")
+    }
+  }
+  respLength <- base::length(base::eval(formula[[2L]], data, env))
+  if (base::length(n) > 0L) {
+    varIndex <- n %% respLength == 0
+    if (
+      base::is.list(data) &&
+        base::diff(base::range(n[base::names(n) %in% base::names(data)])) > 0
+    ) {
+      mf <- data
+      if (!base::missing(subset)) {
+        base::warning("argument 'subset' will be ignored")
+      }
+      if (!base::missing(na.action)) {
+        base::warning("argument 'na.action' will be ignored")
+      }
+      if (base::missing(start)) {
+        start <- stats::getInitial(formula, mf)
+      }
+      startEnv <- base::new.env(
+        hash = FALSE,
+        parent = base::environment(formula)
+      )
+      for (i in base::names(start)) {
+        base::assign(i, start[[i]], envir = startEnv)
+      }
+      rhs <- base::eval(formula[[3L]], data, startEnv)
+      n <- base::NROW(rhs)
+      wts <- if (mWeights) {
+        base::rep(1, n)
+      } else {
+        base::eval(
+          base::substitute(weights),
+          data,
+          base::environment(formula)
+        )
+      }
+    } else {
+      mf$formula <- stats::as.formula(
+        base::paste("~", base::paste(varNames[varIndex], collapse = "+")),
+        env = base::environment(formula)
+      )
+      mf$start <- mf$control <- mf$algorithm <- mf$trace <- mf$model <- NULL
+      mf$lower <- mf$upper <- NULL
+
+      # CHANGE FROM ORIGINAL
+      # Using quote(stats::model.frame) to fix the scoping issue
+      mf[[1L]] <- quote(stats::model.frame)
+      mf <- base::eval.parent(mf)
+
+      n <- base::nrow(mf)
+      mf <- base::as.list(mf)
+      wts <- if (!mWeights) {
+        stats::model.weights(mf)
+      } else {
+        base::rep(1, n)
+      }
+    }
+    if (base::any(wts < 0 | base::is.na(wts))) {
+      base::stop("missing or negative weights not allowed")
+    }
+  } else {
+    varIndex <- base::logical()
+    mf <- base::list(0)
+    wts <- base::numeric()
+  }
+  if (base::missing(start)) {
+    start <- stats::getInitial(formula, mf)
+  }
+  for (var in varNames[!varIndex]) {
+    mf[[var]] <- base::eval(base::as.name(var), data, env)
+  }
+  varNamesRHS <- varNamesRHS[varNamesRHS %in% varNames[varIndex]]
+  mf <- base::c(mf, start)
+  lhs <- base::eval(formula[[2L]], envir = mf)
+  m <- base::match(base::names(start), base::names(mf))
+  .swts <- if (!base::missing(wts) && base::length(wts)) {
+    base::sqrt(wts)
+  }
+  FCT <- function(par) {
+    mf[m] <- par
+    rhs <- base::eval(formula[[3L]], envir = mf, base::environment(formula))
+    res <- lhs - rhs
+    res <- .swts * res
+    res
+  }
+  NLS <- minpack.lm::nls.lm(
+    par = start,
+    fn = FCT,
+    jac = jac,
+    control = control,
+    lower = lower,
+    upper = upper,
+    ...
+  )
+  start <- NLS$par
+  m <- minpack.lm:::nlsModel(formula, mf, start, wts)
+  if (NLS$info %in% base::c(1, 2, 3, 4)) {
+    isConv <- TRUE
+  } else {
+    isConv <- FALSE
+  }
+  finIter <- NLS$niter
+  finTol <- minpack.lm::nls.lm.control()$ftol
+  convInfo <- base::list(
+    isConv = isConv,
+    finIter = finIter,
+    finTol = finTol,
+    stopCode = NLS$info,
+    stopMessage = NLS$message
+  )
+  nls.out <- base::list(
+    m = m,
+    convInfo = convInfo,
+    data = base::substitute(data),
+    call = base::match.call()
+  )
+  nls.out$call$algorithm <- algorithm
+  nls.out$call$control <- stats::nls.control()
+  nls.out$call$trace <- FALSE
+  nls.out$call$lower <- lower
+  nls.out$call$upper <- upper
+  nls.out$na.action <- base::attr(mf, "na.action")
+  nls.out$dataClasses <- base::attr(base::attr(mf, "terms"), "dataClasses")[
+    varNamesRHS
+  ]
+  if (model) {
+    nls.out$model <- mf
+  }
+  if (!mWeights) {
+    nls.out$weights <- wts
+  }
+  nls.out$control <- control
+  base::class(nls.out) <- "nls"
+  nls.out
 }
