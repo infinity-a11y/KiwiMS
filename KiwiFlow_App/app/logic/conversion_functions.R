@@ -711,7 +711,23 @@ check_hits <- function(
   # Abort if peaks show invalid peaks
   if (!any(protein_peak)) {
     message(warning_sym, " No protein peak detected")
-    return(NULL)
+
+    hits_df <- data.frame(
+      well = "A1",
+      sample = sample,
+      protein = parse_filename(sample)[1],
+      theor_prot = as.numeric(protein_mw),
+      measured_prot = NA,
+      delta_prot = NA,
+      prot_intensity = NA,
+      peak = NA,
+      intensity = NA,
+      compound = NA,
+      cmp_mass = NA,
+      multiple = NA
+    )
+
+    return(hits_df)
   }
 
   # Keep only peaks above protein mw
@@ -720,7 +736,25 @@ check_hits <- function(
     peaks_filtered <- as.data.frame(peaks[peaks_valid, ])
   } else {
     message(warning_sym, " No peaks other than the protein were detected")
-    return(NULL)
+
+    hits_df <- data.frame(
+      well = "A1",
+      sample = sample,
+      protein = parse_filename(sample)[1],
+      theor_prot = as.numeric(protein_mw),
+      measured_prot = peaks$mass[which(protein_peak)],
+      delta_prot = abs(
+        as.numeric(protein_mw) - peaks$mass[which(protein_peak)]
+      ),
+      prot_intensity = peaks$intensity[which(protein_peak)],
+      peak = NA,
+      intensity = NA,
+      compound = NA,
+      cmp_mass = NA,
+      multiple = NA
+    )
+
+    return(hits_df)
   }
 
   # Only keep compounds that are in sample
@@ -791,6 +825,26 @@ check_hits <- function(
     }
   }
 
+  # If no hits detected in peaks
+  if (nrow(hits_df) == 0) {
+    hits_df <- data.frame(
+      well = "A1",
+      sample = sample,
+      protein = parse_filename(sample)[1],
+      theor_prot = as.numeric(protein_mw),
+      measured_prot = peaks$mass[which(protein_peak)],
+      delta_prot = abs(
+        as.numeric(protein_mw) - peaks$mass[which(protein_peak)]
+      ),
+      prot_intensity = peaks$intensity[which(protein_peak)],
+      peak = NA,
+      intensity = NA,
+      compound = NA,
+      cmp_mass = NA,
+      multiple = NA
+    )
+  }
+
   message("-> ", nrow(hits_df), " hits detected.")
   return(hits_df)
 }
@@ -822,62 +876,73 @@ conversion <- function(hits) {
       " columns, but five are required."
     )
     return(NULL)
-  }
+  } else if (anyNA(hits)) {
+    message("No binding events in sample.")
 
-  # Peaks: 1000(IA), 1010(IB), 1020(IC), 1011(ID)
-  # Peaks are in hits data frame
+    hits <- hits |>
+      dplyr::mutate(
+        `%binding` = NA
+      ) |>
+      dplyr::mutate(
+        `%binding_tot` = NA,
+        .before = peak
+      )
+  } else {
+    # Peaks: 1000(IA), 1010(IB), 1020(IC), 1011(ID)
+    # Peaks are in hits data frame
 
-  # Gesamtintensität: IA + IB + IC + ID = Itotal
-  I_total <- sum(unique(hits$intensity)) + unique(hits$prot_intensity)
-  perc_bind_prot <- unique(hits$prot_intensity) / I_total
-  message("-> Total intensity = ", I_total)
+    # Gesamtintensität: IA + IB + IC + ID = Itotal
+    I_total <- sum(unique(hits$intensity)) + unique(hits$prot_intensity)
+    perc_bind_prot <- unique(hits$prot_intensity) / I_total
+    message("-> Total intensity = ", I_total)
 
-  # nicht umgesetztes / ungebundenes Protein: IA / Itotal * 100
+    # nicht umgesetztes / ungebundenes Protein: IA / Itotal * 100
 
-  # %BinIB = IB / Itotal * 100
-  # %BinIC = IC / Itotal * 100
-  # usw ....
+    # %BinIB = IB / Itotal * 100
+    # %BinIC = IC / Itotal * 100
+    # usw ....
 
-  # %Bintotal = %BinIB + %BinIC + %BinID  (alles was nicht freies Prot ist)
+    # %Bintotal = %BinIB + %BinIC + %BinID  (alles was nicht freies Prot ist)
 
-  # Adding %Binding values to hit data frame
-  hits <- hits |>
-    dplyr::mutate(
-      `%binding` = intensity / I_total
-    )
-  hits <- hits |>
-    dplyr::mutate(
-      `%binding_tot` = sum(unique(hits$`%binding`)),
-      .before = peak
-    )
+    # Adding %Binding values to hit data frame
+    hits <- hits |>
+      dplyr::mutate(
+        `%binding` = intensity / I_total
+      )
+    hits <- hits |>
+      dplyr::mutate(
+        `%binding_tot` = sum(unique(hits$`%binding`)),
+        .before = peak
+      )
 
-  # Plausibilitätscheck check result < 100 - richtig so?
-  total_relBinding <- hits$`%binding_tot`[1] + perc_bind_prot
-  if (!all.equal(total_relBinding, 1)) {
+    # Plausibilitätscheck check result < 100 - richtig so?
+    total_relBinding <- hits$`%binding_tot`[1] + perc_bind_prot
+    if (!all.equal(total_relBinding, 1)) {
+      message(
+        warning_sym,
+        " total relative binding is not 100%."
+      )
+      return(NULL)
+    }
+
+    # Inform unbound protein intensity
     message(
-      warning_sym,
-      " total relative binding is not 100%."
+      "-> Unbound protein intensity = ",
+      hits$intensity[1],
+      " (",
+      scales::label_percent(accuracy = 0.1)(hits$`%binding`[1]),
+      ")"
     )
-    return(NULL)
+
+    # Inform %binding except protein
+    message(
+      "-> Total binding compounds intensity = ",
+      sum(unique(hits$intensity)),
+      " (",
+      scales::label_percent(accuracy = 0.1)(hits$`%binding_tot`[1]),
+      ")"
+    )
   }
-
-  # Inform unbound protein intensity
-  message(
-    "-> Unbound protein intensity = ",
-    hits$intensity[1],
-    " (",
-    scales::label_percent(accuracy = 0.1)(hits$`%binding`[1]),
-    ")"
-  )
-
-  # Inform %binding except protein
-  message(
-    "-> Total binding compounds intensity = ",
-    sum(unique(hits$intensity)),
-    " (",
-    scales::label_percent(accuracy = 0.1)(hits$`%binding_tot`[1]),
-    ")"
-  )
 
   # Change column names
   colnames(hits) <- c(
@@ -977,7 +1042,7 @@ add_kobs_binding_result <- function(result_list) {
   binding_kobs_result <- result_list[["hits_summary"]] |>
     # Add concentration, time and binding columns to hits summary
     dplyr::mutate(
-      time = extract_minutes(Sample) * 60,
+      time = extract_minutes(Sample),
       binding = `Total % Binding` * 100,
       concentration = gsub(
         "o",
@@ -988,7 +1053,7 @@ add_kobs_binding_result <- function(result_list) {
     dplyr::group_by(concentration) |>
     dplyr::arrange(as.numeric(concentration), time) |>
     # Compute and model kobs values
-    compute_binding_kobs(units = "M - seconds")
+    compute_kobs(units = "µM - minutes")
 
   # Add and display binding plot
   binding_kobs_result$binding_plot <- make_binding_plot(binding_kobs_result)
@@ -1085,25 +1150,13 @@ make_kobs_plot <- function(ki_kinact_result) {
     !is.na(ki_kinact_result$Kobs_Data$kobs) &
       ki_kinact_result$Kobs_Data$kobs != 0,
   ]
-
-  concentration_levels <- test <- df_points |>
-    dplyr::arrange(dplyr::desc(conc)) |>
-    dplyr::reframe(kobs) |>
-    unlist()
-
   df_points$kobs <- factor(
     df_points$kobs,
-    levels = concentration_levels
+    levels = sort(df_points$kobs, decreasing = TRUE)
   )
 
   # Prepare color scale
-  # concentrations <- sort(df_points$conc, decreasing = TRUE)
-  # concentration_map <- RColorBrewer::brewer.pal(n = 6, name = "Set1")
-  # names(concentration_map) <- sort(df_points$conc, decreasing = TRUE)
-  # colors <- concentration_map[as.character(df_points$conc)] |>
-  #   plotly::toRGB()
-
-  colors <- RColorBrewer::brewer.pal(n = 6, name = "Set1") |>
+  discrete_colors <- RColorBrewer::brewer.pal(n = 6, name = "Set1") |>
     plotly::toRGB()
 
   kobs_plot <- plotly::plot_ly() |>
@@ -1112,13 +1165,7 @@ make_kobs_plot <- function(ki_kinact_result) {
       x = ~conc,
       y = ~predicted_kobs,
       line = list(width = 2, opacity = 0.6, color = "black"),
-      showlegend = FALSE,
-      hovertemplate = paste(
-        "<b>Predicted</b><br>",
-        "Concentration: %{x:..2f}<br>",
-        "K<sub>obs</sub>: %{y:.2f}<extra></extra>"
-      ),
-      customdata = ~kobs
+      showlegend = FALSE
     ) |>
     plotly::add_trace(
       data = dplyr::group_by(df_points, kobs),
@@ -1126,19 +1173,12 @@ make_kobs_plot <- function(ki_kinact_result) {
       y = ~kobs,
       type = "scatter",
       mode = "markers",
-      color = ~kobs,
-      colors = concentration_map,
       name = ~kobs,
       symbol = ~kobs,
       marker = list(
         size = 12,
         opacity = 0.9,
         line = list(width = 1.5, color = "black")
-      ),
-      hovertemplate = paste(
-        "<b>Observed</b><br>",
-        "Concentration: %{x:..2f}<br>",
-        "K<sub>obs</sub>: %{y:.2f}<extra></extra>"
       )
     ) |>
     plotly::layout(
@@ -1146,7 +1186,8 @@ make_kobs_plot <- function(ki_kinact_result) {
       legend = list(title = list(text = "<b>k<sub>obs</sub></b>")),
       yaxis = list(title = "k<sub>obs</sub>"),
       xaxis = list(title = "Compound [µM]"),
-      font = list(size = 14)
+      font = list(size = 14),
+      colorway = discrete_colors
     )
 
   # Print plot
@@ -1179,13 +1220,14 @@ predict_values <- function(
   return(prediction_df)
 }
 
-compute_binding_kobs <- function(hits, units = "M - seconds") {
+compute_kobs <- function(hits, units = "µM - minutes") {
   # Prepare empty objects
   concentration_list <- list()
   binding_table <- data.frame()
 
   # Filter non-zero concentrations
-  hits <- dplyr::filter(hits, concentration != "0")
+  # TODO add dynamic outlier selection to filter
+  hits <- dplyr::filter(hits, concentration != "0", concentration != "2.1875")
 
   # Loop over each unique concentration
   for (i in unique(hits$concentration)) {
@@ -1206,7 +1248,7 @@ compute_binding_kobs <- function(hits, units = "M - seconds") {
     # Starting values based on units
     # TODO
     if (units == "M - seconds") {
-      start_vals <- c(v = 1, kobs = 0.001)
+      start_vals <- c(v = 1, kobs = 0.0004)
     } else {
       start_vals <- c(v = 1, kobs = 0.001)
     }
@@ -1271,13 +1313,12 @@ compute_binding_kobs <- function(hits, units = "M - seconds") {
   return(concentration_list)
 }
 
-compute_ki_kinact <- function(kobs_result, units = "M - seconds") {
+compute_ki_kinact <- function(kobs_result, units = "µM - minutes") {
   # Get kobs subset
   kobs <- kobs_result$binding_table |>
     dplyr::filter(!duplicated(kobs_result$binding_table$kobs)) |>
     dplyr::mutate(conc = as.numeric(as.character(concentration))) |>
-    dplyr::select(conc, kobs) |>
-    dplyr::filter(conc != 2.1875)
+    dplyr::select(conc, kobs)
 
   # Adjust start values to units
   if (units == "M - seconds") {

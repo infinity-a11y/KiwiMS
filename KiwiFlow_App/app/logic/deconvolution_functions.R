@@ -581,7 +581,7 @@ process_plot_data <- function(sample = NULL, result_path = NULL) {
       sample$hits$`Compound Mw [Da]`
     )
 
-    highlight_peaks <- cbind(peak_df, name, mw)
+    highlight_peaks <- cbind(peak_df, name, mw) |> dplyr::filter(!is.na(name))
   }
 
   return(list(mass = mass, highlight_peaks = highlight_peaks))
