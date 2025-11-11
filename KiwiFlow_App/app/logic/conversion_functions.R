@@ -724,6 +724,7 @@ check_hits <- function(
       intensity = NA,
       compound = NA,
       cmp_mass = NA,
+      delta_cmp = NA,
       multiple = NA
     )
 
@@ -751,6 +752,7 @@ check_hits <- function(
       intensity = NA,
       compound = NA,
       cmp_mass = NA,
+      delta_cmp = NA,
       multiple = NA
     )
 
@@ -817,6 +819,10 @@ check_hits <- function(
           intensity = peaks_filtered[j, "intensity"],
           compound = sub("\\*.*", "", colnames(hits)[indices[k, 2]]),
           cmp_mass = cmp_mass,
+          delta_cmp = abs(
+            (as.numeric(cmp_mass) * multiple) -
+              (peaks_filtered[j, "mass"] - as.numeric(protein_mw))
+          ),
           multiple = multiple
         )
 
@@ -841,6 +847,7 @@ check_hits <- function(
       intensity = NA,
       compound = NA,
       cmp_mass = NA,
+      delta_cmp = NA,
       multiple = NA
     )
   }
@@ -868,12 +875,12 @@ conversion <- function(hits) {
       " 'hits' argument has to be a data frame with at least one row"
     )
     return(NULL)
-  } else if (ncol(hits) != 12) {
+  } else if (ncol(hits) != 13) {
     message(
       warning_sym,
       " 'hits' data frame has ",
       ncol(hits),
-      " columns, but five are required."
+      " columns, but 13 are required."
     )
     return(NULL)
   } else if (anyNA(hits)) {
@@ -958,6 +965,7 @@ conversion <- function(hits) {
     "Intensity",
     "Compound",
     "Compound Mw [Da]",
+    "Delta Mw Compound [Da]",
     "Binding Stoichiometry",
     "% Binding"
   )
