@@ -242,7 +242,7 @@ server <- function(id, conversion_dirs) {
     )
 
     shiny::observeEvent(conversion_dirs$result_list(), {
-      hits <- conversion_dirs$result_list()[["hits_summary"]]
+      hits <- conversion_dirs$result_list()$hits_summary
 
       # If table is null dont continue
       shiny::req(nrow(hits) > 0)
@@ -253,42 +253,7 @@ server <- function(id, conversion_dirs) {
           title = "Results",
           shiny::div(
             class = "conversion-result-wrapper",
-            shiny::fluidRow(
-              shiny::column(
-                width = 6,
-                shiny::div(
-                  class = "card-custom",
-                  bslib::card(
-                    full_screen = TRUE,
-                    bslib::card_header(
-                      class = "bg-dark help-header",
-                      "Annotated Hits",
-                    ),
-                    bslib::card_body(
-                      plotly::plotlyOutput(ns("hits_spectrum"))
-                    )
-                  )
-                )
-              ),
-              shiny::column(
-                width = 6,
-                shiny::div(
-                  class = "card-custom",
-                  bslib::card(
-                    full_screen = TRUE,
-                    bslib::card_header(
-                      class = "bg-dark help-header",
-                      "Hits Table",
-                    ),
-                    bslib::card_body(
-                      DT::DTOutput(
-                        ns("conversion_result_table")
-                      )
-                    )
-                  )
-                )
-              )
-            )
+            shiny::uiOutput(ns("sample_view"))
           )
         )
       )
@@ -296,12 +261,108 @@ server <- function(id, conversion_dirs) {
       set_selected_tab("Results", session)
     })
 
+    output$sample_view <- shiny::renderUI({
+      if (conversion_dirs$sample_picker() == "Kinetics") {
+        shiny::fluidRow(
+          shiny::column(
+            width = 6,
+            shiny::div(
+              class = "card-custom",
+              bslib::card(
+                full_screen = TRUE,
+                bslib::card_header(
+                  class = "bg-dark help-header",
+                  "Binding Curve",
+                ),
+                bslib::card_body(
+                  plotly::plotlyOutput(
+                    ns("binding_plot")
+                  )
+                )
+              )
+            )
+          ),
+          shiny::column(
+            width = 6,
+            shiny::div(
+              class = "card-custom",
+              bslib::card(
+                full_screen = TRUE,
+                bslib::card_header(
+                  class = "bg-dark help-header",
+                  "kobs Curve",
+                ),
+                bslib::card_body(
+                  plotly::plotlyOutput(
+                    ns("kobs_plot")
+                  )
+                )
+              )
+            )
+          )
+        )
+      } else {
+        shiny::fluidRow(
+          shiny::column(
+            width = 6,
+            shiny::div(
+              class = "card-custom",
+              bslib::card(
+                full_screen = TRUE,
+                bslib::card_header(
+                  class = "bg-dark help-header",
+                  "Annotated Hits",
+                ),
+                bslib::card_body(
+                  plotly::plotlyOutput(ns("hits_spectrum"))
+                )
+              )
+            )
+          ),
+          shiny::column(
+            width = 6,
+            shiny::div(
+              class = "card-custom",
+              bslib::card(
+                full_screen = TRUE,
+                bslib::card_header(
+                  class = "bg-dark help-header",
+                  "Hits Table",
+                ),
+                bslib::card_body(
+                  DT::DTOutput(
+                    ns("conversion_result_table")
+                  )
+                )
+              )
+            )
+          )
+        )
+      }
+    })
+
+    output$binding_plot <- plotly::renderPlotly({
+      shiny::req(
+        conversion_dirs$result_list()$binding_kobs_result$binding_plot
+      )
+
+      conversion_dirs$result_list()$binding_kobs_result$binding_plot
+    })
+
+    output$kobs_plot <- plotly::renderPlotly({
+      shiny::req(
+        conversion_dirs$result_list()$ki_kinact_result$kobs_plot
+      )
+
+      conversion_dirs$result_list()$ki_kinact_result$kobs_plot
+    })
+
     shiny::observe({
       shiny::req(
         conversion_dirs$sample_picker(),
         conversion_dirs$result_list()
       )
-      hits_table <- conversion_dirs$result_list()[[conversion_dirs$sample_picker()]]$hits
+      hits_table <- conversion_dirs$result_list()$deconvolution[[conversion_dirs$sample_picker()]]$hits
 
       if (!is.null(hits_table) && nrow(hits_table) > 0) {
         hits_table <- hits_table |>
@@ -330,7 +391,7 @@ server <- function(id, conversion_dirs) {
         conversion_dirs$sample_picker() %in%
           names(conversion_dirs$result_list())
       ) {
-        conversion_dirs$result_list()[[conversion_dirs$sample_picker()]]$hits_spectrum
+        conversion_dirs$result_list()$deconvolution[[conversion_dirs$sample_picker()]]$hits_spectrum
       }
     })
 
@@ -1044,7 +1105,7 @@ server <- function(id, conversion_dirs) {
         vars$result <- readRDS(file_path)
 
         sample_tab <- data.frame(
-          Sample = utils::head(names(vars$result), -2),
+          Sample = names(vars$result$deconvolution),
           Protein = ifelse(
             length(vars$protein_table$Protein) == 1,
             vars$protein_table$Protein,

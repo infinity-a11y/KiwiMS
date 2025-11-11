@@ -794,6 +794,24 @@ spectrum_plot <- function(
   return(plot)
 }
 
+# Optimized file reader function
+read_file_safe <- function(filename, col_names = NULL) {
+  if (!file.exists(filename)) {
+    return(data.frame())
+  }
+  df <- fread(
+    filename,
+    header = FALSE,
+    sep = " ",
+    fill = TRUE,
+    showProgress = FALSE
+  )
+  if (!is.null(col_names)) {
+    setnames(df, col_names)
+  }
+  return(df)
+}
+
 # Generate deconvolution report
 #' @export
 generate_decon_rslt <- function(
@@ -804,24 +822,6 @@ generate_decon_rslt <- function(
   result_dir,
   temp_dir
 ) {
-  # Optimized file reader function
-  read_file_safe <- function(filename, col_names = NULL) {
-    if (!file.exists(filename)) {
-      return(data.frame())
-    }
-    df <- fread(
-      filename,
-      header = FALSE,
-      sep = " ",
-      fill = TRUE,
-      showProgress = FALSE
-    )
-    if (!is.null(col_names)) {
-      setnames(df, col_names)
-    }
-    return(df)
-  }
-
   process_path <- function(path) {
     rslt_folder <- gsub(".raw", "_rawdata_unidecfiles", path)
     raw_name <- gsub("_unidecfiles", "", basename(rslt_folder))
@@ -899,8 +899,10 @@ generate_decon_rslt <- function(
   }
 
   paths <- file.path(result_dir, basename(paths))
-  results <- lapply(paths, process_path)
-  names(results) <- basename(paths)
+  results <- list()
+  deconvolution <- lapply(paths, process_path)
+  names(deconvolution) <- basename(paths)
+  results[["deconvolution"]] <- deconvolution
   results[["session"]] <- log
   results[["output"]] <- output
 

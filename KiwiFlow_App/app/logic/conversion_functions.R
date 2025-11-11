@@ -498,8 +498,9 @@ get_peaks <- function(peak_file = NULL, result_sample, results) {
       is.character(result_sample) &
       is.list(results)
   ) {
-    result_sample == names(results)
-    peaks <- results[[which(result_sample == names(results))]]$peaks
+    peaks <- results$deconvolution[[which(
+      result_sample == names(results$deconvolution)
+    )]]$peaks
   } else {
     # Check if path valid
     if (!file.exists(peak_file)) {
@@ -985,7 +986,7 @@ add_hits <- function(
   peak_tolerance,
   max_multiples
 ) {
-  samples <- utils::head(names(results), -2)
+  samples <- names(results$deconvolution)
   # protein_mw <- get_protein_mw(protein_mw_file)
   protein_mw <- protein_table$`Mass 1`
   # compound_mw <- get_compound_matrix(compound_mw_file)
@@ -994,25 +995,27 @@ add_hits <- function(
 
   for (i in seq_along(samples)) {
     message("### Checking hits for ", samples[i])
-    results[[samples[i]]][["hits"]] <- check_hits(
+    results$deconvolution[[samples[i]]][["hits"]] <- check_hits(
       sample_table = sample_table,
       protein_mw = protein_mw,
       compound_mw = compound_mw,
       peaks = get_peaks(result_sample = samples[i], results = results),
       peak_tolerance = peak_tolerance,
       max_multiples = max_multiples,
-      sample = names(results)[i]
+      sample = samples[i]
     )
 
     # Add hits data frame to sample
-    results[[samples[i]]][["hits"]] <- conversion(results[[samples[i]]][[
+    results$deconvolution[[samples[i]]][[
+      "hits"
+    ]] <- conversion(results$deconvolution[[samples[i]]][[
       "hits"
     ]])
 
     # Add plot to sample
-    if (!is.null(results[[samples[i]]][["hits"]])) {
-      results[[samples[i]]][["hits_spectrum"]] <- spectrum_plot(
-        sample = results[[samples[i]]]
+    if (!is.null(results$deconvolution[[samples[i]]][["hits"]])) {
+      results$deconvolution[[samples[i]]][["hits_spectrum"]] <- spectrum_plot(
+        sample = results$deconvolution[[samples[i]]]
       )
     }
   }
@@ -1025,13 +1028,16 @@ add_hits <- function(
 #' @export
 summarize_hits <- function(result_list) {
   # Get samples from result list without session and output elements
-  samples <- utils::head(names(result_list), -2)
+  samples <- names(result_list$deconvolution)
 
   # Prepare empty hits data frame
   hits_summarized <- data.frame()
 
   for (i in samples) {
-    hits_summarized <- rbind(hits_summarized, result_list[[i]]$hits)
+    hits_summarized <- rbind(
+      hits_summarized,
+      result_list$deconvolution[[i]]$hits
+    )
   }
 
   return(hits_summarized)
@@ -1055,7 +1061,7 @@ add_kobs_binding_result <- function(result_list) {
   # hits_summary[is.na(hits_summary)] <- 0
 
   binding_kobs_result <- result_list[["hits_summary"]] |>
-    dplyr::filter(is.na(Compound)) |>
+    # dplyr::filter(is.na(Compound)) |>
     # Add concentration, time and binding columns to hits summary
     dplyr::mutate(
       time = extract_minutes(Sample),

@@ -125,7 +125,6 @@ server <- function(
 
     # Render result menu
     output$result_menu <- shiny::renderUI({
-      seee <<- result_list()
       shiny::req(nrow(result_list()[["hits_summary"]]) > 0)
 
       shiny::fluidRow(
@@ -135,7 +134,7 @@ server <- function(
           shinyWidgets::pickerInput(
             ns("sample_picker"),
             "Sample",
-            choices = utils::head(names(result_list()), -5)
+            choices = c("Kinetics", result_list()$hits_summary$Sample)
           )
         )
       )
