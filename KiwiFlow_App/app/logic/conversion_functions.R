@@ -811,8 +811,11 @@ check_hits <- function(
           protein = parse_filename(sample)[1],
           theor_prot = as.numeric(protein_mw),
           measured_prot = peaks$mass[which(protein_peak)],
-          delta_prot = abs(
-            as.numeric(protein_mw) - peaks$mass[which(protein_peak)]
+          delta_prot = round(
+            abs(
+              as.numeric(protein_mw) - peaks$mass[which(protein_peak)]
+            ),
+            2
           ),
           prot_intensity = peaks$intensity[which(protein_peak)],
           peak = peaks_filtered[j, "mass"],
@@ -1047,7 +1050,12 @@ extract_minutes <- function(strings) {
 # Function to add binding/kobs results to result list
 #' @export
 add_kobs_binding_result <- function(result_list) {
+  # Replace NA's with 0
+  # hits_summary <- result_list[["hits_summary"]]
+  # hits_summary[is.na(hits_summary)] <- 0
+
   binding_kobs_result <- result_list[["hits_summary"]] |>
+    dplyr::filter(is.na(Compound)) |>
     # Add concentration, time and binding columns to hits summary
     dplyr::mutate(
       time = extract_minutes(Sample),
