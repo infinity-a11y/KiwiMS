@@ -1055,12 +1055,12 @@ extract_minutes <- function(strings) {
 
 # Function to add binding/kobs results to result list
 #' @export
-add_kobs_binding_result <- function(result_list) {
+add_kobs_binding_result <- function(result_list, concentrations_select = NULL) {
   # Replace NA's with 0
   # hits_summary <- result_list[["hits_summary"]]
   # hits_summary[is.na(hits_summary)] <- 0
 
-  binding_kobs_result <- result_list[["hits_summary"]] |>
+  hits_summary <- result_list$hits_summary |>
     # dplyr::filter(is.na(Compound)) |>
     # Add concentration, time and binding columns to hits summary
     dplyr::mutate(
@@ -1069,16 +1069,53 @@ add_kobs_binding_result <- function(result_list) {
       concentration = gsub(
         "o",
         ".",
-        sapply(strsplit(result_list[["hits_summary"]]$Sample, "_"), `[`, 3)
+        sapply(strsplit(result_list$hits_summary$Sample, "_"), `[`, 3)
       )
     ) |>
     dplyr::group_by(concentration) |>
-    dplyr::arrange(as.numeric(concentration), time) |>
-    # Compute and model kobs values
-    compute_kobs(units = "µM - minutes")
+    dplyr::arrange(as.numeric(concentration), time)
+
+  # Compute and model kobs values
+  if (!is.null(concentrations_select)) {
+    hits_summary <- dplyr::filter(
+      hits_summary,
+      concentration == concentrations_select
+    )
+  }
+
+  # Compute kobs
+  binding_kobs_result <- compute_kobs(hits_summary, units = "µM - minutes")
 
   # Add and display binding plot
   binding_kobs_result$binding_plot <- make_binding_plot(binding_kobs_result)
+
+  # Make kobs result table
+  # Get measured concentrations
+  concentrations <- which(
+    !names(binding_kobs_result) %in%
+      c("binding_table", "binding_plot")
+  )
+
+  # Get concentration names
+  conc_names <- names(binding_kobs_result[concentrations])
+
+  # Fill kobs result table
+  kobs_result_table <- data.frame()
+  for (i in conc_names) {
+    kobs_result_table <- rbind(
+      kobs_result_table,
+      data.frame(
+        binding_kobs_result[[i]]$kobs,
+        binding_kobs_result[[i]]$v,
+        binding_kobs_result[[i]]$plateau
+      )
+    )
+  }
+  rownames(kobs_result_table) <- conc_names
+  colnames(kobs_result_table) <- c("kobs", "v", "plateau")
+
+  # Add kobs result table
+  binding_kobs_result$kobs_result_table <- kobs_result_table
 
   return(binding_kobs_result)
 }
@@ -1249,7 +1286,7 @@ compute_kobs <- function(hits, units = "µM - minutes") {
 
   # Filter non-zero concentrations
   # TODO add dynamic outlier selection to filter
-  hits <- dplyr::filter(hits, concentration != "0", concentration != "2.1875")
+  # hits <- dplyr::filter(hits, concentration != "0", concentration != "2.1875")
 
   # Loop over each unique concentration
   for (i in unique(hits$concentration)) {

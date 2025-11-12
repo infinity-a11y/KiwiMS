@@ -8,6 +8,8 @@ box::use(
   app /
     logic /
     conversion_functions[
+      add_kobs_binding_result,
+      add_ki_kinact_result,
       sample_handsontable,
       prot_comp_handsontable,
       check_table,
@@ -263,41 +265,57 @@ server <- function(id, conversion_dirs) {
 
     output$sample_view <- shiny::renderUI({
       if (conversion_dirs$sample_picker() == "Kinetics") {
-        shiny::fluidRow(
-          shiny::column(
-            width = 6,
-            shiny::div(
-              class = "card-custom",
-              bslib::card(
-                full_screen = TRUE,
-                bslib::card_header(
-                  class = "bg-dark help-header",
-                  "Binding Curve",
-                ),
-                bslib::card_body(
-                  plotly::plotlyOutput(
-                    ns("binding_plot")
+        shiny::div(
+          shiny::fluidRow(
+            shiny::column(
+              width = 6,
+              shiny::div(
+                class = "card-custom",
+                bslib::card(
+                  full_screen = TRUE,
+                  bslib::card_header(
+                    class = "bg-dark help-header",
+                    "Binding Curve",
+                  ),
+                  bslib::card_body(
+                    plotly::plotlyOutput(
+                      ns("binding_plot")
+                    )
+                  )
+                )
+              )
+            ),
+            shiny::column(
+              width = 6,
+              shiny::div(
+                class = "card-custom",
+                bslib::card(
+                  full_screen = TRUE,
+                  bslib::card_header(
+                    class = "bg-dark help-header",
+                    "kobs Curve",
+                  ),
+                  bslib::card_body(
+                    plotly::plotlyOutput(
+                      ns("kobs_plot")
+                    )
                   )
                 )
               )
             )
           ),
-          shiny::column(
-            width = 6,
-            shiny::div(
-              class = "card-custom",
-              bslib::card(
-                full_screen = TRUE,
-                bslib::card_header(
-                  class = "bg-dark help-header",
-                  "kobs Curve",
-                ),
-                bslib::card_body(
-                  plotly::plotlyOutput(
-                    ns("kobs_plot")
-                  )
-                )
-              )
+          shiny::fluidRow(
+            shiny::column(
+              width = 6,
+              shiny::tableOutput(ns("ki_kinact_result"))
+            ),
+            shiny::column(
+              width = 3,
+              shiny::uiOutput(ns("concentration_select"))
+            ),
+            shiny::column(
+              width = 3,
+              shiny::tableOutput(ns("kobs_result"))
             )
           )
         )
@@ -341,20 +359,98 @@ server <- function(id, conversion_dirs) {
       }
     })
 
-    output$binding_plot <- plotly::renderPlotly({
-      shiny::req(
-        conversion_dirs$result_list()$binding_kobs_result$binding_plot
+    # Modify results
+    modified_results <- shiny::reactiveVal(NULL)
+
+    shiny::observeEvent(input$select_concentration, {
+      shiny::req(shiny::isolate(conversion_dirs$result_list()))
+
+      shiny::isolate(
+        result_list <- conversion_dirs$result_list()
       )
+
+      # Add binding/kobs results to result list
+      result_list$binding_kobs_result <- add_kobs_binding_result(
+        result_list,
+        concentrations_select = input$select_concentration
+      )
+
+      # Add Ki/kinact results to result list
+      result_list$ki_kinact_result <- add_ki_kinact_result(
+        result_list
+      )
+
+      modified_results(result_list)
+    })
+
+    output$concentration_select <- shiny::renderUI({
+      shiny::req(conversion_dirs$result_list()$binding_kobs_result)
+
+      # Get included concentrations
+      concentrations <- which(
+        !names(conversion_dirs$result_list()$binding_kobs_result) %in%
+          c("binding_table", "binding_plot")
+      )
+
+      # Define choices
+      choices <- names(conversion_dirs$result_list()$binding_kobs_result)[
+        concentrations
+      ]
+
+      shiny::checkboxGroupInput(
+        "select_concentration",
+        label = "Include Concentrations",
+        choices = choices,
+        selected = choices
+      )
+    })
+
+    output$kobs_result <- shiny::renderTable(
+      {
+        shiny::req(conversion_dirs$result_list())
+
+        result_list <- ifelse(
+          is.null(modified_results()),
+          conversion_dirs$result_list(),
+          modified_results()
+        )
+
+        result_list$binding_kobs_result$kobs_result_table
+      },
+      rownames = TRUE
+    )
+
+    output$ki_kinact_result <- shiny::renderTable(
+      {
+        shiny::req(conversion_dirs$result_list())
+
+        result_list <- ifelse(
+          is.null(modified_results()),
+          conversion_dirs$result_list(),
+          modified_results()
+        )
+
+        result_list$ki_kinact_result$Params
+      },
+      rownames = TRUE
+    )
+
+    output$binding_plot <- plotly::renderPlotly({
+      shiny::req(conversion_dirs$result_list())
 
       conversion_dirs$result_list()$binding_kobs_result$binding_plot
     })
 
     output$kobs_plot <- plotly::renderPlotly({
-      shiny::req(
-        conversion_dirs$result_list()$ki_kinact_result$kobs_plot
+      shiny::req(conversion_dirs$result_list())
+
+      result_list <- ifelse(
+        is.null(modified_results()),
+        conversion_dirs$result_list(),
+        modified_results()
       )
 
-      conversion_dirs$result_list()$ki_kinact_result$kobs_plot
+      result_list$ki_kinact_result$kobs_plot
     })
 
     shiny::observe({
