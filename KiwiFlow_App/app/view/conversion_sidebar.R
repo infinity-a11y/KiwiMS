@@ -27,6 +27,7 @@ ui <- function(id) {
 
   bslib::sidebar(
     class = "conversion-sidebar",
+    width = "15%",
     shinyjs::useShinyjs(),
     shiny::uiOutput(ns("module_sidebar")),
     shiny::hr(style = "margin: 1em 0;"),
@@ -95,12 +96,13 @@ ui <- function(id) {
         shiny::column(
           width = 12,
           align = "center",
-          shinyjs::disabled(
-            shiny::actionButton(
-              ns("run_binding_analysis"),
-              "Run Analysis"
-            )
+          #TODO
+          # shinyjs::disabled(
+          shiny::actionButton(
+            ns("run_binding_analysis"),
+            "Run Analysis"
           )
+          # )
         )
       ),
       shiny::hr(style = "margin: 1em 0;"),
@@ -156,7 +158,7 @@ server <- function(
 
     # Event run conversion
     shiny::observeEvent(input$run_binding_analysis, {
-      shiny::req(input_list(), input$peak_tolerance, input$max_multiples)
+      # shiny::req(input_list(), input$peak_tolerance, input$max_multiples)
 
       # Block UI
       shinyjs::runjs(paste0(
@@ -164,36 +166,42 @@ server <- function(
         '= "block";'
       ))
 
-      # Search and add hits to result list
-      result_with_hits <- add_hits(
-        input_list()$result,
-        sample_table = input_list()$Samples_Table,
-        protein_table = input_list()$Protein_Table,
-        compound_table = input_list()$Compound_Table,
-        peak_tolerance = input$peak_tolerance,
-        max_multiples = input$max_multiples
-      )
+      # # Search and add hits to result list
+      # result_with_hits <- add_hits(
+      #   input_list()$result,
+      #   sample_table = input_list()$Samples_Table,
+      #   protein_table = input_list()$Protein_Table,
+      #   compound_table = input_list()$Compound_Table,
+      #   peak_tolerance = input$peak_tolerance,
+      #   max_multiples = input$max_multiples
+      # )
 
-      # Add summarized hits table to result list
-      result_with_hits$hits_summary <- summarize_hits(result_with_hits)
+      # # Add summarized hits table to result list
+      # result_with_hits$hits_summary <- summarize_hits(result_with_hits)
 
-      result_with_hits <<- result_with_hits
+      # result_with_hits <<- result_with_hits
 
-      # Add binding/kobs results to result list
-      result_with_hits$binding_kobs_result <- add_kobs_binding_result(
-        result_with_hits
-      )
+      # # Add binding/kobs results to result list
+      # result_with_hits$binding_kobs_result <- add_kobs_binding_result(
+      #   result_with_hits
+      # )
 
-      # Add Ki/kinact results to result list
-      result_with_hits$ki_kinact_result <- add_ki_kinact_result(
-        result_with_hits
-      )
+      # # Add Ki/kinact results to result list
+      # result_with_hits$ki_kinact_result <- add_ki_kinact_result(
+      #   result_with_hits
+      # )
 
-      # Assign result list and hits table to reactive vars
-      result_list(result_with_hits)
+      # # Assign result list and hits table to reactive vars
+      # result_list(result_with_hits)
 
-      results <<- result_with_hits
-      # Unlock UI
+      # results <<- result_with_hits
+      # TODO
+      # Dev Mode
+      result_list(readRDS(
+        "C:\\Users\\Marian\\Desktop\\KF_Testing\\results.rds"
+      ))
+
+      # Unblock UI
       shinyjs::runjs(paste0(
         'document.getElementById("blocking-overlay").style.display ',
         '= "none";'

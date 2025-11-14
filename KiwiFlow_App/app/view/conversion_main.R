@@ -2,6 +2,7 @@
 
 box::use(
   shiny[moduleServer, NS],
+  bslib[nav_insert],
 )
 
 box::use(
@@ -19,6 +20,9 @@ box::use(
       set_selected_tab,
       read_uploaded_file,
       process_uploaded_table,
+      format_scientific,
+      make_binding_plot,
+      multiple_spectra,
     ],
   app /
     logic /
@@ -244,26 +248,236 @@ server <- function(id, conversion_dirs) {
     )
 
     shiny::observeEvent(conversion_dirs$result_list(), {
-      hits <- conversion_dirs$result_list()$hits_summary
+      # Hide declaration tabs
+      bslib::nav_hide(
+        "tabs",
+        "Proteins"
+      )
+      bslib::nav_hide(
+        "tabs",
+        "Compounds"
+      )
+      bslib::nav_hide(
+        "tabs",
+        "Samples"
+      )
 
-      # If table is null dont continue
-      shiny::req(nrow(hits) > 0)
-
+      # Add binding tab
       bslib::nav_insert(
         "tabs",
         bslib::nav_panel(
-          title = "Results",
+          title = "Binding",
           shiny::div(
             class = "conversion-result-wrapper",
-            shiny::uiOutput(ns("sample_view"))
+            shiny::uiOutput(ns("binding_tab"))
           )
         )
       )
 
-      set_selected_tab("Results", session)
+      # Add hits tab
+      bslib::nav_insert(
+        "tabs",
+        bslib::nav_panel(
+          title = "Hits",
+          shiny::div(
+            class = "conversion-result-wrapper",
+            shiny::uiOutput(ns("hits_tab"))
+          )
+        )
+      )
+
+      # Get concentrations and add tabs (This part is correct for adding UI)
+      binding_kobs_result_names <- names(
+        conversion_dirs$result_list()$binding_kobs_result
+      )
+      concentrations <- binding_kobs_result_names[
+        !binding_kobs_result_names %in%
+          c("binding_table", "binding_plot", "kobs_result_table")
+      ]
+
+      # Define a set of IDs for the dynamic tabs
+      dynamic_ui_ids <- paste0("concentration_tab_", concentrations)
+
+      # Add all present concentrations as results (updated uiOutput ID)
+      for (i in seq_along(concentrations)) {
+        concentration <- concentrations[[i]]
+        ui_id <- dynamic_ui_ids[[i]] # Use the unique ID here
+
+        bslib::nav_insert(
+          "tabs",
+          bslib::nav_panel(
+            title = concentration,
+            shiny::div(
+              class = "conversion-result-wrapper",
+              # Use the unique, namespaced ID for the UI element
+              shiny::uiOutput(ns(ui_id))
+            )
+          )
+        )
+      }
+
+      lapply(names(output), function(name) {
+        if (grepl("^concentration_tab_", name)) {
+          output[[name]] <- NULL
+        }
+      })
+
+      # Loop through the list of concentrations
+      for (i in seq_along(concentrations)) {
+        concentration <- concentrations[[i]]
+        ui_id <- dynamic_ui_ids[[i]]
+
+        local({
+          local_concentration <- concentration
+          local_ui_id <- ui_id
+
+          conc_result <- conversion_dirs$result_list()$binding_kobs_result[[
+            local_concentration
+          ]]
+
+          # Render hits table
+          output[[paste0(local_ui_id, "_hits")]] <- shiny::renderTable({
+            format_conc <- gsub(
+              "o",
+              ".",
+              sapply(
+                strsplit(
+                  conversion_dirs$result_list()$hits_summary$Sample,
+                  "_"
+                ),
+                `[`,
+                3
+              )
+            )
+
+            conversion_dirs$result_list()$hits_summary |>
+              dplyr::mutate(
+                concentration = format_conc
+              ) |>
+              dplyr::filter(concentration == local_concentration) |>
+              dplyr::select(-c(concentration))
+          })
+
+          # Render binding plot
+          output[[paste0(
+            local_ui_id,
+            "_binding_plot"
+          )]] <- plotly::renderPlotly({
+            make_binding_plot(
+              kobs_result = conversion_dirs$result_list()$binding_kobs_result,
+              filter_conc = local_concentration
+            )
+          })
+
+          # Render spectrum
+          output[[paste0(
+            local_ui_id,
+            "_spectra"
+          )]] <- plotly::renderPlotly({
+            decon_samples <- gsub(
+              "o",
+              ".",
+              sapply(
+                strsplit(
+                  names(conversion_dirs$result_list()$deconvolution),
+                  "_"
+                ),
+                `[`,
+                3
+              )
+            )
+
+            multiple_spectra(
+              results_list = conversion_dirs$result_list(),
+              samples = names(
+                conversion_dirs$result_list()$deconvolution
+              )[which(
+                decon_samples == local_concentration
+              )]
+            )
+          })
+
+          # Assign the renderUI to the dynamically created output slot
+          output[[local_ui_id]] <- shiny::renderUI({
+            shiny::div(
+              class = "result_conc_tab",
+              shiny::fluidRow(
+                shiny::column(
+                  width = 6,
+                  bslib::card(
+                    bslib::card_header(
+                      "% Binding",
+                    ),
+                    full_screen = TRUE,
+                    plotly::plotlyOutput(ns(paste0(
+                      local_ui_id,
+                      "_binding_plot"
+                    )))
+                  )
+                ),
+                shiny::column(
+                  width = 6,
+                  bslib::card(
+                    bslib::card_header(
+                      "Spectrum",
+                    ),
+                    full_screen = TRUE,
+                    plotly::plotlyOutput(ns(paste0(local_ui_id, "_spectra")))
+                  )
+                )
+              ),
+              shiny::fluidRow(
+                shiny::column(
+                  width = 6,
+                  bslib::card(
+                    bslib::card_header(
+                      "Hits",
+                    ),
+                    full_screen = TRUE,
+                    shiny::tableOutput(ns(paste0(local_ui_id, "_hits")))
+                  )
+                ),
+                shiny::column(
+                  width = 6,
+                  shiny::div(
+                    class = "kobs_cards",
+                    bslib::card(
+                      bslib::card_header(htmltools::tagList(
+                        "k",
+                        htmltools::tags$sub("obs")
+                      )),
+                      shiny::div(
+                        class = "kobs_val",
+                        format_scientific(conc_result$kobs)
+                      )
+                    ),
+                    bslib::card(
+                      bslib::card_header("Plateau"),
+                      shiny::div(
+                        class = "kobs_val",
+                        format_scientific(conc_result$plateau)
+                      )
+                    ),
+                    bslib::card(
+                      bslib::card_header("v"),
+                      shiny::div(
+                        class = "kobs_val",
+                        format_scientific(conc_result$v)
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          })
+        })
+      }
+
+      # Select binding results tab
+      set_selected_tab("Binding", session)
     })
 
-    output$sample_view <- shiny::renderUI({
+    output$binding_tab <- shiny::renderUI({
       if (conversion_dirs$sample_picker() == "Kinetics") {
         shiny::div(
           shiny::fluidRow(
@@ -362,6 +576,17 @@ server <- function(id, conversion_dirs) {
     # Declare reactive variables for conversion results
     modified_results <- shiny::reactiveVal(NULL)
     select_concentration <- shiny::reactiveVal(NULL)
+
+    # UI output for hits tab
+    output$hits_tab <- shiny::renderUI({
+      shiny::req(conversion_dirs$result_list())
+
+      output$conversion_result_table <- rhandsontable::renderRHandsontable({
+        rhandsontable::rhandsontable(
+          conversion_dirs$result_list()$"hits_summary"
+        )
+      })
+    })
 
     # Recalculate or modify results depending by excluding concentrations
     shiny::observeEvent(input$select_concentration, {
@@ -505,16 +730,6 @@ server <- function(id, conversion_dirs) {
       ) {
         conversion_dirs$result_list()$deconvolution[[conversion_dirs$sample_picker()]]$hits_spectrum
       }
-    })
-
-    shiny::observe({
-      shiny::req(conversion_dirs$result_list())
-
-      output$conversion_result_table <- rhandsontable::renderRHandsontable({
-        rhandsontable::rhandsontable(conversion_dirs$result_list()[[
-          "hits_summary"
-        ]])
-      })
     })
 
     # Observe protein file upload

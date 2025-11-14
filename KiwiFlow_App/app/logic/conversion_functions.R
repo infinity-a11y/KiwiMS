@@ -1,7 +1,7 @@
 # app/logic/conversion_functions.R
 
 box::use(
-  app / logic / deconvolution_functions[spectrum_plot, ],
+  app / logic / deconvolution_functions[spectrum_plot, process_plot_data, ],
 )
 
 # Helper function to process uploaded table
@@ -1133,7 +1133,16 @@ add_ki_kinact_result <- function(result_list) {
 }
 
 # Function to generate and display binding plot
-make_binding_plot <- function(kobs_result) {
+#' @export
+make_binding_plot <- function(kobs_result, filter_conc = NULL) {
+  # Filter for specified concentration
+  if (!is.null(filter_conc)) {
+    kobs_result$binding_table <- dplyr::filter(
+      kobs_result$binding_table,
+      concentration == filter_conc
+    )
+  }
+
   # Keep only non-zero observed data points
   df_points <- kobs_result$binding_table[
     !(kobs_result$binding_table$time == 0 |
@@ -1655,4 +1664,223 @@ nlsLM_fixed <- function(
   nls.out$control <- control
   base::class(nls.out) <- "nls"
   nls.out
+}
+
+# Function to format number in scientific
+#' @export
+format_scientific <- function(number, digits = 2) {
+  # Calculate the absolute value and the exponent (log10)
+  abs_num <- abs(number)
+  exponent <- ifelse(abs_num > 0, floor(log10(abs_num)), 0)
+
+  # Determine if scientific notation is required
+  use_scientific <- exponent <= -3 | exponent >= 4
+
+  if (use_scientific) {
+    sci_str <- format(number, scientific = TRUE, digits = digits)
+
+    # Split the string at the 'e' or 'E'
+    parts <- strsplit(sci_str, "[eE]")[[1]]
+
+    # Extract base number and power
+    mantissa <- parts[1]
+    # Convert to integer to clean up leading '+' or '0'
+    exponent_val <- as.integer(parts[2])
+
+    # Construct the HTML with superscript
+    return(
+      htmltools::tagList(
+        mantissa,
+        " \u00D7 10",
+        htmltools::tags$sup(exponent_val)
+      )
+    )
+  } else {
+    # Determine how many decimal
+    if (abs_num < 1 && abs_num > 0) {
+      decimals_to_show <- abs(exponent) + digits
+    } else {
+      decimals_to_show <- digits
+    }
+
+    format_string <- paste0("%.", decimals_to_show, "f")
+    formatted_num <- sprintf(format_string, number)
+
+    return(formatted_num)
+  }
+}
+
+# Generate spectrum with multiple traces
+#' @export
+multiple_spectra <- function(results_list, samples) {
+  test2 <<- results_list
+  plot_data <- data.frame()
+  for (i in seq_along(samples)) {
+    test <<- results_list$deconvolution[[samples[i]]]
+    add_df <- process_plot_data(
+      results_list$deconvolution[[samples[i]]],
+      result_path = NULL
+    )$mass |>
+      dplyr::mutate(time = extract_minutes(samples[i]))
+
+    plot_data <- rbind(plot_data, add_df)
+  }
+  plot_data$time <- factor(
+    plot_data$time,
+    levels = sort(unique(plot_data$time))
+  )
+
+  peaks_data <- data.frame()
+  for (i in seq_along(samples)) {
+    add_df <- process_plot_data(
+      results_list$deconvolution[[samples[i]]],
+      result_path = NULL
+    )$highlight_peaks |>
+      dplyr::mutate(time = extract_minutes(samples[i]))
+
+    peaks_data <- rbind(peaks_data, add_df)
+  }
+  peaks_data$time <- factor(
+    peaks_data$time,
+    levels = sort(unique(peaks_data$time))
+  )
+
+  plot <- plotly::plot_ly(
+    data = plot_data,
+    x = ~mass,
+    y = ~intensity,
+    z = ~time,
+    color = ~time,
+    type = "scatter3d",
+    mode = "lines"
+  ) |>
+    plotly::add_markers(
+      data = peaks_data,
+      x = ~mass,
+      y = ~intensity,
+      z = ~time,
+      color = ~time,
+      marker = list(
+        symbol = "circle",
+        size = 5,
+        zindex = 100,
+        line = list(
+          color = "black", # Set the border color to black
+          width = 1.5 # Set the border width (e.g., 1.5 pixels)
+        )
+      ),
+      hoverinfo = "text",
+      text = ~ paste0(
+        "Name: ",
+        name,
+        "\nMeasured: ",
+        mass,
+        " Da\nIntensity: ",
+        round(intensity, 2),
+        "%\n",
+        "Theor. Mw: ",
+        mw
+      ),
+      showlegend = FALSE
+    ) |>
+    plotly::layout(
+      scene = list(
+        xaxis = list(title = "Mass [Da]"),
+        yaxis = list(title = "Intensity [%]"),
+        zaxis = list(
+          title = "Time [min]",
+          type = 'category',
+          dtick = 1
+        ),
+        camera = list(
+          center = list(x = 0, y = 0, z = 0),
+          eye = list(x = 1.5, y = 1, z = 1),
+          up = list(x = 0, y = 0.75, z = 0)
+        )
+      )
+    )
+
+  # plot <- plotly::plot_ly()
+  # for (i in order(extract_minutes(names(plot_data)))) {
+  #   plot <- plotly::add_trace(
+  #     p = plot,
+  #     name = paste(extract_minutes(names(plot_data)[i]), " min"),
+  #     data = plot_data[[i]]$mass,
+  #     x = ~mass,
+  #     y = ~intensity,
+  #     z = ~time,
+  #     # type = "scattergl",
+  #     type = "scatter3d",
+  #     mode = "lines",
+  #     hoverinfo = "text",
+  #     text = ~ paste0(
+  #       "Mass: ",
+  #       mass,
+  #       " Da\nIntensity: ",
+  #       round(intensity, 2),
+  #       "%"
+  #     )
+  #   )
+  # }
+  # plot
+
+  # plot <- plotly::add_markers(
+  #   plot,
+  #   data = plot_data$highlight_peaks,
+  #   x = ~mass,
+  #   y = ~intensity,
+  #   marker = list(
+  #     color = "#e8cb97",
+  #     line = list(
+  #       color = "#35357A",
+  #       width = 2
+  #     ),
+  #     symbol = "circle",
+  #     size = 10,
+  #     zindex = 100
+  #   ),
+  #   hoverinfo = "text",
+  #   text = ~ paste0(
+  #     "Name: ",
+  #     name,
+  #     "\nMeasured: ",
+  #     mass,
+  #     " Da\nIntensity: ",
+  #     round(intensity, 2),
+  #     "%\n",
+  #     "Theor. Mw: ",
+  #     mw
+  #   ),
+  #   showlegend = FALSE
+  # )
+
+  # Define layout for spectrum
+  # plot <- plotly::layout(
+  #   plot,
+  #   yaxis = list(
+  #     title = "Intensity [%]",
+  #     showgrid = TRUE,
+  #     zeroline = FALSE,
+  #     ticks = "outside",
+  #     tickcolor = "transparent"
+  #   ),
+  #   xaxis = list(title = "Mass [Da]", showgrid = TRUE, zeroline = FALSE),
+  #   margin = list(t = 0, r = 0, b = 0, l = 50),
+  #   paper_bgcolor = "#dfdfdf42",
+  #   plot_bgcolor = "#dfdfdf42"
+  # ) |>
+  #   plotly::config(
+  #     displayModeBar = "hover",
+  #     scrollZoom = FALSE,
+  #     modeBarButtons = list(list(
+  #       "zoom2d",
+  #       "toImage",
+  #       "autoScale2d",
+  #       "resetScale2d",
+  #       "zoomIn2d",
+  #       "zoomOut2d"
+  #     ))
+  #   )
+
+  return(plot)
 }

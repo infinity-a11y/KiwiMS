@@ -30,6 +30,7 @@ ui <- function(id) {
 
   sidebar(
     title = "Select Files",
+    width = "23rem",
     shiny::tags$div(
       style = "display: flex; gap: 0.5em;",
       shinyDirButton(

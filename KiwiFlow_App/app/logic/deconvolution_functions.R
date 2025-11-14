@@ -506,6 +506,7 @@ create_384_plate_heatmap <- function(data) {
 }
 
 # Helper function to harmonize data for plotting
+#' @export
 process_plot_data <- function(sample = NULL, result_path = NULL) {
   if (is.null(sample) & is.null(result_path)) {
     message(
