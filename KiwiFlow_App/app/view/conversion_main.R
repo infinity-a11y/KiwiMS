@@ -307,15 +307,15 @@ server <- function(id, conversion_dirs) {
           shiny::fluidRow(
             shiny::column(
               width = 6,
-              shiny::tableOutput(ns("ki_kinact_result"))
+              shiny::tableOutput(ns("kobs_result"))
             ),
             shiny::column(
-              width = 3,
+              width = 2,
               shiny::uiOutput(ns("concentration_select"))
             ),
             shiny::column(
-              width = 3,
-              shiny::tableOutput(ns("kobs_result"))
+              width = 4,
+              shiny::tableOutput(ns("ki_kinact_result"))
             )
           )
         )
@@ -359,20 +359,40 @@ server <- function(id, conversion_dirs) {
       }
     })
 
-    # Modify results
+    # Declare reactive variables for conversion results
     modified_results <- shiny::reactiveVal(NULL)
+    select_concentration <- shiny::reactiveVal(NULL)
 
+    # Recalculate or modify results depending by excluding concentrations
     shiny::observeEvent(input$select_concentration, {
-      shiny::req(shiny::isolate(conversion_dirs$result_list()))
+      shiny::req(conversion_dirs$result_list())
 
-      shiny::isolate(
-        result_list <- conversion_dirs$result_list()
-      )
+      # Check number of selected concentrations
+      if (length(input$select_concentration) < 3) {
+        shinyWidgets::show_toast(
+          "≥ 3 concentrations needed",
+          type = "warning",
+          timer = 3000
+        )
+
+        # Assign concentrations selected before to checkbox input
+        shiny::updateCheckboxGroupInput(
+          session = session,
+          inputId = "select_concentration",
+          selected = select_concentration()
+        )
+
+        return(NULL)
+      }
+
+      select_concentration(input$select_concentration)
+
+      result_list <- conversion_dirs$result_list()
 
       # Add binding/kobs results to result list
       result_list$binding_kobs_result <- add_kobs_binding_result(
         result_list,
-        concentrations_select = input$select_concentration
+        concentrations_select = select_concentration()
       )
 
       # Add Ki/kinact results to result list
@@ -389,7 +409,7 @@ server <- function(id, conversion_dirs) {
       # Get included concentrations
       concentrations <- which(
         !names(conversion_dirs$result_list()$binding_kobs_result) %in%
-          c("binding_table", "binding_plot")
+          c("binding_table", "binding_plot", "kobs_result_table")
       )
 
       # Define choices
@@ -398,7 +418,7 @@ server <- function(id, conversion_dirs) {
       ]
 
       shiny::checkboxGroupInput(
-        "select_concentration",
+        ns("select_concentration"),
         label = "Include Concentrations",
         choices = choices,
         selected = choices
@@ -409,14 +429,9 @@ server <- function(id, conversion_dirs) {
       {
         shiny::req(conversion_dirs$result_list())
 
-        result_list <- ifelse(
-          is.null(modified_results()),
-          conversion_dirs$result_list(),
-          modified_results()
-        )
-
-        result_list$binding_kobs_result$kobs_result_table
+        conversion_dirs$result_list()$binding_kobs_result$kobs_result_table
       },
+      spacing = "xs",
       rownames = TRUE
     )
 
@@ -424,14 +439,15 @@ server <- function(id, conversion_dirs) {
       {
         shiny::req(conversion_dirs$result_list())
 
-        result_list <- ifelse(
-          is.null(modified_results()),
-          conversion_dirs$result_list(),
-          modified_results()
-        )
+        if (is.null(modified_results())) {
+          result_list <- conversion_dirs$result_list()
+        } else {
+          result_list <- modified_results()
+        }
 
         result_list$ki_kinact_result$Params
       },
+      spacing = "xs",
       rownames = TRUE
     )
 
@@ -444,11 +460,11 @@ server <- function(id, conversion_dirs) {
     output$kobs_plot <- plotly::renderPlotly({
       shiny::req(conversion_dirs$result_list())
 
-      result_list <- ifelse(
-        is.null(modified_results()),
-        conversion_dirs$result_list(),
-        modified_results()
-      )
+      if (is.null(modified_results())) {
+        result_list <- conversion_dirs$result_list()
+      } else {
+        result_list <- modified_results()
+      }
 
       result_list$ki_kinact_result$kobs_plot
     })

@@ -1061,7 +1061,6 @@ add_kobs_binding_result <- function(result_list, concentrations_select = NULL) {
   # hits_summary[is.na(hits_summary)] <- 0
 
   hits_summary <- result_list$hits_summary |>
-    # dplyr::filter(is.na(Compound)) |>
     # Add concentration, time and binding columns to hits summary
     dplyr::mutate(
       time = extract_minutes(Sample),
@@ -1072,6 +1071,7 @@ add_kobs_binding_result <- function(result_list, concentrations_select = NULL) {
         sapply(strsplit(result_list$hits_summary$Sample, "_"), `[`, 3)
       )
     ) |>
+    dplyr::filter(!is.na(Compound)) |>
     dplyr::group_by(concentration) |>
     dplyr::arrange(as.numeric(concentration), time)
 
@@ -1079,7 +1079,7 @@ add_kobs_binding_result <- function(result_list, concentrations_select = NULL) {
   if (!is.null(concentrations_select)) {
     hits_summary <- dplyr::filter(
       hits_summary,
-      concentration == concentrations_select
+      concentration %in% concentrations_select
     )
   }
 
