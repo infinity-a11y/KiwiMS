@@ -1712,24 +1712,32 @@ format_scientific <- function(number, digits = 2) {
 
 # Generate spectrum with multiple traces
 #' @export
-multiple_spectra <- function(results_list, samples) {
+multiple_spectra <- function(
+  results_list,
+  samples,
+  cubic = TRUE,
+  show_labels = FALSE
+) {
   test2 <<- results_list
-  plot_data <- data.frame()
+  samples <<- samples
+
+  # Get spectrum data
+  spectrum_data <- data.frame()
   for (i in seq_along(samples)) {
-    test <<- results_list$deconvolution[[samples[i]]]
     add_df <- process_plot_data(
       results_list$deconvolution[[samples[i]]],
       result_path = NULL
     )$mass |>
       dplyr::mutate(time = extract_minutes(samples[i]))
 
-    plot_data <- rbind(plot_data, add_df)
+    spectrum_data <- rbind(spectrum_data, add_df)
   }
-  plot_data$time <- factor(
-    plot_data$time,
-    levels = sort(unique(plot_data$time))
+  spectrum_data$time <- factor(
+    spectrum_data$time,
+    levels = sort(unique(spectrum_data$time))
   )
 
+  # Get peaks data
   peaks_data <- data.frame()
   for (i in seq_along(samples)) {
     add_df <- process_plot_data(
@@ -1745,142 +1753,158 @@ multiple_spectra <- function(results_list, samples) {
     levels = sort(unique(peaks_data$time))
   )
 
-  plot <- plotly::plot_ly(
-    data = plot_data,
-    x = ~mass,
-    y = ~intensity,
-    z = ~time,
-    color = ~time,
-    type = "scatter3d",
-    mode = "lines"
-  ) |>
-    plotly::add_markers(
-      data = peaks_data,
+  if (cubic == TRUE) {
+    plotly::plot_ly(
+      data = spectrum_data,
       x = ~mass,
       y = ~intensity,
       z = ~time,
       color = ~time,
-      marker = list(
-        symbol = "circle",
-        size = 5,
-        zindex = 100,
-        line = list(
-          color = "black", # Set the border color to black
-          width = 1.5 # Set the border width (e.g., 1.5 pixels)
-        )
-      ),
+      type = "scatter3d",
+      mode = "lines",
+      showlegend = FALSE,
       hoverinfo = "text",
       text = ~ paste0(
-        "Name: ",
-        name,
-        "\nMeasured: ",
+        "Mass: ",
         mass,
         " Da\nIntensity: ",
         round(intensity, 2),
-        "%\n",
-        "Theor. Mw: ",
-        mw
+        "%",
+        "\nTime: ",
+        time,
+        " min"
+      )
+    ) |>
+      plotly::add_markers(
+        data = peaks_data,
+        x = ~mass,
+        y = ~intensity,
+        z = ~time,
+        color = ~time,
+        marker = list(
+          symbol = "circle",
+          size = 5,
+          zindex = 100,
+          line = list(
+            color = "black", # Set the border color to black
+            width = 1.5 # Set the border width (e.g., 1.5 pixels)
+          )
+        ),
+        hoverinfo = "text",
+        text = ~ paste0(
+          "Name: ",
+          name,
+          "\nMeasured: ",
+          mass,
+          " Da\nIntensity: ",
+          round(intensity, 2),
+          "%\nTime: ",
+          time,
+          " min",
+          "\nTheor. Mw: ",
+          mw
+        ),
+        showlegend = FALSE
+      ) |>
+      plotly::layout(
+        scene = list(
+          xaxis = list(title = "Mass [Da]"),
+          yaxis = list(title = "Intensity [%]"),
+          zaxis = list(
+            title = "Time [min]",
+            type = 'category',
+            dtick = 1
+          ),
+          camera = list(
+            center = list(x = 0, y = 0, z = 0),
+            eye = list(x = 1.5, y = 1, z = 1.5),
+            up = list(x = 0, y = 0.75, z = 0)
+          )
+        )
+      )
+  } else {
+    plot <- plotly::plot_ly(
+      data = spectrum_data,
+      x = ~mass,
+      y = ~intensity,
+      color = ~time,
+      type = "scatter",
+      mode = "lines",
+      hoverinfo = "text",
+      text = ~ paste0(
+        "Mass: ",
+        mass,
+        " Da\nIntensity: ",
+        round(intensity, 2),
+        "%",
+        "\nTime: ",
+        time,
+        " min"
       ),
       showlegend = FALSE
     ) |>
-    plotly::layout(
-      scene = list(
-        xaxis = list(title = "Mass [Da]"),
-        yaxis = list(title = "Intensity [%]"),
-        zaxis = list(
-          title = "Time [min]",
-          type = 'category',
-          dtick = 1
+      plotly::add_markers(
+        data = peaks_data,
+        x = ~mass,
+        y = ~intensity,
+        color = ~time,
+        marker = list(
+          symbol = "circle",
+          size = 10,
+          zindex = 100,
+          line = list(
+            color = "black",
+            width = 1
+          )
         ),
-        camera = list(
-          center = list(x = 0, y = 0, z = 0),
-          eye = list(x = 1.5, y = 1, z = 1),
-          up = list(x = 0, y = 0.75, z = 0)
-        )
+        hoverinfo = "text",
+        text = ~ paste0(
+          "Name: ",
+          name,
+          "\nMeasured: ",
+          mass,
+          " Da\nIntensity: ",
+          round(intensity, 2),
+          "\nTime: ",
+          time,
+          " min",
+          "\nTheor. Mw: ",
+          mw
+        ),
+        showlegend = FALSE
       )
-    )
 
-  # plot <- plotly::plot_ly()
-  # for (i in order(extract_minutes(names(plot_data)))) {
-  #   plot <- plotly::add_trace(
-  #     p = plot,
-  #     name = paste(extract_minutes(names(plot_data)[i]), " min"),
-  #     data = plot_data[[i]]$mass,
-  #     x = ~mass,
-  #     y = ~intensity,
-  #     z = ~time,
-  #     # type = "scattergl",
-  #     type = "scatter3d",
-  #     mode = "lines",
-  #     hoverinfo = "text",
-  #     text = ~ paste0(
-  #       "Mass: ",
-  #       mass,
-  #       " Da\nIntensity: ",
-  #       round(intensity, 2),
-  #       "%"
-  #     )
-  #   )
-  # }
-  # plot
+    if (show_labels) {
+      plot <- plotly::add_annotations(
+        data = peaks_data,
+        x = ~mass,
+        y = ~intensity,
+        text = ~ paste0(
+          name,
+          " | ",
+          time,
+          "min\n",
+          round(mass, 4),
+          " Da | ",
+          round(intensity, 1),
+          "%"
+        ),
+        xref = "x",
+        yref = "y",
+        xanchor = "left",
+        yanchor = "bottom",
+        ay = -10,
+        ax = 10,
+        font = list(
+          color = "black",
+          size = 10
+        ),
+        arrowhead = 2,
+        arrowwidth = 1,
+        arrowcolor = 'gray'
+      )
+    }
 
-  # plot <- plotly::add_markers(
-  #   plot,
-  #   data = plot_data$highlight_peaks,
-  #   x = ~mass,
-  #   y = ~intensity,
-  #   marker = list(
-  #     color = "#e8cb97",
-  #     line = list(
-  #       color = "#35357A",
-  #       width = 2
-  #     ),
-  #     symbol = "circle",
-  #     size = 10,
-  #     zindex = 100
-  #   ),
-  #   hoverinfo = "text",
-  #   text = ~ paste0(
-  #     "Name: ",
-  #     name,
-  #     "\nMeasured: ",
-  #     mass,
-  #     " Da\nIntensity: ",
-  #     round(intensity, 2),
-  #     "%\n",
-  #     "Theor. Mw: ",
-  #     mw
-  #   ),
-  #   showlegend = FALSE
-  # )
-
-  # Define layout for spectrum
-  # plot <- plotly::layout(
-  #   plot,
-  #   yaxis = list(
-  #     title = "Intensity [%]",
-  #     showgrid = TRUE,
-  #     zeroline = FALSE,
-  #     ticks = "outside",
-  #     tickcolor = "transparent"
-  #   ),
-  #   xaxis = list(title = "Mass [Da]", showgrid = TRUE, zeroline = FALSE),
-  #   margin = list(t = 0, r = 0, b = 0, l = 50),
-  #   paper_bgcolor = "#dfdfdf42",
-  #   plot_bgcolor = "#dfdfdf42"
-  # ) |>
-  #   plotly::config(
-  #     displayModeBar = "hover",
-  #     scrollZoom = FALSE,
-  #     modeBarButtons = list(list(
-  #       "zoom2d",
-  #       "toImage",
-  #       "autoScale2d",
-  #       "resetScale2d",
-  #       "zoomIn2d",
-  #       "zoomOut2d"
-  #     ))
-  #   )
-
-  return(plot)
+    return(plot)
+  }
 }

@@ -363,10 +363,27 @@ server <- function(id, conversion_dirs) {
             local_ui_id,
             "_binding_plot"
           )]] <- plotly::renderPlotly({
-            make_binding_plot(
+            waiter::waiter_show(
+              id = ns(paste0(
+                local_ui_id,
+                "_binding_plot"
+              )),
+              html = waiter::spin_wandering_cubes()
+            )
+
+            plot <- make_binding_plot(
               kobs_result = conversion_dirs$result_list()$binding_kobs_result,
               filter_conc = local_concentration
             )
+
+            waiter::waiter_hide(
+              id = ns(paste0(
+                local_ui_id,
+                "_binding_plot"
+              ))
+            )
+
+            plot
           })
 
           # Render spectrum
@@ -374,6 +391,14 @@ server <- function(id, conversion_dirs) {
             local_ui_id,
             "_spectra"
           )]] <- plotly::renderPlotly({
+            waiter::waiter_show(
+              id = ns(paste0(
+                local_ui_id,
+                "_spectra"
+              )),
+              html = waiter::spin_wandering_cubes()
+            )
+
             decon_samples <- gsub(
               "o",
               ".",
@@ -387,14 +412,24 @@ server <- function(id, conversion_dirs) {
               )
             )
 
-            multiple_spectra(
+            plot <- multiple_spectra(
               results_list = conversion_dirs$result_list(),
               samples = names(
                 conversion_dirs$result_list()$deconvolution
               )[which(
                 decon_samples == local_concentration
-              )]
+              )],
+              cubic = FALSE
             )
+
+            waiter::waiter_hide(
+              id = ns(paste0(
+                local_ui_id,
+                "_spectra"
+              ))
+            )
+
+            plot
           })
 
           # Assign the renderUI to the dynamically created output slot
