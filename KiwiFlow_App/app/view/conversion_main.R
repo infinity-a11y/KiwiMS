@@ -265,11 +265,14 @@ server <- function(id, conversion_dirs) {
       # Add binding tab
       bslib::nav_insert(
         "tabs",
-        bslib::nav_panel(
-          title = "Binding",
-          shiny::div(
-            class = "conversion-result-wrapper",
-            shiny::uiOutput(ns("binding_tab"))
+        shiny::div(
+          class = "conversion-result-panel",
+          bslib::nav_panel(
+            title = "Binding",
+            shiny::div(
+              class = "conversion-result-wrapper",
+              shiny::uiOutput(ns("binding_tab"))
+            )
           )
         )
       )
@@ -512,101 +515,78 @@ server <- function(id, conversion_dirs) {
       set_selected_tab("Binding", session)
     })
 
-    output$binding_tab <- shiny::renderUI({
-      if (conversion_dirs$sample_picker() == "Kinetics") {
+    output$binding_tab <- shiny::renderUI(
+      shiny::div(
+        class = "binding-analysis-tab",
         shiny::div(
-          shiny::fluidRow(
-            shiny::column(
-              width = 6,
-              shiny::div(
-                class = "card-custom",
-                bslib::card(
-                  full_screen = TRUE,
-                  bslib::card_header(
-                    class = "bg-dark help-header",
-                    "Binding Curve",
-                  ),
-                  bslib::card_body(
-                    plotly::plotlyOutput(
-                      ns("binding_plot")
-                    )
-                  )
-                )
-              )
+          class = "card-custom",
+          bslib::card(
+            full_screen = TRUE,
+            bslib::card_header(
+              class = "bg-dark help-header",
+              "Binding Curve",
             ),
-            shiny::column(
-              width = 6,
-              shiny::div(
-                class = "card-custom",
-                bslib::card(
-                  full_screen = TRUE,
-                  bslib::card_header(
-                    class = "bg-dark help-header",
-                    "kobs Curve",
-                  ),
-                  bslib::card_body(
-                    plotly::plotlyOutput(
-                      ns("kobs_plot")
-                    )
-                  )
-                )
+            bslib::card_body(
+              plotly::plotlyOutput(
+                ns("binding_plot"),
+                height = "100%"
               )
             )
-          ),
-          shiny::fluidRow(
-            shiny::column(
-              width = 6,
+          )
+        ),
+        shiny::div(
+          class = "card-custom",
+          bslib::card(
+            full_screen = TRUE,
+            bslib::card_header(
+              class = "bg-dark help-header",
+              "kobs Curve",
+            ),
+            bslib::card_body(
+              plotly::plotlyOutput(
+                ns("kobs_plot"),
+                height = "100%"
+              )
+            )
+          )
+        ),
+        shiny::div(
+          class = "card-custom",
+          bslib::card(
+            full_screen = TRUE,
+            bslib::card_header(
+              class = "bg-dark help-header",
+              "Binding Analysis",
+            ),
+            bslib::card_body(
               shiny::tableOutput(ns("kobs_result"))
-            ),
-            shiny::column(
-              width = 2,
-              shiny::uiOutput(ns("concentration_select"))
-            ),
-            shiny::column(
-              width = 4,
-              shiny::tableOutput(ns("ki_kinact_result"))
             )
           )
-        )
-      } else {
-        shiny::fluidRow(
-          shiny::column(
-            width = 6,
-            shiny::div(
-              class = "card-custom",
-              bslib::card(
-                full_screen = TRUE,
-                bslib::card_header(
-                  class = "bg-dark help-header",
-                  "Annotated Hits",
+        ),
+        shiny::div(
+          class = "card-custom",
+          bslib::card(
+            full_screen = TRUE,
+            bslib::card_header(
+              class = "bg-dark help-header",
+              "Ki / kinact Analysis",
+            ),
+            bslib::card_body(
+              shiny::fluidRow(
+                shiny::column(
+                  width = 4,
+                  shiny::uiOutput(ns("concentration_select"))
                 ),
-                bslib::card_body(
-                  plotly::plotlyOutput(ns("hits_spectrum"))
-                )
-              )
-            )
-          ),
-          shiny::column(
-            width = 6,
-            shiny::div(
-              class = "card-custom",
-              bslib::card(
-                full_screen = TRUE,
-                bslib::card_header(
-                  class = "bg-dark help-header",
-                  "Hits Table",
-                ),
-                bslib::card_body(
-                  DT::DTOutput(
-                    ns("conversion_result_table")
-                  )
+                shiny::column(
+                  width = 8,
+                  shiny::tableOutput(ns("ki_kinact_result"))
                 )
               )
             )
           )
         )
-      }
-    })
+      )
+    )
 
     # Declare reactive variables for conversion results
     modified_results <- shiny::reactiveVal(NULL)

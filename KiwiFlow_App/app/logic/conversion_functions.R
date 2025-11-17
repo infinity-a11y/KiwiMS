@@ -1166,7 +1166,8 @@ make_binding_plot <- function(kobs_result, filter_conc = NULL) {
         "%-Binding: %{y:.2f}<br>",
         "K<sub>obs</sub>: %{customdata:.2f}<extra></extra>"
       ),
-      customdata = ~kobs
+      customdata = ~kobs,
+      showlegend = ifelse(is.null(filter_conc), TRUE, FALSE)
     ) |>
     # Observed binding
     plotly::add_markers(
@@ -1188,12 +1189,18 @@ make_binding_plot <- function(kobs_result, filter_conc = NULL) {
         "%-Binding: %{y:.2f}<br>",
         "K<sub>obs</sub>: %{customdata:.2f}<extra></extra>"
       ),
-      customdata = ~kobs
+      customdata = ~kobs,
+      showlegend = ifelse(is.null(filter_conc), TRUE, FALSE)
     ) |>
     # Layout changes
     plotly::layout(
       hovermode = "closest",
-      legend = list(title = list(text = "<b>Concentration</b>")),
+      paper_bgcolor = "rgba(0,0,0,0)",
+      legend = list(
+        title = list(text = "<b>Concentration</b>"),
+        bgcolor = "rgba(0,0,0,0)",
+        bordercolor = "rgba(0,0,0,0)"
+      ),
       xaxis = list(title = "Time [min]"),
       yaxis = list(title = "Binding [%]"),
       font = list(size = 14)
@@ -1245,13 +1252,17 @@ make_kobs_plot <- function(ki_kinact_result) {
       symbol = ~kobs,
       marker = list(
         size = 12,
-        opacity = 0.9,
-        line = list(width = 1.5, color = "black")
+        opacity = 0.5,
+        line = list(width = 1.5, color = "black", opacity = 0.5)
       )
     ) |>
     plotly::layout(
       hovermode = "closest",
-      legend = list(title = list(text = "<b>k<sub>obs</sub></b>")),
+      legend = list(
+        title = list(text = "<b>k<sub>obs</sub></b>"),
+        bgcolor = "rgba(0,0,0,0)",
+        bordercolor = "rgba(0,0,0,0)"
+      ),
       yaxis = list(title = "k<sub>obs</sub>"),
       xaxis = list(title = "Compound [µM]"),
       font = list(size = 14),
@@ -1807,6 +1818,10 @@ multiple_spectra <- function(
         showlegend = FALSE
       ) |>
       plotly::layout(
+        legend = list(
+          bgcolor = "rgba(0,0,0,0)",
+          bordercolor = "rgba(0,0,0,0)"
+        ),
         scene = list(
           xaxis = list(title = "Mass [Da]"),
           yaxis = list(title = "Intensity [%]"),

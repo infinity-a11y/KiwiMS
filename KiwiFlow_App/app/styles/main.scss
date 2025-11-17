@@ -389,7 +389,7 @@ button .sF-modal {
 .card-log-control .bslib-card {
   box-shadow: none !important;
   border-color: #00000070;
-  background-color: #dfdfdf42;
+  background-color: rgb(245 245 245);
 }
 
 .card-custom .bslib-card {
@@ -1145,7 +1145,57 @@ div[data-value="Protein Conversion"] .bslib-sidebar-layout.sidebar-collapsed > .
 }
 
 .conversion-result-wrapper {
-  padding: 15px;
+  height: 100%;
+  padding: 1%;
+}
+
+.conversion-result-panel,
+.conversion-result-panel > div {
+  height: 100%;
+}
+
+.binding-analysis-tab {
+  height: 100%;
+  display: grid;
+  gap: 1%;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 3fr 2fr;
+}
+
+.binding-analysis-tab .card-custom .card {
+  height: 100%;
+  margin: 0;
+}
+
+.binding-analysis-tab .card-custom .bslib-card .card-header {
+  border-top-left-radius: 4px;
+  border-top-right-radius: 4px;
+  padding-top: 1%;
+  padding-bottom: 1%;
+  height: fit-content;
+}
+
+.binding-analysis-tab .card-custom .card .card-body {
+  padding: 1%;
+}
+
+#app-conversion_main-kobs_result .table,
+#app-conversion_main-ki_kinact_result .table,
+#app-conversion_main-select_concentration {
+  margin: 0;
+  --bs-table-bg: rgb(245 245 245);
+}
+
+#app-conversion_main-binding_plot > div > div > svg:nth-child(3) > g.infolayer > g.legend > rect.bg {
+  fill-opacity: 0 !important;
+}
+
+#app-conversion_main-binding_plot > div,
+#app-conversion_main-binding_plot > div > div,
+#app-conversion_main-kobs_plot > div,
+#app-conversion_main-kobs_plot > div > div {
+  width: unset !important;
+  height: unset !important;
 }
 
 .toggle-show {
