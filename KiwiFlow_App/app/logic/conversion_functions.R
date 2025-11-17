@@ -1040,6 +1040,20 @@ summarize_hits <- function(result_list) {
     )
   }
 
+  hits_summarized <- hits_summarized |>
+    # Add concentration, time and binding columns to hits summary
+    dplyr::mutate(
+      time = extract_minutes(Sample),
+      binding = `Total % Binding` * 100,
+      concentration = gsub(
+        "o",
+        ".",
+        sapply(strsplit(hits_summarized$Sample, "_"), `[`, 3)
+      )
+    ) |>
+    dplyr::group_by(concentration) |>
+    dplyr::arrange(as.numeric(concentration), time)
+
   return(hits_summarized)
 }
 
@@ -1059,21 +1073,8 @@ add_kobs_binding_result <- function(result_list, concentrations_select = NULL) {
   # Replace NA's with 0
   # hits_summary <- result_list[["hits_summary"]]
   # hits_summary[is.na(hits_summary)] <- 0
-
   hits_summary <- result_list$hits_summary |>
-    # Add concentration, time and binding columns to hits summary
-    dplyr::mutate(
-      time = extract_minutes(Sample),
-      binding = `Total % Binding` * 100,
-      concentration = gsub(
-        "o",
-        ".",
-        sapply(strsplit(result_list$hits_summary$Sample, "_"), `[`, 3)
-      )
-    ) |>
-    dplyr::filter(!is.na(Compound)) |>
-    dplyr::group_by(concentration) |>
-    dplyr::arrange(as.numeric(concentration), time)
+    dplyr::filter(!is.na(Compound))
 
   # Compute and model kobs values
   if (!is.null(concentrations_select)) {
@@ -1239,7 +1240,7 @@ make_kobs_plot <- function(ki_kinact_result) {
       data = df,
       x = ~conc,
       y = ~predicted_kobs,
-      line = list(width = 2, opacity = 0.6, color = "black"),
+      line = list(width = 2, opacity = 1, color = "black"),
       showlegend = FALSE
     ) |>
     plotly::add_trace(
@@ -1252,8 +1253,8 @@ make_kobs_plot <- function(ki_kinact_result) {
       symbol = ~kobs,
       marker = list(
         size = 12,
-        opacity = 0.5,
-        line = list(width = 1.5, color = "black", opacity = 0.5)
+        opacity = 1,
+        line = list(width = 1.5, color = "black", opacity = 1)
       )
     ) |>
     plotly::layout(

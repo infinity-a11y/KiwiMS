@@ -281,7 +281,7 @@ server <- function(id, conversion_dirs) {
           title = "Hits",
           shiny::div(
             class = "conversion-result-wrapper",
-            shiny::uiOutput(ns("hits_tab"))
+            DT::DTOutput(ns("hits_tab"))
           )
         )
       )
@@ -585,14 +585,88 @@ server <- function(id, conversion_dirs) {
     select_concentration <- shiny::reactiveVal(NULL)
 
     # UI output for hits tab
-    output$hits_tab <- shiny::renderUI({
+    output$hits_tab <- DT::renderDT({
       shiny::req(conversion_dirs$result_list())
 
-      output$conversion_result_table <- rhandsontable::renderRHandsontable({
-        rhandsontable::rhandsontable(
-          conversion_dirs$result_list()$"hits_summary"
+      hits_summary <- conversion_dirs$result_list()$"hits_summary"
+
+      hits_summary <<- conversion_dirs$result_list()$"hits_summary"
+
+      hits_summary <- hits_summary |>
+        dplyr::mutate(Intensity = Intensity / 100, )
+
+      # colnames(hits_summary) <- c(
+      #   "Well",
+      #   "Sample ID",
+      #   "Protein Name",
+      #   "Theor. Prot. [Da]",
+      #   "Meas. Prot. [Da]",
+      #   "Δ Protein [Da]",
+      #   "Protein Intensity [%]",
+      #   "Total %-Binding",
+      #   "Peak Signal [Da]",
+      #   "Intensity [%]",
+      #   "Compound Name",
+      #   "Theor. Cmp. [Da]",
+      #   "Δ Cmp. [Da]",
+      #   "Binding Stoichiometry",
+      #   "%-Binding",
+      #   "Time [min]",
+      #   "Cmp. Concentration [µM]"
+      # )
+      rowCallback <- c(
+        "function(row, data){",
+        "  for(var i=0; i<data.length; i++){",
+        "    if(data[i] === null){",
+        "      $('td:eq('+i+')', row).html('N/A')",
+        "        .css({'color': 'rgb(151,151,151)', 'font-style': 'italic'});",
+        "    }",
+        "  }",
+        "}"
+      )
+
+      DT::datatable(
+        hits_summary[, -17],
+        colnames = c(
+          "Well",
+          "Sample ID",
+          "Protein Name",
+          "Theor. Prot. [Da]",
+          "Meas. Prot. [Da]",
+          "Δ Protein [Da]",
+          "Protein Intensity [%]",
+          "Total %-Binding",
+          "Peak Signal [Da]",
+          "Intensity [%]",
+          "Compound Name",
+          "Theor. Cmp. [Da]",
+          "Δ Cmp. [Da]",
+          "Binding Stoichiometry",
+          "%-Binding",
+          "Time [min]",
+          "Cmp. Concentration [µM]"
+        ),
+        rownames = FALSE,
+        selection = "none",
+        class = "compact row-border nowrap",
+        options = list(
+          rowCallback = htmlwidgets::JS(rowCallback),
+          scrollX = TRUE,
+          scrollY = TRUE,
+          scrollCollapse = TRUE,
+          fixedHeader = TRUE,
+          stripe = FALSE,
+          lengthMenu = list(c(25, 50, 100, -1), c('25', '50', '100', 'All'))
         )
-      })
+      ) |>
+        # Applies scientific notation/significant figures to ALL NUMERICAL columns,
+        # showing 3 significant digits in total.
+        DT::formatSignif(
+          columns = c(6, 7, 10, 13, 15),
+          digits = 3
+        ) |>
+        DT::formatRound(columns = c(4, 5, 9, 13), digits = 1) |>
+        DT::formatPercentage(columns = c(8, 10, 15), digits = 1)
     })
 
     # Recalculate or modify results depending by excluding concentrations
@@ -699,44 +773,6 @@ server <- function(id, conversion_dirs) {
       }
 
       result_list$ki_kinact_result$kobs_plot
-    })
-
-    shiny::observe({
-      shiny::req(
-        conversion_dirs$sample_picker(),
-        conversion_dirs$result_list()
-      )
-      hits_table <- conversion_dirs$result_list()$deconvolution[[conversion_dirs$sample_picker()]]$hits
-
-      if (!is.null(hits_table) && nrow(hits_table) > 0) {
-        hits_table <- hits_table |>
-          dplyr::select(-c("Well", "Sample")) |>
-          DT::datatable(
-            rownames = FALSE,
-            options = list(
-              pageLength = 5,
-              dom = 'tpi'
-            )
-          ) |>
-          DT::formatRound(columns = c(5, 6, 8, 12), digits = 2)
-      } else {
-        hits_table <- data.frame()
-      }
-
-      output$conversion_result_table <- DT::renderDT(hits_table)
-    })
-
-    output$hits_spectrum <- plotly::renderPlotly({
-      shiny::req(
-        conversion_dirs$sample_picker(),
-        conversion_dirs$result_list()
-      )
-      if (
-        conversion_dirs$sample_picker() %in%
-          names(conversion_dirs$result_list())
-      ) {
-        conversion_dirs$result_list()$deconvolution[[conversion_dirs$sample_picker()]]$hits_spectrum
-      }
     })
 
     # Observe protein file upload
