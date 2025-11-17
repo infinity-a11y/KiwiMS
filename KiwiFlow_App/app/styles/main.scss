@@ -1162,15 +1162,6 @@ div[data-value="Protein Conversion"] .tab-pane {
   height: 80%;
 }
 
-#app-conversion_main-hits_tab td {
-  background-color: #f5f5f5;
-  border-bottom: 1px solid #ddddde;
-}
-
-#app-conversion_main-hits_tab th {
-  background-color: #ddddde;
-}
-
 #app-conversion_main-hits_tab thead th:first-child {
   border-top-left-radius: 4px;
 }
@@ -1181,14 +1172,27 @@ div[data-value="Protein Conversion"] .tab-pane {
   padding: unset;
 }
 
+#app-conversion_main-hits_tab div.dataTables_scrollBody {
+  border: none !important;
+}
+
+div.dtfc-right-top-blocker,
+div.dtfc-left-top-blocker {
+  display: none !important;
+}
+
 th.sorting {
   border-top-left-radius: unset;
   border-top-right-radius: unset;
   padding: unset;
 }
 
-#app-conversion_main-hits_tab thead th:last-child {
+#app-conversion_main-hits_tab tbody tr:first-child td:last-child {
   border-top-right-radius: 4px;
+}
+
+#app-conversion_main-hits_tab tbody tr:first-child td:first-child {
+  border-top-left-radius: 4px;
 }
 
 #app-conversion_main-hits_tab tbody tr:last-child td:last-child {
@@ -1220,11 +1224,21 @@ th.sorting {
   overflow: unset !important;
 }
 
-.active > .page-link {
-  color: #38387c;
-  border-color: #38387c;
+#app-conversion_main-hits_tab tbody td {
+  background-color: inherit;
 }
 
+.active > .page-link {
+  color: white;
+  border-color: #38387c;
+  background: #38387c;
+}
+
+.active > .page-link:hover {
+  color: black;
+}
+
+.page-link,
 .page-link:hover {
   color: #38387c;
 }

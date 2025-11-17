@@ -588,67 +588,131 @@ server <- function(id, conversion_dirs) {
     output$hits_tab <- DT::renderDT({
       shiny::req(conversion_dirs$result_list())
 
-      hits_summary <- conversion_dirs$result_list()$"hits_summary"
+      # Format hits table
+      hits_summary <- conversion_dirs$result_list()$"hits_summary" |>
+        dplyr::mutate(
+          Intensity = scales::percent(
+            Intensity / 100,
+            accuracy = 0.1
+          ),
+          `% Binding` = scales::percent(
+            `% Binding`,
+            accuracy = 0.1
+          ),
+          `Total % Binding` = scales::percent(
+            `Total % Binding`,
+            accuracy = 0.1
+          ),
+          `Protein Intensity` = scales::percent(
+            `Protein Intensity` / 100,
+            accuracy = 0.1
+          ),
+          time = paste(as.character(time), "min"),
+          concentration = paste(concentration, "µM"),
+          `Mw Protein [Da]` = dplyr::if_else(
+            is.na(`Mw Protein [Da]`),
+            "N/A",
+            paste(
+              format(`Mw Protein [Da]`, nsmall = 1, trim = TRUE),
+              "Da"
+            )
+          ),
+          `Measured Mw Protein [Da]` = dplyr::if_else(
+            is.na(`Measured Mw Protein [Da]`),
+            "N/A",
+            paste(
+              format(`Measured Mw Protein [Da]`, nsmall = 1, trim = TRUE),
+              "Da"
+            )
+          ),
+          `Delta Mw Protein [Da]` = dplyr::if_else(
+            is.na(`Delta Mw Protein [Da]`),
+            "N/A",
+            paste(
+              format(`Delta Mw Protein [Da]`, nsmall = 1, trim = TRUE),
+              "Da"
+            )
+          ),
+          `Compound Mw [Da]` = dplyr::if_else(
+            is.na(`Compound Mw [Da]`),
+            "N/A",
+            paste(
+              format(`Compound Mw [Da]`, nsmall = 1, trim = TRUE),
+              "Da"
+            )
+          ),
+          `Delta Mw Compound [Da]` = dplyr::if_else(
+            is.na(`Delta Mw Compound [Da]`),
+            "N/A",
+            paste(
+              format(`Delta Mw Compound [Da]`, nsmall = 1, trim = TRUE),
+              "Da"
+            )
+          ),
+          `Peak [Da]` = dplyr::if_else(
+            is.na(`Peak [Da]`),
+            "N/A",
+            paste(
+              format(`Peak [Da]`, nsmall = 1, trim = TRUE),
+              "Da"
+            )
+          )
+        ) |>
+        dplyr::select(-c(3, 17)) |>
+        dplyr::relocate(c(concentration, time), .before = `Mw Protein [Da]`) |>
+        dplyr::relocate(`Total % Binding`, .after = "% Binding")
 
-      hits_summary <<- conversion_dirs$result_list()$"hits_summary"
+      # Change column names
+      colnames(hits_summary) <- c(
+        "Well",
+        "Sample ID",
+        "Cmp. Concentration",
+        "Time",
+        "Theor. Prot.",
+        "Meas. Prot.",
+        "Δ Protein",
+        "I [Protein]",
+        "Peak Signal",
+        "I [Cmp.]",
+        "Cmp. Name",
+        "Theor. Cmp.",
+        "Δ Cmp.",
+        "Bind. Stoich.",
+        "%-Binding",
+        "Total %-Binding"
+      )
 
-      hits_summary <- hits_summary |>
-        dplyr::mutate(Intensity = Intensity / 100, )
-
-      # colnames(hits_summary) <- c(
-      #   "Well",
-      #   "Sample ID",
-      #   "Protein Name",
-      #   "Theor. Prot. [Da]",
-      #   "Meas. Prot. [Da]",
-      #   "Δ Protein [Da]",
-      #   "Protein Intensity [%]",
-      #   "Total %-Binding",
-      #   "Peak Signal [Da]",
-      #   "Intensity [%]",
-      #   "Compound Name",
-      #   "Theor. Cmp. [Da]",
-      #   "Δ Cmp. [Da]",
-      #   "Binding Stoichiometry",
-      #   "%-Binding",
-      #   "Time [min]",
-      #   "Cmp. Concentration [µM]"
-      # )
+      # JS function to display NA values
       rowCallback <- c(
         "function(row, data){",
         "  for(var i=0; i<data.length; i++){",
         "    if(data[i] === null){",
         "      $('td:eq('+i+')', row).html('N/A')",
-        "        .css({'color': 'rgb(151,151,151)', 'font-style': 'italic'});",
+        "        .css({'color': 'black'});",
         "    }",
         "  }",
         "}"
       )
 
-      DT::datatable(
-        hits_summary[, -17],
-        colnames = c(
-          "Well",
-          "Sample ID",
-          "Protein Name",
-          "Theor. Prot. [Da]",
-          "Meas. Prot. [Da]",
-          "Δ Protein [Da]",
-          "Protein Intensity [%]",
-          "Total %-Binding",
-          "Peak Signal [Da]",
-          "Intensity [%]",
-          "Compound Name",
-          "Theor. Cmp. [Da]",
-          "Δ Cmp. [Da]",
-          "Binding Stoichiometry",
-          "%-Binding",
-          "Time [min]",
-          "Cmp. Concentration [µM]"
-        ),
+      # Color rows by concentration
+      n_colors <- length(unique(hits_summary$`Cmp. Concentration`))
+      concentration_colors <- RColorBrewer::brewer.pal(
+        n = max(3, n_colors),
+        name = "Set1"
+      )[1:n_colors]
+      concentration_colors <- gsub(
+        ",1)",
+        ",0.35)",
+        plotly::toRGB(concentration_colors)
+      )
+
+      # Generate datatable
+      DT::datatable(,
+        data = hits_summary,
         rownames = FALSE,
         selection = "none",
         class = "compact row-border nowrap",
+        extensions = "FixedColumns",
         options = list(
           rowCallback = htmlwidgets::JS(rowCallback),
           scrollX = TRUE,
@@ -656,17 +720,19 @@ server <- function(id, conversion_dirs) {
           scrollCollapse = TRUE,
           fixedHeader = TRUE,
           stripe = FALSE,
+          fixedColumns = list(leftColumns = 1),
           lengthMenu = list(c(25, 50, 100, -1), c('25', '50', '100', 'All'))
         )
       ) |>
-        # Applies scientific notation/significant figures to ALL NUMERICAL columns,
-        # showing 3 significant digits in total.
-        DT::formatSignif(
-          columns = c(6, 7, 10, 13, 15),
-          digits = 3
-        ) |>
-        DT::formatRound(columns = c(4, 5, 9, 13), digits = 1) |>
-        DT::formatPercentage(columns = c(8, 10, 15), digits = 1)
+        DT::formatStyle(
+          columns = 'Cmp. Concentration',
+          valueColumns = 'Cmp. Concentration',
+          target = 'row',
+          backgroundColor = DT::styleEqual(
+            levels = unique(hits_summary$`Cmp. Concentration`),
+            values = concentration_colors
+          )
+        )
     })
 
     # Recalculate or modify results depending by excluding concentrations
