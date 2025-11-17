@@ -265,14 +265,11 @@ server <- function(id, conversion_dirs) {
       # Add binding tab
       bslib::nav_insert(
         "tabs",
-        shiny::div(
-          class = "conversion-result-panel",
-          bslib::nav_panel(
-            title = "Binding",
-            shiny::div(
-              class = "conversion-result-wrapper",
-              shiny::uiOutput(ns("binding_tab"))
-            )
+        bslib::nav_panel(
+          title = "Binding",
+          shiny::div(
+            class = "conversion-result-wrapper",
+            shiny::uiOutput(ns("binding_tab"))
           )
         )
       )
@@ -572,15 +569,10 @@ server <- function(id, conversion_dirs) {
               "Ki / kinact Analysis",
             ),
             bslib::card_body(
-              shiny::fluidRow(
-                shiny::column(
-                  width = 4,
-                  shiny::uiOutput(ns("concentration_select"))
-                ),
-                shiny::column(
-                  width = 8,
-                  shiny::tableOutput(ns("ki_kinact_result"))
-                )
+              shiny::div(
+                class = "ki-kinact-ui",
+                shiny::uiOutput(ns("concentration_select")),
+                shiny::tableOutput(ns("ki_kinact_result"))
               )
             )
           )

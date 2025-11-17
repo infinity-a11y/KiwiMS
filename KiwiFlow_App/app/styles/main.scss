@@ -890,6 +890,10 @@ div[data-value="Protein Conversion"] .bslib-sidebar-layout.sidebar-collapsed > .
   border-color: white;
 }
 
+div[data-value="Protein Conversion"] .tab-pane {
+  height: 100%;
+}
+
 .bslib-sidebar-layout > .collapse-toggle {
   color: transparent;
   display: none;
@@ -1149,11 +1153,6 @@ div[data-value="Protein Conversion"] .bslib-sidebar-layout.sidebar-collapsed > .
   padding: 1%;
 }
 
-.conversion-result-panel,
-.conversion-result-panel > div {
-  height: 100%;
-}
-
 .binding-analysis-tab {
   height: 100%;
   display: grid;
@@ -1179,11 +1178,17 @@ div[data-value="Protein Conversion"] .bslib-sidebar-layout.sidebar-collapsed > .
   padding: 1%;
 }
 
+.ki-kinact-ui {
+  display: flex;
+  align-items: center;
+}
+
 #app-conversion_main-kobs_result .table,
 #app-conversion_main-ki_kinact_result .table,
 #app-conversion_main-select_concentration {
   margin: 0;
   --bs-table-bg: rgb(245 245 245);
+  height: fit-content;
 }
 
 #app-conversion_main-binding_plot > div > div > svg:nth-child(3) > g.infolayer > g.legend > rect.bg {
