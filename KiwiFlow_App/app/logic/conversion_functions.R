@@ -1762,6 +1762,8 @@ multiple_spectra <- function(
     levels = sort(unique(peaks_data$time))
   )
 
+  spectrum_data <<- spectrum_data
+  peaks_data <<- peaks_data
   if (cubic == TRUE) {
     plotly::plot_ly(
       data = spectrum_data,
@@ -1829,7 +1831,7 @@ multiple_spectra <- function(
             dtick = 1
           ),
           camera = list(
-            center = list(x = 0, y = 0, z = 0),
+            center = list(x = 0.1, y = -0.1, z = 0),
             eye = list(x = 1.5, y = 1, z = 1.5),
             up = list(x = 0, y = 0.75, z = 0)
           )
@@ -1947,6 +1949,12 @@ render_hits_table <- function(
     menu_length <- list(c(25, 50, 100, -1), c('25', '50', '100', 'All'))
   }
 
+  if (!is.null(single_conc)) {
+    dom_value <- "t"
+  } else {
+    dom_value <- NULL
+  }
+
   # Generate datatable
   hits_table <- DT::datatable(
     data = hits_table,
@@ -1961,6 +1969,7 @@ render_hits_table <- function(
       scrollCollapse = TRUE,
       fixedHeader = TRUE,
       stripe = FALSE,
+      dom = dom_value,
       # fixedColumns = list(leftColumns = 1),
       lengthMenu = menu_length
     )

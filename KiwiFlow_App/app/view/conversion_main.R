@@ -403,10 +403,10 @@ server <- function(id, conversion_dirs) {
 
       # Assign colors to present concentrations
       n_colors <- length(unique(hits_summary[["[Cmp.]"]]))
-      concentration_colors <- RColorBrewer::brewer.pal(
+      concentration_colors <- rev(RColorBrewer::brewer.pal(
         n = max(3, n_colors),
         name = "Set1"
-      )[1:n_colors]
+      )[1:n_colors])
       names(concentration_colors) <- c(concentrations, "0")
       concentration_colors[which(
         names(concentration_colors) == "0"
@@ -528,7 +528,15 @@ server <- function(id, conversion_dirs) {
               )[which(
                 decon_samples == local_concentration
               )],
-              cubic = FALSE
+              cubic = ifelse(
+                input[[ns(paste0(
+                  local_ui_id,
+                  "_kind"
+                ))]] ==
+                  "3D",
+                TRUE,
+                FALSE
+              )
             )
 
             waiter::waiter_hide(
@@ -544,11 +552,38 @@ server <- function(id, conversion_dirs) {
           # Assign the renderUI to the dynamically created output slot
           output[[local_ui_id]] <- shiny::renderUI({
             shiny::div(
-              class = "result_conc_tab",
+              class = "result-conc-tab",
               shiny::div(
-                class = "card-custom",
+                class = "card-custom spectrum",
                 bslib::card(
                   bslib::card_header(
+                    class = "bg-dark help-header",
+                    shiny::fluidRow(
+                      shiny::column(8, "Spectrum Control"),
+                      shiny::column(
+                        4,
+                        shinyWidgets::radioGroupButtons(
+                          ns(paste0(
+                            local_ui_id,
+                            "_kind"
+                          )),
+                          choices = c("3D", "Planar")
+                        )
+                      )
+                    )
+                  ),
+                  full_screen = TRUE,
+                  plotly::plotlyOutput(
+                    ns(paste0(local_ui_id, "_spectra")),
+                    height = "100%"
+                  )
+                )
+              ),
+              shiny::div(
+                class = "card-custom binding",
+                bslib::card(
+                  bslib::card_header(
+                    class = "bg-dark help-header",
                     "% Binding",
                   ),
                   full_screen = TRUE,
@@ -562,52 +597,61 @@ server <- function(id, conversion_dirs) {
                 )
               ),
               shiny::div(
-                class = "card-custom",
-                bslib::card(
-                  bslib::card_header(
-                    "Spectrum",
-                  ),
-                  full_screen = TRUE,
-                  plotly::plotlyOutput(
-                    ns(paste0(local_ui_id, "_spectra")),
-                    height = "100%"
+                class = "kobs-cards",
+                shiny::div(
+                  class = "card-custom",
+                  bslib::card(
+                    bslib::card_header(
+                      class = "bg-dark help-header",
+                      htmltools::tagList(
+                        "k",
+                        htmltools::tags$sub("obs")
+                      )
+                    ),
+                    shiny::div(
+                      class = "kobs_val",
+                      format_scientific(conc_result$kobs)
+                    )
+                  )
+                ),
+                shiny::div(
+                  class = "card-custom",
+                  bslib::card(
+                    bslib::card_header(
+                      class = "bg-dark help-header",
+                      "Plateau"
+                    ),
+                    shiny::div(
+                      class = "kobs_val",
+                      format_scientific(conc_result$plateau)
+                    )
+                  )
+                ),
+                shiny::div(
+                  class = "card-custom",
+                  bslib::card(
+                    bslib::card_header(
+                      class = "bg-dark help-header",
+                      "v"
+                    ),
+                    shiny::div(
+                      class = "kobs_val",
+                      format_scientific(conc_result$v)
+                    )
                   )
                 )
               ),
               shiny::div(
-                class = "card-custom",
+                class = "card-custom hits",
                 bslib::card(
                   bslib::card_header(
+                    class = "bg-dark help-header",
                     "Hits",
                   ),
                   full_screen = TRUE,
-                  DT::DTOutput(ns(paste0(local_ui_id, "_hits")))
-                )
-              ),
-              shiny::div(
-                class = "kobs_cards",
-                bslib::card(
-                  bslib::card_header(htmltools::tagList(
-                    "k",
-                    htmltools::tags$sub("obs")
-                  )),
                   shiny::div(
-                    class = "kobs_val",
-                    format_scientific(conc_result$kobs)
-                  )
-                ),
-                bslib::card(
-                  bslib::card_header("Plateau"),
-                  shiny::div(
-                    class = "kobs_val",
-                    format_scientific(conc_result$plateau)
-                  )
-                ),
-                bslib::card(
-                  bslib::card_header("v"),
-                  shiny::div(
-                    class = "kobs_val",
-                    format_scientific(conc_result$v)
+                    class = "conc-hits-table",
+                    DT::DTOutput(ns(paste0(local_ui_id, "_hits")))
                   )
                 )
               )
