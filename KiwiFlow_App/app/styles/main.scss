@@ -1212,7 +1212,7 @@ th.sorting {
 }
 
 #app-conversion_main-hits_tab .dataTables_scrollHead th {
-  padding: 8px 6px !important;
+  padding-top: 8px 6px !important;
 }
 
 #app-conversion_main-hits_tab {
@@ -1224,7 +1224,8 @@ th.sorting {
   overflow: unset !important;
 }
 
-#app-conversion_main-hits_tab tbody td {
+#app-conversion_main-hits_tab tbody td,
+table.dataTable.nowrap td {
   background-color: inherit;
 }
 

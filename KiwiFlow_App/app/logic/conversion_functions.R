@@ -462,7 +462,6 @@ check_table <- function(tab, col_limit) {
   return(TRUE)
 }
 
-
 # Get unicode character for warning symbols
 warning_sym <- "\u26A0"
 
@@ -1193,10 +1192,11 @@ make_binding_plot <- function(kobs_result, filter_conc = NULL) {
       customdata = ~kobs,
       showlegend = ifelse(is.null(filter_conc), TRUE, FALSE)
     ) |>
-    # Layout changes
     plotly::layout(
       hovermode = "closest",
       paper_bgcolor = "rgba(0,0,0,0)",
+      paper_bgcolor = 'rgba(0, 0, 0, 0)',
+      plot_bgcolor = 'rgba(0, 0, 0, 0)',
       legend = list(
         title = list(text = "<b>Concentration</b>"),
         bgcolor = "rgba(0,0,0,0)",
@@ -1730,9 +1730,6 @@ multiple_spectra <- function(
   cubic = TRUE,
   show_labels = FALSE
 ) {
-  test2 <<- results_list
-  samples <<- samples
-
   # Get spectrum data
   spectrum_data <- data.frame()
   for (i in seq_along(samples)) {
@@ -1923,4 +1920,82 @@ multiple_spectra <- function(
 
     return(plot)
   }
+}
+
+# Rendering function of hits table
+#' @export
+render_hits_table <- function(
+  hits_table,
+  concentration_colors,
+  single_conc = NULL
+) {
+  # JS function to display NA values
+  rowCallback <- c(
+    "function(row, data){",
+    "  for(var i=0; i<data.length; i++){",
+    "    if(data[i] === null){",
+    "      $('td:eq('+i+')', row).html('N/A')",
+    "        .css({'color': 'black'});",
+    "    }",
+    "  }",
+    "}"
+  )
+
+  if (!is.null(single_conc)) {
+    menu_length <- list(c(25, -1), c('25', 'All'))
+  } else {
+    menu_length <- list(c(25, 50, 100, -1), c('25', '50', '100', 'All'))
+  }
+
+  # Generate datatable
+  hits_table <- DT::datatable(
+    data = hits_table,
+    rownames = FALSE,
+    selection = "single",
+    class = "compact row-border nowrap",
+    extensions = "FixedColumns",
+    options = list(
+      rowCallback = htmlwidgets::JS(rowCallback),
+      scrollX = TRUE,
+      scrollY = TRUE,
+      scrollCollapse = TRUE,
+      fixedHeader = TRUE,
+      stripe = FALSE,
+      # fixedColumns = list(leftColumns = 1),
+      lengthMenu = menu_length
+    )
+  )
+
+  if (!is.null(single_conc)) {
+    conc_color <- concentration_colors[which(
+      names(concentration_colors) == single_conc
+    )]
+
+    hits_table <- hits_table |>
+      DT::formatStyle(
+        columns = 2,
+        target = 'row',
+        backgroundColor = gsub(
+          ",1)",
+          ",0.3)",
+          plotly::toRGB(conc_color)
+        )
+      )
+  } else {
+    hits_table <- hits_table |>
+      DT::formatStyle(
+        columns = '[Cmp.]',
+        target = 'row',
+        backgroundColor = DT::styleEqual(
+          levels = paste(names(concentration_colors), "µM"),
+          values = gsub(
+            ",1)",
+            ",0.3)",
+            plotly::toRGB(concentration_colors)
+          )
+        )
+      )
+  }
+
+  hits_table
 }

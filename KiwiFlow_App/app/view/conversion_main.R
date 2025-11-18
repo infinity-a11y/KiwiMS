@@ -23,6 +23,7 @@ box::use(
       format_scientific,
       make_binding_plot,
       multiple_spectra,
+      render_hits_table,
     ],
   app /
     logic /
@@ -233,8 +234,8 @@ server <- function(id, conversion_dirs) {
     # Set file upload limit
     options(shiny.maxRequestSize = 1000 * 1024^2)
 
-    # Predefine reactive variables
-    vars <- shiny::reactiveValues(
+    # Reactive variables for conversion declarations
+    declaration_vars <- shiny::reactiveValues(
       protein_table = NULL,
       protein_table_active = TRUE,
       protein_table_status = FALSE,
@@ -247,6 +248,15 @@ server <- function(id, conversion_dirs) {
       conversion_ready = FALSE
     )
 
+    # Reactive variables for conversion results
+    conversion_vars <- shiny::reactiveValues(
+      modified_results = NULL,
+      select_concentration = NULL,
+      formatted_hits = NULL,
+      conc_colors = NULL
+    )
+
+    # Trigger
     shiny::observeEvent(conversion_dirs$result_list(), {
       # Hide declaration tabs
       bslib::nav_hide(
@@ -286,7 +296,103 @@ server <- function(id, conversion_dirs) {
         )
       )
 
-      # Get concentrations and add tabs (This part is correct for adding UI)
+      # Summarize hits to table
+      hits_summary <- conversion_dirs$result_list()$"hits_summary" |>
+        dplyr::mutate(
+          Intensity = scales::percent(
+            Intensity / 100,
+            accuracy = 0.1
+          ),
+          `% Binding` = scales::percent(
+            `% Binding`,
+            accuracy = 0.1
+          ),
+          `Total % Binding` = scales::percent(
+            `Total % Binding`,
+            accuracy = 0.1
+          ),
+          `Protein Intensity` = scales::percent(
+            `Protein Intensity` / 100,
+            accuracy = 0.1
+          ),
+          time = paste(as.character(time), "min"),
+          concentration = paste(concentration, "µM"),
+          `Mw Protein [Da]` = dplyr::if_else(
+            is.na(`Mw Protein [Da]`),
+            "N/A",
+            paste(
+              format(`Mw Protein [Da]`, nsmall = 1, trim = TRUE),
+              "Da"
+            )
+          ),
+          `Measured Mw Protein [Da]` = dplyr::if_else(
+            is.na(`Measured Mw Protein [Da]`),
+            "N/A",
+            paste(
+              format(`Measured Mw Protein [Da]`, nsmall = 1, trim = TRUE),
+              "Da"
+            )
+          ),
+          `Delta Mw Protein [Da]` = dplyr::if_else(
+            is.na(`Delta Mw Protein [Da]`),
+            "N/A",
+            paste(
+              format(`Delta Mw Protein [Da]`, nsmall = 1, trim = TRUE),
+              "Da"
+            )
+          ),
+          `Compound Mw [Da]` = dplyr::if_else(
+            is.na(`Compound Mw [Da]`),
+            "N/A",
+            paste(
+              format(`Compound Mw [Da]`, nsmall = 1, trim = TRUE),
+              "Da"
+            )
+          ),
+          `Delta Mw Compound [Da]` = dplyr::if_else(
+            is.na(`Delta Mw Compound [Da]`),
+            "N/A",
+            paste(
+              format(`Delta Mw Compound [Da]`, nsmall = 1, trim = TRUE),
+              "Da"
+            )
+          ),
+          `Peak [Da]` = dplyr::if_else(
+            is.na(`Peak [Da]`),
+            "N/A",
+            paste(
+              format(`Peak [Da]`, nsmall = 1, trim = TRUE),
+              "Da"
+            )
+          )
+        ) |>
+        dplyr::select(-c(3, 17)) |>
+        dplyr::relocate(c(concentration, time), .before = `Mw Protein [Da]`) |>
+        dplyr::relocate(`Total % Binding`, .after = "% Binding")
+
+      # Change column names
+      colnames(hits_summary) <- c(
+        "Well",
+        "Sample ID",
+        "[Cmp.]",
+        "Time",
+        "Theor. Prot.",
+        "Meas. Prot.",
+        "Δ Prot.",
+        "Ⅰ Prot.",
+        "Peak Signal",
+        "Ⅰ Cmp.",
+        "Cmp. Name",
+        "Theor. Cmp.",
+        "Δ Cmp.",
+        "Bind. Stoich.",
+        "%-Binding",
+        "Total %-Binding"
+      )
+      # Assign formatted hits to reactive variable
+      conversion_vars$formatted_hits <- hits_summary
+
+      # Get concentrations
       binding_kobs_result_names <- names(
         conversion_dirs$result_list()$binding_kobs_result
       )
@@ -295,13 +401,26 @@ server <- function(id, conversion_dirs) {
           c("binding_table", "binding_plot", "kobs_result_table")
       ]
 
+      # Assign colors to present concentrations
+      n_colors <- length(unique(hits_summary[["[Cmp.]"]]))
+      concentration_colors <- RColorBrewer::brewer.pal(
+        n = max(3, n_colors),
+        name = "Set1"
+      )[1:n_colors]
+      names(concentration_colors) <- c(concentrations, "0")
+      concentration_colors[which(
+        names(concentration_colors) == "0"
+      )] <- "#ddddde"
+      # Assign colors to reactive variable
+      conversion_vars$conc_colors <- concentration_colors
+
       # Define a set of IDs for the dynamic tabs
       dynamic_ui_ids <- paste0("concentration_tab_", concentrations)
 
-      # Add all present concentrations as results (updated uiOutput ID)
+      # Add all present concentrations as results
       for (i in seq_along(concentrations)) {
         concentration <- concentrations[[i]]
-        ui_id <- dynamic_ui_ids[[i]] # Use the unique ID here
+        ui_id <- dynamic_ui_ids[[i]]
 
         bslib::nav_insert(
           "tabs",
@@ -309,7 +428,7 @@ server <- function(id, conversion_dirs) {
             title = concentration,
             shiny::div(
               class = "conversion-result-wrapper",
-              # Use the unique, namespaced ID for the UI element
+              # Use namespaced ID for UI
               shiny::uiOutput(ns(ui_id))
             )
           )
@@ -336,26 +455,16 @@ server <- function(id, conversion_dirs) {
           ]]
 
           # Render hits table
-          output[[paste0(local_ui_id, "_hits")]] <- shiny::renderTable({
-            format_conc <- gsub(
-              "o",
-              ".",
-              sapply(
-                strsplit(
-                  conversion_dirs$result_list()$hits_summary$Sample,
-                  "_"
+          output[[paste0(local_ui_id, "_hits")]] <- DT::renderDT({
+            message(local_concentration)
+            render_hits_table(
+              hits_table = hits_summary |>
+                dplyr::filter(
+                  `[Cmp.]` == paste(local_concentration, "µM")
                 ),
-                `[`,
-                3
-              )
+              concentration_colors = concentration_colors,
+              single_conc = local_concentration
             )
-
-            conversion_dirs$result_list()$hits_summary |>
-              dplyr::mutate(
-                concentration = format_conc
-              ) |>
-              dplyr::filter(concentration == local_concentration) |>
-              dplyr::select(-c(concentration))
           })
 
           # Render binding plot
@@ -436,70 +545,69 @@ server <- function(id, conversion_dirs) {
           output[[local_ui_id]] <- shiny::renderUI({
             shiny::div(
               class = "result_conc_tab",
-              shiny::fluidRow(
-                shiny::column(
-                  width = 6,
-                  bslib::card(
-                    bslib::card_header(
-                      "% Binding",
-                    ),
-                    full_screen = TRUE,
-                    plotly::plotlyOutput(ns(paste0(
+              shiny::div(
+                class = "card-custom",
+                bslib::card(
+                  bslib::card_header(
+                    "% Binding",
+                  ),
+                  full_screen = TRUE,
+                  plotly::plotlyOutput(
+                    ns(paste0(
                       local_ui_id,
                       "_binding_plot"
-                    )))
-                  )
-                ),
-                shiny::column(
-                  width = 6,
-                  bslib::card(
-                    bslib::card_header(
-                      "Spectrum",
-                    ),
-                    full_screen = TRUE,
-                    plotly::plotlyOutput(ns(paste0(local_ui_id, "_spectra")))
+                    )),
+                    height = "100%"
                   )
                 )
               ),
-              shiny::fluidRow(
-                shiny::column(
-                  width = 6,
-                  bslib::card(
-                    bslib::card_header(
-                      "Hits",
-                    ),
-                    full_screen = TRUE,
-                    shiny::tableOutput(ns(paste0(local_ui_id, "_hits")))
+              shiny::div(
+                class = "card-custom",
+                bslib::card(
+                  bslib::card_header(
+                    "Spectrum",
+                  ),
+                  full_screen = TRUE,
+                  plotly::plotlyOutput(
+                    ns(paste0(local_ui_id, "_spectra")),
+                    height = "100%"
+                  )
+                )
+              ),
+              shiny::div(
+                class = "card-custom",
+                bslib::card(
+                  bslib::card_header(
+                    "Hits",
+                  ),
+                  full_screen = TRUE,
+                  DT::DTOutput(ns(paste0(local_ui_id, "_hits")))
+                )
+              ),
+              shiny::div(
+                class = "kobs_cards",
+                bslib::card(
+                  bslib::card_header(htmltools::tagList(
+                    "k",
+                    htmltools::tags$sub("obs")
+                  )),
+                  shiny::div(
+                    class = "kobs_val",
+                    format_scientific(conc_result$kobs)
                   )
                 ),
-                shiny::column(
-                  width = 6,
+                bslib::card(
+                  bslib::card_header("Plateau"),
                   shiny::div(
-                    class = "kobs_cards",
-                    bslib::card(
-                      bslib::card_header(htmltools::tagList(
-                        "k",
-                        htmltools::tags$sub("obs")
-                      )),
-                      shiny::div(
-                        class = "kobs_val",
-                        format_scientific(conc_result$kobs)
-                      )
-                    ),
-                    bslib::card(
-                      bslib::card_header("Plateau"),
-                      shiny::div(
-                        class = "kobs_val",
-                        format_scientific(conc_result$plateau)
-                      )
-                    ),
-                    bslib::card(
-                      bslib::card_header("v"),
-                      shiny::div(
-                        class = "kobs_val",
-                        format_scientific(conc_result$v)
-                      )
-                    )
+                    class = "kobs_val",
+                    format_scientific(conc_result$plateau)
+                  )
+                ),
+                bslib::card(
+                  bslib::card_header("v"),
+                  shiny::div(
+                    class = "kobs_val",
+                    format_scientific(conc_result$v)
                   )
                 )
               )
@@ -580,162 +688,20 @@ server <- function(id, conversion_dirs) {
       )
     )
 
-    # Declare reactive variables for conversion results
-    modified_results <- shiny::reactiveVal(NULL)
-    select_concentration <- shiny::reactiveVal(NULL)
-
     # UI output for hits tab
     output$hits_tab <- DT::renderDT({
-      shiny::req(conversion_dirs$result_list())
-
-      # Format hits table
-      hits_summary <- conversion_dirs$result_list()$"hits_summary" |>
-        dplyr::mutate(
-          Intensity = scales::percent(
-            Intensity / 100,
-            accuracy = 0.1
-          ),
-          `% Binding` = scales::percent(
-            `% Binding`,
-            accuracy = 0.1
-          ),
-          `Total % Binding` = scales::percent(
-            `Total % Binding`,
-            accuracy = 0.1
-          ),
-          `Protein Intensity` = scales::percent(
-            `Protein Intensity` / 100,
-            accuracy = 0.1
-          ),
-          time = paste(as.character(time), "min"),
-          concentration = paste(concentration, "µM"),
-          `Mw Protein [Da]` = dplyr::if_else(
-            is.na(`Mw Protein [Da]`),
-            "N/A",
-            paste(
-              format(`Mw Protein [Da]`, nsmall = 1, trim = TRUE),
-              "Da"
-            )
-          ),
-          `Measured Mw Protein [Da]` = dplyr::if_else(
-            is.na(`Measured Mw Protein [Da]`),
-            "N/A",
-            paste(
-              format(`Measured Mw Protein [Da]`, nsmall = 1, trim = TRUE),
-              "Da"
-            )
-          ),
-          `Delta Mw Protein [Da]` = dplyr::if_else(
-            is.na(`Delta Mw Protein [Da]`),
-            "N/A",
-            paste(
-              format(`Delta Mw Protein [Da]`, nsmall = 1, trim = TRUE),
-              "Da"
-            )
-          ),
-          `Compound Mw [Da]` = dplyr::if_else(
-            is.na(`Compound Mw [Da]`),
-            "N/A",
-            paste(
-              format(`Compound Mw [Da]`, nsmall = 1, trim = TRUE),
-              "Da"
-            )
-          ),
-          `Delta Mw Compound [Da]` = dplyr::if_else(
-            is.na(`Delta Mw Compound [Da]`),
-            "N/A",
-            paste(
-              format(`Delta Mw Compound [Da]`, nsmall = 1, trim = TRUE),
-              "Da"
-            )
-          ),
-          `Peak [Da]` = dplyr::if_else(
-            is.na(`Peak [Da]`),
-            "N/A",
-            paste(
-              format(`Peak [Da]`, nsmall = 1, trim = TRUE),
-              "Da"
-            )
-          )
-        ) |>
-        dplyr::select(-c(3, 17)) |>
-        dplyr::relocate(c(concentration, time), .before = `Mw Protein [Da]`) |>
-        dplyr::relocate(`Total % Binding`, .after = "% Binding")
-
-      # Change column names
-      colnames(hits_summary) <- c(
-        "Well",
-        "Sample ID",
-        "Cmp. Concentration",
-        "Time",
-        "Theor. Prot.",
-        "Meas. Prot.",
-        "Δ Protein",
-        "I [Protein]",
-        "Peak Signal",
-        "I [Cmp.]",
-        "Cmp. Name",
-        "Theor. Cmp.",
-        "Δ Cmp.",
-        "Bind. Stoich.",
-        "%-Binding",
-        "Total %-Binding"
+      shiny::req(
+        conversion_vars$formatted_hits,
+        conversion_vars$conc_colors
       )
 
-      # JS function to display NA values
-      rowCallback <- c(
-        "function(row, data){",
-        "  for(var i=0; i<data.length; i++){",
-        "    if(data[i] === null){",
-        "      $('td:eq('+i+')', row).html('N/A')",
-        "        .css({'color': 'black'});",
-        "    }",
-        "  }",
-        "}"
+      render_hits_table(
+        hits_table = conversion_vars$formatted_hits,
+        concentration_colors = conversion_vars$conc_colors
       )
-
-      # Color rows by concentration
-      n_colors <- length(unique(hits_summary$`Cmp. Concentration`))
-      concentration_colors <- RColorBrewer::brewer.pal(
-        n = max(3, n_colors),
-        name = "Set1"
-      )[1:n_colors]
-      concentration_colors <- gsub(
-        ",1)",
-        ",0.35)",
-        plotly::toRGB(concentration_colors)
-      )
-
-      # Generate datatable
-      DT::datatable(,
-        data = hits_summary,
-        rownames = FALSE,
-        selection = "none",
-        class = "compact row-border nowrap",
-        extensions = "FixedColumns",
-        options = list(
-          rowCallback = htmlwidgets::JS(rowCallback),
-          scrollX = TRUE,
-          scrollY = TRUE,
-          scrollCollapse = TRUE,
-          fixedHeader = TRUE,
-          stripe = FALSE,
-          fixedColumns = list(leftColumns = 1),
-          lengthMenu = list(c(25, 50, 100, -1), c('25', '50', '100', 'All'))
-        )
-      ) |>
-        DT::formatStyle(
-          columns = 'Cmp. Concentration',
-          valueColumns = 'Cmp. Concentration',
-          target = 'row',
-          backgroundColor = DT::styleEqual(
-            levels = unique(hits_summary$`Cmp. Concentration`),
-            values = concentration_colors
-          )
-        )
     })
 
-    # Recalculate or modify results depending by excluding concentrations
+    # Recalculate results depending on excluded concentrations
     shiny::observeEvent(input$select_concentration, {
       shiny::req(conversion_dirs$result_list())
 
@@ -751,20 +717,20 @@ server <- function(id, conversion_dirs) {
         shiny::updateCheckboxGroupInput(
           session = session,
           inputId = "select_concentration",
-          selected = select_concentration()
+          selected = conversion_vars$select_concentration
         )
 
         return(NULL)
       }
 
-      select_concentration(input$select_concentration)
+      conversion_vars$select_concentration <- input$select_concentration
 
       result_list <- conversion_dirs$result_list()
 
       # Add binding/kobs results to result list
       result_list$binding_kobs_result <- add_kobs_binding_result(
         result_list,
-        concentrations_select = select_concentration()
+        concentrations_select = conversion_vars$select_concentration
       )
 
       # Add Ki/kinact results to result list
@@ -772,7 +738,7 @@ server <- function(id, conversion_dirs) {
         result_list
       )
 
-      modified_results(result_list)
+      conversion_vars$modified_results <- result_list
     })
 
     output$concentration_select <- shiny::renderUI({
@@ -811,10 +777,10 @@ server <- function(id, conversion_dirs) {
       {
         shiny::req(conversion_dirs$result_list())
 
-        if (is.null(modified_results())) {
+        if (is.null(conversion_vars$modified_results)) {
           result_list <- conversion_dirs$result_list()
         } else {
-          result_list <- modified_results()
+          result_list <- conversion_vars$modified_results
         }
 
         result_list$ki_kinact_result$Params
@@ -832,10 +798,10 @@ server <- function(id, conversion_dirs) {
     output$kobs_plot <- plotly::renderPlotly({
       shiny::req(conversion_dirs$result_list())
 
-      if (is.null(modified_results())) {
+      if (is.null(conversion_vars$modified_results)) {
         result_list <- conversion_dirs$result_list()
       } else {
-        result_list <- modified_results()
+        result_list <- conversion_vars$modified_results
       }
 
       result_list$ki_kinact_result$kobs_plot
@@ -854,8 +820,8 @@ server <- function(id, conversion_dirs) {
       table_upload_processed <- process_uploaded_table(table_upload, "protein")
 
       if (!is.null(table_upload_processed)) {
-        vars$protein_table <- table_upload_processed
-        vars$protein_table_status <- TRUE
+        declaration_vars$protein_table <- table_upload_processed
+        declaration_vars$protein_table_status <- TRUE
 
         output$protein_table <- rhandsontable::renderRHandsontable(
           prot_comp_handsontable(table_upload_processed, disabled = FALSE)
@@ -888,8 +854,8 @@ server <- function(id, conversion_dirs) {
       table_upload_processed <- process_uploaded_table(table_upload, "compound")
 
       if (!is.null(table_upload_processed)) {
-        vars$compound_table <- table_upload_processed
-        vars$compound_table_status <- TRUE
+        declaration_vars$compound_table <- table_upload_processed
+        declaration_vars$compound_table_status <- TRUE
 
         output$compound_table <- rhandsontable::renderRHandsontable(
           prot_comp_handsontable(table_upload_processed, disabled = FALSE)
@@ -911,7 +877,10 @@ server <- function(id, conversion_dirs) {
 
     # Observe table status for compound table
     shiny::observe({
-      shiny::req(input$protein_table, shiny::isolate(vars$protein_table_active))
+      shiny::req(
+        input$protein_table,
+        shiny::isolate(declaration_vars$protein_table_active)
+      )
 
       # Show waiter
       waiter::waiter_show(
@@ -928,7 +897,7 @@ server <- function(id, conversion_dirs) {
       # If table non-empty check for correctness
       if (nrow(protein_table) < 1) {
         # Set status variable to FALSE
-        vars$protein_table_status <- FALSE
+        declaration_vars$protein_table_status <- FALSE
 
         # UI feedback
         shinyjs::removeClass(
@@ -952,7 +921,7 @@ server <- function(id, conversion_dirs) {
 
         if (isTRUE(protein_table_status)) {
           # Set status variable to TRUE
-          vars$protein_table_status <- TRUE
+          declaration_vars$protein_table_status <- TRUE
 
           # UI feedback
           shinyjs::removeClass(
@@ -969,7 +938,7 @@ server <- function(id, conversion_dirs) {
           shinyjs::enable("confirm_proteins")
         } else {
           # Set status variable to FALSE
-          vars$protein_table_status <- FALSE
+          declaration_vars$protein_table_status <- FALSE
 
           # UI feedback
           shinyjs::removeClass(
@@ -992,7 +961,7 @@ server <- function(id, conversion_dirs) {
     shiny::observe({
       shiny::req(
         input$compound_table,
-        shiny::isolate(vars$compound_table_active)
+        shiny::isolate(declaration_vars$compound_table_active)
       )
 
       # Show waiter
@@ -1010,7 +979,7 @@ server <- function(id, conversion_dirs) {
       # If table non-empty check for correctness
       if (nrow(compound_table) < 1) {
         # Set status variable to FALSE
-        vars$compound_table_status <- FALSE
+        declaration_vars$compound_table_status <- FALSE
 
         # UI feedback
         shinyjs::removeClass(
@@ -1034,7 +1003,7 @@ server <- function(id, conversion_dirs) {
 
         if (isTRUE(compound_table_status)) {
           # Set status variable to TRUE
-          vars$compound_table_status <- TRUE
+          declaration_vars$compound_table_status <- TRUE
 
           # UI feedback
           shinyjs::removeClass(
@@ -1051,7 +1020,7 @@ server <- function(id, conversion_dirs) {
           shinyjs::enable("confirm_compounds")
         } else {
           # Set status variable to FALSE
-          vars$compound_table_status <- FALSE
+          declaration_vars$compound_table_status <- FALSE
 
           # UI feedback
           shinyjs::removeClass(
@@ -1072,7 +1041,10 @@ server <- function(id, conversion_dirs) {
 
     # Observe table status for samples table
     shiny::observe({
-      shiny::req(input$sample_table, shiny::isolate(vars$sample_table_active))
+      shiny::req(
+        input$sample_table,
+        shiny::isolate(declaration_vars$sample_table_active)
+      )
 
       # Show waiter
       waiter::waiter_show(
@@ -1088,7 +1060,7 @@ server <- function(id, conversion_dirs) {
       # If table non-empty check for correctness
       if (is.null(sample_table) || nrow(sample_table) < 1) {
         # Set status variable to FALSE
-        vars$sample_table_status <- FALSE
+        declaration_vars$sample_table_status <- FALSE
 
         # UI feedback
         shinyjs::removeClass(
@@ -1107,13 +1079,13 @@ server <- function(id, conversion_dirs) {
         # Validate correct input
         sample_table_status <- check_sample_table(
           sample_table,
-          vars$protein_table$Protein,
-          vars$compound_table$Compound
+          declaration_vars$protein_table$Protein,
+          declaration_vars$compound_table$Compound
         )
 
         if (isTRUE(sample_table_status)) {
           # Set status variable to TRUE
-          vars$sample_table_status <- TRUE
+          declaration_vars$sample_table_status <- TRUE
 
           # UI feedback
           shinyjs::removeClass(
@@ -1130,7 +1102,7 @@ server <- function(id, conversion_dirs) {
           shinyjs::enable("confirm_samples")
         } else {
           # Set status variable to FALSE
-          vars$sample_table_status <- FALSE
+          declaration_vars$sample_table_status <- FALSE
 
           # UI feedback
           shinyjs::removeClass(
@@ -1156,9 +1128,9 @@ server <- function(id, conversion_dirs) {
         shiny::req(input$tabs)
 
         # If edit applied always activate edit mode for sample table if present
-        if (!is.null(vars$sample_table)) {
+        if (!is.null(declaration_vars$sample_table)) {
           # Make table observer active
-          vars$sample_table_active <- TRUE
+          declaration_vars$sample_table_active <- TRUE
 
           # Enable file upload
           shinyjs::enable("result_input")
@@ -1178,7 +1150,7 @@ server <- function(id, conversion_dirs) {
 
           # Render editable table
           output$compound_table <- rhandsontable::renderRHandsontable(
-            sample_handsontable(vars$sample_table, disabled = FALSE)
+            sample_handsontable(declaration_vars$sample_table, disabled = FALSE)
           )
 
           # Change buttons
@@ -1195,7 +1167,7 @@ server <- function(id, conversion_dirs) {
         # Edit Protein/Compound
         if (input$tabs == "Proteins") {
           # Make table observer active
-          vars$protein_table_active <- TRUE
+          declaration_vars$protein_table_active <- TRUE
 
           # Enable file upload
           shinyjs::enable("proteins_fileinput")
@@ -1215,7 +1187,10 @@ server <- function(id, conversion_dirs) {
 
           # Render editable table
           output$protein_table <- rhandsontable::renderRHandsontable(
-            prot_comp_handsontable(vars$protein_table, disabled = FALSE)
+            prot_comp_handsontable(
+              declaration_vars$protein_table,
+              disabled = FALSE
+            )
           )
 
           # Change buttons
@@ -1229,7 +1204,7 @@ server <- function(id, conversion_dirs) {
           shinyjs::disable("edit_proteins")
         } else if (input$tabs == "Compounds") {
           # Make table observer active
-          vars$compound_table_active <- TRUE
+          declaration_vars$compound_table_active <- TRUE
 
           # Enable file upload
           shinyjs::enable("compounds_fileinput")
@@ -1249,7 +1224,10 @@ server <- function(id, conversion_dirs) {
 
           # Render editable table
           output$compound_table <- rhandsontable::renderRHandsontable(
-            prot_comp_handsontable(vars$compound_table, disabled = FALSE)
+            prot_comp_handsontable(
+              declaration_vars$compound_table,
+              disabled = FALSE
+            )
           )
 
           # Change buttons
@@ -1273,7 +1251,7 @@ server <- function(id, conversion_dirs) {
       {
         if (input$tabs == "Proteins") {
           # If table can be saved perform actions
-          if (vars$protein_table_status) {
+          if (declaration_vars$protein_table_status) {
             shiny::req(input$protein_table)
 
             # Retrieve sliced user input table
@@ -1316,7 +1294,7 @@ server <- function(id, conversion_dirs) {
             )
 
             # Inactivate table observer
-            vars$protein_table_active <- FALSE
+            declaration_vars$protein_table_active <- FALSE
 
             # Show table message
             output$protein_table_info <- shiny::renderText("Table saved!")
@@ -1334,7 +1312,7 @@ server <- function(id, conversion_dirs) {
                     input$sample_table
                   )),
                   proteins = protein_table$Protein,
-                  compounds = vars$compound_table$Compound
+                  compounds = declaration_vars$compound_table$Compound
                 )
 
                 # waiter::waiter_hide(id = ns("sample_table"))
@@ -1348,11 +1326,11 @@ server <- function(id, conversion_dirs) {
             }
 
             # Assign user input to reactive table variable
-            vars$protein_table <- protein_table
+            declaration_vars$protein_table <- protein_table
           }
         } else if (input$tabs == "Compounds") {
           # If table can be saved perform actions
-          if (vars$compound_table_status) {
+          if (declaration_vars$compound_table_status) {
             shiny::req(input$compound_table)
 
             # Retrieve sliced user input table
@@ -1395,7 +1373,7 @@ server <- function(id, conversion_dirs) {
             )
 
             # Inactivate table observer
-            vars$compound_table_active <- FALSE
+            declaration_vars$compound_table_active <- FALSE
 
             # Show table message
             output$compound_table_info <- shiny::renderText("Table saved!")
@@ -1407,7 +1385,7 @@ server <- function(id, conversion_dirs) {
                   tab = slice_sample_tab(rhandsontable::hot_to_r(
                     input$sample_table
                   )),
-                  proteins = vars$protein_table$Protein,
+                  proteins = declaration_vars$protein_table$Protein,
                   compounds = compound_table$Compound
                 )
               )
@@ -1417,11 +1395,11 @@ server <- function(id, conversion_dirs) {
             set_selected_tab("Samples", session)
 
             # Assign user input to reactive table variable
-            vars$compound_table <- compound_table
+            declaration_vars$compound_table <- compound_table
           }
         } else if (input$tabs == "Samples") {
           # If table can be saved perform actions
-          if (vars$sample_table_status) {
+          if (declaration_vars$sample_table_status) {
             shiny::req(input$sample_table)
 
             # Mark UI as done
@@ -1464,13 +1442,13 @@ server <- function(id, conversion_dirs) {
             )
 
             # Inactivate table observer
-            vars$sample_table_active <- FALSE
+            declaration_vars$sample_table_active <- FALSE
 
             # Show table message
             output$sample_table_info <- shiny::renderText("Table saved!")
 
             # Assign user input to reactive table variable
-            vars$sample_table <- sample_table
+            declaration_vars$sample_table <- sample_table
           }
         }
       }
@@ -1478,26 +1456,26 @@ server <- function(id, conversion_dirs) {
 
     shiny::observe({
       if (
-        isTRUE(vars$protein_table_status) &
+        isTRUE(declaration_vars$protein_table_status) &
           isTRUE(
-            vars$compound_table_status
+            declaration_vars$compound_table_status
           ) &
-          isTRUE(vars$sample_table_status) &
-          isFALSE(vars$sample_table_active)
+          isTRUE(declaration_vars$sample_table_status) &
+          isFALSE(declaration_vars$sample_table_active)
       ) {
-        vars$conversion_ready <- TRUE
+        declaration_vars$conversion_ready <- TRUE
       } else {
-        vars$conversion_ready <- FALSE
+        declaration_vars$conversion_ready <- FALSE
       }
     })
 
     # Observe sample input
     shiny::observe({
       if (
-        is.null(vars$protein_table) ||
-          is.null(vars$compound_table) ||
-          isTRUE(vars$protein_table_active) ||
-          isTRUE(vars$compound_table_active)
+        is.null(declaration_vars$protein_table) ||
+          is.null(declaration_vars$compound_table) ||
+          isTRUE(declaration_vars$protein_table_active) ||
+          isTRUE(declaration_vars$compound_table_active)
       ) {
         shinyjs::removeClass(
           "sample_table_info",
@@ -1538,18 +1516,18 @@ server <- function(id, conversion_dirs) {
         })
 
         file_path <- file.path(input$result_input$datapath)
-        vars$result <- readRDS(file_path)
+        declaration_vars$result <- readRDS(file_path)
 
         sample_tab <- data.frame(
-          Sample = names(vars$result$deconvolution),
+          Sample = names(declaration_vars$result$deconvolution),
           Protein = ifelse(
-            length(vars$protein_table$Protein) == 1,
-            vars$protein_table$Protein,
+            length(declaration_vars$protein_table$Protein) == 1,
+            declaration_vars$protein_table$Protein,
             ""
           ),
           Compound = ifelse(
-            length(vars$compound_table$Compound) == 1,
-            vars$compound_table$Compound,
+            length(declaration_vars$compound_table$Compound) == 1,
+            declaration_vars$compound_table$Compound,
             ""
           ),
           cmp2 = NA,
@@ -1564,7 +1542,7 @@ server <- function(id, conversion_dirs) {
 
         colnames(sample_tab) <- c("Sample", "Protein", paste("Compound", 1:9))
 
-        if (!isTRUE(vars$sample_tab_initial)) {
+        if (!isTRUE(declaration_vars$sample_tab_initial)) {
           output$sample_table <- rhandsontable::renderRHandsontable({
             # waiter::waiter_show(
             #   id = ns("sample_table"),
@@ -1573,21 +1551,21 @@ server <- function(id, conversion_dirs) {
 
             sample_handsontable(
               tab = sample_tab,
-              proteins = vars$protein_table$Protein,
-              compounds = vars$compound_table$Compound
+              proteins = declaration_vars$protein_table$Protein,
+              compounds = declaration_vars$compound_table$Compound
             )
 
             # waiter::waiter_hide(id = ns("sample_table"))
           })
         }
 
-        vars$sample_tab_initial <- TRUE
+        declaration_vars$sample_tab_initial <- TRUE
       }
     })
 
     # Render compound table
     shiny::observe({
-      if (is.null(vars$compound_table)) {
+      if (is.null(declaration_vars$compound_table)) {
         tab <- data.frame(
           Compound = as.character(rep(NA, 9)),
           mass_shift1 = as.numeric(rep(NA, 9)),
@@ -1622,7 +1600,7 @@ server <- function(id, conversion_dirs) {
 
     # Render protein table
     shiny::observe({
-      if (is.null(vars$protein_table)) {
+      if (is.null(declaration_vars$protein_table)) {
         empty_protein_tab <- empty_tab
         colnames(empty_protein_tab) <- c(
           "Protein",
@@ -1647,12 +1625,12 @@ server <- function(id, conversion_dirs) {
     list(
       selected_tab = shiny::reactive(input$tabs),
       set_selected_tab = set_selected_tab,
-      conversion_ready = shiny::reactive(vars$conversion_ready),
+      conversion_ready = shiny::reactive(declaration_vars$conversion_ready),
       input_list = shiny::reactive(list(
-        Protein_Table = vars$protein_table,
-        Compound_Table = vars$compound_table,
-        Samples_Table = vars$sample_table,
-        result = vars$result
+        Protein_Table = declaration_vars$protein_table,
+        Compound_Table = declaration_vars$compound_table,
+        Samples_Table = declaration_vars$sample_table,
+        result = declaration_vars$result
       ))
     )
   })
