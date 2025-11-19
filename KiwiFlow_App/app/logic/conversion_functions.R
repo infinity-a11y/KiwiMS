@@ -1165,7 +1165,6 @@ make_binding_plot <- function(kobs_result, filter_conc = NULL) {
       colors = "Set1",
       symbols = symbol_map,
       line = list(width = 2, opacity = 0.6),
-      # legendgroup = ~concentration,
       hovertemplate = paste(
         "<b>Predicted</b><br>",
         "Time: %{x}<br>",
@@ -1173,7 +1172,6 @@ make_binding_plot <- function(kobs_result, filter_conc = NULL) {
         "K<sub>obs</sub>: %{customdata:.2f}<extra></extra>"
       ),
       customdata = ~kobs,
-      # showlegend = ifelse(is.null(filter_conc), TRUE, FALSE)
       showlegend = FALSE
     ) |>
     # Observed binding
@@ -1205,7 +1203,7 @@ make_binding_plot <- function(kobs_result, filter_conc = NULL) {
       paper_bgcolor = 'rgba(0, 0, 0, 0)',
       plot_bgcolor = 'rgba(0, 0, 0, 0)',
       legend = list(
-        title = list(text = "<b>Concentration</b>"),
+        title = list(text = "Concentration [µM]"),
         bgcolor = "rgba(0,0,0,0)",
         bordercolor = "rgba(0,0,0,0)"
       ),
@@ -1253,6 +1251,7 @@ make_kobs_plot <- function(ki_kinact_result) {
 
   # Generate plot
   kobs_plot <- plotly::plot_ly() |>
+    # Predicted / modeled kobs
     plotly::add_lines(
       data = df,
       x = ~conc,
@@ -1263,6 +1262,7 @@ make_kobs_plot <- function(ki_kinact_result) {
       hovertemplate = "<b>Predicted</b><br>[Cmp.]: %{x:.2f}<br>K<sub>obs</sub>: %{y:.2f}<extra></extra>",
       showlegend = FALSE
     ) |>
+    # Calculated kobs
     plotly::add_markers(
       data = df_points,
       x = ~conc,

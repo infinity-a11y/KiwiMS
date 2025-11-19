@@ -717,7 +717,7 @@ server <- function(id, conversion_dirs) {
               "Binding Analysis",
             ),
             bslib::card_body(
-              shiny::tableOutput(ns("kobs_result"))
+              DT::DTOutput(ns("kobs_result"))
             )
           )
         ),
@@ -728,10 +728,10 @@ server <- function(id, conversion_dirs) {
             bslib::card_header(
               class = "bg-dark help-header",
               htmltools::tagList(
-                "K",
+                "Resulting K",
                 htmltools::tags$sub("i")
               ),
-              " / ",
+              " and ",
               htmltools::tagList(
                 "k",
                 htmltools::tags$sub("inact")
@@ -824,15 +824,258 @@ server <- function(id, conversion_dirs) {
       )
     })
 
-    output$kobs_result <- shiny::renderTable(
-      {
-        shiny::req(conversion_dirs$result_list())
+    # output$kobs_result <- DT::renderDT({
+    #   shiny::req(conversion_dirs$result_list(), conversion_vars$conc_colors)
 
-        conversion_dirs$result_list()$binding_kobs_result$kobs_result_table
-      },
-      spacing = "xs",
-      rownames = TRUE
-    )
+    #   # Show waiter
+    #   waiter::waiter_show(
+    #     id = ns("kobs_result"),
+    #     html = waiter::spin_wandering_cubes()
+    #   )
+
+    #   # Get kobs results table
+    #   kobs_results <- conversion_dirs$result_list()$binding_kobs_result$kobs_result_table
+
+    #   # Adjust displayed units
+    #   kobs_results <- kobs_results |>
+    #     dplyr::mutate(
+    #       kobs = paste(format(kobs, digits = 3), "s⁻¹"),
+    #       v = format(v, digits = 3),
+    #       plateau = paste(format(plateau, digits = 3), "%")
+    #     ) |>
+    #     dplyr::mutate(
+    #       Concentration = paste(rownames(kobs_results), "µM"),
+    #       .before = "kobs"
+    #     )
+
+    #   # Set column names
+    #   colnames(kobs_results) <- c("Concentration", "kobs", "v", "Plateau")
+
+    #   shinyCheckbox <- function(id, value = FALSE) {
+    #     as.character(shiny::checkboxInput(id, label = NULL, value = value))
+    #   }
+
+    #   kobs_results$Included <- sapply(1:nrow(kobs_results), function(i) {
+    #     shinyCheckbox(paste0("chk_", i), value = TRUE)
+    #   })
+
+    #   kobs_table <- DT::datatable(
+    #     data = kobs_results,
+    #     rownames = FALSE,
+    #     selection = "none",
+    #     escape = FALSE,
+    #     class = "compact row-border nowrap",
+    #     options = list(
+    #       autoWidth = TRUE,
+    #       scrollX = TRUE,
+    #       scrollY = TRUE,
+    #       scrollCollapse = TRUE,
+    #       fixedHeader = TRUE,
+    #       stripe = FALSE,
+    #       dom = "t"
+    #     ),
+    #     width = '99%'
+    #   ) |>
+    #     DT::formatStyle(
+    #       columns = 'Concentration',
+    #       target = 'row',
+    #       backgroundColor = DT::styleEqual(
+    #         levels = kobs_results$Concentration,
+    #         values = gsub(
+    #           ",1)",
+    #           ",0.3)",
+    #           plotly::toRGB(conversion_vars$conc_colors)
+    #         )
+    #       )
+    #     ) |>
+    #     DT::formatStyle(
+    #       1:ncol(kobs_results) - 1,
+    #       `border-right` = "solid 1px grey"
+    #     )
+
+    #   # Hide waiter
+    #   waiter::waiter_hide(id = ns("kobs_result"))
+
+    #   kobs_table
+    # })
+
+    # --- Helper Functions (with JS Debugging) ---
+
+    shinyCheckbox <- function(id, value = FALSE) {
+      base::as.character(shiny::checkboxInput(id, label = NULL, value = value))
+    }
+
+    js_checkbox_handler <- function(dtid, cols, ns = base::identity) {
+      code <- base::vector("list", base::length(cols))
+      for (i in base::seq_along(cols)) {
+        col <- cols[i]
+        code[[i]] <- base::c(
+          base::sprintf(
+            "$('body').on('click', '[id^=checkb_%d_]', function() {",
+            col
+          ),
+          "  var id = this.getAttribute('id');",
+          base::sprintf(
+            "  var i = parseInt(/checkb_%d_(\\d+)/.exec(id)[1]);",
+            col
+          ),
+          "  var value = $(this).prop('checked');",
+
+          # *** JS DEBUGGING: Log the change before sending ***
+          "  console.log('DT Checkbox Clicked:');",
+          "  console.log('Row (1-based): ' + i);",
+          base::sprintf(
+            "  console.log('Column: %d');",
+            col
+          ),
+          "  console.log('New Value: ' + value);",
+
+          base::sprintf(
+            "  var info = [{row: i, col: %d, value: value}];",
+            col
+          ),
+          base::sprintf(
+            "  Shiny.setInputValue('%s', info);",
+            ns(base::sprintf("%s_cell_edit:DT.cellInfo", dtid))
+          ),
+          "});"
+        )
+      }
+      base::do.call(base::c, code)
+    }
+
+    # --- Reactive State (define outside renderDT) ---
+
+    included_state <- shiny::reactiveVal(NULL)
+
+    # --- Output Render (No new debugging needed here) ---
+
+    output$kobs_result <- DT::renderDT({
+      shiny::req(conversion_dirs$result_list(), conversion_vars$conc_colors)
+
+      waiter::waiter_show(
+        id = ns("kobs_result"),
+        html = waiter::spin_wandering_cubes()
+      )
+
+      kobs_results <- conversion_dirs$result_list()$binding_kobs_result$kobs_result_table
+
+      if (base::is.null(included_state())) {
+        initial_state <- base::rep(TRUE, base::nrow(kobs_results))
+        included_state(initial_state)
+      }
+
+      current_state <- included_state()
+
+      kobs_results <- kobs_results |>
+        dplyr::mutate(
+          kobs = base::paste(base::format(kobs, digits = 3), "s⁻¹"),
+          v = base::format(v, digits = 3),
+          plateau = base::paste(base::format(plateau, digits = 3), "%")
+        ) |>
+        dplyr::mutate(
+          Concentration = base::paste(base::rownames(kobs_results), "µM"),
+          .before = "kobs"
+        )
+
+      base::colnames(kobs_results) <- base::c(
+        "Concentration",
+        "kobs",
+        "v",
+        "Plateau"
+      )
+
+      checkboxesColumnIndex <- 5
+      kobs_results$Included <- base::sapply(
+        1:base::nrow(kobs_results),
+        function(i) {
+          shinyCheckbox(
+            base::paste0("checkb_", checkboxesColumnIndex, "_", i),
+            value = current_state[i]
+          )
+        }
+      )
+
+      js_code <- js_checkbox_handler("kobs_result", checkboxesColumnIndex, ns)
+
+      kobs_table <- DT::datatable(
+        data = kobs_results,
+        rownames = FALSE,
+        selection = "none",
+        escape = FALSE,
+        class = "compact row-border nowrap",
+        options = base::list(
+          autoWidth = TRUE,
+          scrollX = TRUE,
+          scrollY = TRUE,
+          scrollCollapse = TRUE,
+          fixedHeader = TRUE,
+          stripe = FALSE,
+          dom = "t"
+        ),
+        width = '99%',
+        editable = base::list(
+          target = "cell",
+          disable = base::list(columns = checkboxesColumnIndex - 1)
+        ),
+        callback = DT::JS(js_code)
+      ) |>
+        DT::formatStyle(
+          columns = 'Concentration',
+          target = 'row',
+          backgroundColor = DT::styleEqual(
+            levels = kobs_results$Concentration,
+            values = base::gsub(
+              ",1)",
+              ",0.3)",
+              plotly::toRGB(conversion_vars$conc_colors)
+            )
+          )
+        ) |>
+        DT::formatStyle(
+          1:base::ncol(kobs_results) - 1,
+          `border-right` = "solid 1px grey"
+        )
+
+      waiter::waiter_hide(id = ns("kobs_result"))
+
+      kobs_table
+    })
+
+    # --- Corrected Observer ---
+
+    shiny::observeEvent(input[[ns("kobs_result_cell_edit")]], {
+      info <- input[[ns("kobs_result_cell_edit")]]
+
+      # Log the raw input list
+      base::message("--- INPUT RECEIVED ---")
+      base::message(base::paste("Input ID:", ns("kobs_result_cell_edit")))
+      base::message(base::capture.output(base::str(info)))
+
+      row_index <- info$row
+      new_value <- info$value
+
+      current_state <- included_state()
+
+      # Log the state before update
+      base::message("Current State Vector:")
+      base::message(base::capture.output(base::print(current_state)))
+
+      if (row_index >= 1 && row_index <= base::length(current_state)) {
+        current_state[row_index] <- base::as.logical(new_value)
+        included_state(current_state)
+        base::message(base::paste("Updated Row:", row_index, "to", new_value))
+      } else {
+        base::message("Error: Row index out of bounds")
+      }
+    })
+
+    # --- Namespace Debugger ---
+    # Triggers on ANY input change and prints all input names
+    shiny::observe({
+      base::message("--- ALL AVAILABLE INPUTS ---")
+      base::message(base::paste(base::names(input), collapse = ", "))
+    })
 
     output$ki_kinact_result <- shiny::renderTable(
       {

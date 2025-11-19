@@ -1223,6 +1223,34 @@ th.sorting {
   padding: 4px 6px !important;
 }
 
+#app-conversion_main-kobs_result tbody td {
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+}
+
+#app-conversion_main-kobs_result {
+  width: 99% !important;
+  height: 1px !important;
+  flex-basis: unset !important;
+}
+
+#app-conversion_main-kobs_result .dataTables_scrollBody,
+#app-conversion_main-kobs_result .dataTables_scrollHead {
+  width: 99% !important;
+}
+
+#app-conversion_main-kobs_result .table {
+  margin-top: 0px !important;
+  width: 100% !important;
+}
+
+#app-conversion_main-kobs_result .form-group,
+#app-conversion_main-kobs_result .shiny-input-container .checkbox {
+  margin: 0;
+  height: 20px;
+  justify-items: center;
+}
+
 #app-conversion_main-hits_tab .dataTables_scrollHead th,
 .conc-hits-table .dataTables_scrollHead th {
   padding-top: 8px 6px !important;
@@ -1384,18 +1412,16 @@ table.dataTable>tbody>tr.selected>* {
 .result-conc-tab .datatables {
   width: 1px !important;
   height: 1px !important;
+  flex-basis: unset !important;
 }
 
-// #app-conversion_main-binding_plot>div,
-// #app-conversion_main-binding_plot>div>div,
-// #app-conversion_main-kobs_plot>div,
-// #app-conversion_main-kobs_plot>div>div // .result-conc-tab .plotly > div,
-
-// // .result-conc-tab .plotly > div > div
-//   {
-//   width: unset !important;
-//   height: unset !important;
-// }
+#app-conversion_main-binding_plot>div,
+#app-conversion_main-binding_plot>div>div,
+#app-conversion_main-kobs_plot>div,
+#app-conversion_main-kobs_plot>div>div {
+  width: unset !important;
+  height: unset !important;
+}
 
 .spectrum-radio-button .form-group {
   height: 22px;
