@@ -719,6 +719,13 @@ server <- function(id, conversion_dirs) {
             bslib::card_header(
               class = "bg-dark help-header",
               "Ki / kinact Analysis",
+              htmltools::tagList(
+                "K",
+                htmltools::tags$sub("i"),
+                " / k",
+                htmltools::tags$sub("inact"),
+                " Analysis"
+              )
             ),
             bslib::card_body(
               shiny::div(
