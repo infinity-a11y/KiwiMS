@@ -2,6 +2,7 @@
 
 box::use(
   app / logic / deconvolution_functions[spectrum_plot, process_plot_data, ],
+  app / logic / conversion_constants[symbols, warning_sym, ],
 )
 
 # Helper function to process uploaded table
@@ -462,8 +463,6 @@ check_table <- function(tab, col_limit) {
   return(TRUE)
 }
 
-# Get unicode character for warning symbols
-warning_sym <- "\u26A0"
 
 # Parse filename according to nomenclature of test files
 parse_filename <- function(s) {
@@ -1149,6 +1148,12 @@ make_binding_plot <- function(kobs_result, filter_conc = NULL) {
       kobs_result$binding_table$binding == 0),
   ]
 
+  # Set symbols to corresponding concentration
+  symbol_map <- stats::setNames(
+    symbols[1:length(levels(df_points$concentration))],
+    levels(df_points$concentration)
+  )
+
   # Generate plot
   binding_plot <- plotly::plot_ly() |>
     # Predicted/modeled binding
@@ -1158,8 +1163,9 @@ make_binding_plot <- function(kobs_result, filter_conc = NULL) {
       y = ~predicted_binding,
       color = ~concentration,
       colors = "Set1",
+      symbols = symbol_map,
       line = list(width = 2, opacity = 0.6),
-      legendgroup = ~concentration,
+      # legendgroup = ~concentration,
       hovertemplate = paste(
         "<b>Predicted</b><br>",
         "Time: %{x}<br>",
@@ -1167,7 +1173,8 @@ make_binding_plot <- function(kobs_result, filter_conc = NULL) {
         "K<sub>obs</sub>: %{customdata:.2f}<extra></extra>"
       ),
       customdata = ~kobs,
-      showlegend = ifelse(is.null(filter_conc), TRUE, FALSE)
+      # showlegend = ifelse(is.null(filter_conc), TRUE, FALSE)
+      showlegend = FALSE
     ) |>
     # Observed binding
     plotly::add_markers(
@@ -1207,9 +1214,6 @@ make_binding_plot <- function(kobs_result, filter_conc = NULL) {
       font = list(size = 14)
     )
 
-  # Print plot
-  print(binding_plot)
-
   # Return plot
   return(binding_plot)
 }
@@ -1226,51 +1230,66 @@ make_kobs_plot <- function(ki_kinact_result) {
     !is.na(ki_kinact_result$Kobs_Data$kobs) &
       ki_kinact_result$Kobs_Data$kobs != 0,
   ]
-  df_points$kobs <- factor(
-    df_points$kobs,
-    levels = sort(df_points$kobs, decreasing = TRUE)
+
+  # Set colors to corresponding concentration
+  discrete_colors <- RColorBrewer::brewer.pal(
+    length(unique(df_points$conc)),
+    "Set1"
+  )
+  ordered_kobs <- df_points |>
+    dplyr::arrange(dplyr::desc(conc)) |>
+    dplyr::reframe(kobs) |>
+    unlist()
+  color_map <- stats::setNames(
+    discrete_colors,
+    ordered_kobs
   )
 
-  # Prepare color scale
-  discrete_colors <- RColorBrewer::brewer.pal(n = 6, name = "Set1") |>
-    plotly::toRGB()
+  # Set symbols to corresponding concentration
+  symbol_map <- stats::setNames(
+    symbols[1:length(ordered_kobs)],
+    ordered_kobs
+  )
 
+  # Generate plot
   kobs_plot <- plotly::plot_ly() |>
     plotly::add_lines(
       data = df,
       x = ~conc,
       y = ~predicted_kobs,
-      line = list(width = 2, opacity = 1, color = "black"),
+      colors = color_map,
+      symbols = symbol_map,
+      line = list(width = 2, color = "black"),
+      hovertemplate = "<b>Predicted</b><br>[Cmp.]: %{x:.2f}<br>K<sub>obs</sub>: %{y:.2f}<extra></extra>",
       showlegend = FALSE
     ) |>
-    plotly::add_trace(
-      data = dplyr::group_by(df_points, kobs),
+    plotly::add_markers(
+      data = df_points,
       x = ~conc,
       y = ~kobs,
       type = "scatter",
-      mode = "markers",
-      name = ~kobs,
-      symbol = ~kobs,
+      color = ~ as.character(df_points$kobs),
       marker = list(
         size = 12,
-        opacity = 1,
-        line = list(width = 1.5, color = "black", opacity = 1)
-      )
+        opacity = 0.9,
+        line = list(width = 1.5, color = "black")
+      ),
+      name = ~conc,
+      symbol = ~kobs,
+      hovertemplate = "<b>Calculated</b><br>[Cmp.]: %{x:.2f}<br>K<sub>obs</sub>: %{y:.3f}<extra></extra>"
     ) |>
     plotly::layout(
       hovermode = "closest",
       legend = list(
-        title = list(text = "<b>k<sub>obs</sub></b>"),
+        title = list(text = "Concentration [µM]"),
         bgcolor = "rgba(0,0,0,0)",
         bordercolor = "rgba(0,0,0,0)"
       ),
-      yaxis = list(title = "k<sub>obs</sub>"),
       xaxis = list(title = "Compound [µM]"),
-      font = list(size = 14),
-      colorway = discrete_colors
+      yaxis = list(title = "k<sub>obs</sub> [s⁻¹]"),
+      font = list(size = 14)
     )
 
-  # Print plot
   print(kobs_plot)
 
   # Return plot
@@ -1762,8 +1781,6 @@ multiple_spectra <- function(
     levels = sort(unique(peaks_data$time))
   )
 
-  spectrum_data <<- spectrum_data
-  peaks_data <<- peaks_data
   if (cubic == TRUE) {
     plotly::plot_ly(
       data = spectrum_data,
@@ -1771,6 +1788,7 @@ multiple_spectra <- function(
       y = ~intensity,
       z = ~time,
       color = ~time,
+      colors = viridisLite::magma(length(unique(peaks_data$time))),
       type = "scatter3d",
       mode = "lines",
       showlegend = FALSE,
@@ -1959,7 +1977,7 @@ render_hits_table <- function(
   hits_table <- DT::datatable(
     data = hits_table,
     rownames = FALSE,
-    selection = "single",
+    selection = "none",
     class = "compact row-border nowrap",
     extensions = "FixedColumns",
     options = list(

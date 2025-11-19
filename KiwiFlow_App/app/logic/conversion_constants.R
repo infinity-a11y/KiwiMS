@@ -15,6 +15,27 @@ empty_tab <- data.frame(
   mass_shift9 = as.numeric(rep(NA, 9))
 )
 
+# Warning symbol
+#' @export
+warning_sym <- "\u26A0"
+
+# Custom symbols for plotly plots
+#' @export
+symbols <- c(
+  "circle",
+  "triangle-up",
+  "square",
+  "cross-thin-open",
+  "square-x-open",
+  "asterisk-open",
+  "diamond",
+  "triangle-down",
+  "square",
+  "x",
+  "hexagram",
+  "hourglass"
+)
+
 # keybind menu ui
 #' @export
 keybind_menu_ui <- shiny::div(

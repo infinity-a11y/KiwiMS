@@ -401,18 +401,33 @@ server <- function(id, conversion_dirs) {
           c("binding_table", "binding_plot", "kobs_result_table")
       ]
 
+      hits_summary <<- hits_summary
+
       # Assign colors to present concentrations
-      n_colors <- length(unique(hits_summary[["[Cmp.]"]]))
       concentration_colors <- rev(RColorBrewer::brewer.pal(
-        n = max(3, n_colors),
+        n = length(concentrations),
         name = "Set1"
-      )[1:n_colors])
-      names(concentration_colors) <- c(concentrations, "0")
-      concentration_colors[which(
-        names(concentration_colors) == "0"
-      )] <- "#ddddde"
+      ))
+
+      names(concentration_colors) <- concentrations
+
+      # Assign colors to present concentrations
+      # n_colors <- length(unique(hits_summary[["[Cmp.]"]]))
+
+      # concentration_colors <- rev(RColorBrewer::brewer.pal(
+      #   n = max(3, n_colors),
+      #   name = "Set1"
+      # )[1:n_colors])
+
+      # names(concentration_colors) <- c(concentrations, "0")
+      # concentration_colors[which(
+      #   names(concentration_colors) == "0"
+      # )] <- "#ddddde"
+
       # Assign colors to reactive variable
       conversion_vars$conc_colors <- concentration_colors
+
+      test <<- concentration_colors
 
       # Define a set of IDs for the dynamic tabs
       dynamic_ui_ids <- paste0("concentration_tab_", concentrations)
@@ -508,45 +523,41 @@ server <- function(id, conversion_dirs) {
               html = waiter::spin_wandering_cubes()
             )
 
-            decon_samples <- gsub(
-              "o",
-              ".",
-              sapply(
-                strsplit(
-                  names(conversion_dirs$result_list()$deconvolution),
-                  "_"
-                ),
-                `[`,
-                3
-              )
-            )
+            # decon_samples <- gsub(
+            #   "o",
+            #   ".",
+            #   sapply(
+            #     strsplit(
+            #       names(conversion_dirs$result_list()$deconvolution),
+            #       "_"
+            #     ),
+            #     `[`,
+            #     3
+            #   )
+            # )
 
-            plot <- multiple_spectra(
-              results_list = conversion_dirs$result_list(),
-              samples = names(
-                conversion_dirs$result_list()$deconvolution
-              )[which(
-                decon_samples == local_concentration
-              )],
-              cubic = ifelse(
-                input[[ns(paste0(
-                  local_ui_id,
-                  "_kind"
-                ))]] ==
-                  "3D",
-                TRUE,
-                FALSE
-              )
-            )
+            # plot <- multiple_spectra(
+            #   results_list = conversion_dirs$result_list(),
+            #   samples = names(
+            #     conversion_dirs$result_list()$deconvolution
+            #   )[which(
+            #     decon_samples == local_concentration
+            #   )],
+            #   cubic = ifelse(
+            #     input[[paste0(local_ui_id, "_kind")]] == "3D",
+            #     TRUE,
+            #     FALSE
+            #   )
+            # )
 
-            waiter::waiter_hide(
-              id = ns(paste0(
-                local_ui_id,
-                "_spectra"
-              ))
-            )
+            # waiter::waiter_hide(
+            #   id = ns(paste0(
+            #     local_ui_id,
+            #     "_spectra"
+            #   ))
+            # )
 
-            plot
+            # plot
           })
 
           # Assign the renderUI to the dynamically created output slot
@@ -558,17 +569,15 @@ server <- function(id, conversion_dirs) {
                 bslib::card(
                   bslib::card_header(
                     class = "bg-dark help-header",
-                    shiny::fluidRow(
-                      shiny::column(8, "Spectrum Control"),
-                      shiny::column(
-                        4,
-                        shinyWidgets::radioGroupButtons(
-                          ns(paste0(
-                            local_ui_id,
-                            "_kind"
-                          )),
-                          choices = c("3D", "Planar")
-                        )
+                    "Spectrum Control",
+                    shiny::div(
+                      class = "spectrum-radio-button",
+                      shinyWidgets::radioGroupButtons(
+                        ns(paste0(
+                          local_ui_id,
+                          "_kind"
+                        )),
+                        choices = c("3D", "Planar")
                       )
                     )
                   ),
@@ -584,7 +593,7 @@ server <- function(id, conversion_dirs) {
                 bslib::card(
                   bslib::card_header(
                     class = "bg-dark help-header",
-                    "% Binding",
+                    "Binding Curve",
                   ),
                   full_screen = TRUE,
                   plotly::plotlyOutput(
@@ -619,11 +628,11 @@ server <- function(id, conversion_dirs) {
                   bslib::card(
                     bslib::card_header(
                       class = "bg-dark help-header",
-                      "Plateau"
+                      "Binding Plateau"
                     ),
                     shiny::div(
                       class = "kobs_val",
-                      format_scientific(conc_result$plateau)
+                      paste0(format_scientific(conc_result$plateau), "%")
                     )
                   )
                 ),
@@ -718,13 +727,14 @@ server <- function(id, conversion_dirs) {
             full_screen = TRUE,
             bslib::card_header(
               class = "bg-dark help-header",
-              "Ki / kinact Analysis",
               htmltools::tagList(
                 "K",
-                htmltools::tags$sub("i"),
-                " / k",
-                htmltools::tags$sub("inact"),
-                " Analysis"
+                htmltools::tags$sub("i")
+              ),
+              " / ",
+              htmltools::tagList(
+                "k",
+                htmltools::tags$sub("inact")
               )
             ),
             bslib::card_body(

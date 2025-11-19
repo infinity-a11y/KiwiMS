@@ -166,7 +166,7 @@ server <- function(
         '= "block";'
       ))
 
-      # # Search and add hits to result list
+      # Search and add hits to result list
       # result_with_hits <- add_hits(
       #   input_list()$result,
       #   sample_table = input_list()$Samples_Table,
@@ -197,8 +197,12 @@ server <- function(
       # results <<- result_with_hits
       # TODO
       # Dev Mode
+      # result_list(readRDS(
+      #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results.rds"
+      # ))
+
       result_list(readRDS(
-        "C:\\Users\\Marian\\Desktop\\KF_Testing\\results.rds"
+        "C:\\Users\\marian\\Desktop\\KF_Testing\\results.rds"
       ))
 
       # Unblock UI
