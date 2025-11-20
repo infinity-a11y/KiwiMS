@@ -1205,6 +1205,16 @@ th.sorting {
   padding: unset;
 }
 
+.conversion-result-wrapper td {
+  border-bottom: 1px solid #ffffff;
+  border-collapse: collapse;
+}
+
+tbody td {
+  border-bottom: 1px solid #dedede;
+  border-collapse: collapse;
+}
+
 #app-conversion_main-hits_tab tbody tr:first-child td:last-child,
 .conc-hits-table tbody tr:first-child td:last-child {
   border-top-right-radius: 4px;
@@ -1399,6 +1409,8 @@ th {
 .kobs-val {
   height: 100%;
   width: 100%;
+  align-content: center;
+  text-align: center;
 }
 
 .result-card-content {

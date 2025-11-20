@@ -1782,6 +1782,8 @@ multiple_spectra <- function(
   )
 
   if (cubic == TRUE) {
+    spectrum_data <<- spectrum_data
+    peaks_data <<- peaks_data
     plotly::plot_ly(
       data = spectrum_data,
       x = ~mass,
@@ -1815,8 +1817,8 @@ multiple_spectra <- function(
           size = 5,
           zindex = 100,
           line = list(
-            color = "black", # Set the border color to black
-            width = 1.5 # Set the border width (e.g., 1.5 pixels)
+            color = "black",
+            width = 1.5
           )
         ),
         hoverinfo = "text",
@@ -1849,9 +1851,9 @@ multiple_spectra <- function(
             dtick = 1
           ),
           camera = list(
-            center = list(x = 0.1, y = -0.1, z = 0),
-            eye = list(x = 1.5, y = 1, z = 1.5),
-            up = list(x = 0, y = 0.75, z = 0)
+            center = list(x = -0.05, y = -0.25, z = 0),
+            eye = list(x = 1.3, y = 1, z = 1.3),
+            up = list(x = 0, y = 2, z = 0)
           )
         )
       )

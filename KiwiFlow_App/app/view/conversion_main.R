@@ -507,41 +507,41 @@ server <- function(id, conversion_dirs) {
               html = waiter::spin_wandering_cubes()
             )
 
-            # decon_samples <- gsub(
-            #   "o",
-            #   ".",
-            #   sapply(
-            #     strsplit(
-            #       names(conversion_dirs$result_list()$deconvolution),
-            #       "_"
-            #     ),
-            #     `[`,
-            #     3
-            #   )
-            # )
+            decon_samples <- gsub(
+              "o",
+              ".",
+              sapply(
+                strsplit(
+                  names(conversion_dirs$result_list()$deconvolution),
+                  "_"
+                ),
+                `[`,
+                3
+              )
+            )
 
-            # plot <- multiple_spectra(
-            #   results_list = conversion_dirs$result_list(),
-            #   samples = names(
-            #     conversion_dirs$result_list()$deconvolution
-            #   )[which(
-            #     decon_samples == local_concentration
-            #   )],
-            #   cubic = ifelse(
-            #     input[[paste0(local_ui_id, "_kind")]] == "3D",
-            #     TRUE,
-            #     FALSE
-            #   )
-            # )
+            plot <- multiple_spectra(
+              results_list = conversion_dirs$result_list(),
+              samples = names(
+                conversion_dirs$result_list()$deconvolution
+              )[which(
+                decon_samples == local_concentration
+              )],
+              cubic = ifelse(
+                input[[paste0(local_ui_id, "_kind")]] == "3D",
+                TRUE,
+                FALSE
+              )
+            )
 
-            # waiter::waiter_hide(
-            #   id = ns(paste0(
-            #     local_ui_id,
-            #     "_spectra"
-            #   ))
-            # )
+            waiter::waiter_hide(
+              id = ns(paste0(
+                local_ui_id,
+                "_spectra"
+              ))
+            )
 
-            # plot
+            plot
           })
 
           # Assign the renderUI to the dynamically created output slot
