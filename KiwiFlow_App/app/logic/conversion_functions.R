@@ -2026,3 +2026,42 @@ render_hits_table <- function(
 
   hits_table
 }
+
+# Define JS to fetch checkbox inputs from table
+#' @export
+js_code_gen <- function(dtid, cols, ns = identity) {
+  code <- vector("list", length(cols))
+  for (i in seq_along(cols)) {
+    col <- cols[i]
+    code[[i]] <- c(
+      sprintf(
+        "$('body').on('click', '[id^=checkb_%d_]', function() {",
+        col
+      ),
+      "  var id = this.getAttribute('id');",
+      sprintf("  var i = parseInt(/checkb_%d_(\\d+)/.exec(id)[1]);", col),
+      "  var value = $(this).prop('checked');",
+      sprintf("  var info = [{row: i, col: %d, value: value}];", col),
+      sprintf(
+        "  Shiny.setInputValue('%s', info);",
+        ns(sprintf("%s_cell_edit:DT.cellInfo", dtid))
+      ),
+      "});"
+    )
+  }
+  do.call(c, code)
+}
+
+# Define checkbox generator
+#' @export
+checkboxColumn <- function(len, col, ...) {
+  inputs <- character(len)
+  for (i in seq_len(len)) {
+    inputs[i] <- as.character(shiny::checkboxInput(
+      paste0("checkb_", col, "_", i),
+      label = NULL,
+      ...
+    ))
+  }
+  inputs
+}

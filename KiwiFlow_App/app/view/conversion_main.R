@@ -24,6 +24,8 @@ box::use(
       make_binding_plot,
       multiple_spectra,
       render_hits_table,
+      checkboxColumn,
+      js_code_gen,
     ],
   app /
     logic /
@@ -401,33 +403,15 @@ server <- function(id, conversion_dirs) {
           c("binding_table", "binding_plot", "kobs_result_table")
       ]
 
-      hits_summary <<- hits_summary
-
       # Assign colors to present concentrations
       concentration_colors <- rev(RColorBrewer::brewer.pal(
         n = length(concentrations),
         name = "Set1"
       ))
-
       names(concentration_colors) <- concentrations
-
-      # Assign colors to present concentrations
-      # n_colors <- length(unique(hits_summary[["[Cmp.]"]]))
-
-      # concentration_colors <- rev(RColorBrewer::brewer.pal(
-      #   n = max(3, n_colors),
-      #   name = "Set1"
-      # )[1:n_colors])
-
-      # names(concentration_colors) <- c(concentrations, "0")
-      # concentration_colors[which(
-      #   names(concentration_colors) == "0"
-      # )] <- "#ddddde"
 
       # Assign colors to reactive variable
       conversion_vars$conc_colors <- concentration_colors
-
-      test <<- concentration_colors
 
       # Define a set of IDs for the dynamic tabs
       dynamic_ui_ids <- paste0("concentration_tab_", concentrations)
@@ -763,35 +747,44 @@ server <- function(id, conversion_dirs) {
     })
 
     # Recalculate results depending on excluded concentrations
-    shiny::observeEvent(input$select_concentration, {
-      shiny::req(conversion_dirs$result_list())
+    shiny::observeEvent(input[["kobs_result_cell_edit"]], {
+      # Get previously selected concentrations
+      if (is.null(conversion_vars$select_concentration)) {
+        conc_selected <- rep(TRUE, length(names(conversion_vars$conc_colors)))
+        names(conc_selected) <- names(conversion_vars$conc_colors)
+      } else {
+        conc_selected <- conversion_vars$select_concentration
+      }
+
+      # Apply changes to included concentrations
+      conc_selected[input[["kobs_result_cell_edit"]]$row] <- input[[
+        "kobs_result_cell_edit"
+      ]]$value
+
+      conversion_vars$select_concentration <- conc_selected
 
       # Check number of selected concentrations
-      if (length(input$select_concentration) < 3) {
+      if (sum(conc_selected) < 3) {
         shinyWidgets::show_toast(
           "≥ 3 concentrations needed",
           type = "warning",
           timer = 3000
         )
 
-        # Assign concentrations selected before to checkbox input
-        shiny::updateCheckboxGroupInput(
-          session = session,
-          inputId = "select_concentration",
-          selected = conversion_vars$select_concentration
-        )
-
+        # Dont apply changes
         return(NULL)
       }
 
-      conversion_vars$select_concentration <- input$select_concentration
+      # Recalculate result object according to included concentrations
 
       result_list <- conversion_dirs$result_list()
 
       # Add binding/kobs results to result list
       result_list$binding_kobs_result <- add_kobs_binding_result(
         result_list,
-        concentrations_select = conversion_vars$select_concentration
+        concentrations_select = names(
+          conversion_vars$select_concentration
+        )[which(conversion_vars$select_concentration)]
       )
 
       # Add Ki/kinact results to result list
@@ -799,283 +792,159 @@ server <- function(id, conversion_dirs) {
         result_list
       )
 
+      # Assign modified results to reactive variable
       conversion_vars$modified_results <- result_list
     })
 
-    output$concentration_select <- shiny::renderUI({
-      shiny::req(conversion_dirs$result_list()$binding_kobs_result)
+    # shiny::observeEvent(input[["kobs_result_cell_edit"]], {
+    #   shiny::req(conversion_dirs$result_list())
 
-      # Get included concentrations
-      concentrations <- which(
-        !names(conversion_dirs$result_list()$binding_kobs_result) %in%
-          c("binding_table", "binding_plot", "kobs_result_table")
-      )
-
-      # Define choices
-      choices <- names(conversion_dirs$result_list()$binding_kobs_result)[
-        concentrations
-      ]
-
-      shiny::checkboxGroupInput(
-        ns("select_concentration"),
-        label = "Include Concentrations",
-        choices = choices,
-        selected = choices
-      )
-    })
-
-    # output$kobs_result <- DT::renderDT({
-    #   shiny::req(conversion_dirs$result_list(), conversion_vars$conc_colors)
-
-    #   # Show waiter
-    #   waiter::waiter_show(
-    #     id = ns("kobs_result"),
-    #     html = waiter::spin_wandering_cubes()
-    #   )
-
-    #   # Get kobs results table
-    #   kobs_results <- conversion_dirs$result_list()$binding_kobs_result$kobs_result_table
-
-    #   # Adjust displayed units
-    #   kobs_results <- kobs_results |>
-    #     dplyr::mutate(
-    #       kobs = paste(format(kobs, digits = 3), "s⁻¹"),
-    #       v = format(v, digits = 3),
-    #       plateau = paste(format(plateau, digits = 3), "%")
-    #     ) |>
-    #     dplyr::mutate(
-    #       Concentration = paste(rownames(kobs_results), "µM"),
-    #       .before = "kobs"
+    #   # Check number of selected concentrations
+    #   if (length(input$select_concentration) < 3) {
+    #     shinyWidgets::show_toast(
+    #       "≥ 3 concentrations needed",
+    #       type = "warning",
+    #       timer = 3000
     #     )
 
-    #   # Set column names
-    #   colnames(kobs_results) <- c("Concentration", "kobs", "v", "Plateau")
+    #     # Assign concentrations selected before to checkbox input
+    #     shiny::updateCheckboxGroupInput(
+    #       session = session,
+    #       inputId = "select_concentration",
+    #       selected = conversion_vars$select_concentration
+    #     )
 
-    #   shinyCheckbox <- function(id, value = FALSE) {
-    #     as.character(shiny::checkboxInput(id, label = NULL, value = value))
+    #     return(NULL)
     #   }
 
-    #   kobs_results$Included <- sapply(1:nrow(kobs_results), function(i) {
-    #     shinyCheckbox(paste0("chk_", i), value = TRUE)
-    #   })
+    #   conversion_vars$select_concentration <- input$select_concentration
 
-    #   kobs_table <- DT::datatable(
-    #     data = kobs_results,
-    #     rownames = FALSE,
-    #     selection = "none",
-    #     escape = FALSE,
-    #     class = "compact row-border nowrap",
-    #     options = list(
-    #       autoWidth = TRUE,
-    #       scrollX = TRUE,
-    #       scrollY = TRUE,
-    #       scrollCollapse = TRUE,
-    #       fixedHeader = TRUE,
-    #       stripe = FALSE,
-    #       dom = "t"
-    #     ),
-    #     width = '99%'
-    #   ) |>
-    #     DT::formatStyle(
-    #       columns = 'Concentration',
-    #       target = 'row',
-    #       backgroundColor = DT::styleEqual(
-    #         levels = kobs_results$Concentration,
-    #         values = gsub(
-    #           ",1)",
-    #           ",0.3)",
-    #           plotly::toRGB(conversion_vars$conc_colors)
-    #         )
-    #       )
-    #     ) |>
-    #     DT::formatStyle(
-    #       1:ncol(kobs_results) - 1,
-    #       `border-right` = "solid 1px grey"
-    #     )
+    #   result_list <- conversion_dirs$result_list()
 
-    #   # Hide waiter
-    #   waiter::waiter_hide(id = ns("kobs_result"))
+    #   # Add binding/kobs results to result list
+    #   result_list$binding_kobs_result <- add_kobs_binding_result(
+    #     result_list,
+    #     concentrations_select = conversion_vars$select_concentration
+    #   )
 
-    #   kobs_table
+    #   # Add Ki/kinact results to result list
+    #   result_list$ki_kinact_result <- add_ki_kinact_result(
+    #     result_list
+    #   )
+
+    #   conversion_vars$modified_results <- result_list
     # })
 
-    # --- Helper Functions (with JS Debugging) ---
+    # output$concentration_select <- shiny::renderUI({
+    #   shiny::req(conversion_dirs$result_list()$binding_kobs_result)
 
-    shinyCheckbox <- function(id, value = FALSE) {
-      base::as.character(shiny::checkboxInput(id, label = NULL, value = value))
-    }
+    #   # Get included concentrations
+    #   concentrations <- which(
+    #     !names(conversion_dirs$result_list()$binding_kobs_result) %in%
+    #       c("binding_table", "binding_plot", "kobs_result_table")
+    #   )
 
-    js_checkbox_handler <- function(dtid, cols, ns = base::identity) {
-      code <- base::vector("list", base::length(cols))
-      for (i in base::seq_along(cols)) {
-        col <- cols[i]
-        code[[i]] <- base::c(
-          base::sprintf(
-            "$('body').on('click', '[id^=checkb_%d_]', function() {",
-            col
-          ),
-          "  var id = this.getAttribute('id');",
-          base::sprintf(
-            "  var i = parseInt(/checkb_%d_(\\d+)/.exec(id)[1]);",
-            col
-          ),
-          "  var value = $(this).prop('checked');",
+    #   # Define choices
+    #   choices <- names(conversion_dirs$result_list()$binding_kobs_result)[
+    #     concentrations
+    #   ]
 
-          # *** JS DEBUGGING: Log the change before sending ***
-          "  console.log('DT Checkbox Clicked:');",
-          "  console.log('Row (1-based): ' + i);",
-          base::sprintf(
-            "  console.log('Column: %d');",
-            col
-          ),
-          "  console.log('New Value: ' + value);",
+    #   shiny::checkboxGroupInput(
+    #     ns("select_concentration"),
+    #     label = "Include Concentrations",
+    #     choices = choices,
+    #     selected = choices
+    #   )
+    # })
 
-          base::sprintf(
-            "  var info = [{row: i, col: %d, value: value}];",
-            col
-          ),
-          base::sprintf(
-            "  Shiny.setInputValue('%s', info);",
-            ns(base::sprintf("%s_cell_edit:DT.cellInfo", dtid))
-          ),
-          "});"
-        )
-      }
-      base::do.call(base::c, code)
-    }
+    # Render kobs result table
+    output$kobs_result <- DT::renderDT(
+      {
+        shiny::req(conversion_dirs$result_list(), conversion_vars$conc_colors)
 
-    # --- Reactive State (define outside renderDT) ---
+        # Get results
+        kobs_results <- conversion_dirs$result_list()$binding_kobs_result$kobs_result_table
 
-    included_state <- shiny::reactiveVal(NULL)
-
-    # --- Output Render (No new debugging needed here) ---
-
-    output$kobs_result <- DT::renderDT({
-      shiny::req(conversion_dirs$result_list(), conversion_vars$conc_colors)
-
-      waiter::waiter_show(
-        id = ns("kobs_result"),
-        html = waiter::spin_wandering_cubes()
-      )
-
-      kobs_results <- conversion_dirs$result_list()$binding_kobs_result$kobs_result_table
-
-      if (base::is.null(included_state())) {
-        initial_state <- base::rep(TRUE, base::nrow(kobs_results))
-        included_state(initial_state)
-      }
-
-      current_state <- included_state()
-
-      kobs_results <- kobs_results |>
-        dplyr::mutate(
-          kobs = base::paste(base::format(kobs, digits = 3), "s⁻¹"),
-          v = base::format(v, digits = 3),
-          plateau = base::paste(base::format(plateau, digits = 3), "%")
-        ) |>
-        dplyr::mutate(
-          Concentration = base::paste(base::rownames(kobs_results), "µM"),
-          .before = "kobs"
-        )
-
-      base::colnames(kobs_results) <- base::c(
-        "Concentration",
-        "kobs",
-        "v",
-        "Plateau"
-      )
-
-      checkboxesColumnIndex <- 5
-      kobs_results$Included <- base::sapply(
-        1:base::nrow(kobs_results),
-        function(i) {
-          shinyCheckbox(
-            base::paste0("checkb_", checkboxesColumnIndex, "_", i),
-            value = current_state[i]
+        kobs_results <- kobs_results |>
+          dplyr::mutate(
+            kobs = paste(format(kobs, digits = 3), "s⁻¹"),
+            v = format(v, digits = 3),
+            plateau = paste(format(plateau, digits = 3), "%")
           )
-        }
-      )
 
-      js_code <- js_checkbox_handler("kobs_result", checkboxesColumnIndex, ns)
+        # Add concentration column
+        kobs_results <- kobs_results |>
+          dplyr::mutate(
+            Concentration = paste(rownames(kobs_results), "µM"),
+            .before = "kobs"
+          )
 
-      kobs_table <- DT::datatable(
-        data = kobs_results,
-        rownames = FALSE,
-        selection = "none",
-        escape = FALSE,
-        class = "compact row-border nowrap",
-        options = base::list(
-          autoWidth = TRUE,
-          scrollX = TRUE,
-          scrollY = TRUE,
-          scrollCollapse = TRUE,
-          fixedHeader = TRUE,
-          stripe = FALSE,
-          dom = "t"
-        ),
-        width = '99%',
-        editable = base::list(
-          target = "cell",
-          disable = base::list(columns = checkboxesColumnIndex - 1)
-        ),
-        callback = DT::JS(js_code)
-      ) |>
-        DT::formatStyle(
-          columns = 'Concentration',
-          target = 'row',
-          backgroundColor = DT::styleEqual(
-            levels = kobs_results$Concentration,
-            values = base::gsub(
-              ",1)",
-              ",0.3)",
-              plotly::toRGB(conversion_vars$conc_colors)
+        # Determine checkbox index
+        checkbox_col_index <- 5
+
+        # Add the checkbox
+        kobs_results <- kobs_results |>
+          dplyr::mutate(
+            Included = checkboxColumn(
+              nrow(kobs_results),
+              checkbox_col_index,
+              value = TRUE
             )
           )
-        ) |>
-        DT::formatStyle(
-          1:base::ncol(kobs_results) - 1,
-          `border-right` = "solid 1px grey"
+
+        # Set names
+        colnames(kobs_results) <- c(
+          "Concentration",
+          "kobs",
+          "v",
+          "Plateau",
+          "Included"
         )
 
-      waiter::waiter_hide(id = ns("kobs_result"))
-
-      kobs_table
-    })
-
-    # --- Corrected Observer ---
-
-    shiny::observeEvent(input[[ns("kobs_result_cell_edit")]], {
-      info <- input[[ns("kobs_result_cell_edit")]]
-
-      # Log the raw input list
-      base::message("--- INPUT RECEIVED ---")
-      base::message(base::paste("Input ID:", ns("kobs_result_cell_edit")))
-      base::message(base::capture.output(base::str(info)))
-
-      row_index <- info$row
-      new_value <- info$value
-
-      current_state <- included_state()
-
-      # Log the state before update
-      base::message("Current State Vector:")
-      base::message(base::capture.output(base::print(current_state)))
-
-      if (row_index >= 1 && row_index <= base::length(current_state)) {
-        current_state[row_index] <- base::as.logical(new_value)
-        included_state(current_state)
-        base::message(base::paste("Updated Row:", row_index, "to", new_value))
-      } else {
-        base::message("Error: Row index out of bounds")
-      }
-    })
-
-    # --- Namespace Debugger ---
-    # Triggers on ANY input change and prints all input names
-    shiny::observe({
-      base::message("--- ALL AVAILABLE INPUTS ---")
-      base::message(base::paste(base::names(input), collapse = ", "))
-    })
+        DT::datatable(
+          data = kobs_results,
+          rownames = FALSE,
+          selection = "none",
+          escape = FALSE,
+          class = "compact row-border nowrap",
+          options = list(
+            dom = "t",
+            autoWidth = TRUE,
+            scrollX = TRUE,
+            scrollY = TRUE,
+            scrollCollapse = TRUE,
+            fixedHeader = TRUE,
+            stripe = FALSE
+          ),
+          editable = list(
+            target = "cell",
+            disable = list(columns = checkbox_col_index)
+          ),
+          callback = htmlwidgets::JS(js_code_gen(
+            "kobs_result",
+            checkbox_col_index,
+            ns = session$ns
+          ))
+        ) |>
+          DT::formatStyle(
+            columns = 'Concentration',
+            target = 'row',
+            backgroundColor = DT::styleEqual(
+              levels = kobs_results$Concentration,
+              values = gsub(
+                ",1)",
+                ",0.3)",
+                plotly::toRGB(conversion_vars$conc_colors)
+              )
+            )
+          ) |>
+          DT::formatStyle(
+            1:ncol(kobs_results) - 1,
+            `border-right` = "solid 1px grey"
+          )
+      },
+      server = FALSE
+    )
 
     output$ki_kinact_result <- shiny::renderTable(
       {
