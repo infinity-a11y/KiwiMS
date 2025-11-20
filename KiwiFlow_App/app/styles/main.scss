@@ -1345,25 +1345,68 @@ table.dataTable > tbody > tr.selected > * {
   width: 100% !important;
 }
 
-.result-conc-tab .kobs-cards {
+.result-cards {
   display: flex;
   justify-content: space-evenly;
   gap: 2%;
+}
+
+.result-conc-tab .result-cards {
   grid-row: 4 / 4;
   grid-column: 2 / 2;
 }
 
-.kobs-cards .card-custom {
+#app-conversion_main-kinact .waiter-overlay,
+#app-conversion_main-Ki .waiter-overlay,
+#app-conversion_main-Ki_kinact .waiter-overlay {
+  position: relative !important;
+  height: 100% !important;
+  width: 100% !important;
+  top: unset !important;
+  left: unset !important;
+  background-color: #dedede !important;
+}
+
+.kobs-val div:where(.shiny-html-output):has(> *).recalculating > * {
+  opacity: 1 !important;
+}
+
+.waiter-overlay-content {
+  align-content: center;
   width: 100%;
   height: 100%;
 }
 
-.kobs-cards .card-header {
+#app-conversion_main-kinact,
+#app-conversion_main-Ki,
+#app-conversion_main-Ki_kinact {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.kobs-val {
+  height: 100%;
+  width: 100%;
+}
+
+.result-card-content {
+  position: absolute;
+}
+
+.result-cards .card-custom {
+  width: 100%;
+  height: 100%;
+}
+
+.result-cards .card-header {
   height: 33%;
   display: unset;
 }
 
-.kobs-cards .card-body {
+.result-cards .card-body {
   align-items: center;
   justify-content: center;
   font-size: 1.7em;

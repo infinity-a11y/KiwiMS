@@ -590,7 +590,7 @@ server <- function(id, conversion_dirs) {
                 )
               ),
               shiny::div(
-                class = "kobs-cards",
+                class = "result-cards",
                 shiny::div(
                   class = "card-custom",
                   bslib::card(
@@ -602,7 +602,7 @@ server <- function(id, conversion_dirs) {
                       )
                     ),
                     shiny::div(
-                      class = "kobs_val",
+                      class = "kobs-val",
                       format_scientific(conc_result$kobs)
                     )
                   )
@@ -615,7 +615,7 @@ server <- function(id, conversion_dirs) {
                       "Binding Plateau"
                     ),
                     shiny::div(
-                      class = "kobs_val",
+                      class = "kobs-val",
                       paste0(format_scientific(conc_result$plateau), "%")
                     )
                   )
@@ -628,7 +628,7 @@ server <- function(id, conversion_dirs) {
                       "v"
                     ),
                     shiny::div(
-                      class = "kobs_val",
+                      class = "kobs-val",
                       format_scientific(conc_result$v)
                     )
                   )
@@ -706,32 +706,121 @@ server <- function(id, conversion_dirs) {
           )
         ),
         shiny::div(
-          class = "card-custom",
-          bslib::card(
-            full_screen = TRUE,
-            bslib::card_header(
-              class = "bg-dark help-header",
-              htmltools::tagList(
-                "Resulting K",
-                htmltools::tags$sub("i")
+          class = "result-cards",
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              bslib::card_header(
+                class = "bg-dark help-header",
+                htmltools::tagList(
+                  "Inactivation Rate Constant k",
+                  htmltools::tags$sub("inact")
+                )
               ),
-              " and ",
-              htmltools::tagList(
-                "k",
-                htmltools::tags$sub("inact")
-              )
-            ),
-            bslib::card_body(
               shiny::div(
-                class = "ki-kinact-ui",
-                shiny::uiOutput(ns("concentration_select")),
-                shiny::tableOutput(ns("ki_kinact_result"))
+                class = "kobs-val",
+                shiny::uiOutput(ns("kinact"))
+              )
+            )
+          ),
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              bslib::card_header(
+                class = "bg-dark help-header",
+                htmltools::tagList(
+                  "Inhibition Constant K",
+                  htmltools::tags$sub("i"),
+                  ""
+                )
+              ),
+              shiny::div(
+                class = "kobs-val",
+                shiny::uiOutput(ns("Ki"))
+              )
+            )
+          ),
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              bslib::card_header(
+                class = "bg-dark help-header",
+                htmltools::tagList(
+                  "Efficiency Ratio K",
+                  htmltools::tags$sub("i"),
+                  "/k",
+                  htmltools::tags$sub("inact"),
+                )
+              ),
+              shiny::div(
+                class = "kobs-val",
+                shiny::uiOutput(ns("Ki_kinact"))
               )
             )
           )
         )
       )
     )
+
+    # Show calculated Ki/kinact value
+    output$Ki_kinact <- shiny::renderUI({
+      shiny::div(
+        class = "result-card-content",
+        paste(
+          format_scientific(
+            ki_kinact_result()[2, 1] /
+              ki_kinact_result()[1, 1]
+          ),
+          "M⁻¹ s⁻¹"
+        )
+      )
+    })
+
+    # Show calculated kinact value
+    output$kinact <- shiny::renderUI({
+      shiny::div(
+        class = "result-card-content",
+        paste(format_scientific(ki_kinact_result()[1, 1]), "s⁻¹")
+      )
+    })
+
+    # Show calculated Ki value
+    output$Ki <- shiny::renderUI({
+      shiny::div(
+        class = "result-card-content",
+        paste(format_scientific(ki_kinact_result()[2, 1]), "M")
+      )
+    })
+
+    ki_kinact_result <- shiny::reactive({
+      shiny::req(conversion_dirs$result_list())
+
+      if (is.null(conversion_vars$modified_results)) {
+        result_list <- conversion_dirs$result_list()
+      } else {
+        waiter::waiter_show(
+          id = ns("kinact"),
+          html = waiter::spin_throbber()
+        )
+        waiter::waiter_show(
+          id = ns("Ki"),
+          html = waiter::spin_throbber()
+        )
+        waiter::waiter_show(
+          id = ns("Ki_kinact"),
+          html = waiter::spin_throbber()
+        )
+
+        Sys.sleep(1)
+
+        result_list <- conversion_vars$modified_results
+      }
+
+      waiter::waiter_hide(id = ns("Ki"))
+      waiter::waiter_hide(id = ns("kinact"))
+      waiter::waiter_hide(id = ns("Ki_kinact"))
+      result_list$ki_kinact_result$Params
+    })
 
     # UI output for hits tab
     output$hits_tab <- DT::renderDT({
@@ -944,22 +1033,6 @@ server <- function(id, conversion_dirs) {
           )
       },
       server = FALSE
-    )
-
-    output$ki_kinact_result <- shiny::renderTable(
-      {
-        shiny::req(conversion_dirs$result_list())
-
-        if (is.null(conversion_vars$modified_results)) {
-          result_list <- conversion_dirs$result_list()
-        } else {
-          result_list <- conversion_vars$modified_results
-        }
-
-        result_list$ki_kinact_result$Params
-      },
-      spacing = "xs",
-      rownames = TRUE
     )
 
     output$binding_plot <- plotly::renderPlotly({
