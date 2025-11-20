@@ -12,6 +12,11 @@ sub {
   left: -0.2em;
 }
 
+.binding-analysis-tab sub {
+  left: -0.1vw !important;
+  font-size: 0.7vw;
+}
+
 .waiter-overlay {
   background-color: rgba(255, 255, 255, 0.39) !important;
 }
@@ -1387,6 +1392,10 @@ table.dataTable > tbody > tr.selected > * {
   justify-content: center;
 }
 
+th {
+  font-weight: normal;
+}
+
 .kobs-val {
   height: 100%;
   width: 100%;
@@ -1402,8 +1411,7 @@ table.dataTable > tbody > tr.selected > * {
 }
 
 .result-cards .card-header {
-  height: 33%;
-  display: unset;
+  font-size: 0.9vw !important;
 }
 
 .result-cards .card-body {
@@ -1424,8 +1432,9 @@ table.dataTable > tbody > tr.selected > * {
   border-top-right-radius: 4px;
   padding-top: 1%;
   padding-bottom: 1%;
-  height: fit-content;
+  height: 35px;
   background: #c6c6c6 !important;
+  align-content: center;
 }
 
 .binding-analysis-tab .card-custom .card .card-body,
@@ -1471,6 +1480,16 @@ table.dataTable > tbody > tr.selected > * {
 #app-conversion_main-kobs_plot > div > div {
   width: unset !important;
   height: unset !important;
+}
+
+.error-result {
+  font-size: 0.6em;
+  text-align: end;
+  margin-bottom: 1.5em;
+}
+
+.param-result {
+  font-size: 0.5em;
 }
 
 .spectrum-radio-button .form-group {

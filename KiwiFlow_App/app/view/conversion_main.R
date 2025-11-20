@@ -713,7 +713,7 @@ server <- function(id, conversion_dirs) {
               bslib::card_header(
                 class = "bg-dark help-header",
                 htmltools::tagList(
-                  "Inactivation Rate Constant k",
+                  "Inactivation Rate k",
                   htmltools::tags$sub("inact")
                 )
               ),
@@ -746,7 +746,7 @@ server <- function(id, conversion_dirs) {
               bslib::card_header(
                 class = "bg-dark help-header",
                 htmltools::tagList(
-                  "Efficiency Ratio K",
+                  "K",
                   htmltools::tags$sub("i"),
                   "/k",
                   htmltools::tags$sub("inact"),
@@ -766,12 +766,12 @@ server <- function(id, conversion_dirs) {
     output$Ki_kinact <- shiny::renderUI({
       shiny::div(
         class = "result-card-content",
-        paste(
-          format_scientific(
-            ki_kinact_result()[2, 1] /
-              ki_kinact_result()[1, 1]
-          ),
-          "M⁻¹ s⁻¹"
+        shiny::div(
+          class = "main-result",
+          paste(
+            format_scientific(ki_kinact_result()[1, 1]),
+            "M⁻¹ s⁻¹"
+          )
         )
       )
     })
@@ -780,7 +780,38 @@ server <- function(id, conversion_dirs) {
     output$kinact <- shiny::renderUI({
       shiny::div(
         class = "result-card-content",
-        paste(format_scientific(ki_kinact_result()[1, 1]), "s⁻¹")
+        shiny::div(
+          class = "main-result",
+          paste(
+            format_scientific(ki_kinact_result()[1, 1]),
+            "s⁻¹"
+          )
+        ),
+        shiny::div(
+          class = "error-result",
+          paste(
+            "±",
+            format_scientific(ki_kinact_result()[1, 2])
+          )
+        ),
+        shiny::div(
+          class = "param-result",
+          shiny::HTML(
+            paste(
+              "<b>t value</b>&nbsp;",
+              format_scientific(ki_kinact_result()[1, 3])
+            )
+          )
+        ),
+        shiny::div(
+          class = "param-result",
+          shiny::HTML(
+            paste(
+              "<b>Pr(>|t|)</b>&nbsp;",
+              format_scientific(ki_kinact_result()[1, 4])
+            )
+          )
+        )
       )
     })
 
@@ -788,7 +819,38 @@ server <- function(id, conversion_dirs) {
     output$Ki <- shiny::renderUI({
       shiny::div(
         class = "result-card-content",
-        paste(format_scientific(ki_kinact_result()[2, 1]), "M")
+        shiny::div(
+          class = "main-result",
+          paste(
+            format_scientific(ki_kinact_result()[2, 1]),
+            "M⁻¹"
+          )
+        ),
+        shiny::div(
+          class = "error-result",
+          paste(
+            "±",
+            format_scientific(ki_kinact_result()[2, 2])
+          )
+        ),
+        shiny::div(
+          class = "param-result",
+          shiny::HTML(
+            paste(
+              "<b>t value</b>&nbsp;",
+              format_scientific(ki_kinact_result()[2, 3])
+            )
+          )
+        ),
+        shiny::div(
+          class = "param-result",
+          shiny::HTML(
+            paste(
+              "<b>Pr(>|t|)</b>&nbsp;",
+              format_scientific(ki_kinact_result()[2, 4])
+            )
+          )
+        )
       )
     })
 
@@ -1028,8 +1090,8 @@ server <- function(id, conversion_dirs) {
             )
           ) |>
           DT::formatStyle(
-            1:ncol(kobs_results) - 1,
-            `border-right` = "solid 1px grey"
+            1:4,
+            `border-right` = "solid 1px #ddddde"
           )
       },
       server = FALSE

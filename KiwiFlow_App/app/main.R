@@ -13,7 +13,6 @@ box::use(
   app / view / conversion_sidebar,
   app / view / deconvolution_process,
   app / view / deconvolution_sidebar,
-  app / view / ki_kinact_sidebar,
   app / view / log_view,
   app / view / log_sidebar,
   app / logic / logging[start_logging, write_log, close_logging],
@@ -86,18 +85,6 @@ ui <- function(id) {
         bslib$page_sidebar(
           sidebar = conversion_sidebar$ui(ns("conversion_sidebar")),
           conversion_main$ui(ns("conversion_main"))
-        )
-      ),
-      bslib$nav_panel(
-        title = "kinact/KI",
-        class = "locked-panel",
-        shiny$div(id = "overlay-message", "Module still in work ..."),
-        bslib$page_sidebar(
-          sidebar = ki_kinact_sidebar$ui(ns("ki")),
-          bslib$navset_card_tab(
-            bslib$nav_panel(title = "Kobs Table"),
-            bslib$nav_panel(title = "Kinact Table")
-          )
         )
       ),
       bslib$nav_panel(
