@@ -1971,7 +1971,8 @@ render_hits_table <- function(
   if (!is.null(single_conc)) {
     dom_value <- "t"
   } else {
-    dom_value <- "lrtip"
+    # dom_value <- "lrtip"
+    dom_value <- NULL
   }
 
   # Generate datatable
