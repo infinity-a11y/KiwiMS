@@ -30,21 +30,16 @@ ui <- function(id) {
     width = "15%",
     shinyjs::useShinyjs(),
     shiny::uiOutput(ns("module_sidebar")),
-    shiny::hr(style = "margin: 1em 0;"),
+    shiny::hr(style = "margin: 0.5em 0;"),
     shiny::div(
       class = "interaction-analysis-flex",
       shiny::fluidRow(
         shiny::column(
           width = 12,
           shiny::div(
-            class = "conversion-sidebar-title",
-            "Interaction Analysis"
-          )
-        )
-      ),
-      shiny::fluidRow(
-        shiny::column(
-          width = 6,
+            class = "sidebar-title conversion-title",
+            "Analysis"
+          ),
           shinyjs::disabled(
             shiny::numericInput(
               ns("peak_tolerance"),
@@ -65,10 +60,7 @@ ui <- function(id) {
               max = 20,
               step = 0.1
             )
-          )
-        ),
-        shiny::column(
-          width = 6,
+          ),
           shinyjs::disabled(
             shiny::numericInput(
               ns("max_multiples"),
@@ -89,25 +81,34 @@ ui <- function(id) {
               max = 20,
               step = 1
             )
-          )
-        )
-      ),
-      shiny::fluidRow(
-        shiny::column(
-          width = 12,
-          align = "center",
+          ),
           #TODO
           # shinyjs::disabled(
           shiny::actionButton(
             ns("run_binding_analysis"),
-            "Run Analysis"
-          )
+            "Run",
+            icon = shiny::icon("start")
+          ),
           # )
+          shiny::uiOutput(ns("result_menu"))
         )
-      ),
-      shiny::hr(style = "margin: 1em 0;"),
-      shiny::uiOutput(ns("result_menu"))
+      )
     )
+    # ,
+    # shiny::hr(style = "margin: 0.5em 0;"),
+    # shiny::div(
+    #   class = "interaction-analysis-flex",
+    #   shiny::fluidRow(
+    #     shiny::column(
+    #       width = 12,
+    #       shiny::div(
+    #         class = "sidebar-title conversion-title",
+    #         shinyjs::disabled("Interaction Analysis")
+    #       ),
+    #       shiny::uiOutput(ns("result_menu"))
+    #     )
+    #   )
+    # )
   )
 }
 
@@ -129,16 +130,21 @@ server <- function(
     output$result_menu <- shiny::renderUI({
       shiny::req(nrow(result_list()[["hits_summary"]]) > 0)
 
-      shiny::fluidRow(
-        shiny::column(
-          width = 12,
-          align = "center",
-          shinyWidgets::pickerInput(
-            ns("sample_picker"),
-            "Sample",
-            choices = c("Kinetics", result_list()$hits_summary$Sample)
+      shinyWidgets::pickerInput(
+        ns("sample_picker"),
+        shiny::div(
+          class = "label-tooltip",
+          shiny::tags$label("Complexes"),
+          shiny::div(
+            class = "tooltip-bttn",
+            shiny::actionButton(
+              ns("max_mult_tooltip_bttn"),
+              label = "",
+              icon = shiny::icon("circle-question")
+            )
           )
-        )
+        ),
+        choices = c("Kinetics", result_list()$hits_summary$Sample)
       )
     })
 
@@ -212,59 +218,60 @@ server <- function(
       shiny::req(selected_tab())
 
       if (selected_tab() == "Proteins") {
-        hints <- shiny::div(
-          class = "conversion-hint",
-          "Upload a CSV|TSV|TXT|Excel file or manually enter names and mass values of the proteins into the table.",
-          shiny::div(
-            class = "tooltip-bttn",
-            shiny::actionButton(
-              ns("declaration_prot_tooltip_bttn"),
-              label = "",
-              icon = shiny::icon("circle-question")
-            )
-          )
-        )
+        hints <- "Upload a CSV|TSV|TXT|Excel file or manually enter names and mass values of the <strong>proteins</strong> into the table."
       } else if (selected_tab() == "Compounds") {
-        hints <- shiny::div(
-          class = "conversion-hint",
-          "Upload a CSV|TSV|TXT|Excel file or manually enter names and mass values of the compounds into the table.",
-          shiny::div(
-            class = "tooltip-bttn",
-            shiny::actionButton(
-              ns("declaration_cmp_tooltip_bttn"),
-              label = "",
-              icon = shiny::icon("circle-question")
-            )
-          )
-        )
+        hints <- "Upload a CSV|TSV|TXT|Excel file or manually enter names and mass values of the <strong>compounds</strong> into the table."
       } else {
-        hints <- shiny::div(class = "conversion-hint", "")
+        hints <- "Assign <strong>protein-compound complexes</strong> and analysis parameters to the deconvoluted samples. Continue with the results from the previous deconvolution or upload a .rds results file."
       }
 
       shiny::div(
-        class = "file-selection-flex",
         shiny::fluidRow(
           shiny::column(
             width = 12,
             shiny::div(
               class = "conversion-sidebar-title",
-              shiny::textOutput(ns("selected_module"))
+              shiny::uiOutput(ns("selected_module"))
             )
           )
         ),
         shiny::fluidRow(
           shiny::column(
             width = 12,
-            hints
+            shiny::div(
+              class = "instruction-info",
+              shiny::HTML(hints)
+            )
           )
         )
       )
     })
 
-    output$selected_module <- shiny::renderText({
+    output$selected_module <- shiny::renderUI({
       shiny::req(selected_tab())
 
-      paste(selected_tab(), "Declaration")
+      trest <<- selected_tab()
+
+      if (selected_tab() == "Proteins") {
+        tooltip_id <- "declaration_prot_tooltip_bttn"
+      } else if (selected_tab() == "Compounds") {
+        tooltip_id <- "declaration_cmp_tooltip_bttn"
+      } else {
+        tooltip_id <- "declaration_cmp_tooltip_bttn"
+      }
+
+      shiny::div(
+        class = "sidebar-title conversion-title",
+        paste(selected_tab(), "Declaration"),
+        shiny::div(
+          class = "tooltip-bttn",
+          shiny::actionButton(
+            ns(tooltip_id),
+            label = "",
+            icon = shiny::icon("circle-question")
+          )
+        )
+      )
     })
 
     # Tooltip events

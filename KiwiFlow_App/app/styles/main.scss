@@ -71,8 +71,7 @@ h6 {
   height: 38px;
 }
 
-.help-header .tooltip-bttn .btn,
-.conversion-hint .tooltip-bttn .btn {
+.help-header .tooltip-bttn .btn {
   margin: unset;
 }
 
@@ -333,14 +332,14 @@ button .sF-modal {
   // --_sidebar-width: 23rem !important;
 }
 
-.deconvolution_info {
+.instruction-info {
   font-size: 0.8vw;
   font-style: italic;
   line-height: 2;
 }
 
 .bslib-sidebar-layout .sidebar-title {
-  font-size: 1.4vw;
+  font-size: 1.5em;
 }
 
 :root {
@@ -973,26 +972,11 @@ div[data-value="Protein Conversion"] .tab-pane {
   justify-content: space-between;
 }
 
-.conversion-sidebar-title {
-  font-size: 18px;
-  font-weight: bold;
-  margin-top: 0.5em;
-}
-
 .full-width-btn .btn {
   width: 100%;
 }
 
-.conversion-hint {
-  font-size: 14px;
-  margin: 10px;
-  font-weight: 300;
-  font-style: normal;
-  display: flex;
-  gap: 1em;
-}
-
-.file-selection-flex,
+// .file-selection-flex,
 .interaction-analysis-flex {
   display: flex;
   flex-direction: column;
@@ -1000,7 +984,23 @@ div[data-value="Protein Conversion"] .tab-pane {
 }
 
 .conversion-sidebar > div {
+  padding: 10px !important;
+  justify-content: space-evenly;
   height: 100%;
+  overflow: auto;
+  gap: unset !important;
+}
+
+#app-conversion_sidebar-module_sidebar,
+.interaction-analysis-flex {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  background: #f7f7f7;
+  padding: 10px;
+  border-radius: 4px;
+  padding-top: 20px;
+  padding-bottom: 20px;
 }
 
 .file-select-nomargin > div {
@@ -1548,6 +1548,7 @@ th {
 .hits-tab-tooltip {
   position: absolute;
   left: 16%;
+  z-index: 999;
 }
 
 .MathJax_Display {
@@ -1556,4 +1557,16 @@ th {
 
 .shiny-spinner-output-container {
   height: 100%;
+}
+
+.conversion-title {
+  display: flex;
+  margin-bottom: 10px !important;
+  padding-bottom: 10px !important;
+  font-size: 1.3em !important;
+  gap: 5px;
+}
+
+.conversion-title .tooltip-bttn .btn {
+  margin: 0;
 }

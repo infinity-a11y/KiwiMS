@@ -40,7 +40,7 @@ deconvolution_init_ui <- function(ns) {
             shiny$column(
               width = 8,
               shiny$div(
-                class = "deconvolution_info",
+                class = "instruction-info",
                 shiny$HTML(
                   paste(
                     "1. Use the sidebar to select the Waters .raw folder(s) for processing.",
