@@ -30,7 +30,6 @@ ui <- function(id) {
     width = "15%",
     shinyjs::useShinyjs(),
     shiny::uiOutput(ns("module_sidebar")),
-    shiny::hr(style = "margin: 0.5em 0;"),
     shiny::div(
       class = "interaction-analysis-flex",
       shiny::fluidRow(
