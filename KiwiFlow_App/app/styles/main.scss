@@ -885,11 +885,7 @@ decon-report-modal .btn-default {
 }
 
 div[data-value="Protein Conversion"] .collapse-toggle {
-  color: #000;
-  display: block;
-  border: 1px solid #000;
-  position: absolute;
-  top: 35px;
+  display: none;
 }
 
 div[data-value="Protein Conversion"] .bslib-sidebar-layout.sidebar-collapsed > .collapse-toggle {
