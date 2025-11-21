@@ -293,6 +293,14 @@ server <- function(id, conversion_dirs) {
           title = "Hits",
           shiny::div(
             class = "conversion-result-wrapper",
+            shiny::div(
+              class = "tooltip-bttn hits-tab-tooltip",
+              shiny::actionButton(
+                ns("hits_table_tooltip_bttn"),
+                label = "",
+                icon = shiny::icon("circle-question")
+              )
+            ),
             DT::DTOutput(ns("hits_tab"))
           )
         )
@@ -376,17 +384,17 @@ server <- function(id, conversion_dirs) {
       colnames(hits_summary) <- c(
         "Well",
         "Sample ID",
-        "[Cmp.]",
+        "[Cmp]",
         "Time",
         "Theor. Prot.",
         "Meas. Prot.",
         "Δ Prot.",
         "Ⅰ Prot.",
         "Peak Signal",
-        "Ⅰ Cmp.",
-        "Cmp. Name",
-        "Theor. Cmp.",
-        "Δ Cmp.",
+        "Ⅰ Cmp",
+        "Cmp Name",
+        "Theor. Cmp",
+        "Δ Cmp",
         "Bind. Stoich.",
         "%-Binding",
         "Total %-Binding"
@@ -459,7 +467,7 @@ server <- function(id, conversion_dirs) {
             render_hits_table(
               hits_table = hits_summary |>
                 dplyr::filter(
-                  `[Cmp.]` == paste(local_concentration, "µM")
+                  `[Cmp]` == paste(local_concentration, "µM")
                 ),
               concentration_colors = concentration_colors,
               single_conc = local_concentration
@@ -553,7 +561,7 @@ server <- function(id, conversion_dirs) {
                 bslib::card(
                   bslib::card_header(
                     class = "bg-dark help-header",
-                    "Spectrum Control",
+                    "Mass Spectra",
                     shiny::div(
                       class = "spectrum-radio-button",
                       shinyWidgets::radioGroupButtons(
@@ -567,7 +575,7 @@ server <- function(id, conversion_dirs) {
                     shiny::div(
                       class = "tooltip-bttn",
                       shiny::actionButton(
-                        ns("charge_range_tooltip_bttn"),
+                        ns("mass_spectra_tooltip_bttn"),
                         label = "",
                         icon = shiny::icon("circle-question")
                       )
@@ -589,7 +597,7 @@ server <- function(id, conversion_dirs) {
                     shiny::div(
                       class = "tooltip-bttn",
                       shiny::actionButton(
-                        ns("charge_range_tooltip_bttn"),
+                        ns("binding_curve_single_tooltip_bttn"),
                         label = "",
                         icon = shiny::icon("circle-question")
                       )
@@ -621,7 +629,7 @@ server <- function(id, conversion_dirs) {
                       shiny::div(
                         class = "tooltip-bttn",
                         shiny::actionButton(
-                          ns("charge_range_tooltip_bttn"),
+                          ns("kobs_value_tooltip_bttn"),
                           label = "",
                           icon = shiny::icon("circle-question")
                         )
@@ -642,7 +650,7 @@ server <- function(id, conversion_dirs) {
                       shiny::div(
                         class = "tooltip-bttn",
                         shiny::actionButton(
-                          ns("charge_range_tooltip_bttn"),
+                          ns("binding_plateau_tooltip_bttn"),
                           label = "",
                           icon = shiny::icon("circle-question")
                         )
@@ -659,11 +667,11 @@ server <- function(id, conversion_dirs) {
                   bslib::card(
                     bslib::card_header(
                       class = "bg-dark help-header",
-                      "v",
+                      "Velocity v",
                       shiny::div(
                         class = "tooltip-bttn",
                         shiny::actionButton(
-                          ns("charge_range_tooltip_bttn"),
+                          ns("v_value_tooltip_bttn"),
                           label = "",
                           icon = shiny::icon("circle-question")
                         )
@@ -685,7 +693,7 @@ server <- function(id, conversion_dirs) {
                     shiny::div(
                       class = "tooltip-bttn",
                       shiny::actionButton(
-                        ns("charge_range_tooltip_bttn"),
+                        ns("hits_table_tooltip_bttn"),
                         label = "",
                         icon = shiny::icon("circle-question")
                       )
@@ -709,29 +717,32 @@ server <- function(id, conversion_dirs) {
 
     shiny::observeEvent(input$binding_curve_tooltip_bttn, {
       shiny::showModal(
-        shiny::modalDialog(
-          title = htmltools::tags$span("Binding Curve"),
-          easyClose = TRUE,
-          footer = shiny::modalButton("Dismiss"),
-          shiny::withMathJax(),
-          shiny::fluidRow(
-            shiny::br(),
-            shiny::column(
-              width = 11,
-              shiny::div(
-                class = "tooltip-text",
-                shiny::p(
-                  "Time-course of covalent adduct formation (% modified protein) measured by intact-mass MS at each compound concentration."
-                ),
-                shiny::p("Each trace is individually fitted to:"),
+        shiny::div(
+          class = "conversion-modal",
+          shiny::modalDialog(
+            title = htmltools::tags$span("Binding Curve"),
+            easyClose = TRUE,
+            footer = shiny::modalButton("Dismiss"),
+            shiny::withMathJax(),
+            shiny::fluidRow(
+              shiny::br(),
+              shiny::column(
+                width = 11,
                 shiny::div(
-                  class = "math-display",
-                  "$$\\%\\,\\text{binding} = 100 \\times \\frac{v}{k_{\\text{obs}}} \\times \\big(1 - \\exp(-k_{\\text{obs}} \\cdot t)\\big)$$"
-                ),
-                shiny::p(
-                  "An anchor point is forced at (t = 0, binding = 0). The plateau ",
-                  shiny::strong("100 × v / k", htmltools::tags$sub("obs")),
-                  " is the maximum covalent occupancy achievable."
+                  class = "tooltip-text",
+                  shiny::p(
+                    "Time-course of covalent adduct formation (% modified protein) measured by intact-mass MS at each compound concentration."
+                  ),
+                  shiny::p("Each trace is individually fitted to:"),
+                  shiny::div(
+                    class = "math-display",
+                    "$$\\%\\,\\text{binding} = 100 \\times \\frac{v}{k_{\\text{obs}}} \\times \\big(1 - \\exp(-k_{\\text{obs}} \\cdot t)\\big)$$"
+                  ),
+                  shiny::p(
+                    "An anchor point is forced at (t = 0, binding = 0). The plateau ",
+                    shiny::strong("100 × v / k", htmltools::tags$sub("obs")),
+                    " is the maximum covalent occupancy achievable."
+                  )
                 )
               )
             )
@@ -742,37 +753,42 @@ server <- function(id, conversion_dirs) {
 
     shiny::observeEvent(input$kobs_curve_tooltip_bttn, {
       shiny::showModal(
-        shiny::modalDialog(
-          title = htmltools::tags$span(
-            "k",
-            htmltools::tags$sub("obs"),
-            " Curve"
-          ),
-          easyClose = TRUE,
-          footer = shiny::modalButton("Dismiss"),
-          shiny::withMathJax(),
-          shiny::fluidRow(
-            shiny::br(),
-            shiny::column(
-              width = 11,
-              shiny::div(
-                class = "tooltip-text",
-                shiny::p(
-                  "Plot of observed rate constants ",
-                  shiny::strong("k", htmltools::tags$sub("obs")),
-                  " versus compound concentration [C]."
-                ),
-                shiny::p("Global fit to the two-step covalent binding model:"),
+        shiny::div(
+          class = "conversion-modal",
+          shiny::modalDialog(
+            title = htmltools::tags$span(
+              "k",
+              htmltools::tags$sub("obs"),
+              " Curve"
+            ),
+            easyClose = TRUE,
+            footer = shiny::modalButton("Dismiss"),
+            shiny::withMathJax(),
+            shiny::fluidRow(
+              shiny::br(),
+              shiny::column(
+                width = 11,
                 shiny::div(
-                  class = "math-display",
-                  "$$k_{\\text{obs}} = \\frac{k_{\\text{inact}} \\times [C]}{K_{\\text{i}} + [C]}$$"
-                ),
-                shiny::p(
-                  "Yields ",
-                  shiny::strong("k", htmltools::tags$sub("inact")),
-                  " (maximum covalent rate) and ",
-                  shiny::strong("K", htmltools::tags$sub("i")),
-                  " (apparent affinity of the initial reversible complex)."
+                  class = "tooltip-text",
+                  shiny::p(
+                    "Plot of observed rate constants ",
+                    shiny::strong("k", htmltools::tags$sub("obs")),
+                    " versus compound concentration [C]."
+                  ),
+                  shiny::p(
+                    "Global fit to the two-step covalent binding model:"
+                  ),
+                  shiny::div(
+                    class = "math-display",
+                    "$$k_{\\text{obs}} = \\frac{k_{\\text{inact}} \\times [C]}{K_{\\text{i}} + [C]}$$"
+                  ),
+                  shiny::p(
+                    "Yields ",
+                    shiny::strong("k", htmltools::tags$sub("inact")),
+                    " (maximum covalent rate) and ",
+                    shiny::strong("K", htmltools::tags$sub("i")),
+                    " (apparent affinity of the initial reversible complex)."
+                  )
                 )
               )
             )
@@ -783,43 +799,46 @@ server <- function(id, conversion_dirs) {
 
     shiny::observeEvent(input$binding_analysis_tooltip_bttn, {
       shiny::showModal(
-        shiny::modalDialog(
-          title = "Binding Analysis Table",
-          easyClose = TRUE,
-          footer = shiny::modalButton("Dismiss"),
-          shiny::withMathJax(),
-          shiny::fluidRow(
-            shiny::br(),
-            shiny::column(
-              width = 11,
-              shiny::div(
-                class = "tooltip-text",
-                shiny::p(
-                  "Results from individual exponential fits per concentration:"
-                ),
-                htmltools::tags$ul(
-                  htmltools::tags$li(
-                    shiny::strong("k", htmltools::tags$sub("obs")),
-                    " – observed rate constant (time⁻¹)"
+        shiny::div(
+          class = "conversion-modal",
+          shiny::modalDialog(
+            title = "Binding Analysis Table",
+            easyClose = TRUE,
+            footer = shiny::modalButton("Dismiss"),
+            shiny::withMathJax(),
+            shiny::fluidRow(
+              shiny::br(),
+              shiny::column(
+                width = 11,
+                shiny::div(
+                  class = "tooltip-text",
+                  shiny::p(
+                    "Results from individual exponential fits per concentration:"
                   ),
-                  htmltools::tags$li(
-                    shiny::strong("v"),
-                    " – fitted initial velocity parameter"
+                  htmltools::tags$ul(
+                    htmltools::tags$li(
+                      shiny::strong("k", htmltools::tags$sub("obs")),
+                      " – observed rate constant (time⁻¹)"
+                    ),
+                    htmltools::tags$li(
+                      shiny::strong("v"),
+                      " – fitted initial velocity parameter"
+                    ),
+                    htmltools::tags$li(
+                      shiny::strong("Plateau"),
+                      " – max % modification = 100 × v / k",
+                      htmltools::tags$sub("obs")
+                    )
                   ),
-                  htmltools::tags$li(
-                    shiny::strong("Plateau"),
-                    " – max % modification = 100 × v / k",
-                    htmltools::tags$sub("obs")
+                  shiny::p(
+                    "The ",
+                    shiny::strong("Included"),
+                    " checkbox controls inclusion in the global fit for ",
+                    shiny::strong("k", htmltools::tags$sub("inact")),
+                    " and ",
+                    shiny::strong("K", htmltools::tags$sub("i")),
+                    "."
                   )
-                ),
-                shiny::p(
-                  "The ",
-                  shiny::strong("Included"),
-                  " checkbox controls inclusion in the global fit for ",
-                  shiny::strong("k", htmltools::tags$sub("inact")),
-                  " and ",
-                  shiny::strong("K", htmltools::tags$sub("i")),
-                  "."
                 )
               )
             )
@@ -830,23 +849,26 @@ server <- function(id, conversion_dirs) {
 
     shiny::observeEvent(input$kinact_tooltip_bttn, {
       shiny::showModal(
-        shiny::modalDialog(
-          title = htmltools::tags$span("k", htmltools::tags$sub("inact")),
-          easyClose = TRUE,
-          footer = shiny::modalButton("Dismiss"),
-          shiny::withMathJax(),
-          shiny::fluidRow(
-            shiny::br(),
-            shiny::column(
-              width = 11,
-              shiny::div(
-                class = "tooltip-text",
-                shiny::p(
-                  shiny::strong("k", htmltools::tags$sub("inact")),
-                  " is the maximum first-order rate constant for covalent bond formation when the target is fully saturated (EC → EC*)."
-                ),
-                shiny::p(
-                  "It measures intrinsic warhead reactivity and transition-state stabilization in the reversible complex, independent of binding affinity."
+        shiny::div(
+          class = "conversion-modal",
+          shiny::modalDialog(
+            title = htmltools::tags$span("k", htmltools::tags$sub("inact")),
+            easyClose = TRUE,
+            footer = shiny::modalButton("Dismiss"),
+            shiny::withMathJax(),
+            shiny::fluidRow(
+              shiny::br(),
+              shiny::column(
+                width = 11,
+                shiny::div(
+                  class = "tooltip-text",
+                  shiny::p(
+                    shiny::strong("k", htmltools::tags$sub("inact")),
+                    " is the maximum first-order rate constant for covalent bond formation when the target is fully saturated (EC → EC*)."
+                  ),
+                  shiny::p(
+                    "It measures intrinsic warhead reactivity and transition-state stabilization in the reversible complex, independent of binding affinity."
+                  )
                 )
               )
             )
@@ -857,25 +879,28 @@ server <- function(id, conversion_dirs) {
 
     shiny::observeEvent(input$Ki_tooltip_bttn, {
       shiny::showModal(
-        shiny::modalDialog(
-          title = htmltools::tags$span("K", htmltools::tags$sub("i")),
-          easyClose = TRUE,
-          footer = shiny::modalButton("Dismiss"),
-          shiny::withMathJax(),
-          shiny::fluidRow(
-            shiny::br(),
-            shiny::column(
-              width = 11,
-              shiny::div(
-                class = "tooltip-text",
-                shiny::p(
-                  shiny::strong("K", htmltools::tags$sub("i")),
-                  " is the apparent dissociation constant of the initial non-covalent complex (E + C ⇌ EC)."
-                ),
-                shiny::p(
-                  "Lower K",
-                  htmltools::tags$sub("i"),
-                  " indicates stronger reversible binding before covalency."
+        shiny::div(
+          class = "conversion-modal",
+          shiny::modalDialog(
+            title = htmltools::tags$span("K", htmltools::tags$sub("i")),
+            easyClose = TRUE,
+            footer = shiny::modalButton("Dismiss"),
+            shiny::withMathJax(),
+            shiny::fluidRow(
+              shiny::br(),
+              shiny::column(
+                width = 11,
+                shiny::div(
+                  class = "tooltip-text",
+                  shiny::p(
+                    shiny::strong("K", htmltools::tags$sub("i")),
+                    " is the apparent dissociation constant of the initial non-covalent complex (E + C ⇌ EC)."
+                  ),
+                  shiny::p(
+                    "Lower K",
+                    htmltools::tags$sub("i"),
+                    " indicates stronger reversible binding before covalency."
+                  )
                 )
               )
             )
@@ -886,33 +911,361 @@ server <- function(id, conversion_dirs) {
 
     shiny::observeEvent(input$Ki_kinact_tooltip_bttn, {
       shiny::showModal(
-        shiny::modalDialog(
-          title = htmltools::tags$span(
-            "K",
-            htmltools::tags$sub("i"),
-            " / k",
-            htmltools::tags$sub("inact")
-          ),
-          easyClose = TRUE,
-          footer = shiny::modalButton("Dismiss"),
-          shiny::withMathJax(),
-          shiny::fluidRow(
-            shiny::br(),
-            shiny::column(
-              width = 11,
-              shiny::div(
-                class = "tooltip-text",
-                shiny::p(
-                  "The key potency metric is the ",
-                  shiny::strong("second-order rate constant"),
-                  ":"
-                ),
+        shiny::div(
+          class = "conversion-modal",
+          shiny::modalDialog(
+            title = htmltools::tags$span(
+              "K",
+              htmltools::tags$sub("i"),
+              " / k",
+              htmltools::tags$sub("inact")
+            ),
+            easyClose = TRUE,
+            footer = shiny::modalButton("Dismiss"),
+            shiny::withMathJax(),
+            shiny::fluidRow(
+              shiny::br(),
+              shiny::column(
+                width = 11,
                 shiny::div(
-                  class = "math-display",
-                  "$$\\frac{k_{\\text{inact}}}{K_{\\text{i}}}\\;(\\text{M}^{-1}\\text{s}^{-1})$$"
-                ),
-                shiny::p(
-                  "Higher values indicate more efficient covalent labeling at low concentration."
+                  class = "tooltip-text",
+                  shiny::p(
+                    "The key potency metric is the ",
+                    shiny::strong("second-order rate constant"),
+                    ":"
+                  ),
+                  shiny::div(
+                    class = "math-display",
+                    "$$\\frac{k_{\\text{inact}}}{K_{\\text{i}}}\\;(\\text{M}^{-1}\\text{s}^{-1})$$"
+                  ),
+                  shiny::p(
+                    "Higher values indicate more efficient covalent labeling at low concentration."
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    })
+
+    shiny::observeEvent(input$mass_spectra_tooltip_bttn, {
+      shiny::showModal(
+        shiny::div(
+          class = "conversion-modal",
+          shiny::modalDialog(
+            title = htmltools::tags$span("Mass Spectra"),
+            easyClose = TRUE,
+            footer = shiny::modalButton("Dismiss"),
+            shiny::withMathJax(),
+            shiny::fluidRow(
+              shiny::br(),
+              shiny::column(
+                width = 11,
+                shiny::div(
+                  class = "tooltip-text",
+                  shiny::p(
+                    "Intact-protein mass spectra acquired at different incubation time points with the compound (",
+                    shiny::strong("[C]"),
+                    " = current concentration)."
+                  ),
+                  shiny::p(
+                    "Each trace shows the charge-state envelope of the protein. Progression from unmodified (lower m/z) to covalently modified species (higher m/z) is visible over time."
+                  ),
+                  shiny::p(
+                    "The theoretical unmodified protein mass is marked. Mass shifts correspond to covalent adduct formation (+ compound mass)."
+                  ),
+                  shiny::p(
+                    "Deconvolution into zero-charge mass distribution yields the % modified protein used to construct the binding curve."
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    })
+
+    shiny::observeEvent(input$binding_curve_single_tooltip_bttn, {
+      shiny::showModal(
+        shiny::div(
+          class = "conversion-modal",
+          shiny::modalDialog(
+            title = htmltools::tags$span(
+              "Binding Curve (Single Concentration)"
+            ),
+            easyClose = TRUE,
+            footer = shiny::modalButton("Dismiss"),
+            shiny::withMathJax(),
+            shiny::fluidRow(
+              shiny::br(),
+              shiny::column(
+                width = 11,
+                shiny::div(
+                  class = "tooltip-text",
+                  shiny::p(
+                    "Time-resolved covalent adduct formation at a ",
+                    shiny::strong("single fixed compound concentration"),
+                    " derived from deconvolved intact-mass spectra."
+                  ),
+                  shiny::p(
+                    "Fitted individually to the integrated rate equation:"
+                  ),
+                  shiny::div(
+                    class = "math-display",
+                    "$$\\%\\,\\text{binding} = 100 \\times \\frac{v}{k_{\\text{obs}}} \\times \\big(1 - \\exp(-k_{\\text{obs}} \\cdot t)\\big)$$"
+                  ),
+                  shiny::p(
+                    "Yields ",
+                    shiny::strong("k", htmltools::tags$sub("obs")),
+                    " (observed rate constant), ",
+                    shiny::strong("v"),
+                    " (initial velocity), and ",
+                    shiny::strong("Plateau"),
+                    " (maximum achievable labeling at this concentration)."
+                  ),
+                  shiny::p(
+                    "An anchor point at (t = 0, binding = 0) is forced for numerical stability."
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    })
+
+    shiny::observeEvent(input$hits_table_tooltip_bttn, {
+      shiny::showModal(
+        shiny::div(
+          class = "conversion-modal hits-table-tooltip",
+          shiny::modalDialog(
+            title = "Hits Table",
+            easyClose = TRUE,
+            footer = shiny::modalButton("Dismiss"),
+            shiny::withMathJax(),
+            shiny::fluidRow(
+              shiny::br(),
+              shiny::column(
+                width = 11,
+                shiny::div(
+                  class = "tooltip-text",
+                  shiny::p(
+                    "Detailed per-time-point results from intact-mass MS deconvolution and peak assignment at the currently selected compound concentration."
+                  ),
+                  htmltools::tags$ul(
+                    htmltools::tags$li(
+                      shiny::strong("Well / Sample ID"),
+                      " – plate well and sample name or ID"
+                    ),
+                    htmltools::tags$li(
+                      shiny::strong("[Cmp]"),
+                      " – compound concentration"
+                    ),
+                    htmltools::tags$li(
+                      shiny::strong("Time"),
+                      " – incubation time point"
+                    ),
+                    htmltools::tags$li(
+                      shiny::strong("Theor. Prot."),
+                      " – theoretical mass of the unmodified protein"
+                    ),
+                    htmltools::tags$li(
+                      shiny::strong("Meas. Prot."),
+                      " – measured deconvolved mass of the protein species"
+                    ),
+                    htmltools::tags$li(
+                      shiny::strong("Δ Prot."),
+                      " – difference between theoretical and measured deconvolved protein mass"
+                    ),
+                    htmltools::tags$li(
+                      shiny::strong("Ⅰ Prot."),
+                      " – relative intensity of the unmodified protein peak [%]"
+                    ),
+                    htmltools::tags$li(
+                      shiny::strong("Peak Signal"),
+                      " – raw signal intensity for present peak"
+                    ),
+                    htmltools::tags$li(
+                      shiny::strong("Ⅰ Cmp."),
+                      " – intensity of the peak representing the protein together with a compound adduct [%]"
+                    ),
+                    htmltools::tags$li(
+                      shiny::strong("Cmp. Name"),
+                      " – compound name or ID of the bound compound"
+                    ),
+                    htmltools::tags$li(
+                      shiny::strong("Theor. Cmp."),
+                      " – theoretical mass of the bound compound"
+                    ),
+                    htmltools::tags$li(
+                      shiny::strong("Δ Cmp."),
+                      " – difference between theoretical complex and the obtained deconvolved mass [Da]"
+                    ),
+                    htmltools::tags$li(
+                      shiny::strong("Bind. Stoich."),
+                      " – detected binding stoichiometry (no. of bound compounds)"
+                    ),
+                    htmltools::tags$li(
+                      shiny::strong("%-Binding"),
+                      " – percentage of protein that has formed the covalent adduct at this time point"
+                    ),
+                    htmltools::tags$li(
+                      shiny::strong("Total %-Binding"),
+                      " – cumulative %-binding (identical to %-Binding when only one adduct is present)"
+                    )
+                  ),
+                  shiny::p(
+                    "The ",
+                    shiny::strong("%-Binding"),
+                    " (or ",
+                    shiny::strong("Total %-Binding"),
+                    ") values are used to construct the binding curve and to derive ",
+                    shiny::strong("k", htmltools::tags$sub("obs")),
+                    ", plateau, and initial velocity (v)."
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    })
+
+    shiny::observeEvent(input$kobs_value_tooltip_bttn, {
+      shiny::showModal(
+        shiny::div(
+          class = "conversion-modal",
+          shiny::modalDialog(
+            title = htmltools::tags$span("k", htmltools::tags$sub("obs")),
+            easyClose = TRUE,
+            footer = shiny::modalButton("Dismiss"),
+            shiny::withMathJax(),
+            shiny::fluidRow(
+              shiny::br(),
+              shiny::column(
+                width = 11,
+                shiny::div(
+                  class = "tooltip-text",
+                  shiny::p(
+                    shiny::strong("k", htmltools::tags$sub("obs")),
+                    " is the ",
+                    shiny::em("observed pseudo-first-order rate constant"),
+                    " for covalent adduct formation at this specific compound concentration."
+                  ),
+                  shiny::p(
+                    "It is extracted from the single-exponential fit of the binding curve shown."
+                  ),
+                  shiny::p(
+                    "Units: typically min⁻¹ or s⁻¹. Under the two-step model:"
+                  ),
+                  shiny::div(
+                    class = "math-display",
+                    "$$k_{\\text{obs}} = \\frac{k_{\\text{inact}} \\times [C]}{K_{\\text{i}} + [C]}$$"
+                  ),
+                  shiny::p(
+                    "At low [C], k",
+                    htmltools::tags$sub("obs"),
+                    " ∝ [C]; at high [C], k",
+                    htmltools::tags$sub("obs"),
+                    " → k",
+                    htmltools::tags$sub("inact"),
+                    "."
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    })
+
+    shiny::observeEvent(input$binding_plateau_tooltip_bttn, {
+      shiny::showModal(
+        shiny::div(
+          class = "conversion-modal",
+          shiny::modalDialog(
+            title = "Binding Plateau",
+            easyClose = TRUE,
+            footer = shiny::modalButton("Dismiss"),
+            shiny::withMathJax(),
+            shiny::fluidRow(
+              shiny::br(),
+              shiny::column(
+                width = 11,
+                shiny::div(
+                  class = "tooltip-text",
+                  shiny::p(
+                    "The ",
+                    shiny::strong("Binding Plateau"),
+                    " is the maximum percentage of covalently modified protein achieved at this compound concentration after long incubation."
+                  ),
+                  shiny::p(
+                    "It is calculated as: ",
+                    shiny::strong(
+                      "Plateau = 100 × v / k",
+                      htmltools::tags$sub("obs")
+                    )
+                  ),
+                  shiny::p(
+                    "Values < 100% indicate that even at infinite time, not all protein molecules form the covalent adduct — often due to competing off-pathway reactions or incomplete saturation of the reversible EC complex."
+                  ),
+                  shiny::p(
+                    "Plateau approaches 100% only when [C] ≫ K",
+                    htmltools::tags$sub("i"),
+                    " and the covalent step is strongly favored."
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    })
+
+    shiny::observeEvent(input$v_value_tooltip_bttn, {
+      shiny::showModal(
+        shiny::div(
+          class = "conversion-modal",
+          shiny::modalDialog(
+            title = "v (Initial Velocity Parameter)",
+            easyClose = TRUE,
+            footer = shiny::modalButton("Dismiss"),
+            shiny::withMathJax(),
+            shiny::fluidRow(
+              shiny::br(),
+              shiny::column(
+                width = 11,
+                shiny::div(
+                  class = "tooltip-text",
+                  shiny::p(
+                    shiny::strong("v"),
+                    " is a fitted parameter representing the initial rate of adduct formation scaled by the plateau."
+                  ),
+                  shiny::p(
+                    "From the fitting model: ",
+                    shiny::strong(
+                      "Plateau = 100 × v / k",
+                      htmltools::tags$sub("obs")
+                    ),
+                    " → v = (Plateau × k",
+                    htmltools::tags$sub("obs"),
+                    ") / 100"
+                  ),
+                  shiny::p(
+                    "It has units of %·time⁻¹ and is useful mainly as an intermediate for calculating the plateau."
+                  ),
+                  shiny::p(
+                    "In practice, v is tightly correlated with k",
+                    htmltools::tags$sub("obs"),
+                    " and plateau; only k",
+                    htmltools::tags$sub("obs"),
+                    " is used in the global k",
+                    htmltools::tags$sub("inact"),
+                    "/K",
+                    htmltools::tags$sub("i"),
+                    " analysis."
+                  )
                 )
               )
             )
@@ -1382,7 +1735,7 @@ server <- function(id, conversion_dirs) {
         colnames(kobs_results) <- c(
           "Concentration",
           "kobs",
-          "v",
+          "Velocity",
           "Plateau",
           "Included"
         )

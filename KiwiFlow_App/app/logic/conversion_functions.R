@@ -1259,7 +1259,7 @@ make_kobs_plot <- function(ki_kinact_result) {
       colors = color_map,
       symbols = symbol_map,
       line = list(width = 2, color = "black"),
-      hovertemplate = "<b>Predicted</b><br>[Cmp.]: %{x:.2f}<br>K<sub>obs</sub>: %{y:.2f}<extra></extra>",
+      hovertemplate = "<b>Predicted</b><br>[Cmp]: %{x:.2f}<br>K<sub>obs</sub>: %{y:.2f}<extra></extra>",
       showlegend = FALSE
     ) |>
     # Calculated kobs
@@ -1276,7 +1276,7 @@ make_kobs_plot <- function(ki_kinact_result) {
       ),
       name = ~conc,
       symbol = ~kobs,
-      hovertemplate = "<b>Calculated</b><br>[Cmp.]: %{x:.2f}<br>K<sub>obs</sub>: %{y:.3f}<extra></extra>"
+      hovertemplate = "<b>Calculated</b><br>[Cmp]: %{x:.2f}<br>K<sub>obs</sub>: %{y:.3f}<extra></extra>"
     ) |>
     plotly::layout(
       hovermode = "closest",
@@ -1971,7 +1971,7 @@ render_hits_table <- function(
   if (!is.null(single_conc)) {
     dom_value <- "t"
   } else {
-    dom_value <- NULL
+    dom_value <- "lrtip"
   }
 
   # Generate datatable
@@ -2012,7 +2012,7 @@ render_hits_table <- function(
   } else {
     hits_table <- hits_table |>
       DT::formatStyle(
-        columns = '[Cmp.]',
+        columns = '[Cmp]',
         target = 'row',
         backgroundColor = DT::styleEqual(
           levels = paste(names(concentration_colors), "µM"),

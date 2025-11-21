@@ -1546,3 +1546,21 @@ th {
 .listbox {
   background: pink !important;
 }
+
+.conversion-modal .modal-dialog {
+  width: fit-content;
+  max-width: unset !important;
+}
+
+.hits-table-tooltip .tooltip-text {
+  font-size: 0.9em;
+}
+
+.hits-tab-tooltip {
+  position: absolute;
+  right: 3%;
+}
+
+.MathJax_Display {
+  pointer-events: none;
+}
