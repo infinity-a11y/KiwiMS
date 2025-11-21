@@ -43,6 +43,7 @@ ui <- function(id) {
     id = ns("tabs"),
     bslib::nav_panel(
       "Proteins",
+      waiter::useWaiter(),
       shiny::fluidRow(
         shiny::column(
           width = 3,
@@ -301,7 +302,11 @@ server <- function(id, conversion_dirs) {
                 icon = shiny::icon("circle-question")
               )
             ),
-            DT::DTOutput(ns("hits_tab"))
+            shinycssloaders::withSpinner(
+              DT::DTOutput(ns("hits_tab")),
+              type = 1,
+              color = "#35357a"
+            )
           )
         )
       )
@@ -432,10 +437,9 @@ server <- function(id, conversion_dirs) {
         bslib::nav_insert(
           "tabs",
           bslib::nav_panel(
-            title = concentration,
+            title = paste0("[", concentration, "]"),
             shiny::div(
               class = "conversion-result-wrapper",
-              # Use namespaced ID for UI
               shiny::uiOutput(ns(ui_id))
             )
           )
@@ -463,7 +467,6 @@ server <- function(id, conversion_dirs) {
 
           # Render hits table
           output[[paste0(local_ui_id, "_hits")]] <- DT::renderDT({
-            message(local_concentration)
             render_hits_table(
               hits_table = hits_summary |>
                 dplyr::filter(
@@ -507,14 +510,6 @@ server <- function(id, conversion_dirs) {
             local_ui_id,
             "_spectra"
           )]] <- plotly::renderPlotly({
-            waiter::waiter_show(
-              id = ns(paste0(
-                local_ui_id,
-                "_spectra"
-              )),
-              html = waiter::spin_wandering_cubes()
-            )
-
             decon_samples <- gsub(
               "o",
               ".",
@@ -528,7 +523,7 @@ server <- function(id, conversion_dirs) {
               )
             )
 
-            plot <- multiple_spectra(
+            multiple_spectra(
               results_list = conversion_dirs$result_list(),
               samples = names(
                 conversion_dirs$result_list()$deconvolution
@@ -541,15 +536,6 @@ server <- function(id, conversion_dirs) {
                 FALSE
               )
             )
-
-            waiter::waiter_hide(
-              id = ns(paste0(
-                local_ui_id,
-                "_spectra"
-              ))
-            )
-
-            plot
           })
 
           # Assign the renderUI to the dynamically created output slot
@@ -582,9 +568,13 @@ server <- function(id, conversion_dirs) {
                     )
                   ),
                   full_screen = TRUE,
-                  plotly::plotlyOutput(
-                    ns(paste0(local_ui_id, "_spectra")),
-                    height = "100%"
+                  shinycssloaders::withSpinner(
+                    plotly::plotlyOutput(
+                      ns(paste0(local_ui_id, "_spectra")),
+                      height = "100%"
+                    ),
+                    type = 1,
+                    color = "#35357a"
                   )
                 )
               ),
@@ -604,12 +594,16 @@ server <- function(id, conversion_dirs) {
                     )
                   ),
                   full_screen = TRUE,
-                  plotly::plotlyOutput(
-                    ns(paste0(
-                      local_ui_id,
-                      "_binding_plot"
-                    )),
-                    height = "100%"
+                  shinycssloaders::withSpinner(
+                    plotly::plotlyOutput(
+                      ns(paste0(
+                        local_ui_id,
+                        "_binding_plot"
+                      )),
+                      height = "100%"
+                    ),
+                    type = 1,
+                    color = "#35357a"
                   )
                 )
               ),
@@ -702,7 +696,11 @@ server <- function(id, conversion_dirs) {
                   full_screen = TRUE,
                   shiny::div(
                     class = "conc-hits-table",
-                    DT::DTOutput(ns(paste0(local_ui_id, "_hits")))
+                    shinycssloaders::withSpinner(
+                      DT::DTOutput(ns(paste0(local_ui_id, "_hits"))),
+                      type = 1,
+                      color = "#35357a"
+                    )
                   )
                 )
               )
@@ -1087,19 +1085,19 @@ server <- function(id, conversion_dirs) {
                       " – raw signal intensity for present peak"
                     ),
                     htmltools::tags$li(
-                      shiny::strong("Ⅰ Cmp."),
+                      shiny::strong("Ⅰ Cmp"),
                       " – intensity of the peak representing the protein together with a compound adduct [%]"
                     ),
                     htmltools::tags$li(
-                      shiny::strong("Cmp. Name"),
+                      shiny::strong("Cmp Name"),
                       " – compound name or ID of the bound compound"
                     ),
                     htmltools::tags$li(
-                      shiny::strong("Theor. Cmp."),
+                      shiny::strong("Theor. Cmp"),
                       " – theoretical mass of the bound compound"
                     ),
                     htmltools::tags$li(
-                      shiny::strong("Δ Cmp."),
+                      shiny::strong("Δ Cmp"),
                       " – difference between theoretical complex and the obtained deconvolved mass [Da]"
                     ),
                     htmltools::tags$li(
@@ -1294,9 +1292,13 @@ server <- function(id, conversion_dirs) {
               )
             ),
             bslib::card_body(
-              plotly::plotlyOutput(
-                ns("binding_plot"),
-                height = "100%"
+              shinycssloaders::withSpinner(
+                plotly::plotlyOutput(
+                  ns("binding_plot"),
+                  height = "100%"
+                ),
+                type = 1,
+                color = "#35357a"
               )
             )
           )
@@ -1324,9 +1326,13 @@ server <- function(id, conversion_dirs) {
               )
             ),
             bslib::card_body(
-              plotly::plotlyOutput(
-                ns("kobs_plot"),
-                height = "100%"
+              shinycssloaders::withSpinner(
+                plotly::plotlyOutput(
+                  ns("kobs_plot"),
+                  height = "100%"
+                ),
+                type = 1,
+                color = "#35357a"
               )
             )
           )
@@ -1348,7 +1354,11 @@ server <- function(id, conversion_dirs) {
               )
             ),
             bslib::card_body(
-              DT::DTOutput(ns("kobs_result"))
+              shinycssloaders::withSpinner(
+                DT::DTOutput(ns("kobs_result")),
+                type = 1,
+                color = "#35357a"
+              )
             )
           )
         ),
@@ -1376,7 +1386,11 @@ server <- function(id, conversion_dirs) {
               ),
               shiny::div(
                 class = "kobs-val",
-                shiny::uiOutput(ns("kinact"))
+                shinycssloaders::withSpinner(
+                  shiny::uiOutput(ns("kinact")),
+                  type = 1,
+                  color = "#35357a"
+                )
               )
             )
           ),
@@ -1402,7 +1416,11 @@ server <- function(id, conversion_dirs) {
               ),
               shiny::div(
                 class = "kobs-val",
-                shiny::uiOutput(ns("Ki"))
+                shinycssloaders::withSpinner(
+                  shiny::uiOutput(ns("Ki")),
+                  type = 1,
+                  color = "#35357a"
+                )
               )
             )
           ),
@@ -1430,7 +1448,11 @@ server <- function(id, conversion_dirs) {
               ),
               shiny::div(
                 class = "kobs-val",
-                shiny::uiOutput(ns("Ki_kinact"))
+                shinycssloaders::withSpinner(
+                  shiny::uiOutput(ns("Ki_kinact")),
+                  type = 1,
+                  color = "#35357a"
+                )
               )
             )
           )
@@ -1542,21 +1564,6 @@ server <- function(id, conversion_dirs) {
           '= "block";'
         ))
 
-        waiter::waiter_show(
-          id = ns("kinact"),
-          html = waiter::spin_throbber()
-        )
-        waiter::waiter_show(
-          id = ns("Ki"),
-          html = waiter::spin_throbber()
-        )
-        waiter::waiter_show(
-          id = ns("Ki_kinact"),
-          html = waiter::spin_throbber()
-        )
-
-        Sys.sleep(1)
-
         result_list <- conversion_vars$modified_results
 
         # Unblock UI
@@ -1566,9 +1573,6 @@ server <- function(id, conversion_dirs) {
         ))
       }
 
-      waiter::waiter_hide(id = ns("Ki"))
-      waiter::waiter_hide(id = ns("kinact"))
-      waiter::waiter_hide(id = ns("Ki_kinact"))
       result_list$ki_kinact_result$Params
     })
 

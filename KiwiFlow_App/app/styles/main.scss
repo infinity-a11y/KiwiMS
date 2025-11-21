@@ -453,9 +453,8 @@ button .sF-modal {
   height: 90% !important;
 }
 
-#app-deconvolution_process-spectrum,
-#app-deconvolution_process-heatmap {
-  visibility: unset !important;
+.shiny-spinner-placeholder {
+  height: unset !important;
 }
 
 .deconvolution-result-controls,
@@ -539,10 +538,8 @@ button .sF-modal {
 .table-input .progress {
   height: 3px;
   width: 100%;
-  // border: 1px solid #8bc34a;
   --bs-progress-bar-bg: #8bc34a;
   --bs-progress-bg: #f7f7f7;
-  // background: #8bc34a;
 }
 
 .table-input .control-label {
@@ -1155,7 +1152,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 }
 
 .bslib-full-screen-enter {
-  opacity: 1 !important;
+  opacity: 0.6 !important;
 }
 
 .transparent-box {
@@ -1287,6 +1284,7 @@ th.sorting {
 
 #app-conversion_main-hits_tab,
 .conc-hits-table {
+  height: 100%;
   font-size: 12px;
 }
 
@@ -1450,7 +1448,6 @@ th {
   border-top-left-radius: 4px;
   border-top-right-radius: 4px;
   height: 35px;
-  background: #c6c6c6 !important;
   align-content: center;
   align-items: center;
 }
@@ -1458,16 +1455,11 @@ th {
 .binding-analysis-tab .card-custom .card .card-body,
 .result-conc-tab .card-custom .card .card-body {
   padding: 1%;
-  background: #dedede !important;
 }
 
 .ki-kinact-ui {
   display: flex;
   align-items: center;
-}
-
-.plotly {
-  visibility: unset !important;
 }
 
 #app-conversion_main-kobs_result .table,
@@ -1563,4 +1555,8 @@ th {
 
 .MathJax_Display {
   pointer-events: none;
+}
+
+.shiny-spinner-output-container {
+  height: 100%;
 }
