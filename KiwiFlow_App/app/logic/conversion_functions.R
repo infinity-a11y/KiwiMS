@@ -1782,8 +1782,6 @@ multiple_spectra <- function(
   )
 
   if (cubic == TRUE) {
-    spectrum_data <<- spectrum_data
-    peaks_data <<- peaks_data
     plotly::plot_ly(
       data = spectrum_data,
       x = ~mass,
@@ -1863,6 +1861,7 @@ multiple_spectra <- function(
       x = ~mass,
       y = ~intensity,
       color = ~time,
+      colors = viridisLite::magma(length(unique(peaks_data$time))),
       type = "scatter",
       mode = "lines",
       hoverinfo = "text",

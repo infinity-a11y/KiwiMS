@@ -563,6 +563,14 @@ server <- function(id, conversion_dirs) {
                         )),
                         choices = c("3D", "Planar")
                       )
+                    ),
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("charge_range_tooltip_bttn"),
+                        label = "",
+                        icon = shiny::icon("circle-question")
+                      )
                     )
                   ),
                   full_screen = TRUE,
@@ -578,6 +586,14 @@ server <- function(id, conversion_dirs) {
                   bslib::card_header(
                     class = "bg-dark help-header",
                     "Binding Curve",
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("charge_range_tooltip_bttn"),
+                        label = "",
+                        icon = shiny::icon("circle-question")
+                      )
+                    )
                   ),
                   full_screen = TRUE,
                   plotly::plotlyOutput(
@@ -597,8 +613,18 @@ server <- function(id, conversion_dirs) {
                     bslib::card_header(
                       class = "bg-dark help-header",
                       htmltools::tagList(
-                        "k",
-                        htmltools::tags$sub("obs")
+                        shiny::div(
+                          "k",
+                          htmltools::tags$sub("obs")
+                        )
+                      ),
+                      shiny::div(
+                        class = "tooltip-bttn",
+                        shiny::actionButton(
+                          ns("charge_range_tooltip_bttn"),
+                          label = "",
+                          icon = shiny::icon("circle-question")
+                        )
                       )
                     ),
                     shiny::div(
@@ -612,7 +638,15 @@ server <- function(id, conversion_dirs) {
                   bslib::card(
                     bslib::card_header(
                       class = "bg-dark help-header",
-                      "Binding Plateau"
+                      "Binding Plateau",
+                      shiny::div(
+                        class = "tooltip-bttn",
+                        shiny::actionButton(
+                          ns("charge_range_tooltip_bttn"),
+                          label = "",
+                          icon = shiny::icon("circle-question")
+                        )
+                      )
                     ),
                     shiny::div(
                       class = "kobs-val",
@@ -625,7 +659,15 @@ server <- function(id, conversion_dirs) {
                   bslib::card(
                     bslib::card_header(
                       class = "bg-dark help-header",
-                      "v"
+                      "v",
+                      shiny::div(
+                        class = "tooltip-bttn",
+                        shiny::actionButton(
+                          ns("charge_range_tooltip_bttn"),
+                          label = "",
+                          icon = shiny::icon("circle-question")
+                        )
+                      )
                     ),
                     shiny::div(
                       class = "kobs-val",
@@ -640,6 +682,14 @@ server <- function(id, conversion_dirs) {
                   bslib::card_header(
                     class = "bg-dark help-header",
                     "Hits",
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("charge_range_tooltip_bttn"),
+                        label = "",
+                        icon = shiny::icon("circle-question")
+                      )
+                    )
                   ),
                   full_screen = TRUE,
                   shiny::div(
@@ -657,6 +707,220 @@ server <- function(id, conversion_dirs) {
       set_selected_tab("Binding", session)
     })
 
+    shiny::observeEvent(input$binding_curve_tooltip_bttn, {
+      shiny::showModal(
+        shiny::modalDialog(
+          title = htmltools::tags$span("Binding Curve"),
+          easyClose = TRUE,
+          footer = shiny::modalButton("Dismiss"),
+          shiny::withMathJax(),
+          shiny::fluidRow(
+            shiny::br(),
+            shiny::column(
+              width = 11,
+              shiny::div(
+                class = "tooltip-text",
+                shiny::p(
+                  "Time-course of covalent adduct formation (% modified protein) measured by intact-mass MS at each compound concentration."
+                ),
+                shiny::p("Each trace is individually fitted to:"),
+                shiny::div(
+                  class = "math-display",
+                  "$$\\%\\,\\text{binding} = 100 \\times \\frac{v}{k_{\\text{obs}}} \\times \\big(1 - \\exp(-k_{\\text{obs}} \\cdot t)\\big)$$"
+                ),
+                shiny::p(
+                  "An anchor point is forced at (t = 0, binding = 0). The plateau ",
+                  shiny::strong("100 × v / k", htmltools::tags$sub("obs")),
+                  " is the maximum covalent occupancy achievable."
+                )
+              )
+            )
+          )
+        )
+      )
+    })
+
+    shiny::observeEvent(input$kobs_curve_tooltip_bttn, {
+      shiny::showModal(
+        shiny::modalDialog(
+          title = htmltools::tags$span(
+            "k",
+            htmltools::tags$sub("obs"),
+            " Curve"
+          ),
+          easyClose = TRUE,
+          footer = shiny::modalButton("Dismiss"),
+          shiny::withMathJax(),
+          shiny::fluidRow(
+            shiny::br(),
+            shiny::column(
+              width = 11,
+              shiny::div(
+                class = "tooltip-text",
+                shiny::p(
+                  "Plot of observed rate constants ",
+                  shiny::strong("k", htmltools::tags$sub("obs")),
+                  " versus compound concentration [C]."
+                ),
+                shiny::p("Global fit to the two-step covalent binding model:"),
+                shiny::div(
+                  class = "math-display",
+                  "$$k_{\\text{obs}} = \\frac{k_{\\text{inact}} \\times [C]}{K_{\\text{i}} + [C]}$$"
+                ),
+                shiny::p(
+                  "Yields ",
+                  shiny::strong("k", htmltools::tags$sub("inact")),
+                  " (maximum covalent rate) and ",
+                  shiny::strong("K", htmltools::tags$sub("i")),
+                  " (apparent affinity of the initial reversible complex)."
+                )
+              )
+            )
+          )
+        )
+      )
+    })
+
+    shiny::observeEvent(input$binding_analysis_tooltip_bttn, {
+      shiny::showModal(
+        shiny::modalDialog(
+          title = "Binding Analysis Table",
+          easyClose = TRUE,
+          footer = shiny::modalButton("Dismiss"),
+          shiny::withMathJax(),
+          shiny::fluidRow(
+            shiny::br(),
+            shiny::column(
+              width = 11,
+              shiny::div(
+                class = "tooltip-text",
+                shiny::p(
+                  "Results from individual exponential fits per concentration:"
+                ),
+                htmltools::tags$ul(
+                  htmltools::tags$li(
+                    shiny::strong("k", htmltools::tags$sub("obs")),
+                    " – observed rate constant (time⁻¹)"
+                  ),
+                  htmltools::tags$li(
+                    shiny::strong("v"),
+                    " – fitted initial velocity parameter"
+                  ),
+                  htmltools::tags$li(
+                    shiny::strong("Plateau"),
+                    " – max % modification = 100 × v / k",
+                    htmltools::tags$sub("obs")
+                  )
+                ),
+                shiny::p(
+                  "The ",
+                  shiny::strong("Included"),
+                  " checkbox controls inclusion in the global fit for ",
+                  shiny::strong("k", htmltools::tags$sub("inact")),
+                  " and ",
+                  shiny::strong("K", htmltools::tags$sub("i")),
+                  "."
+                )
+              )
+            )
+          )
+        )
+      )
+    })
+
+    shiny::observeEvent(input$kinact_tooltip_bttn, {
+      shiny::showModal(
+        shiny::modalDialog(
+          title = htmltools::tags$span("k", htmltools::tags$sub("inact")),
+          easyClose = TRUE,
+          footer = shiny::modalButton("Dismiss"),
+          shiny::withMathJax(),
+          shiny::fluidRow(
+            shiny::br(),
+            shiny::column(
+              width = 11,
+              shiny::div(
+                class = "tooltip-text",
+                shiny::p(
+                  shiny::strong("k", htmltools::tags$sub("inact")),
+                  " is the maximum first-order rate constant for covalent bond formation when the target is fully saturated (EC → EC*)."
+                ),
+                shiny::p(
+                  "It measures intrinsic warhead reactivity and transition-state stabilization in the reversible complex, independent of binding affinity."
+                )
+              )
+            )
+          )
+        )
+      )
+    })
+
+    shiny::observeEvent(input$Ki_tooltip_bttn, {
+      shiny::showModal(
+        shiny::modalDialog(
+          title = htmltools::tags$span("K", htmltools::tags$sub("i")),
+          easyClose = TRUE,
+          footer = shiny::modalButton("Dismiss"),
+          shiny::withMathJax(),
+          shiny::fluidRow(
+            shiny::br(),
+            shiny::column(
+              width = 11,
+              shiny::div(
+                class = "tooltip-text",
+                shiny::p(
+                  shiny::strong("K", htmltools::tags$sub("i")),
+                  " is the apparent dissociation constant of the initial non-covalent complex (E + C ⇌ EC)."
+                ),
+                shiny::p(
+                  "Lower K",
+                  htmltools::tags$sub("i"),
+                  " indicates stronger reversible binding before covalency."
+                )
+              )
+            )
+          )
+        )
+      )
+    })
+
+    shiny::observeEvent(input$Ki_kinact_tooltip_bttn, {
+      shiny::showModal(
+        shiny::modalDialog(
+          title = htmltools::tags$span(
+            "K",
+            htmltools::tags$sub("i"),
+            " / k",
+            htmltools::tags$sub("inact")
+          ),
+          easyClose = TRUE,
+          footer = shiny::modalButton("Dismiss"),
+          shiny::withMathJax(),
+          shiny::fluidRow(
+            shiny::br(),
+            shiny::column(
+              width = 11,
+              shiny::div(
+                class = "tooltip-text",
+                shiny::p(
+                  "The key potency metric is the ",
+                  shiny::strong("second-order rate constant"),
+                  ":"
+                ),
+                shiny::div(
+                  class = "math-display",
+                  "$$\\frac{k_{\\text{inact}}}{K_{\\text{i}}}\\;(\\text{M}^{-1}\\text{s}^{-1})$$"
+                ),
+                shiny::p(
+                  "Higher values indicate more efficient covalent labeling at low concentration."
+                )
+              )
+            )
+          )
+        )
+      )
+    })
+
     output$binding_tab <- shiny::renderUI(
       shiny::div(
         class = "binding-analysis-tab",
@@ -667,6 +931,14 @@ server <- function(id, conversion_dirs) {
             bslib::card_header(
               class = "bg-dark help-header",
               "Binding Curve",
+              shiny::div(
+                class = "tooltip-bttn",
+                shiny::actionButton(
+                  ns("binding_curve_tooltip_bttn"),
+                  label = "",
+                  icon = shiny::icon("circle-question")
+                )
+              )
             ),
             bslib::card_body(
               plotly::plotlyOutput(
@@ -682,7 +954,21 @@ server <- function(id, conversion_dirs) {
             full_screen = TRUE,
             bslib::card_header(
               class = "bg-dark help-header",
-              "kobs Curve",
+              htmltools::tagList(
+                shiny::div(
+                  "k",
+                  htmltools::tags$sub("obs"),
+                  " Curve"
+                )
+              ),
+              shiny::div(
+                class = "tooltip-bttn",
+                shiny::actionButton(
+                  ns("kobs_curve_tooltip_bttn"),
+                  label = "",
+                  icon = shiny::icon("circle-question")
+                )
+              )
             ),
             bslib::card_body(
               plotly::plotlyOutput(
@@ -699,6 +985,14 @@ server <- function(id, conversion_dirs) {
             bslib::card_header(
               class = "bg-dark help-header",
               "Binding Analysis",
+              shiny::div(
+                class = "tooltip-bttn",
+                shiny::actionButton(
+                  ns("binding_analysis_tooltip_bttn"),
+                  label = "",
+                  icon = shiny::icon("circle-question")
+                )
+              )
             ),
             bslib::card_body(
               DT::DTOutput(ns("kobs_result"))
@@ -713,8 +1007,18 @@ server <- function(id, conversion_dirs) {
               bslib::card_header(
                 class = "bg-dark help-header",
                 htmltools::tagList(
-                  "Inactivation Rate k",
-                  htmltools::tags$sub("inact")
+                  shiny::div(
+                    "k",
+                    htmltools::tags$sub("inact")
+                  )
+                ),
+                shiny::div(
+                  class = "tooltip-bttn",
+                  shiny::actionButton(
+                    ns("kinact_tooltip_bttn"),
+                    label = "",
+                    icon = shiny::icon("circle-question")
+                  )
                 )
               ),
               shiny::div(
@@ -729,9 +1033,18 @@ server <- function(id, conversion_dirs) {
               bslib::card_header(
                 class = "bg-dark help-header",
                 htmltools::tagList(
-                  "Inhibition Constant K",
-                  htmltools::tags$sub("i"),
-                  ""
+                  shiny::div(
+                    "K",
+                    htmltools::tags$sub("i")
+                  )
+                ),
+                shiny::div(
+                  class = "tooltip-bttn",
+                  shiny::actionButton(
+                    ns("Ki_tooltip_bttn"),
+                    label = "",
+                    icon = shiny::icon("circle-question")
+                  )
                 )
               ),
               shiny::div(
@@ -746,10 +1059,20 @@ server <- function(id, conversion_dirs) {
               bslib::card_header(
                 class = "bg-dark help-header",
                 htmltools::tagList(
-                  "K",
-                  htmltools::tags$sub("i"),
-                  "/k",
-                  htmltools::tags$sub("inact"),
+                  shiny::div(
+                    "K",
+                    htmltools::tags$sub("i"),
+                    "/ k",
+                    htmltools::tags$sub("inact"),
+                  )
+                ),
+                shiny::div(
+                  class = "tooltip-bttn",
+                  shiny::actionButton(
+                    ns("Ki_kinact_tooltip_bttn"),
+                    label = "",
+                    icon = shiny::icon("circle-question")
+                  )
                 )
               ),
               shiny::div(
@@ -860,6 +1183,12 @@ server <- function(id, conversion_dirs) {
       if (is.null(conversion_vars$modified_results)) {
         result_list <- conversion_dirs$result_list()
       } else {
+        # Block UI
+        shinyjs::runjs(paste0(
+          'document.getElementById("blocking-overlay").style.display ',
+          '= "block";'
+        ))
+
         waiter::waiter_show(
           id = ns("kinact"),
           html = waiter::spin_throbber()
@@ -876,6 +1205,12 @@ server <- function(id, conversion_dirs) {
         Sys.sleep(1)
 
         result_list <- conversion_vars$modified_results
+
+        # Unblock UI
+        shinyjs::runjs(paste0(
+          'document.getElementById("blocking-overlay").style.display ',
+          '= "none";'
+        ))
       }
 
       waiter::waiter_hide(id = ns("Ki"))
