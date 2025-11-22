@@ -1153,7 +1153,6 @@ make_binding_plot <- function(kobs_result, filter_conc = NULL) {
     symbols[1:length(levels(df_points$concentration))],
     levels(df_points$concentration)
   )
-
   # Generate plot
   binding_plot <- plotly::plot_ly() |>
     # Predicted/modeled binding
@@ -1185,7 +1184,8 @@ make_binding_plot <- function(kobs_result, filter_conc = NULL) {
       marker = list(
         size = 12,
         opacity = 0.9,
-        line = list(width = 1.5, color = "black")
+        # Changed marker border from black to white for visibility
+        line = list(width = 1.5, color = "white")
       ),
       legendgroup = ~concentration,
       hovertemplate = paste(
@@ -1200,16 +1200,31 @@ make_binding_plot <- function(kobs_result, filter_conc = NULL) {
     plotly::layout(
       hovermode = "closest",
       paper_bgcolor = "rgba(0,0,0,0)",
-      paper_bgcolor = 'rgba(0, 0, 0, 0)',
-      plot_bgcolor = 'rgba(0, 0, 0, 0)',
+      plot_bgcolor = "rgba(0,0,0,0)",
+      # Global font settings (White)
+      font = list(size = 14, color = "white"),
       legend = list(
-        title = list(text = "Concentration [µM]"),
+        title = list(text = "Concentration [µM]", font = list(color = "white")),
         bgcolor = "rgba(0,0,0,0)",
-        bordercolor = "rgba(0,0,0,0)"
+        bordercolor = "rgba(0,0,0,0)",
+        font = list(color = "white")
       ),
-      xaxis = list(title = "Time [min]"),
-      yaxis = list(title = "Binding [%]"),
-      font = list(size = 14)
+      # X-Axis Styling (White)
+      xaxis = list(
+        title = "Time [min]",
+        color = "white", # Changes tick labels and axis line
+        showgrid = TRUE,
+        gridcolor = "rgba(255, 255, 255, 0.2)", # Semi-transparent white grid
+        zerolinecolor = "rgba(255, 255, 255, 0.5)"
+      ),
+      # Y-Axis Styling (White)
+      yaxis = list(
+        title = "Binding [%]",
+        color = "white",
+        showgrid = TRUE,
+        gridcolor = "rgba(255, 255, 255, 0.2)",
+        zerolinecolor = "rgba(255, 255, 255, 0.5)"
+      )
     )
 
   # Return plot
@@ -1258,7 +1273,7 @@ make_kobs_plot <- function(ki_kinact_result) {
       y = ~predicted_kobs,
       colors = color_map,
       symbols = symbol_map,
-      line = list(width = 2, color = "black"),
+      line = list(width = 2, color = "white"),
       hovertemplate = "<b>Predicted</b><br>[Cmp]: %{x:.2f}<br>K<sub>obs</sub>: %{y:.2f}<extra></extra>",
       showlegend = FALSE
     ) |>
@@ -1271,8 +1286,8 @@ make_kobs_plot <- function(ki_kinact_result) {
       color = ~ as.character(df_points$kobs),
       marker = list(
         size = 12,
-        opacity = 0.9,
-        line = list(width = 1.5, color = "black")
+        opacity = 1,
+        line = list(width = 1, color = "white")
       ),
       name = ~conc,
       symbol = ~kobs,
@@ -1280,14 +1295,32 @@ make_kobs_plot <- function(ki_kinact_result) {
     ) |>
     plotly::layout(
       hovermode = "closest",
+      paper_bgcolor = "rgba(0,0,0,0)",
+      plot_bgcolor = "rgba(0,0,0,0)",
+      # Global font settings (White)
+      font = list(size = 14, color = "white"),
       legend = list(
-        title = list(text = "Concentration [µM]"),
+        title = list(text = "Concentration [µM]", font = list(color = "white")),
         bgcolor = "rgba(0,0,0,0)",
-        bordercolor = "rgba(0,0,0,0)"
+        bordercolor = "rgba(0,0,0,0)",
+        font = list(color = "white")
       ),
-      xaxis = list(title = "Compound [µM]"),
-      yaxis = list(title = "k<sub>obs</sub> [s⁻¹]"),
-      font = list(size = 14)
+      # X-Axis Styling (White)
+      xaxis = list(
+        title = "Compound [µM]",
+        color = "white",
+        showgrid = TRUE,
+        gridcolor = "rgba(255, 255, 255, 0.2)",
+        zerolinecolor = "rgba(255, 255, 255, 0.5)"
+      ),
+      # Y-Axis Styling (White)
+      yaxis = list(
+        title = "k<sub>obs</sub> [s⁻¹]",
+        color = "white",
+        showgrid = TRUE,
+        gridcolor = "rgba(255, 255, 255, 0.2)",
+        zerolinecolor = "rgba(255, 255, 255, 0.5)"
+      )
     )
 
   print(kobs_plot)
@@ -1788,7 +1821,10 @@ multiple_spectra <- function(
       y = ~intensity,
       z = ~time,
       color = ~time,
-      colors = viridisLite::magma(length(unique(peaks_data$time))),
+      colors = viridisLite::viridis(
+        length(unique(peaks_data$time)),
+        begin = 0.5
+      ),
       type = "scatter3d",
       mode = "lines",
       showlegend = FALSE,
@@ -1814,10 +1850,8 @@ multiple_spectra <- function(
           symbol = "circle",
           size = 5,
           zindex = 100,
-          line = list(
-            color = "black",
-            width = 1.5
-          )
+          # Changed marker border from black to white
+          line = list(color = "white", width = 1.5)
         ),
         hoverinfo = "text",
         text = ~ paste0(
@@ -1836,17 +1870,37 @@ multiple_spectra <- function(
         showlegend = FALSE
       ) |>
       plotly::layout(
+        paper_bgcolor = "rgba(0,0,0,0)",
+        font = list(color = "white"),
         legend = list(
           bgcolor = "rgba(0,0,0,0)",
-          bordercolor = "rgba(0,0,0,0)"
+          bordercolor = "rgba(0,0,0,0)",
+          font = list(color = "white")
         ),
+        # 3D Scene Styling
         scene = list(
-          xaxis = list(title = "Mass [Da]"),
-          yaxis = list(title = "Intensity [%]"),
+          xaxis = list(
+            title = "Mass [Da]",
+            color = "white",
+            gridcolor = "rgba(255, 255, 255, 0.2)",
+            zerolinecolor = "rgba(255, 255, 255, 0.5)",
+            showbackground = FALSE
+          ),
+          yaxis = list(
+            title = "Intensity [%]",
+            color = "white",
+            gridcolor = "rgba(255, 255, 255, 0.2)",
+            zerolinecolor = "rgba(255, 255, 255, 0.5)",
+            showbackground = FALSE
+          ),
           zaxis = list(
             title = "Time [min]",
             type = 'category',
-            dtick = 1
+            dtick = 1,
+            color = "white",
+            gridcolor = "rgba(255, 255, 255, 0.2)",
+            zerolinecolor = "rgba(255, 255, 255, 0.5)",
+            showbackground = FALSE
           ),
           camera = list(
             center = list(x = -0.05, y = -0.25, z = 0),
@@ -1861,7 +1915,10 @@ multiple_spectra <- function(
       x = ~mass,
       y = ~intensity,
       color = ~time,
-      colors = viridisLite::magma(length(unique(peaks_data$time))),
+      colors = viridisLite::viridis(
+        length(unique(peaks_data$time)),
+        begin = 0.5
+      ),
       type = "scatter",
       mode = "lines",
       hoverinfo = "text",
@@ -1886,10 +1943,7 @@ multiple_spectra <- function(
           symbol = "circle",
           size = 10,
           zindex = 100,
-          line = list(
-            color = "black",
-            width = 1
-          )
+          line = list(color = "white", width = 1)
         ),
         hoverinfo = "text",
         text = ~ paste0(
@@ -1906,10 +1960,33 @@ multiple_spectra <- function(
           mw
         ),
         showlegend = FALSE
+      ) |>
+      plotly::layout(
+        paper_bgcolor = "rgba(0,0,0,0)",
+        plot_bgcolor = "rgba(0,0,0,0)",
+        font = list(color = "white"),
+        xaxis = list(
+          title = "Mass [Da]",
+          color = "white",
+          gridcolor = "rgba(255, 255, 255, 0.2)",
+          zerolinecolor = "rgba(255, 255, 255, 0.5)"
+        ),
+        yaxis = list(
+          title = "Intensity [%]",
+          color = "white",
+          gridcolor = "rgba(255, 255, 255, 0.2)",
+          zerolinecolor = "rgba(255, 255, 255, 0.5)"
+        ),
+        legend = list(
+          bgcolor = "rgba(0,0,0,0)",
+          bordercolor = "rgba(0,0,0,0)",
+          font = list(color = "white")
+        )
       )
 
     if (show_labels) {
       plot <- plotly::add_annotations(
+        plot,
         data = peaks_data,
         x = ~mass,
         y = ~intensity,
@@ -1929,17 +2006,14 @@ multiple_spectra <- function(
         yanchor = "bottom",
         ay = -10,
         ax = 10,
-        font = list(
-          color = "black",
-          size = 10
-        ),
+        font = list(color = "white", size = 10),
         arrowhead = 2,
         arrowwidth = 1,
-        arrowcolor = 'gray'
+        arrowcolor = "white"
       )
     }
 
-    return(plot)
+    plot
   }
 }
 

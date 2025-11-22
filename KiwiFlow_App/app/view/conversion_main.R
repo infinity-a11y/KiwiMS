@@ -2022,7 +2022,7 @@ server <- function(id, conversion_dirs) {
               levels = kobs_results$Concentration,
               values = gsub(
                 ",1)",
-                ",0.3)",
+                ",0.6)",
                 plotly::toRGB(conversion_vars$conc_colors)
               )
             )
