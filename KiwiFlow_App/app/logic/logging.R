@@ -110,7 +110,7 @@ format_log <- function(log_text) {
       if (grepl("^={10,}$", line)) {
         formatted_lines <- c(
           formatted_lines,
-          "<hr style='border: 1px solid #555;'>"
+          "<hr style='border: 1px solid #e5e5e5;'>"
         )
       } else if (
         # Metadata Section (Gray & Italic)
@@ -122,7 +122,7 @@ format_log <- function(log_text) {
         formatted_lines <- c(
           formatted_lines,
           paste0(
-            "<div style='color: gray; font-style: italic;'>",
+            "<div style='color: color: lightgray; font-style: italic;'>",
             line,
             "</div>"
           )

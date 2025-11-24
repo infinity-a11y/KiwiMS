@@ -27,6 +27,7 @@ ui <- function(id) {
 
   sidebar(
     title = "Log Actions",
+    width = "15%",
     column(
       width = 12,
       align = "center",
@@ -34,10 +35,10 @@ ui <- function(id) {
       br(),
       br(),
       div(
-        class = "log-button",
+        class = "log-button repeat",
         actionButton(
           ns("refresh_logs"),
-          "Refresh Log",
+          "Refresh",
           icon = icon("repeat")
         )
       ),

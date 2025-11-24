@@ -103,7 +103,10 @@ ui <- function(id) {
       shiny::fluidRow(
         shiny::column(
           width = 12,
-          rhandsontable::rHandsontableOutput(ns("protein_table"))
+          shiny::div(
+            class = "handsontable-wrapper",
+            rhandsontable::rHandsontableOutput(ns("protein_table"))
+          )
         )
       ),
       keybind_menu_ui
@@ -168,7 +171,10 @@ ui <- function(id) {
       shiny::fluidRow(
         shiny::column(
           width = 12,
-          rhandsontable::rHandsontableOutput(ns("compound_table"))
+          shiny::div(
+            class = "handsontable-wrapper",
+            rhandsontable::rHandsontableOutput(ns("compound_table"))
+          )
         )
       ),
       keybind_menu_ui
@@ -222,7 +228,10 @@ ui <- function(id) {
       shiny::fluidRow(
         shiny::column(
           width = 12,
-          rhandsontable::rHandsontableOutput(ns("sample_table"))
+          shiny::div(
+            class = "handsontable-wrapper",
+            rhandsontable::rHandsontableOutput(ns("sample_table"))
+          )
         )
       ),
       keybind_menu_ui
@@ -322,7 +331,7 @@ server <- function(id, conversion_dirs) {
       }
     })
 
-    # Observe table status for compound table
+    # Observe table status for protein table
     shiny::observe({
       shiny::req(
         input$protein_table,
@@ -901,6 +910,7 @@ server <- function(id, conversion_dirs) {
       }
     )
 
+    # Observe conversion declaration readiness
     shiny::observe({
       if (
         isTRUE(declaration_vars$protein_table_status) &
@@ -932,6 +942,14 @@ server <- function(id, conversion_dirs) {
           "sample_table_info",
           "table-info-red"
         )
+        shinyjs::addClass(
+          selector = ".btn-file:has(#app-conversion_main-result_input)",
+          class = "custom-disable"
+        )
+        shinyjs::addClass(
+          selector = ".input-group:has(#app-conversion_main-result_input) > .form-control",
+          class = "custom-disable"
+        )
         shinyjs::disable("confirm_samples")
         output$sample_table_info <- shiny::renderText({
           "Enter Proteins and Compounds first"
@@ -945,6 +963,16 @@ server <- function(id, conversion_dirs) {
           "sample_table_info",
           "table-info-red"
         )
+
+        shinyjs::removeClass(
+          selector = ".btn-file:has(#app-conversion_main-result_input)",
+          class = "custom-disable"
+        )
+        shinyjs::removeClass(
+          selector = ".input-group:has(#app-conversion_main-result_input) > .form-control",
+          class = "custom-disable"
+        )
+
         shinyjs::disable("confirm_samples")
         output$sample_table_info <- shiny::renderText({
           "Upload result file"
@@ -958,6 +986,16 @@ server <- function(id, conversion_dirs) {
           "sample_table_info",
           "table-info-green"
         )
+
+        shinyjs::removeClass(
+          selector = ".btn-file:has(#app-conversion_main-result_input)",
+          class = "custom-disable"
+        )
+        shinyjs::removeClass(
+          selector = ".input-group:has(#app-conversion_main-result_input) > .form-control",
+          class = "custom-disable"
+        )
+
         output$sample_table_info <- shiny::renderText({
           "Fill table ..."
         })
@@ -1831,7 +1869,8 @@ server <- function(id, conversion_dirs) {
 
       render_hits_table(
         hits_table = conversion_vars$formatted_hits,
-        concentration_colors = conversion_vars$conc_colors
+        concentration_colors = conversion_vars$conc_colors,
+        withzero = any(conversion_vars$formatted_hits[["[Cmp]"]] == "0 µM")
       )
     })
 

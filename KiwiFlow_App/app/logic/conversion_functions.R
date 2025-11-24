@@ -2022,7 +2022,8 @@ multiple_spectra <- function(
 render_hits_table <- function(
   hits_table,
   concentration_colors,
-  single_conc = NULL
+  single_conc = NULL,
+  withzero = FALSE
 ) {
   # JS function to display NA values
   rowCallback <- c(
@@ -2085,16 +2086,24 @@ render_hits_table <- function(
         )
       )
   } else {
+    if (withzero) {
+      lvls <- paste(c("0", names(concentration_colors)), "µM")
+      vals <- plotly::toRGB(c("#e5e5e5", concentration_colors))
+    } else {
+      lvls <- paste(names(concentration_colors), "µM")
+      vals <- plotly::toRGB(, concentration_colors)
+    }
+
     hits_table <- hits_table |>
       DT::formatStyle(
         columns = '[Cmp]',
         target = 'row',
         backgroundColor = DT::styleEqual(
-          levels = paste(names(concentration_colors), "µM"),
+          levels = lvls,
           values = gsub(
             ",1)",
             ",0.3)",
-            plotly::toRGB(concentration_colors)
+            vals
           )
         )
       )

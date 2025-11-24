@@ -249,8 +249,6 @@ server <- function(
     output$selected_module <- shiny::renderUI({
       shiny::req(selected_tab())
 
-      trest <<- selected_tab()
-
       if (selected_tab() == "Proteins") {
         tooltip_id <- "declaration_prot_tooltip_bttn"
       } else if (selected_tab() == "Compounds") {
