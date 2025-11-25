@@ -44,6 +44,7 @@ ui <- function(id) {
     id = ns("tabs"),
     bslib::nav_panel(
       "Proteins",
+      shinyjs::useShinyjs(),
       waiter::useWaiter(),
       shiny::fluidRow(
         shiny::column(
@@ -229,7 +230,7 @@ ui <- function(id) {
         shiny::column(
           width = 12,
           shiny::div(
-            class = "handsontable-wrapper",
+            class = "sample-table",
             rhandsontable::rHandsontableOutput(ns("sample_table"))
           )
         )
@@ -243,6 +244,29 @@ ui <- function(id) {
 server <- function(id, conversion_dirs) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+
+    # TEST
+    # TODO
+    w <- waiter::Waiter$new(
+      id = ns("sample_table"), # NULL means full screen (or use specific element ID)
+      html = waiter::spin_wave()
+    )
+    shinyjs::onevent(
+      "change",
+      "result_input",
+      # CRITICAL: Call the named JS instance and its show() method
+      {
+        shinyjs::disable("result_input")
+        shinyjs::addClass(
+          selector = ".btn-file:has(#app-conversion_main-compounds_fileinput)",
+          class = "custom-disable"
+        )
+        output$sample_table_info <- shiny::renderText(
+          "Loading ..."
+        )
+        w$show()
+      }
+    )
 
     # Set file upload limit
     options(shiny.maxRequestSize = 1000 * 1024^2)
@@ -507,7 +531,17 @@ server <- function(id, conversion_dirs) {
         id = ns("sample_table_info"),
         html = waiter::spin_throbber()
       )
-      Sys.sleep(0.5)
+      # Sys.sleep(0.5)
+
+      # Hide table spinner
+      on.exit(w$hide())
+
+      # Reenable result file picker
+      shinyjs::enable("result_input")
+      shinyjs::removeClass(
+        selector = ".btn-file:has(#app-conversion_main-compounds_fileinput)",
+        class = "custom-disable"
+      )
 
       sample_table <- rhandsontable::hot_to_r(
         input$sample_table
@@ -705,6 +739,12 @@ server <- function(id, conversion_dirs) {
         input$confirm_compounds |
         input$confirm_samples,
       {
+        # Block UI
+        shinyjs::runjs(paste0(
+          'document.getElementById("blocking-overlay").style.display ',
+          '= "block";'
+        ))
+
         if (input$tabs == "Proteins") {
           # If table can be saved perform actions
           if (declaration_vars$protein_table_status) {
@@ -907,6 +947,12 @@ server <- function(id, conversion_dirs) {
             declaration_vars$sample_table <- sample_table
           }
         }
+
+        # Unblock UI
+        shinyjs::runjs(paste0(
+          'document.getElementById("blocking-overlay").style.display ',
+          '= "none";'
+        ))
       }
     )
 
@@ -1001,6 +1047,7 @@ server <- function(id, conversion_dirs) {
         })
 
         file_path <- file.path(input$result_input$datapath)
+        testi <<- file_path
         declaration_vars$result <- readRDS(file_path)
 
         sample_tab <- data.frame(
@@ -1029,18 +1076,11 @@ server <- function(id, conversion_dirs) {
 
         if (!isTRUE(declaration_vars$sample_tab_initial)) {
           output$sample_table <- rhandsontable::renderRHandsontable({
-            # waiter::waiter_show(
-            #   id = ns("sample_table"),
-            #   html = waiter::spin_throbber()
-            # )
-
             sample_handsontable(
               tab = sample_tab,
               proteins = declaration_vars$protein_table$Protein,
               compounds = declaration_vars$compound_table$Compound
             )
-
-            # waiter::waiter_hide(id = ns("sample_table"))
           })
         }
 
@@ -1117,441 +1157,485 @@ server <- function(id, conversion_dirs) {
     )
 
     # Trigger loading of binding analysis results interface
-    shiny::observeEvent(conversion_dirs$result_list(), {
-      # Summarize hits to table
-      hits_summary <- conversion_dirs$result_list()$"hits_summary" |>
-        dplyr::mutate(
-          Intensity = scales::percent(
-            Intensity / 100,
-            accuracy = 0.1
-          ),
-          `% Binding` = scales::percent(
-            `% Binding`,
-            accuracy = 0.1
-          ),
-          `Total % Binding` = scales::percent(
-            `Total % Binding`,
-            accuracy = 0.1
-          ),
-          `Protein Intensity` = scales::percent(
-            `Protein Intensity` / 100,
-            accuracy = 0.1
-          ),
-          time = paste(as.character(time), "min"),
-          concentration = paste(concentration, "µM"),
-          `Mw Protein [Da]` = dplyr::if_else(
-            is.na(`Mw Protein [Da]`),
-            "N/A",
-            paste(
-              format(`Mw Protein [Da]`, nsmall = 1, trim = TRUE),
-              "Da"
-            )
-          ),
-          `Measured Mw Protein [Da]` = dplyr::if_else(
-            is.na(`Measured Mw Protein [Da]`),
-            "N/A",
-            paste(
-              format(`Measured Mw Protein [Da]`, nsmall = 1, trim = TRUE),
-              "Da"
-            )
-          ),
-          `Delta Mw Protein [Da]` = dplyr::if_else(
-            is.na(`Delta Mw Protein [Da]`),
-            "N/A",
-            paste(
-              format(`Delta Mw Protein [Da]`, nsmall = 1, trim = TRUE),
-              "Da"
-            )
-          ),
-          `Compound Mw [Da]` = dplyr::if_else(
-            is.na(`Compound Mw [Da]`),
-            "N/A",
-            paste(
-              format(`Compound Mw [Da]`, nsmall = 1, trim = TRUE),
-              "Da"
-            )
-          ),
-          `Delta Mw Compound [Da]` = dplyr::if_else(
-            is.na(`Delta Mw Compound [Da]`),
-            "N/A",
-            paste(
-              format(`Delta Mw Compound [Da]`, nsmall = 1, trim = TRUE),
-              "Da"
-            )
-          ),
-          `Peak [Da]` = dplyr::if_else(
-            is.na(`Peak [Da]`),
-            "N/A",
-            paste(
-              format(`Peak [Da]`, nsmall = 1, trim = TRUE),
-              "Da"
-            )
-          )
-        ) |>
-        dplyr::select(-c(3, 17)) |>
-        dplyr::relocate(c(concentration, time), .before = `Mw Protein [Da]`) |>
-        dplyr::relocate(`Total % Binding`, .after = "% Binding")
-
-      # Change column names
-      colnames(hits_summary) <- c(
-        "Well",
-        "Sample ID",
-        "[Cmp]",
-        "Time",
-        "Theor. Prot.",
-        "Meas. Prot.",
-        "Δ Prot.",
-        "Ⅰ Prot.",
-        "Peak Signal",
-        "Ⅰ Cmp",
-        "Cmp Name",
-        "Theor. Cmp",
-        "Δ Cmp",
-        "Bind. Stoich.",
-        "%-Binding",
-        "Total %-Binding"
-      )
-      # Assign formatted hits to reactive variable
-      conversion_vars$formatted_hits <- hits_summary
-
-      # Get concentrations
-      binding_kobs_result_names <- names(
-        conversion_dirs$result_list()$binding_kobs_result
-      )
-      concentrations <- binding_kobs_result_names[
-        !binding_kobs_result_names %in%
-          c("binding_table", "binding_plot", "kobs_result_table")
-      ]
-
-      # Assign colors to present concentrations
-      concentration_colors <- rev(RColorBrewer::brewer.pal(
-        n = length(concentrations),
-        name = "Set1"
-      ))
-      names(concentration_colors) <- concentrations
-
-      # Assign colors to reactive variable
-      conversion_vars$conc_colors <- concentration_colors
-
-      # Hide declaration tabs
-      bslib::nav_hide(
-        "tabs",
-        "Proteins"
-      )
-      bslib::nav_hide(
-        "tabs",
-        "Compounds"
-      )
-      bslib::nav_hide(
-        "tabs",
-        "Samples"
-      )
-
-      # Add "Binding" tab
-      bslib::nav_insert(
-        "tabs",
-        bslib::nav_panel(
-          title = "Binding",
-          shiny::div(
-            class = "conversion-result-wrapper",
-            shiny::uiOutput(ns("binding_tab"))
-          )
-        )
-      )
-
-      # Add "Hits" tab
-      bslib::nav_insert(
-        "tabs",
-        bslib::nav_panel(
-          title = "Hits",
-          shiny::div(
-            class = "conversion-result-wrapper",
-            shiny::div(
-              class = "tooltip-bttn hits-tab-tooltip",
-              shiny::actionButton(
-                ns("hits_table_tooltip_bttn"),
-                label = "",
-                icon = shiny::icon("circle-question")
+    shiny::observeEvent(conversion_dirs$run_analysis(), {
+      if (!is.null(conversion_dirs$result_list())) {
+        # Summarize hits to table
+        hits_summary <- conversion_dirs$result_list()$"hits_summary" |>
+          dplyr::mutate(
+            Intensity = scales::percent(
+              Intensity / 100,
+              accuracy = 0.1
+            ),
+            `% Binding` = scales::percent(
+              `% Binding`,
+              accuracy = 0.1
+            ),
+            `Total % Binding` = scales::percent(
+              `Total % Binding`,
+              accuracy = 0.1
+            ),
+            `Protein Intensity` = scales::percent(
+              `Protein Intensity` / 100,
+              accuracy = 0.1
+            ),
+            time = paste(as.character(time), "min"),
+            concentration = paste(concentration, "µM"),
+            `Mw Protein [Da]` = dplyr::if_else(
+              is.na(`Mw Protein [Da]`),
+              "N/A",
+              paste(
+                format(`Mw Protein [Da]`, nsmall = 1, trim = TRUE),
+                "Da"
               )
             ),
-            shinycssloaders::withSpinner(
-              DT::DTOutput(ns("hits_tab")),
-              type = 1,
-              color = "#35357a"
+            `Measured Mw Protein [Da]` = dplyr::if_else(
+              is.na(`Measured Mw Protein [Da]`),
+              "N/A",
+              paste(
+                format(`Measured Mw Protein [Da]`, nsmall = 1, trim = TRUE),
+                "Da"
+              )
+            ),
+            `Delta Mw Protein [Da]` = dplyr::if_else(
+              is.na(`Delta Mw Protein [Da]`),
+              "N/A",
+              paste(
+                format(`Delta Mw Protein [Da]`, nsmall = 1, trim = TRUE),
+                "Da"
+              )
+            ),
+            `Compound Mw [Da]` = dplyr::if_else(
+              is.na(`Compound Mw [Da]`),
+              "N/A",
+              paste(
+                format(`Compound Mw [Da]`, nsmall = 1, trim = TRUE),
+                "Da"
+              )
+            ),
+            `Delta Mw Compound [Da]` = dplyr::if_else(
+              is.na(`Delta Mw Compound [Da]`),
+              "N/A",
+              paste(
+                format(`Delta Mw Compound [Da]`, nsmall = 1, trim = TRUE),
+                "Da"
+              )
+            ),
+            `Peak [Da]` = dplyr::if_else(
+              is.na(`Peak [Da]`),
+              "N/A",
+              paste(
+                format(`Peak [Da]`, nsmall = 1, trim = TRUE),
+                "Da"
+              )
             )
-          )
+          ) |>
+          dplyr::select(-c(3, 17)) |>
+          dplyr::relocate(
+            c(concentration, time),
+            .before = `Mw Protein [Da]`
+          ) |>
+          dplyr::relocate(`Total % Binding`, .after = "% Binding")
+
+        # Change column names
+        colnames(hits_summary) <- c(
+          "Well",
+          "Sample ID",
+          "[Cmp]",
+          "Time",
+          "Theor. Prot.",
+          "Meas. Prot.",
+          "Δ Prot.",
+          "Ⅰ Prot.",
+          "Peak Signal",
+          "Ⅰ Cmp",
+          "Cmp Name",
+          "Theor. Cmp",
+          "Δ Cmp",
+          "Bind. Stoich.",
+          "%-Binding",
+          "Total %-Binding"
         )
-      )
+        # Assign formatted hits to reactive variable
+        conversion_vars$formatted_hits <- hits_summary
 
-      # Define a set of IDs for the dynamic concentration tabs
-      dynamic_ui_ids <- paste0("concentration_tab_", concentrations)
+        # Get concentrations
+        binding_kobs_result_names <- names(
+          conversion_dirs$result_list()$binding_kobs_result
+        )
+        concentrations <- binding_kobs_result_names[
+          !binding_kobs_result_names %in%
+            c("binding_table", "binding_plot", "kobs_result_table")
+        ]
+        conc_selected <- rep(TRUE, length(concentrations))
+        names(conc_selected) <- concentrations
+        conversion_vars$select_concentration <- conc_selected
 
-      # Add tabs for each present concentration
-      for (i in seq_along(concentrations)) {
-        concentration <- concentrations[[i]]
-        ui_id <- dynamic_ui_ids[[i]]
+        # Assign colors to present concentrations
+        concentration_colors <- rev(RColorBrewer::brewer.pal(
+          n = length(concentrations),
+          name = "Set1"
+        ))
+        names(concentration_colors) <- concentrations
 
+        # Assign colors to reactive variable
+        conversion_vars$conc_colors <- concentration_colors
+
+        # Hide declaration tabs
+        bslib::nav_hide(
+          "tabs",
+          "Proteins"
+        )
+        bslib::nav_hide(
+          "tabs",
+          "Compounds"
+        )
+        bslib::nav_hide(
+          "tabs",
+          "Samples"
+        )
+
+        # Add "Binding" tab
         bslib::nav_insert(
           "tabs",
           bslib::nav_panel(
-            title = paste0("[", concentration, "]"),
+            title = "Binding",
             shiny::div(
               class = "conversion-result-wrapper",
-              shiny::uiOutput(ns(ui_id))
+              shiny::uiOutput(ns("binding_tab"))
             )
           )
         )
-      }
 
-      # Assign output names according to present concentrations
-      lapply(names(output), function(name) {
-        if (grepl("^concentration_tab_", name)) {
-          output[[name]] <- NULL
-        }
-      })
-
-      # Loop through the list of concentrations to render UI
-      for (i in seq_along(concentrations)) {
-        concentration <- concentrations[[i]]
-        ui_id <- dynamic_ui_ids[[i]]
-
-        local({
-          local_concentration <- concentration
-          local_ui_id <- ui_id
-
-          conc_result <- conversion_dirs$result_list()$binding_kobs_result[[
-            local_concentration
-          ]]
-
-          # Render hits table for concentration tab
-          output[[paste0(local_ui_id, "_hits")]] <- DT::renderDT({
-            render_hits_table(
-              hits_table = hits_summary |>
-                dplyr::filter(
-                  `[Cmp]` == paste(local_concentration, "µM")
-                ),
-              concentration_colors = concentration_colors,
-              single_conc = local_concentration
-            )
-          })
-
-          # Render binding plot for concentration tab
-          output[[paste0(
-            local_ui_id,
-            "_binding_plot"
-          )]] <- plotly::renderPlotly({
-            make_binding_plot(
-              kobs_result = conversion_dirs$result_list()$binding_kobs_result,
-              filter_conc = local_concentration
-            )
-          })
-
-          # Render multiple spectra plot
-          output[[paste0(
-            local_ui_id,
-            "_spectra"
-          )]] <- plotly::renderPlotly({
-            decon_samples <- gsub(
-              "o",
-              ".",
-              sapply(
-                strsplit(
-                  names(conversion_dirs$result_list()$deconvolution),
-                  "_"
-                ),
-                `[`,
-                3
-              )
-            )
-
-            multiple_spectra(
-              results_list = conversion_dirs$result_list(),
-              samples = names(
-                conversion_dirs$result_list()$deconvolution
-              )[which(
-                decon_samples == local_concentration
-              )],
-              cubic = ifelse(
-                input[[paste0(local_ui_id, "_kind")]] == "3D",
-                TRUE,
-                FALSE
-              )
-            )
-          })
-
-          # Assign the renderUI to the dynamically created output slot
-          output[[local_ui_id]] <- shiny::renderUI({
+        # Add "Hits" tab
+        bslib::nav_insert(
+          "tabs",
+          bslib::nav_panel(
+            title = "Hits",
             shiny::div(
-              class = "result-conc-tab",
+              class = "conversion-result-wrapper",
               shiny::div(
-                class = "card-custom spectrum",
-                bslib::card(
-                  bslib::card_header(
-                    class = "bg-dark help-header",
-                    "Mass Spectra",
-                    shiny::div(
-                      class = "spectrum-radio-button",
-                      shinyWidgets::radioGroupButtons(
-                        ns(paste0(
-                          local_ui_id,
-                          "_kind"
-                        )),
-                        choices = c("3D", "Planar")
-                      )
-                    ),
-                    shiny::div(
-                      class = "tooltip-bttn",
-                      shiny::actionButton(
-                        ns("mass_spectra_tooltip_bttn"),
-                        label = "",
-                        icon = shiny::icon("circle-question")
-                      )
-                    )
-                  ),
-                  full_screen = TRUE,
-                  shinycssloaders::withSpinner(
-                    plotly::plotlyOutput(
-                      ns(paste0(local_ui_id, "_spectra")),
-                      height = "100%"
-                    ),
-                    type = 1,
-                    color = "#35357a"
-                  )
+                class = "tooltip-bttn hits-tab-tooltip",
+                shiny::actionButton(
+                  ns("hits_table_tooltip_bttn"),
+                  label = "",
+                  icon = shiny::icon("circle-question")
                 )
               ),
+              shinycssloaders::withSpinner(
+                DT::DTOutput(ns("hits_tab")),
+                type = 1,
+                color = "#7777f9"
+              )
+            )
+          )
+        )
+
+        # Define a set of IDs for the dynamic concentration tabs
+        dynamic_ui_ids <- paste0("concentration_tab_", concentrations)
+
+        # Add tabs for each present concentration
+        for (i in seq_along(concentrations)) {
+          concentration <- concentrations[[i]]
+          ui_id <- dynamic_ui_ids[[i]]
+
+          bslib::nav_insert(
+            "tabs",
+            bslib::nav_panel(
+              title = paste0("[", concentration, "]"),
               shiny::div(
-                class = "card-custom binding",
-                bslib::card(
-                  bslib::card_header(
-                    class = "bg-dark help-header",
-                    "Binding Curve",
-                    shiny::div(
-                      class = "tooltip-bttn",
-                      shiny::actionButton(
-                        ns("binding_curve_single_tooltip_bttn"),
-                        label = "",
-                        icon = shiny::icon("circle-question")
-                      )
-                    )
+                class = "conversion-result-wrapper",
+                shiny::uiOutput(ns(ui_id))
+              )
+            )
+          )
+        }
+
+        # Assign output names according to present concentrations
+        lapply(names(output), function(name) {
+          if (grepl("^concentration_tab_", name)) {
+            output[[name]] <- NULL
+          }
+        })
+
+        # Loop through the list of concentrations to render UI
+        for (i in seq_along(concentrations)) {
+          concentration <- concentrations[[i]]
+          ui_id <- dynamic_ui_ids[[i]]
+
+          local({
+            local_concentration <- concentration
+            local_ui_id <- ui_id
+
+            conc_result <- conversion_dirs$result_list()$binding_kobs_result[[
+              local_concentration
+            ]]
+
+            # Render hits table for concentration tab
+            output[[paste0(local_ui_id, "_hits")]] <- DT::renderDT({
+              render_hits_table(
+                hits_table = hits_summary |>
+                  dplyr::filter(
+                    `[Cmp]` == paste(local_concentration, "µM")
                   ),
-                  full_screen = TRUE,
-                  shinycssloaders::withSpinner(
-                    plotly::plotlyOutput(
-                      ns(paste0(
-                        local_ui_id,
-                        "_binding_plot"
-                      )),
-                      height = "100%"
-                    ),
-                    type = 1,
-                    color = "#35357a"
-                  )
+                concentration_colors = concentration_colors,
+                single_conc = local_concentration
+              )
+            })
+
+            # Render binding plot for concentration tab
+            output[[paste0(
+              local_ui_id,
+              "_binding_plot"
+            )]] <- plotly::renderPlotly({
+              make_binding_plot(
+                kobs_result = conversion_dirs$result_list()$binding_kobs_result,
+                filter_conc = local_concentration
+              )
+            })
+
+            # Render multiple spectra plot
+            output[[paste0(
+              local_ui_id,
+              "_spectra"
+            )]] <- plotly::renderPlotly({
+              decon_samples <- gsub(
+                "o",
+                ".",
+                sapply(
+                  strsplit(
+                    names(conversion_dirs$result_list()$deconvolution),
+                    "_"
+                  ),
+                  `[`,
+                  3
                 )
-              ),
+              )
+
+              multiple_spectra(
+                results_list = conversion_dirs$result_list(),
+                samples = names(
+                  conversion_dirs$result_list()$deconvolution
+                )[which(
+                  decon_samples == local_concentration
+                )],
+                cubic = ifelse(
+                  input[[paste0(local_ui_id, "_kind")]] == "3D",
+                  TRUE,
+                  FALSE
+                )
+              )
+            })
+
+            # Assign the renderUI to the dynamically created output slot
+            output[[local_ui_id]] <- shiny::renderUI({
               shiny::div(
-                class = "result-cards",
+                class = "result-conc-tab",
                 shiny::div(
-                  class = "card-custom",
+                  class = "card-custom spectrum",
                   bslib::card(
                     bslib::card_header(
                       class = "bg-dark help-header",
-                      htmltools::tagList(
-                        shiny::div(
-                          "k",
-                          htmltools::tags$sub("obs")
+                      "Mass Spectra",
+                      shiny::div(
+                        class = "spectrum-radio-button",
+                        shinyWidgets::radioGroupButtons(
+                          ns(paste0(
+                            local_ui_id,
+                            "_kind"
+                          )),
+                          choices = c("3D", "Planar")
                         )
                       ),
                       shiny::div(
                         class = "tooltip-bttn",
                         shiny::actionButton(
-                          ns("kobs_value_tooltip_bttn"),
+                          ns("mass_spectra_tooltip_bttn"),
                           label = "",
                           icon = shiny::icon("circle-question")
                         )
                       )
                     ),
-                    shiny::div(
-                      class = "kobs-val",
-                      format_scientific(conc_result$kobs)
+                    full_screen = TRUE,
+                    shinycssloaders::withSpinner(
+                      plotly::plotlyOutput(
+                        ns(paste0(local_ui_id, "_spectra")),
+                        height = "100%"
+                      ),
+                      type = 1,
+                      color = "#7777f9"
                     )
                   )
                 ),
                 shiny::div(
-                  class = "card-custom",
+                  class = "card-custom binding",
                   bslib::card(
                     bslib::card_header(
                       class = "bg-dark help-header",
-                      "Binding Plateau",
+                      "Binding Curve",
                       shiny::div(
                         class = "tooltip-bttn",
                         shiny::actionButton(
-                          ns("binding_plateau_tooltip_bttn"),
+                          ns("binding_curve_single_tooltip_bttn"),
                           label = "",
                           icon = shiny::icon("circle-question")
                         )
                       )
                     ),
-                    shiny::div(
-                      class = "kobs-val",
-                      paste0(format_scientific(conc_result$plateau), "%")
+                    full_screen = TRUE,
+                    shinycssloaders::withSpinner(
+                      plotly::plotlyOutput(
+                        ns(paste0(
+                          local_ui_id,
+                          "_binding_plot"
+                        )),
+                        height = "100%"
+                      ),
+                      type = 1,
+                      color = "#7777f9"
                     )
                   )
                 ),
                 shiny::div(
-                  class = "card-custom",
-                  bslib::card(
-                    bslib::card_header(
-                      class = "bg-dark help-header",
-                      "Velocity v",
-                      shiny::div(
-                        class = "tooltip-bttn",
-                        shiny::actionButton(
-                          ns("v_value_tooltip_bttn"),
-                          label = "",
-                          icon = shiny::icon("circle-question")
+                  class = "result-cards",
+                  shiny::div(
+                    class = "card-custom",
+                    bslib::card(
+                      bslib::card_header(
+                        class = "bg-dark help-header",
+                        htmltools::tagList(
+                          shiny::div(
+                            "k",
+                            htmltools::tags$sub("obs")
+                          )
+                        ),
+                        shiny::div(
+                          class = "tooltip-bttn",
+                          shiny::actionButton(
+                            ns("kobs_value_tooltip_bttn"),
+                            label = "",
+                            icon = shiny::icon("circle-question")
+                          )
                         )
-                      )
-                    ),
-                    shiny::div(
-                      class = "kobs-val",
-                      format_scientific(conc_result$v)
-                    )
-                  )
-                )
-              ),
-              shiny::div(
-                class = "card-custom hits",
-                bslib::card(
-                  bslib::card_header(
-                    class = "bg-dark help-header",
-                    "Hits",
-                    shiny::div(
-                      class = "tooltip-bttn",
-                      shiny::actionButton(
-                        ns("hits_table_tooltip_bttn"),
-                        label = "",
-                        icon = shiny::icon("circle-question")
+                      ),
+                      shiny::div(
+                        class = "kobs-val",
+                        format_scientific(conc_result$kobs)
                       )
                     )
                   ),
-                  full_screen = TRUE,
                   shiny::div(
-                    class = "conc-hits-table",
-                    shinycssloaders::withSpinner(
-                      DT::DTOutput(ns(paste0(local_ui_id, "_hits"))),
-                      type = 1,
-                      color = "#35357a"
+                    class = "card-custom",
+                    bslib::card(
+                      bslib::card_header(
+                        class = "bg-dark help-header",
+                        "Binding Plateau",
+                        shiny::div(
+                          class = "tooltip-bttn",
+                          shiny::actionButton(
+                            ns("binding_plateau_tooltip_bttn"),
+                            label = "",
+                            icon = shiny::icon("circle-question")
+                          )
+                        )
+                      ),
+                      shiny::div(
+                        class = "kobs-val",
+                        paste0(format_scientific(conc_result$plateau), "%")
+                      )
+                    )
+                  ),
+                  shiny::div(
+                    class = "card-custom",
+                    bslib::card(
+                      bslib::card_header(
+                        class = "bg-dark help-header",
+                        "Velocity v",
+                        shiny::div(
+                          class = "tooltip-bttn",
+                          shiny::actionButton(
+                            ns("v_value_tooltip_bttn"),
+                            label = "",
+                            icon = shiny::icon("circle-question")
+                          )
+                        )
+                      ),
+                      shiny::div(
+                        class = "kobs-val",
+                        format_scientific(conc_result$v)
+                      )
+                    )
+                  )
+                ),
+                shiny::div(
+                  class = "card-custom hits",
+                  bslib::card(
+                    bslib::card_header(
+                      class = "bg-dark help-header",
+                      "Hits",
+                      shiny::div(
+                        class = "tooltip-bttn",
+                        shiny::actionButton(
+                          ns("hits_table_tooltip_bttn"),
+                          label = "",
+                          icon = shiny::icon("circle-question")
+                        )
+                      )
+                    ),
+                    full_screen = TRUE,
+                    shiny::div(
+                      class = "conc-hits-table",
+                      shinycssloaders::withSpinner(
+                        DT::DTOutput(ns(paste0(local_ui_id, "_hits"))),
+                        type = 1,
+                        color = "#7777f9"
+                      )
                     )
                   )
                 )
               )
-            )
+            })
           })
-        })
-      }
+        }
 
-      # Select binding results tab
-      set_selected_tab("Binding", session)
+        # Select binding results tab
+        set_selected_tab("Binding", session)
+      } else {
+        # If results were reset load conversion declaration interface
+        # Show declaration tabs
+        bslib::nav_show(
+          "tabs",
+          "Proteins"
+        )
+        bslib::nav_show(
+          "tabs",
+          "Compounds"
+        )
+        bslib::nav_show(
+          "tabs",
+          "Samples"
+        )
+
+        # Remove results tabs
+        bslib::nav_remove("tabs", "Binding")
+        bslib::nav_remove("tabs", "Hits")
+        for (i in names(conversion_vars$select_concentration)) {
+          bslib::nav_remove(
+            "tabs",
+            paste0("[", i, "]")
+          )
+        }
+
+        # Reset reactive variables
+        conversion_vars <- shiny::reactiveValues(
+          modified_results = NULL,
+          select_concentration = NULL,
+          formatted_hits = NULL,
+          conc_colors = NULL
+        )
+
+        # Select samples tab
+        set_selected_tab("Samples", session)
+      }
     })
 
     output$binding_tab <- shiny::renderUI(
@@ -1580,7 +1664,7 @@ server <- function(id, conversion_dirs) {
                   height = "100%"
                 ),
                 type = 1,
-                color = "#35357a"
+                color = "#7777f9"
               )
             )
           )
@@ -1614,7 +1698,7 @@ server <- function(id, conversion_dirs) {
                   height = "100%"
                 ),
                 type = 1,
-                color = "#35357a"
+                color = "#7777f9"
               )
             )
           )
@@ -1639,7 +1723,7 @@ server <- function(id, conversion_dirs) {
               shinycssloaders::withSpinner(
                 DT::DTOutput(ns("kobs_result")),
                 type = 1,
-                color = "#35357a"
+                color = "#7777f9"
               )
             )
           )
@@ -1671,7 +1755,7 @@ server <- function(id, conversion_dirs) {
                 shinycssloaders::withSpinner(
                   shiny::uiOutput(ns("kinact")),
                   type = 1,
-                  color = "#35357a"
+                  color = "#7777f9"
                 )
               )
             )
@@ -1701,7 +1785,7 @@ server <- function(id, conversion_dirs) {
                 shinycssloaders::withSpinner(
                   shiny::uiOutput(ns("Ki")),
                   type = 1,
-                  color = "#35357a"
+                  color = "#7777f9"
                 )
               )
             )
@@ -1733,7 +1817,7 @@ server <- function(id, conversion_dirs) {
                 shinycssloaders::withSpinner(
                   shiny::uiOutput(ns("Ki_kinact")),
                   type = 1,
-                  color = "#35357a"
+                  color = "#7777f9"
                 )
               )
             )
@@ -1876,23 +1960,15 @@ server <- function(id, conversion_dirs) {
 
     # Recalculate results depending on excluded concentrations
     shiny::observeEvent(input[["kobs_result_cell_edit"]], {
-      # Get previously selected concentrations
-      if (is.null(conversion_vars$select_concentration)) {
-        conc_selected <- rep(TRUE, length(names(conversion_vars$conc_colors)))
-        names(conc_selected) <- names(conversion_vars$conc_colors)
-      } else {
-        conc_selected <- conversion_vars$select_concentration
-      }
-
       # Apply changes to included concentrations
-      conc_selected[input[["kobs_result_cell_edit"]]$row] <- input[[
+      conversion_vars$select_concentration[
+        input[["kobs_result_cell_edit"]]$row
+      ] <- input[[
         "kobs_result_cell_edit"
       ]]$value
 
-      conversion_vars$select_concentration <- conc_selected
-
       # Check number of selected concentrations
-      if (sum(conc_selected) < 3) {
+      if (sum(conversion_vars$select_concentration) < 3) {
         shinyWidgets::show_toast(
           "≥ 3 concentrations needed",
           type = "warning",
@@ -2068,7 +2144,7 @@ server <- function(id, conversion_dirs) {
           ) |>
           DT::formatStyle(
             1:4,
-            `border-right` = "solid 1px #ddddde"
+            `border-right` = "solid 1px #0000005c"
           )
       },
       server = FALSE

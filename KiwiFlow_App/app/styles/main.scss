@@ -429,8 +429,12 @@ h6 {
 .card-log-control .bslib-card {
   box-shadow: none !important;
   border-color: rgb(255 255 255);
-  background-color: #0000005c;
+  background-color: rgb(0 0 0 / 40%);
   border: none;
+}
+
+div.dataTables_scrollBody {
+  border-left: none;
 }
 
 .card-custom .bslib-card {
@@ -572,6 +576,10 @@ h6 {
 
 .conversion-result-wrapper .far {
   color: black;
+}
+
+.card-header .far {
+  color: black !important;
 }
 
 div[data-value="Protein Conversion"] .tab-pane .conversion-result-wrapper .far {
@@ -815,7 +823,8 @@ deconv-rep-check {
 }
 
 .dropdown-menu > li.active > a {
-  backgroubnd: #38387c;
+  background: #35357a !important;
+  color: white;
 }
 
 .bootstrap-select .dropdown-menu {
@@ -1094,15 +1103,21 @@ div[data-value="Protein Conversion"] .tab-pane {
 }
 
 .conversion-sidebar > div {
-  justify-content: space-evenly;
   height: 100%;
-  overflow: auto;
-  gap: 2% !important;
-  margin-left: -12px;
   padding: 5% !important;
+  padding-left: 0 !important;
 }
 
-#app-conversion_sidebar-module_sidebar,
+.conversion-sidebar-ui {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  height: 100%;
+  gap: 2% !important;
+  margin-left: -3px;
+}
+
+#app-conversion_sidebar-conversion_info_ui,
 .interaction-analysis-flex {
   display: flex;
   flex-direction: column;
@@ -1110,21 +1125,29 @@ div[data-value="Protein Conversion"] .tab-pane {
   background: rgba(0, 0, 0, 0.05);
   padding: 10px;
   border-radius: 4px;
-  padding-top: 20px;
-  padding-bottom: 20px;
+  padding-top: 15px;
+  padding-bottom: 15px;
   border: 1px solid rgba(0, 0, 0, 0.3);
   border-left: none;
   height: -webkit-fill-available;
   padding-left: 15px;
 }
 
-.nav-tabs .nav-link:hover,
-.nav-tabs > li > a:hover {
-  border-bottom-color: rgba(255, 255, 255, 0.1);
-}
-
 .file-select-nomargin > div {
   margin: 0;
+}
+
+.nav-tabs .nav-link:hover,
+.nav-tabs > li > a:hover,
+.nav-tabs .nav-pills > li > a:hover,
+.nav-tabs :where(ul.nav.navbar-nav > li) > a:hover,
+.nav-tabs .nav-link:focus,
+.nav-tabs > li > a:focus,
+.nav-tabs .nav-pills > li > a:focus,
+.nav-tabs :where(ul.nav.navbar-nav > li) > a:focus {
+  isolation: isolate;
+  border-color: var(--bs-nav-tabs-link-hover-border-color);
+  border-bottom-color: transparent !important;
 }
 
 .handsontable td {
@@ -1179,12 +1202,48 @@ div[data-value="Protein Conversion"] .tab-pane {
   color: black;
 }
 
+.handsontable .wtBorder.corner,
+.handsontable .wtBorder.current {
+  background-color: #35357a;
+}
+
+.sample-table {
+  overflow: scroll;
+  height: 100%;
+}
+
+.sample-table .ht_master {
+  height: 100%;
+}
+
+.handsontable .autocompleteEditor.handsontable .sample-table .ht_master {
+  height: unset !important;
+}
+
+.sample-table .waiter-overlay {
+  width: 80% !important;
+  height: 70% !important;
+  background: rgba(0, 0, 0, 0.1) !important;
+}
+
+// .sample-table {
+//   width: 100% !important;
+// }
+
+.waver > div {
+  background-color: #7777f9;
+}
+
 .handsontable-wrapper {
-  border: 1px solid black;
   border-radius: 5px;
   overflow: hidden;
+  height: 100%;
   width: fit-content;
   background: #f7f7f7;
+}
+
+.handsontable .autocompleteEditor.handsontable {
+  padding-right: unset;
 }
 
 table.dataTable thead > tr > th.sorting:before,
@@ -1732,13 +1791,23 @@ th {
   width: 100%;
 }
 
-.listbox {
-  background: pink !important;
-}
-
 .conversion-modal .modal-dialog {
   width: fit-content;
   max-width: unset !important;
+}
+
+.handsontable input,
+.handsontable textarea {
+  min-height: 0;
+  width: fit-content !important;
+}
+
+.handsontable.listbox td.htDimmed {
+  cursor: default;
+  color: inherit;
+  font-style: inherit;
+  background: #dcdcdc;
+  cursor: pointer;
 }
 
 .hits-table-tooltip .tooltip-text {
@@ -1762,9 +1831,10 @@ th {
 .conversion-title {
   display: flex;
   margin-bottom: 10px !important;
-  padding-bottom: 10px !important;
-  font-size: 1.3em !important;
+  padding-bottom: 5px !important;
+  font-size: 1em !important;
   gap: 5px;
+  justify-content: space-between;
 }
 
 .conversion-title .tooltip-bttn .btn {
