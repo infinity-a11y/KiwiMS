@@ -338,7 +338,7 @@ server <- function(id, dirs, reset_button) {
       enable(
         selector = "#app-deconvolution_process-deconvolute_start_conf"
       )
-      shinyjs::addClass("deconvolute_start_conf", "btn-highlight")
+      # shinyjs::addClass("deconvolute_start_conf", "btn-highlight")
 
       message <- NULL
 
@@ -367,7 +367,6 @@ server <- function(id, dirs, reset_button) {
             disable(
               selector = "#app-deconvolution_process-deconvolute_start_conf"
             )
-            shinyjs::removeClass("deconvolute_start_conf", "btn-highlight")
 
             message <- shiny$p(
               shiny$HTML(
@@ -403,7 +402,6 @@ server <- function(id, dirs, reset_button) {
             disable(
               selector = "#app-deconvolution_process-deconvolute_start_conf"
             )
-            shinyjs::removeClass("deconvolute_start_conf", "btn-highlight")
           }
         } else {
           if (is.null(input$target_selector)) {
@@ -416,7 +414,6 @@ server <- function(id, dirs, reset_button) {
             disable(
               selector = "#app-deconvolution_process-deconvolute_start_conf"
             )
-            shinyjs::removeClass("deconvolute_start_conf", "btn-highlight")
           }
 
           message <- shiny$p(
@@ -1984,7 +1981,7 @@ server <- function(id, dirs, reset_button) {
                       shiny$HTML(
                         paste0(
                           '<i class="fa fa-spinner fa-spin fa-fw fa-2x" style="color: ',
-                          '#38387C; margin-top: 0.25em"></i>'
+                          '#7777f9; margin-top: 0.25em"></i>'
                         )
                       )
                     )
@@ -2248,7 +2245,7 @@ server <- function(id, dirs, reset_button) {
                   shiny$HTML(
                     paste0(
                       '<i class="fa-solid fa-circle-check fa-2x" style="color:',
-                      '#38387C; margin-top: 0.5em"></i>'
+                      '#7777f9; margin-top: 0.5em"></i>'
                     )
                   )
                 )
