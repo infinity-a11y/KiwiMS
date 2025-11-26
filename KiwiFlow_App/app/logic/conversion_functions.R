@@ -319,7 +319,7 @@ sample_handsontable <- function(
     allowed_per_col = allowed_per_col
   ) |>
     rhandsontable::hot_col("Sample", readOnly = TRUE) |>
-    rhandsontable::hot_cols(fixedColumnsLeft = 1, renderer = renderer_js) |>
+    rhandsontable::hot_cols(fixedColumnsLeft = 2, renderer = renderer_js) |>
     rhandsontable::hot_table(
       contextMenu = FALSE
     )
@@ -1322,8 +1322,6 @@ make_kobs_plot <- function(ki_kinact_result) {
         zerolinecolor = "rgba(255, 255, 255, 0.5)"
       )
     )
-
-  print(kobs_plot)
 
   # Return plot
   return(kobs_plot)

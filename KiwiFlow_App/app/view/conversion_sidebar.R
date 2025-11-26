@@ -60,8 +60,6 @@ server <- function(
 
     # Render conversion result controls UI
     output$conversion_result_controls_ui <- shiny::renderUI({
-      # shiny::req(nrow(result_list()[["hits_summary"]]) > 0)
-
       # List of protein-compound-complexes
       complexes <- list(
         "Global Overview",
@@ -201,7 +199,7 @@ server <- function(
       ))
 
       if (analysis_status() == "pending") {
-        # # Search and add hits to result list
+        # Search and add hits to result list
         # result_with_hits <- add_hits(
         #   input_list()$result,
         #   sample_table = input_list()$Samples_Table,
@@ -277,14 +275,18 @@ server <- function(
         )
       } else if (selected_tab() == "Samples") {
         hints <- shiny::HTML(
-          "Assign <strong>protein-compound complexes</strong> and analysis parameters to the deconvoluted samples. Continue with the results from the previous deconvolution or upload a .rds results file."
+          "Assign <strong>protein-compound complexes</strong> to deconvoluted samples."
         )
       } else if (selected_tab() == "Binding") {
-        hints <- shiny::div()
+        hints <- shiny::HTML(
+          "Global fit of a concentration series of binding curves determining binding parameters for the selected complex."
+        )
       } else if (selected_tab() == "Hits") {
-        hints <- ""
+        hints <- shiny::HTML(
+          "The 'Hits' tab shows all signals assigned to the currently selected complex and respectively inferred parameters."
+        )
       } else {
-        hints <- ""
+        hints <- "%-Binding inferred from time series measurements of a single concentration."
       }
 
       shiny::div(
@@ -312,11 +314,13 @@ server <- function(
     output$selected_module <- shiny::renderUI({
       shiny::req(selected_tab())
 
-      title_add <- ifelse(
-        selected_tab() %in% c("Proteins", "Compounds", "Samples"),
-        "Declaration",
-        ""
-      )
+      if (selected_tab() %in% c("Proteins", "Compounds", "Samples")) {
+        title_add <- "Declaration"
+      } else if (selected_tab() %in% c("Binding", "Hits")) {
+        title_add <- ""
+      } else {
+        title_add <- "Concentration"
+      }
 
       shiny::div(
         class = "sidebar-title conversion-title",
@@ -334,7 +338,6 @@ server <- function(
 
     # Tooltip events
     shiny::observeEvent(input$sidebar_tooltip_bttn, {
-      test <<- selected_tab()
       if (selected_tab() == "Proteins") {
         title <- "Protein Declaration"
         hints <- shiny::column(
@@ -419,13 +422,93 @@ server <- function(
           )
         )
       } else if (selected_tab() == "Hits") {
-        hints <- shiny::column(
-          width = 12
+        title <- "Hits Table"
+        hints <- shiny::fluidRow(
+          shiny::br(),
+          shiny::column(
+            width = 11,
+            shiny::div(
+              class = "tooltip-text",
+              shiny::p(
+                "The hits table lists all peak signals that correspond to the declared proteins and compounds with respect to their molecular weights including mass shifts and multiple binding (stoichiometry). Signals that fall within the user-determined peak tolerance values are considered."
+              ),
+              htmltools::tags$ul(
+                htmltools::tags$li(
+                  shiny::strong("Well / Sample ID"),
+                  " – plate well and sample name or ID"
+                ),
+                htmltools::tags$li(
+                  shiny::strong("[Cmp]"),
+                  " – compound concentration"
+                ),
+                htmltools::tags$li(
+                  shiny::strong("Time"),
+                  " – incubation time point"
+                ),
+                htmltools::tags$li(
+                  shiny::strong("Theor. Prot."),
+                  " – theoretical mass of the unmodified protein"
+                ),
+                htmltools::tags$li(
+                  shiny::strong("Meas. Prot."),
+                  " – measured deconvolved mass of the protein species"
+                ),
+                htmltools::tags$li(
+                  shiny::strong("Δ Prot."),
+                  " – difference between theoretical and measured deconvolved protein mass"
+                ),
+                htmltools::tags$li(
+                  shiny::strong("Ⅰ Prot."),
+                  " – relative intensity of the unmodified protein peak [%]"
+                ),
+                htmltools::tags$li(
+                  shiny::strong("Peak Signal"),
+                  " – raw signal intensity for present peak"
+                ),
+                htmltools::tags$li(
+                  shiny::strong("Ⅰ Cmp"),
+                  " – intensity of the peak representing the protein together with a compound adduct [%]"
+                ),
+                htmltools::tags$li(
+                  shiny::strong("Cmp Name"),
+                  " – compound name or ID of the bound compound"
+                ),
+                htmltools::tags$li(
+                  shiny::strong("Theor. Cmp"),
+                  " – theoretical mass of the bound compound"
+                ),
+                htmltools::tags$li(
+                  shiny::strong("Δ Cmp"),
+                  " – difference between theoretical complex and the obtained deconvolved mass [Da]"
+                ),
+                htmltools::tags$li(
+                  shiny::strong("Bind. Stoich."),
+                  " – detected binding stoichiometry (no. of bound compounds)"
+                ),
+                htmltools::tags$li(
+                  shiny::strong("%-Binding"),
+                  " – percentage of protein that has formed the covalent adduct at this time point"
+                ),
+                htmltools::tags$li(
+                  shiny::strong("Total %-Binding"),
+                  " – cumulative %-binding (identical to %-Binding when only one adduct is present)"
+                )
+              ),
+              shiny::p(
+                "The ",
+                shiny::strong("%-Binding"),
+                " (or ",
+                shiny::strong("Total %-Binding"),
+                ") values are used to construct the binding curve and to derive ",
+                shiny::strong("k", htmltools::tags$sub("obs")),
+                ", plateau, and initial velocity (v)."
+              )
+            )
+          )
         )
       } else {
-        hints <- shiny::column(
-          width = 12
-        )
+        title <- "Single Concentration Time Series"
+        hints <- "Binding parameters derived from mass spectra of time series measurements of a single concentration."
       }
 
       shiny::showModal(

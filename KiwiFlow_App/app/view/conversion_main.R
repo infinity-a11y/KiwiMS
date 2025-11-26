@@ -293,12 +293,17 @@ server <- function(id, conversion_dirs) {
         )
 
         # Update info text
+        shinyjs::removeClass(
+          "sample_table_info",
+          "table-info-green"
+        )
+        shinyjs::addClass(
+          "sample_table_info",
+          "table-info-red"
+        )
         output$sample_table_info <- shiny::renderText(
           "Loading ..."
         )
-
-        # Show spinner
-        w$show()
       }
     )
 
@@ -541,21 +546,12 @@ server <- function(id, conversion_dirs) {
         shiny::isolate(declaration_vars$sample_table_active)
       )
 
-      # Show waiter
+      # Show waiter with 0.5 seconds minimum runtime
       waiter::waiter_show(
         id = ns("sample_table_info"),
         html = waiter::spin_throbber()
       )
       Sys.sleep(0.5)
-
-      # Hide table spinner
-      on.exit(w$hide())
-
-      # Unblock UI
-      shinyjs::runjs(paste0(
-        'document.getElementById("blocking-overlay").style.display ',
-        '= "none";'
-      ))
 
       # Reenable result file picker
       shinyjs::enable("result_input")
@@ -629,6 +625,12 @@ server <- function(id, conversion_dirs) {
           shinyjs::disable("confirm_samples")
         }
       }
+
+      # Unblock UI
+      shinyjs::runjs(paste0(
+        'document.getElementById("blocking-overlay").style.display ',
+        '= "none";'
+      ))
 
       waiter::waiter_hide(id = ns("sample_table_info"))
     })
@@ -1041,11 +1043,11 @@ server <- function(id, conversion_dirs) {
       } else {
         shinyjs::removeClass(
           "sample_table_info",
-          "table-info-red"
-        )
-        shinyjs::removeClass(
-          "sample_table_info",
           "table-info-green"
+        )
+        shinyjs::addClass(
+          "sample_table_info",
+          "table-info-red"
         )
 
         shinyjs::removeClass(
@@ -1102,6 +1104,12 @@ server <- function(id, conversion_dirs) {
 
         declaration_vars$sample_tab_initial <- TRUE
       }
+
+      # Block UI
+      shinyjs::runjs(paste0(
+        'document.getElementById("blocking-overlay").style.display ',
+        '= "none";'
+      ))
     })
 
     # Render compound table
@@ -1329,14 +1337,14 @@ server <- function(id, conversion_dirs) {
             title = "Hits",
             shiny::div(
               class = "conversion-result-wrapper",
-              shiny::div(
-                class = "tooltip-bttn hits-tab-tooltip",
-                shiny::actionButton(
-                  ns("hits_table_tooltip_bttn"),
-                  label = "",
-                  icon = shiny::icon("circle-question")
-                )
-              ),
+              # shiny::div(
+              #   class = "tooltip-bttn hits-tab-tooltip",
+              #   shiny::actionButton(
+              #     ns("hits_table_tooltip_bttn"),
+              #     label = "",
+              #     icon = shiny::icon("circle-question")
+              #   )
+              # ),
               shinycssloaders::withSpinner(
                 DT::DTOutput(ns("hits_tab")),
                 type = 1,

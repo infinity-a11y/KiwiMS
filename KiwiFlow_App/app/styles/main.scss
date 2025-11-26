@@ -2,7 +2,7 @@
 // BASIC ELEMENTS
 // ============================
 
-body > div.waiter-overlay.waiter-fullscreen {
+body>div.waiter-overlay.waiter-fullscreen {
   background: linear-gradient(135deg, #35357a, #4a4a89, #77778f, #b0b0b8, #e0e0e0);
   cursor: wait;
 }
@@ -44,7 +44,7 @@ h6 {
   right: calc(0.75rem + 0px);
 }
 
-.selectize-input > * {
+.selectize-input>* {
   max-width: 75%;
   overflow: clip;
 }
@@ -130,7 +130,7 @@ pre {
   background-color: #e5e5e5;
 }
 
-#app-deconvolution_process-deconvolution_init_ui > div {
+#app-deconvolution_process-deconvolution_init_ui>div {
   height: 100%;
   margin-bottom: unset;
 }
@@ -224,9 +224,9 @@ button .sF-modal {
   padding-bottom: 1em;
 }
 
-#app-deconvolution_pars-folder-modal > div > div > div.modal-body > div.sF-navigation.btn-toolbar > select,
-#app-deconvolution_pars-target_folder-modal > div > div > div.modal-body > div.sF-navigation.btn-toolbar > select,
-#app-deconvolution_pars-file-modal > div > div > div.modal-body > div.sF-navigation.btn-toolbar > select {
+#app-deconvolution_pars-folder-modal>div>div>div.modal-body>div.sF-navigation.btn-toolbar>select,
+#app-deconvolution_pars-target_folder-modal>div>div>div.modal-body>div.sF-navigation.btn-toolbar>select,
+#app-deconvolution_pars-file-modal>div>div>div.modal-body>div.sF-navigation.btn-toolbar>select {
   width: calc(70% - 340px);
 }
 
@@ -249,7 +249,7 @@ button .sF-modal {
   font-size: 0.7em;
 }
 
-.sF-dirList div.selected > .sF-file-name > div {
+.sF-dirList div.selected>.sF-file-name>div {
   background: #35357a !important;
 }
 
@@ -257,7 +257,7 @@ button .sF-modal {
   height: 100%;
 }
 
-.deconvolution-process-spinner > div {
+.deconvolution-process-spinner>div {
   display: flex;
   justify-content: center;
   height: 100%;
@@ -289,13 +289,13 @@ button .sF-modal {
   color: black !important;
 }
 
-.bslib-page-navbar > .navbar {
+.bslib-page-navbar>.navbar {
   background: linear-gradient(90deg, #e8cb97, #c6c5b4, #ddddde) !important;
   box-shadow: 0px 6px 6px 0px rgb(0 0 0 / 38%) !important;
   z-index: 999 !important;
 }
 
-.bslib-page-navbar > .navbar .navbar-header {
+.bslib-page-navbar>.navbar .navbar-header {
   height: 2rem;
   margin-right: 4rem;
   margin-top: -5px;
@@ -309,9 +309,9 @@ button .sF-modal {
 }
 
 .dropdown-item:hover,
-.dropdown-menu > li > a:hover,
+.dropdown-menu>li>a:hover,
 .dropdown-item:focus,
-.dropdown-menu > li > a:focus {
+.dropdown-menu>li>a:focus {
   color: var(--bs-dropdown-link-hover-color);
   background-color: var(--bs-dropdown-link-hover-bg) !important;
 }
@@ -324,7 +324,7 @@ button .sF-modal {
   background: linear-gradient(135deg, #35357a, #4a4a89, #77778f, #b0b0b8, #e0e0e0) !important;
 }
 
-.bslib-sidebar-layout > .sidebar {
+.bslib-sidebar-layout>.sidebar {
   margin-top: 23px;
   margin-bottom: 24px;
   border-top-right-radius: 7px;
@@ -334,17 +334,13 @@ button .sF-modal {
   box-shadow: inset 0px 0px 50px 14px #ffffff61;
 }
 
-.bslib-sidebar-layout > .sidebar *::-webkit-scrollbar-track,
-.bslib-sidebar-layout > .sidebar::-webkit-scrollbar-track {
+.bslib-sidebar-layout>.sidebar *::-webkit-scrollbar-track,
+.bslib-sidebar-layout>.sidebar::-webkit-scrollbar-track {
   border-top-right-radius: 7px;
   border-bottom-right-radius: 7px;
 }
 
-.navbar
-  + .container-fluid
-  > .tab-content
-  > .tab-pane.active.html-fill-container
-  > .bslib-sidebar-layout:only-child:not([data-bslib-sidebar-border-radius="true"]) {
+.navbar+.container-fluid>.tab-content>.tab-pane.active.html-fill-container>.bslib-sidebar-layout:only-child:not([data-bslib-sidebar-border-radius="true"]) {
   // --_sidebar-width: 23rem !important;
 }
 
@@ -395,7 +391,7 @@ h6 {
   flex-direction: column;
 }
 
-.deconvolution-parent-card > div {
+.deconvolution-parent-card>div {
   margin-top: auto;
   margin-bottom: auto;
   flex: 1 1 auto;
@@ -413,11 +409,11 @@ h6 {
 }
 
 .full-height-row,
-.full-height-row > div {
+.full-height-row>div {
   height: 100%;
 }
 
-.full-height-row > div > div {
+.full-height-row>div>div {
   display: flex;
   flex-direction: column;
   align-content: space-evenly;
@@ -462,10 +458,10 @@ div.dataTables_scrollBody {
   align-content: center;
 }
 
-.deconvolution-result-content-noplate > div,
-.deconvolution-result-content-plate > div,
-.deconvolution-result-content-plate > div > div,
-.deconvolution-result-content-noplate > div > div {
+.deconvolution-result-content-noplate>div,
+.deconvolution-result-content-plate>div,
+.deconvolution-result-content-plate>div>div,
+.deconvolution-result-content-noplate>div>div {
   height: 100%;
   align-content: center;
 }
@@ -583,13 +579,13 @@ div.dataTables_scrollBody {
   color: black !important;
 }
 
-div[data-value="Protein Conversion"] .tab-pane .conversion-result-wrapper .far {
-  color: white;
-}
+// div[data-value="Protein Conversion"] .tab-pane .conversion-result-wrapper .far {
+//   color: white;
+// }
 
-#app-conversion_main-hits_table_tooltip_bttn {
-  color: white;
-}
+// #app-conversion_main-hits_table_tooltip_bttn {
+//   color: white;
+// }
 
 .shiny-input-container:not(.shiny-input-container-inline) {
   width: 100%;
@@ -644,11 +640,11 @@ textarea.form-control {
 }
 
 .nav-tabs .nav-link,
-.nav-tabs > li > a {
+.nav-tabs>li>a {
   color: white !important;
 }
 
-.tab-content > .active {
+.tab-content>.active {
   display: block;
   background: rgb(255 255 255 / 10%);
 }
@@ -713,7 +709,7 @@ textarea.form-control {
   font-style: italic;
 }
 
-#app-deconvolution_process-target_sel_ui > div > div {
+#app-deconvolution_process-target_sel_ui>div>div {
   width: inherit;
 }
 
@@ -789,7 +785,7 @@ deconv-rep-check {
   box-shadow: none;
 }
 
-.selectize-input > * {
+.selectize-input>* {
   vertical-align: -webkit-baseline-middle;
 }
 
@@ -813,17 +809,17 @@ deconv-rep-check {
   box-shadow: 1px -4px 12px rgb(0 0 0 / 40%);
 }
 
-.bootstrap-select > .dropdown-toggle {
+.bootstrap-select>.dropdown-toggle {
   border-color: transparent;
   background: #e5e5e5;
 }
 
 .dropdown-item,
-.dropdown-menu > li > a {
+.dropdown-menu>li>a {
   background: #e5e5e5;
 }
 
-.dropdown-menu > li.active > a {
+.dropdown-menu>li.active>a {
   background: #35357a !important;
   color: white;
 }
@@ -842,19 +838,16 @@ deconv-rep-check {
   --bs-btn-disabled-opacity: 0.5;
 }
 
-.card-body
-  .btn-default:not(
-    .btn-primary,
-    .btn-secondary,
-    .btn-info,
-    .btn-success,
-    .btn-danger,
-    .btn-warning,
-    .btn-light,
-    .btn-dark,
-    .btn-link,
-    [class*="btn-outline-"]
-  ) {
+.card-body .btn-default:not(.btn-primary,
+  .btn-secondary,
+  .btn-info,
+  .btn-success,
+  .btn-danger,
+  .btn-warning,
+  .btn-light,
+  .btn-dark,
+  .btn-link,
+  [class*="btn-outline-"]) {
   --bs-btn-color: #ffffff;
   --bs-border-color: #ffffff;
 }
@@ -882,21 +875,21 @@ deconv-rep-check {
   color: white;
 }
 
-.btn-group > .btn {
+.btn-group>.btn {
   background-color: #e5e5e5;
   color: #404040;
 }
 
-.btn-group > .btn:hover {
+.btn-group>.btn:hover {
   background-color: #404040;
   color: white;
 }
 
-.btn-group .btn-group-sm .btn-group > .btn {
+.btn-group .btn-group-sm .btn-group>.btn {
   border-color: #404040;
 }
 
-.btn-check:checked + .btn:hover {
+.btn-check:checked+.btn:hover {
   color: #fff !important;
   background-color: #38387c !important;
   border-color: #38387c !important;
@@ -965,6 +958,7 @@ decon-report-modal .btn-default {
 }
 
 @keyframes pulsate-shadow {
+
   0%,
   100% {
     box-shadow: 0 0 12px rgb(0 0 0 / 80%);
@@ -993,13 +987,13 @@ decon-report-modal .btn-default {
 // PROTEIN CONVERSION AND KI/KINACT TABS
 // ======================================
 
-.locked-panel .bslib-sidebar-layout > .sidebar,
+.locked-panel .bslib-sidebar-layout>.sidebar,
 .locked-panel .bslib-sidebar-layout .bslib-page-main {
   filter: blur(3px);
   pointer-events: none;
 }
 
-.locked-panel .bslib-sidebar-layout > .collapse-toggle {
+.locked-panel .bslib-sidebar-layout>.collapse-toggle {
   display: none;
 }
 
@@ -1007,7 +1001,7 @@ div[data-value="Protein Conversion"] .collapse-toggle {
   display: none;
 }
 
-div[data-value="Protein Conversion"] .bslib-sidebar-layout.sidebar-collapsed > .collapse-toggle {
+div[data-value="Protein Conversion"] .bslib-sidebar-layout.sidebar-collapsed>.collapse-toggle {
   color: white;
   top: 35px;
   border-color: white;
@@ -1017,12 +1011,12 @@ div[data-value="Protein Conversion"] .tab-pane {
   height: 100%;
 }
 
-.bslib-sidebar-layout > .collapse-toggle {
+.bslib-sidebar-layout>.collapse-toggle {
   color: transparent;
   display: none;
 }
 
-.navbar + .container-fluid > .tab-content > .tab-pane.active.html-fill-container {
+.navbar+.container-fluid>.tab-content>.tab-pane.active.html-fill-container {
   padding: 0;
 }
 
@@ -1103,7 +1097,7 @@ div[data-value="Protein Conversion"] .tab-pane {
   gap: 15px;
 }
 
-.conversion-sidebar > div {
+.conversion-sidebar>div {
   height: 100%;
   padding: 5% !important;
   padding-left: 0 !important;
@@ -1134,18 +1128,18 @@ div[data-value="Protein Conversion"] .tab-pane {
   padding-left: 15px;
 }
 
-.file-select-nomargin > div {
+.file-select-nomargin>div {
   margin: 0;
 }
 
 .nav-tabs .nav-link:hover,
-.nav-tabs > li > a:hover,
-.nav-tabs .nav-pills > li > a:hover,
-.nav-tabs :where(ul.nav.navbar-nav > li) > a:hover,
+.nav-tabs>li>a:hover,
+.nav-tabs .nav-pills>li>a:hover,
+.nav-tabs :where(ul.nav.navbar-nav > li)>a:hover,
 .nav-tabs .nav-link:focus,
-.nav-tabs > li > a:focus,
-.nav-tabs .nav-pills > li > a:focus,
-.nav-tabs :where(ul.nav.navbar-nav > li) > a:focus {
+.nav-tabs>li>a:focus,
+.nav-tabs .nav-pills>li>a:focus,
+.nav-tabs :where(ul.nav.navbar-nav > li)>a:focus {
   isolation: isolate;
   border-color: var(--bs-nav-tabs-link-hover-border-color);
   border-bottom-color: transparent !important;
@@ -1205,7 +1199,11 @@ div[data-value="Protein Conversion"] .tab-pane {
 
 .handsontable .wtBorder.corner,
 .handsontable .wtBorder.current {
-  background-color: #35357a;
+  background-color: #35357a !important;
+}
+
+.sample-table .handsontable {
+  overflow: hidden;
 }
 
 .sample-table {
@@ -1225,17 +1223,7 @@ div[data-value="Protein Conversion"] .tab-pane {
   height: unset !important;
 }
 
-.sample-table .waiter-overlay {
-  width: 80% !important;
-  height: 70% !important;
-  background: rgba(0, 0, 0, 0.1) !important;
-}
-
-// .sample-table {
-//   width: 100% !important;
-// }
-
-.waver > div {
+.waver>div {
   background-color: #7777f9;
 }
 
@@ -1251,8 +1239,8 @@ div[data-value="Protein Conversion"] .tab-pane {
   padding-right: unset;
 }
 
-table.dataTable thead > tr > th.sorting:before,
-table.dataTable thead > tr > th.sorting:after {
+table.dataTable thead>tr>th.sorting:before,
+table.dataTable thead>tr>th.sorting:after {
   font-size: 10px !important;
 }
 
@@ -1372,7 +1360,7 @@ table.dataTable thead > tr > th.sorting:after {
 }
 
 #app-conversion_main-hits_tab,
-#app-conversion_main-hits_tab > div {
+#app-conversion_main-hits_tab>div {
   height: 100% !important;
 }
 
@@ -1493,8 +1481,8 @@ th.sorting {
   background: transparent;
 }
 
-table.dataTable thead > tr > th.sorting::after,
-table.dataTable thead > tr > th.sorting::before {
+table.dataTable thead>tr>th.sorting::after,
+table.dataTable thead>tr>th.sorting::before {
   opacity: 0.5 !important;
 }
 
@@ -1554,7 +1542,7 @@ table.dataTable thead > tr > th.sorting::before {
   color: black;
 }
 
-table.dataTable > tbody > tr.selected > * {
+table.dataTable>tbody>tr.selected>* {
   box-shadow: inset 0 0 0 9999px #38387c !important;
 }
 
@@ -1562,13 +1550,13 @@ table.dataTable > tbody > tr.selected > * {
   background: transparent;
 }
 
-.active > .page-link {
+.active>.page-link {
   color: white;
   border-color: #38387c;
   background: #38387c;
 }
 
-.active > .page-link:hover {
+.active>.page-link:hover {
   color: black;
 }
 
@@ -1643,7 +1631,7 @@ table.dataTable > tbody > tr.selected > * {
   background-color: #dedede !important;
 }
 
-.kobs-val div:where(.shiny-html-output):has(> *).recalculating > * {
+.kobs-val div:where(.shiny-html-output):has(> *).recalculating>* {
   opacity: 1 !important;
 }
 
@@ -1726,7 +1714,7 @@ th {
   height: fit-content;
 }
 
-#app-conversion_main-binding_plot > div > div > svg:nth-child(3) > g.infolayer > g.legend > rect.bg {
+#app-conversion_main-binding_plot>div>div>svg:nth-child(3)>g.infolayer>g.legend>rect.bg {
   fill-opacity: 0 !important;
 }
 
@@ -1736,10 +1724,10 @@ th {
   flex-basis: unset !important;
 }
 
-#app-conversion_main-binding_plot > div,
-#app-conversion_main-binding_plot > div > div,
-#app-conversion_main-kobs_plot > div,
-#app-conversion_main-kobs_plot > div > div {
+#app-conversion_main-binding_plot>div,
+#app-conversion_main-binding_plot>div>div,
+#app-conversion_main-kobs_plot>div,
+#app-conversion_main-kobs_plot>div>div {
   width: unset !important;
   height: unset !important;
 }
