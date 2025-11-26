@@ -245,29 +245,6 @@ server <- function(id, conversion_dirs) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
-    # TEST
-    # TODO
-    w <- waiter::Waiter$new(
-      id = ns("sample_table"), # NULL means full screen (or use specific element ID)
-      html = waiter::spin_wave()
-    )
-    shinyjs::onevent(
-      "change",
-      "result_input",
-      # CRITICAL: Call the named JS instance and its show() method
-      {
-        shinyjs::disable("result_input")
-        shinyjs::addClass(
-          selector = ".btn-file:has(#app-conversion_main-compounds_fileinput)",
-          class = "custom-disable"
-        )
-        output$sample_table_info <- shiny::renderText(
-          "Loading ..."
-        )
-        w$show()
-      }
-    )
-
     # Set file upload limit
     options(shiny.maxRequestSize = 1000 * 1024^2)
 
@@ -285,6 +262,44 @@ server <- function(id, conversion_dirs) {
       sample_table_active = TRUE,
       sample_table_status = FALSE,
       conversion_ready = FALSE
+    )
+
+    # Prepare waiter spinner object
+    w <- waiter::Waiter$new(
+      id = ns("sample_table"),
+      html = waiter::spin_wave()
+    )
+
+    # On result file input execute immediately
+    shinyjs::onevent(
+      "change",
+      "result_input",
+      {
+        # Block UI
+        shinyjs::runjs(paste0(
+          'document.getElementById("blocking-overlay").style.display ',
+          '= "block";'
+        ))
+
+        # Disable result file input
+        shinyjs::disable("result_input")
+        shinyjs::addClass(
+          selector = ".btn-file:has(#app-conversion_main-result_input)",
+          class = "custom-disable"
+        )
+        shinyjs::addClass(
+          selector = ".input-group:has(#app-conversion_main-result_input) > .form-control",
+          class = "custom-disable"
+        )
+
+        # Update info text
+        output$sample_table_info <- shiny::renderText(
+          "Loading ..."
+        )
+
+        # Show spinner
+        w$show()
+      }
     )
 
     # Observe protein file upload
@@ -531,10 +546,16 @@ server <- function(id, conversion_dirs) {
         id = ns("sample_table_info"),
         html = waiter::spin_throbber()
       )
-      # Sys.sleep(0.5)
+      Sys.sleep(0.5)
 
       # Hide table spinner
       on.exit(w$hide())
+
+      # Unblock UI
+      shinyjs::runjs(paste0(
+        'document.getElementById("blocking-overlay").style.display ',
+        '= "none";'
+      ))
 
       # Reenable result file picker
       shinyjs::enable("result_input")
@@ -543,6 +564,7 @@ server <- function(id, conversion_dirs) {
         class = "custom-disable"
       )
 
+      # Read sample table input
       sample_table <- rhandsontable::hot_to_r(
         input$sample_table
       )
@@ -798,11 +820,6 @@ server <- function(id, conversion_dirs) {
             # Render sample table with new input
             if (!is.null(input$sample_table)) {
               output$sample_table <- rhandsontable::renderRHandsontable({
-                # waiter::waiter_show(
-                #   id = ns("sample_table"),
-                #   html = waiter::spin_throbber()
-                # )
-
                 sample_handsontable(
                   tab = slice_sample_tab(rhandsontable::hot_to_r(
                     input$sample_table
@@ -810,8 +827,6 @@ server <- function(id, conversion_dirs) {
                   proteins = protein_table$Protein,
                   compounds = declaration_vars$compound_table$Compound
                 )
-
-                # waiter::waiter_hide(id = ns("sample_table"))
               })
 
               # Jump to next tab module
@@ -1046,10 +1061,11 @@ server <- function(id, conversion_dirs) {
           "Fill table ..."
         })
 
+        # Read results .rds file from selected path
         file_path <- file.path(input$result_input$datapath)
-        testi <<- file_path
         declaration_vars$result <- readRDS(file_path)
 
+        # Framework sample table
         sample_tab <- data.frame(
           Sample = names(declaration_vars$result$deconvolution),
           Protein = ifelse(
