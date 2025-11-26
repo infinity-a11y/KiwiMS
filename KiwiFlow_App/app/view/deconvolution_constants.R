@@ -498,7 +498,7 @@ deconvolution_status_controls <- function(ns) {
                 shiny$HTML(
                   paste0(
                     '<i class="fa fa-spinner fa-spin fa-fw fa-2x" style="color: ',
-                    '#38387C;"></i>'
+                    '#7777f9;"></i>'
                   )
                 )
               )
@@ -509,7 +509,7 @@ deconvolution_status_controls <- function(ns) {
                 shiny$HTML(
                   paste0(
                     '<i class="fa-solid fa-spinner fa-2x" style="color: ',
-                    '#38387C;"></i>'
+                    '#7777f9;"></i>'
                   )
                 )
               )
@@ -531,7 +531,7 @@ deconvolution_status_controls <- function(ns) {
                 shiny$HTML(
                   paste0(
                     '<i class="fa-solid fa-circle-check fa-2x" style="color: ',
-                    '#38387C;"></i>'
+                    '#7777f9;"></i>'
                   )
                 )
               )

@@ -762,6 +762,14 @@ server <- function(id, dirs, reset_button) {
       reactVars$decon_process_out <- file.path(temp, "output.txt")
       write("", reactVars$decon_process_out)
 
+      # TEST
+      # TODO
+      temp1 <<- temp
+      logfile <<- log_path
+      source_file <<- getwd()
+      result_dir <<- dirs$targetpath()
+      reactVars <<- reactVars
+
       # Launch external deconvolution process
       tryCatch(
         {
@@ -1473,6 +1481,12 @@ server <- function(id, dirs, reset_button) {
 
         shiny$req(result_files_sel(), input$toggle_result)
 
+        input_toggle_result <<- input$toggle_result
+        result_files_sel <<- result_files_sel()
+        dirs_selected <<- dirs$selected()
+        dirs_targetpath <<- dirs$targetpath()
+        dirs_file <<- dirs$file()
+
         if (dirs$selected() == "folder") {
           result_dir <- file.path(
             dirs$targetpath(),
@@ -1487,7 +1501,10 @@ server <- function(id, dirs, reset_button) {
 
         if (dir.exists(result_dir)) {
           # Generate the spectrum plot
-          spectrum <- spectrum_plot(result_dir, input$toggle_result)
+          spectrum <- spectrum_plot(
+            result_path = result_dir,
+            raw = as.logical(input$toggle_result)
+          )
 
           # Hide spinner and activate reactive spinner variable again
           waiter_hide(id = ns("spectrum"))

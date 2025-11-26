@@ -131,8 +131,16 @@ engine.pick_peaks()
 
       if (dir.exists(result)) {
         plots <- list(
-          decon_spec = spectrum_plot(result, raw = FALSE, interactive = FALSE),
-          raw_spec = spectrum_plot(result, raw = TRUE, interactive = FALSE)
+          decon_spec = spectrum_plot(
+            result_path = result,
+            raw = FALSE,
+            interactive = FALSE
+          ),
+          raw_spec = spectrum_plot(
+            result_path = result,
+            raw = TRUE,
+            interactive = FALSE
+          )
         )
 
         saveRDS(plots, file.path(result, "plots.rds"))
@@ -320,8 +328,8 @@ deconvolute <- function(
       {
         for (dir in seq_along(raw_dirs)) {
           process_single_dir(
-            raw_dirs[dir],
-            result_dir,
+            waters_dir = raw_dirs[dir],
+            result_dir = result_dir,
             startz,
             endz,
             minmz,
@@ -508,7 +516,12 @@ create_384_plate_heatmap <- function(data) {
 # Helper function to harmonize data for plotting
 
 #' @export
-process_plot_data <- function(sample = NULL, result_path = NULL) {
+process_plot_data <- function(
+  sample = NULL,
+  result_path = NULL,
+  raw = FALSE,
+  bin_width = 0.01
+) {
   if (is.null(sample) & is.null(result_path)) {
     message(
       "Provide either the path to a '.rds' result file or a list object carrying sample results"
@@ -539,9 +552,20 @@ process_plot_data <- function(sample = NULL, result_path = NULL) {
       mass$intensity <- (mass$intensity - min(mass$intensity)) /
         (max(mass$intensity) - min(mass$intensity)) *
         100
+      highlight_peaks <- NULL
     } else {
-      mass <- utils::read.delim(mass_file, sep = " ", header = FALSE)
-      peaks <- utils::read.delim(peaks_file, sep = " ", header = FALSE)
+      mass <- utils::read.delim(
+        mass_file,
+        sep = " ",
+        header = FALSE,
+        col.names = c("mass", "intensity")
+      )
+      peaks <- utils::read.delim(
+        peaks_file,
+        sep = " ",
+        header = FALSE,
+        col.names = c("mass", "intensity")
+      )
       mass$intensity <- (mass$intensity - min(mass$intensity)) /
         (max(mass$intensity) - min(mass$intensity)) *
         100
@@ -598,11 +622,16 @@ spectrum_plot <- function(
   interactive = TRUE,
   bin_width = 0.01
 ) {
-  plot_data <- process_plot_data(sample, result_path)
+  plot_data <- process_plot_data(
+    sample,
+    result_path,
+    raw = raw,
+    bin_width = bin_width
+  )
 
   if (!interactive) {
     plot <- ggplot2::ggplot(
-      plot_data$mass$mass,
+      plot_data$mass,
       ggplot2::aes(
         x = mass,
         y = intensity,
@@ -618,6 +647,7 @@ spectrum_plot <- function(
       ggplot2::geom_line() +
       ggplot2::scale_y_continuous(labels = scales::percent_format(scale = 1)) +
       ggplot2::theme_minimal()
+
     if (raw) {
       plot <- plot + ggplot2::labs(y = "Intensity [%]", x = "m/z [Th]")
     } else {
@@ -700,7 +730,8 @@ spectrum_plot <- function(
     )
 
     if (!is.null(result_path)) {
-      plotly::add_markers(
+      plot <- plotly::add_markers(
+        plot,
         data = plot_data$highlight_peaks,
         x = ~mass,
         y = ~intensity,
@@ -717,9 +748,9 @@ spectrum_plot <- function(
         hoverinfo = "text",
         text = ~ paste0(
           "Mass: ",
-          ~mass,
+          mass,
           " Da\nIntensity: ",
-          round(~intensity, 2),
+          round(intensity, 2),
           "%"
         ),
         showlegend = FALSE
@@ -878,12 +909,12 @@ generate_decon_rslt <- function(
     ))
 
     decon_spec <- spectrum_plot(
-      rslt_folder,
+      result_path = rslt_folder,
       raw = FALSE,
       interactive = FALSE
     )
     raw_spec <- spectrum_plot(
-      rslt_folder,
+      result_path = rslt_folder,
       raw = TRUE,
       interactive = FALSE
     )

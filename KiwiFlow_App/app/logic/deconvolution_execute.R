@@ -35,8 +35,8 @@ tryCatch(
 tryCatch(
   {
     deconvolute(
-      conf$dirs,
-      result_dir,
+      raw_dirs = conf$dirs,
+      result_dir = result_dir,
       startz = conf$params$startz,
       endz = conf$params$endz,
       minmz = conf$params$minmz,
