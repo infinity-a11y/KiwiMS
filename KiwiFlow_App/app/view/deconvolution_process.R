@@ -67,13 +67,13 @@ server <- function(id, dirs, reset_button) {
 
     ### Reactive variables declaration ----
     reactVars <- shiny$reactiveValues(
-      isRunning = FALSE,
-      completedFiles = 0,
-      expectedFiles = 0,
+      is_running = FALSE,
+      completed_files = 0,
+      expected_files = 0,
       current_total_files = 0,
-      initialFileCount = 0,
-      lastCheck = 0,
-      lastCheckresults = 0,
+      initial_file_count = 0,
+      last_check = 0,
+      results_last_check = 0,
       count = 0,
       rep_count = 0,
       rslt_df = data.frame(),
@@ -202,9 +202,7 @@ server <- function(id, dirs, reset_button) {
         )
       }
 
-      shiny$div(
-        shiny$actionButton(ns("deconvolute_start"), "Run Deconvolution")
-      )
+      shiny$actionButton(ns("deconvolute_start"), "Run Deconvolution")
     })
 
     ### Functions ----
@@ -229,14 +227,14 @@ server <- function(id, dirs, reset_button) {
 
     #### reset_progress ----
     reset_progress <- function() {
-      reactVars$isRunning <- FALSE
+      reactVars$is_running <- FALSE
       reactVars$heatmap_ready <- FALSE
-      reactVars$completedFiles <- 0
+      reactVars$completed_files <- 0
       reactVars$sample_names <- NULL
       reactVars$wells <- NULL
       reactVars$rslt_df <- data.frame()
-      reactVars$lastCheck <- Sys.time()
-      reactVars$lastCheckresults <- Sys.time()
+      reactVars$last_check <- Sys.time()
+      reactVars$results_last_check <- Sys.time()
       reactVars$heatmap_ready <- FALSE
       reactVars$deconv_report_status <- NULL
 
@@ -726,11 +724,11 @@ server <- function(id, dirs, reset_button) {
       session$sendCustomMessage("selectize-init", "result_picker")
 
       # Initialization variables
-      reactVars$isRunning <- TRUE
+      reactVars$is_running <- TRUE
       reactVars$catch_error <- FALSE
-      reactVars$expectedFiles <- length(raw_dirs)
-      reactVars$initialFileCount <- check_progress(raw_dirs)
-      message("Initial file count: ", reactVars$initialFileCount)
+      reactVars$expected_files <- length(raw_dirs)
+      reactVars$initial_file_count <- check_progress(raw_dirs)
+      message("Initial file count: ", reactVars$initial_file_count)
 
       #### Start computation ----
 
@@ -812,7 +810,7 @@ server <- function(id, dirs, reset_button) {
         reactVars$catch_error <- FALSE
 
         # Set reactive status variables
-        reactVars$isRunning <- FALSE
+        reactVars$is_running <- FALSE
         reactVars$deconv_report_status <- NULL
 
         # End mouse pointer blocking overlay
@@ -832,7 +830,7 @@ server <- function(id, dirs, reset_button) {
       shiny$observe({
         shiny$req(decon_process_data())
 
-        if (isTRUE(reactVars$isRunning)) {
+        if (isTRUE(reactVars$is_running)) {
           shiny$invalidateLater(2000)
 
           # Check if the process is still alive
@@ -895,7 +893,7 @@ server <- function(id, dirs, reset_button) {
             }
 
             # Set reactive status variables
-            reactVars$isRunning <- FALSE
+            reactVars$is_running <- FALSE
             reactVars$deconv_report_status <- NULL
           }
         }
@@ -915,16 +913,16 @@ server <- function(id, dirs, reset_button) {
       reactVars$process_observer <- shiny$observe({
         proc <- decon_process_data()
 
-        completedFiles <- reactVars$completedFiles
-        expectedFiles <- reactVars$expectedFiles
+        completed_files <- reactVars$completed_files
+        expected_files <- reactVars$expected_files
 
         session$onSessionEnded(function() {
           if (!is.null(proc) && proc$is_alive()) {
             write_log(paste(
               "Deconvolution cancelled with",
-              completedFiles,
+              completed_files,
               "out of",
-              expectedFiles,
+              expected_files,
               "target(s) completed"
             ))
 
@@ -946,7 +944,7 @@ server <- function(id, dirs, reset_button) {
           if (
             difftime(
               Sys.time(),
-              reactVars$lastCheckresults,
+              reactVars$results_last_check,
               units = "secs"
             ) >=
               10
@@ -954,7 +952,7 @@ server <- function(id, dirs, reset_button) {
             if (
               isTRUE(dirs$batch_mode()) &&
                 length(dirs$batch_file()) &&
-                nrow(reactVars$rslt_df) < reactVars$completedFiles
+                nrow(reactVars$rslt_df) < reactVars$completed_files
             ) {
               shiny$req(reactVars$sample_names, reactVars$wells)
 
@@ -1156,7 +1154,7 @@ server <- function(id, dirs, reset_button) {
               count
             }
 
-            reactVars$lastCheckresults <- Sys.time()
+            reactVars$results_last_check <- Sys.time()
           }
 
           runjs(paste0(
@@ -1170,16 +1168,16 @@ server <- function(id, dirs, reset_button) {
       reactVars$progress_observer <- shiny$observe({
         shiny$invalidateLater(1000)
 
-        if (difftime(Sys.time(), reactVars$lastCheck, units = "secs") >= 0.5) {
+        if (difftime(Sys.time(), reactVars$last_check, units = "secs") >= 0.5) {
           reactVars$current_total_files <- check_progress(raw_dirs)
-          reactVars$completedFiles <-
-            reactVars$current_total_files - reactVars$initialFileCount
-          reactVars$lastCheck <- Sys.time()
+          reactVars$completed_files <-
+            reactVars$current_total_files - reactVars$initial_file_count
+          reactVars$last_check <- Sys.time()
 
           progress_pct <- min(
             100,
             round(
-              100 * reactVars$completedFiles / reactVars$expectedFiles
+              100 * reactVars$completed_files / reactVars$expected_files
             )
           )
 
@@ -1187,9 +1185,9 @@ server <- function(id, dirs, reset_button) {
             "Updating progress: ",
             progress_pct,
             "% (",
-            reactVars$completedFiles,
+            reactVars$completed_files,
             "/",
-            reactVars$expectedFiles,
+            reactVars$expected_files,
             ")"
           )
 
@@ -1208,8 +1206,8 @@ server <- function(id, dirs, reset_button) {
             title <- paste0(
               sprintf(
                 "Processing Files (%d/%d) ",
-                reactVars$completedFiles,
-                reactVars$expectedFiles
+                reactVars$completed_files,
+                reactVars$expected_files
               ),
               paste0(rep(".", reactVars$count), collapse = "")
             )
@@ -1250,8 +1248,8 @@ server <- function(id, dirs, reset_button) {
                 reactVars$results_observer$destroy()
               }
 
-              # Set reactive status variable "isRunning" to FALSE
-              reactVars$isRunning <- FALSE
+              # Set reactive status variable "is_running" to FALSE
+              reactVars$is_running <- FALSE
 
               # final result check for heatmap update
               if (
@@ -1561,7 +1559,7 @@ server <- function(id, dirs, reset_button) {
 
     ### Event end/reset deconvolution ----
     shiny$observeEvent(input$deconvolute_end, {
-      if (reactVars$isRunning) {
+      if (reactVars$is_running) {
         shiny$showModal(
           shiny$div(
             class = "start-modal",
@@ -1691,8 +1689,8 @@ server <- function(id, dirs, reset_button) {
         reactVars$process_observer$destroy()
       }
 
-      # Set reactive status variable "isRunning" to FALSE
-      reactVars$isRunning <- FALSE
+      # Set reactive status variable "is_running" to FALSE
+      reactVars$is_running <- FALSE
 
       # Remove modal dialogue window
       shiny$removeModal()
@@ -1703,9 +1701,9 @@ server <- function(id, dirs, reset_button) {
 
       write_log(paste(
         "Deconvolution cancelled with",
-        reactVars$completedFiles,
+        reactVars$completed_files,
         "out of",
-        reactVars$expectedFiles,
+        reactVars$expected_files,
         "target(s) completed"
       ))
     })
