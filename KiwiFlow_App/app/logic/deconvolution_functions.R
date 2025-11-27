@@ -134,12 +134,14 @@ engine.pick_peaks()
           decon_spec = spectrum_plot(
             result_path = result,
             raw = FALSE,
-            interactive = FALSE
+            interactive = FALSE,
+            theme = "light"
           ),
           raw_spec = spectrum_plot(
             result_path = result,
             raw = TRUE,
-            interactive = FALSE
+            interactive = FALSE,
+            theme = "light"
           )
         )
 
@@ -620,7 +622,8 @@ spectrum_plot <- function(
   sample = NULL,
   raw = FALSE,
   interactive = TRUE,
-  bin_width = 0.01
+  bin_width = 0.01,
+  theme = "dark"
 ) {
   plot_data <- process_plot_data(
     sample,
@@ -629,6 +632,26 @@ spectrum_plot <- function(
     bin_width = bin_width
   )
 
+  # Theme Styling Logic
+  if (tolower(theme) == "light") {
+    bg_color <- "white"
+    plot_bg_color <- "white"
+    font_color <- "black"
+    grid_color <- "rgba(0, 0, 0, 0.1)"
+    zeroline_color <- "rgba(0, 0, 0, 0.5)"
+    data_line_color <- "black"
+    marker_border_color <- "#7777f9"
+  } else {
+    bg_color <- "rgba(0,0,0,0)"
+    plot_bg_color <- "rgba(0,0,0,0)"
+    font_color <- "white"
+    grid_color <- "rgba(255, 255, 255, 0.2)"
+    zeroline_color <- "rgba(255, 255, 255, 0.5)"
+    data_line_color <- "white"
+    marker_border_color <- "#7777f9"
+  }
+
+  # GGPLOT (Non-Interactive) Section
   if (!interactive) {
     plot <- ggplot2::ggplot(
       plot_data$mass,
@@ -644,9 +667,14 @@ spectrum_plot <- function(
         )
       )
     ) +
-      ggplot2::geom_line() +
-      ggplot2::scale_y_continuous(labels = scales::percent_format(scale = 1)) +
-      ggplot2::theme_minimal()
+      ggplot2::geom_line(color = data_line_color) +
+      ggplot2::scale_y_continuous(labels = scales::percent_format(scale = 1))
+
+    if (tolower(theme) == "dark") {
+      plot <- plot + ggplot2::theme_dark()
+    } else {
+      plot <- plot + ggplot2::theme_minimal()
+    }
 
     if (raw) {
       plot <- plot + ggplot2::labs(y = "Intensity [%]", x = "m/z [Th]")
@@ -656,7 +684,7 @@ spectrum_plot <- function(
           data = plot_data$highlight_peaks,
           ggplot2::aes(x = mass, y = intensity),
           fill = "#e8cb97",
-          colour = "#35357A",
+          colour = marker_border_color,
           shape = 21,
           size = 2
         ) +
@@ -665,6 +693,7 @@ spectrum_plot <- function(
     return(plot)
   }
 
+  # PLOTLY (Interactive) Section
   if (raw) {
     plot <- plotly::plot_ly(
       plot_data$mass,
@@ -672,7 +701,7 @@ spectrum_plot <- function(
       y = ~intensity,
       type = "scattergl",
       mode = "lines",
-      color = I("black"),
+      color = I(data_line_color),
       hoverinfo = "text",
       text = ~ paste0(
         "Mass: ",
@@ -683,17 +712,29 @@ spectrum_plot <- function(
       )
     ) |>
       plotly::layout(
+        hovermode = "closest",
+        paper_bgcolor = bg_color,
+        plot_bgcolor = plot_bg_color,
+        font = list(size = 14, color = font_color),
         yaxis = list(
           title = "Intensity [%]",
+          color = font_color,
           showgrid = TRUE,
+          gridcolor = grid_color,
           zeroline = FALSE,
+          zerolinecolor = zeroline_color,
           ticks = "outside",
           tickcolor = "transparent"
         ),
-        xaxis = list(title = "m/z [Th]", showgrid = TRUE, zeroline = FALSE),
-        margin = list(t = 0, r = 0, b = 0, l = 50),
-        paper_bgcolor = "#dfdfdf42",
-        plot_bgcolor = "#dfdfdf42"
+        xaxis = list(
+          title = "m/z [Th]",
+          color = font_color,
+          showgrid = TRUE,
+          gridcolor = grid_color,
+          zeroline = FALSE,
+          zerolinecolor = zeroline_color
+        ),
+        margin = list(t = 0, r = 0, b = 0, l = 50)
       ) |>
       plotly::config(
         displayModeBar = "hover",
@@ -706,10 +747,6 @@ spectrum_plot <- function(
           "zoomIn2d",
           "zoomOut2d"
         ))
-        # ,
-        # toImageButtonOptions = list(
-        #   filename = paste0(Sys.Date(), "_", gsub("_rawdata", "", base), "_raw")
-        # )
       )
   } else {
     plot <- plotly::plot_ly(
@@ -718,7 +755,7 @@ spectrum_plot <- function(
       y = ~intensity,
       type = "scattergl",
       mode = "lines",
-      color = I("black"),
+      color = I(data_line_color),
       hoverinfo = "text",
       text = ~ paste0(
         "Mass: ",
@@ -738,11 +775,11 @@ spectrum_plot <- function(
         marker = list(
           color = "#e8cb97",
           line = list(
-            color = "#35357A",
-            width = 2
+            color = marker_border_color,
+            width = 1.5
           ),
           symbol = "circle",
-          size = 10,
+          size = 12,
           zindex = 100
         ),
         hoverinfo = "text",
@@ -764,11 +801,11 @@ spectrum_plot <- function(
         marker = list(
           color = "#e8cb97",
           line = list(
-            color = "#35357A",
-            width = 2
+            color = marker_border_color,
+            width = 1.5
           ),
           symbol = "circle",
-          size = 10,
+          size = 12,
           zindex = 100
         ),
         hoverinfo = "text",
@@ -789,17 +826,29 @@ spectrum_plot <- function(
 
     plot <- plotly::layout(
       plot,
+      hovermode = "closest",
+      paper_bgcolor = bg_color,
+      plot_bgcolor = plot_bg_color,
+      font = list(size = 14, color = font_color),
       yaxis = list(
         title = "Intensity [%]",
+        color = font_color,
         showgrid = TRUE,
+        gridcolor = grid_color,
         zeroline = FALSE,
+        zerolinecolor = zeroline_color,
         ticks = "outside",
         tickcolor = "transparent"
       ),
-      xaxis = list(title = "Mass [Da]", showgrid = TRUE, zeroline = FALSE),
-      margin = list(t = 0, r = 0, b = 0, l = 50),
-      paper_bgcolor = "#dfdfdf42",
-      plot_bgcolor = "#dfdfdf42"
+      xaxis = list(
+        title = "Mass [Da]",
+        color = font_color,
+        showgrid = TRUE,
+        gridcolor = grid_color,
+        zeroline = FALSE,
+        zerolinecolor = zeroline_color
+      ),
+      margin = list(t = 0, r = 0, b = 0, l = 50)
     ) |>
       plotly::config(
         displayModeBar = "hover",
@@ -812,15 +861,6 @@ spectrum_plot <- function(
           "zoomIn2d",
           "zoomOut2d"
         ))
-        # ,
-        # toImageButtonOptions = list(
-        #   filename = paste0(
-        #     Sys.Date(),
-        #     "_",
-        #     gsub("_rawdata", "", base),
-        #     "_deconvoluted"
-        #   )
-        # )
       )
   }
 
@@ -908,21 +948,22 @@ generate_decon_rslt <- function(
       paste0(raw_name, "_input.dat")
     ))
 
-    decon_spec <- spectrum_plot(
-      result_path = rslt_folder,
-      raw = FALSE,
-      interactive = FALSE
-    )
-    raw_spec <- spectrum_plot(
-      result_path = rslt_folder,
-      raw = TRUE,
-      interactive = FALSE
-    )
+    plots <- readRDS(file.path(rslt_folder, "plots.rds"))
+    # decon_spec <- spectrum_plot(
+    #   result_path = rslt_folder,
+    #   raw = FALSE,
+    #   interactive = FALSE
+    # )
+    # raw_spec <- spectrum_plot(
+    #   result_path = rslt_folder,
+    #   raw = TRUE,
+    #   interactive = FALSE
+    # )
 
     return(list(
       config = conf_df,
-      decon_spec = decon_spec,
-      raw_spec = raw_spec,
+      decon_spec = plots$decon_spec,
+      raw_spec = plots$raw_spec,
       peaks = peaks_df,
       error = error_df,
       rawdata = rawdata_df,

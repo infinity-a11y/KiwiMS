@@ -364,6 +364,10 @@ button:focus:not(:focus-visible) {
   --bs-btn-disabled-opacity: 0.5;
 }
 
+.btn-group > .btn {
+  border: none;
+}
+
 .btn:disabled {
   color: unset;
   opacity: 0.5;
@@ -429,10 +433,12 @@ button:focus:not(:focus-visible) {
   border-color: #404040;
 }
 
-.btn-check:checked + .btn:hover {
+.btn-check:checked + .btn:hover,
+.btn-group .btn-check:checked {
   color: #fff !important;
   background-color: #38387c !important;
   border-color: #38387c !important;
+  box-shadow: inset 0px 0px 20px 3px #ffffff21;
 }
 
 .bs-actionsbox .btn-group {
@@ -641,12 +647,20 @@ input[type="number"]::-webkit-inner-spin-button {
   max-height: 200px;
   overflow-scrolling: touch;
   min-width: fit-content;
-  background: #fff;
+  background: #e5e5e5;
   text-align: end;
   position: absolute;
   right: 0%;
   border-radius: 5px;
   box-shadow: 0 0 9px 0 #00000094;
+}
+
+.result-picker .selectize-dropdown-content {
+  width: 100%;
+}
+
+.result-picker .selectize-dropdown .option {
+  text-align: left;
 }
 
 .selectize-input.dropdown-active {
@@ -689,7 +703,7 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 
 .selectize-dropdown .selected {
-  background-color: #38387c;
+  background-color: #38387c !important;
 }
 
 .selectize-dropdown-content .option {
@@ -888,6 +902,12 @@ table.dataTable > tbody > tr.selected > * {
 
 .deconvolution-running-control-card {
   min-height: fit-content;
+  height: 90px;
+  margin-bottom: 15px;
+}
+
+.deconvolution-running-control-card .bslib-card .card-body {
+  justify-content: center;
 }
 
 .deconvolution-running-result-card {
@@ -1092,7 +1112,15 @@ table.dataTable > tbody > tr.selected > * {
 }
 
 .progress-group {
-  height: 47px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.progress-text {
+  font-size: 1em;
+  height: 50%;
 }
 
 #app-deconvolution_process-processing,
@@ -1114,6 +1142,19 @@ table.dataTable > tbody > tr.selected > * {
 .result-picker .selectize-control.single .selectize-input {
   height: 47px;
   border: 1px solid black;
+  background-color: #e5e5e5 !important;
+  color: black !important;
+}
+
+.selectize-control.single .selectize-input.input-active,
+.selectize-control.single .selectize-input.input-active input:not(:read-only) {
+  cursor: text;
+}
+
+.selectize-control.single .selectize-input:hover {
+  background-color: #404040;
+  color: white;
+  border-color: #404040;
 }
 
 .deconv-rep-element .shiny-input-container:not(.shiny-input-container-inline) {

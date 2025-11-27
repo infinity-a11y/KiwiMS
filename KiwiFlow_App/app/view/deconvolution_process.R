@@ -15,7 +15,7 @@ box::use(
   ],
   clipr[write_clip],
   utils[head, tail],
-  waiter[useWaiter, spin_wandering_cubes, waiter_show, waiter_hide, withWaiter],
+  waiter[useWaiter, spin_wave, waiter_show, waiter_hide, withWaiter],
 )
 
 box::use(
@@ -82,10 +82,11 @@ server <- function(id, dirs, reset_button) {
     )
 
     decon_rep_process_data <- shiny$reactiveVal(NULL)
-    result_files_sel <- shiny$reactiveVal()
+    result_files_sel <- shiny$reactiveVal(NULL)
     target_selector_sel <- shiny$reactiveVal()
 
     shiny$observe({
+      input_result_picker <<- input$result_picker
       if (!is.null(input$result_picker)) {
         result_files_sel(input$result_picker)
       }
@@ -760,49 +761,41 @@ server <- function(id, dirs, reset_button) {
       reactVars$decon_process_out <- file.path(temp, "output.txt")
       write("", reactVars$decon_process_out)
 
-      # TEST
-      # TODO
-      temp1 <<- temp
-      logfile <<- log_path
-      source_file <<- getwd()
-      result_dir <<- dirs$targetpath()
-      reactVars <<- reactVars
-
       # Launch external deconvolution process
-      tryCatch(
-        {
-          rx_process <- process$new(
-            "Rscript.exe",
-            args = c(
-              "app/logic/deconvolution_execute.R",
-              temp,
-              log_path,
-              getwd(),
-              dirs$targetpath()
-            ),
-            stdout = reactVars$decon_process_out,
-            stderr = reactVars$decon_process_out
-          )
-        },
-        error = function(e) {
-          # Activate error catching variable
-          reactVars$catch_error <- TRUE
-
-          # Stop spinner for spectrum and heatmap plot
-          waiter_hide(id = ns("heatmap"))
-          waiter_hide(id = ns("spectrum"))
-
-          error_msg <- paste("Failed to start deconvolution:", e$message)
-          write_log(error_msg)
-
-          # Show error notification
-          shiny$showNotification(
-            error_msg,
-            type = "error",
-            duration = 5
-          )
-        }
+      # tryCatch(
+      #   {
+      rx_process <- process$new(
+        "Rscript.exe",
+        args = c(
+          "app/logic/deconvolution_execute.R",
+          temp,
+          log_path,
+          getwd(),
+          dirs$targetpath()
+        ),
+        stdout = reactVars$decon_process_out,
+        stderr = reactVars$decon_process_out
       )
+      #   },
+      #   error = function(e) {
+      #     # Activate error catching variable
+      #     reactVars$catch_error <- TRUE
+
+      #     # Stop spinner for spectrum and heatmap plot
+      #     waiter_hide(id = ns("heatmap"))
+      #     waiter_hide(id = ns("spectrum"))
+
+      #     error_msg <- paste("Failed to start deconvolution:", e$message)
+      #     write_log(error_msg)
+
+      #     # Show error notification
+      #     shiny$showNotification(
+      #       error_msg,
+      #       type = "error",
+      #       duration = 5
+      #     )
+      #   }
+      # )
 
       # Abort deconvolution if process initiation fails
       if (reactVars$catch_error == TRUE) {
@@ -1473,17 +1466,11 @@ server <- function(id, dirs, reset_button) {
       output$spectrum <- renderPlotly({
         # Show spinner only once before plot fully rendered
         if (shiny$isolate(allow_spinner_spectrum()) == TRUE) {
-          waiter_show(id = ns("spectrum"), html = spin_wandering_cubes())
+          waiter_show(id = ns("spectrum"), html = spin_wave())
           allow_spinner_spectrum(FALSE)
         }
 
         shiny$req(result_files_sel(), input$toggle_result)
-
-        input_toggle_result <<- input$toggle_result
-        result_files_sel <<- result_files_sel()
-        dirs_selected <<- dirs$selected()
-        dirs_targetpath <<- dirs$targetpath()
-        dirs_file <<- dirs$file()
 
         if (dirs$selected() == "folder") {
           result_dir <- file.path(
@@ -1525,7 +1512,7 @@ server <- function(id, dirs, reset_button) {
           if (shiny$isolate(allow_spinner_heatmap()) == TRUE) {
             waiter_show(
               id = ns("heatmap"),
-              html = spin_wandering_cubes()
+              html = spin_wave()
             )
             allow_spinner_heatmap(FALSE)
           }
@@ -2055,6 +2042,16 @@ server <- function(id, dirs, reset_button) {
               ".html"
             )
 
+            input_decon_rep_title <<- fill_empty(input$decon_rep_title)
+            input_decon_rep_author <<- fill_empty(input$decon_rep_author)
+            input_decon_rep_desc <<- fill_empty(input$decon_rep_desc)
+            output_file <<- output_file
+            log_path <<- log_path
+            dirs_targetpath <<- dirs$targetpath()
+            kiwiflow_version <<- get_kiwiflow_version()["version"]
+            kiwiflow_date <<- get_kiwiflow_version()["date"]
+            temp1 <<- temp
+
             # Summarize args in vector
             args <- c(
               "deconvolution_report.R",
@@ -2068,6 +2065,9 @@ server <- function(id, dirs, reset_button) {
               get_kiwiflow_version()["date"],
               temp
             )
+
+            args1 <<- args
+            script_dir1 <<- script_dir
 
             # Construct the system command
             cmd <- paste(

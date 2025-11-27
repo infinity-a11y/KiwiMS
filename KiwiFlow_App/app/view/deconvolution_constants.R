@@ -15,7 +15,7 @@ box::use(
   ],
   clipr[write_clip],
   utils[head, tail],
-  waiter[useWaiter, spin_wandering_cubes, waiter_show, waiter_hide, withWaiter],
+  waiter[useWaiter, spin_wave, waiter_show, waiter_hide, withWaiter],
 )
 
 # Deconvolution initiation interface
@@ -555,7 +555,7 @@ deconvolution_status_controls <- function(ns) {
         class = "deconvolution-running-control-card",
         shiny$fluidRow(
           shiny$column(
-            width = 2,
+            width = 3,
             shiny$div(
               class = "decon-btn",
               shiny$actionButton(
