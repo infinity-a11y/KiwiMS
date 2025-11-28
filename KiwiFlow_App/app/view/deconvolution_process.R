@@ -78,7 +78,8 @@ server <- function(id, dirs, reset_button) {
       rep_count = 0,
       rslt_df = data.frame(),
       logs = "",
-      deconv_report_status = NULL
+      deconv_report_status = NULL,
+      continue_conversion = NULL
     )
 
     decon_rep_process_data <- shiny$reactiveVal(NULL)
@@ -86,7 +87,6 @@ server <- function(id, dirs, reset_button) {
     target_selector_sel <- shiny$reactiveVal()
 
     shiny$observe({
-      input_result_picker <<- input$result_picker
       if (!is.null(input$result_picker)) {
         result_files_sel(input$result_picker)
       }
@@ -1391,6 +1391,11 @@ server <- function(id, dirs, reset_button) {
                 selector = "#app-deconvolution_process-deconvolution_report"
               )
 
+              # Enable continuation button to protein conversion
+              enable(
+                selector = "#app-deconvolution_process-forward_deconvolution"
+              )
+
               # Change spinner to finished
               hide(selector = "#app-deconvolution_process-processing")
               show(selector = "#app-deconvolution_process-processing_fin")
@@ -2042,16 +2047,6 @@ server <- function(id, dirs, reset_button) {
               ".html"
             )
 
-            input_decon_rep_title <<- fill_empty(input$decon_rep_title)
-            input_decon_rep_author <<- fill_empty(input$decon_rep_author)
-            input_decon_rep_desc <<- fill_empty(input$decon_rep_desc)
-            output_file <<- output_file
-            log_path <<- log_path
-            dirs_targetpath <<- dirs$targetpath()
-            kiwiflow_version <<- get_kiwiflow_version()["version"]
-            kiwiflow_date <<- get_kiwiflow_version()["date"]
-            temp1 <<- temp
-
             # Summarize args in vector
             args <- c(
               "deconvolution_report.R",
@@ -2065,9 +2060,6 @@ server <- function(id, dirs, reset_button) {
               get_kiwiflow_version()["date"],
               temp
             )
-
-            args1 <<- args
-            script_dir1 <<- script_dir
 
             # Construct the system command
             cmd <- paste(
@@ -2337,6 +2329,21 @@ server <- function(id, dirs, reset_button) {
       }
     })
 
+    # Event continue to protein conversion
+    shiny$observeEvent(input$forward_deconvolution, {
+      # Switch to Protein Conversion tab
+      bslib::nav_select(
+        "#app-tabs",
+        session = session,
+        "Protein Conversion"
+      )
+
+      reactVars$continue_conversion <- file.path(
+        dirs$targetpath(),
+        gsub(".log", "_RESULT.rds", basename(log_path))
+      )
+    })
+
     ### Tooltip events ----
     shiny$observeEvent(input$detection_window_tooltip_bttn, {
       shiny$showModal(
@@ -2492,5 +2499,12 @@ server <- function(id, dirs, reset_button) {
         )
       )
     })
+
+    return(
+      shiny::reactiveValues(
+        forward_deconvolution = shiny::reactive(input$forward_deconvolution),
+        continue_conversion = shiny::reactive(reactVars$continue_conversion)
+      )
+    )
   })
 }

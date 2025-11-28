@@ -81,7 +81,7 @@ format:
 # Load the result list from RDS file
 result <- readRDS(file.path(params$result_file))
 names_result <- names(result$deconvolution)[
-  !names(result) %in% c("session", "output")
+  !names(result$deconvolution) %in% c("session", "output")
 ]
 ```
 

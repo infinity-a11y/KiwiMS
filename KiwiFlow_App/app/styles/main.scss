@@ -434,7 +434,7 @@ button:focus:not(:focus-visible) {
 }
 
 .btn-check:checked + .btn:hover,
-.btn-group .btn-check:checked {
+.btn-group > .btn-check:checked + .btn {
   color: #fff !important;
   background-color: #38387c !important;
   border-color: #38387c !important;
@@ -637,8 +637,9 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 
 .selectize-input > * {
-  max-width: 75%;
+  max-width: 92%;
   overflow: clip;
+  vertical-align: -webkit-baseline-middle;
 }
 
 .selectize-dropdown-content {
@@ -692,10 +693,6 @@ input[type="number"]::-webkit-inner-spin-button {
 .selectize-input.focus {
   border-color: black !important;
   box-shadow: none;
-}
-
-.selectize-input > * {
-  vertical-align: -webkit-baseline-middle;
 }
 
 .selectize-dropdown {
@@ -883,6 +880,12 @@ table.dataTable > tbody > tr.selected > * {
   align-items: center;
 }
 
+#app-deconvolution_process-show_log .fas {
+  position: unset;
+  right: unset;
+  padding-left: unset;
+}
+
 .deconvolution-parent-card {
   display: contents;
 }
@@ -906,7 +909,7 @@ table.dataTable > tbody > tr.selected > * {
   margin-bottom: 15px;
 }
 
-.deconvolution-running-control-card .bslib-card .card-body {
+.deconvolution-running-control-card .card-body {
   justify-content: center;
 }
 
@@ -989,7 +992,8 @@ table.dataTable > tbody > tr.selected > * {
 #app-deconvolution_process-deconvolute_start {
   background: #38387c;
   animation: pulsate-shadow 2s infinite ease-in-out;
-  height: 70px;
+  height: 65px;
+  border-radius: 15px;
 }
 
 #app-deconvolution_process-deconvolute_start:hover {
@@ -1113,6 +1117,7 @@ table.dataTable > tbody > tr.selected > * {
 
 .progress-group {
   height: 100%;
+  width: 90%;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -1141,9 +1146,12 @@ table.dataTable > tbody > tr.selected > * {
 
 .result-picker .selectize-control.single .selectize-input {
   height: 47px;
-  border: 1px solid black;
+  border: 1px solid #000;
   background-color: #e5e5e5 !important;
-  color: black !important;
+  color: #000 !important;
+  display: flex;
+  align-items: center;
+  justify-content: left;
 }
 
 .selectize-control.single .selectize-input.input-active,
@@ -1155,6 +1163,10 @@ table.dataTable > tbody > tr.selected > * {
   background-color: #404040;
   color: white;
   border-color: #404040;
+}
+
+.selectize-input.focus {
+  box-shadow: none !important;
 }
 
 .deconv-rep-element .shiny-input-container:not(.shiny-input-container-inline) {
@@ -1809,9 +1821,14 @@ table.dataTable thead > tr > th.sorting::before {
 }
 
 .load-db {
-  background-color: #38387c;
-  color: white;
+  background-color: #38387c !important;
+  color: white !important;
 }
+
+// .load-db button:focus:not(:focus-visible) {
+//   background-color: #38387c !important;
+//   color: white !important;
+// }
 
 .table-info-red {
   border: 1px solid #ff5a23;

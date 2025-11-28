@@ -241,7 +241,7 @@ ui <- function(id) {
 }
 
 #' @export
-server <- function(id, conversion_dirs) {
+server <- function(id, conversion_dirs, deconvolution_process_vars) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -991,7 +991,64 @@ server <- function(id, conversion_dirs) {
 
     # Observe sample input
     shiny::observe({
-      if (
+      if (!is.null(deconvolution_process_vars$continue_conversion())) {
+        shinyjs::removeClass(
+          "sample_table_info",
+          "table-info-green"
+        )
+        shinyjs::addClass(
+          "sample_table_info",
+          "table-info-red"
+        )
+        shinyjs::removeClass(
+          selector = ".btn-file:has(#app-conversion_main-result_input)",
+          class = "custom-disable"
+        )
+        shinyjs::removeClass(
+          selector = ".input-group:has(#app-conversion_main-result_input) > .form-control",
+          class = "custom-disable"
+        )
+        output$sample_table_info <- shiny::renderText({
+          "Fill table ..."
+        })
+        # Read results .rds file from previous deconvolution
+        declaration_vars$result <- readRDS(
+          deconvolution_process_vars$continue_conversion()
+        )
+        # Framework sample table
+        sample_tab <- data.frame(
+          Sample = names(declaration_vars$result$deconvolution),
+          Protein = ifelse(
+            length(declaration_vars$protein_table$Protein) == 1,
+            declaration_vars$protein_table$Protein,
+            ""
+          ),
+          Compound = ifelse(
+            length(declaration_vars$compound_table$Compound) == 1,
+            declaration_vars$compound_table$Compound,
+            ""
+          ),
+          cmp2 = NA,
+          cmp3 = NA,
+          cmp4 = NA,
+          cmp5 = NA,
+          cmp6 = NA,
+          cmp7 = NA,
+          cmp8 = NA,
+          cmp9 = NA
+        )
+        colnames(sample_tab) <- c("Sample", "Protein", paste("Compound", 1:9))
+        if (!isTRUE(declaration_vars$sample_tab_initial)) {
+          output$sample_table <- rhandsontable::renderRHandsontable({
+            sample_handsontable(
+              tab = sample_tab,
+              proteins = declaration_vars$protein_table$Protein,
+              compounds = declaration_vars$compound_table$Compound
+            )
+          })
+        }
+        declaration_vars$sample_tab_initial <- TRUE
+      } else if (
         is.null(declaration_vars$protein_table) ||
           is.null(declaration_vars$compound_table) ||
           isTRUE(declaration_vars$protein_table_active) ||

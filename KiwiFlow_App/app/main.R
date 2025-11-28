@@ -128,7 +128,8 @@ ui <- function(id) {
         )
       ),
       bslib$nav_item(
-        shiny$uiOutput(ns("update_button"))
+        # shiny$uiOutput(ns("update_button"))
+        shiny$actionButton(ns("test"), "")
       )
     )
   )
@@ -165,7 +166,7 @@ server <- function(id) {
     )
 
     # Deconvolution process server
-    deconvolution_process$server(
+    deconvolution_process_vars <- deconvolution_process$server(
       "deconvolution_process",
       dirs,
       reset_button = reset_button
@@ -183,7 +184,8 @@ server <- function(id) {
     # Conversion main server
     conversion_main_vars <- conversion_main$server(
       "conversion_main",
-      conversion_dirs
+      conversion_dirs,
+      deconvolution_process_vars
     )
 
     # Check update availability
@@ -240,6 +242,15 @@ server <- function(id) {
         label = label,
         icon = icon,
         class = "nav-link"
+      )
+    })
+
+    # Switch Protein Conversion tab when user forwards
+    shiny$observeEvent(deconvolution_process_vars$forward_deconvolution(), {
+      bslib::nav_select(
+        "tabs",
+        session = session,
+        "Protein Conversion"
       )
     })
 

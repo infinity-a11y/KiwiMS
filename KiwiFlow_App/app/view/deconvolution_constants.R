@@ -485,7 +485,7 @@ deconvolution_init_ui <- function(ns) {
 deconvolution_status_controls <- function(ns) {
   shiny$fluidRow(
     shiny$column(
-      width = 5,
+      width = 6,
       card(
         class = "deconvolution-running-control-card",
         shiny$fluidRow(
@@ -538,24 +538,16 @@ deconvolution_status_controls <- function(ns) {
             )
           ),
           shiny$column(
-            width = 8,
+            width = 7,
             progressBar(
               id = ns("progressBar"),
               value = 0,
               title = "Initiating Deconvolution",
               display_pct = TRUE
             )
-          )
-        )
-      )
-    ),
-    shiny$column(
-      width = 7,
-      card(
-        class = "deconvolution-running-control-card",
-        shiny$fluidRow(
+          ),
           shiny$column(
-            width = 3,
+            width = 1,
             shiny$div(
               class = "decon-btn",
               shiny$actionButton(
@@ -566,39 +558,50 @@ deconvolution_status_controls <- function(ns) {
               )
             )
           ),
-          shiny$column(
-            width = 3,
-            shiny$actionButton(
-              ns("deconvolute_end"),
-              "Abort",
-              icon = shiny$icon("circle-stop"),
-              width = "100%"
-            )
-          ),
-          shiny$column(
-            width = 3,
-            shiny$div(
-              class = "decon-btn",
-              disabled(
-                shiny$actionButton(
-                  ns("deconvolution_report"),
-                  "Report",
-                  icon = shiny$icon("square-poll-vertical"),
-                  width = "100%"
+        )
+      )
+    ),
+    shiny$column(
+      width = 6,
+      card(
+        class = "deconvolution-running-control-card",
+        shiny$column(
+          width = 12,
+          shiny$fluidRow(
+            shiny$column(
+              width = 4,
+              shiny$actionButton(
+                ns("deconvolute_end"),
+                "Abort",
+                icon = shiny$icon("circle-stop"),
+                width = "100%"
+              )
+            ),
+            shiny$column(
+              width = 4,
+              shiny$div(
+                class = "decon-btn",
+                disabled(
+                  shiny$actionButton(
+                    ns("deconvolution_report"),
+                    "Report",
+                    icon = shiny$icon("square-poll-vertical"),
+                    width = "100%"
+                  )
                 )
               )
-            )
-          ),
-          shiny$column(
-            width = 3,
-            shiny$div(
-              class = "decon-btn",
-              disabled(
-                shiny$actionButton(
-                  ns("forward_deconvolution"),
-                  "Continue",
-                  icon = shiny$icon("forward-fast"),
-                  width = "100%"
+            ),
+            shiny$column(
+              width = 4,
+              shiny$div(
+                class = "decon-btn",
+                disabled(
+                  shiny$actionButton(
+                    ns("forward_deconvolution"),
+                    "Continue",
+                    icon = shiny$icon("forward-fast"),
+                    width = "100%"
+                  )
                 )
               )
             )
