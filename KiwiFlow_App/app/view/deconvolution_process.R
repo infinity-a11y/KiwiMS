@@ -2338,10 +2338,13 @@ server <- function(id, dirs, reset_button) {
         "Protein Conversion"
       )
 
+      shinyjs::disable("forward_deconvolution")
+
       reactVars$continue_conversion <- file.path(
         dirs$targetpath(),
         gsub(".log", "_RESULT.rds", basename(log_path))
       )
+      message("DECONVOLUTION", reactVars$continue_conversion)
     })
 
     ### Tooltip events ----

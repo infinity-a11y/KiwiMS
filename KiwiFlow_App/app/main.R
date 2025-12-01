@@ -126,10 +126,6 @@ ui <- function(id) {
             class = "nav-link"
           )
         )
-      ),
-      bslib$nav_item(
-        # shiny$uiOutput(ns("update_button"))
-        shiny$actionButton(ns("test"), "")
       )
     )
   )

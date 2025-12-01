@@ -366,6 +366,11 @@ slice_sample_tab <- function(sample_table) {
 # Validate sample table
 #' @export
 check_sample_table <- function(sample_table, proteins, compounds) {
+  # Check if protein and compound names present
+  if (is.null(proteins) || is.null(compounds)) {
+    return("Declare Proteins and Compounds")
+  }
+
   # Check if protein names valid
   if (
     !all(

@@ -1011,10 +1011,15 @@ server <- function(id, conversion_dirs, deconvolution_process_vars) {
         output$sample_table_info <- shiny::renderText({
           "Fill table ..."
         })
+
+        message("CONVERSION", deconvolution_process_vars$continue_conversion())
         # Read results .rds file from previous deconvolution
-        declaration_vars$result <- readRDS(
-          deconvolution_process_vars$continue_conversion()
+        shiny::isolate(
+          declaration_vars$result <- readRDS(
+            deconvolution_process_vars$continue_conversion()
+          )
         )
+
         # Framework sample table
         sample_tab <- data.frame(
           Sample = names(declaration_vars$result$deconvolution),
