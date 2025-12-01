@@ -863,7 +863,7 @@ table.dataTable > tbody > tr.selected > * {
   flex-direction: column;
 }
 
-#app-deconvolution_process-deconvolution_init_ui > div {
+#app-deconvolution_main-deconvolution_init_ui > div {
   height: 100%;
   margin-bottom: unset;
 }
@@ -872,7 +872,7 @@ table.dataTable > tbody > tr.selected > * {
   height: 100%;
 }
 
-#app-deconvolution_process-show_log {
+#app-deconvolution_main-show_log {
   width: 100%;
   display: flex;
   justify-content: center;
@@ -880,7 +880,7 @@ table.dataTable > tbody > tr.selected > * {
   align-items: center;
 }
 
-#app-deconvolution_process-show_log .fas {
+#app-deconvolution_main-show_log .fas {
   position: unset;
   right: unset;
   padding-left: unset;
@@ -971,56 +971,56 @@ table.dataTable > tbody > tr.selected > * {
   padding-right: 3rem;
 }
 
-#app-deconvolution_process-target_sel_ui > div > div {
+#app-deconvolution_main-target_sel_ui > div > div {
   width: inherit;
 }
 
-#app-deconvolution_process-target_sel_ui .shiny-input-container:not(.shiny-input-container-inline) {
+#app-deconvolution_main-target_sel_ui .shiny-input-container:not(.shiny-input-container-inline) {
   width: 100%;
   margin-top: -1rem;
   margin-bottom: 0;
 }
 
-#app-deconvolution_process-target_sel_ui .form-group .bootstrap-select {
+#app-deconvolution_main-target_sel_ui .form-group .bootstrap-select {
   width: inherit;
 }
 
-#app-deconvolution_process-decon_select {
+#app-deconvolution_main-decon_select {
   margin-top: -1em;
 }
 
-#app-deconvolution_process-deconvolute_start {
+#app-deconvolution_main-deconvolute_start {
   background: #38387c;
   animation: pulsate-shadow 2s infinite ease-in-out;
   height: 65px;
   border-radius: 15px;
 }
 
-#app-deconvolution_process-deconvolute_start:hover {
+#app-deconvolution_main-deconvolute_start:hover {
   background: var(--bs-btn-hover-bg) !important;
 }
 
-#app-deconvolution_process-deconvolute_end,
-#app-deconvolution_process-forward_deconvolution {
+#app-deconvolution_main-deconvolute_end,
+#app-deconvolution_main-forward_deconvolution {
   width: 100%;
 }
 
-#app-deconvolution_process-copy_deconvolution_log {
+#app-deconvolution_main-copy_deconvolution_log {
   color: white;
   background: #38387c;
 }
 
-#app-deconvolution_process-copy_deconvolution_log:hover {
+#app-deconvolution_main-copy_deconvolution_log:hover {
   color: white;
   background: #404040;
 }
 
-#app-deconvolution_process-toggle_result .btn-group {
+#app-deconvolution_main-toggle_result .btn-group {
   width: 100%;
 }
 
 /* Logs & Text */
-#app-deconvolution_process-logtext {
+#app-deconvolution_main-logtext {
   overflow-y: auto;
   max-height: 22rem;
   height: 100%;
@@ -1028,12 +1028,12 @@ table.dataTable > tbody > tr.selected > * {
   word-wrap: break-word;
 }
 
-#app-deconvolution_process-logtext::-webkit-scrollbar-track {
+#app-deconvolution_main-logtext::-webkit-scrollbar-track {
   border-bottom-right-radius: 5px;
   border-top-right-radius: 5px;
 }
 
-#app-deconvolution_process-decon_rep_logtext {
+#app-deconvolution_main-decon_rep_logtext {
   overflow-y: auto;
   max-height: 35vh;
   height: 100%;
@@ -1042,17 +1042,17 @@ table.dataTable > tbody > tr.selected > * {
   word-wrap: break-word;
 }
 
-#app-deconvolution_process-decon_rep_logtext::-webkit-scrollbar-track {
+#app-deconvolution_main-decon_rep_logtext::-webkit-scrollbar-track {
   border-bottom-right-radius: 5px;
   border-top-right-radius: 5px;
 }
 
-#app-deconvolution_process-message_ui,
-#app-deconvolution_process-warning_ui {
+#app-deconvolution_main-message_ui,
+#app-deconvolution_main-warning_ui {
   text-align: justify;
 }
 
-#app-deconvolution_process-warning_ui {
+#app-deconvolution_main-warning_ui {
   font-style: italic;
 }
 
@@ -1128,10 +1128,10 @@ table.dataTable > tbody > tr.selected > * {
   height: 50%;
 }
 
-#app-deconvolution_process-processing,
-#app-deconvolution_process-processing_fin,
-#app-deconvolution_process-processing_stop,
-#app-deconvolution_process-processing_error {
+#app-deconvolution_main-processing,
+#app-deconvolution_main-processing_fin,
+#app-deconvolution_main-processing_stop,
+#app-deconvolution_main-processing_error {
   display: flex;
   justify-content: center;
   height: 100%;

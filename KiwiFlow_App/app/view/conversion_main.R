@@ -241,7 +241,7 @@ ui <- function(id) {
 }
 
 #' @export
-server <- function(id, conversion_dirs, deconvolution_process_vars) {
+server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -991,7 +991,7 @@ server <- function(id, conversion_dirs, deconvolution_process_vars) {
 
     # Observe sample input
     shiny::observe({
-      if (!is.null(deconvolution_process_vars$continue_conversion())) {
+      if (!is.null(deconvolution_main_vars$continue_conversion())) {
         shinyjs::removeClass(
           "sample_table_info",
           "table-info-green"
@@ -1012,12 +1012,10 @@ server <- function(id, conversion_dirs, deconvolution_process_vars) {
           "Fill table ..."
         })
 
-        message("CONVERSION", deconvolution_process_vars$continue_conversion())
+        message("CONVERSION", deconvolution_main_vars$continue_conversion())
         # Read results .rds file from previous deconvolution
-        shiny::isolate(
-          declaration_vars$result <- readRDS(
-            deconvolution_process_vars$continue_conversion()
-          )
+        declaration_vars$result <- readRDS(
+          deconvolution_main_vars$continue_conversion()
         )
 
         # Framework sample table
@@ -1243,10 +1241,10 @@ server <- function(id, conversion_dirs, deconvolution_process_vars) {
     )
 
     # Trigger loading of binding analysis results interface
-    shiny::observeEvent(conversion_dirs$run_analysis(), {
-      if (!is.null(conversion_dirs$result_list())) {
+    shiny::observeEvent(conversion_sidebar_vars$run_analysis(), {
+      if (!is.null(conversion_sidebar_vars$result_list())) {
         # Summarize hits to table
-        hits_summary <- conversion_dirs$result_list()$"hits_summary" |>
+        hits_summary <- conversion_sidebar_vars$result_list()$"hits_summary" |>
           dplyr::mutate(
             Intensity = scales::percent(
               Intensity / 100,
@@ -1346,7 +1344,7 @@ server <- function(id, conversion_dirs, deconvolution_process_vars) {
 
         # Get concentrations
         binding_kobs_result_names <- names(
-          conversion_dirs$result_list()$binding_kobs_result
+          conversion_sidebar_vars$result_list()$binding_kobs_result
         )
         concentrations <- binding_kobs_result_names[
           !binding_kobs_result_names %in%
@@ -1452,7 +1450,7 @@ server <- function(id, conversion_dirs, deconvolution_process_vars) {
             local_concentration <- concentration
             local_ui_id <- ui_id
 
-            conc_result <- conversion_dirs$result_list()$binding_kobs_result[[
+            conc_result <- conversion_sidebar_vars$result_list()$binding_kobs_result[[
               local_concentration
             ]]
 
@@ -1474,7 +1472,7 @@ server <- function(id, conversion_dirs, deconvolution_process_vars) {
               "_binding_plot"
             )]] <- plotly::renderPlotly({
               make_binding_plot(
-                kobs_result = conversion_dirs$result_list()$binding_kobs_result,
+                kobs_result = conversion_sidebar_vars$result_list()$binding_kobs_result,
                 filter_conc = local_concentration
               )
             })
@@ -1489,7 +1487,7 @@ server <- function(id, conversion_dirs, deconvolution_process_vars) {
                 ".",
                 sapply(
                   strsplit(
-                    names(conversion_dirs$result_list()$deconvolution),
+                    names(conversion_sidebar_vars$result_list()$deconvolution),
                     "_"
                   ),
                   `[`,
@@ -1498,9 +1496,9 @@ server <- function(id, conversion_dirs, deconvolution_process_vars) {
               )
 
               multiple_spectra(
-                results_list = conversion_dirs$result_list(),
+                results_list = conversion_sidebar_vars$result_list(),
                 samples = names(
-                  conversion_dirs$result_list()$deconvolution
+                  conversion_sidebar_vars$result_list()$deconvolution
                 )[which(
                   decon_samples == local_concentration
                 )],
@@ -2005,10 +2003,10 @@ server <- function(id, conversion_dirs, deconvolution_process_vars) {
     })
 
     ki_kinact_result <- shiny::reactive({
-      shiny::req(conversion_dirs$result_list())
+      shiny::req(conversion_sidebar_vars$result_list())
 
       if (is.null(conversion_vars$modified_results)) {
-        result_list <- conversion_dirs$result_list()
+        result_list <- conversion_sidebar_vars$result_list()
       } else {
         # Block UI
         shinyjs::runjs(paste0(
@@ -2067,7 +2065,7 @@ server <- function(id, conversion_dirs, deconvolution_process_vars) {
 
       # Recalculate result object according to included concentrations
 
-      result_list <- conversion_dirs$result_list()
+      result_list <- conversion_sidebar_vars$result_list()
 
       # Add binding/kobs results to result list
       result_list$binding_kobs_result <- add_kobs_binding_result(
@@ -2087,7 +2085,7 @@ server <- function(id, conversion_dirs, deconvolution_process_vars) {
     })
 
     # shiny::observeEvent(input[["kobs_result_cell_edit"]], {
-    #   shiny::req(conversion_dirs$result_list())
+    #   shiny::req(conversion_sidebar_vars$result_list())
 
     #   # Check number of selected concentrations
     #   if (length(input$select_concentration) < 3) {
@@ -2109,7 +2107,7 @@ server <- function(id, conversion_dirs, deconvolution_process_vars) {
 
     #   conversion_vars$select_concentration <- input$select_concentration
 
-    #   result_list <- conversion_dirs$result_list()
+    #   result_list <- conversion_sidebar_vars$result_list()
 
     #   # Add binding/kobs results to result list
     #   result_list$binding_kobs_result <- add_kobs_binding_result(
@@ -2126,16 +2124,16 @@ server <- function(id, conversion_dirs, deconvolution_process_vars) {
     # })
 
     # output$concentration_select <- shiny::renderUI({
-    #   shiny::req(conversion_dirs$result_list()$binding_kobs_result)
+    #   shiny::req(conversion_sidebar_vars$result_list()$binding_kobs_result)
 
     #   # Get included concentrations
     #   concentrations <- which(
-    #     !names(conversion_dirs$result_list()$binding_kobs_result) %in%
+    #     !names(conversion_sidebar_vars$result_list()$binding_kobs_result) %in%
     #       c("binding_table", "binding_plot", "kobs_result_table")
     #   )
 
     #   # Define choices
-    #   choices <- names(conversion_dirs$result_list()$binding_kobs_result)[
+    #   choices <- names(conversion_sidebar_vars$result_list()$binding_kobs_result)[
     #     concentrations
     #   ]
 
@@ -2150,10 +2148,13 @@ server <- function(id, conversion_dirs, deconvolution_process_vars) {
     # Render kobs result table
     output$kobs_result <- DT::renderDT(
       {
-        shiny::req(conversion_dirs$result_list(), conversion_vars$conc_colors)
+        shiny::req(
+          conversion_sidebar_vars$result_list(),
+          conversion_vars$conc_colors
+        )
 
         # Get results
-        kobs_results <- conversion_dirs$result_list()$binding_kobs_result$kobs_result_table
+        kobs_results <- conversion_sidebar_vars$result_list()$binding_kobs_result$kobs_result_table
 
         kobs_results <- kobs_results |>
           dplyr::mutate(
@@ -2237,16 +2238,16 @@ server <- function(id, conversion_dirs, deconvolution_process_vars) {
     )
 
     output$binding_plot <- plotly::renderPlotly({
-      shiny::req(conversion_dirs$result_list())
+      shiny::req(conversion_sidebar_vars$result_list())
 
-      conversion_dirs$result_list()$binding_kobs_result$binding_plot
+      conversion_sidebar_vars$result_list()$binding_kobs_result$binding_plot
     })
 
     output$kobs_plot <- plotly::renderPlotly({
-      shiny::req(conversion_dirs$result_list())
+      shiny::req(conversion_sidebar_vars$result_list())
 
       if (is.null(conversion_vars$modified_results)) {
-        result_list <- conversion_dirs$result_list()
+        result_list <- conversion_sidebar_vars$result_list()
       } else {
         result_list <- conversion_vars$modified_results
       }

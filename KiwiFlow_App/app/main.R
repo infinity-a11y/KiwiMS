@@ -11,7 +11,7 @@ box::use(
   app / logic / dev_utils,
   app / view / conversion_main,
   app / view / conversion_sidebar,
-  app / view / deconvolution_process,
+  app / view / deconvolution_main,
   app / view / deconvolution_sidebar,
   app / view / log_view,
   app / view / log_sidebar,
@@ -75,8 +75,8 @@ ui <- function(id) {
           sidebar = deconvolution_sidebar$ui(
             ns("deconvolution_pars")
           ),
-          deconvolution_process$ui(
-            ns("deconvolution_process")
+          deconvolution_main$ui(
+            ns("deconvolution_main")
           )
         )
       ),
@@ -156,20 +156,20 @@ server <- function(id) {
     reset_button <- shiny$reactiveVal(0)
 
     # Deconvolution sidebar server
-    dirs <- deconvolution_sidebar$server(
+    deconvolution_sidebar_vars <- deconvolution_sidebar$server(
       "deconvolution_pars",
       reset_button = reset_button
     )
 
     # Deconvolution process server
-    deconvolution_process_vars <- deconvolution_process$server(
-      "deconvolution_process",
-      dirs,
+    deconvolution_main_vars <- deconvolution_main$server(
+      "deconvolution_main",
+      deconvolution_sidebar_vars,
       reset_button = reset_button
     )
 
     # Conversion sidebar server
-    conversion_dirs <- conversion_sidebar$server(
+    conversion_sidebar_vars <- conversion_sidebar$server(
       "conversion_sidebar",
       selected_tab = conversion_main_vars$selected_tab,
       set_selected_tab = conversion_main_vars$set_selected_tab,
@@ -180,8 +180,8 @@ server <- function(id) {
     # Conversion main server
     conversion_main_vars <- conversion_main$server(
       "conversion_main",
-      conversion_dirs,
-      deconvolution_process_vars
+      conversion_sidebar_vars,
+      deconvolution_main_vars
     )
 
     # Check update availability
@@ -242,7 +242,7 @@ server <- function(id) {
     })
 
     # Switch Protein Conversion tab when user forwards
-    shiny$observeEvent(deconvolution_process_vars$forward_deconvolution(), {
+    shiny$observeEvent(deconvolution_main_vars$forward_deconvolution(), {
       bslib::nav_select(
         "tabs",
         session = session,
@@ -307,7 +307,7 @@ server <- function(id) {
     })
 
     # Hide waiter
-    Sys.sleep(2)
+    # Sys.sleep(2)
     waiter_hide()
   })
 }
