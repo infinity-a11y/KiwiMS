@@ -310,7 +310,7 @@ sample_handsontable <- function(
   }"
   } else {
     allowed_per_col <- list(NULL)
-    renderer_js <- "" # Note: passing empty string might sometimes cause issues, 'NULL' is safer, but if "" works for you keep it.
+    renderer_js <- ""
   }
 
   handsontable <- rhandsontable::rhandsontable(
@@ -353,12 +353,14 @@ sample_handsontable <- function(
   return(handsontable)
 }
 
+# Slice declaration tables column-wise
 #' @export
 slice_tab <- function(tab) {
   row_contain <- which(rowSums(is.na(tab) | tab == "") != ncol(tab))
   return(tab[row_contain, ])
 }
 
+# Slice sample declaration table row-wise
 #' @export
 slice_sample_tab <- function(sample_table) {
   non_empty <- which(
@@ -2186,4 +2188,224 @@ new_sample_table <- function(result, protein_table, compound_table) {
   colnames(sample_tab) <- c("Sample", "Protein", paste("Compound", 1:9))
 
   return(sample_tab)
+}
+
+# UI changes when conversion declaration tab is confirmed
+#' @export
+confirm_ui_changes <- function(tab, table, session, output) {
+  tab_low <- tolower(tab)
+
+  # Show toast
+  shinyWidgets::show_toast(
+    "Table saved!",
+    text = NULL,
+    type = "success",
+    timer = 3000,
+    timerProgressBar = TRUE
+  )
+
+  # Update confirm button
+  shiny::updateActionButton(
+    session = session,
+    paste0("confirm_", tab_low),
+    label = "Saved",
+    icon = shiny::icon("check")
+  )
+
+  # Disable confirm button
+  shinyjs::disable(paste0("confirm_", tab_low))
+
+  # Enable edit button
+  shinyjs::enable(paste0("edit_", tab_low))
+
+  # Disable file upload
+  shinyjs::disable(paste0(tab_low, "_fileinput"))
+  shinyjs::addClass(
+    selector = paste0(
+      ".btn-file:has(#app-conversion_main-",
+      tab_low,
+      "_fileinput"
+    ),
+    class = "custom-disable"
+  )
+  shinyjs::addClass(
+    selector = paste0(
+      ".input-group:has(#app-conversion_main-",
+      tab_low,
+      "_fileinput) > .form-control"
+    ),
+    class = "custom-disable"
+  )
+
+  # Disable header checkbox
+  shinyjs::disable(paste0(tab_low, "_header_checkbox"))
+
+  # Render table uneditable
+  output[[paste0(tab_low, "_table")]] <- rhandsontable::renderRHandsontable(
+    do.call(
+      ifelse(tab == "Samples", "sample_handsontable", "prot_comp_handsontable"),
+      list(tab = table, disabled = TRUE)
+    )
+  )
+
+  # Show table message
+  output[[paste0(tab_low, "_table_info")]] <- shiny::renderText("Table saved!")
+
+  # Mark tab as done
+  shinyjs::runjs(paste0(
+    'document.querySelector(".nav-link[data-value=\'',
+    tab,
+    '\']").classList.add("done");'
+  ))
+}
+
+# UI changes when conversion declaration tab is edited
+#' @export
+edit_ui_changes <- function(tab, table, session, output) {
+  tab_low <- tolower(tab)
+
+  # Update confirm button
+  shiny::updateActionButton(
+    session = session,
+    paste0("confirm_", tab_low),
+    label = "Save",
+    icon = shiny::icon("bookmark")
+  )
+
+  # Enable confirm button
+  shinyjs::enable(paste0("confirm_", tab_low))
+
+  # Disable edit button
+  shinyjs::disable(paste0("edit_", tab_low))
+
+  # Enable file upload
+  shinyjs::enable(paste0(tab_low, "_fileinput"))
+  shinyjs::removeClass(
+    selector = paste0(
+      ".btn-file:has(#app-conversion_main-",
+      tab_low,
+      "_fileinput"
+    ),
+    class = "custom-disable"
+  )
+  shinyjs::removeClass(
+    selector = paste0(
+      ".input-group:has(#app-conversion_main-",
+      tab_low,
+      "_fileinput) > .form-control"
+    ),
+    class = "custom-disable"
+  )
+
+  # Enable header checkbox
+  shinyjs::enable(paste0(tab_low, "_header_checkbox"))
+
+  # Render table uneditable
+  output[[paste0(tab_low, "_table")]] <- rhandsontable::renderRHandsontable(
+    do.call(
+      ifelse(tab == "Samples", "sample_handsontable", "prot_comp_handsontable"),
+      list(tab = table, disabled = FALSE)
+    )
+  )
+
+  # Mark tab as undone
+  shinyjs::runjs(paste0(
+    'document.querySelector(".nav-link[data-value=\'',
+    tab,
+    '\']").classList.remove("done");'
+  ))
+}
+
+# Slice sample declaration table row-wise
+#' @export
+table_observe <- function(table, tab, output, ns, proteins, compounds) {
+  # Show waiter with 0.5 seconds minimum runtime
+  waiter::waiter_show(
+    id = ns(paste0(tab, "_table_info")),
+    html = waiter::spin_throbber()
+  )
+  Sys.sleep(0.5)
+
+  # If table non-empty check for correctness
+  if (nrow(table) < 1) {
+    # Table info UI changes
+    shinyjs::removeClass(
+      paste0(tab, "_table_info"),
+      "table-info-green"
+    )
+    shinyjs::addClass(
+      paste0(tab, "_table_info"),
+      "table-info-red"
+    )
+    output[[paste0(tab, "_table_info")]] <- shiny::renderText(
+      "Fill table ..."
+    )
+
+    # Disable confirm button
+    shinyjs::disable(paste0("confirm_", tab))
+
+    # Set status variable to FALSE
+    table_status <- FALSE
+  } else {
+    # Validate correct input
+
+    if (tab == "samples") {
+      check_function <- "check_sample_table"
+      args <- list(
+        sample_table = table,
+        proteins = proteins,
+        compounds = compounds
+      )
+    } else {
+      check_function <- "check_table"
+      args <- list(tab = table, col_limit = 10)
+    }
+
+    table_check <- do.call(what = check_function, args = args)
+
+    if (isTRUE(table_check)) {
+      # Table info UI changes
+      shinyjs::removeClass(
+        paste0(tab, "_table_info"),
+        "table-info-red"
+      )
+      shinyjs::addClass(
+        paste0(tab, "_table_info"),
+        "table-info-green"
+      )
+      output[[paste0(tab, "_table_info")]] <- shiny::renderText(
+        "Table can be saved"
+      )
+
+      # Enable confirm button
+      shinyjs::enable(paste0("confirm_", tab))
+
+      # Set status variable to TRUE
+      table_status <- TRUE
+    } else {
+      # Table info UI changes
+      shinyjs::removeClass(
+        paste0(tab, "_table_info"),
+        "table-info-green"
+      )
+      shinyjs::addClass(
+        paste0(tab, "_table_info"),
+        "table-info-red"
+      )
+      output[[paste0(tab, "_table_info")]] <- shiny::renderText(
+        table_check
+      )
+
+      # Disable confirm button
+      shinyjs::disable(paste0("confirm_", tab))
+
+      # Set status variable to FALSE
+      table_status <- FALSE
+    }
+  }
+
+  # Hide waiter
+  waiter::waiter_hide(id = ns(paste0(tab, "_table_info")))
+
+  return(table_status)
 }

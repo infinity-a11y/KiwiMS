@@ -1307,9 +1307,9 @@ div[data-value="Protein Conversion"] .tab-pane {
 }
 
 /* Conversion Tables (Protein/Compound/Sample) */
-#app-conversion_main-protein_table_info,
-#app-conversion_main-compound_table_info,
-#app-conversion_main-sample_table_info {
+#app-conversion_main-proteins_table_info,
+#app-conversion_main-compounds_table_info,
+#app-conversion_main-samples_table_info {
   font-style: italic;
   margin-top: auto;
   height: 46.6px;
@@ -1324,9 +1324,17 @@ div[data-value="Protein Conversion"] .tab-pane {
   padding-right: 1em;
 }
 
-#app-conversion_main-protein_table,
-#app-conversion_main-compound_table,
-#app-conversion_main-sample_table {
+#app-conversion_main-sample_number_info {
+  font-style: italic;
+  height: 100%;
+  align-content: center;
+  font-size: 12px;
+  text-align: justify;
+}
+
+#app-conversion_main-proteins_table,
+#app-conversion_main-compounds_table,
+#app-conversion_main-samples_table {
   max-height: 60vh !important;
   max-width: fit-content !important;
   color: black;

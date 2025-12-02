@@ -27,6 +27,9 @@ box::use(
       checkboxColumn,
       js_code_gen,
       new_sample_table,
+      confirm_ui_changes,
+      edit_ui_changes,
+      table_observe,
     ],
   app /
     logic /
@@ -73,7 +76,7 @@ ui <- function(id) {
         ),
         shiny::column(
           width = 3,
-          shiny::textOutput(ns("protein_table_info")),
+          shiny::textOutput(ns("proteins_table_info")),
         ),
         shiny::column(
           width = 2,
@@ -107,7 +110,7 @@ ui <- function(id) {
           width = 12,
           shiny::div(
             class = "handsontable-wrapper",
-            rhandsontable::rHandsontableOutput(ns("protein_table"))
+            rhandsontable::rHandsontableOutput(ns("proteins_table"))
           )
         )
       ),
@@ -141,7 +144,7 @@ ui <- function(id) {
         ),
         shiny::column(
           width = 3,
-          shiny::textOutput(ns("compound_table_info"))
+          shiny::textOutput(ns("compounds_table_info"))
         ),
         shiny::column(
           width = 2,
@@ -175,7 +178,7 @@ ui <- function(id) {
           width = 12,
           shiny::div(
             class = "handsontable-wrapper",
-            rhandsontable::rHandsontableOutput(ns("compound_table"))
+            rhandsontable::rHandsontableOutput(ns("compounds_table"))
           )
         )
       ),
@@ -189,7 +192,7 @@ ui <- function(id) {
           shiny::div(
             class = "table-input",
             shiny::fileInput(
-              ns("result_input"),
+              ns("samples_fileinput"),
               "Select File",
               multiple = FALSE,
               accept = c(".rds")
@@ -197,8 +200,12 @@ ui <- function(id) {
           )
         ),
         shiny::column(
+          width = 2,
+          shiny::textOutput(ns("sample_number_info"))
+        ),
+        shiny::column(
           width = 3,
-          shiny::textOutput(ns("sample_table_info"))
+          shiny::textOutput(ns("samples_table_info"))
         ),
         shiny::column(
           width = 2,
@@ -232,7 +239,7 @@ ui <- function(id) {
           width = 12,
           shiny::div(
             class = "sample-table",
-            rhandsontable::rHandsontableOutput(ns("sample_table"))
+            rhandsontable::rHandsontableOutput(ns("samples_table"))
           )
         )
       ),
@@ -262,19 +269,31 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       sample_tab = NULL,
       sample_table_active = TRUE,
       sample_table_status = FALSE,
-      conversion_ready = FALSE
+      conversion_ready = FALSE,
+      result = NULL
     )
 
     # Prepare waiter spinner object
     w <- waiter::Waiter$new(
-      id = ns("sample_table"),
+      id = ns("samples_table"),
       html = waiter::spin_wave()
     )
+
+    output$sample_number_info <- shiny::renderText({
+      if (is.null(declaration_vars$result)) {
+        "Add samples ..."
+      } else {
+        paste(
+          length(declaration_vars$result$deconvolution),
+          "deconvoluted samples"
+        )
+      }
+    })
 
     # On result file input execute immediately
     shinyjs::onevent(
       "change",
-      "result_input",
+      "samples_fileinput",
       {
         # Block UI
         shinyjs::runjs(paste0(
@@ -283,26 +302,26 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         ))
 
         # Disable result file input
-        shinyjs::disable("result_input")
+        shinyjs::disable("samples_fileinput")
         shinyjs::addClass(
-          selector = ".btn-file:has(#app-conversion_main-result_input)",
+          selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
           class = "custom-disable"
         )
         shinyjs::addClass(
-          selector = ".input-group:has(#app-conversion_main-result_input) > .form-control",
+          selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
           class = "custom-disable"
         )
 
         # Update info text
         shinyjs::removeClass(
-          "sample_table_info",
+          "samples_table_info",
           "table-info-green"
         )
         shinyjs::addClass(
-          "sample_table_info",
+          "samples_table_info",
           "table-info-red"
         )
-        output$sample_table_info <- shiny::renderText(
+        output$samples_table_info <- shiny::renderText(
           "Loading ..."
         )
       }
@@ -321,10 +340,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       table_upload_processed <- process_uploaded_table(table_upload, "protein")
 
       if (!is.null(table_upload_processed)) {
-        declaration_vars$protein_table <- table_upload_processed
         declaration_vars$protein_table_status <- TRUE
 
-        output$protein_table <- rhandsontable::renderRHandsontable(
+        output$proteins_table <- rhandsontable::renderRHandsontable(
           prot_comp_handsontable(table_upload_processed, disabled = FALSE)
         )
 
@@ -355,10 +373,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       table_upload_processed <- process_uploaded_table(table_upload, "compound")
 
       if (!is.null(table_upload_processed)) {
-        declaration_vars$compound_table <- table_upload_processed
         declaration_vars$compound_table_status <- TRUE
 
-        output$compound_table <- rhandsontable::renderRHandsontable(
+        output$compounds_table <- rhandsontable::renderRHandsontable(
           prot_comp_handsontable(table_upload_processed, disabled = FALSE)
         )
 
@@ -379,261 +396,73 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     # Observe table status for protein table
     shiny::observe({
       shiny::req(
-        input$protein_table,
+        input$proteins_table,
         shiny::isolate(declaration_vars$protein_table_active)
       )
 
-      # Show waiter
-      waiter::waiter_show(
-        id = ns("protein_table_info"),
-        html = waiter::spin_throbber()
-      )
-      Sys.sleep(0.5)
-
       # Retrieve sliced user input table
       protein_table <- slice_tab(rhandsontable::hot_to_r(
-        input$protein_table
+        input$proteins_table
       ))
 
-      # If table non-empty check for correctness
-      if (nrow(protein_table) < 1) {
-        # Set status variable to FALSE
-        declaration_vars$protein_table_status <- FALSE
-
-        # UI feedback
-        shinyjs::removeClass(
-          "protein_table_info",
-          "table-info-green"
-        )
-        shinyjs::addClass(
-          "protein_table_info",
-          "table-info-red"
-        )
-        output$protein_table_info <- shiny::renderText(
-          "Fill table ..."
-        )
-        shinyjs::disable("confirm_proteins")
-      } else {
-        # Validate correct input
-        protein_table_status <- check_table(
-          protein_table,
-          col_limit = 10
-        )
-
-        if (isTRUE(protein_table_status)) {
-          # Set status variable to TRUE
-          declaration_vars$protein_table_status <- TRUE
-
-          # UI feedback
-          shinyjs::removeClass(
-            "protein_table_info",
-            "table-info-red"
-          )
-          shinyjs::addClass(
-            "protein_table_info",
-            "table-info-green"
-          )
-          output$protein_table_info <- shiny::renderText(
-            "Table can be saved"
-          )
-          shinyjs::enable("confirm_proteins")
-        } else {
-          # Set status variable to FALSE
-          declaration_vars$protein_table_status <- FALSE
-
-          # UI feedback
-          shinyjs::removeClass(
-            "protein_table_info",
-            "table-info-green"
-          )
-          shinyjs::addClass(
-            "protein_table_info",
-            "table-info-red"
-          )
-          output$protein_table_info <- shiny::renderText(protein_table_status)
-          shinyjs::disable("confirm_proteins")
-        }
-      }
-
-      waiter::waiter_hide(id = ns("protein_table_info"))
+      # Conditional observe actions
+      declaration_vars$protein_table_status <- table_observe(
+        tab = "proteins",
+        table = protein_table,
+        output = output,
+        ns = ns
+      )
     })
 
     # Observe table status for compound table
     shiny::observe({
       shiny::req(
-        input$compound_table,
+        input$compounds_table,
         shiny::isolate(declaration_vars$compound_table_active)
       )
 
-      # Show waiter
-      waiter::waiter_show(
-        id = ns("compound_table_info"),
-        html = waiter::spin_throbber()
-      )
-      Sys.sleep(0.5)
-
       # Retrieve sliced user input table
       compound_table <- slice_tab(rhandsontable::hot_to_r(
-        input$compound_table
+        input$compounds_table
       ))
 
-      # If table non-empty check for correctness
-      if (nrow(compound_table) < 1) {
-        # Set status variable to FALSE
-        declaration_vars$compound_table_status <- FALSE
-
-        # UI feedback
-        shinyjs::removeClass(
-          "compound_table_info",
-          "table-info-green"
-        )
-        shinyjs::addClass(
-          "compound_table_info",
-          "table-info-red"
-        )
-        output$compound_table_info <- shiny::renderText(
-          "Fill table ..."
-        )
-        shinyjs::disable("confirm_compounds")
-      } else {
-        # Validate correct input
-        compound_table_status <- check_table(
-          compound_table,
-          col_limit = 10
-        )
-
-        if (isTRUE(compound_table_status)) {
-          # Set status variable to TRUE
-          declaration_vars$compound_table_status <- TRUE
-
-          # UI feedback
-          shinyjs::removeClass(
-            "compound_table_info",
-            "table-info-red"
-          )
-          shinyjs::addClass(
-            "compound_table_info",
-            "table-info-green"
-          )
-          output$compound_table_info <- shiny::renderText(
-            "Table can be saved"
-          )
-          shinyjs::enable("confirm_compounds")
-        } else {
-          # Set status variable to FALSE
-          declaration_vars$compound_table_status <- FALSE
-
-          # UI feedback
-          shinyjs::removeClass(
-            "compound_table_info",
-            "table-info-green"
-          )
-          shinyjs::addClass(
-            "compound_table_info",
-            "table-info-red"
-          )
-          output$compound_table_info <- shiny::renderText(compound_table_status)
-          shinyjs::disable("confirm_compounds")
-        }
-      }
-
-      waiter::waiter_hide(id = ns("compound_table_info"))
+      # Conditional observe actions
+      declaration_vars$compound_table_status <- table_observe(
+        tab = "compounds",
+        table = compound_table,
+        output = output,
+        ns = ns
+      )
     })
 
     # Observe table status for samples table
     shiny::observe({
       shiny::req(
-        input$sample_table,
+        input$samples_table,
+        declaration_vars$protein_table_sliced,
         shiny::isolate(declaration_vars$sample_table_active)
       )
 
-      # Show waiter with 0.5 seconds minimum runtime
-      waiter::waiter_show(
-        id = ns("sample_table_info"),
-        html = waiter::spin_throbber()
-      )
-      Sys.sleep(0.5)
-
-      # Reenable result file picker
-      shinyjs::enable("result_input")
-      shinyjs::removeClass(
-        selector = ".btn-file:has(#app-conversion_main-compounds_fileinput)",
-        class = "custom-disable"
-      )
-
-      # Read sample table input
+      # Table info UI changes
       sample_table <- rhandsontable::hot_to_r(
-        input$sample_table
+        input$samples_table
       )
 
-      # If table non-empty check for correctness
-      if (is.null(sample_table) || nrow(sample_table) < 1) {
-        # Set status variable to FALSE
-        declaration_vars$sample_table_status <- FALSE
-
-        # UI feedback
-        shinyjs::removeClass(
-          "sample_table_info",
-          "table-info-green"
-        )
-        shinyjs::addClass(
-          "sample_table_info",
-          "table-info-red"
-        )
-        output$sample_table_info <- shiny::renderText(
-          "Table could not be read"
-        )
-        shinyjs::disable("confirm_samples")
-      } else {
-        # Validate correct input
-        sample_table_status <- check_sample_table(
-          sample_table,
-          declaration_vars$protein_table$Protein,
-          declaration_vars$compound_table$Compound
-        )
-
-        if (isTRUE(sample_table_status)) {
-          # Set status variable to TRUE
-          declaration_vars$sample_table_status <- TRUE
-
-          # UI feedback
-          shinyjs::removeClass(
-            "sample_table_info",
-            "table-info-red"
-          )
-          shinyjs::addClass(
-            "sample_table_info",
-            "table-info-green"
-          )
-          output$sample_table_info <- shiny::renderText(
-            "Table can be saved"
-          )
-          shinyjs::enable("confirm_samples")
-        } else {
-          # Set status variable to FALSE
-          declaration_vars$sample_table_status <- FALSE
-
-          # UI feedback
-          shinyjs::removeClass(
-            "sample_table_info",
-            "table-info-green"
-          )
-          shinyjs::addClass(
-            "sample_table_info",
-            "table-info-red"
-          )
-          output$sample_table_info <- shiny::renderText(sample_table_status)
-          shinyjs::disable("confirm_samples")
-        }
-      }
+      # Conditional observe actions
+      declaration_vars$sample_table_status <- table_observe(
+        tab = "samples",
+        table = sample_table,
+        output = output,
+        ns = ns,
+        proteins = declaration_vars$protein_table_sliced$Protein,
+        compounds = declaration_vars$compound_table_sliced$Compound
+      )
 
       # Unblock UI
       shinyjs::runjs(paste0(
         'document.getElementById("blocking-overlay").style.display ',
         '= "none";'
       ))
-
-      waiter::waiter_hide(id = ns("sample_table_info"))
     })
 
     # Actions on edit button click
@@ -643,117 +472,42 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         shiny::req(input$tabs)
 
         # If edit applied always activate edit mode for sample table if present
-        if (!is.null(declaration_vars$sample_table)) {
+        if (!is.null(declaration_vars$sample_table_sliced)) {
+          # Make UI changes
+          edit_ui_changes(
+            tab = "Samples",
+            table = declaration_vars$sample_table,
+            session = session,
+            output = output
+          )
+
           # Activate table observer
           declaration_vars$sample_table_active <- TRUE
-
-          # Enable file upload
-          shinyjs::enable("result_input")
-          shinyjs::removeClass(
-            selector = ".btn-file:has(#app-conversion_main-result_input)",
-            class = "custom-disable"
-          )
-          shinyjs::removeClass(
-            selector = ".input-group:has(#app-conversion_main-result_input) > .form-control",
-            class = "custom-disable"
-          )
-
-          # Mark tab as undone
-          shinyjs::runjs(
-            'document.querySelector(".nav-link[data-value=\'Samples\']").classList.remove("done");'
-          )
-
-          # Render editable table
-          output$compound_table <- rhandsontable::renderRHandsontable(
-            sample_handsontable(declaration_vars$sample_table, disabled = FALSE)
-          )
-
-          # Change buttons
-          shiny::updateActionButton(
-            session = session,
-            "confirm_samples",
-            label = "Save",
-            icon = shiny::icon("bookmark")
-          )
-          shinyjs::enable("confirm_samples")
-          shinyjs::disable("edit_samples")
         }
 
         # Edit Protein/Compound
         if (input$tabs == "Proteins") {
+          # Make UI changes
+          edit_ui_changes(
+            tab = input$tabs,
+            table = declaration_vars$protein_table,
+            session = session,
+            output = output
+          )
+
           # Make table observer active
           declaration_vars$protein_table_active <- TRUE
-
-          # Enable file upload
-          shinyjs::enable("proteins_fileinput")
-          shinyjs::removeClass(
-            selector = ".btn-file:has(#app-conversion_main-proteins_fileinput)",
-            class = "custom-disable"
-          )
-          shinyjs::removeClass(
-            selector = ".input-group:has(#app-conversion_main-proteins_fileinput) > .form-control",
-            class = "custom-disable"
-          )
-
-          # Mark tab as undone
-          shinyjs::runjs(
-            'document.querySelector(".nav-link[data-value=\'Proteins\']").classList.remove("done");'
-          )
-
-          # Render editable table
-          output$protein_table <- rhandsontable::renderRHandsontable(
-            prot_comp_handsontable(
-              declaration_vars$protein_table,
-              disabled = FALSE
-            )
-          )
-
-          # Change buttons
-          shiny::updateActionButton(
-            session = session,
-            "confirm_proteins",
-            label = "Save",
-            icon = shiny::icon("bookmark")
-          )
-          shinyjs::enable("confirm_proteins")
-          shinyjs::disable("edit_proteins")
         } else if (input$tabs == "Compounds") {
+          # Make UI changes
+          edit_ui_changes(
+            tab = input$tabs,
+            table = declaration_vars$compound_table,
+            session = session,
+            output = output
+          )
+
           # Make table observer active
           declaration_vars$compound_table_active <- TRUE
-
-          # Enable file upload
-          shinyjs::enable("compounds_fileinput")
-          shinyjs::removeClass(
-            selector = ".btn-file:has(#app-conversion_main-compounds_fileinput)",
-            class = "custom-disable"
-          )
-          shinyjs::removeClass(
-            selector = ".input-group:has(#app-conversion_main-compounds_fileinput) > .form-control",
-            class = "custom-disable"
-          )
-
-          # Mark tab as undone
-          shinyjs::runjs(
-            'document.querySelector(".nav-link[data-value=\'Compounds\']").classList.remove("done");'
-          )
-
-          # Render editable table
-          output$compound_table <- rhandsontable::renderRHandsontable(
-            prot_comp_handsontable(
-              declaration_vars$compound_table,
-              disabled = FALSE
-            )
-          )
-
-          # Change buttons
-          shiny::updateActionButton(
-            session = session,
-            "confirm_compounds",
-            label = "Save",
-            icon = shiny::icon("bookmark")
-          )
-          shinyjs::enable("confirm_compounds")
-          shinyjs::disable("edit_compounds")
         }
       }
     )
@@ -770,206 +524,113 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           '= "block";'
         ))
 
-        if (input$tabs == "Proteins") {
-          # If table can be saved perform actions
-          if (declaration_vars$protein_table_status) {
-            shiny::req(input$protein_table)
+        if (input$tabs == "Proteins" && declaration_vars$protein_table_status) {
+          # Retrieve client side table input
+          protein_table <- rhandsontable::hot_to_r(
+            input$proteins_table
+          )
+          declaration_vars$protein_table <- protein_table
 
-            # Retrieve sliced user input table
-            protein_table <- slice_tab(rhandsontable::hot_to_r(
-              input$protein_table
-            ))
+          # Slice table input
+          protein_table_sliced <- slice_tab(protein_table)
+          declaration_vars$protein_table_sliced <- protein_table_sliced
 
-            # Mark UI as done
-            shinyjs::runjs(
-              'document.querySelector(".nav-link[data-value=\'Proteins\']").classList.add("done");'
-            )
-            shinyWidgets::show_toast(
-              "Table saved!",
-              text = NULL,
-              type = "success",
-              timer = 3000,
-              timerProgressBar = TRUE
-            )
-            shiny::updateActionButton(
-              session = session,
-              "confirm_proteins",
-              label = "Saved",
-              icon = shiny::icon("check")
-            )
-            shinyjs::disable("confirm_proteins")
-            shinyjs::enable("edit_proteins")
-            shinyjs::disable("proteins_fileinput")
-            shinyjs::addClass(
-              selector = ".btn-file:has(#app-conversion_main-proteins_fileinput)",
-              class = "custom-disable"
-            )
-            shinyjs::addClass(
-              selector = ".input-group:has(#app-conversion_main-proteins_fileinput) > .form-control",
-              class = "custom-disable"
-            )
+          # Mark UI as done
+          confirm_ui_changes(
+            tab = input$tabs,
+            table = protein_table_sliced,
+            session = session,
+            output = output
+          )
 
-            # Render table uneditable
-            output$protein_table <- rhandsontable::renderRHandsontable(
-              prot_comp_handsontable(protein_table, disabled = TRUE)
-            )
-
-            # Inactivate table observer
-            declaration_vars$protein_table_active <- FALSE
-
-            # Show table message
-            output$protein_table_info <- shiny::renderText("Table saved!")
-
-            # Render sample table with new input
-            if (!is.null(input$sample_table)) {
-              output$sample_table <- rhandsontable::renderRHandsontable({
-                sample_handsontable(
-                  # slice_sample_tab(
-                  tab = rhandsontable::hot_to_r(input$sample_table),
-                  # )
-                  proteins = protein_table$Protein,
-                  compounds = declaration_vars$compound_table$Compound
-                )
-              })
-
-              # Jump to next tab module
-              set_selected_tab("Samples", session)
-            } else {
-              # Jump to next tab module
-              set_selected_tab("Compounds", session)
-            }
-
-            # Assign user input to reactive table variable
-            declaration_vars$protein_table <- protein_table
+          # Render sample table with new input
+          if (!is.null(input$samples_table)) {
+            output$samples_table <- rhandsontable::renderRHandsontable({
+              sample_handsontable(
+                # slice_sample_tab(
+                tab = rhandsontable::hot_to_r(input$samples_table),
+                # )
+                proteins = protein_table_sliced$Protein,
+                compounds = declaration_vars$compound_table_sliced$Compound
+              )
+            })
           }
-        } else if (input$tabs == "Compounds") {
-          # If table can be saved perform actions
-          if (declaration_vars$compound_table_status) {
-            shiny::req(input$compound_table)
 
-            # Retrieve sliced user input table
-            compound_table <- slice_tab(rhandsontable::hot_to_r(
-              input$compound_table
-            ))
-
-            # Mark UI as done
-            shinyjs::runjs(
-              'document.querySelector(".nav-link[data-value=\'Compounds\']").classList.add("done");'
-            )
-            shinyWidgets::show_toast(
-              "Table saved!",
-              text = NULL,
-              type = "success",
-              timer = 3000,
-              timerProgressBar = TRUE
-            )
-            shiny::updateActionButton(
-              session = session,
-              "confirm_compounds",
-              label = "Saved",
-              icon = shiny::icon("check")
-            )
-            shinyjs::disable("confirm_compounds")
-            shinyjs::enable("edit_compounds")
-            shinyjs::disable("compounds_fileinput")
-            shinyjs::addClass(
-              selector = ".btn-file:has(#app-conversion_main-compounds_fileinput)",
-              class = "custom-disable"
-            )
-            shinyjs::addClass(
-              selector = ".input-group:has(#app-conversion_main-compounds_fileinput) > .form-control",
-              class = "custom-disable"
-            )
-
-            # Render table uneditable
-            output$compound_table <- rhandsontable::renderRHandsontable(
-              prot_comp_handsontable(compound_table, disabled = TRUE)
-            )
-
-            # Inactivate table observer
-            declaration_vars$compound_table_active <- FALSE
-
-            # Show table message
-            output$compound_table_info <- shiny::renderText("Table saved!")
-
-            # Render sample table with new input
-            if (!is.null(input$sample_table)) {
-              sample_table <<- rhandsontable::hot_to_r(
-                input$sample_table
-              )
-              proteins <<- declaration_vars$protein_table$Protein
-              compounds <<- compound_table$Compound
-
-              output$sample_table <- rhandsontable::renderRHandsontable(
-                sample_handsontable(
-                  # slice_sample_tab(
-                  tab = rhandsontable::hot_to_r(input$sample_table),
-                  # )
-                  proteins = declaration_vars$protein_table$Protein,
-                  compounds = compound_table$Compound
-                )
-              )
-            }
-
-            # Jump to next tab module
+          # Jump to next tab depending on compound table status
+          if (isTRUE(declaration_vars$compound_table_active)) {
+            set_selected_tab("Compounds", session)
+          } else {
             set_selected_tab("Samples", session)
-
-            # Assign user input to reactive table variable
-            declaration_vars$compound_table <- compound_table
           }
-        } else if (input$tabs == "Samples") {
-          # If table can be saved perform actions
-          if (declaration_vars$sample_table_status) {
-            shiny::req(input$sample_table)
 
-            # Mark UI as done
-            shinyjs::runjs(
-              'document.querySelector(".nav-link[data-value=\'Samples\']").classList.add("done");'
-            )
-            shinyWidgets::show_toast(
-              "Table saved!",
-              text = NULL,
-              type = "success",
-              timer = 3000,
-              timerProgressBar = TRUE
-            )
-            shiny::updateActionButton(
-              session = session,
-              "confirm_samples",
-              label = "Saved",
-              icon = shiny::icon("check")
-            )
-            shinyjs::disable("confirm_samples")
-            shinyjs::enable("edit_samples")
-            shinyjs::disable("result_input")
-            shinyjs::addClass(
-              selector = ".btn-file:has(#app-conversion_main-result_input)",
-              class = "custom-disable"
-            )
-            shinyjs::addClass(
-              selector = ".input-group:has(#app-conversion_main-result_input) > .form-control",
-              class = "custom-disable"
-            )
+          # Inactivate table observer
+          declaration_vars$protein_table_active <- FALSE
+        } else if (
+          input$tabs == "Compounds" && declaration_vars$compound_table_status
+        ) {
+          # Retrieve client side table input
+          compound_table <- rhandsontable::hot_to_r(
+            input$compounds_table
+          )
+          declaration_vars$compound_table <- compound_table
 
-            # Retrieve sliced user input table
-            sample_table <- slice_sample_tab(rhandsontable::hot_to_r(
-              input$sample_table
-            ))
+          # Slice table input
+          compound_table_sliced <- slice_tab(compound_table)
+          declaration_vars$compound_table_sliced <- compound_table_sliced
 
-            # Render table uneditable
-            output$sample_table <- rhandsontable::renderRHandsontable(
-              sample_handsontable(sample_table, disabled = TRUE)
-            )
+          # Mark UI as done
+          confirm_ui_changes(
+            tab = input$tabs,
+            table = compound_table_sliced,
+            session = session,
+            output = output
+          )
 
-            # Inactivate table observer
-            declaration_vars$sample_table_active <- FALSE
-
-            # Show table message
-            output$sample_table_info <- shiny::renderText("Table saved!")
-
-            # Assign user input to reactive table variable
-            declaration_vars$sample_table <- sample_table
+          # Render sample table with new input
+          if (!is.null(input$samples_table)) {
+            output$samples_table <- rhandsontable::renderRHandsontable({
+              sample_handsontable(
+                # slice_sample_tab(
+                tab = rhandsontable::hot_to_r(input$samples_table),
+                # )
+                proteins = declaration_vars$protein_table_sliced$Protein,
+                compounds = compound_table$Compound
+              )
+            })
           }
+
+          # Jump to next tab depending on compound table status
+          if (isTRUE(declaration_vars$protein_table_active)) {
+            set_selected_tab("Proteins", session)
+          } else {
+            set_selected_tab("Samples", session)
+          }
+
+          # Inactivate table observer
+          declaration_vars$compound_table_active <- FALSE
+        } else if (
+          input$tabs == "Samples" && declaration_vars$sample_table_status
+        ) {
+          # Retrieve client side table input
+          sample_table <- rhandsontable::hot_to_r(
+            input$samples_table
+          )
+          declaration_vars$sample_table <- sample_table
+
+          # Slice table input
+          sample_table_sliced <- slice_tab(sample_table)
+          declaration_vars$sample_table_sliced <- sample_table_sliced
+
+          # Mark UI as done
+          confirm_ui_changes(
+            tab = input$tabs,
+            table = sample_table_sliced,
+            session = session,
+            output = output
+          )
+
+          # Inactivate table observer
+          declaration_vars$sample_table_active <- FALSE
         }
 
         # Unblock UI
@@ -998,46 +659,44 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
     # Observe sample input
     shiny::observeEvent(
-      input$result_input,
+      input$samples_fileinput,
       {
-        shiny::req(input$result_input)
-
         shinyjs::removeClass(
-          "sample_table_info",
+          "samples_table_info",
           "table-info-green"
         )
         shinyjs::addClass(
-          "sample_table_info",
+          "samples_table_info",
           "table-info-red"
         )
 
         shinyjs::removeClass(
-          selector = ".btn-file:has(#app-conversion_main-result_input)",
+          selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
           class = "custom-disable"
         )
         shinyjs::removeClass(
-          selector = ".input-group:has(#app-conversion_main-result_input) > .form-control",
+          selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
           class = "custom-disable"
         )
 
-        output$sample_table_info <- shiny::renderText({
+        output$samples_table_info <- shiny::renderText({
           "Fill table ..."
         })
 
         # Read results .rds file from selected path
-        file_path <- file.path(input$result_input$datapath)
+        file_path <- file.path(input$samples_fileinput$datapath)
         declaration_vars$result <- readRDS(file_path)
 
         # if (!isTRUE(declaration_vars$sample_tab_initial)) {
-        output$sample_table <- rhandsontable::renderRHandsontable({
+        output$samples_table <- rhandsontable::renderRHandsontable({
           sample_handsontable(
             tab = new_sample_table(
               result = declaration_vars$result,
-              protein_table = declaration_vars$protein_table,
-              compound_table = declaration_vars$compound_table
+              protein_table = declaration_vars$protein_table_sliced,
+              compound_table = declaration_vars$compound_table_sliced
             ),
-            proteins = declaration_vars$protein_table$Protein,
-            compounds = declaration_vars$compound_table$Compound
+            proteins = declaration_vars$protein_table_sliced$Protein,
+            compounds = declaration_vars$compound_table_sliced$Compound
           )
         })
       }
@@ -1073,13 +732,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       shinyjs::disable("edit_samples")
 
       # Enable file upload
-      shinyjs::enable("result_input")
+      shinyjs::enable("samples_fileinput")
       shinyjs::removeClass(
-        selector = ".btn-file:has(#app-conversion_main-result_input)",
+        selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
         class = "custom-disable"
       )
       shinyjs::removeClass(
-        selector = ".input-group:has(#app-conversion_main-result_input) > .form-control",
+        selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
         class = "custom-disable"
       )
 
@@ -1092,22 +751,22 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       declaration_vars$sample_table_active <- TRUE
 
       shinyjs::removeClass(
-        "sample_table_info",
+        "samples_table_info",
         "table-info-green"
       )
       shinyjs::addClass(
-        "sample_table_info",
+        "samples_table_info",
         "table-info-red"
       )
       shinyjs::removeClass(
-        selector = ".btn-file:has(#app-conversion_main-result_input)",
+        selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
         class = "custom-disable"
       )
       shinyjs::removeClass(
-        selector = ".input-group:has(#app-conversion_main-result_input) > .form-control",
+        selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
         class = "custom-disable"
       )
-      output$sample_table_info <- shiny::renderText({
+      output$samples_table_info <- shiny::renderText({
         "Fill table ..."
       })
 
@@ -1117,18 +776,18 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       )
 
       # if (!isTRUE(shiny::isolate(declaration_vars$sample_tab_initial))) {
-      output$sample_table <- rhandsontable::renderRHandsontable({
+      output$samples_table <- rhandsontable::renderRHandsontable({
         sample_handsontable(
           tab = new_sample_table(
             result = declaration_vars$result,
-            protein_table = declaration_vars$protein_table,
-            compound_table = declaration_vars$compound_table
+            protein_table = declaration_vars$protein_table_sliced,
+            compound_table = declaration_vars$compound_table_sliced
           ),
-          proteins = declaration_vars$protein_table$Protein,
-          compounds = declaration_vars$compound_table$Compound,
+          proteins = declaration_vars$protein_table_sliced$Protein,
+          compounds = declaration_vars$compound_table_sliced$Compound,
           disabled = ifelse(
-            is.null(declaration_vars$protein_table) ||
-              is.null(declaration_vars$compound_table) ||
+            is.null(declaration_vars$protein_table_sliced) ||
+              is.null(declaration_vars$compound_table_sliced) ||
               isTRUE(declaration_vars$protein_table_active) ||
               isTRUE(declaration_vars$compound_table_active),
             TRUE,
@@ -1217,18 +876,18 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
           # Render rhandsontable
           # if (!isTRUE(shiny::isolate(declaration_vars$sample_tab_initial))) {
-          output$sample_table <- rhandsontable::renderRHandsontable({
+          output$samples_table <- rhandsontable::renderRHandsontable({
             sample_handsontable(
               tab = new_sample_table(
                 result = declaration_vars$result,
-                protein_table = declaration_vars$protein_table,
-                compound_table = declaration_vars$compound_table
+                protein_table = declaration_vars$protein_table_sliced,
+                compound_table = declaration_vars$compound_table_sliced
               ),
-              proteins = declaration_vars$protein_table$Protein,
-              compounds = declaration_vars$compound_table$Compound,
+              proteins = declaration_vars$protein_table_sliced$Protein,
+              compounds = declaration_vars$compound_table_sliced$Compound,
               disabled = ifelse(
-                is.null(declaration_vars$protein_table) ||
-                  is.null(declaration_vars$compound_table) ||
+                is.null(declaration_vars$protein_table_sliced) ||
+                  is.null(declaration_vars$compound_table_sliced) ||
                   isTRUE(declaration_vars$protein_table_active) ||
                   isTRUE(declaration_vars$compound_table_active),
                 TRUE,
@@ -1256,69 +915,76 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       }
     )
 
+    # Observe sample tab activation status
     shiny::observe({
       if (
-        is.null(declaration_vars$protein_table) ||
-          is.null(declaration_vars$compound_table) ||
+        # if protein/compound declaration unconfirmed
+        is.null(declaration_vars$protein_table_sliced) ||
+          is.null(declaration_vars$compound_table_sliced) ||
           isTRUE(declaration_vars$protein_table_active) ||
           isTRUE(declaration_vars$compound_table_active)
       ) {
-        shinyjs::removeClass(
-          "sample_table_info",
-          "table-info-green"
-        )
+        # Disable file upload
+        shinyjs::disable("samples_fileinput")
         shinyjs::addClass(
-          "sample_table_info",
-          "table-info-red"
-        )
-        shinyjs::disable("result_input")
-        shinyjs::addClass(
-          selector = ".btn-file:has(#app-conversion_main-result_input)",
+          selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
           class = "custom-disable"
         )
         shinyjs::addClass(
-          selector = ".input-group:has(#app-conversion_main-result_input) > .form-control",
+          selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
           class = "custom-disable"
         )
+
+        # Disable confirm button
         shinyjs::disable("confirm_samples")
-        output$sample_table_info <- shiny::renderText({
+
+        # Update table info
+        output$samples_table_info <- shiny::renderText({
           "Enter Proteins and Compounds first"
         })
-      } else {
         shinyjs::removeClass(
-          "sample_table_info",
+          "samples_table_info",
           "table-info-green"
         )
         shinyjs::addClass(
-          "sample_table_info",
+          "samples_table_info",
           "table-info-red"
         )
+      } else {
+        # if protein/compound declaration confirmed
 
+        # Enable file upload
+        shinyjs::enable("samples_fileinput")
         shinyjs::removeClass(
-          selector = ".btn-file:has(#app-conversion_main-result_input)",
+          selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
           class = "custom-disable"
         )
         shinyjs::removeClass(
-          selector = ".input-group:has(#app-conversion_main-result_input) > .form-control",
+          selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
           class = "custom-disable"
         )
 
-        shinyjs::disable("confirm_samples")
-        output$sample_table_info <- shiny::renderText({
+        # Enable confirm button
+        shinyjs::enable("confirm_samples")
+
+        # Update table info
+        output$samples_table_info <- shiny::renderText({
           "Upload result file"
         })
+        shinyjs::removeClass(
+          "samples_table_info",
+          "table-info-green"
+        )
+        shinyjs::addClass(
+          "samples_table_info",
+          "table-info-red"
+        )
       }
-
-      # Unblock UI
-      shinyjs::runjs(paste0(
-        'document.getElementById("blocking-overlay").style.display ',
-        '= "none";'
-      ))
     })
 
     # Render compound table
     shiny::observe({
-      if (is.null(declaration_vars$compound_table)) {
+      if (is.null(declaration_vars$compound_table_sliced)) {
         tab <- data.frame(
           Compound = as.character(rep(NA, 9)),
           mass_shift1 = as.numeric(rep(NA, 9)),
@@ -1345,7 +1011,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           "Mass 9"
         )
 
-        output$compound_table <- rhandsontable::renderRHandsontable({
+        output$compounds_table <- rhandsontable::renderRHandsontable({
           prot_comp_handsontable(tab)
         })
       }
@@ -1353,7 +1019,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
     # Render protein table
     shiny::observe({
-      if (is.null(declaration_vars$protein_table)) {
+      if (is.null(declaration_vars$protein_table_sliced)) {
         empty_protein_tab <- empty_tab
         colnames(empty_protein_tab) <- c(
           "Protein",
@@ -1368,7 +1034,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           "Mass 9"
         )
 
-        output$protein_table <- rhandsontable::renderRHandsontable(
+        output$proteins_table <- rhandsontable::renderRHandsontable(
           prot_comp_handsontable(empty_protein_tab)
         )
       }
@@ -2965,9 +2631,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       set_selected_tab = set_selected_tab,
       conversion_ready = shiny::reactive(declaration_vars$conversion_ready),
       input_list = shiny::reactive(list(
-        Protein_Table = declaration_vars$protein_table,
-        Compound_Table = declaration_vars$compound_table,
-        Samples_Table = declaration_vars$sample_table,
+        Protein_Table = declaration_vars$protein_table_sliced,
+        Compound_Table = declaration_vars$compound_table_sliced,
+        Samples_Table = declaration_vars$sample_table_sliced,
         result = declaration_vars$result
       )),
       cancel_continuation = shiny::reactive(input$conversion_cont_cancel)
