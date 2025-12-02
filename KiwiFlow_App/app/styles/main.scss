@@ -286,6 +286,7 @@ th {
   border-top-right-radius: 4px;
   border: 1px solid #000000c2;
   border-bottom: none;
+  align-items: center;
 }
 
 .card-custom .card-body .far {
@@ -1353,6 +1354,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 .table-input .progress {
   height: 3px;
   width: 100%;
+  background: #8bc34a;
   --bs-progress-bar-bg: #8bc34a;
   --bs-progress-bg: #f7f7f7;
 }
@@ -1362,8 +1364,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 }
 
 .table-input .progress-bar {
-  color: #8bc34a;
-  height: 3px;
+  display: none;
 }
 
 .conversion-checkbox .form-group,
@@ -1768,6 +1769,11 @@ table.dataTable thead > tr > th.sorting::before {
   color: #000;
   background: #f0ffe0a3 !important;
   box-shadow: inset 0px 0px 25px 6px #ffffff78;
+}
+
+.info-symbol-container {
+  display: flex;
+  align-items: center;
 }
 
 .help-header {

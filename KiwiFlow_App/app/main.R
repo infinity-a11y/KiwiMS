@@ -165,6 +165,7 @@ server <- function(id) {
     deconvolution_main_vars <- deconvolution_main$server(
       "deconvolution_main",
       deconvolution_sidebar_vars,
+      conversion_main_vars,
       reset_button = reset_button
     )
 
@@ -250,6 +251,15 @@ server <- function(id) {
       )
     })
 
+    # Switch back to Deconvolution module when user forwards
+    shiny$observeEvent(conversion_main_vars$cancel_continuation(), {
+      bslib::nav_select(
+        "tabs",
+        session = session,
+        "Deconvolution"
+      )
+    })
+
     # Update modal
     shiny$observeEvent(input$open_update_modal, {
       shiny$req(local_version, release, message, link, hint)
@@ -307,7 +317,6 @@ server <- function(id) {
     })
 
     # Hide waiter
-    # Sys.sleep(2)
     waiter_hide()
   })
 }

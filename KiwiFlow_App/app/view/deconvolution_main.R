@@ -48,7 +48,12 @@ ui <- function(id) {
 }
 
 #' @export
-server <- function(id, deconvolution_sidebar_vars, reset_button) {
+server <- function(
+  id,
+  deconvolution_sidebar_vars,
+  conversion_main_vars,
+  reset_button
+) {
   shiny$moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -2384,20 +2389,23 @@ server <- function(id, deconvolution_sidebar_vars, reset_button) {
 
     # Event continue to protein conversion
     shiny$observeEvent(input$forward_deconvolution, {
-      # Switch to Protein Conversion tab
-      bslib::nav_select(
-        "#app-tabs",
-        session = session,
-        "Protein Conversion"
-      )
-
-      shinyjs::disable("forward_deconvolution")
-
+      # Return result file path as module output
       reactVars$continue_conversion <- file.path(
         deconvolution_sidebar_vars$targetpath(),
         gsub(".log", "_RESULT.rds", basename(log_path))
       )
-      message("DECONVOLUTION", reactVars$continue_conversion)
+
+      # Disable continuation/forward button
+      shinyjs::disable("forward_deconvolution")
+    })
+
+    # Event continuation and overwrite present sample table cancelled
+    shiny::observeEvent(conversion_main_vars$cancel_continuation(), {
+      # Reenable continuiation/forward button
+      shinyjs::enable("forward_deconvolution")
+
+      # Set "continue_conversion" reactive variable back to NULL
+      reactVars$continue_conversion <- NULL
     })
 
     ### Tooltip events ----

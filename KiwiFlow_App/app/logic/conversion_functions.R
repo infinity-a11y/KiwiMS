@@ -310,7 +310,7 @@ sample_handsontable <- function(
   }"
   } else {
     allowed_per_col <- list(NULL)
-    renderer_js <- ""
+    renderer_js <- "" # Note: passing empty string might sometimes cause issues, 'NULL' is safer, but if "" works for you keep it.
   }
 
   handsontable <- rhandsontable::rhandsontable(
@@ -319,7 +319,11 @@ sample_handsontable <- function(
     allowed_per_col = allowed_per_col
   ) |>
     rhandsontable::hot_col("Sample", readOnly = TRUE) |>
-    rhandsontable::hot_cols(fixedColumnsLeft = 2, renderer = renderer_js) |>
+    rhandsontable::hot_cols(
+      fixedColumnsLeft = 2,
+      renderer = renderer_js,
+      type = "text"
+    ) |>
     rhandsontable::hot_table(
       contextMenu = FALSE
     )
@@ -2152,4 +2156,34 @@ checkboxColumn <- function(len, col, ...) {
     ))
   }
   inputs
+}
+
+# Empty sample declaration table generator function
+#' @export
+new_sample_table <- function(result, protein_table, compound_table) {
+  sample_tab <- data.frame(
+    Sample = names(result$deconvolution),
+    Protein = ifelse(
+      length(protein_table$Protein) == 1,
+      protein_table$Protein,
+      ""
+    ),
+    Compound = ifelse(
+      length(compound_table$Compound) == 1,
+      compound_table$Compound,
+      ""
+    ),
+    cmp2 = NA,
+    cmp3 = NA,
+    cmp4 = NA,
+    cmp5 = NA,
+    cmp6 = NA,
+    cmp7 = NA,
+    cmp8 = NA,
+    cmp9 = NA
+  )
+
+  colnames(sample_tab) <- c("Sample", "Protein", paste("Compound", 1:9))
+
+  return(sample_tab)
 }
