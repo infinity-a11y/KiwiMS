@@ -353,16 +353,98 @@ sample_handsontable <- function(
   return(handsontable)
 }
 
+# Construct cleaned-up declaration table with only consecutive non-NA entries
+#' @export
+clean_table <- function(tab, table, full = FALSE) {
+  # Keep only rows without NAs
+  table <- table[rowSums(is.na(table) | table == "") != ncol(table), ]
+
+  # If empty return empty table
+  if (nrow(table) | all(is.na(table))) {
+    return(table)
+  }
+
+  df <- data.frame()
+  for (i in 1:nrow(table)) {
+    # Extract vector from input table
+    row_noNA <- unlist(table[i, ])[!is.na(unlist(table[i, ]))]
+
+    # Case name column is NA
+    if (!tab %in% names(row_noNA)) {
+      row_noNA <- c(as.character(NA), row_noNA)
+      names(row_noNA)[1] <- tab
+    }
+
+    # Adjust column differences
+    col_diff <- ncol(df) - length(row_noNA)
+    if (i != 1 && col_diff > 0) {
+      row_noNA <- c(row_noNA, rep(as.numeric(NA), col_diff))
+    } else if (i != 1 && col_diff < 0) {
+      df <- cbind(df, rep(list(NA), abs(col_diff)))
+    }
+
+    df <- rbind(df, row_noNA)
+  }
+
+  # Correct mass columns to be numeric
+  df[, -1] <- as.data.frame(sapply(df[, -1], as.numeric))
+
+  if (nrow(df) > 0 && ncol(df) > 1) {
+    if (full) {
+      # Get missing columns and rows to achieve target dimension (9, 10)
+      missing_cols <- 10 - ncol(df)
+      missing_rows <- ifelse(nrow(df) > 9, 0, 9 - nrow(df))
+
+      if (missing_cols != 0 & missing_rows != 0) {
+        # Fill up cols with NAs
+        df <- cbind(df, rep(list(as.numeric(NA)), missing_cols))
+
+        # Fill up rows with NAs
+        df_add_miss_rows <- data.frame(c(
+          list(rep(as.character(NA), missing_rows)),
+          rep(list(rep(as.numeric(NA), missing_rows)), 9)
+        ))
+
+        # Equalize names before merge
+        names(df_add_miss_rows) <- names(df)
+
+        # Merge on rows
+        df <- rbind(df, df_add_miss_rows)
+      } else if (missing_cols != 0 & missing_rows == 0) {
+        # Fill up cols with NAs
+        df <- cbind(df, rep(list(as.numeric(NA)), missing_cols))
+      } else if (missing_cols == 0 & missing_rows != 0) {
+        # Fill up rows with NAs
+        df_add_miss_rows <- data.frame(c(
+          list(rep(as.character(NA), missing_rows)),
+          rep(list(rep(as.numeric(NA), missing_rows)), 9)
+        ))
+
+        # Equalize names before merge
+        names(df_add_miss_rows) <- names(df)
+
+        # Merge on rows
+        df <- rbind(df, df_add_miss_rows)
+      }
+    }
+  }
+
+  # Rename columns
+  names(df) <- c(tab, paste("Mass", 1:(ncol(df) - 1)))
+
+  return(df)
+}
+
 # Slice declaration tables column-wise
 #' @export
-slice_tab <- function(tab) {
+slice_rows <- function(tab) {
   row_contain <- which(rowSums(is.na(tab) | tab == "") != ncol(tab))
   return(tab[row_contain, ])
 }
 
 # Slice sample declaration table row-wise
 #' @export
-slice_sample_tab <- function(sample_table) {
+slice_cols <- function(sample_table) {
   non_empty <- which(
     colSums(is.na(sample_table) | sample_table == "") != nrow(sample_table)
   )
@@ -435,9 +517,9 @@ check_sample_table <- function(sample_table, proteins, compounds) {
 
 # Validate protein/compound table
 #' @export
-check_table <- function(tab, col_limit) {
-  if (!nrow(tab)) {
-    return("Fill the table with values.")
+check_table <- function(tab) {
+  if (!nrow(tab) || ncol(tab) < 2) {
+    return("Fill name and mass fields.")
   }
 
   # Check variable types
@@ -447,7 +529,7 @@ check_table <- function(tab, col_limit) {
   }
   if (
     !all(tab_variables[-1] == "numeric") |
-      !all(rowSums(!is.na(tab[, -1])) > 0)
+      !all(rowSums(!is.na(tab[, -1, drop = FALSE])) > 0)
   ) {
     return(paste("Mass fields require numeric values"))
   }
@@ -2358,7 +2440,7 @@ table_observe <- function(table, tab, output, ns, proteins, compounds) {
       )
     } else {
       check_function <- "check_table"
-      args <- list(tab = table, col_limit = 10)
+      args <- list(tab = table)
     }
 
     table_check <- do.call(what = check_function, args = args)

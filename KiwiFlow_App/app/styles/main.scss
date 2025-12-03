@@ -769,6 +769,10 @@ table.dataTable > tbody > tr.selected > * {
   max-width: fit-content !important;
 }
 
+.ht_master .wtHolder {
+  overflow: hidden;
+}
+
 .handsontable .wtBorder.corner,
 .handsontable .wtBorder.current {
   background-color: #35357a !important;

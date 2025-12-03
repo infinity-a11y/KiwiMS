@@ -15,8 +15,8 @@ box::use(
       prot_comp_handsontable,
       check_table,
       check_sample_table,
-      slice_tab,
-      slice_sample_tab,
+      slice_rows,
+      slice_cols,
       set_selected_tab,
       read_uploaded_file,
       process_uploaded_table,
@@ -30,6 +30,7 @@ box::use(
       confirm_ui_changes,
       edit_ui_changes,
       table_observe,
+      clean_table,
     ],
   app /
     logic /
@@ -280,14 +281,14 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     )
 
     output$sample_number_info <- shiny::renderText({
-      if (is.null(declaration_vars$result)) {
-        "Add samples ..."
-      } else {
-        paste(
+      paste(
+        ifelse(
+          !is.null(declaration_vars$result),
           length(declaration_vars$result$deconvolution),
-          "deconvoluted samples"
-        )
-      }
+          0
+        ),
+        "deconvoluted sample(s)"
+      )
     })
 
     # On result file input execute immediately
@@ -342,9 +343,14 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       if (!is.null(table_upload_processed)) {
         declaration_vars$protein_table_status <- TRUE
 
-        output$proteins_table <- rhandsontable::renderRHandsontable(
+        output$proteins_table <- rhandsontable::renderRHandsontable({
+          test1 <<- prot_comp_handsontable(
+            table_upload_processed,
+            disabled = FALSE
+          )
+          test11 <<- table_upload_processed
           prot_comp_handsontable(table_upload_processed, disabled = FALSE)
-        )
+        })
 
         shinyWidgets::show_toast(
           "Protein table loaded!",
@@ -400,10 +406,25 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         shiny::isolate(declaration_vars$protein_table_active)
       )
 
-      # Retrieve sliced user input table
-      protein_table <- slice_tab(rhandsontable::hot_to_r(
+      protein_table <- rhandsontable::hot_to_r(
         input$proteins_table
-      ))
+      )
+
+      test <<- protein_table
+
+      # Retrieve sliced user input table
+      # if (any(!is.na(protein_table))) {
+      #   protein_table <- clean_table(
+      #     tab = "Protein",
+      #     table = protein_table,
+      #     full = FALSE
+      #   )
+      # }
+      protein_table <- clean_table(
+        tab = "Protein",
+        table = protein_table,
+        full = FALSE
+      )
 
       # Conditional observe actions
       declaration_vars$protein_table_status <- table_observe(
@@ -422,7 +443,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       )
 
       # Retrieve sliced user input table
-      compound_table <- slice_tab(rhandsontable::hot_to_r(
+      compound_table <- slice_rows(rhandsontable::hot_to_r(
         input$compounds_table
       ))
 
@@ -490,7 +511,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           # Make UI changes
           edit_ui_changes(
             tab = input$tabs,
-            table = declaration_vars$protein_table,
+            table = clean_table(
+              tab = "Protein",
+              table = declaration_vars$protein_table,
+              full = TRUE
+            ),
             session = session,
             output = output
           )
@@ -525,20 +550,31 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         ))
 
         if (input$tabs == "Proteins" && declaration_vars$protein_table_status) {
-          # Retrieve client side table input
-          protein_table <- rhandsontable::hot_to_r(
-            input$proteins_table
-          )
-          declaration_vars$protein_table <- protein_table
+          # # Retrieve client side table input
+          # protein_table <- rhandsontable::hot_to_r(
+          #   input$proteins_table
+          # )
+          # declaration_vars$protein_table <- protein_table
+          # protein_table1 <<- protein_table
 
-          # Slice table input
-          protein_table_sliced <- slice_tab(protein_table)
-          declaration_vars$protein_table_sliced <- protein_table_sliced
+          # # Slice table input
+          # protein_table_sliced <- slice_rows(protein_table)
+          # declaration_vars$protein_table_sliced <- protein_table_sliced
+
+          protein_table <- clean_table(
+            tab = "Protein",
+            table = rhandsontable::hot_to_r(
+              input$proteins_table
+            ),
+            full = FALSE
+          )
+
+          declaration_vars$protein_table <- protein_table
 
           # Mark UI as done
           confirm_ui_changes(
             tab = input$tabs,
-            table = protein_table_sliced,
+            table = protein_table,
             session = session,
             output = output
           )
@@ -547,7 +583,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           if (!is.null(input$samples_table)) {
             output$samples_table <- rhandsontable::renderRHandsontable({
               sample_handsontable(
-                # slice_sample_tab(
+                # slice_cols(
                 tab = rhandsontable::hot_to_r(input$samples_table),
                 # )
                 proteins = protein_table_sliced$Protein,
@@ -575,7 +611,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           declaration_vars$compound_table <- compound_table
 
           # Slice table input
-          compound_table_sliced <- slice_tab(compound_table)
+          compound_table_sliced <- slice_rows(compound_table)
           declaration_vars$compound_table_sliced <- compound_table_sliced
 
           # Mark UI as done
@@ -590,7 +626,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           if (!is.null(input$samples_table)) {
             output$samples_table <- rhandsontable::renderRHandsontable({
               sample_handsontable(
-                # slice_sample_tab(
+                # slice_cols(
                 tab = rhandsontable::hot_to_r(input$samples_table),
                 # )
                 proteins = declaration_vars$protein_table_sliced$Protein,
@@ -618,7 +654,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           declaration_vars$sample_table <- sample_table
 
           # Slice table input
-          sample_table_sliced <- slice_tab(sample_table)
+          sample_table_sliced <- slice_rows(sample_table)
           declaration_vars$sample_table_sliced <- sample_table_sliced
 
           # Mark UI as done
@@ -1034,9 +1070,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           "Mass 9"
         )
 
-        output$proteins_table <- rhandsontable::renderRHandsontable(
+        output$proteins_table <- rhandsontable::renderRHandsontable({
+          test2 <<- prot_comp_handsontable(empty_protein_tab)
+          test22 <<- empty_protein_tab
           prot_comp_handsontable(empty_protein_tab)
-        )
+        })
       }
     })
 
