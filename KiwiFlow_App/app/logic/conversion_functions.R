@@ -192,16 +192,30 @@ prot_comp_handsontable <- function(tab, disabled = FALSE) {
     }
   }"
 
+  if (nrow(tab) > 16) {
+    height <- 400
+  } else {
+    height <- NULL
+  }
+
+  if (disabled) {
+    stretch <- "none"
+  } else {
+    stretch <- "all"
+  }
+
   table <- rhandsontable::rhandsontable(
     tab,
     rowHeaders = NULL,
-    stretchH = "all"
+    height = height,
+    stretchH = stretch
   ) |>
     rhandsontable::hot_cols(fixedColumnsLeft = 1, renderer = renderer_js) |>
     rhandsontable::hot_table(
       contextMenu = TRUE,
       highlightCol = TRUE,
-      highlightRow = TRUE
+      highlightRow = TRUE,
+      stretchH = stretch,
     ) |>
     rhandsontable::hot_context_menu(
       allowRowEdit = TRUE,
@@ -356,81 +370,88 @@ sample_handsontable <- function(
 # Construct cleaned-up declaration table with only consecutive non-NA entries
 #' @export
 clean_table <- function(tab, table, full = FALSE) {
-  # Keep only rows without NAs
-  table <- table[rowSums(is.na(table) | table == "") != ncol(table), ]
+  suppressWarnings({
+    # Keep only rows without NAs
+    table <- table[rowSums(is.na(table) | table == "") != ncol(table), ]
 
-  # If empty return empty table
-  if (nrow(table) | all(is.na(table))) {
-    return(table)
-  }
-
-  df <- data.frame()
-  for (i in 1:nrow(table)) {
-    # Extract vector from input table
-    row_noNA <- unlist(table[i, ])[!is.na(unlist(table[i, ]))]
-
-    # Case name column is NA
-    if (!tab %in% names(row_noNA)) {
-      row_noNA <- c(as.character(NA), row_noNA)
-      names(row_noNA)[1] <- tab
+    # If empty return empty table
+    if (!nrow(table) | all(is.na(table))) {
+      return(table)
     }
 
-    # Adjust column differences
-    col_diff <- ncol(df) - length(row_noNA)
-    if (i != 1 && col_diff > 0) {
-      row_noNA <- c(row_noNA, rep(as.numeric(NA), col_diff))
-    } else if (i != 1 && col_diff < 0) {
-      df <- cbind(df, rep(list(NA), abs(col_diff)))
+    df <- data.frame()
+    for (i in 1:nrow(table)) {
+      # Extract vector from input table
+      row_noNA <- unlist(table[i, ])[!is.na(unlist(table[i, ]))]
+
+      # Case name column is NA
+      if (!tab %in% names(row_noNA)) {
+        row_noNA <- c(as.character(NA), row_noNA)
+        names(row_noNA)[1] <- tab
+      }
+
+      # Adjust column differences
+      col_diff <- ncol(df) - length(row_noNA)
+      if (i != 1 && col_diff > 0) {
+        row_noNA <- c(row_noNA, rep(as.numeric(NA), col_diff))
+      } else if (i != 1 && col_diff < 0) {
+        df <- cbind(df, rep(list(NA), abs(col_diff)))
+      }
+
+      df <- rbind(df, row_noNA)
     }
 
-    df <- rbind(df, row_noNA)
-  }
+    # Correct mass columns to be numeric and name column character
+    df[, -1] <- as.data.frame(sapply(df[, -1], as.numeric))
+    df[, 1] <- as.character(df[, 1])
 
-  # Correct mass columns to be numeric
-  df[, -1] <- as.data.frame(sapply(df[, -1], as.numeric))
+    if (nrow(df) > 0 && ncol(df) > 1) {
+      if (full) {
+        # Get missing columns and rows to achieve target dimension (9, 10)
+        missing_cols <- 10 - ncol(df)
+        missing_rows <- ifelse(nrow(df) > 9, 0, 9 - nrow(df))
 
-  if (nrow(df) > 0 && ncol(df) > 1) {
-    if (full) {
-      # Get missing columns and rows to achieve target dimension (9, 10)
-      missing_cols <- 10 - ncol(df)
-      missing_rows <- ifelse(nrow(df) > 9, 0, 9 - nrow(df))
+        if (missing_cols != 0 & missing_rows != 0) {
+          # Fill up cols with NAs
+          df <- cbind(df, rep(list(as.numeric(NA)), missing_cols))
 
-      if (missing_cols != 0 & missing_rows != 0) {
-        # Fill up cols with NAs
-        df <- cbind(df, rep(list(as.numeric(NA)), missing_cols))
+          # Fill up rows with NAs
+          df_add_miss_rows <- data.frame(c(
+            list(rep(as.character(NA), missing_rows)),
+            rep(list(rep(as.numeric(NA), missing_rows)), 9)
+          ))
 
-        # Fill up rows with NAs
-        df_add_miss_rows <- data.frame(c(
-          list(rep(as.character(NA), missing_rows)),
-          rep(list(rep(as.numeric(NA), missing_rows)), 9)
-        ))
+          # Equalize names before merge
+          names(df_add_miss_rows) <- names(df)
 
-        # Equalize names before merge
-        names(df_add_miss_rows) <- names(df)
+          # Merge on rows
+          df <- rbind(df, df_add_miss_rows)
+        } else if (missing_cols != 0 & missing_rows == 0) {
+          # Fill up cols with NAs
+          df <- cbind(df, rep(list(as.numeric(NA)), missing_cols))
+        } else if (missing_cols == 0 & missing_rows != 0) {
+          # Fill up rows with NAs
+          df_add_miss_rows <- data.frame(c(
+            list(rep(as.character(NA), missing_rows)),
+            rep(list(rep(as.numeric(NA), missing_rows)), 9)
+          ))
 
-        # Merge on rows
-        df <- rbind(df, df_add_miss_rows)
-      } else if (missing_cols != 0 & missing_rows == 0) {
-        # Fill up cols with NAs
-        df <- cbind(df, rep(list(as.numeric(NA)), missing_cols))
-      } else if (missing_cols == 0 & missing_rows != 0) {
-        # Fill up rows with NAs
-        df_add_miss_rows <- data.frame(c(
-          list(rep(as.character(NA), missing_rows)),
-          rep(list(rep(as.numeric(NA), missing_rows)), 9)
-        ))
+          # Equalize names before merge
+          names(df_add_miss_rows) <- names(df)
 
-        # Equalize names before merge
-        names(df_add_miss_rows) <- names(df)
-
-        # Merge on rows
-        df <- rbind(df, df_add_miss_rows)
+          # Merge on rows
+          df <- rbind(df, df_add_miss_rows)
+        }
       }
     }
-  }
 
-  # Rename columns
-  names(df) <- c(tab, paste("Mass", 1:(ncol(df) - 1)))
+    # Rename columns
+    if (ncol(df) == 1 & class(df[1, ]) == "character") {
+      names(df) <- tab
+    } else {
+      names(df) <- c(tab, paste("Mass", 1:(ncol(df) - 1)))
+    }
+  })
 
   return(df)
 }
@@ -2490,4 +2511,44 @@ table_observe <- function(table, tab, output, ns, proteins, compounds) {
   waiter::waiter_hide(id = ns(paste0(tab, "_table_info")))
 
   return(table_status)
+}
+
+# Generalized function to handle file uploads for proteins or compounds
+#' @export
+handle_file_upload <- function(
+  file_input,
+  header_checkbox,
+  type,
+  output,
+  declaration_vars
+) {
+  shiny::req(file_input)
+
+  table_upload <- read_uploaded_file(
+    file_input$datapath,
+    tolower(tools::file_ext(file_input$name)),
+    header_checkbox
+  )
+
+  table_upload_processed <- process_uploaded_table(table_upload, type)
+
+  if (!is.null(table_upload_processed)) {
+    declaration_vars[[paste0(type, "_table_status")]] <- TRUE
+
+    output[[paste0(type, "s_table")]] <- rhandsontable::renderRHandsontable({
+      prot_comp_handsontable(table_upload_processed, disabled = FALSE)
+    })
+
+    shinyWidgets::show_toast(
+      paste0(tools::toTitleCase(type), " table loaded!"),
+      type = "success",
+      timer = 3000
+    )
+  } else {
+    shinyWidgets::show_toast(
+      paste0("Loading ", tolower(tools::toTitleCase(type)), " table failed!"),
+      type = "error",
+      timer = 3000
+    )
+  }
 }

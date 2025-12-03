@@ -647,7 +647,6 @@ input[type="number"]::-webkit-inner-spin-button {
   overflow-y: auto;
   overflow-x: hidden;
   max-height: 200px;
-  overflow-scrolling: touch;
   min-width: fit-content;
   background: #e5e5e5;
   text-align: end;
@@ -761,16 +760,20 @@ table.dataTable > tbody > tr.selected > * {
   background: #ddddde;
 }
 
-.handsontable .wtHider {
-  height: 100% !important;
-}
+// .handsontable .wtHider {
+//   height: 100% !important;
+// }
 
-.ht_clone_top .wtHolder {
-  max-width: fit-content !important;
-}
+// .ht_clone_top .wtHolder {
+//   max-width: fit-content !important;
+// }
+
+// .ht_master .wtHolder {
+//   overflow: hidden;
+// }
 
 .ht_master .wtHolder {
-  overflow: hidden;
+  width: fit-content !important;
 }
 
 .handsontable .wtBorder.corner,
@@ -778,13 +781,13 @@ table.dataTable > tbody > tr.selected > * {
   background-color: #35357a !important;
 }
 
-.handsontable-wrapper {
-  border-radius: 5px;
-  overflow: hidden;
-  height: 100%;
-  width: fit-content;
-  background: #f7f7f7;
-}
+// .handsontable-wrapper {
+//   border-radius: 5px;
+//   overflow: hidden;
+//   height: 100%;
+//   width: 90%;
+//   background: #f7f7f7;
+// }
 
 .handsontable .autocompleteEditor.handsontable {
   padding-right: unset;
@@ -802,7 +805,6 @@ table.dataTable > tbody > tr.selected > * {
 
 .handsontable input,
 .handsontable textarea {
-  min-height: 0;
   width: fit-content !important;
 }
 
@@ -814,9 +816,9 @@ table.dataTable > tbody > tr.selected > * {
   cursor: pointer;
 }
 
-.listbox .handsontable .ht_master {
-  height: unset !important;
-}
+// .listbox .handsontable .ht_master {
+//   height: unset !important;
+// }
 
 /* --- Plotly & MathJax --- */
 .js-plotly-plot .plotly svg {
@@ -1339,8 +1341,6 @@ div[data-value="Protein Conversion"] .tab-pane {
 #app-conversion_main-proteins_table,
 #app-conversion_main-compounds_table,
 #app-conversion_main-samples_table {
-  max-height: 60vh !important;
-  max-width: fit-content !important;
   color: black;
 }
 
