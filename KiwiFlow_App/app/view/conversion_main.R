@@ -114,8 +114,51 @@ ui <- function(id) {
           #   class = "handsontable-wrapper",
           rhandsontable::rHandsontableOutput(
             ns("proteins_table")
+          ),
+          # ),
+          shiny::div(
+            class = "table-legend",
+            shiny::div(
+              class = "table-legend-element",
+              shiny::div(
+                class = "cell duplicated-names"
+              ),
+              shiny::div(
+                class = "table-legend-desc",
+                "= duplicated names"
+              )
+            ),
+            shiny::div(
+              class = "table-legend-element",
+              shiny::div(
+                class = "cell numeric-mass"
+              ),
+              shiny::div(
+                class = "table-legend-desc",
+                "= non-numeric mass values"
+              )
+            ),
+            shiny::div(
+              class = "table-legend-element",
+              shiny::div(
+                class = "cell duplicated-mass"
+              ),
+              shiny::div(
+                class = "table-legend-desc",
+                "= mass shifts of one protein duplicated (proximity < peak tolerance)"
+              )
+            ),
+            shiny::div(
+              class = "table-legend-element",
+              shiny::div(
+                class = "cell duplicated-mass-between"
+              ),
+              shiny::div(
+                class = "table-legend-desc",
+                "= mass shifts duplicated between different proteins (proximity < peak tolerance)"
+              )
+            )
           )
-          # )
         )
       ),
       keybind_menu_ui
@@ -351,36 +394,50 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       )
     })
 
+    tolerance <- shiny::reactive(
+      ifelse(
+        is.null(conversion_sidebar_vars$peak_tolerance()),
+        3,
+        conversion_sidebar_vars$peak_tolerance()
+      )
+    ) |>
+      shiny::debounce(millis = 750)
+
     # Observe table status for protein table
     shiny::observe({
       shiny::req(
         input$proteins_table,
-        shiny::isolate(declaration_vars$protein_table_active),
-        conversion_sidebar_vars$peak_tolerance()
+        declaration_vars$protein_table_active
+        # conversion_sidebar_vars$peak_tolerance()
       )
-      protein_table <- clean_table(
-        tab = "Protein",
-        table = rhandsontable::hot_to_r(
-          input$proteins_table
-        ),
-        full = FALSE
-      )
+      message("PROTEIN TABLE 413")
+      suppressWarnings({
+        protein_table <- clean_table(
+          tab = "Protein",
+          table = rhandsontable::hot_to_r(
+            input$proteins_table
+          ),
+          full = FALSE
+        )
 
-      # Conditional observe actions
-      declaration_vars$protein_table_status <- table_observe(
-        tab = "proteins",
-        table = protein_table,
-        output = output,
-        ns = ns,
-        tolerance = conversion_sidebar_vars$peak_tolerance()
-      )
+        # Conditional observe actions
+        # declaration_vars$protein_table_status <-
+        table_observe(
+          tab = "proteins",
+          table = protein_table,
+          output = output,
+          ns = ns,
+          tolerance = tolerance()
+        )
+      })
     })
 
     # Observe table status for compound table
     shiny::observe({
       shiny::req(
         input$compounds_table,
-        shiny::isolate(declaration_vars$compound_table_active)
+        declaration_vars$compound_table_active,
+        conversion_sidebar_vars$peak_tolerance()
       )
 
       compound_table <- clean_table(
@@ -396,7 +453,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         tab = "compounds",
         table = compound_table,
         output = output,
-        ns = ns
+        ns = ns,
+        tolerance = tolerance()
       )
     })
 
@@ -977,7 +1035,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           "Mass 9"
         )
 
-        tolerance <- shiny::isolate(conversion_sidebar_vars$peak_tolerance())
+        shiny::isolate({
+          tolerance <- tolerance()
+        })
+
         output$compounds_table <- rhandsontable::renderRHandsontable({
           prot_comp_handsontable(
             tab,
@@ -988,19 +1049,18 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     })
 
     # Update compound/protein table with tolerance value
-    shiny::observe({
-      shiny::req(conversion_sidebar_vars$peak_tolerance())
-
+    shiny::observeEvent(conversion_sidebar_vars$peak_tolerance(), {
       output$proteins_table <- rhandsontable::renderRHandsontable({
         prot_comp_handsontable(
-          shiny::isolate(rhandsontable::hot_to_r(input$proteins_table)),
-          tolerance = conversion_sidebar_vars$peak_tolerance()
+          rhandsontable::hot_to_r(input$proteins_table),
+          tolerance = tolerance()
         )
       })
     })
 
     # Render protein table
     shiny::observe({
+      message("INITIAL PROTEIN 1064")
       if (is.null(declaration_vars$protein_table)) {
         empty_protein_tab <- empty_tab
         colnames(empty_protein_tab) <- c(
@@ -1015,7 +1075,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           "Mass 8",
           "Mass 9"
         )
-        tolerance <- shiny::isolate(conversion_sidebar_vars$peak_tolerance())
+
+        shiny::isolate({
+          tolerance <- tolerance()
+        })
+        testi <<- tolerance
         output$proteins_table <- rhandsontable::renderRHandsontable({
           prot_comp_handsontable(
             empty_protein_tab,

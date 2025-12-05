@@ -101,151 +101,108 @@ set_selected_tab <- function(tab_name, session) {
 
 #' @export
 # The updated function
-prot_comp_handsontable <- function(tab, tolerance, disabled = FALSE) {
+prot_comp_handsontable <- function(tab, tolerance = 1.5, disabled = FALSE) {
   renderer_js <- sprintf(
     "function(instance, td, row, col, prop, value, cellProperties) {
     Handsontable.renderers.TextRenderer.apply(this, arguments);
     
-    td.style.background = ''; // Clear existing background for new rendering
+    td.style.background = ''; // Clear existing background
+    td.style.color = '';      // Clear existing text color
     
     // Define the tolerance (injected from R)
     var GLOBAL_TOLERANCE = %f;
     
-    // Function to get the value rounded to 3 digits (or empty string if non-numeric/NA)
+    // Helper: Normalize value (return object with float val and numeric status)
     var getNormalizedValue = function(val) {
         if (val == null || val === '') {
-            return {
-                val: '',
-                is_numeric: false
-            };
+            return { val: '', is_numeric: false };
         }
-        
-        // 1. Try to parse as a float
         var floatVal = parseFloat(val);
-        
-        // 2. Check if it's a valid number (i.e., not NaN)
         if (isNaN(floatVal)) {
-            // For non-numeric text, return the trimmed string itself (for column 0 check)
-            return {
-                val: String(val).trim(),
-                is_numeric: false
-            }; 
+            return { val: String(val).trim(), is_numeric: false }; 
         } else {
-            // 3. Return the float and the rounded string value for comparison
-            return {
-                val: floatVal,
-                rounded_str: floatVal.toFixed(3),
-                is_numeric: true
-            }; 
+            return { val: floatVal, is_numeric: true }; 
         }
     };
 
-    // Get the normalized/parsed value for the current cell
     var cellData = getNormalizedValue(value);
     
-    if (!cellData.is_numeric) {
-        // Skip all numeric checks and default styling for non-numeric/empty cells
-        if (col === 0 && cellData.val === '') {
-            return;
-        }
-    }
+    // Skip empty cells
+    if (cellData.val === '') return;
 
-    var isDuplicated = false;
-    
-    // --- A. Column 0 Duplication Check ('Protein/Compound' column) ---
-    // (Existing string comparison logic, only runs for col 0)
+    // --- A. Column 0 Check (Protein Names) ---
+    // We keep the exact duplicate check for the text column
+    var isNameDuplicated = false;
     if (col === 0) {
         var colData = instance.getDataAtCol(0); 
         var valueCounts = {};
-        
         for (var i = 0; i < colData.length; i++) {
-            var cellValue = colData[i];
-            var trimmedValue = cellValue == null ? '' : String(cellValue).trim();
-            
-            if (trimmedValue !== '') {
-                valueCounts[trimmedValue] = (valueCounts[trimmedValue] || 0) + 1;
-            }
+            var cVal = colData[i];
+            var tVal = cVal == null ? '' : String(cVal).trim();
+            if (tVal !== '') valueCounts[tVal] = (valueCounts[tVal] || 0) + 1;
         }
-        
-        if (valueCounts[cellData.val] > 1) {
-            isDuplicated = true;
-        }
+        if (valueCounts[cellData.val] > 1) isNameDuplicated = true;
     }
     
-    // --- B. Row Duplication Check (Columns 1 and greater) ---
-    // (Existing row-wise comparison logic, only runs for col >= 1)
-    if (col >= 1 && cellData.is_numeric) {
-      var rowData = instance.getDataAtRow(row);
-      var valueCounts = {};
-      var startCol = 1; 
-      
-      // Count frequencies of rounded values in the current row
-      for (var i = startCol; i < rowData.length; i++) {
-          // IMPORTANT: Check the cell itself. The current cell value is at rowData[col].
-          if (i !== col) { 
-              var roundedValue = getNormalizedValue(rowData[i]).rounded_str;
-              
-              if (roundedValue !== undefined) {
-                  valueCounts[roundedValue] = (valueCounts[roundedValue] || 0) + 1;
-              }
-          }
-      }
-      
-      if (valueCounts[cellData.rounded_str] > 0) {
-          isDuplicated = true;
-      }
-    }
-    
-    // --- C. GLOBAL PROXIMITY CHECK ---
-    // Runs only for numeric columns (Mass 1, Mass 2, etc.)
-    var isGloballyProximate = false;
+    // --- B. Global Proximity Check (Numeric Columns) ---
+    var isSameRowProximate = false;
+    var isDiffRowProximate = false;
     
     if (col >= 1 && cellData.is_numeric) {
-        // 1. Iterate over ALL cells in the table to find numeric values
         var totalRows = instance.countRows();
         var totalCols = instance.countCols();
         var current_val = cellData.val;
         
-        // Iterate over every row
+        // Iterate over the entire table
         for (var r = 0; r < totalRows; r++) {
-            // Iterate over columns 1 to last (Mass columns)
+            // Optimization: If we already found both types, stop checking
+            if (isSameRowProximate && isDiffRowProximate) break;
+
             for (var c = 1; c < totalCols; c++) {
-                
-                // IMPORTANT: Skip comparison of the cell with itself
-                if (r === row && c === col) {
-                    continue; 
-                }
+                // Skip self-comparison
+                if (r === row && c === col) continue; 
                 
                 var other_value = instance.getDataAtCell(r, c);
                 var other_data = getNormalizedValue(other_value);
                 
                 if (other_data.is_numeric) {
-                    // Calculate absolute difference
                     var diff = Math.abs(current_val - other_data.val);
                     
                     if (diff < GLOBAL_TOLERANCE) {
-                        isGloballyProximate = true;
-                        // Found one close value, no need to check the rest
-                        break; 
+                        if (r === row) {
+                            // Match found in the SAME row
+                            isSameRowProximate = true;
+                        } else {
+                            // Match found in a DIFFERENT row
+                            isDiffRowProximate = true;
+                        }
                     }
                 }
-            }
-            if (isGloballyProximate) {
-                break;
+                
+                // Optimization: Break inner loop if we found both flags
+                if (isSameRowProximate && isDiffRowProximate) break;
             }
         }
     }
     
-    // --- D. Apply Styles ---
-    if (isGloballyProximate) {
-      // Apply PURPLE style for global proximity check
-      td.style.background = '#e6e6fa'; // Light Lavender/Purple
-    } else if (isDuplicated) {
-      // Keep ORANGE style for the existing row/column duplication checks
-      td.style.background = 'orange'; 
+    // --- C. Apply Styles (Priority Based) ---
+    
+    if (isSameRowProximate) {
+        // Priority 1: Close value in SAME ROW -> Dark Purple
+        td.style.background = '#9370dbff';
+        td.style.color = 'white';
+    } 
+    else if (isDiffRowProximate) {
+        // Priority 2: Close value in DIFFERENT ROW -> Lavender
+        td.style.background = '#b8a8d6ff';
+        td.style.color = 'black';
+    } 
+    else if (isNameDuplicated) {
+        // Priority 3: Duplicate Name in Col 0 -> Orange
+        td.style.background = 'orange';
     }
     
-    // --- E. Re-apply Dropdown Renderer ---
+    // --- D. Re-apply Dropdown Renderer ---
     if (cellProperties.type === 'dropdown') {
         Handsontable.renderers.DropdownRenderer.apply(this, arguments);
     }
@@ -446,7 +403,11 @@ clean_table <- function(tab, table, full = FALSE) {
     }
 
     # Correct mass columns to be numeric and name column character
-    df[, -1] <- as.data.frame(sapply(df[, -1], as.numeric))
+    if (class(df[, -1]) == "data.frame") {
+      df[, -1] <- as.data.frame(apply(df[, -1], c(1, 2), as.numeric))
+    } else {
+      df[, -1] <- as.numeric(df[, -1])
+    }
     df[, 1] <- as.character(df[, 1])
 
     if (nrow(df) > 0 && ncol(df) > 1) {
@@ -582,9 +543,10 @@ check_sample_table <- function(sample_table, proteins, compounds) {
 
 ### Check duplicated masses
 check_mass_duplicates <- function(tab, tolerance) {
+  numeric_part <- tab[, -1, drop = FALSE]
+
   # Flatten the data frame
-  all_values <- as.vector(as.matrix(tab[, -1]))
-  n_values <- length(all_values)
+  all_values <- as.vector(as.matrix(numeric_part))
 
   # Calculate absolute difference matrix
   diff_matrix <- abs(outer(all_values, all_values, FUN = "-"))
@@ -599,20 +561,19 @@ check_mass_duplicates <- function(tab, tolerance) {
   diag(is_close_matrix) <- FALSE
 
   # Determine indices close to any other value
-  # If sum is > 0 the value is close to at least one other numeric value
   close_to_any_vector <- rowSums(is_close_matrix) > 0
 
   # Transform resulting Boolean vector back into original data frame structure
   result_matrix <- matrix(
     close_to_any_vector,
-    nrow = nrow(tab[, -1]),
-    ncol = ncol(tab[, -1]),
+    nrow = nrow(numeric_part),
+    ncol = ncol(numeric_part),
     byrow = FALSE
   )
 
   # Convert matrix to data frame and restore names
   result_df <- as.data.frame(result_matrix)
-  colnames(result_df) <- colnames(tab[, -1])
+  colnames(result_df) <- colnames(numeric_part)
 
   # Read protein/compound column
   result_df <- dplyr::mutate(
@@ -620,6 +581,7 @@ check_mass_duplicates <- function(tab, tolerance) {
     !!colnames(tab)[1] := tab[, 1],
     .before = 1
   )
+
   return(result_df)
 }
 
@@ -649,15 +611,17 @@ check_table <- function(tab, tolerance) {
 
   # Check duplicated names
   if (any(duplicated(tab[, 1]))) {
-    return(paste("Duplicated name ID values"))
+    return(paste("Duplicated names"))
   }
-  test <<- tab
-  if (
-    sum(!is.na(tab[, -1])) > 1 &&
-      any(check_mass_duplicates(tab = tab, tolerance = tolerance)[, -1])
-  ) {
-    return("Mass shifts are duplicated in peak tolerance range")
-  }
+
+  # Check mass shift duplicates
+  # duplicate_check <- check_mass_duplicates(tab = tab, tolerance = tolerance)
+  #   if (
+  #   sum(!is.na(tab[, -1])) > 1 &&
+  #     any(rowSums(duplicate_check[, -1, drop = FALSE]) > 1)
+  # ) {
+  #   return("Mass shifts are duplicated in peak tolerance range")
+  # }
 
   # If all checks passed return TRUE
   return(TRUE)
@@ -2521,7 +2485,7 @@ table_observe <- function(
     id = ns(paste0(tab, "_table_info")),
     html = waiter::spin_throbber()
   )
-  Sys.sleep(0.5)
+  Sys.sleep(0.25)
 
   # If table non-empty check for correctness
   if (nrow(table) < 1) {
