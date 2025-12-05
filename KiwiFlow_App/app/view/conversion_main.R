@@ -38,6 +38,7 @@ box::use(
     conversion_constants[
       empty_tab,
       keybind_menu_ui,
+      table_legend,
     ],
 )
 
@@ -110,55 +111,10 @@ ui <- function(id) {
       shiny::fluidRow(
         shiny::column(
           width = 12,
-          # shiny::div(
-          #   class = "handsontable-wrapper",
           rhandsontable::rHandsontableOutput(
             ns("proteins_table")
           ),
-          # ),
-          shiny::div(
-            class = "table-legend",
-            shiny::div(
-              class = "table-legend-element",
-              shiny::div(
-                class = "cell duplicated-names"
-              ),
-              shiny::div(
-                class = "table-legend-desc",
-                "= duplicated names"
-              )
-            ),
-            shiny::div(
-              class = "table-legend-element",
-              shiny::div(
-                class = "cell numeric-mass"
-              ),
-              shiny::div(
-                class = "table-legend-desc",
-                "= non-numeric mass values"
-              )
-            ),
-            shiny::div(
-              class = "table-legend-element",
-              shiny::div(
-                class = "cell duplicated-mass"
-              ),
-              shiny::div(
-                class = "table-legend-desc",
-                "= mass shifts of one protein duplicated (proximity < peak tolerance)"
-              )
-            ),
-            shiny::div(
-              class = "table-legend-element",
-              shiny::div(
-                class = "cell duplicated-mass-between"
-              ),
-              shiny::div(
-                class = "table-legend-desc",
-                "= mass shifts duplicated between different proteins (proximity < peak tolerance)"
-              )
-            )
-          )
+          table_legend
         )
       ),
       keybind_menu_ui
@@ -223,10 +179,8 @@ ui <- function(id) {
       shiny::fluidRow(
         shiny::column(
           width = 12,
-          # shiny::div(
-          #   class = "handsontable-wrapper",
-          rhandsontable::rHandsontableOutput(ns("compounds_table"))
-          # )
+          rhandsontable::rHandsontableOutput(ns("compounds_table")),
+          table_legend
         )
       ),
       keybind_menu_ui
@@ -403,33 +357,44 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     ) |>
       shiny::debounce(millis = 750)
 
+    protein_table_input <- shiny::reactive({
+      shiny::req(input$proteins_table)
+      rhandsontable::hot_to_r(
+        input$proteins_table
+      )
+    }) |>
+      shiny::debounce(millis = 500)
+
+    compound_table_input <- shiny::reactive({
+      shiny::req(input$compounds_table)
+      rhandsontable::hot_to_r(
+        input$compounds_table
+      )
+    }) |>
+      shiny::debounce(millis = 500)
+
     # Observe table status for protein table
     shiny::observe({
       shiny::req(
-        input$proteins_table,
-        declaration_vars$protein_table_active
-        # conversion_sidebar_vars$peak_tolerance()
+        protein_table_input(),
+        declaration_vars$protein_table_active,
+        conversion_sidebar_vars$peak_tolerance()
       )
-      message("PROTEIN TABLE 413")
-      suppressWarnings({
-        protein_table <- clean_table(
-          tab = "Protein",
-          table = rhandsontable::hot_to_r(
-            input$proteins_table
-          ),
-          full = FALSE
-        )
 
-        # Conditional observe actions
-        # declaration_vars$protein_table_status <-
-        table_observe(
-          tab = "proteins",
-          table = protein_table,
-          output = output,
-          ns = ns,
-          tolerance = tolerance()
-        )
-      })
+      protein_table <- clean_table(
+        tab = "Protein",
+        table = shiny::isolate(protein_table_input()),
+        full = FALSE
+      )
+
+      # Conditional observe actions
+      declaration_vars$protein_table_status <- table_observe(
+        tab = "proteins",
+        table = protein_table,
+        output = output,
+        ns = ns,
+        tolerance = tolerance()
+      )
     })
 
     # Observe table status for compound table

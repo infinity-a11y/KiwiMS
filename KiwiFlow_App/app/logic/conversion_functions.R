@@ -371,92 +371,88 @@ sample_handsontable <- function(
 # Construct cleaned-up declaration table with only consecutive non-NA entries
 #' @export
 clean_table <- function(tab, table, full = FALSE) {
-  suppressWarnings({
-    # Keep only rows without NAs
-    table <- table[rowSums(is.na(table) | table == "") != ncol(table), ]
+  tab1 <<- tab
+  table1 <<- table
+  # Keep only rows without NAs
+  table <- table[rowSums(is.na(table) | table == "") != ncol(table), ]
 
-    # If empty return empty table
-    if (!nrow(table) | all(is.na(table))) {
-      return(table)
+  # If empty return empty table
+  if (!nrow(table) | all(is.na(table))) {
+    return(table)
+  }
+
+  df <- data.frame()
+  for (i in 1:nrow(table)) {
+    # Extract vector from input table
+    row_noNA <- unlist(table[i, ])[!is.na(unlist(table[i, ]))]
+
+    # Case name column is NA
+    if (!tab %in% names(row_noNA)) {
+      row_noNA <- c(as.character(NA), row_noNA)
+      names(row_noNA)[1] <- tab
     }
 
-    df <- data.frame()
-    for (i in 1:nrow(table)) {
-      # Extract vector from input table
-      row_noNA <- unlist(table[i, ])[!is.na(unlist(table[i, ]))]
-
-      # Case name column is NA
-      if (!tab %in% names(row_noNA)) {
-        row_noNA <- c(as.character(NA), row_noNA)
-        names(row_noNA)[1] <- tab
-      }
-
-      # Adjust column differences
-      col_diff <- ncol(df) - length(row_noNA)
-      if (i != 1 && col_diff > 0) {
-        row_noNA <- c(row_noNA, rep(as.numeric(NA), col_diff))
-      } else if (i != 1 && col_diff < 0) {
-        df <- cbind(df, rep(list(NA), abs(col_diff)))
-      }
-
-      df <- rbind(df, row_noNA)
+    # Adjust column differences
+    col_diff <- ncol(df) - length(row_noNA)
+    if (i != 1 && col_diff > 0) {
+      row_noNA <- c(row_noNA, rep(as.numeric(NA), col_diff))
+    } else if (i != 1 && col_diff < 0) {
+      df <- cbind(df, rep(list(NA), abs(col_diff)))
     }
 
-    # Correct mass columns to be numeric and name column character
-    if (class(df[, -1]) == "data.frame") {
-      df[, -1] <- as.data.frame(apply(df[, -1], c(1, 2), as.numeric))
-    } else {
-      df[, -1] <- as.numeric(df[, -1])
-    }
-    df[, 1] <- as.character(df[, 1])
+    df <- rbind(df, row_noNA)
+  }
 
-    if (nrow(df) > 0 && ncol(df) > 1) {
-      if (full) {
-        # Get missing columns and rows to achieve target dimension (9, 10)
-        missing_cols <- 10 - ncol(df)
-        missing_rows <- ifelse(nrow(df) > 9, 0, 9 - nrow(df))
+  # Correct mass columns to be numeric and name column character
+  df[, -1] <- as.data.frame(apply(df[, -1, drop = FALSE], c(1, 2), as.numeric))
+  df[, 1] <- as.character(df[, 1])
 
-        if (missing_cols != 0 & missing_rows != 0) {
-          # Fill up cols with NAs
-          df <- cbind(df, rep(list(as.numeric(NA)), missing_cols))
+  if (nrow(df) > 0 && ncol(df) > 1) {
+    if (full) {
+      # Get missing columns and rows to achieve target dimension (9, 10)
+      missing_cols <- 10 - ncol(df)
+      missing_rows <- ifelse(nrow(df) > 9, 0, 9 - nrow(df))
 
-          # Fill up rows with NAs
-          df_add_miss_rows <- data.frame(c(
-            list(rep(as.character(NA), missing_rows)),
-            rep(list(rep(as.numeric(NA), missing_rows)), 9)
-          ))
+      if (missing_cols != 0 & missing_rows != 0) {
+        # Fill up cols with NAs
+        df <- cbind(df, rep(list(as.numeric(NA)), missing_cols))
 
-          # Equalize names before merge
-          names(df_add_miss_rows) <- names(df)
+        # Fill up rows with NAs
+        df_add_miss_rows <- data.frame(c(
+          list(rep(as.character(NA), missing_rows)),
+          rep(list(rep(as.numeric(NA), missing_rows)), 9)
+        ))
 
-          # Merge on rows
-          df <- rbind(df, df_add_miss_rows)
-        } else if (missing_cols != 0 & missing_rows == 0) {
-          # Fill up cols with NAs
-          df <- cbind(df, rep(list(as.numeric(NA)), missing_cols))
-        } else if (missing_cols == 0 & missing_rows != 0) {
-          # Fill up rows with NAs
-          df_add_miss_rows <- data.frame(c(
-            list(rep(as.character(NA), missing_rows)),
-            rep(list(rep(as.numeric(NA), missing_rows)), 9)
-          ))
+        # Equalize names before merge
+        names(df_add_miss_rows) <- names(df)
 
-          # Equalize names before merge
-          names(df_add_miss_rows) <- names(df)
+        # Merge on rows
+        df <- rbind(df, df_add_miss_rows)
+      } else if (missing_cols != 0 & missing_rows == 0) {
+        # Fill up cols with NAs
+        df <- cbind(df, rep(list(as.numeric(NA)), missing_cols))
+      } else if (missing_cols == 0 & missing_rows != 0) {
+        # Fill up rows with NAs
+        df_add_miss_rows <- data.frame(c(
+          list(rep(as.character(NA), missing_rows)),
+          rep(list(rep(as.numeric(NA), missing_rows)), 9)
+        ))
 
-          # Merge on rows
-          df <- rbind(df, df_add_miss_rows)
-        }
+        # Equalize names before merge
+        names(df_add_miss_rows) <- names(df)
+
+        # Merge on rows
+        df <- rbind(df, df_add_miss_rows)
       }
     }
+  }
 
-    # Rename columns
-    if (ncol(df) == 1 & class(df[1, ]) == "character") {
-      names(df) <- tab
-    } else {
-      names(df) <- c(tab, paste("Mass", 1:(ncol(df) - 1)))
-    }
-  })
+  # Rename columns
+  if (ncol(df) == 1 & class(df[1, ]) == "character") {
+    names(df) <- tab
+  } else {
+    names(df) <- c(tab, paste("Mass", 1:(ncol(df) - 1)))
+  }
 
   return(df)
 }

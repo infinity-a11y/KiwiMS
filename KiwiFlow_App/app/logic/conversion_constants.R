@@ -80,3 +80,49 @@ keybind_menu_ui <- shiny::div(
     " Move Rows"
   )
 )
+
+# Table Legend UI
+#' @export
+table_legend <- shiny::div(
+  class = "table-legend",
+  shiny::div(
+    class = "table-legend-element",
+    shiny::div(
+      class = "cell duplicated-names"
+    ),
+    shiny::div(
+      class = "table-legend-desc",
+      "= duplicated names"
+    )
+  ),
+  shiny::div(
+    class = "table-legend-element",
+    shiny::div(
+      class = "cell numeric-mass"
+    ),
+    shiny::div(
+      class = "table-legend-desc",
+      "= non-numeric mass values"
+    )
+  ),
+  shiny::div(
+    class = "table-legend-element",
+    shiny::div(
+      class = "cell duplicated-mass"
+    ),
+    shiny::div(
+      class = "table-legend-desc",
+      "= mass shifts of one protein duplicated (proximity < peak tolerance)"
+    )
+  ),
+  shiny::div(
+    class = "table-legend-element",
+    shiny::div(
+      class = "cell duplicated-mass-between"
+    ),
+    shiny::div(
+      class = "table-legend-desc",
+      "= mass shifts duplicated between different proteins (proximity < peak tolerance)"
+    )
+  )
+)
