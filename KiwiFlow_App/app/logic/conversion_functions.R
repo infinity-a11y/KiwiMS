@@ -100,16 +100,24 @@ set_selected_tab <- function(tab_name, session) {
 }
 
 #' @export
-prot_comp_handsontable <- function(tab, disabled = FALSE) {
-  renderer_js <- "function(instance, td, row, col, prop, value, cellProperties) {
+# The updated function
+prot_comp_handsontable <- function(tab, tolerance, disabled = FALSE) {
+  renderer_js <- sprintf(
+    "function(instance, td, row, col, prop, value, cellProperties) {
     Handsontable.renderers.TextRenderer.apply(this, arguments);
     
     td.style.background = ''; // Clear existing background for new rendering
     
+    // Define the tolerance (injected from R)
+    var GLOBAL_TOLERANCE = %f;
+    
     // Function to get the value rounded to 3 digits (or empty string if non-numeric/NA)
     var getNormalizedValue = function(val) {
         if (val == null || val === '') {
-            return '';
+            return {
+                val: '',
+                is_numeric: false
+            };
         }
         
         // 1. Try to parse as a float
@@ -118,31 +126,38 @@ prot_comp_handsontable <- function(tab, disabled = FALSE) {
         // 2. Check if it's a valid number (i.e., not NaN)
         if (isNaN(floatVal)) {
             // For non-numeric text, return the trimmed string itself (for column 0 check)
-            return String(val).trim(); 
+            return {
+                val: String(val).trim(),
+                is_numeric: false
+            }; 
         } else {
-            // 3. Round to 3 decimal places and return as a string
-            // This handles floating-point precision issues
-            return floatVal.toFixed(3); 
+            // 3. Return the float and the rounded string value for comparison
+            return {
+                val: floatVal,
+                rounded_str: floatVal.toFixed(3),
+                is_numeric: true
+            }; 
         }
     };
 
-    // Get the normalized/rounded value for the current cell
-    var normalizedValue = getNormalizedValue(value);
+    // Get the normalized/parsed value for the current cell
+    var cellData = getNormalizedValue(value);
     
-    if (normalizedValue === '') {
-        // Skip all duplication checks and styling for empty cells
-        return; 
+    if (!cellData.is_numeric) {
+        // Skip all numeric checks and default styling for non-numeric/empty cells
+        if (col === 0 && cellData.val === '') {
+            return;
+        }
     }
 
     var isDuplicated = false;
     
-    // --- A. Column 0 Duplication Check ('Sample' column - likely non-numeric) ---
-    // This check uses the string value, as it's the 'Sample' column
+    // --- A. Column 0 Duplication Check ('Protein/Compound' column) ---
+    // (Existing string comparison logic, only runs for col 0)
     if (col === 0) {
         var colData = instance.getDataAtCol(0); 
         var valueCounts = {};
         
-        // Count frequencies of non-empty values in the entire column 0
         for (var i = 0; i < colData.length; i++) {
             var cellValue = colData[i];
             var trimmedValue = cellValue == null ? '' : String(cellValue).trim();
@@ -152,45 +167,91 @@ prot_comp_handsontable <- function(tab, disabled = FALSE) {
             }
         }
         
-        if (valueCounts[normalizedValue] > 1) {
+        if (valueCounts[cellData.val] > 1) {
             isDuplicated = true;
         }
     }
     
-    // --- B. Row Duplication Check (Columns 1 and greater - numeric/mass columns) ---
-    // This check uses the 3-digit rounded value
-    if (col >= 1) {
+    // --- B. Row Duplication Check (Columns 1 and greater) ---
+    // (Existing row-wise comparison logic, only runs for col >= 1)
+    if (col >= 1 && cellData.is_numeric) {
       var rowData = instance.getDataAtRow(row);
       var valueCounts = {};
-      var startCol = 1; // Start from the second column
+      var startCol = 1; 
       
-      // Count frequencies of non-empty/rounded values in the current row (from col 1 onwards)
+      // Count frequencies of rounded values in the current row
       for (var i = startCol; i < rowData.length; i++) {
-          var cellValue = rowData[i];
-          // Use the rounding function for mass columns
-          var roundedValue = getNormalizedValue(cellValue);
-          
-          if (roundedValue !== '') {
-              valueCounts[roundedValue] = (valueCounts[roundedValue] || 0) + 1;
+          // IMPORTANT: Check the cell itself. The current cell value is at rowData[col].
+          if (i !== col) { 
+              var roundedValue = getNormalizedValue(rowData[i]).rounded_str;
+              
+              if (roundedValue !== undefined) {
+                  valueCounts[roundedValue] = (valueCounts[roundedValue] || 0) + 1;
+              }
           }
       }
       
-      // The current cell's value (normalizedValue) is already rounded via getNormalizedValue(value)
-      if (valueCounts[normalizedValue] > 1) {
+      if (valueCounts[cellData.rounded_str] > 0) {
           isDuplicated = true;
       }
     }
     
-    // --- C. Apply Styles ---
-    if (isDuplicated) {
-      td.style.background = 'orange';
+    // --- C. GLOBAL PROXIMITY CHECK ---
+    // Runs only for numeric columns (Mass 1, Mass 2, etc.)
+    var isGloballyProximate = false;
+    
+    if (col >= 1 && cellData.is_numeric) {
+        // 1. Iterate over ALL cells in the table to find numeric values
+        var totalRows = instance.countRows();
+        var totalCols = instance.countCols();
+        var current_val = cellData.val;
+        
+        // Iterate over every row
+        for (var r = 0; r < totalRows; r++) {
+            // Iterate over columns 1 to last (Mass columns)
+            for (var c = 1; c < totalCols; c++) {
+                
+                // IMPORTANT: Skip comparison of the cell with itself
+                if (r === row && c === col) {
+                    continue; 
+                }
+                
+                var other_value = instance.getDataAtCell(r, c);
+                var other_data = getNormalizedValue(other_value);
+                
+                if (other_data.is_numeric) {
+                    // Calculate absolute difference
+                    var diff = Math.abs(current_val - other_data.val);
+                    
+                    if (diff < GLOBAL_TOLERANCE) {
+                        isGloballyProximate = true;
+                        // Found one close value, no need to check the rest
+                        break; 
+                    }
+                }
+            }
+            if (isGloballyProximate) {
+                break;
+            }
+        }
     }
     
-    // --- D. Re-apply Dropdown Renderer ---
+    // --- D. Apply Styles ---
+    if (isGloballyProximate) {
+      // Apply PURPLE style for global proximity check
+      td.style.background = '#e6e6fa'; // Light Lavender/Purple
+    } else if (isDuplicated) {
+      // Keep ORANGE style for the existing row/column duplication checks
+      td.style.background = 'orange'; 
+    }
+    
+    // --- E. Re-apply Dropdown Renderer ---
     if (cellProperties.type === 'dropdown') {
         Handsontable.renderers.DropdownRenderer.apply(this, arguments);
     }
-  }"
+  }",
+    tolerance
+  )
 
   if (nrow(tab) > 16) {
     height <- 400
@@ -198,24 +259,18 @@ prot_comp_handsontable <- function(tab, disabled = FALSE) {
     height <- NULL
   }
 
-  if (disabled) {
-    stretch <- "none"
-  } else {
-    stretch <- "all"
-  }
-
   table <- rhandsontable::rhandsontable(
     tab,
     rowHeaders = NULL,
     height = height,
-    stretchH = stretch
+    stretchH = ifelse(disabled, "none", "all")
   ) |>
     rhandsontable::hot_cols(fixedColumnsLeft = 1, renderer = renderer_js) |>
     rhandsontable::hot_table(
       contextMenu = TRUE,
       highlightCol = TRUE,
       highlightRow = TRUE,
-      stretchH = stretch,
+      stretchH = ifelse(disabled, "none", "all")
     ) |>
     rhandsontable::hot_context_menu(
       allowRowEdit = TRUE,
@@ -316,11 +371,6 @@ sample_handsontable <- function(
     } else if (isDuplicated) {
       td.style.background = 'orange'; // Duplicated content
     }
-    
-    // --- 5. Re-apply Dropdown Renderer ---
-    if (cellProperties.type === 'dropdown') {
-        Handsontable.renderers.DropdownRenderer.apply(this, arguments);
-    }
   }"
   } else {
     allowed_per_col <- list(NULL)
@@ -330,39 +380,33 @@ sample_handsontable <- function(
   handsontable <- rhandsontable::rhandsontable(
     tab,
     rowHeaders = NULL,
-    allowed_per_col = allowed_per_col
+    allowed_per_col = allowed_per_col,
+    height = 400,
+    stretchH = ifelse(disabled, "none", "all")
   ) |>
     rhandsontable::hot_col("Sample", readOnly = TRUE) |>
     rhandsontable::hot_cols(
       fixedColumnsLeft = 2,
       renderer = renderer_js,
-      type = "text"
+      type = "text",
+      readOnly = ifelse(disabled, TRUE, FALSE)
+    ) |>
+    rhandsontable::hot_col(
+      col = "Protein",
+      type = "autocomplete",
+      source = proteins,
+      strict = FALSE
+    ) |>
+    rhandsontable::hot_col(
+      col = min(cmp_cols):max(cmp_cols),
+      type = "autocomplete",
+      source = compounds,
+      strict = FALSE
     ) |>
     rhandsontable::hot_table(
-      contextMenu = FALSE
+      contextMenu = FALSE,
+      stretchH = ifelse(disabled, "none", "all")
     )
-
-  if (length(proteins) > 1) {
-    handsontable <- handsontable |>
-      rhandsontable::hot_col(
-        col = "Protein",
-        type = "dropdown",
-        source = proteins
-      )
-  }
-
-  if (length(compounds) > 1) {
-    handsontable <- handsontable |>
-      rhandsontable::hot_col(
-        col = min(cmp_cols):max(cmp_cols),
-        type = "dropdown",
-        source = compounds
-      )
-  }
-
-  if (disabled) {
-    handsontable <- rhandsontable::hot_cols(handsontable, readOnly = TRUE)
-  }
 
   return(handsontable)
 }
@@ -536,9 +580,52 @@ check_sample_table <- function(sample_table, proteins, compounds) {
   return(TRUE)
 }
 
+### Check duplicated masses
+check_mass_duplicates <- function(tab, tolerance) {
+  # Flatten the data frame
+  all_values <- as.vector(as.matrix(tab[, -1]))
+  n_values <- length(all_values)
+
+  # Calculate absolute difference matrix
+  diff_matrix <- abs(outer(all_values, all_values, FUN = "-"))
+
+  # Create boolean matrix for proximity
+  is_close_matrix <- diff_matrix < tolerance
+
+  # Set all NA values in the boolean matrix to FALSE
+  is_close_matrix[is.na(is_close_matrix)] <- FALSE
+
+  # Remove diagonal
+  diag(is_close_matrix) <- FALSE
+
+  # Determine indices close to any other value
+  # If sum is > 0 the value is close to at least one other numeric value
+  close_to_any_vector <- rowSums(is_close_matrix) > 0
+
+  # Transform resulting Boolean vector back into original data frame structure
+  result_matrix <- matrix(
+    close_to_any_vector,
+    nrow = nrow(tab[, -1]),
+    ncol = ncol(tab[, -1]),
+    byrow = FALSE
+  )
+
+  # Convert matrix to data frame and restore names
+  result_df <- as.data.frame(result_matrix)
+  colnames(result_df) <- colnames(tab[, -1])
+
+  # Read protein/compound column
+  result_df <- dplyr::mutate(
+    result_df,
+    !!colnames(tab)[1] := tab[, 1],
+    .before = 1
+  )
+  return(result_df)
+}
+
 # Validate protein/compound table
 #' @export
-check_table <- function(tab) {
+check_table <- function(tab, tolerance) {
   if (!nrow(tab) || ncol(tab) < 2) {
     return("Fill name and mass fields.")
   }
@@ -564,16 +651,15 @@ check_table <- function(tab) {
   if (any(duplicated(tab[, 1]))) {
     return(paste("Duplicated name ID values"))
   }
-
-  # Check duplicated masses
+  test <<- tab
   if (
-    any(apply(as.data.frame(tab[, -1]), 1, function(x) {
-      any(duplicated(round(stats::na.omit(x), digits = 3)))
-    }))
+    sum(!is.na(tab[, -1])) > 1 &&
+      any(check_mass_duplicates(tab = tab, tolerance = tolerance)[, -1])
   ) {
-    return("Duplicated mass shift")
+    return("Mass shifts are duplicated in peak tolerance range")
   }
 
+  # If all checks passed return TRUE
   return(TRUE)
 }
 
@@ -2421,7 +2507,15 @@ edit_ui_changes <- function(tab, table, session, output) {
 
 # Slice sample declaration table row-wise
 #' @export
-table_observe <- function(table, tab, output, ns, proteins, compounds) {
+table_observe <- function(
+  table,
+  tab,
+  output,
+  ns,
+  proteins,
+  compounds,
+  tolerance
+) {
   # Show waiter with 0.5 seconds minimum runtime
   waiter::waiter_show(
     id = ns(paste0(tab, "_table_info")),
@@ -2451,7 +2545,6 @@ table_observe <- function(table, tab, output, ns, proteins, compounds) {
     table_status <- FALSE
   } else {
     # Validate correct input
-
     if (tab == "samples") {
       check_function <- "check_sample_table"
       args <- list(
@@ -2461,7 +2554,7 @@ table_observe <- function(table, tab, output, ns, proteins, compounds) {
       )
     } else {
       check_function <- "check_table"
-      args <- list(tab = table)
+      args <- list(tab = table, tolerance = tolerance)
     }
 
     table_check <- do.call(what = check_function, args = args)

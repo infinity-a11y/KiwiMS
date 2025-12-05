@@ -750,6 +750,15 @@ table.dataTable > tbody > tr.selected > * {
 }
 
 /* --- Handsontable --- */
+// #app-conversion_main-samples_table .handsontable,
+// #app-conversion_main-samples_table {
+//   overflow: visible !important;
+// }
+
+.autocompleteEditor .ht_master .wtHolder {
+  overflow: unset;
+}
+
 .handsontable td {
   font-size: 14px;
   background: #f7f7f7;
@@ -760,34 +769,30 @@ table.dataTable > tbody > tr.selected > * {
   background: #ddddde;
 }
 
-// .handsontable .wtHider {
-//   height: 100% !important;
-// }
+td.listbox.htDimmed.current.highlight {
+  background: #35357a;
+  color: white;
+}
 
-// .ht_clone_top .wtHolder {
-//   max-width: fit-content !important;
-// }
-
-// .ht_master .wtHolder {
-//   overflow: hidden;
-// }
+.handsontable .htAutocompleteArrow {
+  color: #e5e5e5;
+  position: relative;
+  z-index: 99;
+}
 
 .ht_master .wtHolder {
   width: fit-content !important;
+}
+
+.htContextMenu table.htCore,
+.htContextMenu:not(.htGhostTable) {
+  overflow: hidden;
 }
 
 .handsontable .wtBorder.corner,
 .handsontable .wtBorder.current {
   background-color: #35357a !important;
 }
-
-// .handsontable-wrapper {
-//   border-radius: 5px;
-//   overflow: hidden;
-//   height: 100%;
-//   width: 90%;
-//   background: #f7f7f7;
-// }
 
 .handsontable .autocompleteEditor.handsontable {
   padding-right: unset;
@@ -809,16 +814,9 @@ table.dataTable > tbody > tr.selected > * {
 }
 
 .handsontable.listbox td.htDimmed {
-  cursor: default;
-  color: inherit;
-  font-style: inherit;
   background: #dcdcdc;
   cursor: pointer;
 }
-
-// .listbox .handsontable .ht_master {
-//   height: unset !important;
-// }
 
 /* --- Plotly & MathJax --- */
 .js-plotly-plot .plotly svg {
@@ -1342,19 +1340,6 @@ div[data-value="Protein Conversion"] .tab-pane {
 #app-conversion_main-compounds_table,
 #app-conversion_main-samples_table {
   color: black;
-}
-
-.sample-table .handsontable {
-  overflow: hidden;
-}
-
-.sample-table {
-  overflow: scroll;
-  height: 100%;
-}
-
-.sample-table .ht_master {
-  height: 100%;
 }
 
 /* Conversion Controls */

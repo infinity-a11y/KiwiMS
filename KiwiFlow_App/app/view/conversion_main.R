@@ -241,10 +241,7 @@ ui <- function(id) {
       shiny::fluidRow(
         shiny::column(
           width = 12,
-          shiny::div(
-            class = "sample-table",
-            rhandsontable::rHandsontableOutput(ns("samples_table"))
-          )
+          rhandsontable::rHandsontableOutput(ns("samples_table"))
         )
       ),
       keybind_menu_ui
@@ -283,6 +280,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       html = waiter::spin_wave()
     )
 
+    # Render sample no info
     output$sample_number_info <- shiny::renderText({
       paste(
         ifelse(
@@ -357,7 +355,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     shiny::observe({
       shiny::req(
         input$proteins_table,
-        shiny::isolate(declaration_vars$protein_table_active)
+        shiny::isolate(declaration_vars$protein_table_active),
+        conversion_sidebar_vars$peak_tolerance()
       )
       protein_table <- clean_table(
         tab = "Protein",
@@ -372,7 +371,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         tab = "proteins",
         table = protein_table,
         output = output,
-        ns = ns
+        ns = ns,
+        tolerance = conversion_sidebar_vars$peak_tolerance()
       )
     })
 
@@ -470,7 +470,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           # Make UI changes
           edit_ui_changes(
             tab = input$tabs,
-            table = declaration_vars$compound_table,
+            table = clean_table(
+              tab = "Compound",
+              table = declaration_vars$compound_table,
+              full = TRUE
+            ),
             session = session,
             output = output
           )
@@ -626,15 +630,17 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     shiny::observeEvent(
       input$samples_fileinput,
       {
-        shinyjs::removeClass(
-          "samples_table_info",
-          "table-info-green"
-        )
-        shinyjs::addClass(
-          "samples_table_info",
-          "table-info-red"
-        )
+        # shinyjs::removeClass(
+        #   "samples_table_info",
+        #   "table-info-green"
+        # )
+        # shinyjs::addClass(
+        #   "samples_table_info",
+        #   "table-info-red"
+        # )
 
+        # Disable result file input
+        shinyjs::enable("samples_fileinput")
         shinyjs::removeClass(
           selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
           class = "custom-disable"
@@ -644,9 +650,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           class = "custom-disable"
         )
 
-        output$samples_table_info <- shiny::renderText({
-          "Fill table ..."
-        })
+        # output$samples_table_info <- shiny::renderText({
+        #   "Fill table ..."
+        # })
 
         # Read results .rds file from selected path
         file_path <- file.path(input$samples_fileinput$datapath)
@@ -738,7 +744,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         deconvolution_main_vars$continue_conversion()
       )
 
-      # if (!isTRUE(shiny::isolate(declaration_vars$sample_tab_initial))) {
       output$samples_table <- rhandsontable::renderRHandsontable({
         sample_handsontable(
           tab = new_sample_table(
@@ -758,8 +763,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           )
         )
       })
-      # }
-      # shiny::isolate(declaration_vars$sample_tab_initial <- TRUE)
 
       # Unblock UI
       shinyjs::runjs(paste0(
@@ -775,7 +778,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         shiny::req(deconvolution_main_vars$continue_conversion())
 
         # If present sample table ask confirmation
-        if (isFALSE(declaration_vars$sample_table_active)) {
+        if (!is.null(input$samples_table)) {
           # Switch to samples table tab
           set_selected_tab("Samples", session)
 
@@ -974,10 +977,26 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           "Mass 9"
         )
 
+        tolerance <- shiny::isolate(conversion_sidebar_vars$peak_tolerance())
         output$compounds_table <- rhandsontable::renderRHandsontable({
-          prot_comp_handsontable(tab)
+          prot_comp_handsontable(
+            tab,
+            tolerance = tolerance
+          )
         })
       }
+    })
+
+    # Update compound/protein table with tolerance value
+    shiny::observe({
+      shiny::req(conversion_sidebar_vars$peak_tolerance())
+
+      output$proteins_table <- rhandsontable::renderRHandsontable({
+        prot_comp_handsontable(
+          shiny::isolate(rhandsontable::hot_to_r(input$proteins_table)),
+          tolerance = conversion_sidebar_vars$peak_tolerance()
+        )
+      })
     })
 
     # Render protein table
@@ -996,23 +1015,12 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           "Mass 8",
           "Mass 9"
         )
-
+        tolerance <- shiny::isolate(conversion_sidebar_vars$peak_tolerance())
         output$proteins_table <- rhandsontable::renderRHandsontable({
-          # test2 <<- prot_comp_handsontable(empty_protein_tab)
-          # test22 <<- empty_protein_tab
-          prot_comp_handsontable(empty_protein_tab)
-          # MAT = matrix(
-          #   stats::rnorm(30),
-          #   nrow = 10,
-          #   dimnames = list(LETTERS[1:10], letters[1:3])
-          # )
-
-          # rhandsontable::rhandsontable(
-          #   empty_protein_tab,
-          #   width = 1000,
-          #   height = 300,
-          #   stretchH = "all"
-          # )
+          prot_comp_handsontable(
+            empty_protein_tab,
+            tolerance = tolerance
+          )
         })
       }
     })

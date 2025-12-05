@@ -118,47 +118,43 @@ server <- function(
               class = "sidebar-title conversion-title",
               "Analysis"
             ),
-            shinyjs::disabled(
-              shiny::numericInput(
-                ns("peak_tolerance"),
+            shiny::numericInput(
+              ns("peak_tolerance"),
+              shiny::div(
+                class = "label-tooltip",
+                shiny::tags$label("Peak Tolerance [Da]"),
                 shiny::div(
-                  class = "label-tooltip",
-                  shiny::tags$label("Peak Tolerance [Da]"),
-                  shiny::div(
-                    class = "tooltip-bttn",
-                    shiny::actionButton(
-                      ns("peak_tol_tooltip_bttn"),
-                      label = "",
-                      icon = shiny::icon("circle-question")
-                    )
+                  class = "tooltip-bttn",
+                  shiny::actionButton(
+                    ns("peak_tol_tooltip_bttn"),
+                    label = "",
+                    icon = shiny::icon("circle-question")
                   )
-                ),
-                value = 3,
-                min = 0,
-                max = 20,
-                step = 0.1
-              )
+                )
+              ),
+              value = 3,
+              min = 0,
+              max = 20,
+              step = 0.1
             ),
-            shinyjs::disabled(
-              shiny::numericInput(
-                ns("max_multiples"),
+            shiny::numericInput(
+              ns("max_multiples"),
+              shiny::div(
+                class = "label-tooltip",
+                shiny::tags$label("Max. Stoichiometry"),
                 shiny::div(
-                  class = "label-tooltip",
-                  shiny::tags$label("Max. Stoichiometry"),
-                  shiny::div(
-                    class = "tooltip-bttn",
-                    shiny::actionButton(
-                      ns("max_mult_tooltip_bttn"),
-                      label = "",
-                      icon = shiny::icon("circle-question")
-                    )
+                  class = "tooltip-bttn",
+                  shiny::actionButton(
+                    ns("max_mult_tooltip_bttn"),
+                    label = "",
+                    icon = shiny::icon("circle-question")
                   )
-                ),
-                value = 4,
-                min = 1,
-                max = 20,
-                step = 1
-              )
+                )
+              ),
+              value = 4,
+              min = 1,
+              max = 20,
+              step = 1
             ),
             #TODO
             # shinyjs::disabled(
@@ -531,7 +527,8 @@ server <- function(
       shiny::reactiveValues(
         result_list = shiny::reactive(result_list()),
         sample_picker = shiny::reactive(input$sample_picker),
-        run_analysis = shiny::reactive(input$run_binding_analysis)
+        run_analysis = shiny::reactive(input$run_binding_analysis),
+        peak_tolerance = shiny::reactive(input$peak_tolerance)
       )
     )
   })
