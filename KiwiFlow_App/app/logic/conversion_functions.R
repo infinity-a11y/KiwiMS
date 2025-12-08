@@ -101,7 +101,7 @@ set_selected_tab <- function(tab_name, session) {
 
 #' @export
 # The updated function
-prot_comp_handsontable <- function(tab, tolerance = 1.5, disabled = FALSE) {
+prot_comp_handsontable <- function(tab, tolerance = 3, disabled = FALSE) {
   renderer_js <- sprintf(
     "function(instance, td, row, col, prop, value, cellProperties) {
     Handsontable.renderers.TextRenderer.apply(this, arguments);
@@ -131,7 +131,7 @@ prot_comp_handsontable <- function(tab, tolerance = 1.5, disabled = FALSE) {
     if (cellData.val === '') return;
 
     // --- A. Column 0 Check (Protein Names) ---
-    // We keep the exact duplicate check for the text column
+    // Keep the exact duplicate check for the text column
     var isNameDuplicated = false;
     if (col === 0) {
         var colData = instance.getDataAtCol(0); 
@@ -201,36 +201,19 @@ prot_comp_handsontable <- function(tab, tolerance = 1.5, disabled = FALSE) {
         // Priority 3: Duplicate Name in Col 0 -> Orange
         td.style.background = 'orange';
     }
-    
-    // --- D. Re-apply Dropdown Renderer ---
-    if (cellProperties.type === 'dropdown') {
-        Handsontable.renderers.DropdownRenderer.apply(this, arguments);
-    }
   }",
     tolerance
   )
 
-  if (nrow(tab) > 16) {
-    height <- 400
-  } else {
-    height <- NULL
-  }
-
   table <- rhandsontable::rhandsontable(
     tab,
     rowHeaders = NULL,
-    height = height,
+    height = 400,
     stretchH = ifelse(disabled, "none", "all")
   ) |>
     rhandsontable::hot_cols(fixedColumnsLeft = 1, renderer = renderer_js) |>
-    rhandsontable::hot_table(
-      contextMenu = TRUE,
-      highlightCol = TRUE,
-      highlightRow = TRUE,
-      stretchH = ifelse(disabled, "none", "all")
-    ) |>
     rhandsontable::hot_context_menu(
-      allowRowEdit = TRUE,
+      allowRowEdit = ifelse(disabled, FALSE, TRUE),
       allowColEdit = FALSE
     ) |>
     rhandsontable::hot_cols(
@@ -241,6 +224,12 @@ prot_comp_handsontable <- function(tab, tolerance = 1.5, disabled = FALSE) {
       cols = 2:ncol(tab),
       min = 1,
       allowInvalid = TRUE
+    ) |>
+    rhandsontable::hot_table(
+      contextMenu = ifelse(disabled, FALSE, TRUE),
+      highlightCol = TRUE,
+      highlightRow = TRUE,
+      stretchH = ifelse(disabled, "none", "all")
     )
 
   if (disabled) {
@@ -257,6 +246,10 @@ sample_handsontable <- function(
   compounds = NULL,
   disabled = FALSE
 ) {
+  tab2 <<- tab
+  proteins2 <<- proteins
+  compounds2 <<- compounds
+
   cmp_cols <- grep("Compound", colnames(tab))
 
   # Allowed protein and compound values
@@ -361,26 +354,86 @@ sample_handsontable <- function(
       strict = FALSE
     ) |>
     rhandsontable::hot_table(
-      contextMenu = FALSE,
+      contextMenu = ifelse(disabled, FALSE, TRUE),
       stretchH = ifelse(disabled, "none", "all")
     )
 
   return(handsontable)
 }
 
-# Construct cleaned-up declaration table with only consecutive non-NA entries
+# Construct cleaned-up sample table with only consecutive non-NA entries
 #' @export
-clean_table <- function(tab, table, full = FALSE) {
-  tab1 <<- tab
-  table1 <<- table
+clean_sample_table <- function(table, full = FALSE) {
+  # Keep only rows without NAs
+  table_prot_cmp <- table[, -1][
+    rowSums(is.na(table[, -1]) | table[, -1] == "") != ncol(table[, -1]),
+    ,
+    drop = FALSE
+  ]
+
+  # If empty return empty table
+  if (
+    !nrow(table_prot_cmp) | all(is.na(table_prot_cmp) | table_prot_cmp == "")
+  ) {
+    return(table_prot_cmp)
+  }
+
+  # Rebuild data frame with consecutive values
+  df <- data.frame()
+  for (i in 1:nrow(table_prot_cmp)) {
+    # Extract vector from input table
+    row_noNA <- unlist(table_prot_cmp[i, ])[
+      !is.na(unlist(table_prot_cmp[i, ])) & unlist(table_prot_cmp[i, ]) != ""
+    ]
+
+    # Adjust column differences
+    if (i != 1) {
+      col_diff <- ncol(df) - length(row_noNA)
+      if (col_diff > 0) {
+        row_noNA <- c(row_noNA, rep(as.numeric(NA), col_diff))
+      } else if (col_diff < 0) {
+        df <- cbind(df, rep(list(NA), abs(col_diff)))
+      }
+    }
+
+    df <- rbind(df, row_noNA)
+  }
+
+  # Correct mass columns to be character
+  df <- as.data.frame(apply(df, c(1, 2), as.character))
+
+  # Fill up full table with columns
+  if (nrow(df) & full) {
+    # Get missing columns to achieve target of 10 cols
+    missing_cols <- 10 - ncol(df)
+
+    if (missing_cols != 0) {
+      # Fill up cols with NAs
+      df <- cbind(df, rep(list(as.numeric(NA)), missing_cols))
+    }
+  }
+
+  # Rename columns
+  names(df) <- c("Protein", paste("Compound", 1:(ncol(df) - 1)))
+
+  # Reattach sample column
+  df <- cbind(table[, 1, drop = FALSE], df)
+
+  return(df)
+}
+
+# Construct cleaned-up prot/cmp table with only consecutive non-NA entries
+#' @export
+clean_prot_comp_table <- function(tab, table, full = FALSE) {
   # Keep only rows without NAs
   table <- table[rowSums(is.na(table) | table == "") != ncol(table), ]
 
   # If empty return empty table
-  if (!nrow(table) | all(is.na(table))) {
+  if (!nrow(table) | all(is.na(table) | table == "")) {
     return(table)
   }
 
+  # Rebuild data frame with consecutive values
   df <- data.frame()
   for (i in 1:nrow(table)) {
     # Extract vector from input table
@@ -404,7 +457,11 @@ clean_table <- function(tab, table, full = FALSE) {
   }
 
   # Correct mass columns to be numeric and name column character
-  df[, -1] <- as.data.frame(apply(df[, -1, drop = FALSE], c(1, 2), as.numeric))
+  df[, -1] <- as.data.frame(apply(
+    df[, -1, drop = FALSE],
+    c(1, 2),
+    as.numeric
+  ))
   df[, 1] <- as.character(df[, 1])
 
   if (nrow(df) > 0 && ncol(df) > 1) {
@@ -422,6 +479,14 @@ clean_table <- function(tab, table, full = FALSE) {
           list(rep(as.character(NA), missing_rows)),
           rep(list(rep(as.numeric(NA), missing_rows)), 9)
         ))
+
+        suppressWarnings({
+          df[, -1] <- as.data.frame(apply(
+            df[, -1, drop = FALSE],
+            c(1, 2),
+            as.numeric
+          ))
+        })
 
         # Equalize names before merge
         names(df_add_miss_rows) <- names(df)
@@ -476,53 +541,42 @@ slice_cols <- function(sample_table) {
 # Validate sample table
 #' @export
 check_sample_table <- function(sample_table, proteins, compounds) {
+  sample_table <<- sample_table
+  proteins <<- proteins
+  compounds <<- compounds
   # Check if protein and compound names present
   if (is.null(proteins) || is.null(compounds)) {
     return("Declare Proteins and Compounds")
   }
 
   # Check if protein names valid
-  if (
-    !all(
-      unlist(
-        sample_table |>
-          dplyr::select("Protein") |>
-          dplyr::select(where(~ !all(is.na(.))))
-      ) %in%
-        proteins
-    )
-  ) {
+  proteins_input <- sample_table[, 2][
+    !is.na(sample_table[, 2]) & sample_table[, 2] != ""
+  ]
+  if (length(proteins_input) & any(!proteins_input %in% proteins)) {
     return("Protein name not found")
   }
 
   # Check if compound names valid
-  if (
-    !all(
-      unlist(
-        sample_table |>
-          dplyr::select(-c("Sample", "Protein")) |>
-          dplyr::select(where(~ !all(is.na(.))))
-      ) %in%
-        compounds
-    )
-  ) {
+  compounds_input <- sample_table[, -(1:2)][
+    !is.na(sample_table[, -(1:2)]) & sample_table[, -(1:2)] != ""
+  ]
+  if (length(compounds_input) & any(!compounds_input %in% compounds)) {
     return("Compound name not found")
   }
 
-  # Check if compounds are defined
-  if (all(is.na(sample_table[, -c(1, 2)]))) {
-    # Reject only NA
-    return("Enter compounds")
-  } else {
-    nonEmpty_cmps <- sample_table |>
-      dplyr::select(where(~ !all(is.na(.)))) |>
-      dplyr::select(-c(1, 2)) !=
-      ""
+  # If all proteins empty
+  if (any(sample_table[, 2] == "" | is.na(sample_table[, 2]))) {
+    return("Assign proteins")
+  }
 
-    if (!all(nonEmpty_cmps)) {
-      # Reject empty names
-      return("Compound names missing")
-    }
+  # If all compounds empty
+  if (
+    any(
+      rowSums(sample_table[, -(1:2)] != "" & !is.na(sample_table[, -(1:2)])) < 1
+    )
+  ) {
+    return("Assign compounds")
   }
 
   # Check duplicated compounds
