@@ -101,7 +101,13 @@ set_selected_tab <- function(tab_name, session) {
 
 #' @export
 # The updated function
-prot_comp_handsontable <- function(tab, tolerance = 3, disabled = FALSE) {
+prot_comp_handsontable <- function(
+  tab,
+  tolerance = 3,
+  disabled = FALSE,
+  proteins = NULL,
+  compounds = NULL
+) {
   renderer_js <- sprintf(
     "function(instance, td, row, col, prop, value, cellProperties) {
     Handsontable.renderers.TextRenderer.apply(this, arguments);
@@ -246,11 +252,12 @@ sample_handsontable <- function(
   compounds = NULL,
   disabled = FALSE
 ) {
-  tab2 <<- tab
-  proteins2 <<- proteins
-  compounds2 <<- compounds
+  tab3 <<- tab
+  proteins3 <<- proteins
+  compounds3 <<- compounds
 
   cmp_cols <- grep("Compound", colnames(tab))
+  cmp_cols3 <<- cmp_cols
 
   # Allowed protein and compound values
   if (!is.null(proteins) && !is.null(compounds)) {
@@ -361,63 +368,74 @@ sample_handsontable <- function(
   return(handsontable)
 }
 
+# Function to fill missing columns in sample table
+#' @export
+fill_sample_table <- function(sample_table) {
+  col_diff <- abs(ncol(sample_table) - 11)
+  if (col_diff != 0) {
+    sample_table <- cbind(
+      sample_table,
+      (data.frame(rep(list(rep("", nrow(sample_table))), col_diff)))
+    )
+
+    names(sample_table) <- c(
+      "Sample",
+      "Protein",
+      paste("Compound", 1:9)
+    )
+  }
+
+  return(sample_table)
+}
+
 # Construct cleaned-up sample table with only consecutive non-NA entries
 #' @export
-clean_sample_table <- function(table, full = FALSE) {
-  # Keep only rows without NAs
-  table_prot_cmp <- table[, -1][
-    rowSums(is.na(table[, -1]) | table[, -1] == "") != ncol(table[, -1]),
-    ,
+clean_sample_table <- function(sample_table) {
+  brainn <<- sample_table
+  extra_cmp_section <- sample_table[, -(1:2), drop = FALSE]
+
+  df <- extra_cmp_section[,
+    colSums(is.na(extra_cmp_section) | extra_cmp_section == "") !=
+      nrow(extra_cmp_section),
     drop = FALSE
   ]
 
-  # If empty return empty table
-  if (
-    !nrow(table_prot_cmp) | all(is.na(table_prot_cmp) | table_prot_cmp == "")
-  ) {
-    return(table_prot_cmp)
-  }
-
   # Rebuild data frame with consecutive values
-  df <- data.frame()
-  for (i in 1:nrow(table_prot_cmp)) {
-    # Extract vector from input table
-    row_noNA <- unlist(table_prot_cmp[i, ])[
-      !is.na(unlist(table_prot_cmp[i, ])) & unlist(table_prot_cmp[i, ]) != ""
-    ]
+  if (ncol(extra_cmp_section)) {
+    df <- data.frame()
+    for (i in 1:nrow(extra_cmp_section)) {
+      # Extract vector from input table
+      row_noNA <- unlist(extra_cmp_section[i, ])[
+        !is.na(unlist(extra_cmp_section[i, ])) &
+          unlist(extra_cmp_section[i, ]) != ""
+      ]
 
-    # Adjust column differences
-    if (i != 1) {
-      col_diff <- ncol(df) - length(row_noNA)
-      if (col_diff > 0) {
-        row_noNA <- c(row_noNA, rep(as.numeric(NA), col_diff))
-      } else if (col_diff < 0) {
-        df <- cbind(df, rep(list(NA), abs(col_diff)))
+      if (!length(row_noNA)) {
+        row_noNA <- ""
       }
+
+      # Adjust column differences
+      if (i != 1) {
+        col_diff <- ncol(df) - length(row_noNA)
+        if (col_diff > 0) {
+          row_noNA <- c(row_noNA, rep("", col_diff))
+        } else if (col_diff < 0) {
+          df <- cbind(df, rep(list(""), abs(col_diff)))
+        }
+      }
+
+      df <- rbind(df, row_noNA)
     }
 
-    df <- rbind(df, row_noNA)
+    # Correct mass columns to be character
+    df <- as.data.frame(apply(df, c(1, 2), as.character))
   }
 
-  # Correct mass columns to be character
-  df <- as.data.frame(apply(df, c(1, 2), as.character))
-
-  # Fill up full table with columns
-  if (nrow(df) & full) {
-    # Get missing columns to achieve target of 10 cols
-    missing_cols <- 10 - ncol(df)
-
-    if (missing_cols != 0) {
-      # Fill up cols with NAs
-      df <- cbind(df, rep(list(as.numeric(NA)), missing_cols))
-    }
-  }
+  # Reattach sample, protein, compound columns
+  df <- cbind(sample_table[, 1:2, drop = FALSE], df)
 
   # Rename columns
-  names(df) <- c("Protein", paste("Compound", 1:(ncol(df) - 1)))
-
-  # Reattach sample column
-  df <- cbind(table[, 1, drop = FALSE], df)
+  names(df) <- c("Sample", "Protein", paste("Compound", 1:(ncol(df) - 2)))
 
   return(df)
 }
@@ -541,9 +559,9 @@ slice_cols <- function(sample_table) {
 # Validate sample table
 #' @export
 check_sample_table <- function(sample_table, proteins, compounds) {
-  sample_table <<- sample_table
-  proteins <<- proteins
-  compounds <<- compounds
+  sample_table1 <<- sample_table
+  proteins1 <<- proteins
+  compounds1 <<- compounds
   # Check if protein and compound names present
   if (is.null(proteins) || is.null(compounds)) {
     return("Declare Proteins and Compounds")
@@ -573,17 +591,29 @@ check_sample_table <- function(sample_table, proteins, compounds) {
   # If all compounds empty
   if (
     any(
-      rowSums(sample_table[, -(1:2)] != "" & !is.na(sample_table[, -(1:2)])) < 1
+      rowSums(
+        sample_table[, -(1:2), drop = FALSE] != "" &
+          !is.na(sample_table[, -(1:2), drop = FALSE])
+      ) <
+        1
     )
   ) {
     return("Assign compounds")
   }
 
   # Check duplicated compounds
+  # cmp_section <- sample_table[, -(1:2), drop = FALSE]
+  # cmp_section_clean <- cmp_section[,
+  #   colSums(cmp_section == "" | is.na(cmp_section)) != nrow(cmp_section),
+  #   drop = FALSE
+  # ]
   if (
-    any(apply(as.data.frame(sample_table[, c(-1, -2)]), 1, function(x) {
-      any(duplicated(stats::na.omit(x)))
-    }))
+    any(t(apply(
+      sample_table[, -(1:2), drop = FALSE],
+      1,
+      duplicated,
+      incomparables = ""
+    )))
   ) {
     return("Duplicated compounds")
   }
@@ -638,6 +668,7 @@ check_mass_duplicates <- function(tab, tolerance) {
 # Validate protein/compound table
 #' @export
 check_table <- function(tab, tolerance) {
+  tab1 <<- tab
   if (!nrow(tab) || ncol(tab) < 2) {
     return("Fill name and mass fields.")
   }
@@ -2378,14 +2409,7 @@ new_sample_table <- function(result, protein_table, compound_table) {
       compound_table$Compound,
       ""
     ),
-    cmp2 = NA,
-    cmp3 = NA,
-    cmp4 = NA,
-    cmp5 = NA,
-    cmp6 = NA,
-    cmp7 = NA,
-    cmp8 = NA,
-    cmp9 = NA
+    rep(list(""), 8)
   )
 
   colnames(sample_tab) <- c("Sample", "Protein", paste("Compound", 1:9))
@@ -2395,7 +2419,14 @@ new_sample_table <- function(result, protein_table, compound_table) {
 
 # UI changes when conversion declaration tab is confirmed
 #' @export
-confirm_ui_changes <- function(tab, table, session, output) {
+confirm_ui_changes <- function(
+  tab,
+  table,
+  session,
+  output,
+  proteins = NULL,
+  compounds = NULL
+) {
   tab_low <- tolower(tab)
 
   # Show toast
@@ -2447,7 +2478,12 @@ confirm_ui_changes <- function(tab, table, session, output) {
   output[[paste0(tab_low, "_table")]] <- rhandsontable::renderRHandsontable(
     do.call(
       ifelse(tab == "Samples", "sample_handsontable", "prot_comp_handsontable"),
-      list(tab = table, disabled = TRUE)
+      list(
+        tab = table,
+        disabled = TRUE,
+        proteins = proteins,
+        compounds = compounds
+      )
     )
   )
 
@@ -2464,7 +2500,14 @@ confirm_ui_changes <- function(tab, table, session, output) {
 
 # UI changes when conversion declaration tab is edited
 #' @export
-edit_ui_changes <- function(tab, table, session, output) {
+edit_ui_changes <- function(
+  tab,
+  table,
+  session,
+  output,
+  proteins = NULL,
+  compounds = NULL
+) {
   tab_low <- tolower(tab)
 
   # Update confirm button
@@ -2503,11 +2546,16 @@ edit_ui_changes <- function(tab, table, session, output) {
   # Enable header checkbox
   shinyjs::enable(paste0(tab_low, "_header_checkbox"))
 
-  # Render table uneditable
+  # Render table editable
   output[[paste0(tab_low, "_table")]] <- rhandsontable::renderRHandsontable(
     do.call(
       ifelse(tab == "Samples", "sample_handsontable", "prot_comp_handsontable"),
-      list(tab = table, disabled = FALSE)
+      list(
+        tab = table,
+        disabled = FALSE,
+        proteins = proteins,
+        compounds = compounds
+      )
     )
   )
 
@@ -2530,7 +2578,7 @@ table_observe <- function(
   compounds,
   tolerance
 ) {
-  # Show waiter with 0.5 seconds minimum runtime
+  # Show waiter with 0.25 seconds minimum runtime
   waiter::waiter_show(
     id = ns(paste0(tab, "_table_info")),
     html = waiter::spin_throbber()

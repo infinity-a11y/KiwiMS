@@ -13,13 +13,7 @@ box::use(
       add_ki_kinact_result,
       sample_handsontable,
       prot_comp_handsontable,
-      check_table,
-      check_sample_table,
-      slice_rows,
-      slice_cols,
       set_selected_tab,
-      read_uploaded_file,
-      process_uploaded_table,
       format_scientific,
       make_binding_plot,
       multiple_spectra,
@@ -33,6 +27,7 @@ box::use(
       clean_prot_comp_table,
       clean_sample_table,
       handle_file_upload,
+      fill_sample_table,
     ],
   app /
     logic /
@@ -272,7 +267,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       result = NULL
     )
 
-    # Prepare waiter spinner object
+    #### Prepare waiter spinner object
     w <- waiter::Waiter$new(
       id = ns("samples_table"),
       html = waiter::spin_wave()
@@ -395,6 +390,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         conversion_sidebar_vars$peak_tolerance()
       )
 
+      message("PRT:", Sys.time())
+
       protein_table <- clean_prot_comp_table(
         tab = "Protein",
         table = protein_table_input(),
@@ -419,6 +416,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         conversion_sidebar_vars$peak_tolerance()
       )
 
+      message("CMP:", Sys.time())
+
       compound_table <- clean_prot_comp_table(
         tab = "Compound",
         table = compound_table_input(),
@@ -438,15 +437,16 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     # Observe table status for samples table
     shiny::observe({
       shiny::req(
-        input$samples_table,
-        declaration_vars$protein_table,
-        shiny::isolate(declaration_vars$sample_table_active)
+        sample_table_input(),
+        declaration_vars$sample_table_active
       )
+
+      message("SMP:", Sys.time())
 
       # Conditional observe actions
       declaration_vars$sample_table_status <- table_observe(
         tab = "samples",
-        table = sample_table_input(),
+        table = clean_sample_table(sample_table_input()),
         output = output,
         ns = ns,
         proteins = declaration_vars$protein_table$Protein,
@@ -471,12 +471,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           # Make UI changes
           edit_ui_changes(
             tab = "Samples",
-            table = clean_sample_table(
-              declaration_vars$sample_table,
-              full = TRUE
+            table = fill_sample_table(
+              declaration_vars$sample_table
             ),
             session = session,
-            output = output
+            output = output,
+            proteins = declaration_vars$protein_table$Protein,
+            compounds = declaration_vars$compound_table$Compound
           )
 
           # Activate table observer
@@ -547,13 +548,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
           # Render sample table with new input
           if (!is.null(input$samples_table)) {
-            output$samples_table <- rhandsontable::renderRHandsontable({
+            output$samples_table <- rhandsontable::renderRHandsontable(
               sample_handsontable(
                 tab = sample_table_input(),
-                proteins = protein_table$Protein,
+                proteins = declaration_vars$protein_table$Protein,
                 compounds = declaration_vars$compound_table$Compound
               )
-            })
+            )
           }
 
           # Jump to next tab depending on compound table status
@@ -584,13 +585,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
           # Render sample table with new input
           if (!is.null(input$samples_table)) {
-            output$samples_table <- rhandsontable::renderRHandsontable({
+            output$samples_table <- rhandsontable::renderRHandsontable(
               sample_handsontable(
                 tab = sample_table_input(),
                 proteins = declaration_vars$protein_table$Protein,
-                compounds = compound_table$Compound
+                compounds = declaration_vars$compound_table$Compound
               )
-            })
+            )
           }
 
           # Jump to next tab depending on compound table status
@@ -605,17 +606,17 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         } else if (
           input$tabs == "Samples" && declaration_vars$sample_table_status
         ) {
-          declaration_vars$sample_table <- clean_sample_table(
-            table = sample_table_input(),
-            full = FALSE
-          )
+          sample_table <- clean_sample_table(sample_table_input())
+          declaration_vars$sample_table <- sample_table
 
           # Mark UI as done
           confirm_ui_changes(
             tab = input$tabs,
-            table = declaration_vars$sample_table,
+            table = sample_table,
             session = session,
-            output = output
+            output = output,
+            proteins = declaration_vars$protein_table$Protein,
+            compounds = declaration_vars$compound_table$Compound
           )
 
           # Inactivate table observer
@@ -679,7 +680,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         declaration_vars$result <- readRDS(file_path)
 
         # Render samples table
-        output$samples_table <- rhandsontable::renderRHandsontable({
+        output$samples_table <- rhandsontable::renderRHandsontable(
           sample_handsontable(
             tab = new_sample_table(
               result = declaration_vars$result,
@@ -689,7 +690,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             proteins = declaration_vars$protein_table$Protein,
             compounds = declaration_vars$compound_table$Compound
           )
-        })
+        )
       }
     )
 
@@ -968,21 +969,23 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
     # Update compound/protein table with tolerance value
     shiny::observeEvent(conversion_sidebar_vars$peak_tolerance(), {
-      output$proteins_table <- rhandsontable::renderRHandsontable({
-        prot_comp_handsontable(
-          shiny::isolate(protein_table_input()),
-          tolerance = tolerance()
-        )
-      })
-    })
+      if (!is.null(input$proteins_table)) {
+        output$proteins_table <- rhandsontable::renderRHandsontable({
+          prot_comp_handsontable(
+            shiny::isolate(protein_table_input()),
+            tolerance = tolerance()
+          )
+        })
+      }
 
-    shiny::observeEvent(conversion_sidebar_vars$peak_tolerance(), {
-      output$compounds_table <- rhandsontable::renderRHandsontable({
-        prot_comp_handsontable(
-          shiny::isolate(compound_table_input()),
-          tolerance = tolerance()
-        )
-      })
+      if (!is.null(input$compounds_table)) {
+        output$compounds_table <- rhandsontable::renderRHandsontable({
+          prot_comp_handsontable(
+            shiny::isolate(compound_table_input()),
+            tolerance = tolerance()
+          )
+        })
+      }
     })
 
     ### Render empty protein/compound tables ----
@@ -995,8 +998,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         shiny::isolate({
           tolerance <- tolerance()
         })
-
-        test <<- empty_compound_tab
 
         output$compounds_table <- rhandsontable::renderRHandsontable({
           prot_comp_handsontable(
