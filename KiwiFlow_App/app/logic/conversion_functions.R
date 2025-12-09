@@ -252,12 +252,7 @@ sample_handsontable <- function(
   compounds = NULL,
   disabled = FALSE
 ) {
-  tab3 <<- tab
-  proteins3 <<- proteins
-  compounds3 <<- compounds
-
   cmp_cols <- grep("Compound", colnames(tab))
-  cmp_cols3 <<- cmp_cols
 
   # Allowed protein and compound values
   if (!is.null(proteins) && !is.null(compounds)) {
@@ -391,7 +386,6 @@ fill_sample_table <- function(sample_table) {
 # Construct cleaned-up sample table with only consecutive non-NA entries
 #' @export
 clean_sample_table <- function(sample_table) {
-  brainn <<- sample_table
   extra_cmp_section <- sample_table[, -(1:2), drop = FALSE]
 
   df <- extra_cmp_section[,
@@ -559,9 +553,6 @@ slice_cols <- function(sample_table) {
 # Validate sample table
 #' @export
 check_sample_table <- function(sample_table, proteins, compounds) {
-  sample_table1 <<- sample_table
-  proteins1 <<- proteins
-  compounds1 <<- compounds
   # Check if protein and compound names present
   if (is.null(proteins) || is.null(compounds)) {
     return("Declare Proteins and Compounds")
@@ -601,12 +592,6 @@ check_sample_table <- function(sample_table, proteins, compounds) {
     return("Assign compounds")
   }
 
-  # Check duplicated compounds
-  # cmp_section <- sample_table[, -(1:2), drop = FALSE]
-  # cmp_section_clean <- cmp_section[,
-  #   colSums(cmp_section == "" | is.na(cmp_section)) != nrow(cmp_section),
-  #   drop = FALSE
-  # ]
   if (
     any(t(apply(
       sample_table[, -(1:2), drop = FALSE],
@@ -668,7 +653,6 @@ check_mass_duplicates <- function(tab, tolerance) {
 # Validate protein/compound table
 #' @export
 check_table <- function(tab, tolerance) {
-  tab1 <<- tab
   if (!nrow(tab) || ncol(tab) < 2) {
     return("Fill name and mass fields.")
   }
@@ -686,16 +670,17 @@ check_table <- function(tab, tolerance) {
   }
 
   # Check missing names
-  if (!all(!is.na(tab[, 1]))) {
+  if (any(is.na(tab[, 1]) | tab[, 1] == "")) {
     return(paste("Missing name ID values"))
   }
 
   # Check duplicated names
-  if (any(duplicated(tab[, 1]))) {
+  if (any(duplicated(tab[, 1], incomparables = c("", NA)))) {
     return(paste("Duplicated names"))
   }
 
   # Check mass shift duplicates
+  # TODO
   # duplicate_check <- check_mass_duplicates(tab = tab, tolerance = tolerance)
   #   if (
   #   sum(!is.na(tab[, -1])) > 1 &&
