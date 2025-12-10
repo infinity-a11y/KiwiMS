@@ -323,6 +323,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       )
     })
 
+    # Initial sample table info render
+    output$samples_table_info <- shiny::renderText(
+      "Enter Proteins and Compounds first"
+    )
+
     # On sample table result file input execute immediately
     shinyjs::onevent(
       "change",
@@ -350,7 +355,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           "samples_table_info",
           "table-info-green"
         )
-        shinyjs::addClass(
+        shinyjs::removeClass(
           "samples_table_info",
           "table-info-red"
         )
@@ -437,22 +442,72 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
     # Observe table status for samples table
     shiny::observe({
-      shiny::req(
-        sample_table_input(),
-        declaration_vars$sample_table_active
-      )
+      # Get sample table client input
+      input_samples_table <- sample_table_input()
 
       message("SMP:", Sys.time())
 
       # Conditional observe actions
-      declaration_vars$sample_table_status <- table_observe(
-        tab = "samples",
-        table = clean_sample_table(sample_table_input()),
-        output = output,
-        ns = ns,
-        proteins = declaration_vars$protein_table$Protein,
-        compounds = declaration_vars$compound_table$Compound
-      )
+      if (
+        is.null(declaration_vars$protein_table) ||
+          is.null(declaration_vars$compound_table) ||
+          isTRUE(declaration_vars$protein_table_active) ||
+          isTRUE(declaration_vars$compound_table_active)
+      ) {
+        # Update info text
+        output$samples_table_info <- shiny::renderText({
+          "Enter Proteins and Compounds first"
+        })
+        shinyjs::removeClass(
+          "samples_table_info",
+          "table-info-green"
+        )
+        shinyjs::removeClass(
+          "samples_table_info",
+          "table-info-red"
+        )
+
+        # Disable file upload
+        shinyjs::disable("samples_fileinput")
+        shinyjs::addClass(
+          selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
+          class = "custom-disable"
+        )
+        shinyjs::addClass(
+          selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
+          class = "custom-disable"
+        )
+
+        # Disable confirm button
+        shinyjs::disable("confirm_samples")
+      } else if (is.null(input_samples_table)) {
+        output$samples_table_info <- shiny::renderText({
+          "Add Deconvoluted Samples"
+        })
+        # if protein/compound declaration confirmed
+        # Enable file upload
+        shinyjs::enable("samples_fileinput")
+        shinyjs::removeClass(
+          selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
+          class = "custom-disable"
+        )
+        shinyjs::removeClass(
+          selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
+          class = "custom-disable"
+        )
+
+        # Disable confirm button
+        shinyjs::disable("confirm_samples")
+      } else if (isTRUE(declaration_vars$sample_table_active)) {
+        declaration_vars$sample_table_status <- table_observe(
+          tab = "samples",
+          table = clean_sample_table(input_samples_table),
+          output = output,
+          ns = ns,
+          proteins = declaration_vars$protein_table$Protein,
+          compounds = declaration_vars$compound_table$Compound
+        )
+      }
 
       # Unblock UI
       shinyjs::runjs(paste0(
@@ -468,17 +523,24 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         shiny::req(input$tabs)
 
         # If edit applied always activate edit mode for sample table if present
-        if (!is.null(declaration_vars$sample_table)) {
+        if (!is.null(input$samples_table)) {
           # Make UI changes
           edit_ui_changes(
             tab = "Samples",
             table = fill_sample_table(
-              declaration_vars$sample_table
+              sample_table_input()
             ),
             session = session,
             output = output,
-            proteins = declaration_vars$protein_table$Protein,
-            compounds = declaration_vars$compound_table$Compound
+            declaration_vars = declaration_vars,
+            disabled = ifelse(
+              is.null(declaration_vars$protein_table) ||
+                is.null(declaration_vars$compound_table) ||
+                isTRUE(declaration_vars$protein_table_active) ||
+                isTRUE(declaration_vars$compound_table_active),
+              TRUE,
+              FALSE
+            )
           )
 
           # Activate table observer
@@ -553,7 +615,15 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               sample_handsontable(
                 tab = sample_table_input(),
                 proteins = declaration_vars$protein_table$Protein,
-                compounds = declaration_vars$compound_table$Compound
+                compounds = declaration_vars$compound_table$Compound,
+                disabled = ifelse(
+                  is.null(declaration_vars$protein_table) ||
+                    is.null(declaration_vars$compound_table) ||
+                    isTRUE(declaration_vars$protein_table_active) ||
+                    isTRUE(declaration_vars$compound_table_active),
+                  TRUE,
+                  FALSE
+                )
               )
             )
           }
@@ -590,7 +660,15 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               sample_handsontable(
                 tab = sample_table_input(),
                 proteins = declaration_vars$protein_table$Protein,
-                compounds = declaration_vars$compound_table$Compound
+                compounds = declaration_vars$compound_table$Compound,
+                disabled = ifelse(
+                  is.null(declaration_vars$protein_table) ||
+                    is.null(declaration_vars$compound_table) ||
+                    isTRUE(declaration_vars$protein_table_active) ||
+                    isTRUE(declaration_vars$compound_table_active),
+                  TRUE,
+                  FALSE
+                )
               )
             )
           }
@@ -652,15 +730,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     shiny::observeEvent(
       input$samples_fileinput,
       {
-        # shinyjs::removeClass(
-        #   "samples_table_info",
-        #   "table-info-green"
-        # )
-        # shinyjs::addClass(
-        #   "samples_table_info",
-        #   "table-info-red"
-        # )
-
         # Disable result file input
         shinyjs::enable("samples_fileinput")
         shinyjs::removeClass(
@@ -671,10 +740,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
           class = "custom-disable"
         )
-
-        # output$samples_table_info <- shiny::renderText({
-        #   "Fill table ..."
-        # })
 
         # Read results .rds file from selected path
         file_path <- file.path(input$samples_fileinput$datapath)
@@ -743,14 +808,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       declaration_vars$sample_table_active <- TRUE
 
       shinyjs::removeClass(
-        "samples_table_info",
-        "table-info-green"
-      )
-      shinyjs::addClass(
-        "samples_table_info",
-        "table-info-red"
-      )
-      shinyjs::removeClass(
         selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
         class = "custom-disable"
       )
@@ -758,9 +815,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
         class = "custom-disable"
       )
-      output$samples_table_info <- shiny::renderText({
-        "Fill table ..."
-      })
 
       # Read results .rds file from previous deconvolution
       declaration_vars$result <- readRDS(
@@ -902,93 +956,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       }
     )
 
-    # Observe sample tab activation status
-    shiny::observe({
-      if (
-        # if protein/compound declaration unconfirmed
-        is.null(declaration_vars$protein_table) ||
-          is.null(declaration_vars$compound_table) ||
-          isTRUE(declaration_vars$protein_table_active) ||
-          isTRUE(declaration_vars$compound_table_active)
-      ) {
-        # Disable file upload
-        shinyjs::disable("samples_fileinput")
-        shinyjs::addClass(
-          selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
-          class = "custom-disable"
-        )
-        shinyjs::addClass(
-          selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
-          class = "custom-disable"
-        )
-
-        # Disable confirm button
-        shinyjs::disable("confirm_samples")
-
-        # Update table info
-        output$samples_table_info <- shiny::renderText({
-          "Enter Proteins and Compounds first"
-        })
-        shinyjs::removeClass(
-          "samples_table_info",
-          "table-info-green"
-        )
-        shinyjs::addClass(
-          "samples_table_info",
-          "table-info-red"
-        )
-      } else {
-        # if protein/compound declaration confirmed
-        # Enable file upload
-        shinyjs::enable("samples_fileinput")
-        shinyjs::removeClass(
-          selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
-          class = "custom-disable"
-        )
-        shinyjs::removeClass(
-          selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
-          class = "custom-disable"
-        )
-
-        # Enable confirm button
-        shinyjs::enable("confirm_samples")
-
-        # Update table info
-        output$samples_table_info <- shiny::renderText({
-          "Upload result file"
-        })
-        shinyjs::removeClass(
-          "samples_table_info",
-          "table-info-green"
-        )
-        shinyjs::addClass(
-          "samples_table_info",
-          "table-info-red"
-        )
-      }
-    })
-
-    # Update compound/protein table with tolerance value
-    shiny::observeEvent(conversion_sidebar_vars$peak_tolerance(), {
-      if (!is.null(input$proteins_table)) {
-        output$proteins_table <- rhandsontable::renderRHandsontable({
-          prot_comp_handsontable(
-            shiny::isolate(protein_table_input()),
-            tolerance = tolerance()
-          )
-        })
-      }
-
-      if (!is.null(input$compounds_table)) {
-        output$compounds_table <- rhandsontable::renderRHandsontable({
-          prot_comp_handsontable(
-            shiny::isolate(compound_table_input()),
-            tolerance = tolerance()
-          )
-        })
-      }
-    })
-
     ### Render empty protein/compound tables ----
     # Render compound table
     shiny::observe({
@@ -1003,12 +970,12 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           tolerance <- tolerance()
         })
 
-        output$compounds_table <- rhandsontable::renderRHandsontable({
+        output$compounds_table <- rhandsontable::renderRHandsontable(
           prot_comp_handsontable(
             empty_compound_tab,
-            tolerance = tolerance
+            tolerance = 3
           )
-        })
+        )
       }
     })
 
@@ -1024,10 +991,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         shiny::isolate({
           tolerance <- tolerance()
         })
+
         output$proteins_table <- rhandsontable::renderRHandsontable({
           prot_comp_handsontable(
             empty_protein_tab,
-            tolerance = tolerance
+            tolerance = 3
           )
         })
       }

@@ -2488,8 +2488,8 @@ edit_ui_changes <- function(
   table,
   session,
   output,
-  proteins = NULL,
-  compounds = NULL
+  declaration_vars = NULL,
+  disabled = FALSE
 ) {
   tab_low <- tolower(tab)
 
@@ -2529,15 +2529,15 @@ edit_ui_changes <- function(
   # Enable header checkbox
   shinyjs::enable(paste0(tab_low, "_header_checkbox"))
 
-  # Render table editable
+  # Render table (editable)
   output[[paste0(tab_low, "_table")]] <- rhandsontable::renderRHandsontable(
     do.call(
       ifelse(tab == "Samples", "sample_handsontable", "prot_comp_handsontable"),
       list(
         tab = table,
-        disabled = FALSE,
-        proteins = proteins,
-        compounds = compounds
+        disabled = disabled,
+        proteins = declaration_vars$protein_table$Protein,
+        compounds = declaration_vars$compound_table$Compound
       )
     )
   )
@@ -2575,7 +2575,7 @@ table_observe <- function(
       paste0(tab, "_table_info"),
       "table-info-green"
     )
-    shinyjs::addClass(
+    shinyjs::removeClass(
       paste0(tab, "_table_info"),
       "table-info-red"
     )
