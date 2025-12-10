@@ -103,11 +103,19 @@ set_selected_tab <- function(tab_name, session) {
 # The updated function
 prot_comp_handsontable <- function(
   tab,
-  tolerance = 3,
+  tolerance = NULL,
   disabled = FALSE,
   proteins = NULL,
   compounds = NULL
 ) {
+  # Prepare JS tolerance variable
+  js_tolerance_value <- if (is.null(tolerance) || is.na(tolerance)) {
+    "null"
+  } else {
+    tolerance
+  }
+
+  # JS render function
   renderer_js <- sprintf(
     "function(instance, td, row, col, prop, value, cellProperties) {
     Handsontable.renderers.TextRenderer.apply(this, arguments);
@@ -116,9 +124,9 @@ prot_comp_handsontable <- function(
     td.style.color = '';      // Clear existing text color
     
     // Define the tolerance (injected from R)
-    var GLOBAL_TOLERANCE = %f;
+    var GLOBAL_TOLERANCE = %s; 
     
-    // Helper: Normalize value (return object with float val and numeric status)
+    // Helper: Normalize value
     var getNormalizedValue = function(val) {
         if (val == null || val === '') {
             return { val: '', is_numeric: false };
@@ -137,7 +145,6 @@ prot_comp_handsontable <- function(
     if (cellData.val === '') return;
 
     // --- A. Column 0 Check (Protein Names) ---
-    // Keep the exact duplicate check for the text column
     var isNameDuplicated = false;
     if (col === 0) {
         var colData = instance.getDataAtCol(0); 
@@ -154,18 +161,17 @@ prot_comp_handsontable <- function(
     var isSameRowProximate = false;
     var isDiffRowProximate = false;
     
-    if (col >= 1 && cellData.is_numeric) {
+    // 3. CHECK IF TOLERANCE IS ACTIVE
+    // We added '&& GLOBAL_TOLERANCE !== null' to this condition
+    if (col >= 1 && cellData.is_numeric && GLOBAL_TOLERANCE !== null) {
         var totalRows = instance.countRows();
         var totalCols = instance.countCols();
         var current_val = cellData.val;
         
-        // Iterate over the entire table
         for (var r = 0; r < totalRows; r++) {
-            // Optimization: If we already found both types, stop checking
             if (isSameRowProximate && isDiffRowProximate) break;
 
             for (var c = 1; c < totalCols; c++) {
-                // Skip self-comparison
                 if (r === row && c === col) continue; 
                 
                 var other_value = instance.getDataAtCell(r, c);
@@ -176,37 +182,29 @@ prot_comp_handsontable <- function(
                     
                     if (diff < GLOBAL_TOLERANCE) {
                         if (r === row) {
-                            // Match found in the SAME row
                             isSameRowProximate = true;
                         } else {
-                            // Match found in a DIFFERENT row
                             isDiffRowProximate = true;
                         }
                     }
                 }
-                
-                // Optimization: Break inner loop if we found both flags
                 if (isSameRowProximate && isDiffRowProximate) break;
             }
         }
     }
     
-    // --- C. Apply Styles (Priority Based) ---
-    
+    // --- C. Apply Styles ---
     if (isSameRowProximate) {
-        // Priority 1: Close value in SAME ROW -> Dark Purple
         td.style.background = '#9370dbff';
     } 
     else if (isDiffRowProximate) {
-        // Priority 2: Close value in DIFFERENT ROW -> Lavender
         td.style.background = '#b8a8d6ff';
     } 
     else if (isNameDuplicated) {
-        // Priority 3: Duplicate Name in Col 0 -> Orange
         td.style.background = 'orange';
     }
   }",
-    tolerance
+    js_tolerance_value
   )
 
   table <- rhandsontable::rhandsontable(
@@ -2489,7 +2487,8 @@ edit_ui_changes <- function(
   session,
   output,
   declaration_vars = NULL,
-  disabled = FALSE
+  disabled = FALSE,
+  tolerance = NULL
 ) {
   tab_low <- tolower(tab)
 
@@ -2530,7 +2529,7 @@ edit_ui_changes <- function(
   shinyjs::enable(paste0(tab_low, "_header_checkbox"))
 
   # Render table (editable)
-  output[[paste0(tab_low, "_table")]] <- rhandsontable::renderRHandsontable(
+  output[[paste0(tab_low, "_table")]] <- rhandsontable::renderRHandsontable({
     do.call(
       ifelse(tab == "Samples", "sample_handsontable", "prot_comp_handsontable"),
       list(
@@ -2540,7 +2539,7 @@ edit_ui_changes <- function(
         compounds = declaration_vars$compound_table$Compound
       )
     )
-  )
+  })
 
   # Mark tab as undone
   shinyjs::runjs(paste0(
@@ -2559,7 +2558,7 @@ table_observe <- function(
   ns,
   proteins,
   compounds,
-  tolerance
+  tolerance = 3
 ) {
   # Show waiter with 0.25 seconds minimum runtime
   waiter::waiter_show(
