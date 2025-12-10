@@ -513,6 +513,41 @@ input[type="number"]::-webkit-inner-spin-button {
   border-color: #38387c;
 }
 
+.ki-kinact-checkbox label {
+  display: flex;
+}
+
+#app-conversion_sidebar-run_ki_kinact {
+  margin: 0;
+}
+.ki-kinact-checkbox {
+  margin-bottom: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.ki-kinact-checkbox span {
+  align-self: center;
+}
+
+.ki-kinact-label {
+  font-size: 13px;
+  display: flex;
+  gap: 0.5em;
+  margin-left: 0.5em;
+  align-items: center;
+}
+
+.ki-kinact-highlight {
+  background: #35357a;
+  font-size: 0.8vw;
+  color: white;
+  padding-left: 0.5em;
+  align-content: baseline;
+  padding-right: 0.5em;
+  border-radius: 4px;
+  box-shadow: inset 0px 0px 14px 3px #ffffff42;
+}
+
 /* --- Progress Bars --- */
 .progress {
   height: 2em;
@@ -1232,6 +1267,12 @@ decon-report-modal .btn-default {
   height: 100%;
   padding: 5% !important;
   padding-left: 0 !important;
+  gap: 5px !important;
+}
+
+.conversion-sidebar .bslib-sidebar-layout .sidebar-title {
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
 }
 
 .conversion-sidebar-ui {
@@ -1241,6 +1282,12 @@ decon-report-modal .btn-default {
   height: 100%;
   gap: 2% !important;
   margin-left: -3px;
+}
+
+.conversion-main-info {
+  font-size: 0.8vw;
+  font-style: italic;
+  line-height: 2;
 }
 
 #app-conversion_sidebar-conversion_info_ui {
