@@ -32,9 +32,9 @@ box::use(
   app /
     logic /
     conversion_constants[
-      empty_tab,
       keybind_menu_ui,
       table_legend,
+      sample_table_legend,
     ],
 )
 
@@ -234,7 +234,8 @@ ui <- function(id) {
       shiny::fluidRow(
         shiny::column(
           width = 12,
-          rhandsontable::rHandsontableOutput(ns("samples_table"))
+          rhandsontable::rHandsontableOutput(ns("samples_table")),
+          sample_table_legend
         )
       ),
       keybind_menu_ui
@@ -992,7 +993,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     # Render compound table
     shiny::observe({
       if (is.null(declaration_vars$compound_table)) {
-        empty_compound_tab <- empty_tab
+        empty_compound_tab <- data.frame(
+          name = as.character(rep(NA, 9)),
+          rep(list(as.numeric(rep(NA, 9))), 9)
+        )
         colnames(empty_compound_tab) <- c("Compound", paste("Mass", 1:9))
 
         shiny::isolate({
@@ -1011,7 +1015,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     # Render protein table
     shiny::observe({
       if (is.null(declaration_vars$protein_table)) {
-        empty_protein_tab <- empty_tab
+        empty_protein_tab <- data.frame(
+          name = as.character(rep(NA, 9)),
+          rep(list(as.numeric(rep(NA, 9))), 9)
+        )
         colnames(empty_protein_tab) <- c("Protein", paste("Mass", 1:9))
 
         shiny::isolate({

@@ -196,12 +196,10 @@ prot_comp_handsontable <- function(
     if (isSameRowProximate) {
         // Priority 1: Close value in SAME ROW -> Dark Purple
         td.style.background = '#9370dbff';
-        td.style.color = 'white';
     } 
     else if (isDiffRowProximate) {
         // Priority 2: Close value in DIFFERENT ROW -> Lavender
         td.style.background = '#b8a8d6ff';
-        td.style.color = 'black';
     } 
     else if (isNameDuplicated) {
         // Priority 3: Duplicate Name in Col 0 -> Orange
