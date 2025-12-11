@@ -52,7 +52,7 @@ server <- function(
     output$conversion_sidebar_ui <- shiny::renderUI({
       shiny::div(
         class = "conversion-sidebar-ui",
-        shiny::uiOutput(ns("conversion_info_ui")),
+        # shiny::uiOutput(ns("conversion_info_ui")),
         shiny::uiOutput(ns("conversion_analysis_controls_ui")),
         shiny::uiOutput(ns("conversion_result_controls_ui"))
       )
@@ -116,7 +116,7 @@ server <- function(
             width = 12,
             shiny::div(
               class = "sidebar-title conversion-title",
-              "Analysis"
+              "Binding Analysis"
             ),
             shiny::numericInput(
               ns("peak_tolerance"),
@@ -155,6 +155,25 @@ server <- function(
               min = 1,
               max = 20,
               step = 1
+            ),
+            shiny::div(
+              class = "ki-kinact-checkbox",
+              shiny::checkboxInput(
+                ns("run_ki_kinact"),
+                shiny::div(
+                  class = "ki-kinact-label",
+                  "Run",
+                  shiny::div(
+                    class = "ki-kinact-highlight",
+                    " K",
+                    htmltools::tags$sub("i"),
+                    " / k",
+                    htmltools::tags$sub("inact")
+                  ),
+                  " Analysis"
+                ),
+                value = FALSE
+              )
             ),
             #TODO
             # shinyjs::disabled(
