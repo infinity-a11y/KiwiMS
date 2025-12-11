@@ -748,15 +748,6 @@ table.dataTable>tbody>tr.selected>* {
 }
 
 /* --- Handsontable --- */
-// #app-conversion_main-samples_table .handsontable,
-// #app-conversion_main-samples_table {
-//   overflow: visible !important;
-// }
-
-.handsontable-wrapper {
-  max-height: 400px !important;
-}
-
 .autocompleteEditor .ht_master .wtHolder {
   overflow: unset;
 }
@@ -1901,15 +1892,15 @@ table.dataTable thead>tr>th.sorting::before {
 .table-legend {
   display: flex;
   gap: 10px;
-  width: fit-content;
-  flex-flow: column;
-  box-shadow: inset 0px 0px 65px 4px #0000004d;
+  box-shadow: inset 0px 0px 65px 4px rgba(0, 0, 0, .3019607843);
   border-radius: 4px;
-  padding: 4px;
+  padding: 10px;
   padding-left: 10px;
   padding-right: 20px;
   position: absolute;
-  bottom: 63px;
+  bottom: 52px;
+  flex-wrap: wrap;
+  width: 97%;
 }
 
 .table-legend-element {

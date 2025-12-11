@@ -332,7 +332,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       "Enter Proteins and Compounds first"
     )
 
-    # On sample table result file input execute immediately
+    # On sample table result file input show loading feedback
     shinyjs::onevent(
       "change",
       "samples_fileinput",
@@ -369,6 +369,34 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       }
     )
 
+    # On table pasting event show loading feedback
+    shiny::observeEvent(
+      input$table_paste_instant,
+      {
+        # Block UI
+        shinyjs::runjs(paste0(
+          'document.getElementById("blocking-overlay").style.display ',
+          '= "block";'
+        ))
+
+        # Update info text
+        shinyjs::removeClass(
+          paste0(tolower(input$tabs), "_table_info"),
+          "table-info-green"
+        )
+        shinyjs::removeClass(
+          paste0(tolower(input$tabs), "_table_info"),
+          "table-info-red"
+        )
+        output[[paste0(
+          tolower(input$tabs),
+          "_table_info"
+        )]] <- shiny::renderText(
+          "Loading ..."
+        )
+      }
+    )
+
     ### Protein/Compound table file uploads ----
     # Protein table file upload
     shiny::observeEvent(input$proteins_fileinput, {
@@ -393,126 +421,147 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     })
 
     # Observe table status for protein table
-    shiny::observe({
-      shiny::req(
-        protein_table_input(),
-        declaration_vars$protein_table_active
-        # ,conversion_sidebar_vars$peak_tolerance()
-      )
+    shiny::observe(
+      {
+        shiny::req(
+          protein_table_input(),
+          declaration_vars$protein_table_active
+          # ,conversion_sidebar_vars$peak_tolerance()
+        )
 
-      protein_table <- clean_prot_comp_table(
-        tab = "Protein",
-        table = protein_table_input(),
-        full = FALSE
-      )
+        protein_table <- clean_prot_comp_table(
+          tab = "Protein",
+          table = protein_table_input(),
+          full = FALSE
+        )
 
-      # Conditional observe actions
-      declaration_vars$protein_table_status <- table_observe(
-        tab = "proteins",
-        table = protein_table,
-        output = output,
-        ns = ns
-        #, tolerance = tolerance()
-      )
-    })
+        # Conditional observe actions
+        declaration_vars$protein_table_status <- table_observe(
+          tab = "proteins",
+          table = protein_table,
+          output = output,
+          ns = ns
+          #, tolerance = tolerance()
+        )
+
+        # Unblock UI
+        shinyjs::runjs(paste0(
+          'document.getElementById("blocking-overlay").style.display ',
+          '= "none";'
+        ))
+      },
+      priority = 100
+    )
 
     # Observe table status for compound table
-    shiny::observe({
-      shiny::req(
-        compound_table_input(),
-        declaration_vars$compound_table_active
-        #,conversion_sidebar_vars$peak_tolerance()
-      )
+    shiny::observe(
+      {
+        shiny::req(
+          compound_table_input(),
+          declaration_vars$compound_table_active
+          #,conversion_sidebar_vars$peak_tolerance()
+        )
 
-      compound_table <- clean_prot_comp_table(
-        tab = "Compound",
-        table = compound_table_input(),
-        full = FALSE
-      )
+        compound_table <- clean_prot_comp_table(
+          tab = "Compound",
+          table = compound_table_input(),
+          full = FALSE
+        )
 
-      # Conditional observe actions
-      declaration_vars$compound_table_status <- table_observe(
-        tab = "compounds",
-        table = compound_table,
-        output = output,
-        ns = ns
-        #,tolerance = tolerance()
-      )
-    })
+        # Conditional observe actions
+        declaration_vars$compound_table_status <- table_observe(
+          tab = "compounds",
+          table = compound_table,
+          output = output,
+          ns = ns
+          #,tolerance = tolerance()
+        )
+
+        # Unblock UI
+        shinyjs::runjs(paste0(
+          'document.getElementById("blocking-overlay").style.display ',
+          '= "none";'
+        ))
+      },
+      priority = 100
+    )
 
     # Observe table status for samples table
-    shiny::observe({
-      # Get sample table client input
-      input_samples_table <- sample_table_input()
+    shiny::observe(
+      {
+        # Get sample table client input
+        input_samples_table <- sample_table_input()
 
-      # Conditional observe actions
-      if (
-        is.null(declaration_vars$protein_table) ||
-          is.null(declaration_vars$compound_table) ||
-          isTRUE(declaration_vars$protein_table_active) ||
-          isTRUE(declaration_vars$compound_table_active)
-      ) {
-        # Update info text
-        output$samples_table_info <- shiny::renderText({
-          "Enter Proteins and Compounds first"
-        })
-        shinyjs::removeClass(
-          "samples_table_info",
-          "table-info-green"
-        )
-        shinyjs::removeClass(
-          "samples_table_info",
-          "table-info-red"
-        )
+        # Conditional observe actions
+        if (
+          is.null(declaration_vars$protein_table) ||
+            is.null(declaration_vars$compound_table) ||
+            isTRUE(declaration_vars$protein_table_active) ||
+            isTRUE(declaration_vars$compound_table_active)
+        ) {
+          # Update info text
+          output$samples_table_info <- shiny::renderText({
+            "Enter Proteins and Compounds first"
+          })
+          shinyjs::removeClass(
+            "samples_table_info",
+            "table-info-green"
+          )
+          shinyjs::removeClass(
+            "samples_table_info",
+            "table-info-red"
+          )
 
-        # Disable file upload
-        shinyjs::disable("samples_fileinput")
-        shinyjs::addClass(
-          selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
-          class = "custom-disable"
-        )
-        shinyjs::addClass(
-          selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
-          class = "custom-disable"
-        )
+          # Disable file upload
+          shinyjs::disable("samples_fileinput")
+          shinyjs::addClass(
+            selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
+            class = "custom-disable"
+          )
+          shinyjs::addClass(
+            selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
+            class = "custom-disable"
+          )
 
-        # Disable confirm button
-        shinyjs::disable("confirm_samples")
-      } else if (is.null(input_samples_table)) {
-        output$samples_table_info <- shiny::renderText({
-          "Add Deconvoluted Samples"
-        })
-        # if protein/compound declaration confirmed
-        # Enable file upload
-        shinyjs::enable("samples_fileinput")
-        shinyjs::removeClass(
-          selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
-          class = "custom-disable"
-        )
-        shinyjs::removeClass(
-          selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
-          class = "custom-disable"
-        )
+          # Disable confirm button
+          shinyjs::disable("confirm_samples")
+        } else if (is.null(input_samples_table)) {
+          output$samples_table_info <- shiny::renderText({
+            "Add Deconvoluted Samples"
+          })
+          # if protein/compound declaration confirmed
+          # Enable file upload
+          shinyjs::enable("samples_fileinput")
+          shinyjs::removeClass(
+            selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
+            class = "custom-disable"
+          )
+          shinyjs::removeClass(
+            selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
+            class = "custom-disable"
+          )
 
-        # Disable confirm button
-        shinyjs::disable("confirm_samples")
-      } else if (isTRUE(declaration_vars$sample_table_active)) {
-        declaration_vars$sample_table_status <- table_observe(
-          tab = "samples",
-          table = clean_sample_table(input_samples_table),
-          output = output,
-          ns = ns,
-          proteins = declaration_vars$protein_table$Protein,
-          compounds = declaration_vars$compound_table$Compound
-        )
-      }
+          # Disable confirm button
+          shinyjs::disable("confirm_samples")
+        } else if (isTRUE(declaration_vars$sample_table_active)) {
+          declaration_vars$sample_table_status <- table_observe(
+            tab = "samples",
+            table = clean_sample_table(input_samples_table),
+            output = output,
+            ns = ns,
+            proteins = declaration_vars$protein_table$Protein,
+            compounds = declaration_vars$compound_table$Compound
+          )
+        }
 
-      # Unblock UI
-      shinyjs::runjs(paste0(
-        'document.getElementById("blocking-overlay").style.display ',
-        '= "none";'
-      ))
-    })
+        # Unblock UI
+        shinyjs::runjs(paste0(
+          'document.getElementById("blocking-overlay").style.display ',
+          '= "none";'
+        ))
+      },
+      priority = 100
+    )
 
     # Actions on edit button click
     shiny::observeEvent(
@@ -968,7 +1017,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               name = as.character(rep(NA, 9)),
               rep(list(as.numeric(rep(NA, 9))), 9)
             )
-            colnames(compound_table) <- c("Protein", paste("Mass", 1:9))
+            colnames(compound_table) <- c("Compound", paste("Mass", 1:9))
           } else {
             compound_table <- rhandsontable::hot_to_r(input_compounds_table)
           }

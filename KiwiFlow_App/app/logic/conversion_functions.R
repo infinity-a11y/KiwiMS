@@ -99,8 +99,8 @@ set_selected_tab <- function(tab_name, session) {
   )
 }
 
+# Render function for protein/compound declaration tables
 #' @export
-# The updated function
 prot_comp_handsontable <- function(
   tab,
   tolerance = NULL,
@@ -108,7 +108,6 @@ prot_comp_handsontable <- function(
   proteins = NULL,
   compounds = NULL
 ) {
-  # Prepare JS tolerance variable
   js_tolerance_value <- if (is.null(tolerance) || is.na(tolerance)) {
     "null"
   } else {
@@ -207,6 +206,24 @@ prot_comp_handsontable <- function(
     js_tolerance_value
   )
 
+  paste_hook_js <- "function(el, x) {
+      var hot = this.hot;
+      if (hot._pasteHookAttached) return;
+      hot._pasteHookAttached = true;
+      var parts = el.id.split('-');
+      var nsPrefix = parts.join('-') + (parts.length > 0 ? '-' : '');
+      hot.addHook('beforePaste', function(data, coords) {
+        if (typeof Shiny !== 'undefined' && Shiny.setInputValue) {
+          Shiny.setInputValue(nsPrefix + 'table_paste_instant', {
+            timestamp: Date.now(),
+            rowCount: data.length,
+            colCount: data[0] ? data[0].length : 0
+          }, {priority: 'event'});
+        }
+        return true;
+      });
+    }"
+
   table <- rhandsontable::rhandsontable(
     tab,
     rowHeaders = NULL,
@@ -232,7 +249,14 @@ prot_comp_handsontable <- function(
       highlightCol = TRUE,
       highlightRow = TRUE,
       stretchH = ifelse(disabled, "none", "all")
-    )
+    ) |>
+    rhandsontable::hot_table(
+      contextMenu = ifelse(disabled, FALSE, TRUE),
+      highlightCol = TRUE,
+      highlightRow = TRUE,
+      stretchH = ifelse(disabled, "none", "all")
+    ) |>
+    htmlwidgets::onRender(paste_hook_js)
 
   if (disabled) {
     table <- rhandsontable::hot_cols(table, readOnly = TRUE)
