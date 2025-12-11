@@ -206,23 +206,59 @@ prot_comp_handsontable <- function(
     js_tolerance_value
   )
 
+  # paste_hook_js <- "function(el, x) {
+  #     var hot = this.hot;
+  #     if (hot._pasteHookAttached) return;
+  #     hot._pasteHookAttached = true;
+  #     var parts = el.id.split('-');
+  #     var nsPrefix = parts.join('-') + (parts.length > 0 ? '-' : '');
+  #     hot.addHook('beforePaste', function(data, coords) {
+  #       if (typeof Shiny !== 'undefined' && Shiny.setInputValue) {
+  #         Shiny.setInputValue(nsPrefix + 'table_paste_instant', {
+  #           timestamp: Date.now(),
+  #           rowCount: data.length,
+  #           colCount: data[0] ? data[0].length : 0
+  #         }, {priority: 'event'});
+  #       }
+  #       return true;
+  #     });
+  #   }"
+
+  #   paste_hook_js <- "function(el, x) {
+  # var hot = this.hot;
+  # if (hot._pasteHookAttached) return;
+  # hot._pasteHookAttached = true;
+  # var nsPrefix = el.id.replace('-compounds_table', '-') || '';
+  # hot.addHook('beforePaste', function(data, coords) {
+  # if (typeof Shiny !== 'undefined' && Shiny.setInputValue) {
+  # Shiny.setInputValue(nsPrefix + 'compounds_table_paste_instant', {
+  # timestamp: Date.now(),
+  # rowCount: data.length,
+  # colCount: data[0] ? data[0].length : 0
+  # }, {priority: 'event'});
+  # }
+  # return true;
+  # });
+  # }"
+
   paste_hook_js <- "function(el, x) {
-      var hot = this.hot;
-      if (hot._pasteHookAttached) return;
-      hot._pasteHookAttached = true;
-      var parts = el.id.split('-');
-      var nsPrefix = parts.join('-') + (parts.length > 0 ? '-' : '');
-      hot.addHook('beforePaste', function(data, coords) {
-        if (typeof Shiny !== 'undefined' && Shiny.setInputValue) {
-          Shiny.setInputValue(nsPrefix + 'table_paste_instant', {
-            timestamp: Date.now(),
-            rowCount: data.length,
-            colCount: data[0] ? data[0].length : 0
-          }, {priority: 'event'});
-        }
-        return true;
-      });
-    }"
+var hot = this.hot;
+if (hot._pasteHookAttached) return;
+hot._pasteHookAttached = true;
+var parts = el.id.split('-');
+var base_id = parts.pop();
+var nsPrefix = parts.join('-') + (parts.length > 0 ? '-' : '');
+hot.addHook('beforePaste', function(data, coords) {
+if (typeof Shiny !== 'undefined' && Shiny.setInputValue) {
+Shiny.setInputValue(nsPrefix + 'table_paste_instant', {
+timestamp: Date.now(),
+rowCount: data.length,
+colCount: data[0] ? data[0].length : 0
+}, {priority: 'event'});
+}
+return true;
+});
+}"
 
   table <- rhandsontable::rhandsontable(
     tab,
@@ -349,6 +385,25 @@ sample_handsontable <- function(
     renderer_js <- ""
   }
 
+  paste_hook_js <- "function(el, x) {
+var hot = this.hot;
+if (hot._pasteHookAttached) return;
+hot._pasteHookAttached = true;
+var parts = el.id.split('-');
+var base_id = parts.pop();
+var nsPrefix = parts.join('-') + (parts.length > 0 ? '-' : '');
+hot.addHook('beforePaste', function(data, coords) {
+if (typeof Shiny !== 'undefined' && Shiny.setInputValue) {
+Shiny.setInputValue(nsPrefix + 'table_paste_instant', {
+timestamp: Date.now(),
+rowCount: data.length,
+colCount: data[0] ? data[0].length : 0
+}, {priority: 'event'});
+}
+return true;
+});
+}"
+
   handsontable <- rhandsontable::rhandsontable(
     tab,
     rowHeaders = NULL,
@@ -356,7 +411,6 @@ sample_handsontable <- function(
     height = 400,
     stretchH = ifelse(disabled, "none", "all")
   ) |>
-    rhandsontable::hot_col("Sample", readOnly = TRUE) |>
     rhandsontable::hot_cols(
       fixedColumnsLeft = 2,
       renderer = renderer_js,
@@ -375,10 +429,12 @@ sample_handsontable <- function(
       source = compounds,
       strict = FALSE
     ) |>
+    rhandsontable::hot_col("Sample", readOnly = TRUE) |>
     rhandsontable::hot_table(
       contextMenu = ifelse(disabled, FALSE, TRUE),
       stretchH = ifelse(disabled, "none", "all")
-    )
+    ) |>
+    htmlwidgets::onRender(paste_hook_js)
 
   return(handsontable)
 }
