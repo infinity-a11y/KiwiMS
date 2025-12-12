@@ -411,6 +411,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       "Enter Proteins and Compounds first"
     )
 
+    ### Table loading special events ---
     # On sample table result file input show loading feedback
     shinyjs::onevent(
       "change",
@@ -792,7 +793,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           input$tabs == "Compounds" && declaration_vars$compound_table_status
         ) {
           compound_table_data(clean_prot_comp_table(
-            tab = "Protein",
+            tab = "Compound",
             table = compound_table_input(),
             full = FALSE
           ))
