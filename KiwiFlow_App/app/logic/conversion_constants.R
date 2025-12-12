@@ -21,6 +21,14 @@ symbols <- c(
   "hourglass"
 )
 
+# EMpty protein declaration table
+#' @export
+empty_protein_table <- data.frame(
+  name = as.character(rep(NA, 9)),
+  rep(list(as.numeric(rep(NA, 9))), 9)
+) |>
+  stats::setNames(c("Protein", paste("Mass", 1:9)))
+
 # keybind menu ui
 #' @export
 keybind_menu_ui <- shiny::div(

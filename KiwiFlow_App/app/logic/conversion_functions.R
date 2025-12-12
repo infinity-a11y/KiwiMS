@@ -114,152 +114,136 @@ prot_comp_handsontable <- function(
     tolerance
   }
 
-  # JS render function
+  # Original renderer (no edit detection needed)
   renderer_js <- sprintf(
     "function(instance, td, row, col, prop, value, cellProperties) {
-    Handsontable.renderers.TextRenderer.apply(this, arguments);
-    
-    td.style.background = ''; // Clear existing background
-    td.style.color = '';      // Clear existing text color
-    
-    // Define the tolerance (injected from R)
-    var GLOBAL_TOLERANCE = %s; 
-    
-    // Helper: Normalize value
-    var getNormalizedValue = function(val) {
+      Handsontable.renderers.TextRenderer.apply(this, arguments);
+      
+      td.style.background = ''; // Clear existing background
+      td.style.color = '';      // Clear existing text color
+      
+      var GLOBAL_TOLERANCE = %s; 
+      
+      var getNormalizedValue = function(val) {
         if (val == null || val === '') {
-            return { val: '', is_numeric: false };
+          return { val: '', is_numeric: false };
         }
         var floatVal = parseFloat(val);
         if (isNaN(floatVal)) {
-            return { val: String(val).trim(), is_numeric: false }; 
+          return { val: String(val).trim(), is_numeric: false }; 
         } else {
-            return { val: floatVal, is_numeric: true }; 
+          return { val: floatVal, is_numeric: true }; 
         }
-    };
+      };
 
-    var cellData = getNormalizedValue(value);
-    
-    // Skip empty cells
-    if (cellData.val === '') return;
+      var cellData = getNormalizedValue(value);
+      
+      if (cellData.val === '') return;
 
-    // --- A. Column 0 Check (Protein Names) ---
-    var isNameDuplicated = false;
-    if (col === 0) {
+      var isNameDuplicated = false;
+      if (col === 0) {
         var colData = instance.getDataAtCol(0); 
         var valueCounts = {};
         for (var i = 0; i < colData.length; i++) {
-            var cVal = colData[i];
-            var tVal = cVal == null ? '' : String(cVal).trim();
-            if (tVal !== '') valueCounts[tVal] = (valueCounts[tVal] || 0) + 1;
+          var cVal = colData[i];
+          var tVal = cVal == null ? '' : String(cVal).trim();
+          if (tVal !== '') valueCounts[tVal] = (valueCounts[tVal] || 0) + 1;
         }
         if (valueCounts[cellData.val] > 1) isNameDuplicated = true;
-    }
-    
-    // --- B. Global Proximity Check (Numeric Columns) ---
-    var isSameRowProximate = false;
-    var isDiffRowProximate = false;
-    
-    // 3. CHECK IF TOLERANCE IS ACTIVE
-    // We added '&& GLOBAL_TOLERANCE !== null' to this condition
-    if (col >= 1 && cellData.is_numeric && GLOBAL_TOLERANCE !== null) {
+      }
+      
+      var isSameRowProximate = false;
+      var isDiffRowProximate = false;
+      
+      if (col >= 1 && cellData.is_numeric && GLOBAL_TOLERANCE !== null) {
         var totalRows = instance.countRows();
         var totalCols = instance.countCols();
         var current_val = cellData.val;
         
         for (var r = 0; r < totalRows; r++) {
-            if (isSameRowProximate && isDiffRowProximate) break;
-
-            for (var c = 1; c < totalCols; c++) {
-                if (r === row && c === col) continue; 
-                
-                var other_value = instance.getDataAtCell(r, c);
-                var other_data = getNormalizedValue(other_value);
-                
-                if (other_data.is_numeric) {
-                    var diff = Math.abs(current_val - other_data.val);
-                    
-                    if (diff < GLOBAL_TOLERANCE) {
-                        if (r === row) {
-                            isSameRowProximate = true;
-                        } else {
-                            isDiffRowProximate = true;
-                        }
-                    }
-                }
-                if (isSameRowProximate && isDiffRowProximate) break;
+          if (isSameRowProximate && isDiffRowProximate) break;
+          for (var c = 1; c < totalCols; c++) {
+            if (r === row && c === col) continue; 
+            var other_value = instance.getDataAtCell(r, c);
+            var other_data = getNormalizedValue(other_value);
+            if (other_data.is_numeric) {
+              var diff = Math.abs(current_val - other_data.val);
+              if (diff < GLOBAL_TOLERANCE) {
+                if (r === row) isSameRowProximate = true;
+                else isDiffRowProximate = true;
+              }
             }
+          }
         }
-    }
-    
-    // --- C. Apply Styles ---
-    if (isSameRowProximate) {
-        td.style.background = '#9370dbff';
-    } 
-    else if (isDiffRowProximate) {
-        td.style.background = '#b8a8d6ff';
-    } 
-    else if (isNameDuplicated) {
+      }
+      
+      if (isSameRowProximate) {
+        td.style.background = 'repeating-linear-gradient(-45deg, #fbfbe7, #fbfbe7 5px, #ffa50000 5px, #ffa50073 10px)';
+      } 
+      else if (isDiffRowProximate) {
+        td.style.background = 'rgb(251 251 231)';
+      } 
+      else if (isNameDuplicated) {
         td.style.background = 'orange';
-    }
-  }",
+        td.style.color = 'white';
+      }
+    }",
     js_tolerance_value
   )
 
-  # paste_hook_js <- "function(el, x) {
-  #     var hot = this.hot;
-  #     if (hot._pasteHookAttached) return;
-  #     hot._pasteHookAttached = true;
-  #     var parts = el.id.split('-');
-  #     var nsPrefix = parts.join('-') + (parts.length > 0 ? '-' : '');
-  #     hot.addHook('beforePaste', function(data, coords) {
-  #       if (typeof Shiny !== 'undefined' && Shiny.setInputValue) {
-  #         Shiny.setInputValue(nsPrefix + 'table_paste_instant', {
-  #           timestamp: Date.now(),
-  #           rowCount: data.length,
-  #           colCount: data[0] ? data[0].length : 0
-  #         }, {priority: 'event'});
-  #       }
-  #       return true;
-  #     });
-  #   }"
-
-  #   paste_hook_js <- "function(el, x) {
-  # var hot = this.hot;
-  # if (hot._pasteHookAttached) return;
-  # hot._pasteHookAttached = true;
-  # var nsPrefix = el.id.replace('-compounds_table', '-') || '';
-  # hot.addHook('beforePaste', function(data, coords) {
-  # if (typeof Shiny !== 'undefined' && Shiny.setInputValue) {
-  # Shiny.setInputValue(nsPrefix + 'compounds_table_paste_instant', {
-  # timestamp: Date.now(),
-  # rowCount: data.length,
-  # colCount: data[0] ? data[0].length : 0
-  # }, {priority: 'event'});
-  # }
-  # return true;
-  # });
-  # }"
-
+  # Updated onRender: Paste hook + anti-ghosting hooks (hide td during edit)
   paste_hook_js <- "function(el, x) {
-var hot = this.hot;
-if (hot._pasteHookAttached) return;
-hot._pasteHookAttached = true;
-var parts = el.id.split('-');
-var base_id = parts.pop();
-var nsPrefix = parts.join('-') + (parts.length > 0 ? '-' : '');
-hot.addHook('beforePaste', function(data, coords) {
-if (typeof Shiny !== 'undefined' && Shiny.setInputValue) {
-Shiny.setInputValue(nsPrefix + 'table_paste_instant', {
-timestamp: Date.now(),
-rowCount: data.length,
-colCount: data[0] ? data[0].length : 0
-}, {priority: 'event'});
-}
-return true;
-});
-}"
+    var hot = this.hot;
+    if (hot._pasteHookAttached) return;
+    hot._pasteHookAttached = true;
+    
+    var parts = el.id.split('-');
+    var base_id = parts.pop();
+    var nsPrefix = parts.join('-') + (parts.length > 0 ? '-' : '');
+    
+    hot.addHook('beforePaste', function(data, coords) {
+      if (typeof Shiny !== 'undefined' && Shiny.setInputValue) {
+        Shiny.setInputValue(nsPrefix + 'table_paste_instant', {
+          timestamp: Date.now(),
+          rowCount: data.length,
+          colCount: data[0] ? data[0].length : 0
+        }, {priority: 'event'});
+      }
+      return true;
+    });
+    
+    // === FIX GHOSTING: Hide td (no old content/bg visible) ===
+    hot.addHook('afterBeginEditing', function(row, col) {
+      var td = hot.getCell(row, col);
+      if (td) {
+        td.style.visibility = 'hidden';  // Hides td completely
+      }
+      // Optional: Force editor bg white (in case transparent)
+      var editor = hot.getActiveEditor();
+      if (editor && editor.TEXTAREA) {
+        editor.TEXTAREA.style.backgroundColor = 'white';
+        editor.TEXTAREA.style.opacity = '1';
+      }
+    });
+    
+    // === RESTORE AFTER EDIT ===
+    hot.addHook('afterChange', function(changes, source) {
+      if (source === 'edit') {
+        setTimeout(function() {
+          hot.render();  // Re-renders, restores visibility & applies styles
+        }, 10);
+      }
+    });
+    
+    // Also restore on deselect (e.g., ESC/cancel)
+    hot.addHook('afterDeselect', function() {
+      setTimeout(function() {
+        hot.render();
+      }, 10);
+    });
+  }"
 
+  # Build the table
   table <- rhandsontable::rhandsontable(
     tab,
     rowHeaders = NULL,
@@ -279,12 +263,6 @@ return true;
       cols = 2:ncol(tab),
       min = 1,
       allowInvalid = TRUE
-    ) |>
-    rhandsontable::hot_table(
-      contextMenu = ifelse(disabled, FALSE, TRUE),
-      highlightCol = TRUE,
-      highlightRow = TRUE,
-      stretchH = ifelse(disabled, "none", "all")
     ) |>
     rhandsontable::hot_table(
       contextMenu = ifelse(disabled, FALSE, TRUE),
@@ -729,6 +707,8 @@ check_mass_duplicates <- function(tab, tolerance) {
 # Validate protein/compound table
 #' @export
 check_table <- function(tab, tolerance) {
+  tab2 <<- tab
+  tolerance2 <<- tolerance
   if (!nrow(tab) || ncol(tab) < 2) {
     return("Fill name and mass fields.")
   }
@@ -2535,19 +2515,6 @@ confirm_ui_changes <- function(
   # Disable header checkbox
   shinyjs::disable(paste0(tab_low, "_header_checkbox"))
 
-  # Render table uneditable
-  output[[paste0(tab_low, "_table")]] <- rhandsontable::renderRHandsontable(
-    do.call(
-      ifelse(tab == "Samples", "sample_handsontable", "prot_comp_handsontable"),
-      list(
-        tab = table,
-        disabled = TRUE,
-        proteins = proteins,
-        compounds = compounds
-      )
-    )
-  )
-
   # Show table message
   output[[paste0(tab_low, "_table_info")]] <- shiny::renderText("Table saved!")
 
@@ -2607,19 +2574,6 @@ edit_ui_changes <- function(
 
   # Enable header checkbox
   shinyjs::enable(paste0(tab_low, "_header_checkbox"))
-
-  # Render table (editable)
-  output[[paste0(tab_low, "_table")]] <- rhandsontable::renderRHandsontable({
-    do.call(
-      ifelse(tab == "Samples", "sample_handsontable", "prot_comp_handsontable"),
-      list(
-        tab = table,
-        disabled = disabled,
-        proteins = declaration_vars$protein_table$Protein,
-        compounds = declaration_vars$compound_table$Compound
-      )
-    )
-  })
 
   # Mark tab as undone
   shinyjs::runjs(paste0(
@@ -2752,10 +2706,6 @@ handle_file_upload <- function(
   if (!is.null(table_upload_processed)) {
     declaration_vars[[paste0(type, "_table_status")]] <- TRUE
 
-    output[[paste0(type, "s_table")]] <- rhandsontable::renderRHandsontable({
-      prot_comp_handsontable(table_upload_processed, disabled = FALSE)
-    })
-
     shinyWidgets::show_toast(
       paste0(tools::toTitleCase(type), " table loaded!"),
       type = "success",
@@ -2768,4 +2718,6 @@ handle_file_upload <- function(
       timer = 3000
     )
   }
+
+  table_upload_processed
 }

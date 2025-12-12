@@ -35,6 +35,7 @@ box::use(
       keybind_menu_ui,
       table_legend,
       sample_table_legend,
+      empty_protein_table,
     ],
 )
 
@@ -253,14 +254,15 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
     ################ Conversion Declarations ------------------
 
-    ## Reactive variables for conversion declarations ----
+    ### Reactive variables for conversion declarations ----
     declaration_vars <- shiny::reactiveValues(
-      protein_table = NULL,
       protein_table_active = TRUE,
       protein_table_status = FALSE,
+      protein_table_disabled = FALSE,
       compound_table = NULL,
       compound_table_active = TRUE,
       compound_table_status = FALSE,
+      compound_table_disabled = FALSE,
       sample_tab = NULL,
       sample_table_active = TRUE,
       sample_table_status = FALSE,
@@ -268,29 +270,104 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       result = NULL
     )
 
+    # Default empty tables
+    protein_table_data <- shiny::reactiveVal({
+      na_num <- matrix(NA_real_, nrow = 9, ncol = 9) |>
+        as.data.frame() |>
+        stats::setNames(paste("Mass", 1:9))
+
+      cbind(Protein = as.character(rep(NA, 9)), na_num)
+    })
+    compound_table_data <- shiny::reactiveVal({
+      na_num <- matrix(NA_real_, nrow = 9, ncol = 9) |>
+        as.data.frame() |>
+        stats::setNames(paste("Mass", 1:9))
+
+      cbind(Compound = as.character(rep(NA, 9)), na_num)
+    })
+
+    # Initiate protein and compound table render trigger
+    protein_table_trigger <- shiny::reactiveVal(0)
+    compound_table_trigger <- shiny::reactiveVal(0)
+
+    # Silently update protein_table_data() and compound_table_data() reactives
+    shiny::observeEvent(
+      input$proteins_table,
+      {
+        shiny::req(input$proteins_table)
+
+        # Save current table input
+        suppressWarnings({
+          current_user_data <- rhandsontable::hot_to_r(input$proteins_table)
+        })
+        protein_table_data(current_user_data)
+      },
+      priority = 100
+    )
+    shiny::observeEvent(
+      input$compounds_table,
+      {
+        shiny::req(input$compounds_table)
+
+        # Save current table input
+        suppressWarnings({
+          current_user_data <- rhandsontable::hot_to_r(input$compounds_table)
+        })
+        compound_table_data(current_user_data)
+      },
+      priority = 100
+    )
+
+    # Compound & Protein Table Renderer
+    output$proteins_table <- rhandsontable::renderRHandsontable({
+      message("PROT rendering: ", Sys.time())
+
+      prot_comp_handsontable(
+        protein_table_data(),
+        tolerance = tolerance(),
+        disabled = declaration_vars$protein_table_disabled
+      )
+    }) |>
+      shiny::bindEvent(
+        list(tolerance(), protein_table_trigger()),
+        ignoreInit = FALSE
+      )
+
+    output$compounds_table <- rhandsontable::renderRHandsontable({
+      message("CMP rendering: ", Sys.time())
+
+      prot_comp_handsontable(
+        compound_table_data(),
+        tolerance = tolerance(),
+        disabled = declaration_vars$compound_table_disabled
+      )
+    }) |>
+      shiny::bindEvent(
+        list(tolerance(), compound_table_trigger()),
+        ignoreInit = FALSE
+      )
+
     #### Prepare waiter spinner object
     w <- waiter::Waiter$new(
       id = ns("samples_table"),
       html = waiter::spin_wave()
     )
 
-    # Throttled reactive for tolerance input
+    # Throttled reactive for sample declaration table input
     tolerance <- shiny::reactive({
-      peak_tolerance <- conversion_sidebar_vars$peak_tolerance()
-      ifelse(
-        is.null(peak_tolerance),
-        3,
-        peak_tolerance
-      )
+      peak_tol <- conversion_sidebar_vars$peak_tolerance()
+      if (is.null(peak_tol)) 3 else peak_tol
     }) |>
-      shiny::debounce(millis = 750)
+      shiny::debounce(750)
 
     # Throttled reactive for protein declaration table input
     protein_table_input <- shiny::reactive({
       proteins_table <- input$proteins_table
       shiny::req(proteins_table)
-      rhandsontable::hot_to_r(
-        proteins_table
+      suppressWarnings(
+        rhandsontable::hot_to_r(
+          proteins_table
+        )
       )
     }) |>
       shiny::debounce(millis = 500)
@@ -299,8 +376,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     compound_table_input <- shiny::reactive({
       compounds_table <- input$compounds_table
       shiny::req(compounds_table)
-      rhandsontable::hot_to_r(
-        compounds_table
+      suppressWarnings(
+        rhandsontable::hot_to_r(
+          compounds_table
+        )
       )
     }) |>
       shiny::debounce(millis = 500)
@@ -309,9 +388,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     sample_table_input <- shiny::reactive({
       samples_table <- input$samples_table
       shiny::req(samples_table)
-      rhandsontable::hot_to_r(
+      suppressWarnings(rhandsontable::hot_to_r(
         samples_table
-      )
+      ))
     }) |>
       shiny::debounce(millis = 500)
 
@@ -400,24 +479,28 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     ### Protein/Compound table file uploads ----
     # Protein table file upload
     shiny::observeEvent(input$proteins_fileinput, {
-      handle_file_upload(
+      protein_table_data(handle_file_upload(
         file_input = input$proteins_fileinput,
         header_checkbox = input$proteins_header_checkbox,
         type = "protein",
         output = output,
         declaration_vars = declaration_vars
-      )
+      ))
+      declaration_vars$protein_table_disabled <- FALSE
+      protein_table_trigger(protein_table_trigger() + 1)
     })
 
     # Compound table file upload
     shiny::observeEvent(input$compounds_fileinput, {
-      handle_file_upload(
+      compound_table_data(handle_file_upload(
         file_input = input$compounds_fileinput,
         header_checkbox = input$compounds_header_checkbox,
         type = "compound",
         output = output,
         declaration_vars = declaration_vars
-      )
+      ))
+      declaration_vars$compound_table_disabled <- FALSE
+      compound_table_trigger(compound_table_trigger() + 1)
     })
 
     # Observe table status for protein table
@@ -596,6 +679,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
         # Edit Protein/Compound
         if (input$tabs == "Proteins") {
+          # shiny::req(protein_table())
           # Make UI changes
           edit_ui_changes(
             tab = input$tabs,
@@ -607,6 +691,15 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             session = session,
             output = output
           )
+
+          # Trigger re-render of table with changes
+          protein_table_data(clean_prot_comp_table(
+            tab = "Protein",
+            table = protein_table_input(),
+            full = TRUE
+          ))
+          declaration_vars$protein_table_disabled <- FALSE
+          protein_table_trigger(protein_table_trigger() + 1)
 
           # Make table observer active
           declaration_vars$protein_table_active <- TRUE
@@ -622,6 +715,15 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             session = session,
             output = output
           )
+
+          # Trigger re-render of table with changes
+          compound_table_data(clean_prot_comp_table(
+            tab = "Compound",
+            table = compound_table_input(),
+            full = TRUE
+          ))
+          declaration_vars$compound_table_disabled <- FALSE
+          compound_table_trigger(compound_table_trigger() + 1)
 
           # Make table observer active
           declaration_vars$compound_table_active <- TRUE
@@ -642,11 +744,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         ))
 
         if (input$tabs == "Proteins" && declaration_vars$protein_table_status) {
-          declaration_vars$protein_table <- clean_prot_comp_table(
+          protein_table_data(clean_prot_comp_table(
             tab = "Protein",
             table = protein_table_input(),
             full = FALSE
-          )
+          ))
+          declaration_vars$protein_table_disabled <- TRUE
+          protein_table_trigger(protein_table_trigger() + 1)
 
           # Mark UI as done
           confirm_ui_changes(
@@ -687,11 +791,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         } else if (
           input$tabs == "Compounds" && declaration_vars$compound_table_status
         ) {
-          declaration_vars$compound_table <- clean_prot_comp_table(
-            tab = "Compound",
+          compound_table_data(clean_prot_comp_table(
+            tab = "Protein",
             table = compound_table_input(),
             full = FALSE
-          )
+          ))
+          declaration_vars$compound_table_disabled <- TRUE
+          compound_table_trigger(compound_table_trigger() + 1)
 
           # Mark UI as done
           confirm_ui_changes(
@@ -1003,62 +1109,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       }
     )
 
-    ### Render empty protein/compound tables ----
-    # Render compound table
-    shiny::observe({
-      if (is.null(declaration_vars$compound_table)) {
-        output$compounds_table <- rhandsontable::renderRHandsontable({
-          shiny::isolate(
-            input_compounds_table <- input$compounds_table
-          )
-
-          if (is.null(input_compounds_table)) {
-            compound_table <- data.frame(
-              name = as.character(rep(NA, 9)),
-              rep(list(as.numeric(rep(NA, 9))), 9)
-            )
-            colnames(compound_table) <- c("Compound", paste("Mass", 1:9))
-          } else {
-            compound_table <- rhandsontable::hot_to_r(input_compounds_table)
-          }
-
-          prot_comp_handsontable(
-            compound_table,
-            tolerance = tolerance()
-          )
-        })
-      }
-    })
-
-    # Render protein table
-    shiny::observe({
-      if (is.null(declaration_vars$protein_table)) {
-        output$proteins_table <- rhandsontable::renderRHandsontable({
-          shiny::isolate(
-            input_proteins_table <- input$proteins_table
-          )
-
-          if (is.null(input_proteins_table)) {
-            protein_table <- data.frame(
-              name = as.character(rep(NA, 9)),
-              rep(list(as.numeric(rep(NA, 9))), 9)
-            )
-            colnames(protein_table) <- c("Protein", paste("Mass", 1:9))
-          } else {
-            protein_table <- rhandsontable::hot_to_r(input_proteins_table)
-          }
-
-          prot_comp_handsontable(
-            protein_table,
-            tolerance = tolerance()
-          )
-        })
-      }
-    })
-
     ################ Conversion Results ------------------
 
-    ## Reactive variables for conversion results ----
+    ### Reactive variables for conversion results ----
     conversion_vars <- shiny::reactiveValues(
       modified_results = NULL,
       select_concentration = NULL,
