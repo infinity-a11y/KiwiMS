@@ -547,7 +547,8 @@ server <- function(
         result_list = shiny::reactive(result_list()),
         sample_picker = shiny::reactive(input$sample_picker),
         run_analysis = shiny::reactive(input$run_binding_analysis),
-        peak_tolerance = shiny::reactive(input$peak_tolerance)
+        peak_tolerance = shiny::reactive(input$peak_tolerance),
+        run_ki_kinact = shiny::reactive(input$run_ki_kinact)
       )
     )
   })

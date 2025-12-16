@@ -386,7 +386,7 @@ return true;
     tab,
     rowHeaders = NULL,
     allowed_per_col = allowed_per_col,
-    height = 400,
+    height = 26 + 24 * nrow(tab),
     stretchH = ifelse(disabled, "none", "all")
   ) |>
     rhandsontable::hot_cols(
@@ -401,18 +401,19 @@ return true;
       source = proteins,
       strict = FALSE
     ) |>
+    rhandsontable::hot_col("Sample", readOnly = TRUE) |>
     rhandsontable::hot_col(
       col = min(cmp_cols):max(cmp_cols),
       type = "autocomplete",
       source = compounds,
       strict = FALSE
     ) |>
-    rhandsontable::hot_col("Sample", readOnly = TRUE) |>
     rhandsontable::hot_table(
       contextMenu = ifelse(disabled, FALSE, TRUE),
       stretchH = ifelse(disabled, "none", "all")
-    ) |>
-    htmlwidgets::onRender(paste_hook_js)
+    )
+  # |>
+  # htmlwidgets::onRender(paste_hook_js)
 
   return(handsontable)
 }
@@ -2437,7 +2438,12 @@ checkboxColumn <- function(len, col, ...) {
 
 # Empty sample declaration table generator function
 #' @export
-new_sample_table <- function(result, protein_table, compound_table) {
+new_sample_table <- function(
+  result,
+  protein_table,
+  compound_table,
+  ki_kinact = FALSE
+) {
   sample_tab <- data.frame(
     Sample = names(result$deconvolution),
     Protein = ifelse(
@@ -2450,10 +2456,14 @@ new_sample_table <- function(result, protein_table, compound_table) {
       compound_table$Compound,
       ""
     ),
-    rep(list(""), 8)
+    rep(list(""), 4)
   )
 
-  colnames(sample_tab) <- c("Sample", "Protein", paste("Compound", 1:9))
+  colnames(sample_tab) <- c(
+    "Sample",
+    "Protein",
+    paste("Compound", 1:5)
+  )
 
   return(sample_tab)
 }
@@ -2462,11 +2472,8 @@ new_sample_table <- function(result, protein_table, compound_table) {
 #' @export
 confirm_ui_changes <- function(
   tab,
-  table,
   session,
-  output,
-  proteins = NULL,
-  compounds = NULL
+  output
 ) {
   tab_low <- tolower(tab)
 
@@ -2483,7 +2490,7 @@ confirm_ui_changes <- function(
   shiny::updateActionButton(
     session = session,
     paste0("confirm_", tab_low),
-    label = "Saved",
+    label = ifelse(tab != "Samples", "Saved", ""),
     icon = shiny::icon("check")
   )
 
@@ -2530,12 +2537,8 @@ confirm_ui_changes <- function(
 #' @export
 edit_ui_changes <- function(
   tab,
-  table,
   session,
-  output,
-  declaration_vars = NULL,
-  disabled = FALSE,
-  tolerance = NULL
+  output
 ) {
   tab_low <- tolower(tab)
 
@@ -2543,7 +2546,7 @@ edit_ui_changes <- function(
   shiny::updateActionButton(
     session = session,
     paste0("confirm_", tab_low),
-    label = "Save",
+    label = ifelse(tab != "Samples", "Save", ""),
     icon = shiny::icon("bookmark")
   )
 

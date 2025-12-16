@@ -749,6 +749,12 @@ input[type="number"]::-webkit-inner-spin-button {
   background: #e5e5e5;
 }
 
+.unit-selectors .bootstrap-select > .dropdown-toggle {
+  padding-left: 10px;
+  padding-right: 10px;
+  color: black;
+}
+
 .bootstrap-select .dropdown-menu {
   box-shadow: 0px 0px 10px 2px #00000087;
   border-radius: 4px;
@@ -1373,7 +1379,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 
 #app-conversion_main-sample_number_info {
   font-style: italic;
-  height: 100%;
+  height: 47px;
   align-content: center;
   font-size: 12px;
   text-align: justify;
@@ -1381,11 +1387,36 @@ div[data-value="Protein Conversion"] .tab-pane {
 
 #app-conversion_main-proteins_table,
 #app-conversion_main-compounds_table,
-#app-conversion_main-samples_table {
+#app-conversion_main-samples_table,
+#app-conversion_main-samples_table_conc_time {
   color: black;
 }
 
 /* Conversion Controls */
+.unit-selectors .bootstrap-select .dropdown-menu {
+  left: auto !important;
+  right: 0px !important;
+}
+
+.unit-selectors label {
+  color: white !important;
+}
+
+.unit-selectors .form-group {
+  margin-bottom: 0;
+}
+
+.samples-controls > div,
+.comp-prot-controls > div {
+  align-items: end;
+}
+
+.samples-controls,
+.comp-prot-controls {
+  height: 75px;
+  align-content: end;
+}
+
 .table-input .form-group {
   margin: 0;
   height: fit-content;
@@ -1410,7 +1441,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 .conversion-checkbox .form-group,
 .conversion-checkbox {
   margin: 0;
-  height: 100%;
+  height: 47px;
   align-content: center;
 }
 
