@@ -190,23 +190,13 @@ server <- function(id, conversion_main_vars) {
 
     # Enable/Disable conversion parameter and launch input UI
     shiny::observe({
-      # shinyjs::toggleState(
-      #   "max_multiples",
-      #   conversion_main_vars$conversion_ready()
-      # )
-      # shinyjs::toggleState(
-      #   "peak_tolerance",
-      #   conversion_main_vars$conversion_ready()
-      # )
       if (isTRUE(conversion_main_vars$conversion_ready())) {
-        message("TRUE2")
         shinyjs::enable("run_binding_analysis")
         shinyjs::addClass(
           id = "run_binding_analysis",
           class = "btn-highlight"
         )
       } else {
-        message("FALSE2")
         shinyjs::disable("run_binding_analysis")
         shinyjs::removeClass(
           id = "run_binding_analysis",
@@ -217,8 +207,6 @@ server <- function(id, conversion_main_vars) {
 
     # Event run conversion
     shiny::observeEvent(input$run_binding_analysis, {
-      # shiny::req(conversion_main_vars$input_list(), input$peak_tolerance, input$max_multiples)
-
       # Block UI
       shinyjs::runjs(paste0(
         'document.getElementById("blocking-overlay").style.display ',
@@ -226,35 +214,39 @@ server <- function(id, conversion_main_vars) {
       ))
 
       if (analysis_status() == "pending") {
+        input_list <<- conversion_main_vars$input_list()
+        input_peak_tolerance <<- input$peak_tolerance
+        max_multiples <<- input$max_multiples
+
         # Search and add hits to result list
-        # result_with_hits <- add_hits(
-        #   conversion_main_vars$input_list()$result,
-        #   sample_table = conversion_main_vars$input_list()$Samples_Table,
-        #   protein_table = conversion_main_vars$input_list()$Protein_Table,
-        #   compound_table = conversion_main_vars$input_list()$Compound_Table,
-        #   peak_tolerance = input$peak_tolerance,
-        #   max_multiples = input$max_multiples
-        # )
+        result_with_hits <- add_hits(
+          conversion_main_vars$input_list()$result,
+          sample_table = conversion_main_vars$input_list()$Samples_Table,
+          protein_table = conversion_main_vars$input_list()$Protein_Table,
+          compound_table = conversion_main_vars$input_list()$Compound_Table,
+          peak_tolerance = input$peak_tolerance,
+          max_multiples = input$max_multiples
+        )
 
-        # # Add summarized hits table to result list
-        # result_with_hits$hits_summary <- summarize_hits(result_with_hits)
+        # Add summarized hits table to result list
+        result_with_hits$hits_summary <- summarize_hits(result_with_hits)
 
-        # result_with_hits <<- result_with_hits
+        result_with_hits <<- result_with_hits
 
-        # # Add binding/kobs results to result list
-        # result_with_hits$binding_kobs_result <- add_kobs_binding_result(
-        #   result_with_hits
-        # )
+        # Add binding/kobs results to result list
+        result_with_hits$binding_kobs_result <- add_kobs_binding_result(
+          result_with_hits
+        )
 
-        # # Add Ki/kinact results to result list
-        # result_with_hits$ki_kinact_result <- add_ki_kinact_result(
-        #   result_with_hits
-        # )
+        # Add Ki/kinact results to result list
+        result_with_hits$ki_kinact_result <- add_ki_kinact_result(
+          result_with_hits
+        )
 
-        # # Assign result list and hits table to reactive vars
-        # result_list(result_with_hits)
+        # Assign result list and hits table to reactive vars
+        result_list(result_with_hits)
 
-        # results <<- result_with_hits
+        results <<- result_with_hits
         # TODO
         # Dev Mode
         result_list(readRDS(

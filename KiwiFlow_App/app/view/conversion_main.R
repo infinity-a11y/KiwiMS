@@ -1027,10 +1027,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           isTRUE(declaration_vars$sample_table_status) &
           isFALSE(declaration_vars$sample_table_active)
       ) {
-        message(TRUE)
         declaration_vars$conversion_ready <- TRUE
       } else {
-        message(FALSE)
         declaration_vars$conversion_ready <- FALSE
       }
     })
