@@ -219,12 +219,16 @@ ui <- function(id) {
             width = 1,
             shiny::div(
               class = "full-width-btn",
-              shinyjs::disabled(
-                shiny::actionButton(
-                  ns("confirm_samples"),
-                  label = "",
-                  icon = shiny::icon("bookmark")
-                )
+              bslib::tooltip(
+                shinyjs::disabled(
+                  shiny::actionButton(
+                    ns("confirm_samples"),
+                    label = "",
+                    icon = shiny::icon("bookmark")
+                  )
+                ),
+                "Confirm Sample Table",
+                placement = "top"
               )
             )
           ),
@@ -232,12 +236,16 @@ ui <- function(id) {
             width = 1,
             shiny::div(
               class = "full-width-btn",
-              shinyjs::disabled(
-                shiny::actionButton(
-                  ns("edit_samples"),
-                  label = "",
-                  icon = shiny::icon("pen-to-square")
-                )
+              bslib::tooltip(
+                shinyjs::disabled(
+                  shiny::actionButton(
+                    ns("edit_samples"),
+                    label = "",
+                    icon = shiny::icon("pen-to-square")
+                  )
+                ),
+                "Edit Sample Table",
+                placement = "top"
               )
             )
           ),
@@ -361,10 +369,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     output$samples_table_conc_time <- rhandsontable::renderRHandsontable({
       shiny::req(sample_table_data())
 
-      message("TEST")
-
       shiny::isolate({
-        # if (is.null(input$samples_table_conc_time)) {
         if (is.null(conc_time_table_data())) {
           conc_time_tbl <- data.frame(
             Concentration = rep("", nrow(sample_table_data())),
@@ -373,9 +378,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         } else {
           conc_time_tbl <- conc_time_table_data()
         }
-        #  else if (!is.null(conc_time_table_data())) {
-        #   conc_time_tbl <- conc_time_table_data()
-        # }
       })
 
       if (isFALSE(declaration_vars$samples_confirmed)) {
@@ -390,7 +392,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       }
     })
 
-    # Silently update table data table input status variables
+    ### Silently update table data table input status variables
     shiny::observeEvent(
       input$proteins_table,
       {
@@ -403,6 +405,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       },
       priority = 100
     )
+
     shiny::observeEvent(
       input$compounds_table,
       {
@@ -415,6 +418,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       },
       priority = 100
     )
+
     shiny::observeEvent(
       input$samples_table,
       {
@@ -428,13 +432,16 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         # Remove concentration / time columns if present
         conc_col <- grep("Concentration", colnames(samples_table))
         time_col <- grep("Time", colnames(samples_table))
-        samples_table <- samples_table[, -c(conc_col, time_col)]
+        if (length(conc_col) & length(time_col)) {
+          samples_table <- samples_table[, -c(conc_col, time_col)]
+        }
 
         # Assign to reactive variable
         sample_table_data(samples_table)
       },
       priority = 100
     )
+
     shiny::observeEvent(
       input$samples_table_conc_time,
       {
@@ -827,6 +834,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
           # New editable full sample table data
           declaration_vars$samples_confirmed <- FALSE
+          test2 <<- sample_table_data()
           sample_table_data(fill_sample_table(
             sample_table_data()
           ))
@@ -838,7 +846,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
         # Edit Protein/Compound
         if (input$tabs == "Proteins") {
-          # shiny::req(protein_table())
           # Make UI changes
           edit_ui_changes(
             tab = input$tabs,
@@ -1020,8 +1027,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           isTRUE(declaration_vars$sample_table_status) &
           isFALSE(declaration_vars$sample_table_active)
       ) {
+        message(TRUE)
         declaration_vars$conversion_ready <- TRUE
       } else {
+        message(FALSE)
         declaration_vars$conversion_ready <- FALSE
       }
     })

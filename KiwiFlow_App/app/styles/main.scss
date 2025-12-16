@@ -448,12 +448,9 @@ button:focus:not(:focus-visible) {
 
 .btn-highlight {
   background: #38387c;
-  color: white;
-  box-shadow: 0 0 12px rgb(0 0 0 / 80%);
-  animation: pulsate-shadow 2s infinite ease-in-out;
-  padding: 15px;
-  padding-right: 40px;
-  padding-left: 40px;
+  color: #fff;
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.8);
+  box-shadow: inset 0px 0px 20px 4px rgb(255 255 255 / 30%);
 }
 
 .full-width-btn .btn {
@@ -538,14 +535,14 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 
 .ki-kinact-highlight {
-  background: #35357a;
   font-size: 0.8vw;
-  color: white;
+  color: #ffffff;
   padding-left: 0.5em;
   align-content: baseline;
   padding-right: 0.5em;
   border-radius: 4px;
-  box-shadow: inset 0px 0px 14px 3px #ffffff42;
+  box-shadow: inset 0px 0px 14px 3px rgb(0 0 0 / 26%);
+  background: #c3c3c3;
 }
 
 /* --- Progress Bars --- */

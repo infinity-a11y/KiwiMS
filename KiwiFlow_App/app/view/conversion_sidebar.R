@@ -70,7 +70,7 @@ server <- function(id, conversion_main_vars) {
           shiny::div(
             class = "tooltip-bttn",
             shiny::actionButton(
-              ns("max_mult_tooltip_bttn"),
+              ns("result_picker_tooltip_bttn"),
               label = "",
               icon = shiny::icon("circle-question")
             )
@@ -190,28 +190,29 @@ server <- function(id, conversion_main_vars) {
 
     # Enable/Disable conversion parameter and launch input UI
     shiny::observe({
-      shiny::req(
-        conversion_main_vars$conversion_ready(),
-        conversion_main_vars$input_list()
-      )
-
-      shinyjs::toggleState(
-        "max_multiples",
-        conversion_main_vars$conversion_ready()
-      )
-      shinyjs::toggleState(
-        "peak_tolerance",
-        conversion_main_vars$conversion_ready()
-      )
-      shinyjs::toggleState(
-        "run_binding_analysis",
-        conversion_main_vars$conversion_ready()
-      )
-      shinyjs::toggleClass(
-        "run_binding_analysis",
-        "btn-highlight",
-        conversion_main_vars$conversion_ready()
-      )
+      # shinyjs::toggleState(
+      #   "max_multiples",
+      #   conversion_main_vars$conversion_ready()
+      # )
+      # shinyjs::toggleState(
+      #   "peak_tolerance",
+      #   conversion_main_vars$conversion_ready()
+      # )
+      if (isTRUE(conversion_main_vars$conversion_ready())) {
+        message("TRUE2")
+        shinyjs::enable("run_binding_analysis")
+        shinyjs::addClass(
+          id = "run_binding_analysis",
+          class = "btn-highlight"
+        )
+      } else {
+        message("FALSE2")
+        shinyjs::disable("run_binding_analysis")
+        shinyjs::removeClass(
+          id = "run_binding_analysis",
+          class = "btn-highlight"
+        )
+      }
     })
 
     # Event run conversion
@@ -551,6 +552,107 @@ server <- function(id, conversion_main_vars) {
             easyClose = TRUE,
             footer = shiny::tagList(
               shiny::modalButton("Dismiss")
+            )
+          )
+        )
+      )
+    })
+
+    shiny::observeEvent(input$peak_tol_tooltip_bttn, {
+      shiny::showModal(
+        shiny::div(
+          class = "conversion-modal",
+          shiny::modalDialog(
+            title = "Peak Tolerance",
+            easyClose = TRUE,
+            footer = shiny::modalButton("Dismiss"),
+            shiny::fluidRow(
+              shiny::br(),
+              shiny::column(
+                width = 11,
+                shiny::div(
+                  class = "tooltip-text",
+                  shiny::p(
+                    'The ',
+                    shiny::strong("Peak Tolerance"),
+                    ' sets the maximum acceptable ',
+                    shiny::strong("mass error"),
+                    ' (or deviation) around the theoretical molecular mass of your target compound.'
+                  ),
+                  shiny::p(
+                    'A measured mass peak is considered a ',
+                    shiny::strong("Hit"),
+                    ' only if it falls within this acceptable range.'
+                  ),
+                  shiny::br(),
+                  shiny::h5("Example:"),
+                  shiny::p(
+                    shiny::div(shiny::strong("Theoretical Mass:"), ' 105 Da'),
+                    shiny::div(shiny::strong("Tolerance:"), ' ± 2 Da'),
+                    shiny::div(
+                      shiny::strong("Accepted Range:"),
+                      ' [103 Da, 107 Da]'
+                    )
+                  ),
+                  shiny::tags$ul(
+                    shiny::tags$li(
+                      shiny::HTML(
+                        'Measured peak at <strong>104 Da</strong> &rightarrow; Hit <b>&check;</b> (Within the range [103 Da, 107 Da])'
+                      )
+                    ),
+                    shiny::tags$li(
+                      shiny::HTML(
+                        'Measured peak at <strong>107 Da</strong> &rightarrow; Hit <b>&check;</b> (Exactly on the upper boundary)'
+                      )
+                    ),
+                    shiny::tags$li(
+                      shiny::HTML(
+                        'Measured peak at <strong>102 Da</strong> &rightarrow; No Hit <b>&times;</b> (Outside the lower boundary of 103 Da)'
+                      )
+                    ),
+                    shiny::tags$li(
+                      shiny::HTML(
+                        'Measured peak at <strong>109 Da</strong> &rightarrow; No Hit <b>&times;</b> (Outside the upper boundary of 107 Da)'
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    })
+
+    shiny::observeEvent(input$max_mult_tooltip_bttn, {
+      shiny::showModal(
+        shiny::div(
+          class = "conversion-modal",
+          shiny::modalDialog(
+            title = "Maximum Stoichiometry",
+            easyClose = TRUE,
+            footer = shiny::modalButton("Dismiss"),
+            shiny::fluidRow(
+              shiny::br(),
+              shiny::column(
+                width = 11,
+                shiny::div(
+                  class = "tooltip-text",
+                  shiny::p(
+                    "The maximum number of compound molecules bound to the target protein."
+                  ),
+                  shiny::p(
+                    shiny::div(
+                      " If Max. Stoichiometry is set to ",
+                      shiny::strong(3),
+                      ", protein-compound complexes of up to three bound compounds are screened for."
+                    ),
+                    shiny::div(
+                      "Complexes with four bound compounds would not be accounted for in the analysis."
+                    )
+                  )
+                )
+              )
             )
           )
         )

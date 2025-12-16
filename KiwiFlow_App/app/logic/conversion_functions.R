@@ -422,6 +422,7 @@ return true;
 # Function to fill missing columns in sample table
 #' @export
 fill_sample_table <- function(sample_table) {
+  test <<- sample_table
   col_diff <- abs(ncol(sample_table) - 7)
   if (col_diff != 0) {
     sample_table <- cbind(
@@ -709,8 +710,6 @@ check_mass_duplicates <- function(tab, tolerance) {
 # Validate protein/compound table
 #' @export
 check_table <- function(tab, tolerance) {
-  tab2 <<- tab
-  tolerance2 <<- tolerance
   if (!nrow(tab) || ncol(tab) < 2) {
     return("Fill name and mass fields.")
   }
