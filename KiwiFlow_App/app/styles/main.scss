@@ -816,9 +816,9 @@ td.listbox.htDimmed.current.highlight {
   z-index: 99;
 }
 
-.ht_master .wtHolder {
-  width: fit-content !important;
-}
+// .ht_master .wtHolder {
+//   width: fit-content !important;
+// }
 
 .htContextMenu table.htCore,
 .htContextMenu:not(.htGhostTable) {
@@ -1447,6 +1447,10 @@ div[data-value="Protein Conversion"] .tab-pane {
 
 .conversion-checkbox .checkbox {
   margin: 0;
+}
+
+.checkbox-disable label {
+  cursor: auto !important;
 }
 
 .file-select-nomargin > div {

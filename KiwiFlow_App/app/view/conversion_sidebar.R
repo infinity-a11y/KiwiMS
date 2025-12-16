@@ -34,13 +34,7 @@ ui <- function(id) {
 }
 
 #' @export
-server <- function(
-  id,
-  selected_tab,
-  set_selected_tab,
-  conversion_ready,
-  input_list
-) {
+server <- function(id, conversion_main_vars) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -189,23 +183,40 @@ server <- function(
       )
     )
 
+    shiny::observeEvent(conversion_main_vars$samples_confirmed(), {
+      shinyjs::toggleState("run_ki_kinact")
+      shinyjs::toggleClass(selector = ".checkbox", class = "checkbox-disable")
+    })
+
     # Enable/Disable conversion parameter and launch input UI
     shiny::observe({
-      shiny::req(conversion_ready(), input_list())
+      shiny::req(
+        conversion_main_vars$conversion_ready(),
+        conversion_main_vars$input_list()
+      )
 
-      shinyjs::toggleState("max_multiples", conversion_ready())
-      shinyjs::toggleState("peak_tolerance", conversion_ready())
-      shinyjs::toggleState("run_binding_analysis", conversion_ready())
+      shinyjs::toggleState(
+        "max_multiples",
+        conversion_main_vars$conversion_ready()
+      )
+      shinyjs::toggleState(
+        "peak_tolerance",
+        conversion_main_vars$conversion_ready()
+      )
+      shinyjs::toggleState(
+        "run_binding_analysis",
+        conversion_main_vars$conversion_ready()
+      )
       shinyjs::toggleClass(
         "run_binding_analysis",
         "btn-highlight",
-        conversion_ready()
+        conversion_main_vars$conversion_ready()
       )
     })
 
     # Event run conversion
     shiny::observeEvent(input$run_binding_analysis, {
-      # shiny::req(input_list(), input$peak_tolerance, input$max_multiples)
+      # shiny::req(conversion_main_vars$input_list(), input$peak_tolerance, input$max_multiples)
 
       # Block UI
       shinyjs::runjs(paste0(
@@ -216,10 +227,10 @@ server <- function(
       if (analysis_status() == "pending") {
         # Search and add hits to result list
         # result_with_hits <- add_hits(
-        #   input_list()$result,
-        #   sample_table = input_list()$Samples_Table,
-        #   protein_table = input_list()$Protein_Table,
-        #   compound_table = input_list()$Compound_Table,
+        #   conversion_main_vars$input_list()$result,
+        #   sample_table = conversion_main_vars$input_list()$Samples_Table,
+        #   protein_table = conversion_main_vars$input_list()$Protein_Table,
+        #   compound_table = conversion_main_vars$input_list()$Compound_Table,
         #   peak_tolerance = input$peak_tolerance,
         #   max_multiples = input$max_multiples
         # )
@@ -278,25 +289,25 @@ server <- function(
     })
 
     output$conversion_info_ui <- shiny::renderUI({
-      shiny::req(selected_tab())
+      shiny::req(conversion_main_vars$selected_tab())
 
-      if (selected_tab() == "Proteins") {
+      if (conversion_main_vars$selected_tab() == "Proteins") {
         hints <- shiny::HTML(
           "Upload a CSV|TSV|TXT|Excel file or manually enter names and mass values of the <strong>proteins</strong> into the table."
         )
-      } else if (selected_tab() == "Compounds") {
+      } else if (conversion_main_vars$selected_tab() == "Compounds") {
         hints <- shiny::HTML(
           "Upload a CSV|TSV|TXT|Excel file or manually enter names and mass values of the <strong>compounds</strong> into the table."
         )
-      } else if (selected_tab() == "Samples") {
+      } else if (conversion_main_vars$selected_tab() == "Samples") {
         hints <- shiny::HTML(
           "Assign <strong>protein-compound complexes</strong> to deconvoluted samples."
         )
-      } else if (selected_tab() == "Binding") {
+      } else if (conversion_main_vars$selected_tab() == "Binding") {
         hints <- shiny::HTML(
           "Global fit of a concentration series of binding curves determining binding parameters for the selected complex."
         )
-      } else if (selected_tab() == "Hits") {
+      } else if (conversion_main_vars$selected_tab() == "Hits") {
         hints <- shiny::HTML(
           "The 'Hits' tab shows all signals assigned to the currently selected complex and respectively inferred parameters."
         )
@@ -327,11 +338,16 @@ server <- function(
     })
 
     output$selected_module <- shiny::renderUI({
-      shiny::req(selected_tab())
+      shiny::req(conversion_main_vars$selected_tab())
 
-      if (selected_tab() %in% c("Proteins", "Compounds", "Samples")) {
+      if (
+        conversion_main_vars$selected_tab() %in%
+          c("Proteins", "Compounds", "Samples")
+      ) {
         title_add <- "Declaration"
-      } else if (selected_tab() %in% c("Binding", "Hits")) {
+      } else if (
+        conversion_main_vars$selected_tab() %in% c("Binding", "Hits")
+      ) {
         title_add <- ""
       } else {
         title_add <- "Concentration"
@@ -339,7 +355,7 @@ server <- function(
 
       shiny::div(
         class = "sidebar-title conversion-title",
-        paste(selected_tab(), title_add),
+        paste(conversion_main_vars$selected_tab(), title_add),
         shiny::div(
           class = "tooltip-bttn",
           shiny::actionButton(
@@ -353,7 +369,7 @@ server <- function(
 
     # Tooltip events
     shiny::observeEvent(input$sidebar_tooltip_bttn, {
-      if (selected_tab() == "Proteins") {
+      if (conversion_main_vars$selected_tab() == "Proteins") {
         title <- "Protein Declaration"
         hints <- shiny::column(
           width = 12,
@@ -370,7 +386,7 @@ server <- function(
           shiny::tags$img(src = "static/protein_table.png"),
           shiny::br()
         )
-      } else if (selected_tab() == "Compounds") {
+      } else if (conversion_main_vars$selected_tab() == "Compounds") {
         title <- "Compound Declaration"
         hints <- shiny::column(
           width = 12,
@@ -389,7 +405,7 @@ server <- function(
           ),
           shiny::br()
         )
-      } else if (selected_tab() == "Samples") {
+      } else if (conversion_main_vars$selected_tab() == "Samples") {
         title <- "Samples Declaration"
         hints <- shiny::column(
           width = 12,
@@ -408,7 +424,7 @@ server <- function(
           ),
           shiny::br()
         )
-      } else if (selected_tab() == "Binding") {
+      } else if (conversion_main_vars$selected_tab() == "Binding") {
         title <- "Binding Analysis"
         hints <- shiny::column(
           width = 12,
@@ -436,7 +452,7 @@ server <- function(
             )
           )
         )
-      } else if (selected_tab() == "Hits") {
+      } else if (conversion_main_vars$selected_tab() == "Hits") {
         title <- "Hits Table"
         hints <- shiny::fluidRow(
           shiny::br(),

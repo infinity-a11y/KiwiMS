@@ -386,12 +386,12 @@ return true;
     tab,
     rowHeaders = NULL,
     allowed_per_col = allowed_per_col,
-    height = 26 + 24 * nrow(tab),
+    height = 28 + 23 * nrow(tab),
     stretchH = ifelse(disabled, "none", "all")
   ) |>
     rhandsontable::hot_cols(
       fixedColumnsLeft = 2,
-      renderer = renderer_js,
+      # renderer = renderer_js,
       type = "text",
       readOnly = ifelse(disabled, TRUE, FALSE)
     ) |>
@@ -401,6 +401,7 @@ return true;
       source = proteins,
       strict = FALSE
     ) |>
+    rhandsontable::hot_col(col = 2:max(cmp_cols), renderer = renderer_js) |>
     rhandsontable::hot_col("Sample", readOnly = TRUE) |>
     rhandsontable::hot_col(
       col = min(cmp_cols):max(cmp_cols),
@@ -421,7 +422,7 @@ return true;
 # Function to fill missing columns in sample table
 #' @export
 fill_sample_table <- function(sample_table) {
-  col_diff <- abs(ncol(sample_table) - 11)
+  col_diff <- abs(ncol(sample_table) - 7)
   if (col_diff != 0) {
     sample_table <- cbind(
       sample_table,
@@ -431,7 +432,7 @@ fill_sample_table <- function(sample_table) {
     names(sample_table) <- c(
       "Sample",
       "Protein",
-      paste("Compound", 1:9)
+      paste("Compound", 1:5)
     )
   }
 

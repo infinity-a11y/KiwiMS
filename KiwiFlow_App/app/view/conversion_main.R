@@ -245,9 +245,7 @@ ui <- function(id) {
             width = 1,
             shiny::div(
               class = "unit-selectors",
-              # shinyjs::disabled(
               conc_unit_input_ui(ns)
-              # )
             )
           ),
           shiny::column(
@@ -297,6 +295,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       sample_tab = NULL,
       sample_table_active = TRUE,
       sample_table_status = FALSE,
+      samples_confirmed = FALSE,
       conversion_ready = FALSE,
       result = NULL
     )
@@ -317,40 +316,78 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       cbind(Compound = as.character(rep(NA, 9)), na_num)
     })
     sample_table_data <- shiny::reactiveVal()
+    conc_time_table_data <- shiny::reactiveVal()
 
     # Initiate table render trigger variables
     protein_table_trigger <- shiny::reactiveVal(0)
     compound_table_trigger <- shiny::reactiveVal(0)
     sample_table_trigger <- shiny::reactiveVal(0)
 
-    # Adapt UI depending on ki/kinact checkbox input
-    shiny::observeEvent(conversion_sidebar_vars$run_ki_kinact(), {
-      shinyjs::toggleClass(
-        selector = ".unit-selectors .form-group .bootstrap-select",
-        class = "custom-disable"
-      )
-      shinyjs::toggleClass(
-        selector = ".unit-selectors label",
-        class = "custom-disable"
-      )
-      shinyjs::toggleClass(
-        selector = "#app-conversion_main-samples_table_conc_time",
-        class = "custom-disable"
-      )
+    # Conditional adaption of concentration/time input UI
+    shiny::observe({
+      if (
+        isTRUE(conversion_sidebar_vars$run_ki_kinact()) &&
+          isFALSE(declaration_vars$samples_confirmed)
+      ) {
+        shinyjs::removeClass(
+          selector = ".unit-selectors .form-group .bootstrap-select",
+          class = "custom-disable"
+        )
+        shinyjs::removeClass(
+          selector = ".unit-selectors label",
+          class = "custom-disable"
+        )
+        shinyjs::removeClass(
+          selector = "#app-conversion_main-samples_table_conc_time",
+          class = "custom-disable"
+        )
+      } else {
+        shinyjs::addClass(
+          selector = ".unit-selectors .form-group .bootstrap-select",
+          class = "custom-disable"
+        )
+        shinyjs::addClass(
+          selector = ".unit-selectors label",
+          class = "custom-disable"
+        )
+        shinyjs::addClass(
+          selector = "#app-conversion_main-samples_table_conc_time",
+          class = "custom-disable"
+        )
+      }
     })
 
+    # Render concentration / time input table
     output$samples_table_conc_time <- rhandsontable::renderRHandsontable({
       shiny::req(sample_table_data())
 
-      rhandsontable::rhandsontable(
-        data.frame(
-          Concentration = rep("", nrow(sample_table_data())),
-          Time = rep("", nrow(sample_table_data()))
-        ),
-        rowHeaders = NULL,
-        # height = 400,
-        stretchH = "all"
-      )
+      message("TEST")
+
+      shiny::isolate({
+        # if (is.null(input$samples_table_conc_time)) {
+        if (is.null(conc_time_table_data())) {
+          conc_time_tbl <- data.frame(
+            Concentration = rep("", nrow(sample_table_data())),
+            Time = rep("", nrow(sample_table_data()))
+          )
+        } else {
+          conc_time_tbl <- conc_time_table_data()
+        }
+        #  else if (!is.null(conc_time_table_data())) {
+        #   conc_time_tbl <- conc_time_table_data()
+        # }
+      })
+
+      if (isFALSE(declaration_vars$samples_confirmed)) {
+        rhandsontable::rhandsontable(
+          conc_time_tbl,
+          rowHeaders = NULL,
+          height = 28 + 23 * nrow(conc_time_tbl),
+          stretchH = "all"
+        )
+      } else {
+        NULL
+      }
     })
 
     # Silently update table data table input status variables
@@ -361,9 +398,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
         # Save current table input
         suppressWarnings({
-          current_user_data <- rhandsontable::hot_to_r(input$proteins_table)
+          protein_table_data(rhandsontable::hot_to_r(input$proteins_table))
         })
-        protein_table_data(current_user_data)
       },
       priority = 100
     )
@@ -374,9 +410,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
         # Save current table input
         suppressWarnings({
-          current_user_data <- rhandsontable::hot_to_r(input$compounds_table)
+          compound_table_data(rhandsontable::hot_to_r(input$compounds_table))
         })
-        compound_table_data(current_user_data)
       },
       priority = 100
     )
@@ -387,9 +422,30 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
         # Save current table input
         suppressWarnings({
-          current_user_data <- rhandsontable::hot_to_r(input$samples_table)
+          samples_table <- rhandsontable::hot_to_r(input$samples_table)
         })
-        sample_table_data(current_user_data)
+
+        # Remove concentration / time columns if present
+        conc_col <- grep("Concentration", colnames(samples_table))
+        time_col <- grep("Time", colnames(samples_table))
+        samples_table <- samples_table[, -c(conc_col, time_col)]
+
+        # Assign to reactive variable
+        sample_table_data(samples_table)
+      },
+      priority = 100
+    )
+    shiny::observeEvent(
+      input$samples_table_conc_time,
+      {
+        shiny::req(input$samples_table_conc_time)
+
+        # Save current table input
+        suppressWarnings({
+          conc_time_table_data(rhandsontable::hot_to_r(
+            input$samples_table_conc_time
+          ))
+        })
       },
       priority = 100
     )
@@ -435,7 +491,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           is.null(protein_table_data()) ||
             is.null(compound_table_data()) ||
             isTRUE(declaration_vars$protein_table_active) ||
-            isTRUE(declaration_vars$compound_table_active),
+            isTRUE(declaration_vars$compound_table_active) ||
+            isTRUE(declaration_vars$samples_confirmed),
           TRUE,
           FALSE
         )
@@ -769,6 +826,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           )
 
           # New editable full sample table data
+          declaration_vars$samples_confirmed <- FALSE
           sample_table_data(fill_sample_table(
             sample_table_data()
           ))
@@ -903,10 +961,34 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         } else if (
           input$tabs == "Samples" && declaration_vars$sample_table_status
         ) {
-          sample_table <- clean_sample_table(sample_table_input())
+          if (isTRUE(conversion_sidebar_vars$run_ki_kinact())) {
+            # Attach concentration/time table to clean non-NA sample table input
+            samples_table_conc_time <- rhandsontable::hot_to_r(
+              input$samples_table_conc_time
+            )
+
+            # Set colnames with selected time / concentration units
+            colnames(samples_table_conc_time) <- c(
+              paste0("Concentration [", input$conc_unit, "]"),
+              paste0("Time [", input$time_unit, "]")
+            )
+
+            # Merge with samples table
+            sample_table <- cbind(
+              clean_sample_table(sample_table_input()),
+              samples_table_conc_time
+            )
+          } else {
+            # Get clean non-NA sample table without concentration/time input
+            sample_table <- clean_sample_table(sample_table_input())
+          }
+
+          # Assign table to reactive variables
           declaration_vars$sample_table <- sample_table
-          testi <<- sample_table
           sample_table_data(sample_table)
+
+          # Trigger re-rendering of sample table
+          declaration_vars$samples_confirmed <- TRUE
           sample_table_trigger(sample_table_trigger() + 1)
 
           # Mark UI as done
@@ -956,6 +1038,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         # Read results .rds file from selected path
         file_path <- file.path(input$samples_fileinput$datapath)
         declaration_vars$result <- readRDS(file_path)
+
+        # Reset concentration / time input table
+        conc_time_table_data(NULL)
 
         # New table data
         sample_table_data(new_sample_table(
@@ -1018,6 +1103,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       declaration_vars$result <- readRDS(
         deconvolution_main_vars$continue_conversion()
       )
+
+      # Reset concentration / time input table
+      conc_time_table_data(NULL)
 
       # New table data
       sample_table_data(new_sample_table(
@@ -1102,6 +1190,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           declaration_vars$result <- readRDS(
             deconvolution_main_vars$continue_conversion()
           )
+
+          # Reset concentration / time input table
+          conc_time_table_data(NULL)
 
           # New table data
           sample_table_data(new_sample_table(
@@ -2716,7 +2807,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     ################ Return server values ------------------
     list(
       selected_tab = shiny::reactive(input$tabs),
-      set_selected_tab = set_selected_tab,
       conversion_ready = shiny::reactive(declaration_vars$conversion_ready),
       input_list = shiny::reactive(list(
         Protein_Table = protein_table_data(),
@@ -2724,6 +2814,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         Samples_Table = declaration_vars$sample_table,
         result = declaration_vars$result
       )),
+      samples_confirmed = shiny::reactive(declaration_vars$samples_confirmed),
       cancel_continuation = shiny::reactive(input$conversion_cont_cancel)
     )
   })

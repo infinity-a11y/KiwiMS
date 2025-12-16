@@ -33,11 +33,11 @@ time_unit_input_ui <- function(ns) {
         w_col1 <- "45px"
         w_col2 <- "95px"
         units <- c("s", "min")
-        names <- c("second", "minute")
+        names <- c("seconds", "minutes")
         sprintf(
           paste0(
             "<span style='display: inline-block; width: %s; font-weight: 700; text-align: left;'>%s</span>",
-            "<span style='display: inline-block; width: %s; color: #555; font-style: italic; text-align: right;'>%s</span>"
+            "<span style='display: inline-block; width: %s; font-style: italic; text-align: right;'>%s</span>"
           ),
           w_col1,
           units,
