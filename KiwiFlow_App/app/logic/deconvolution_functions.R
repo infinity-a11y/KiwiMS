@@ -18,6 +18,10 @@ box::use(
   utils[read.delim, read.table],
 )
 
+box::use(
+  app / logic / conversion_constants[warning_sym, ],
+)
+
 # Processing a single waters dir
 #' @export
 process_single_dir <- function(
@@ -516,7 +520,6 @@ create_384_plate_heatmap <- function(data) {
 }
 
 # Helper function to harmonize data for plotting
-
 #' @export
 process_plot_data <- function(
   sample = NULL,
@@ -532,11 +535,13 @@ process_plot_data <- function(
   }
 
   if (!is.null(result_path)) {
+    # Get file paths from deconvolution result
     base <- gsub("_unidecfiles", "", basename(result_path))
     raw_file <- file.path(result_path, paste0(base, "_rawdata.txt"))
     mass_file <- file.path(result_path, paste0(base, "_mass.txt"))
     peaks_file <- file.path(result_path, paste0(base, "_peaks.dat"))
 
+    # Abort if files missing
     if (!file.exists(mass_file) || !file.exists(peaks_file)) {
       message("Mass or peak file missing in ", result_path)
       return()
@@ -556,21 +561,32 @@ process_plot_data <- function(
         100
       highlight_peaks <- NULL
     } else {
+      # Read mass spectrum and filter zero intensity values
       mass <- utils::read.delim(
         mass_file,
         sep = " ",
         header = FALSE,
         col.names = c("mass", "intensity")
-      )
+      ) |>
+        dplyr::filter(intensity != 0)
+
+      # Cut off outer limits
+      mass <- mass[-c(1, nrow(mass)), ]
+
+      # Read detected peaks
       peaks <- utils::read.delim(
         peaks_file,
         sep = " ",
         header = FALSE,
         col.names = c("mass", "intensity")
       )
+
+      # Normalize intensities
       mass$intensity <- (mass$intensity - min(mass$intensity)) /
         (max(mass$intensity) - min(mass$intensity)) *
         100
+
+      # Match peaks to spectrum
       highlight_peaks <- mass[mass$mass %in% peaks$mass, ]
     }
   } else if (!is.null(sample)) {
@@ -580,11 +596,19 @@ process_plot_data <- function(
       )
       return()
     }
-    mass <- sample$mass
+
+    # Read mass spectrum and filter zero intensity values
+    mass <- sample$mass |> dplyr::filter(intensity != 0) |> as.data.frame()
+
+    # Cut off outer limits
+    mass <- mass[-c(1, nrow(mass)), ]
+
+    # Normalize intensities
     mass$intensity <- (mass$intensity - min(mass$intensity)) /
       (max(mass$intensity) - min(mass$intensity)) *
       100
 
+    # Read peaks
     peaks <- c(
       unique(
         sample$hits$`Measured Mw Protein [Da]`
@@ -592,9 +616,23 @@ process_plot_data <- function(
       sample$hits$`Peak [Da]`
     )
 
-    hits <- which(mass$mass %in% peaks)
-    peak_df <- mass[hits, ]
+    # If duplicated peaks throw message
+    if (any(duplicated(peaks))) {
+      message(
+        warning_sym,
+        " ",
+        sample$hits$Sample[1],
+        " has multiple hits for ",
+        sum(duplicated(highlight_peaks$mass)),
+        " compound(s)."
+      )
+    }
 
+    # Match peaks to mass spectrum
+    indices <- match(peaks, mass$mass)
+    peak_df <- mass[indices, ]
+
+    # Get protein and compound names
     name <- c(
       unique(
         sample$hits$Protein
@@ -602,6 +640,7 @@ process_plot_data <- function(
       sample$hits$Compound
     )
 
+    # Get molecular weights
     mw <- c(
       unique(
         sample$hits$`Mw Protein [Da]`
@@ -609,7 +648,12 @@ process_plot_data <- function(
       sample$hits$`Compound Mw [Da]`
     )
 
-    highlight_peaks <- cbind(peak_df, name, mw) |> dplyr::filter(!is.na(name))
+    # Get stoichiometry values
+    multiple <- c(1, sample$hits$`Binding Stoichiometry`)
+
+    # Summarize in data frame
+    highlight_peaks <- cbind(peak_df, name, mw, multiple) |>
+      dplyr::filter(!is.na(name))
   }
 
   return(list(mass = mass, highlight_peaks = highlight_peaks))
@@ -651,7 +695,7 @@ spectrum_plot <- function(
     marker_border_color <- "#7777f9"
   }
 
-  # GGPLOT (Non-Interactive) Section
+  # ggplot (non-interactive) section
   if (!interactive) {
     plot <- ggplot2::ggplot(
       plot_data$mass,
@@ -793,6 +837,14 @@ spectrum_plot <- function(
         showlegend = FALSE
       )
     } else {
+      dupl <- duplicated(plot_data$highlight_peaks$mass)
+      if (any(dupl)) {
+        plot_data$highlight_peaks$intensity[
+          dupl
+        ] <- plot_data$highlight_peaks$intensity[dupl] +
+          1
+      }
+
       plot <- plotly::add_markers(
         plot,
         data = plot_data$highlight_peaks,

@@ -249,9 +249,9 @@ server <- function(id, conversion_main_vars) {
         results <<- result_with_hits
         # TODO
         # Dev Mode
-        result_list(readRDS(
-          "C:\\Users\\Marian\\Desktop\\KF_Testing\\results.rds"
-        ))
+        # result_list(readRDS(
+        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results.rds"
+        # ))
 
         shiny::updateActionButton(
           session = session,
@@ -635,9 +635,11 @@ server <- function(id, conversion_main_vars) {
                   ),
                   shiny::p(
                     shiny::div(
-                      " If Max. Stoichiometry is set to ",
+                      'If the',
+                      shiny::em('Max. Stoichiometry'),
+                      ' value is set to',
                       shiny::strong(3),
-                      ", protein-compound complexes of up to three bound compounds are screened for."
+                      "protein-compound complexes of up to three bound compounds are screened for."
                     ),
                     shiny::div(
                       "Complexes with four bound compounds would not be accounted for in the analysis."

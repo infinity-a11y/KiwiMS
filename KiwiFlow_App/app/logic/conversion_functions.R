@@ -1051,7 +1051,12 @@ check_hits <- function(
   } else {
     sample_compounds <- sample_table[which(sample == sample_table$Sample), ]
     sample_compound_vector <- unlist(sample_compounds[-c(1, 2)])
-    cmp_mat <- t(as.matrix(compound_mw[sample_compound_vector, ]))
+    if (length(sample_compound_vector) == 1) {
+      cmp_mat <- as.matrix(compound_mw[sample_compound_vector, ])
+    } else {
+      cmp_mat <- t(as.matrix(compound_mw[sample_compound_vector, ]))
+    }
+    colnames(cmp_mat) <- sample_compound_vector
   }
 
   # Fill multiples matrix
@@ -1272,9 +1277,7 @@ add_hits <- function(
   max_multiples
 ) {
   samples <- names(results$deconvolution)
-  # protein_mw <- get_protein_mw(protein_mw_file)
   protein_mw <- protein_table$`Mass 1`
-  # compound_mw <- get_compound_matrix(compound_mw_file)
   compound_mw <- as.matrix(compound_table[, -1])
   rownames(compound_mw) <- compound_table[, 1]
 

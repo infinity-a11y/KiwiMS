@@ -449,7 +449,6 @@ button:focus:not(:focus-visible) {
 .btn-highlight {
   background: #38387c;
   color: #fff;
-  box-shadow: 0 0 12px rgba(0, 0, 0, 0.8);
   box-shadow: inset 0px 0px 20px 4px rgb(255 255 255 / 30%);
 }
 
@@ -686,6 +685,10 @@ input[type="number"]::-webkit-inner-spin-button {
   right: 0%;
   border-radius: 5px;
   box-shadow: 0 0 9px 0 #00000094;
+}
+
+.selectize-dropdown {
+  border: none;
 }
 
 .result-picker .selectize-dropdown-content {
@@ -1029,9 +1032,9 @@ td.listbox.htDimmed.current.highlight {
 
 #app-deconvolution_main-deconvolute_start {
   background: #38387c;
-  animation: pulsate-shadow 2s infinite ease-in-out;
   height: 65px;
-  border-radius: 15px;
+  box-shadow: inset 0px 0px 20px 4px rgb(255 255 255 / 30%);
+  border: 1px solid #e5e5e5;
 }
 
 #app-deconvolution_main-deconvolute_start:hover {
