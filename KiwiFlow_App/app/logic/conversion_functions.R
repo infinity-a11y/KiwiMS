@@ -1314,7 +1314,7 @@ add_hits <- function(
 
 # Concatenate and extract all hits data frames from all samples
 #' @export
-summarize_hits <- function(result_list) {
+summarize_hits <- function(result_list, conc_time = NULL) {
   # Get samples from result list without session and output elements
   samples <- names(result_list$deconvolution)
 
@@ -1328,19 +1328,21 @@ summarize_hits <- function(result_list) {
     )
   }
 
-  hits_summarized <- hits_summarized |>
-    # Add concentration, time and binding columns to hits summary
-    dplyr::mutate(
-      time = extract_minutes(Sample),
-      binding = `Total % Binding` * 100,
-      concentration = gsub(
-        "o",
-        ".",
-        sapply(strsplit(hits_summarized$Sample, "_"), `[`, 3)
-      )
-    ) |>
-    dplyr::group_by(concentration) |>
-    dplyr::arrange(as.numeric(concentration), time)
+  if (!is.null(conc_time)) {
+    hits_summarized <- hits_summarized |>
+      # Add concentration, time and binding columns to hits summary
+      dplyr::mutate(
+        time = extract_minutes(Sample),
+        binding = `Total % Binding` * 100,
+        concentration = gsub(
+          "o",
+          ".",
+          sapply(strsplit(hits_summarized$Sample, "_"), `[`, 3)
+        )
+      ) |>
+      dplyr::group_by(concentration) |>
+      dplyr::arrange(as.numeric(concentration), time)
+  }
 
   return(hits_summarized)
 }
@@ -2311,8 +2313,48 @@ render_hits_table <- function(
   hits_table,
   concentration_colors,
   single_conc = NULL,
-  withzero = FALSE
+  withzero = FALSE,
+  selected_cols = NULL,
+  bar_chart = FALSE,
+  compounds = NULL,
+  samples = NULL,
+  select = FALSE
 ) {
+  # Filter compounds
+  if (!is.null(compounds)) {
+    hits_table <- dplyr::filter(hits_table, `Cmp Name` %in% compounds)
+  }
+
+  # Filter samples
+  if (!is.null(samples)) {
+    hits_table <- dplyr::filter(hits_table, `Sample ID` %in% samples)
+  }
+
+  # Filter columns
+  if (!is.null(selected_cols)) {
+    hits_table <- dplyr::select(
+      hits_table,
+      c("Sample ID", "Cmp Name", selected_cols)
+    )
+  }
+
+  if (length(bar_chart)) {
+    if (any("Total %-Binding" %in% bar_chart)) {
+      hits_table$`Total %-Binding` <- as.numeric(gsub(
+        "%",
+        "",
+        hits_table$`Total %-Binding`
+      ))
+    }
+    if (any("%-Binding" %in% bar_chart)) {
+      hits_table$`%-Binding` <- as.numeric(gsub(
+        "%",
+        "",
+        hits_table$`%-Binding`
+      ))
+    }
+  }
+
   # JS function to display NA values
   rowCallback <- c(
     "function(row, data){",
@@ -2325,24 +2367,51 @@ render_hits_table <- function(
     "}"
   )
 
+  chart_js <- '
+function(data, type, row, meta) {
+  return $("<div></div>", {
+    class: "bar-chart-bar"
+  })
+    .append(
+      $("<div></div>", {
+        class: "bar"
+      }).css({
+        width: data + "%"
+      })
+    )
+    .prop("outerHTML");
+}
+'
+
   if (!is.null(single_conc)) {
     menu_length <- list(c(25, -1), c('25', 'All'))
   } else {
-    menu_length <- list(c(25, 50, 100, -1), c('25', '50', '100', 'All'))
+    menu_length <- list(
+      c(15, 25, 50, 100, -1),
+      c('15', '25', '50', '100', 'All')
+    )
   }
 
   if (!is.null(single_conc)) {
     dom_value <- "t"
   } else {
-    # dom_value <- "lrtip"
     dom_value <- NULL
   }
 
+  if (any(names(hits_table) %in% c("Sample ID", "Cmp Name"))) {
+    clickable_targets <- which(
+      names(hits_table) %in% c("Sample ID", "Cmp Name")
+    ) -
+      1
+  } else {
+    clickable_targets <- NULL
+  }
+
   # Generate datatable
-  hits_table <- DT::datatable(
+  hits_datatable <- DT::datatable(
     data = hits_table,
     rownames = FALSE,
-    selection = "none",
+    selection = list(mode = ifelse(select, "single", "none"), target = 'cell'),
     class = "compact row-border nowrap",
     extensions = "FixedColumns",
     options = list(
@@ -2354,37 +2423,63 @@ render_hits_table <- function(
       stripe = FALSE,
       dom = dom_value,
       # fixedColumns = list(leftColumns = 1),
-      lengthMenu = menu_length
+      lengthMenu = menu_length,
+      columnDefs = list(
+        list(className = 'clickable-column', targets = clickable_targets),
+        list(
+          targets = bar_chart,
+          render = htmlwidgets::JS(chart_js)
+        )
+      )
     )
   )
 
-  if (!is.null(single_conc)) {
-    conc_color <- concentration_colors[which(
-      names(concentration_colors) == single_conc
-    )]
+  if (!is.null(concentration_colors)) {
+    if (!is.null(single_conc)) {
+      conc_color <- concentration_colors[which(
+        names(concentration_colors) == single_conc
+      )]
 
-    hits_table <- hits_table |>
-      DT::formatStyle(
-        columns = 2,
-        target = 'row',
-        backgroundColor = gsub(
-          ",1)",
-          ",0.3)",
-          plotly::toRGB(conc_color)
+      hits_datatable <- hits_datatable |>
+        DT::formatStyle(
+          columns = 2,
+          target = 'row',
+          backgroundColor = gsub(
+            ",1)",
+            ",0.3)",
+            plotly::toRGB(conc_color)
+          )
         )
-      )
-  } else {
-    if (withzero) {
-      lvls <- paste(c("0", names(concentration_colors)), "µM")
-      vals <- plotly::toRGB(c("#e5e5e5", concentration_colors))
     } else {
-      lvls <- paste(names(concentration_colors), "µM")
-      vals <- plotly::toRGB(, concentration_colors)
-    }
+      if (withzero) {
+        lvls <- paste(c("0", names(concentration_colors)), "µM")
+        vals <- plotly::toRGB(c("#e5e5e5", concentration_colors))
+      } else {
+        lvls <- paste(names(concentration_colors), "µM")
+        vals <- plotly::toRGB(, concentration_colors)
+      }
 
-    hits_table <- hits_table |>
+      hits_datatable <- hits_datatable |>
+        DT::formatStyle(
+          columns = '[Cmp]',
+          target = 'row',
+          backgroundColor = DT::styleEqual(
+            levels = lvls,
+            values = gsub(
+              ",1)",
+              ",0.3)",
+              vals
+            )
+          )
+        )
+    }
+  } else {
+    lvls <- unique(hits_table$Sample)
+    vals <- plotly::toRGB(viridisLite::turbo(length(lvls)))
+
+    hits_datatable <- hits_datatable |>
       DT::formatStyle(
-        columns = '[Cmp]',
+        columns = 'Sample ID',
         target = 'row',
         backgroundColor = DT::styleEqual(
           levels = lvls,
@@ -2397,7 +2492,7 @@ render_hits_table <- function(
       )
   }
 
-  hits_table
+  return(hits_datatable)
 }
 
 # Define JS to fetch checkbox inputs from table
@@ -2726,4 +2821,85 @@ handle_file_upload <- function(
   }
 
   table_upload_processed
+}
+
+# Transform summarized hits into readable table
+#' @export
+transform_hits <- function(hits_summary, run_ki_kinact) {
+  # Shared transformations
+  summary_table <- hits_summary |>
+    dplyr::mutate(
+      # Format all percentages
+      dplyr::across(
+        c(`% Binding`, `Total % Binding`),
+        ~ scales::percent(.x, accuracy = 0.1)
+      ),
+      dplyr::across(
+        c(Intensity, `Protein Intensity`),
+        ~ scales::percent(.x / 100, accuracy = 0.1)
+      ),
+      # Format all [Da] columns
+      dplyr::across(
+        dplyr::ends_with("[Da]"),
+        ~ dplyr::if_else(
+          is.na(.x),
+          "N/A",
+          paste(format(.x, nsmall = 1, trim = TRUE), "Da")
+        )
+      )
+    ) |>
+    dplyr::relocate(`Total % Binding`, .after = "% Binding")
+
+  # Interface dependent logic
+  if (run_ki_kinact) {
+    summary_table <- summary_table |>
+      dplyr::mutate(
+        time = paste(time, "min"),
+        concentration = paste(concentration, "µM")
+      ) |>
+      dplyr::select(-c(3, 17)) |>
+      dplyr::relocate(c(concentration, time), .before = `Mw Protein [Da]`)
+
+    new_names <- c(
+      "Well",
+      "Sample ID",
+      "[Cmp]",
+      "Time",
+      "Theor. Prot.",
+      "Meas. Prot.",
+      "Δ Prot.",
+      "Ⅰ Prot.",
+      "Peak Signal",
+      "Ⅰ Cmp",
+      "Cmp Name",
+      "Theor. Cmp",
+      "Δ Cmp",
+      "Bind. Stoich.",
+      "%-Binding",
+      "Total %-Binding"
+    )
+  } else {
+    summary_table <- summary_table |>
+      dplyr::select(-3)
+
+    new_names <- c(
+      "Well",
+      "Sample ID",
+      "Theor. Prot.",
+      "Meas. Prot.",
+      "Δ Prot.",
+      "Ⅰ Prot.",
+      "Peak Signal",
+      "Ⅰ Cmp",
+      "Cmp Name",
+      "Theor. Cmp",
+      "Δ Cmp",
+      "Bind. Stoich.",
+      "%-Binding",
+      "Total %-Binding"
+    )
+  }
+
+  colnames(summary_table) <- new_names
+  return(summary_table)
 }

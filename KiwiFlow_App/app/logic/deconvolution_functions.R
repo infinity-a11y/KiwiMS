@@ -623,7 +623,7 @@ process_plot_data <- function(
         " ",
         sample$hits$Sample[1],
         " has multiple hits for ",
-        sum(duplicated(highlight_peaks$mass)),
+        sum(duplicated(peaks)),
         " compound(s)."
       )
     }
