@@ -21,6 +21,24 @@ symbols <- c(
   "hourglass"
 )
 
+# JS renderer for bar charts in tables
+#' @export
+chart_js <- '
+function(data, type, row, meta) {
+  return $("<div></div>", {
+    class: "bar-chart-bar"
+  })
+    .append(
+      $("<div></div>", {
+        class: "bar"
+      }).css({
+        width: data + "%"
+      })
+    )
+    .prop("outerHTML");
+}
+'
+
 # Time unit choices
 #' @export
 time_unit_input_ui <- function(ns) {

@@ -1561,7 +1561,11 @@ div[data-value="Protein Conversion"] .tab-pane {
 #app-conversion_main-binding_plot > div,
 #app-conversion_main-binding_plot > div > div,
 #app-conversion_main-kobs_plot > div,
-#app-conversion_main-kobs_plot > div > div {
+#app-conversion_main-kobs_plot > div > div,
+#app-conversion_main-conversion_sample_spectrum > div,
+#app-conversion_main-conversion_sample_spectrum > div > div,
+#app-conversion_main-conversion_present_compounds_pie > div,
+app-conversion_main-conversion_present_compounds_pie > div > div {
   width: unset !important;
   height: unset !important;
 }
@@ -1709,13 +1713,15 @@ div[data-value="Protein Conversion"] .tab-pane {
 
 /* Card Styling in Analysis */
 .binding-analysis-tab .card-custom .card,
-.result-conc-tab .card-custom .card {
+.result-conc-tab .card-custom .card,
+.conversion-samples-wrapper .card-custom .card {
   height: 100%;
   margin: 0;
 }
 
 .binding-analysis-tab .card-custom .bslib-card .card-header,
-.result-conc-tab .card-custom .bslib-card .card-header {
+.result-conc-tab .card-custom .bslib-card .card-header,
+.conversion-samples-wrapper .card-custom .bslib-card .card-header {
   border-top-left-radius: 4px;
   border-top-right-radius: 4px;
   height: 35px;
@@ -1724,7 +1730,8 @@ div[data-value="Protein Conversion"] .tab-pane {
 }
 
 .binding-analysis-tab .card-custom .card .card-body,
-.result-conc-tab .card-custom .card .card-body {
+.result-conc-tab .card-custom .card .card-body,
+.conversion-samples-wrapper .card-custom .card .card-body {
   padding: 1%;
 }
 
@@ -2095,4 +2102,34 @@ table.dataTable tbody td {
 #app-conversion_main-download_conversion_hits_table {
   margin-top: 28px;
   height: 47px;
+}
+
+#app-conversion_main-conversion_present_compounds_table {
+  width: 99% !important;
+  height: 1px !important;
+  flex-basis: unset !important;
+}
+
+.conversion-samples-control {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 2%;
+  justify-content: space-between;
+}
+
+.conversion-samples-wrapper {
+  display: grid;
+  gap: 1%;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 3fr 2fr;
+  height: 100%;
+  width: 99%;
+  padding: 1%;
+}
+
+.conversion-samples-wrapper .card-custom .card,
+.conversion-samples-control > div {
+  height: 100%;
+  margin: 0;
 }

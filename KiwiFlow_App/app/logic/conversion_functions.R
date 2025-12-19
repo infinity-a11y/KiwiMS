@@ -2,7 +2,7 @@
 
 box::use(
   app / logic / deconvolution_functions[spectrum_plot, process_plot_data, ],
-  app / logic / conversion_constants[symbols, warning_sym, ],
+  app / logic / conversion_constants[symbols, warning_sym, chart_js, ],
 )
 
 # Helper function to process uploaded table
@@ -2366,22 +2366,6 @@ render_hits_table <- function(
     "  }",
     "}"
   )
-
-  chart_js <- '
-function(data, type, row, meta) {
-  return $("<div></div>", {
-    class: "bar-chart-bar"
-  })
-    .append(
-      $("<div></div>", {
-        class: "bar"
-      }).css({
-        width: data + "%"
-      })
-    )
-    .prop("outerHTML");
-}
-'
 
   if (!is.null(single_conc)) {
     menu_length <- list(c(25, -1), c('25', 'All'))
