@@ -2413,6 +2413,10 @@ render_hits_table <- function(
         list(
           targets = bar_chart,
           render = htmlwidgets::JS(chart_js)
+        ),
+        list(
+          targets = -1,
+          className = 'dt-last-col'
         )
       )
     )

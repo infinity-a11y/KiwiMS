@@ -1697,15 +1697,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                         `actions-box` = TRUE
                       )
                     )
-                  ),
-                  shiny::column(
-                    width = 2,
-                    align = "center",
-                    shiny::actionButton(
-                      ns("download_conversion_hits_table"),
-                      label = "",
-                      icon = shiny::icon("save")
-                    )
                   )
                 ),
                 # ),
@@ -1735,66 +1726,66 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                       choices = unique(hits_summary$`Sample ID`)
                     ),
                     shiny::div(
-                      class = "card-custom",
-                      bslib::card(
-                        bslib::card_header(
-                          class = "bg-dark help-header",
-                          "Protein",
-                          shiny::div(
-                            class = "tooltip-bttn",
-                            shiny::actionButton(
-                              ns("conversion_samples_protein_tooltip_bttn"),
-                              label = "",
-                              icon = shiny::icon("circle-question")
+                      class = "conversion-samples-stats",
+                      shiny::div(
+                        class = "card-custom",
+                        bslib::card(
+                          bslib::card_header(
+                            class = "bg-dark help-header",
+                            "Protein",
+                            shiny::div(
+                              class = "tooltip-bttn",
+                              shiny::actionButton(
+                                ns("conversion_samples_protein_tooltip_bttn"),
+                                label = "",
+                                icon = shiny::icon("circle-question")
+                              )
                             )
-                          )
-                        ),
-                        shiny::div(
-                          class = "kobs-val",
-                          shiny::uiOutput(ns("conversion_sample_protein"))
-                        )
-                      )
-                    ),
-                    shiny::div(
-                      class = "card-custom",
-                      bslib::card(
-                        bslib::card_header(
-                          class = "bg-dark help-header",
-                          "Total %-Binding",
+                          ),
                           shiny::div(
-                            class = "tooltip-bttn",
-                            shiny::actionButton(
-                              ns("total_pct_bind_tooltip_bttn"),
-                              label = "",
-                              icon = shiny::icon("circle-question")
-                            )
+                            class = "kobs-val",
+                            shiny::uiOutput(ns("conversion_sample_protein"))
                           )
-                        ),
-                        shiny::div(
-                          class = "kobs-val",
-                          shiny::uiOutput(ns("total_pct_binding"))
                         )
-                      )
-                    )
-                  ),
-                  shiny::div(
-                    class = "card-custom",
-                    bslib::card(
-                      bslib::card_header(
-                        class = "bg-dark help-header",
-                        "Annotated Spectrum"
                       ),
-                      plotly::plotlyOutput(ns("conversion_sample_spectrum"))
+                      shiny::div(
+                        class = "card-custom",
+                        bslib::card(
+                          bslib::card_header(
+                            class = "bg-dark help-header",
+                            "Total %-Binding",
+                            shiny::div(
+                              class = "tooltip-bttn",
+                              shiny::actionButton(
+                                ns("total_pct_bind_tooltip_bttn"),
+                                label = "",
+                                icon = shiny::icon("circle-question")
+                              )
+                            )
+                          ),
+                          shiny::div(
+                            class = "kobs-val",
+                            shiny::uiOutput(ns("total_pct_binding"))
+                          )
+                        )
+                      )
                     )
                   ),
                   shiny::div(
-                    class = "card-custom",
+                    class = "card-custom cmp-table",
                     bslib::card(
                       bslib::card_header(
                         class = "bg-dark help-header",
                         "Present Compounds"
                       ),
-                      DT::DTOutput(ns("conversion_present_compounds_table"))
+                      shinycssloaders::withSpinner(
+                        DT::DTOutput(
+                          ns("conversion_present_compounds_table")
+                        ),
+                        type = 1,
+                        color = "#7777f9"
+                      ),
+                      full_screen = TRUE
                     )
                   ),
                   shiny::div(
@@ -1804,13 +1795,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                         class = "bg-dark help-header",
                         "Compound Pie",
                         shiny::div(
-                          class = "spectrum-radio-button",
-                          shinyWidgets::radioGroupButtons(
-                            ns("compound_pie_partial"),
-                            choices = c("Full", "Partial")
-                          )
-                        ),
-                        shiny::div(
                           class = "tooltip-bttn",
                           shiny::actionButton(
                             ns("mass_spectra_tooltip_bttn"),
@@ -1819,9 +1803,33 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                           )
                         )
                       ),
-                      plotly::plotlyOutput(ns(
-                        "conversion_present_compounds_pie"
-                      ))
+                      shinycssloaders::withSpinner(
+                        plotly::plotlyOutput(
+                          ns("conversion_present_compounds_pie"),
+                          height = "100%"
+                        ),
+                        type = 1,
+                        color = "#7777f9"
+                      ),
+                      full_screen = TRUE
+                    )
+                  ),
+                  shiny::div(
+                    class = "card-custom",
+                    bslib::card(
+                      bslib::card_header(
+                        class = "bg-dark help-header",
+                        "Annotated Spectrum"
+                      ),
+                      shinycssloaders::withSpinner(
+                        plotly::plotlyOutput(
+                          ns("conversion_sample_spectrum"),
+                          height = "100%"
+                        ),
+                        type = 1,
+                        color = "#7777f9"
+                      ),
+                      full_screen = TRUE
                     )
                   )
                 )
@@ -1830,10 +1838,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           )
 
           output$conversion_present_compounds_pie <- plotly::renderPlotly({
-            shiny::req(
-              input$conversion_sample_picker,
-              input$compound_pie_partial
-            )
+            shiny::req(input$conversion_sample_picker)
 
             cmp_table <- hits_summary |>
               dplyr::filter(
@@ -1860,88 +1865,59 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               unique(cmp_table$`Theor. Cmp`)
             )]
 
-            if (input$compound_pie_partial == "Partial") {
-              empty_row <- data.frame(
-                cmp_table$`Cmp Name`[1],
-                cmp_table$`Total %-Binding`[1],
-                "empty",
-                "Unbound",
-                1 -
-                  as.numeric(gsub("%", "", cmp_table$`Total %-Binding`[1])) /
-                    100
+            empty_row <- data.frame(
+              cmp_table$`Cmp Name`[1],
+              cmp_table$`Total %-Binding`[1],
+              "empty",
+              "Unbound",
+              1 -
+                as.numeric(gsub("%", "", cmp_table$`Total %-Binding`[1])) /
+                  100
+            ) |>
+              stats::setNames(c(
+                "Cmp Name",
+                "total_bind",
+                "mass_shift",
+                "mass_stoich",
+                "relBinding"
+              ))
+
+            cmp_table <- cmp_table |>
+              dplyr::reframe(
+                total_bind = `Total %-Binding`,
+                mass_shift = `Theor. Cmp`,
+                mass_stoich = paste0(
+                  "[",
+                  `Theor. Cmp`,
+                  "]",
+                  sapply(`Bind. Stoich.`, function(x) {
+                    as.character(htmltools::tags$sub(x))
+                  })
+                ),
+                relBinding = as.numeric(gsub("%", "", `%-Binding`)) / 100
               ) |>
-                stats::setNames(c(
-                  "Cmp Name",
-                  "total_bind",
-                  "mass_shift",
-                  "mass_stoich",
-                  "relBinding"
-                ))
+              rbind(empty_row)
 
-              cmp_table <- cmp_table |>
-                dplyr::reframe(
-                  total_bind = `Total %-Binding`,
-                  mass_shift = `Theor. Cmp`,
-                  mass_stoich = paste0(
-                    "[",
-                    `Theor. Cmp`,
-                    "]",
-                    sapply(`Bind. Stoich.`, function(x) {
-                      as.character(htmltools::tags$sub(x))
-                    })
-                  ),
-                  relBinding = as.numeric(gsub("%", "", `%-Binding`)) / 100
-                ) |>
-                rbind(empty_row)
-
-              mapped_colors <- c(mapped_colors, 'rgba(0,0,0,0)')
-            } else {
-              cmp_table <- cmp_table |>
-                dplyr::reframe(
-                  total_bind = `Total %-Binding`,
-                  mass_shift = `Theor. Cmp`,
-                  mass_stoich = paste0(
-                    "[",
-                    `Theor. Cmp`,
-                    "]",
-                    sapply(`Bind. Stoich.`, function(x) {
-                      as.character(htmltools::tags$sub(x))
-                    })
-                  ),
-                  relBinding = as.numeric(gsub("%", "", `%-Binding`)) /
-                    as.numeric(gsub("%", "", `Total %-Binding`))
-                )
-            }
-
-            pull_vector <- c(rep(0.05, nrow(cmp_table) - 1), 0)
+            mapped_colors <- c(mapped_colors, '#e5e5e5')
 
             plotly::plot_ly(
               data = cmp_table,
               labels = ~mass_stoich,
               values = ~relBinding,
+              sort = FALSE,
               type = 'pie',
               hole = 0.4,
-              # pull = pull_vector,
-              pull = 0.05,
               textinfo = 'label+percent',
-              texttemplate = ~ ifelse(
-                mass_stoich == "Unbound",
-                "",
-                "%{label}<br>%{percent}"
-              ),
+              texttemplate = "%{label}<br>%{percent}",
+              hoverinfo = 'skip',
               textposition = 'auto',
               outsidetextfont = list(color = 'white'),
               marker = list(
                 colors = mapped_colors,
-                line = list(color = 'transparent', width = 10)
+                line = list(color = '#e5e5e5', width = 1)
               )
             ) |>
               plotly::layout(
-                showlegend = ifelse(
-                  any(cmp_table$relBinding < 0.08),
-                  TRUE,
-                  FALSE
-                ),
                 showlegend = FALSE,
                 annotations = list(
                   list(
@@ -1950,7 +1926,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     text = paste0(
                       "<b>",
                       cmp_table$total_bind[1],
-                      "</b><br>Total"
+                      "</b><br>Bound"
                     ),
                     xref = "paper",
                     yref = "paper",
@@ -1973,68 +1949,94 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           })
 
           output$conversion_sample_protein <- shiny::renderUI({
-            shiny::HTML(paste("RACA<br>", format_scientific(as.numeric(27234))))
+            shiny::div(
+              class = "conversion-sample-protein-box",
+              shiny::div(
+                class = "conversion-sample-protein-names",
+                shiny::HTML("Name<br>Mw")
+              ),
+              shiny::div(
+                class = "conversion-sample-protein",
+                shiny::HTML(paste(
+                  "<b>RACA</b><br><b>",
+                  format(27234, big.mark = ",", scientific = FALSE),
+                  "Da</b>"
+                ))
+              )
+            )
           })
 
           # Samples View - present compounds table
-          output$conversion_present_compounds_table <- DT::renderDT({
-            shiny::req(input$conversion_sample_picker)
+          output$conversion_present_compounds_table <- DT::renderDataTable(
+            {
+              shiny::req(input$conversion_sample_picker)
 
-            cmp_table <- hits_summary |>
-              dplyr::filter(
-                `Sample ID` == input$conversion_sample_picker
-              ) |>
-              dplyr::group_by(`Cmp Name`) |>
-              dplyr::arrange(dplyr::desc(`Theor. Cmp`), `Bind. Stoich.`) |>
-              dplyr::reframe(
-                `Mass Shift` = `Theor. Cmp`,
-                Stoichiometry = `Bind. Stoich.`,
-                `%-Binding` = `%-Binding`
-              )
+              cmp_table <- hits_summary |>
+                dplyr::filter(
+                  `Sample ID` == input$conversion_sample_picker
+                ) |>
+                dplyr::group_by(`Cmp Name`) |>
+                dplyr::arrange(dplyr::desc(`Theor. Cmp`), `Bind. Stoich.`) |>
+                dplyr::reframe(
+                  `Mass Shift` = `Theor. Cmp`,
+                  Stoichiometry = `Bind. Stoich.`,
+                  `%-Binding` = `%-Binding`
+                )
 
-            input_conversion_present_compounds_table_barchart <- TRUE
-            if (input_conversion_present_compounds_table_barchart) {
-              cmp_table$`%-Binding` <- as.numeric(gsub(
-                "%",
-                "",
-                cmp_table$`%-Binding`
-              ))
-            }
+              input_conversion_present_compounds_table_barchart <- TRUE
+              if (input_conversion_present_compounds_table_barchart) {
+                cmp_table$`%-Binding` <- as.numeric(gsub(
+                  "%",
+                  "",
+                  cmp_table$`%-Binding`
+                ))
+              }
 
-            tbl <- DT::datatable(
-              cmp_table,
-              extensions = 'RowGroup',
-              rownames = FALSE,
-              selection = "none",
-              class = 'cell-border hover',
-              options = list(
-                rowGroup = list(dataSrc = 0),
-                columnDefs = list(
-                  list(visible = FALSE, targets = 0),
-                  list(
-                    targets = 3,
-                    render = htmlwidgets::JS(chart_js)
+              tbl <- DT::datatable(
+                cmp_table,
+                extensions = c('Scroller', 'RowGroup'),
+                rownames = FALSE,
+                selection = "none",
+                class = 'cell-border hover',
+                options = list(
+                  deferRender = TRUE,
+                  dom = 'rtiS',
+                  scrollY = 150,
+                  scrollCollapse = TRUE,
+                  paging = TRUE,
+                  displayLength = 100,
+                  scroller = TRUE,
+                  rowGroup = list(dataSrc = 0),
+                  columnDefs = list(
+                    list(visible = FALSE, targets = 0),
+                    list(className = 'dt-center', targets = "_all"),
+                    list(
+                      targets = 3,
+                      render = htmlwidgets::JS(chart_js)
+                    ),
+                    list(
+                      targets = -1,
+                      className = 'dt-last-col'
+                    )
                   )
-                ),
-                stripe = FALSE,
-                scrollX = TRUE,
-                scrollY = TRUE,
-                scrollCollapse = TRUE,
-                dom = "t"
+                )
               )
-            )
 
-            if (length(unique(cmp_table$`Mass Shift`)) > 1) {
               if (length(unique(cmp_table$`Mass Shift`)) > 2) {
                 vals <- RColorBrewer::brewer.pal(
                   length(unique(cmp_table$`Mass Shift`)),
                   "Dark2"
                 )
-              } else {
+              } else if (length(unique(cmp_table$`Mass Shift`)) == 2) {
                 vals <- RColorBrewer::brewer.pal(
                   3,
                   "Dark2"
                 )[c(1, 3)]
+              } else {
+                vals <- RColorBrewer::brewer.pal(
+                  3,
+                  "Dark2"
+                )[1]
               }
 
               tbl <- tbl |>
@@ -2043,17 +2045,29 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   target = 'row',
                   backgroundColor = DT::styleEqual(
                     levels = unique(cmp_table$`Mass Shift`),
-                    values = gsub(
-                      ",1)",
-                      ",0.3)",
-                      plotly::toRGB(vals)
-                    )
+                    values = vals
                   )
                 )
-            }
 
-            tbl
-          })
+              tbl
+            }
+            # ,
+            # extensions = 'Scroller',
+            # server = FALSE
+            # options = list(
+            #   # ajax = 'large.txt',
+            #   deferRender = TRUE,
+            #   dom = 'frtiS',
+            #   scrollY = 200,
+            #   scrollCollapse = TRUE
+            # )
+            # options = list(
+            #   paging = FALSE, # Disable pagination logic completely
+            #   scrollY = "400px", # Set the height of the scroll window
+            #   scrollCollapse = TRUE, # Allow table to be shorter if fewer rows
+            #   dom = "frti" # No 'p' (pagination) or 'S' (scroller) needed
+            # )
+          )
 
           # Add Compound View tab
           bslib::nav_insert(

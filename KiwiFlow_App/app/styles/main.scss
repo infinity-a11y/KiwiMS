@@ -365,10 +365,6 @@ button:focus:not(:focus-visible) {
   --bs-btn-disabled-opacity: 0.5;
 }
 
-.btn-group > .btn {
-  border: none;
-}
-
 .btn:disabled {
   color: unset;
   opacity: 0.5;
@@ -422,12 +418,15 @@ button:focus:not(:focus-visible) {
 
 .btn-group > .btn {
   background-color: #e5e5e5;
-  color: #404040;
+  color: #404040 !important;
+  border: none;
+  font-weight: 100;
+  font-size: 14px;
 }
 
 .btn-group > .btn:hover {
   background-color: #404040;
-  color: white;
+  color: white !important;
 }
 
 .btn-group .btn-group-sm .btn-group > .btn {
@@ -467,7 +466,10 @@ button:focus:not(:focus-visible) {
 
 .form-select,
 .form-control {
-  background-color: #e5e5e5;
+  background-color: #d5d5d5;
+  border: 1px solid #e5e5e5 !important;
+  border-radius: 3px !important;
+  box-shadow: inset 0px 0px 20px 1px rgb(255 255 255) !important;
 }
 
 .form-control:disabled {
@@ -745,6 +747,8 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 
 .bootstrap-select > .dropdown-toggle {
+  padding-left: 15px;
+  padding-right: 15px;
   border-color: transparent;
   background: #e5e5e5;
 }
@@ -1575,12 +1579,14 @@ app-conversion_main-conversion_present_compounds_pie > div > div {
 }
 
 /* Hits Tab */
-#app-conversion_main-conversion_hits_tab {
+#app-conversion_main-conversion_hits_tab,
+#app-conversion_main-conversion_present_compounds_table {
   height: 85% !important;
   font-size: 12px;
 }
 
-#app-conversion_main-conversion_hits_tab > div {
+#app-conversion_main-conversion_hits_tab > div,
+#app-conversion_main-conversion_present_compounds_table > div {
   height: 100% !important;
 }
 
@@ -1590,61 +1596,78 @@ app-conversion_main-conversion_present_compounds_pie > div > div {
 }
 
 #app-conversion_main-hits_tab .dt-row,
-#app-conversion_main-conversion_hits_tab .dt-row {
+#app-conversion_main-conversion_hits_tab .dt-row,
+#app-conversion_main-conversion_present_compounds_table {
   height: 80%;
 }
 
 #app-conversion_main-hits_tab div.dataTables_scrollBody,
 #app-conversion_main-conversion_hits_tab div.dataTables_scrollBody,
-.conc-hits-table div.dataTables_scrollBody {
+.conc-hits-table div.dataTables_scrollBody,
+#app-conversion_main-conversion_present_compounds_table div.dataTables_scrollBody {
   border: none !important;
 }
 
 #app-conversion_main-hits_tab tbody tr:first-child td:last-child,
 #app-conversion_main-conversion_hits_tab tbody tr:first-child td:last-child,
-.conc-hits-table tbody tr:first-child td:last-child {
+.conc-hits-table tbody tr:first-child td:last-child,
+#app-conversion_main-conversion_present_compounds_table tbody tr:first-child td:last-child {
   border-top-right-radius: 4px;
 }
 
 #app-conversion_main-hits_tab tbody tr:first-child td:first-child,
 #app-conversion_main-conversion_hits_tab tbody tr:first-child td:first-child,
-.conc-hits-table tbody tr:first-child td:first-child {
+.conc-hits-table tbody tr:first-child td:first-child,
+#app-conversion_main-conversion_present_compounds_table tbody tr:first-child td:first-child {
   border-top-left-radius: 4px;
 }
 
 #app-conversion_main-hits_tab tbody tr:last-child td:last-child,
 #app-conversion_main-conversion_hits_tab tbody tr:last-child td:last-child,
-.conc-hits-table tbody tr:last-child td:last-child {
+.conc-hits-table tbody tr:last-child td:last-child,
+#app-conversion_main-conversion_present_compounds_table tbody tr:last-child td:last-child {
   border-bottom-right-radius: 4px;
 }
 
 #app-conversion_main-hits_tab tbody tr:last-child td:first-child,
 #app-conversion_main-conversion_hits_tab tbody tr:last-child td:first-child,
-.conc-hits-table tbody tr:last-child td:first-child {
+.conc-hits-table tbody tr:last-child td:first-child,
+#app-conversion_main-conversion_present_compounds_table tbody tr:last-child td:first-child {
   border-bottom-left-radius: 4px;
 }
 
 #app-conversion_main-hits_tab tbody tr:last-child td,
 #app-conversion_main-conversion_hits_tab tbody tr:last-child td,
-.conc-hits-table tbody tr:last-child td {
+.conc-hits-table tbody tr:last-child td,
+#app-conversion_main-conversion_present_compounds_table tbody tr:last-child td {
   border: none;
+  border-right: 2px solid #0000002b;
+}
+
+.dt-last-col {
+  border-right: none !important;
 }
 
 #app-conversion_main-hits_tab tbody td,
 #app-conversion_main-conversion_hits_tab tbody td,
-.conc-hits-table tbody td {
+.conc-hits-table tbody td,
+#app-conversion_main-conversion_present_compounds_table tbody td {
   padding: 4px 6px !important;
   background-color: inherit;
   color: white !important;
-  border-bottom: 1px solid #ffffff;
+  border-bottom: 2px solid #0000002b;
+  border-right: 2px solid #0000002b;
   border-collapse: collapse;
+  align-content: end;
 }
 
 #app-conversion_main-hits_tab .dataTables_scrollHead th,
 #app-conversion_main-conversion_hits_tab .dataTables_scrollHead th,
-.conc-hits-table .dataTables_scrollHead th {
-  padding-top: 8px 6px !important;
+.conc-hits-table .dataTables_scrollHead th,
+#app-conversion_main-conversion_present_compounds_table .dataTables_scrollHead th {
   color: white;
+  text-decoration: none;
+  border-left: none !important;
   background: transparent;
 }
 
@@ -1656,13 +1679,15 @@ app-conversion_main-conversion_present_compounds_pie > div > div {
 
 #app-conversion_main-hits_tab thead th:first-child,
 #app-conversion_main-conversion_hits_tab thead th:first-child,
-.conc-hits-table thead th:first-child {
+.conc-hits-table thead th:first-child,
+#app-conversion_main-conversion_present_compounds_table thead th:first-child {
   border-top-left-radius: 4px;
 }
 
 #app-conversion_main-hits_tab thead th:first-child th.sorting,
 #app-conversion_main-conversion_hits_tab thead th:first-child th.sorting,
-.conc-hits-table thead th:first-child th.sorting {
+.conc-hits-table thead th:first-child th.sorting,
+#app-conversion_main-conversion_present_compounds_table thead th:first-child th.sorting {
   border-top-left-radius: unset;
   border-top-right-radius: unset;
   padding: unset;
@@ -1855,10 +1880,10 @@ th.sorting {
   color: #ffffff;
 }
 
-.dataTables_scrollHead,
-.dataTables_scrollBody {
-  overflow: unset !important;
-}
+// .dataTables_scrollHead,
+// .dataTables_scrollBody {
+//   overflow: unset !important;
+// }
 
 table.dataTable thead > tr > th.sorting::after,
 table.dataTable thead > tr > th.sorting::before {
@@ -2093,6 +2118,8 @@ table.dataTable thead > tr > th.sorting::before {
 
 .clickable-column {
   cursor: pointer;
+  text-decoration: underline;
+  align-content: end;
 }
 
 table.dataTable tbody td {
@@ -2122,14 +2149,97 @@ table.dataTable tbody td {
   display: grid;
   gap: 1%;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: 3fr 2fr;
+  grid-template-rows: 2fr 3fr;
   height: 100%;
   width: 99%;
-  padding: 1%;
 }
 
 .conversion-samples-wrapper .card-custom .card,
 .conversion-samples-control > div {
   height: 100%;
   margin: 0;
+}
+
+.conversion-samples-wrapper .card-custom .card {
+  overflow: clip;
+}
+
+.conversion-samples-stats {
+  gap: 2%;
+  display: flex;
+  width: 100%;
+}
+
+.conversion-samples-stats .card-custom {
+  width: 100%;
+}
+
+.conversion-samples-control .form-group {
+  align-content: center;
+  padding-left: 20px;
+  padding-right: 20px;
+  background-color: rgb(0 0 0 / 11%);
+  border-radius: 3px;
+  box-shadow: inset 0px 0px 50px 2px rgb(255 255 255 / 30%);
+}
+
+table.dataTable tbody tr:hover,
+table.dataTable tbody tr.selected:hover {
+  background: none;
+}
+
+table.dataTable tr.dtrg-group.dtrg-level-0 th {
+  font-weight: bold;
+  background: #e5e5e5;
+  border-top-left-radius: 4px;
+  border-top-right-radius: 4px;
+  padding-left: 5%;
+}
+
+.js-plotly-plot .plotly:hover .modebar--hover .modebar-group {
+  height: 100%;
+}
+
+.js-plotly-plot .plotly .modebar {
+  height: 32;
+}
+
+.js-plotly-plot .plotly:hover .modebar--hover .modebar-group {
+  background-color: rgba(0, 0, 0, 0.5) !important;
+}
+
+.modebar-btn .icon path {
+  fill: rgba(255, 255, 255, 0.7) !important;
+}
+
+.dt-center {
+  text-align: cenver;
+}
+
+.conversion-sample-protein,
+.conversion-sample-protein-names {
+  text-align: left;
+}
+
+.conversion-sample-protein-names {
+  font-weight: 100;
+}
+
+.conversion-sample-protein {
+  font-weight: 300;
+}
+
+.conversion-sample-protein-box {
+  display: flex;
+  justify-content: left;
+  gap: 3em;
+  padding-left: 20px;
+}
+
+#app-conversion_main-conversion_present_compounds_table div.dataTables_wrapper div.dataTables_info {
+  padding-top: 0.5em !important;
+}
+
+.cmp-table .card .card-body {
+  padding-left: 20px !important;
 }
