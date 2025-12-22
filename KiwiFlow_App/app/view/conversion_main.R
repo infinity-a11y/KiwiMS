@@ -1744,7 +1744,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                           ),
                           shiny::div(
                             class = "kobs-val",
-                            shiny::uiOutput(ns("conversion_sample_protein"))
+                            shinycssloaders::withSpinner(
+                              shiny::uiOutput(ns("conversion_sample_protein")),
+                              type = 1,
+                              color = "#7777f9"
+                            )
                           )
                         )
                       ),
@@ -1765,7 +1769,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                           ),
                           shiny::div(
                             class = "kobs-val",
-                            shiny::uiOutput(ns("total_pct_binding"))
+                            shinycssloaders::withSpinner(
+                              shiny::uiOutput(ns("total_pct_binding")),
+                              type = 1,
+                              color = "#7777f9"
+                            )
                           )
                         )
                       )
@@ -2091,14 +2099,92 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   bslib::card(
                     bslib::card_header(
                       class = "bg-dark help-header",
-                      "Annotated Spectrum"
+                      "Compound Distribution"
                     ),
-                    shiny::h5("SOMETHIUGN")
+                    plotly::plotlyOutput(ns("cmp_distribution"))
                   )
                 )
               )
             )
           )
+
+          output$cmp_distribution <- plotly::renderPlotly({
+            shiny::req(input$conversion_compound_picker)
+
+            tbl <- hits_summary |>
+              dplyr::filter(`Cmp Name` == input$conversion_compound_picker) |>
+              # dplyr::group_by(`Sample ID`) |>
+              dplyr::mutate(
+                mass_stoich = paste0(
+                  "[",
+                  `Theor. Cmp`,
+                  "]",
+                  sapply(`Bind. Stoich.`, function(x) {
+                    as.character(htmltools::tags$sub(x))
+                  })
+                )
+              )
+
+            if (length(unique(tbl$`Theor. Cmp`)) > 2) {
+              vals <- RColorBrewer::brewer.pal(
+                length(unique(tbl$`Theor. Cmp`)),
+                "Dark2"
+              )
+            } else if (length(unique(tbl$`Theor. Cmp`)) == 2) {
+              vals <- RColorBrewer::brewer.pal(
+                3,
+                "Dark2"
+              )[c(1, 3)]
+            } else {
+              vals <- RColorBrewer::brewer.pal(
+                3,
+                "Dark2"
+              )[1]
+            }
+
+            plotly::plot_ly(
+              data = tbl,
+              x = ~`Sample ID`,
+              y = ~ as.numeric(gsub("%", "", `%-Binding`)),
+              color = ~`Theor. Cmp`,
+              colors = vals,
+              type = 'bar',
+              name = ~mass_stoich,
+              hovertemplate = ~ paste0(
+                "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
+                `Theor. Cmp`,
+                "</b><br>",
+                "<span style='opacity: 0.8'>Stoichiometry:</span> <b>",
+                `Bind. Stoich.`,
+                "</b><br>",
+                "<span style='opacity: 0.8'>%-Binding:</span> <b>",
+                `%-Binding`,
+                "</b>",
+                "<extra><div style='text-align: left'>",
+                "<span style='opacity: 0.8'>Cmp Name: </span><b>",
+                `Cmp Name`,
+                "</b><br>",
+                "<span style='opacity: 0.8'>Sample ID: </span><b>",
+                `Sample ID`,
+                "</b>",
+                "</div></extra>"
+              ),
+              hoverlabel = list(
+                align = "left",
+                valign = "middle"
+              ),
+              text = ~mass_stoich,
+              textposition = 'inside',
+              textfont = list(color = '#ffffff'),
+              insidetextfont = list(color = '#ffffff'),
+              marker = list(line = list(color = 'white', width = 1))
+            ) |>
+              plotly::layout(
+                barmode = 'stack',
+                xaxis = list(title = list(text = NULL)),
+                yaxis = list(title = list(text = "%-Binding"))
+              )
+          })
 
           # Hits table clicking observer
           shiny::observe({
