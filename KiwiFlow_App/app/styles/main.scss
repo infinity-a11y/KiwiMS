@@ -1597,49 +1597,57 @@ app-conversion_main-conversion_present_compounds_pie > div > div {
 
 #app-conversion_main-hits_tab .dt-row,
 #app-conversion_main-conversion_hits_tab .dt-row,
-#app-conversion_main-conversion_present_compounds_table {
+#app-conversion_main-conversion_present_compounds_table .dt-row
+// #app-conversion_main-conversion_cmp_table .dt-row
+{
   height: 80%;
 }
 
 #app-conversion_main-hits_tab div.dataTables_scrollBody,
 #app-conversion_main-conversion_hits_tab div.dataTables_scrollBody,
 .conc-hits-table div.dataTables_scrollBody,
-#app-conversion_main-conversion_present_compounds_table div.dataTables_scrollBody {
+#app-conversion_main-conversion_present_compounds_table div.dataTables_scrollBody,
+#app-conversion_main-conversion_cmp_table div.dataTables_scrollBody {
   border: none !important;
 }
 
 #app-conversion_main-hits_tab tbody tr:first-child td:last-child,
 #app-conversion_main-conversion_hits_tab tbody tr:first-child td:last-child,
 .conc-hits-table tbody tr:first-child td:last-child,
-#app-conversion_main-conversion_present_compounds_table tbody tr:first-child td:last-child {
+#app-conversion_main-conversion_present_compounds_table tbody tr:first-child td:last-child,
+#app-conversion_main-conversion_cmp_table tbody tr:first-child td:last-child {
   border-top-right-radius: 4px;
 }
 
 #app-conversion_main-hits_tab tbody tr:first-child td:first-child,
 #app-conversion_main-conversion_hits_tab tbody tr:first-child td:first-child,
 .conc-hits-table tbody tr:first-child td:first-child,
-#app-conversion_main-conversion_present_compounds_table tbody tr:first-child td:first-child {
+#app-conversion_main-conversion_present_compounds_table tbody tr:first-child td:first-child,
+#app-conversion_main-conversion_cmp_table tbody tr:first-child td:first-child {
   border-top-left-radius: 4px;
 }
 
 #app-conversion_main-hits_tab tbody tr:last-child td:last-child,
 #app-conversion_main-conversion_hits_tab tbody tr:last-child td:last-child,
 .conc-hits-table tbody tr:last-child td:last-child,
-#app-conversion_main-conversion_present_compounds_table tbody tr:last-child td:last-child {
+#app-conversion_main-conversion_present_compounds_table tbody tr:last-child td:last-child,
+#app-conversion_main-conversion_cmp_table tbody tr:last-child td:last-child {
   border-bottom-right-radius: 4px;
 }
 
 #app-conversion_main-hits_tab tbody tr:last-child td:first-child,
 #app-conversion_main-conversion_hits_tab tbody tr:last-child td:first-child,
 .conc-hits-table tbody tr:last-child td:first-child,
-#app-conversion_main-conversion_present_compounds_table tbody tr:last-child td:first-child {
+#app-conversion_main-conversion_present_compounds_table tbody tr:last-child td:first-child,
+#app-conversion_main-conversion_cmp_table tbody tr:last-child td:first-child {
   border-bottom-left-radius: 4px;
 }
 
 #app-conversion_main-hits_tab tbody tr:last-child td,
 #app-conversion_main-conversion_hits_tab tbody tr:last-child td,
 .conc-hits-table tbody tr:last-child td,
-#app-conversion_main-conversion_present_compounds_table tbody tr:last-child td {
+#app-conversion_main-conversion_present_compounds_table tbody tr:last-child td,
+#app-conversion_main-conversion_cmp_table tbody tr:last-child td {
   border: none;
   border-right: 2px solid #0000002b;
 }
@@ -1651,7 +1659,8 @@ app-conversion_main-conversion_present_compounds_pie > div > div {
 #app-conversion_main-hits_tab tbody td,
 #app-conversion_main-conversion_hits_tab tbody td,
 .conc-hits-table tbody td,
-#app-conversion_main-conversion_present_compounds_table tbody td {
+#app-conversion_main-conversion_present_compounds_table tbody td,
+#app-conversion_main-conversion_cmp_table tbody td {
   padding: 4px 6px !important;
   background-color: inherit;
   color: white !important;
@@ -1664,7 +1673,8 @@ app-conversion_main-conversion_present_compounds_pie > div > div {
 #app-conversion_main-hits_tab .dataTables_scrollHead th,
 #app-conversion_main-conversion_hits_tab .dataTables_scrollHead th,
 .conc-hits-table .dataTables_scrollHead th,
-#app-conversion_main-conversion_present_compounds_table .dataTables_scrollHead th {
+#app-conversion_main-conversion_present_compounds_table .dataTables_scrollHead th,
+#app-conversion_main-conversion_cmp_table .dataTables_scrollHead th {
   color: white;
   text-decoration: none;
   border-left: none !important;
@@ -1680,14 +1690,16 @@ app-conversion_main-conversion_present_compounds_pie > div > div {
 #app-conversion_main-hits_tab thead th:first-child,
 #app-conversion_main-conversion_hits_tab thead th:first-child,
 .conc-hits-table thead th:first-child,
-#app-conversion_main-conversion_present_compounds_table thead th:first-child {
+#app-conversion_main-conversion_present_compounds_table thead th:first-child,
+#app-conversion_main-conversion_cmp_table thead th:first-child {
   border-top-left-radius: 4px;
 }
 
 #app-conversion_main-hits_tab thead th:first-child th.sorting,
 #app-conversion_main-conversion_hits_tab thead th:first-child th.sorting,
 .conc-hits-table thead th:first-child th.sorting,
-#app-conversion_main-conversion_present_compounds_table thead th:first-child th.sorting {
+#app-conversion_main-conversion_present_compounds_table thead th:first-child th.sorting,
+#app-conversion_main-conversion_cmp_table thead th:first-child th.sorting {
   border-top-left-radius: unset;
   border-top-right-radius: unset;
   padding: unset;
@@ -2131,7 +2143,8 @@ table.dataTable tbody td {
   height: 47px;
 }
 
-#app-conversion_main-conversion_present_compounds_table {
+#app-conversion_main-conversion_present_compounds_table,
+#app-conversion_main-conversion_conversion_cmp_table {
   width: 99% !important;
   height: 1px !important;
   flex-basis: unset !important;
@@ -2236,10 +2249,18 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   padding-left: 20px;
 }
 
-#app-conversion_main-conversion_present_compounds_table div.dataTables_wrapper div.dataTables_info {
+#app-conversion_main-conversion_present_compounds_table div.dataTables_wrapper div.dataTables_info,
+#app-conversion_main-conversion_conversion_cmp_table div.dataTables_wrapper div.dataTables_info {
   padding-top: 0.5em !important;
 }
 
 .cmp-table .card .card-body {
   padding-left: 20px !important;
+}
+
+#app-conversion_main-conversion_cmp_table {
+  width: 99% !important;
+  height: 1px !important;
+  flex-basis: unset !important;
+  font-size: 12px;
 }

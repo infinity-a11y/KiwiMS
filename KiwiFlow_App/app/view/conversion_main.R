@@ -2164,12 +2164,14 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                         class = "bg-dark help-header",
                         "Present Compounds"
                       ),
-                      shinycssloaders::withSpinner(
-                        DT::DTOutput(
-                          ns("conversion_cmp_table")
-                        ),
-                        type = 1,
-                        color = "#7777f9"
+                      shiny::div(
+                        shinycssloaders::withSpinner(
+                          DT::DTOutput(
+                            ns("conversion_cmp_table")
+                          ),
+                          type = 1,
+                          color = "#7777f9"
+                        )
                       ),
                       full_screen = TRUE
                     )
@@ -2222,6 +2224,93 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               )
             )
           )
+
+          output$conversion_cmp_table <- DT::renderDataTable({
+            shiny::req(input$conversion_compound_picker)
+
+            test <<- hits_summary
+
+            cmp_table <- hits_summary |>
+              dplyr::filter(
+                `Cmp Name` == input$conversion_compound_picker
+              ) |>
+              dplyr::group_by(`Sample ID`) |>
+              dplyr::arrange(dplyr::desc(`Theor. Cmp`), `Bind. Stoich.`) |>
+              dplyr::reframe(
+                `Mass Shift` = `Theor. Cmp`,
+                `Stoichiometry` = `Bind. Stoich.`,
+                `Sample ID` = `Sample ID`,
+                `%-Binding` = `%-Binding`,
+                `Total %-Binding` = `Total %-Binding`
+              ) |>
+              dplyr::relocate(`Mass Shift`, .before = 1)
+
+            input_conversion_present_compounds_table_barchart <- TRUE
+            if (input_conversion_present_compounds_table_barchart) {
+              cmp_table$`%-Binding` <- as.numeric(gsub(
+                "%",
+                "",
+                cmp_table$`%-Binding`
+              ))
+            }
+
+            tbl <- DT::datatable(
+              cmp_table,
+              extensions = c('RowGroup'),
+              rownames = FALSE,
+              selection = "none",
+              options = list(
+                dom = 't',
+                scrollY = TRUE,
+                scrollCollapse = TRUE,
+                paging = TRUE,
+                displayLength = 100,
+                scroller = TRUE,
+                rowGroup = list(dataSrc = 1),
+                columnDefs = list(
+                  list(visible = FALSE, targets = 1),
+                  list(className = 'dt-center', targets = "_all"),
+                  list(
+                    targets = 3,
+                    render = htmlwidgets::JS(chart_js)
+                  ),
+                  list(
+                    targets = -1,
+                    className = 'dt-last-col'
+                  )
+                )
+              )
+            )
+
+            if (length(unique(cmp_table$`Mass Shift`)) > 2) {
+              vals <- RColorBrewer::brewer.pal(
+                length(unique(cmp_table$`Mass Shift`)),
+                "Dark2"
+              )
+            } else if (length(unique(cmp_table$`Mass Shift`)) == 2) {
+              vals <- RColorBrewer::brewer.pal(
+                3,
+                "Dark2"
+              )[c(1, 3)]
+            } else {
+              vals <- RColorBrewer::brewer.pal(
+                3,
+                "Dark2"
+              )[1]
+            }
+
+            tbl <- tbl |>
+              DT::formatStyle(
+                columns = "Mass Shift",
+                target = 'row',
+                backgroundColor = DT::styleEqual(
+                  levels = unique(cmp_table$`Mass Shift`),
+                  values = vals
+                )
+              )
+
+            tbl
+          })
 
           output$conversion_cmp_spectra <- plotly::renderPlotly({
             shiny::req(input$conversion_compound_picker)
@@ -2280,8 +2369,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   })
                 )
               )
-
-            test4 <<- tbl
 
             # Prepare manual compound color scale
             if (length(unique(tbl$`Theor. Cmp`)) > 2) {
