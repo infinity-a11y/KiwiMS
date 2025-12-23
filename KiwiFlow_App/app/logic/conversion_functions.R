@@ -2070,7 +2070,9 @@ multiple_spectra <- function(
   results_list,
   samples,
   cubic = TRUE,
-  show_labels = FALSE
+  show_labels = FALSE,
+  time = FALSE,
+  color_cmp = NULL
 ) {
   # Get spectrum data
   spectrum_data <- data.frame()
@@ -2078,14 +2080,20 @@ multiple_spectra <- function(
     add_df <- process_plot_data(
       results_list$deconvolution[[samples[i]]],
       result_path = NULL
-    )$mass |>
-      dplyr::mutate(time = extract_minutes(samples[i]))
+    )$mass
+
+    if (time) {
+      add_df <- dplyr::mutate(add_df, z = extract_minutes(samples[i]))
+    } else {
+      add_df <- dplyr::mutate(add_df, z = samples[i])
+    }
 
     spectrum_data <- rbind(spectrum_data, add_df)
   }
-  spectrum_data$time <- factor(
-    spectrum_data$time,
-    levels = sort(unique(spectrum_data$time))
+
+  spectrum_data$z <- factor(
+    spectrum_data$z,
+    levels = sort(unique(spectrum_data$z))
   )
 
   # Get peaks data
@@ -2094,29 +2102,130 @@ multiple_spectra <- function(
     add_df <- process_plot_data(
       results_list$deconvolution[[samples[i]]],
       result_path = NULL
-    )$highlight_peaks |>
-      dplyr::mutate(time = extract_minutes(samples[i]))
+    )$highlight_peaks
+
+    if (time) {
+      add_df <- dplyr::mutate(add_df, z = extract_minutes(samples[i]))
+    } else {
+      add_df <- dplyr::mutate(add_df, z = samples[i])
+    }
 
     peaks_data <- rbind(peaks_data, add_df)
   }
-  peaks_data$time <- factor(
-    peaks_data$time,
-    levels = sort(unique(peaks_data$time))
+
+  peaks_data$z <- factor(
+    peaks_data$z,
+    levels = sort(unique(peaks_data$z))
   )
+
+  # Prepare compound marker colors
+  if (!is.null(color_cmp)) {
+    test1 <<- color_cmp
+    test2 <<- peaks_data
+
+    color_cmp <- c("#ffffff", color_cmp)
+    names(color_cmp) <- c(
+      as.character(max(unique(peaks_data$mw))),
+      names(color_cmp)[-1]
+    )
+
+    peaks_data$mw_color <- color_cmp[match(
+      as.character(peaks_data$mw),
+      gsub("\\.?0+$", "", gsub(" Da", "", names(color_cmp)))
+    )]
+  }
+
+  plotly::plot_ly(
+    data = spectrum_data,
+    x = ~mass,
+    y = ~intensity,
+    z = ~z,
+    split = ~z,
+    # colors = c("#ffffff", pal),
+    # color = ~z,
+    # colors = if (time) {
+    #   viridisLite::viridis(
+    #     length(unique(peaks_data$z)),
+    #     begin = 0.5
+    #   )
+    # } else {
+    #   rep("white", length(unique(peaks_data$z)))
+    # },
+    type = "scatter3d",
+    mode = "lines",
+    line = list(color = "black", width = 2),
+    showlegend = FALSE,
+    hoverinfo = "text",
+    text = ~ paste0(
+      "Mass: ",
+      mass,
+      " Da\nIntensity: ",
+      round(intensity, 2),
+      "%",
+      ifelse(
+        time == TRUE,
+        "\nTime: ",
+        "\nSample: "
+      ),
+      z,
+      ifelse(
+        time == TRUE,
+        " min",
+        ""
+      )
+    )
+  ) |>
+    plotly::add_markers(
+      data = peaks_data,
+      x = ~mass,
+      y = ~intensity,
+      z = ~z,
+      mode = "markers",
+      inherit = FALSE,
+      marker = list(
+        color = ~ I(mw_color),
+        symbol = "circle",
+        size = 5,
+        zindex = 100,
+        line = list(color = "black", width = 1)
+      ),
+      hoverinfo = "text",
+      text = ~ paste0(
+        "Name: ",
+        name,
+        "\nMeasured: ",
+        mass,
+        " Da\nIntensity: ",
+        round(intensity, 2),
+        ifelse(time, "%\nTime: ", "%\nSample: "),
+        z,
+        ifelse(time, " min", ""),
+        "\nTheor. Mw: ",
+        mw
+      ),
+      showlegend = FALSE
+    )
 
   if (cubic == TRUE) {
     plotly::plot_ly(
       data = spectrum_data,
       x = ~mass,
       y = ~intensity,
-      z = ~time,
-      color = ~time,
-      colors = viridisLite::viridis(
-        length(unique(peaks_data$time)),
-        begin = 0.5
-      ),
+      z = ~z,
+      split = ~z,
+      # colors = c("#ffffff", pal),
+      # color = ~z,
+      # colors = if (time) {
+      #   viridisLite::viridis(
+      #     length(unique(peaks_data$z)),
+      #     begin = 0.5
+      #   )
+      # } else {
+      #   rep("white", length(unique(peaks_data$z)))
+      # },
       type = "scatter3d",
       mode = "lines",
+      line = list(color = "white", width = 2),
       showlegend = FALSE,
       hoverinfo = "text",
       text = ~ paste0(
@@ -2125,23 +2234,32 @@ multiple_spectra <- function(
         " Da\nIntensity: ",
         round(intensity, 2),
         "%",
-        "\nTime: ",
-        time,
-        " min"
+        ifelse(
+          time == TRUE,
+          "\nTime: ",
+          "\nSample: "
+        ),
+        z,
+        ifelse(
+          time == TRUE,
+          " min",
+          ""
+        )
       )
     ) |>
       plotly::add_markers(
         data = peaks_data,
         x = ~mass,
         y = ~intensity,
-        z = ~time,
-        color = ~time,
+        z = ~z,
+        mode = "markers",
+        inherit = FALSE,
         marker = list(
+          color = ~ I(mw_color),
           symbol = "circle",
           size = 5,
           zindex = 100,
-          # Changed marker border from black to white
-          line = list(color = "white", width = 1.5)
+          line = list(color = "black", width = 1.5)
         ),
         hoverinfo = "text",
         text = ~ paste0(
@@ -2151,9 +2269,9 @@ multiple_spectra <- function(
           mass,
           " Da\nIntensity: ",
           round(intensity, 2),
-          "%\nTime: ",
-          time,
-          " min",
+          ifelse(time, "%\nTime: ", "%\nSample: "),
+          z,
+          ifelse(time, " min", ""),
           "\nTheor. Mw: ",
           mw
         ),
@@ -2161,6 +2279,7 @@ multiple_spectra <- function(
       ) |>
       plotly::layout(
         paper_bgcolor = "rgba(0,0,0,0)",
+        paper_bgcolor = "rgba(255,255,255,0)",
         font = list(color = "white"),
         legend = list(
           bgcolor = "rgba(0,0,0,0)",
@@ -2169,28 +2288,42 @@ multiple_spectra <- function(
         ),
         # 3D Scene Styling
         scene = list(
+          aspectmode = "manual",
+          aspectratio = list(
+            x = 1,
+            y = 1,
+            z = ifelse(length(unique(spectrum_data$z)) <= 3, 0.3, 1.0)
+          ),
           xaxis = list(
             title = "Mass [Da]",
-            color = "white",
-            gridcolor = "rgba(255, 255, 255, 0.2)",
-            zerolinecolor = "rgba(255, 255, 255, 0.5)",
+            gridcolor = "#7f7f7fff",
+            showgrid = TRUE,
+            showline = FALSE,
+            showzeroline = FALSE,
+            showticklabels = TRUE,
+            showspikes = FALSE,
             showbackground = FALSE
           ),
           yaxis = list(
             title = "Intensity [%]",
-            color = "white",
-            gridcolor = "rgba(255, 255, 255, 0.2)",
-            zerolinecolor = "rgba(255, 255, 255, 0.5)",
+            gridcolor = "#7f7f7fff",
+            showgrid = TRUE,
+            showline = FALSE,
+            showzeroline = FALSE,
+            showticklabels = TRUE,
+            showspikes = FALSE,
             showbackground = FALSE
           ),
           zaxis = list(
-            title = "Time [min]",
-            type = 'category',
-            dtick = 1,
-            color = "white",
-            gridcolor = "rgba(255, 255, 255, 0.2)",
-            zerolinecolor = "rgba(255, 255, 255, 0.5)",
-            showbackground = FALSE
+            title = ifelse(time, "Time [min]", ""),
+            gridcolor = "#7f7f7fff",
+            showgrid = ifelse(time, TRUE, FALSE),
+            showline = FALSE,
+            showzeroline = FALSE,
+            showticklabels = FALSE,
+            showspikes = FALSE,
+            showbackground = FALSE,
+            type = 'category'
           ),
           camera = list(
             center = list(x = -0.05, y = -0.25, z = 0),
@@ -2200,13 +2333,13 @@ multiple_spectra <- function(
         )
       )
   } else {
-    plot <- plotly::plot_ly(
+    plotly::plot_ly(
       data = spectrum_data,
       x = ~mass,
       y = ~intensity,
-      color = ~time,
+      color = ~z,
       colors = viridisLite::viridis(
-        length(unique(peaks_data$time)),
+        length(unique(peaks_data$z)),
         begin = 0.5
       ),
       type = "scatter",
@@ -2218,9 +2351,17 @@ multiple_spectra <- function(
         " Da\nIntensity: ",
         round(intensity, 2),
         "%",
-        "\nTime: ",
-        time,
-        " min"
+        ifelse(
+          time == TRUE,
+          "\nTime: ",
+          "\nSample: "
+        ),
+        z,
+        ifelse(
+          time == TRUE,
+          " min",
+          ""
+        )
       ),
       showlegend = FALSE
     ) |>
@@ -2228,7 +2369,7 @@ multiple_spectra <- function(
         data = peaks_data,
         x = ~mass,
         y = ~intensity,
-        color = ~time,
+        color = ~z,
         marker = list(
           symbol = "circle",
           size = 10,
@@ -2243,9 +2384,9 @@ multiple_spectra <- function(
           mass,
           " Da\nIntensity: ",
           round(intensity, 2),
-          "\nTime: ",
-          time,
-          " min",
+          ifelse(time, "%\nTime: ", "%\nSample: "),
+          z,
+          ifelse(time, " min", ""),
           "\nTheor. Mw: ",
           mw
         ),
@@ -2273,37 +2414,6 @@ multiple_spectra <- function(
           font = list(color = "white")
         )
       )
-
-    if (show_labels) {
-      plot <- plotly::add_annotations(
-        plot,
-        data = peaks_data,
-        x = ~mass,
-        y = ~intensity,
-        text = ~ paste0(
-          name,
-          " | ",
-          time,
-          "min\n",
-          round(mass, 4),
-          " Da | ",
-          round(intensity, 1),
-          "%"
-        ),
-        xref = "x",
-        yref = "y",
-        xanchor = "left",
-        yanchor = "bottom",
-        ay = -10,
-        ax = 10,
-        font = list(color = "white", size = 10),
-        arrowhead = 2,
-        arrowwidth = 1,
-        arrowcolor = "white"
-      )
-    }
-
-    plot
   }
 }
 
