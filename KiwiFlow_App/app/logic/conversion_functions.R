@@ -422,7 +422,6 @@ return true;
 # Function to fill missing columns in sample table
 #' @export
 fill_sample_table <- function(sample_table) {
-  test <<- sample_table
   col_diff <- abs(ncol(sample_table) - 7)
   if (col_diff != 0) {
     sample_table <- cbind(
@@ -2064,6 +2063,219 @@ format_scientific <- function(number, digits = 2) {
   }
 }
 
+# Smart truncation helper function
+label_smart_clean <- function(files, max_width) {
+  if (!is.character(files) || length(files) == 0) {
+    stop("Input must be a non-empty character vector.")
+  }
+  if (!is.numeric(max_width) || length(max_width) != 1 || max_width <= 0) {
+    stop("max_width must be a positive number.")
+  }
+
+  n <- length(files)
+  lens <- nchar(files)
+  short_idx <- which(lens <= max_width)
+  long_idx <- which(lens > max_width)
+
+  if (length(long_idx) == 0) {
+    return(files)
+  }
+
+  pattern <- "[-._+# ]|[^-._+# ]+"
+  parts_list <- lapply(files, function(f) {
+    regmatches(f, gregexpr(pattern, f))[[1]]
+  })
+
+  # No common prefix/suffix
+  prefix_parts <- 0
+  suffix_parts <- 0
+  prefix <- ""
+  suffix <- ""
+
+  # Middles are full
+  middles <- files
+
+  middle_parts_list <- lapply(middles, function(m) {
+    if (nchar(m) > 0) regmatches(m, gregexpr(pattern, m))[[1]] else character(0)
+  })
+
+  # For long
+  long_middle_parts <- middle_parts_list[long_idx]
+
+  left_m_vec <- rep(1, length(long_idx))
+  right_m_vec <- rep(1, length(long_idx))
+
+  max_loop <- max(0, sapply(long_middle_parts, length))
+  loop_count <- 0
+  found <- FALSE
+  result <- files
+
+  while (loop_count < max_loop) {
+    loop_count <- loop_count + 1
+
+    long_labels <- character(length(long_idx))
+    lengths_long <- numeric(length(long_idx))
+    for (j in 1:length(long_idx)) {
+      parts <- long_middle_parts[[j]]
+      np <- length(parts)
+      if (np == 0) {
+        long_labels[j] <- ""
+        lengths_long[j] <- 0
+        next
+      }
+      left_m <- left_m_vec[j]
+      right_m <- right_m_vec[j]
+      if (np <= left_m + right_m) {
+        long_labels[j] <- paste0(parts, collapse = "")
+        lengths_long[j] <- nchar(long_labels[j])
+      } else {
+        left <- paste0(parts[1:left_m], collapse = "")
+        right <- paste0(parts[(np - right_m + 1):np], collapse = "")
+        long_labels[j] <- paste0(left, "...", right)
+        lengths_long[j] <- nchar(long_labels[j])
+      }
+    }
+
+    all_labels <- files
+    all_labels[long_idx] <- paste0(prefix, long_labels, suffix)
+    all_lengths <- nchar(all_labels)
+
+    if (length(unique(all_labels)) == n && all(all_lengths <= max_width)) {
+      found <- TRUE
+      # Expansion step
+      for (j in 1:length(long_idx)) {
+        parts <- long_middle_parts[[j]]
+        np <- length(parts)
+        if (np <= left_m_vec[j] + right_m_vec[j]) {
+          next
+        }
+
+        current_full <- paste0(prefix, long_labels[j], suffix)
+        current_len <- nchar(current_full)
+
+        while (TRUE) {
+          added <- FALSE
+
+          # Try add to left
+          new_left_m <- left_m_vec[j] + 1
+          new_right_m <- right_m_vec[j]
+          if (new_left_m + new_right_m >= np) {
+            new_label <- paste0(parts, collapse = "")
+          } else {
+            new_left <- paste0(parts[1:new_left_m], collapse = "")
+            new_right <- paste0(parts[(np - new_right_m + 1):np], collapse = "")
+            new_label <- paste0(new_left, "...", new_right)
+          }
+          new_full <- paste0(prefix, new_label, suffix)
+          if (nchar(new_full) <= max_width) {
+            left_m_vec[j] <- new_left_m
+            long_labels[j] <- new_label
+            current_len <- nchar(new_full)
+            added <- TRUE
+          }
+
+          # Try add to right
+          new_left_m <- left_m_vec[j]
+          new_right_m <- right_m_vec[j] + 1
+          if (new_left_m + new_right_m >= np) {
+            new_label <- paste0(parts, collapse = "")
+          } else {
+            new_left <- paste0(parts[1:new_left_m], collapse = "")
+            new_right <- paste0(parts[(np - new_right_m + 1):np], collapse = "")
+            new_label <- paste0(new_left, "...", new_right)
+          }
+          new_full <- paste0(prefix, new_label, suffix)
+          if (nchar(new_full) <= max_width) {
+            right_m_vec[j] <- new_right_m
+            long_labels[j] <- new_label
+            current_len <- nchar(new_full)
+            added <- TRUE
+          }
+
+          if (!added) break
+        }
+      }
+      result <- files
+      result[long_idx] <- paste0(prefix, long_labels, suffix)
+      break
+    }
+
+    dup_mask <- duplicated(all_labels) | duplicated(all_labels, fromLast = TRUE)
+    if (all(!dup_mask)) {
+      break
+    }
+
+    dup_labels <- unique(all_labels[dup_mask])
+    for (d in dup_labels) {
+      group_idx <- which(all_labels == d)
+      group_long_idx <- group_idx[group_idx %in% long_idx]
+      if (length(group_long_idx) < 2) {
+        next
+      }
+      group_j <- match(group_long_idx, long_idx)
+      group_parts <- long_middle_parts[group_j]
+      np <- length(group_parts[[1]])
+      min_pos <- np + 1
+      for (p in 1:np) {
+        ps <- sapply(group_parts, function(gp) gp[p])
+        if (length(unique(ps)) > 1) {
+          min_pos <- p
+          break
+        }
+      }
+      if (min_pos > np) {
+        next
+      }
+      is_prev_sep <- min_pos > 1 &&
+        nchar(group_parts[[1]][min_pos - 1]) == 1 &&
+        grepl("[-._+# ]", group_parts[[1]][min_pos - 1])
+      is_next_sep <- min_pos < np &&
+        nchar(group_parts[[1]][min_pos + 1]) == 1 &&
+        grepl("[-._+# ]", group_parts[[1]][min_pos + 1])
+      curr_left <- left_m_vec[group_j[1]]
+      curr_right <- right_m_vec[group_j[1]]
+      add_left <- max(0, min_pos - curr_left)
+      add_right <- max(0, (np - min_pos + 1) - curr_right)
+      if (is_next_sep) {
+        add_left_next <- max(0, (min_pos + 1) - curr_left)
+        add_left <- max(add_left, add_left_next)
+      }
+      if (is_prev_sep) {
+        add_right_prev <- max(0, (np - (min_pos - 1) + 1) - curr_right)
+        add_right <- max(add_right, add_right_prev)
+      }
+      if (add_left == 0 && add_right == 0) {
+        next
+      }
+      if (add_left <= add_right) {
+        left_m_vec[group_j] <- curr_left + add_left
+      } else {
+        right_m_vec[group_j] <- curr_right + add_right
+      }
+    }
+  }
+
+  if (!found) {
+    dup_mask <- duplicated(all_labels) | duplicated(all_labels, fromLast = TRUE)
+    if (all(!dup_mask)) {
+      for (i in long_idx) {
+        if (all_lengths[i] > max_width) {
+          all_labels[i] <- files[i]
+        }
+      }
+      if (length(unique(all_labels)) == n) {
+        result <- all_labels
+      } else {
+        result <- files
+      }
+    } else {
+      result <- files
+    }
+  }
+
+  return(result)
+}
+
 # Generate spectrum with multiple traces
 #' @export
 multiple_spectra <- function(
@@ -2091,6 +2303,8 @@ multiple_spectra <- function(
     spectrum_data <- rbind(spectrum_data, add_df)
   }
 
+  spectrum_data$z <- stringr::str_trunc(spectrum_data$z, 13, side = "left")
+
   spectrum_data$z <- factor(
     spectrum_data$z,
     levels = sort(unique(spectrum_data$z))
@@ -2113,6 +2327,8 @@ multiple_spectra <- function(
     peaks_data <- rbind(peaks_data, add_df)
   }
 
+  peaks_data$z <- stringr::str_trunc(peaks_data$z, 13, side = "left")
+
   peaks_data$z <- factor(
     peaks_data$z,
     levels = sort(unique(peaks_data$z))
@@ -2120,9 +2336,6 @@ multiple_spectra <- function(
 
   # Prepare compound marker colors
   if (!is.null(color_cmp)) {
-    test1 <<- color_cmp
-    test2 <<- peaks_data
-
     color_cmp <- c("#ffffff", color_cmp)
     names(color_cmp) <- c(
       as.character(max(unique(peaks_data$mw))),
@@ -2134,6 +2347,11 @@ multiple_spectra <- function(
       gsub("\\.?0+$", "", gsub(" Da", "", names(color_cmp)))
     )]
   }
+
+  test5 <<- spectrum_data
+  test6 <<- peaks_data
+  # spectrum_data$z <- stringr::str_trunc(spectrum_data$z, 13, side = "left")
+  # peaks_data$z <- stringr::str_trunc(spectrum_data$z, 13, side = "left")
 
   plotly::plot_ly(
     data = spectrum_data,
@@ -2153,7 +2371,7 @@ multiple_spectra <- function(
     # },
     type = "scatter3d",
     mode = "lines",
-    line = list(color = "black", width = 2),
+    line = list(color = "white", width = 2),
     showlegend = FALSE,
     hoverinfo = "text",
     text = ~ paste0(
@@ -2187,7 +2405,7 @@ multiple_spectra <- function(
         symbol = "circle",
         size = 5,
         zindex = 100,
-        line = list(color = "black", width = 1)
+        line = list(color = "black", width = 1.5)
       ),
       hoverinfo = "text",
       text = ~ paste0(
@@ -2204,6 +2422,61 @@ multiple_spectra <- function(
         mw
       ),
       showlegend = FALSE
+    ) |>
+    plotly::layout(
+      paper_bgcolor = "rgba(0,0,0,0)",
+      paper_bgcolor = "rgba(255,255,255,0)",
+      font = list(color = "white"),
+      legend = list(
+        bgcolor = "rgba(0,0,0,0)",
+        bordercolor = "rgba(0,0,0,0)",
+        font = list(color = "white")
+      ),
+      # 3D Scene Styling
+      scene = list(
+        aspectmode = "manual",
+        aspectratio = list(
+          x = 1,
+          y = 1,
+          z = ifelse(length(unique(spectrum_data$z)) <= 3, 0.3, 1.0)
+        ),
+        xaxis = list(
+          title = "Mass [Da]",
+          gridcolor = "#7f7f7fff",
+          showgrid = TRUE,
+          showline = FALSE,
+          showzeroline = FALSE,
+          showticklabels = TRUE,
+          showspikes = FALSE,
+          showbackground = FALSE
+        ),
+        yaxis = list(
+          title = "Intensity [%]",
+          gridcolor = "#7f7f7fff",
+          showgrid = TRUE,
+          showline = FALSE,
+          showzeroline = FALSE,
+          showticklabels = TRUE,
+          showspikes = FALSE,
+          showbackground = FALSE
+        ),
+        zaxis = list(
+          title = ifelse(time, "Time [min]", ""),
+          gridcolor = "#7f7f7fff",
+          showgrid = ifelse(time, TRUE, FALSE),
+          showline = FALSE,
+          showzeroline = FALSE,
+          showticklabels = TRUE,
+          showspikes = FALSE,
+          showbackground = FALSE,
+          type = 'category'
+        ),
+        camera = list(
+          center = list(x = -0.05, y = -0.18, z = 0),
+          eye = list(x = 1.1, y = 0.8, z = 1.1),
+          up = list(x = 0, y = 1.5, z = 0)
+        )
+      )
     )
 
   if (cubic == TRUE) {
@@ -2320,15 +2593,18 @@ multiple_spectra <- function(
             showgrid = ifelse(time, TRUE, FALSE),
             showline = FALSE,
             showzeroline = FALSE,
-            showticklabels = FALSE,
+            showticklabels = TRUE,
             showspikes = FALSE,
             showbackground = FALSE,
             type = 'category'
           ),
           camera = list(
-            center = list(x = -0.05, y = -0.25, z = 0),
-            eye = list(x = 1.3, y = 1, z = 1.3),
-            up = list(x = 0, y = 2, z = 0)
+            center = list(x = -0.05, y = -0.18, z = 0),
+            eye = list(x = 1.2, y = 0.9, z = 1.2),
+            up = list(x = 0, y = 1.5, z = 0)
+            # center = list(x = -0.05, y = -0.25, z = 0),
+            # eye = list(x = 1.3, y = 1, z = 1.3),
+            # up = list(x = 0, y = 2, z = 0)
           )
         )
       )
@@ -3000,4 +3276,29 @@ transform_hits <- function(hits_summary, run_ki_kinact) {
 
   colnames(summary_table) <- new_names
   return(summary_table)
+}
+
+# Make uniform color scale for compounds
+#' @export
+get_cmp_colorScale <- function(filtered_table) {
+  if (length(unique(filtered_table$`Theor. Cmp`)) > 2) {
+    colors <- RColorBrewer::brewer.pal(
+      length(unique(filtered_table$`Theor. Cmp`)),
+      "Dark2"
+    )
+  } else if (length(unique(filtered_table$`Theor. Cmp`)) == 2) {
+    colors <- RColorBrewer::brewer.pal(
+      3,
+      "Dark2"
+    )[c(1, 3)]
+  } else {
+    colors <- RColorBrewer::brewer.pal(
+      3,
+      "Dark2"
+    )[1]
+  }
+
+  names(colors) <- unique(filtered_table$`Theor. Cmp`)
+
+  return(colors)
 }

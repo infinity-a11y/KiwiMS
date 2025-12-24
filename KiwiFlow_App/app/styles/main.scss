@@ -1761,9 +1761,10 @@ app-conversion_main-conversion_present_compounds_pie > div > div {
 .conversion-samples-wrapper .card-custom .bslib-card .card-header {
   border-top-left-radius: 4px;
   border-top-right-radius: 4px;
-  height: 35px;
+  height: 30px;
   align-content: center;
   align-items: center;
+  font-weight: normal;
 }
 
 .binding-analysis-tab .card-custom .card .card-body,
@@ -1772,6 +1773,7 @@ app-conversion_main-conversion_present_compounds_pie > div > div {
   padding: 1%;
 }
 
+// TODO - check if redundant
 .binding-analysis-tab tbody td,
 .result-conc-tab tbody td {
   border-top: 1px solid #0000005c;
@@ -1798,7 +1800,10 @@ app-conversion_main-conversion_present_compounds_pie > div > div {
 
 .result-conc-tab .plotly #scene,
 .result-conc-tab .plot-container .plotly,
-.result-conc-tab .plotly .gl-container {
+.result-conc-tab .plotly .gl-container,
+.conversion-samples-wrapper .plotly #scene,
+.conversion-samples-wrapper .plot-container .plotly,
+.conversion-samples-wrapper .plotly .gl-container .conversion-samples-wrapper .plotly #scene {
   top: unset !important;
   left: unset !important;
   height: 100% !important;
@@ -1863,10 +1868,14 @@ app-conversion_main-conversion_present_compounds_pie > div > div {
 
 .result-conc-tab .plotly,
 .result-conc-tab .js-plotly-plot .plotly,
-.result-conc-tab .js-plotly-plot .plotly .user-select-none {
+.result-conc-tab .js-plotly-plot .plotly .user-select-none,
+.conversion-samples-wrapper .plotly,
+.conversion-samples-wrapper .js-plotly-plot .plotly,
+.conversion-samples-wrapper .js-plotly-plot .plotly .user-select-none {
   width: 99% !important;
 }
 
+// TODO check if redundant
 .result-conc-tab .datatables {
   width: 1px !important;
   height: 1px !important;
