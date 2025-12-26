@@ -2765,7 +2765,7 @@ render_hits_table <- function(
   if (!is.null(single_conc)) {
     dom_value <- "t"
   } else {
-    dom_value <- NULL
+    dom_value <- "fti"
   }
 
   if (any(names(hits_table) %in% c("Sample ID", "Cmp Name"))) {
@@ -2782,18 +2782,15 @@ render_hits_table <- function(
     data = hits_table,
     rownames = FALSE,
     selection = list(mode = ifelse(select, "single", "none"), target = 'cell'),
-    class = "compact row-border nowrap",
-    extensions = "FixedColumns",
     options = list(
       rowCallback = htmlwidgets::JS(rowCallback),
       scrollX = TRUE,
-      scrollY = TRUE,
+      scrollY = "365px",
       scrollCollapse = TRUE,
       fixedHeader = TRUE,
       stripe = FALSE,
       dom = dom_value,
-      # fixedColumns = list(leftColumns = 1),
-      lengthMenu = menu_length,
+      paging = FALSE,
       columnDefs = list(
         list(className = 'clickable-column', targets = clickable_targets),
         list(

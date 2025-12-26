@@ -79,13 +79,14 @@ th {
 }
 
 *::-webkit-scrollbar-track {
-  background: transparent;
+  background: rgb(255 255 255 / 15%);
   margin-left: 5px;
   padding-left: 5px;
   left: 5px;
   position: relative;
-  border-radius: 10px;
   z-index: 9999;
+  border-top-right-radius: 4px;
+  border-bottom-right-radius: 4px;
 }
 
 *::-webkit-scrollbar-thumb {
@@ -257,6 +258,7 @@ th {
   border: 1px solid #00000000;
   box-shadow: inset 0px 0px 50px 14px rgb(0 0 0 / 10%);
   border: none;
+  overflow-x: hidden;
 }
 
 .bslib-card .card-header {
@@ -271,6 +273,7 @@ th {
   background-color: rgb(0 0 0 / 40%);
   border: none;
   border-radius: 4px;
+  overflow-x: hidden;
 }
 
 .card-custom .card-body {
@@ -1257,7 +1260,7 @@ decon-report-modal .btn-default {
 /* Structure & Tables */
 .conversion-result-wrapper {
   height: 100%;
-  width: 99%;
+  width: 100%;
   padding: 1%;
 }
 
@@ -1579,14 +1582,12 @@ app-conversion_main-conversion_present_compounds_pie > div > div {
 }
 
 /* Hits Tab */
-#app-conversion_main-conversion_hits_tab,
-#app-conversion_main-conversion_present_compounds_table {
+#app-conversion_main-conversion_hits_tab {
   height: 85% !important;
   font-size: 12px;
 }
 
-#app-conversion_main-conversion_hits_tab > div,
-#app-conversion_main-conversion_present_compounds_table > div {
+#app-conversion_main-conversion_hits_tab > div {
   height: 100% !important;
 }
 
@@ -1595,20 +1596,13 @@ app-conversion_main-conversion_present_compounds_pie > div > div {
   height: 100% !important;
 }
 
-#app-conversion_main-hits_tab .dt-row,
-#app-conversion_main-conversion_hits_tab .dt-row,
-#app-conversion_main-conversion_present_compounds_table .dt-row
-// #app-conversion_main-conversion_cmp_table .dt-row
-{
-  height: 80%;
-}
-
 #app-conversion_main-hits_tab div.dataTables_scrollBody,
 #app-conversion_main-conversion_hits_tab div.dataTables_scrollBody,
 .conc-hits-table div.dataTables_scrollBody,
 #app-conversion_main-conversion_present_compounds_table div.dataTables_scrollBody,
 #app-conversion_main-conversion_cmp_table div.dataTables_scrollBody {
   border: none !important;
+  border-radius: 4px;
 }
 
 #app-conversion_main-hits_tab tbody tr:first-child td:last-child,
@@ -1873,6 +1867,7 @@ app-conversion_main-conversion_present_compounds_pie > div > div {
 .conversion-samples-wrapper .js-plotly-plot .plotly,
 .conversion-samples-wrapper .js-plotly-plot .plotly .user-select-none {
   width: 99% !important;
+  height: 99% !important;
 }
 
 // TODO check if redundant
@@ -2173,7 +2168,7 @@ table.dataTable tbody td {
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 2fr 3fr;
   height: 100%;
-  width: 99%;
+  width: 100%;
 }
 
 .conversion-samples-wrapper .card-custom .card,
@@ -2248,7 +2243,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 .conversion-sample-protein {
-  font-weight: 300;
+  font-weight: 400;
 }
 
 .conversion-sample-protein-box {
@@ -2264,10 +2259,11 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 .cmp-table .card .card-body {
-  padding-left: 20px !important;
+  padding-left: 15px !important;
 }
 
-#app-conversion_main-conversion_cmp_table {
+#app-conversion_main-conversion_cmp_table,
+#app-conversion_main-conversion_present_compounds_table {
   width: 99% !important;
   height: 1px !important;
   flex-basis: unset !important;

@@ -2086,18 +2086,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
               tbl <- DT::datatable(
                 cmp_table,
-                extensions = c('Scroller', 'RowGroup'),
+                extensions = "RowGroup",
                 rownames = FALSE,
                 selection = "none",
-                class = 'cell-border hover',
                 options = list(
-                  deferRender = TRUE,
-                  dom = 'rtiS',
-                  scrollY = 150,
+                  dom = 't',
+                  scrollY = "175px",
                   scrollCollapse = TRUE,
-                  paging = TRUE,
-                  displayLength = 100,
-                  scroller = TRUE,
                   rowGroup = list(dataSrc = 0),
                   columnDefs = list(
                     list(visible = FALSE, targets = 0),
@@ -2222,15 +2217,17 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                         class = "bg-dark help-header",
                         "Present Compounds"
                       ),
-                      shiny::div(
-                        shinycssloaders::withSpinner(
-                          DT::DTOutput(
-                            ns("conversion_cmp_table")
-                          ),
-                          type = 1,
-                          color = "#7777f9"
-                        )
+                      # shiny::div(
+                      shinycssloaders::withSpinner(
+                        DT::DTOutput(
+                          ns("conversion_cmp_table")
+                          # ,
+                          # height = "185px"
+                        ),
+                        type = 1,
+                        color = "#7777f9"
                       ),
+                      # ),
                       full_screen = TRUE
                     )
                   ),
@@ -2327,8 +2324,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           output$conversion_cmp_table <- DT::renderDataTable({
             shiny::req(input$conversion_compound_picker)
 
-            test <<- hits_summary
-
             # Filter table for selected compound
             tbl <- hits_summary |>
               dplyr::filter(
@@ -2337,24 +2332,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
             # Prepare compound coloring
             colors <- get_cmp_colorScale(filtered_table = tbl)
-
-            test <<- colors
-            # if (length(unique(cmp_table$`Mass Shift`)) > 2) {
-            #   vals <- RColorBrewer::brewer.pal(
-            #     length(unique(cmp_table$`Mass Shift`)),
-            #     "Dark2"
-            #   )
-            # } else if (length(unique(cmp_table$`Mass Shift`)) == 2) {
-            #   vals <- RColorBrewer::brewer.pal(
-            #     3,
-            #     "Dark2"
-            #   )[c(1, 3)]
-            # } else {
-            #   vals <- RColorBrewer::brewer.pal(
-            #     3,
-            #     "Dark2"
-            #   )[1]
-            # }
 
             # Create data table
             cmp_table <- tbl |>
@@ -2373,16 +2350,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               ) |>
               dplyr::relocate(`Mass Shift`, .before = 1) |>
               DT::datatable(
-                extensions = c('RowGroup'),
+                extensions = "RowGroup",
                 rownames = FALSE,
                 selection = "none",
                 options = list(
                   dom = 't',
-                  scrollY = TRUE,
+                  scrollY = "175px",
                   scrollCollapse = TRUE,
-                  paging = TRUE,
-                  displayLength = 100,
-                  scroller = TRUE,
                   rowGroup = list(dataSrc = 1),
                   columnDefs = list(
                     list(visible = FALSE, targets = 1),
@@ -2402,7 +2376,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 columns = "Mass Shift",
                 target = 'row',
                 backgroundColor = DT::styleEqual(
-                  # levels = unique(cmp_table$`Mass Shift`),
                   levels = names(colors),
                   values = colors
                 )
