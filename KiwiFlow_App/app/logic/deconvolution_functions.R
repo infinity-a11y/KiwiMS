@@ -667,7 +667,8 @@ spectrum_plot <- function(
   raw = FALSE,
   interactive = TRUE,
   bin_width = 0.01,
-  theme = "dark"
+  theme = "dark",
+  color_cmp = NULL
 ) {
   plot_data <- process_plot_data(
     sample,
@@ -684,7 +685,6 @@ spectrum_plot <- function(
     grid_color <- "rgba(0, 0, 0, 0.1)"
     zeroline_color <- "rgba(0, 0, 0, 0.5)"
     data_line_color <- "black"
-    marker_border_color <- "#7777f9"
   } else {
     bg_color <- "rgba(0,0,0,0)"
     plot_bg_color <- "rgba(0,0,0,0)"
@@ -692,8 +692,9 @@ spectrum_plot <- function(
     grid_color <- "rgba(255, 255, 255, 0.2)"
     zeroline_color <- "rgba(255, 255, 255, 0.5)"
     data_line_color <- "white"
-    marker_border_color <- "#7777f9"
   }
+
+  marker_border_color <- ifelse(!is.null(color_cmp), "#000000", "#7777f9")
 
   # ggplot (non-interactive) section
   if (!interactive) {
@@ -845,16 +846,36 @@ spectrum_plot <- function(
           1
       }
 
+      color_cmp <<- color_cmp
+      plot_data <<- plot_data
+
+      if (!is.null(color_cmp)) {
+        color_cmp <- c("#ffffff", color_cmp)
+        names(color_cmp) <- c(
+          as.character(max(unique(plot_data$highlight_peaks$mw))),
+          names(color_cmp)[-1]
+        )
+
+        plot_data$highlight_peaks$mw_color <- color_cmp[match(
+          as.character(plot_data$highlight_peaks$mw),
+          gsub("\\.?0+$", "", gsub(" Da", "", names(color_cmp)))
+        )]
+      }
+
       plot <- plotly::add_markers(
         plot,
         data = plot_data$highlight_peaks,
         x = ~mass,
         y = ~intensity,
         marker = list(
-          color = "#e8cb97",
+          color = if (!is.null(color_cmp)) {
+            ~ I(mw_color)
+          } else {
+            "#e8cb97"
+          },
           line = list(
             color = marker_border_color,
-            width = 1.5
+            width = ifelse(!is.null(color_cmp), 1, 1.5)
           ),
           symbol = "circle",
           size = 12,

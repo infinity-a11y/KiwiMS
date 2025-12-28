@@ -31,6 +31,7 @@ box::use(
       transform_hits,
       get_cmp_colorScale,
     ],
+  app / logic / deconvolution_functions[spectrum_plot, ],
   app /
     logic /
     conversion_constants[
@@ -1951,49 +1952,14 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           output$conversion_present_compounds_pie <- plotly::renderPlotly({
             shiny::req(input$conversion_sample_picker)
 
-            cmp_table <- hits_summary |>
+            tbl <- hits_summary |>
               dplyr::filter(
                 `Sample ID` == input$conversion_sample_picker
-              ) |>
+              )
+
+            cmp_table <- tbl |>
               dplyr::group_by(`Cmp Name`) |>
-              dplyr::arrange(dplyr::desc(`Theor. Cmp`), `Bind. Stoich.`)
-
-            # Color mapping based on unique mass shift values
-            n_masses <- length(unique(cmp_table$`Theor. Cmp`))
-
-            # Generate the palette
-            if (n_masses > 2) {
-              pal <- RColorBrewer::brewer.pal(n_masses, "Dark2")
-            } else if (n_masses == 2) {
-              pal <- RColorBrewer::brewer.pal(3, "Dark2")[c(1, 3)]
-            } else {
-              pal <- RColorBrewer::brewer.pal(3, "Dark2")[1]
-            }
-
-            # Match colors to the data
-            mapped_colors <- pal[match(
-              cmp_table$`Theor. Cmp`,
-              unique(cmp_table$`Theor. Cmp`)
-            )]
-
-            empty_row <- data.frame(
-              cmp_table$`Cmp Name`[1],
-              cmp_table$`Total %-Binding`[1],
-              "empty",
-              "Unbound",
-              1 -
-                as.numeric(gsub("%", "", cmp_table$`Total %-Binding`[1])) /
-                  100
-            ) |>
-              stats::setNames(c(
-                "Cmp Name",
-                "total_bind",
-                "mass_shift",
-                "mass_stoich",
-                "relBinding"
-              ))
-
-            cmp_table <- cmp_table |>
+              dplyr::arrange(dplyr::desc(`Theor. Cmp`), `Bind. Stoich.`) |>
               dplyr::reframe(
                 total_bind = `Total %-Binding`,
                 mass_shift = `Theor. Cmp`,
@@ -2007,9 +1973,40 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 ),
                 relBinding = as.numeric(gsub("%", "", `%-Binding`)) / 100
               ) |>
-              rbind(empty_row)
+              rbind(
+                data.frame(
+                  tbl$`Cmp Name`[1],
+                  tbl$`Total %-Binding`[1],
+                  "empty",
+                  "Unbound",
+                  1 -
+                    as.numeric(gsub(
+                      "%",
+                      "",
+                      tbl$`Total %-Binding`[1]
+                    )) /
+                      100
+                ) |>
+                  stats::setNames(c(
+                    "Cmp Name",
+                    "total_bind",
+                    "mass_shift",
+                    "mass_stoich",
+                    "relBinding"
+                  ))
+              )
 
-            mapped_colors <- c(mapped_colors, '#e5e5e5')
+            # Prepare compound marker colors
+            colors <- c("#e5e5e5", get_cmp_colorScale(filtered_table = tbl))
+            names(colors) <- c(
+              "empty",
+              names(colors)[-1]
+            )
+
+            cmp_table$mw_color <- colors[match(
+              cmp_table$mass_shift,
+              names(colors)
+            )]
 
             plotly::plot_ly(
               data = cmp_table,
@@ -2024,7 +2021,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               textposition = 'auto',
               outsidetextfont = list(color = 'white'),
               marker = list(
-                colors = mapped_colors,
+                colors = ~ I(mw_color),
                 line = list(color = '#e5e5e5', width = 1)
               )
             ) |>
@@ -2052,10 +2049,31 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
           # Render sample spectrum
           output$conversion_sample_spectrum <- plotly::renderPlotly({
-            shiny::req(input$conversion_sample_picker)
+            selected_sample <- input$conversion_sample_picker
+            shiny::req(selected_sample)
 
-            samples <- conversion_sidebar_vars$result_list()$deconvolution
-            samples[[input$conversion_sample_picker]]$hits_spectrum
+            # Filter table for selected sample
+            tbl <- hits_summary |>
+              dplyr::filter(
+                `Sample ID` == selected_sample
+              )
+
+            # Prepare compound coloring
+            colors <- get_cmp_colorScale(filtered_table = tbl)
+
+            deconvolution <<- conversion_sidebar_vars$result_list()$deconvolution
+            sel_smpl <<- selected_sample
+            cols <<- colors
+
+            spectrum_plot(
+              sample = conversion_sidebar_vars$result_list()$deconvolution[[
+                selected_sample
+              ]],
+              color_cmp = colors
+            )
+
+            # samples <- conversion_sidebar_vars$result_list()$deconvolution
+            # samples[[input$conversion_sample_picker]]$hits_spectrum
           })
 
           # Render samples view table
@@ -2063,80 +2081,87 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             {
               shiny::req(input$conversion_sample_picker)
 
-              cmp_table <- hits_summary |>
+              tbl <- hits_summary |>
                 dplyr::filter(
                   `Sample ID` == input$conversion_sample_picker
-                ) |>
+                )
+
+              # Prepare compound coloring
+              colors <- get_cmp_colorScale(filtered_table = tbl)
+
+              cmp_table <- tbl |>
                 dplyr::group_by(`Cmp Name`) |>
                 dplyr::arrange(dplyr::desc(`Theor. Cmp`), `Bind. Stoich.`) |>
                 dplyr::reframe(
                   `Mass Shift` = `Theor. Cmp`,
                   Stoichiometry = `Bind. Stoich.`,
-                  `%-Binding` = `%-Binding`
-                )
-
-              input_conversion_present_compounds_table_barchart <- TRUE
-              if (input_conversion_present_compounds_table_barchart) {
-                cmp_table$`%-Binding` <- as.numeric(gsub(
-                  "%",
-                  "",
-                  cmp_table$`%-Binding`
-                ))
-              }
-
-              tbl <- DT::datatable(
-                cmp_table,
-                extensions = "RowGroup",
-                rownames = FALSE,
-                selection = "none",
-                options = list(
-                  dom = 't',
-                  scrollY = "175px",
-                  scrollCollapse = TRUE,
-                  rowGroup = list(dataSrc = 0),
-                  columnDefs = list(
-                    list(visible = FALSE, targets = 0),
-                    list(className = 'dt-center', targets = "_all"),
-                    list(
-                      targets = 3,
-                      render = htmlwidgets::JS(chart_js)
-                    ),
-                    list(
-                      targets = -1,
-                      className = 'dt-last-col'
+                  `%-Binding` = as.numeric(gsub(
+                    "%",
+                    "",
+                    `%-Binding`
+                  ))
+                ) |>
+                DT::datatable(
+                  extensions = "RowGroup",
+                  rownames = FALSE,
+                  selection = "none",
+                  options = list(
+                    dom = 't',
+                    scrollY = "175px",
+                    scrollCollapse = TRUE,
+                    rowGroup = list(dataSrc = 0),
+                    columnDefs = list(
+                      list(visible = FALSE, targets = 0),
+                      list(className = 'dt-center', targets = "_all"),
+                      list(
+                        targets = 3,
+                        render = htmlwidgets::JS(chart_js)
+                      ),
+                      list(
+                        targets = -1,
+                        className = 'dt-last-col'
+                      )
                     )
                   )
-                )
-              )
-
-              if (length(unique(cmp_table$`Mass Shift`)) > 2) {
-                vals <- RColorBrewer::brewer.pal(
-                  length(unique(cmp_table$`Mass Shift`)),
-                  "Dark2"
-                )
-              } else if (length(unique(cmp_table$`Mass Shift`)) == 2) {
-                vals <- RColorBrewer::brewer.pal(
-                  3,
-                  "Dark2"
-                )[c(1, 3)]
-              } else {
-                vals <- RColorBrewer::brewer.pal(
-                  3,
-                  "Dark2"
-                )[1]
-              }
-
-              tbl <- tbl |>
+                ) |>
                 DT::formatStyle(
                   columns = "Mass Shift",
                   target = 'row',
                   backgroundColor = DT::styleEqual(
-                    levels = unique(cmp_table$`Mass Shift`),
-                    values = vals
+                    levels = names(colors),
+                    values = colors
                   )
                 )
 
-              tbl
+              return(cmp_table)
+              # if (length(unique(cmp_table$`Mass Shift`)) > 2) {
+              #   vals <- RColorBrewer::brewer.pal(
+              #     length(unique(cmp_table$`Mass Shift`)),
+              #     "Dark2"
+              #   )
+              # } else if (length(unique(cmp_table$`Mass Shift`)) == 2) {
+              #   vals <- RColorBrewer::brewer.pal(
+              #     3,
+              #     "Dark2"
+              #   )[c(1, 3)]
+              # } else {
+              #   vals <- RColorBrewer::brewer.pal(
+              #     3,
+              #     "Dark2"
+              #   )[1]
+              # }
+
+              # tbl <- tbl |>
+              #   DT::formatStyle(
+              #     columns = "Mass Shift",
+              #     target = 'row',
+              #     backgroundColor = DT::styleEqual(
+              #       levels = unique(cmp_table$`Mass Shift`),
+              #       values = vals
+              #     )
+              #   )
+
+              # tbl
             }
           )
 
@@ -2221,8 +2246,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                       shinycssloaders::withSpinner(
                         DT::DTOutput(
                           ns("conversion_cmp_table")
-                          # ,
-                          # height = "185px"
                         ),
                         type = 1,
                         color = "#7777f9"
@@ -2437,7 +2460,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
             # Make compound color scale
             colors <- get_cmp_colorScale(filtered_table = tbl)
-
+            colors1 <<- colors
             # Pre-calculate totals for the top labels
             totals <- dplyr::group_by(tbl, `Sample ID`) |>
               dplyr::summarize(

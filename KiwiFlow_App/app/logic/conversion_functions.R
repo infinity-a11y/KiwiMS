@@ -2348,11 +2348,6 @@ multiple_spectra <- function(
     )]
   }
 
-  test5 <<- spectrum_data
-  test6 <<- peaks_data
-  # spectrum_data$z <- stringr::str_trunc(spectrum_data$z, 13, side = "left")
-  # peaks_data$z <- stringr::str_trunc(spectrum_data$z, 13, side = "left")
-
   plotly::plot_ly(
     data = spectrum_data,
     x = ~mass,
