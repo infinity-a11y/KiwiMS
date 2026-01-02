@@ -42,6 +42,9 @@ box::use(
       conc_unit_input_ui,
       time_unit_input_ui,
       chart_js,
+      sequential_scales,
+      qualitative_scales,
+      gradient_scales,
     ],
 )
 
@@ -1997,7 +2000,14 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               )
 
             # Prepare compound marker colors
-            colors <- c("#e5e5e5", get_cmp_colorScale(filtered_table = tbl))
+            colors <- c(
+              "#e5e5e5",
+              get_cmp_colorScale(
+                filtered_table = tbl,
+                scale = input$color_scale,
+                variable = input$scale_select
+              )
+            )
             names(colors) <- c(
               "empty",
               names(colors)[-1]
@@ -2059,11 +2069,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               )
 
             # Prepare compound coloring
-            colors <- get_cmp_colorScale(filtered_table = tbl)
-
-            deconvolution <<- conversion_sidebar_vars$result_list()$deconvolution
-            sel_smpl <<- selected_sample
-            cols <<- colors
+            colors <- get_cmp_colorScale(
+              filtered_table = tbl,
+              scale = input$color_scale,
+              variable = input$scale_select
+            )
 
             spectrum_plot(
               sample = conversion_sidebar_vars$result_list()$deconvolution[[
@@ -2071,9 +2081,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               ]],
               color_cmp = colors
             )
-
-            # samples <- conversion_sidebar_vars$result_list()$deconvolution
-            # samples[[input$conversion_sample_picker]]$hits_spectrum
           })
 
           # Render samples view table
@@ -2087,7 +2094,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 )
 
               # Prepare compound coloring
-              colors <- get_cmp_colorScale(filtered_table = tbl)
+              colors <- get_cmp_colorScale(
+                filtered_table = tbl,
+                scale = input$color_scale,
+                variable = input$scale_select
+              )
 
               cmp_table <- tbl |>
                 dplyr::group_by(`Cmp Name`) |>
@@ -2134,34 +2145,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 )
 
               return(cmp_table)
-              # if (length(unique(cmp_table$`Mass Shift`)) > 2) {
-              #   vals <- RColorBrewer::brewer.pal(
-              #     length(unique(cmp_table$`Mass Shift`)),
-              #     "Dark2"
-              #   )
-              # } else if (length(unique(cmp_table$`Mass Shift`)) == 2) {
-              #   vals <- RColorBrewer::brewer.pal(
-              #     3,
-              #     "Dark2"
-              #   )[c(1, 3)]
-              # } else {
-              #   vals <- RColorBrewer::brewer.pal(
-              #     3,
-              #     "Dark2"
-              #   )[1]
-              # }
-
-              # tbl <- tbl |>
-              #   DT::formatStyle(
-              #     columns = "Mass Shift",
-              #     target = 'row',
-              #     backgroundColor = DT::styleEqual(
-              #       levels = unique(cmp_table$`Mass Shift`),
-              #       values = vals
-              #     )
-              #   )
-
-              # tbl
             }
           )
 
@@ -2354,7 +2337,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               )
 
             # Prepare compound coloring
-            colors <- get_cmp_colorScale(filtered_table = tbl)
+            colors <- get_cmp_colorScale(
+              filtered_table = tbl,
+              scale = input$color_scale,
+              variable = input$scale_select
+            )
 
             # Create data table
             cmp_table <- tbl |>
@@ -2418,7 +2405,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             )
 
             # Make compound color scale
-            colors <- get_cmp_colorScale(filtered_table = tbl)
+            colors <- get_cmp_colorScale(
+              filtered_table = tbl,
+              scale = input$color_scale,
+              variable = input$scale_select
+            )
 
             # Create spectra plot
             multiple_spectra(
@@ -2459,8 +2450,12 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               )
 
             # Make compound color scale
-            colors <- get_cmp_colorScale(filtered_table = tbl)
-            colors1 <<- colors
+            colors <- get_cmp_colorScale(
+              filtered_table = tbl,
+              scale = input$color_scale,
+              variable = input$scale_select
+            )
+
             # Pre-calculate totals for the top labels
             totals <- dplyr::group_by(tbl, `Sample ID`) |>
               dplyr::summarize(
@@ -2535,6 +2530,44 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 )
               )
           })
+
+          bslib::nav_insert(
+            id = "tabs",
+            bslib::nav_item(
+              class = "conversion-tab-item-wrapper",
+              shiny::div(
+                class = "conversion-tab-items",
+                shiny::div(
+                  class = "scale-div",
+                  shinyWidgets::pickerInput(
+                    inputId = ns("scale_select"),
+                    label = NULL,
+                    choices = c("Theor. Cmp", "Mass Shifts", "Sample ID")
+                  )
+                ),
+                shiny::selectInput(
+                  ns("color_scale"),
+                  label = NULL,
+                  choices = list(
+                    Qualitative = qualitative_scales,
+                    Sequential = sequential_scales,
+                    Gradient = gradient_scales
+                  )
+                ),
+                shiny::div(
+                  class = "tooltip-bttn",
+                  shiny::actionButton(
+                    ns("conversion_tooltip_bttn"),
+                    label = "",
+                    icon = shiny::icon("circle-question")
+                  )
+                )
+              )
+            ),
+            target = NULL,
+            position = "after",
+            select = FALSE
+          )
 
           ### Switch to Hits tab ----
           set_selected_tab("Hits", session)

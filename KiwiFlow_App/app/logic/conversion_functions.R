@@ -2,7 +2,16 @@
 
 box::use(
   app / logic / deconvolution_functions[spectrum_plot, process_plot_data, ],
-  app / logic / conversion_constants[symbols, warning_sym, chart_js, ],
+  app /
+    logic /
+    conversion_constants[
+      symbols,
+      warning_sym,
+      chart_js,
+      sequential_scales,
+      qualitative_scales,
+      gradient_scales
+    ],
 )
 
 # Helper function to process uploaded table
@@ -3272,25 +3281,63 @@ transform_hits <- function(hits_summary, run_ki_kinact) {
 
 # Make uniform color scale for compounds
 #' @export
-get_cmp_colorScale <- function(filtered_table) {
-  if (length(unique(filtered_table$`Theor. Cmp`)) > 2) {
-    colors <- RColorBrewer::brewer.pal(
-      length(unique(filtered_table$`Theor. Cmp`)),
-      "Dark2"
-    )
-  } else if (length(unique(filtered_table$`Theor. Cmp`)) == 2) {
-    colors <- RColorBrewer::brewer.pal(
-      3,
-      "Dark2"
-    )[c(1, 3)]
+get_cmp_colorScale <- function(filtered_table, scale, variable) {
+  if (variable == "Mass Shift") {
+    cmp_levels <- unique(paste0(
+      "[",
+      filtered_table[["Theor. Cmp"]],
+      "]",
+      filtered_table[["Bind. Stoich."]]
+    ))
   } else {
-    colors <- RColorBrewer::brewer.pal(
-      3,
-      "Dark2"
-    )[1]
+    cmp_levels <- unique(filtered_table[[variable]])
   }
 
-  names(colors) <- unique(filtered_table$`Theor. Cmp`)
+  n <- length(cmp_levels)
 
+  # Initialize output
+  colors <- NULL
+
+  # RColorBrewer Scales
+  if (scale %in% c(qualitative_scales, sequential_scales)) {
+    # Check max colors available for this specific Brewer palette
+    max_colors <- RColorBrewer::brewer.pal.info[scale, "maxcolors"]
+
+    # Return NULL if n exceeds the palette's max limit
+    if (n > max_colors) {
+      warning(paste(
+        "N =",
+        n,
+        "exceeds max colors (",
+        max_colors,
+        ") for palette",
+        scale
+      ))
+      return(NULL)
+    }
+
+    # Handle n < 3 (Brewer minimum request is 3)
+    n_request <- max(n, 3)
+    raw_colors <- RColorBrewer::brewer.pal(n_request, scale)
+
+    # Apply custom subsetting for contrast at low n
+    if (n == 2) {
+      colors <- raw_colors[c(1, 3)]
+    } else if (n == 1) {
+      colors <- raw_colors[1]
+    } else {
+      colors <- raw_colors[1:n]
+    }
+
+    # ViridisLite Scales
+  } else if (scale %in% gradient_scales) {
+    vir_func <- getExportedValue("viridisLite", scale)
+    colors <- vir_func(n)
+  } else {
+    stop(paste("Scale", scale, "not recognized in provided lists."))
+  }
+
+  # Assign names mapping the colors to the specific variable levels
+  names(colors) <- cmp_levels
   return(colors)
 }
