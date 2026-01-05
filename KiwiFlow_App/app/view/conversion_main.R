@@ -2005,8 +2005,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               "#e5e5e5",
               get_cmp_colorScale(
                 filtered_table = tbl,
-                scale = input$color_scale,
-                variable = input$scale_select
+                scale = input$color_scale
               )
             )
             names(colors) <- c(
@@ -2072,8 +2071,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             # Prepare compound coloring
             colors <- get_cmp_colorScale(
               filtered_table = tbl,
-              scale = input$color_scale,
-              variable = input$scale_select
+              scale = input$color_scale
             )
 
             spectrum_plot(
@@ -2097,8 +2095,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               # Prepare compound coloring
               colors <- get_cmp_colorScale(
                 filtered_table = tbl,
-                scale = input$color_scale,
-                variable = input$scale_select
+                scale = input$color_scale
               )
 
               cmp_table <- tbl |>
@@ -2345,8 +2342,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             # Prepare compound coloring
             colors <- get_cmp_colorScale(
               filtered_table = tbl,
-              scale = input$color_scale,
-              variable = input$scale_select
+              scale = input$color_scale
             )
 
             # Create data table
@@ -2418,8 +2414,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             # Make compound color scale
             colors <- get_cmp_colorScale(
               filtered_table = tbl,
-              scale = input$color_scale,
-              variable = input$scale_select
+              scale = input$color_scale
             )
 
             # Create spectra plot
@@ -2463,8 +2458,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             # Make compound color scale
             colors <- get_cmp_colorScale(
               filtered_table = tbl,
-              scale = input$color_scale,
-              variable = input$scale_select
+              scale = input$color_scale
             )
 
             # Assign font colors to match background brightness
@@ -2560,14 +2554,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               class = "conversion-tab-item-wrapper",
               shiny::div(
                 class = "conversion-tab-items",
-                shiny::div(
-                  class = "scale-div",
-                  shinyWidgets::pickerInput(
-                    inputId = ns("scale_select"),
-                    label = NULL,
-                    choices = c("Theor. Cmp", "Mass Shifts", "Sample ID")
-                  )
-                ),
                 shiny::selectInput(
                   ns("color_scale"),
                   label = NULL,

@@ -2283,7 +2283,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 .conversion-tab-items {
   display: flex;
   gap: 15px;
-  width: 300px;
+  width: 150px;
   right: 2%;
   position: relative;
 }
@@ -2316,11 +2316,6 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   right: 5px;
 }
 
-.conversion-tab-items .bslib-card .card-header .selectize-control .item,
-.conversion-tab-items .selectize-control.single .selectize-input:hover {
-  color: black !important;
-}
-
 .conversion-tab-items .selectize-dropdown {
   border: none;
 }
@@ -2348,9 +2343,11 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   margin-left: auto !important;
   margin-top: 0 !important;
 }
+
 /* Set1 */
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Set1"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Set1"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Set1"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Set1"]) {
   background: linear-gradient(
     to right,
     #e41a1c 0%,
@@ -2378,7 +2375,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 
 /* Set2 */
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Set2"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Set2"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Set2"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Set2"]) {
   background: linear-gradient(
     to right,
     #66c2a5 0%,
@@ -2404,7 +2402,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 
 /* Set3 */
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Set3"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Set3"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Set3"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Set3"]) {
   background: linear-gradient(
     to right,
     #8dd3c7 0%,
@@ -2438,7 +2437,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 
 /* Pastel1 */
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Pastel1"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Pastel1"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Pastel1"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Pastel1"]) {
   background: linear-gradient(
     to right,
     #fbb4ae 0%,
@@ -2465,7 +2465,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Pastel2"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Pastel2"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Pastel2"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Pastel2"]) {
   background: linear-gradient(
     to right,
     #b3e2cd 0%,
@@ -2490,7 +2491,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Dark2"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Dark2"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Dark2"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Dark2"]) {
   background: linear-gradient(
     to right,
     #1b9e77 0%,
@@ -2515,7 +2517,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Accent"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Accent"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Accent"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Accent"]) {
   background: linear-gradient(
     to right,
     #7fc97f 0%,
@@ -2540,7 +2543,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="YlOrRd"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="YlOrRd"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="YlOrRd"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="YlOrRd"]) {
   background: linear-gradient(
     to right,
     #ffffcc 0%,
@@ -2567,7 +2571,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="YlOrBr"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="YlOrBr"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="YlOrBr"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="YlOrBr"]) {
   background: linear-gradient(
     to right,
     #ffffe5 0%,
@@ -2594,7 +2599,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="YlGnBu"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="YlGnBu"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="YlGnBu"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="YlGnBu"]) {
   background: linear-gradient(
     to right,
     #ffffd9 0%,
@@ -2621,7 +2627,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="YlGn"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="YlGn"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="YlGn"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="YlGn"]) {
   background: linear-gradient(
     to right,
     #ffffe5 0%,
@@ -2648,7 +2655,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Reds"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Reds"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Reds"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Reds"]) {
   background: linear-gradient(
     to right,
     #fff5f0 0%,
@@ -2675,7 +2683,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="RdPu"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="RdPu"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="RdPu"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="RdPu"]) {
   background: linear-gradient(
     to right,
     #fff7f3 0%,
@@ -2702,7 +2711,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Purples"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Purples"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Purples"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Purples"]) {
   background: linear-gradient(
     to right,
     #fcfbfd 0%,
@@ -2729,7 +2739,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="PuRd"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="PuRd"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="PuRd"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="PuRd"]) {
   background: linear-gradient(
     to right,
     #f7f4f9 0%,
@@ -2756,7 +2767,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="PuBuGn"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="PuBuGn"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="PuBuGn"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="PuBuGn"]) {
   background: linear-gradient(
     to right,
     #fff7fb 0%,
@@ -2783,7 +2795,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="PuBu"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="PuBu"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="PuBu"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="PuBu"]) {
   background: linear-gradient(
     to right,
     #fff7fb 0%,
@@ -2810,7 +2823,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="OrRd"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="OrRd"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="OrRd"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="OrRd"]) {
   background: linear-gradient(
     to right,
     #fff7ec 0%,
@@ -2837,7 +2851,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Oranges"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Oranges"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Oranges"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Oranges"]) {
   background: linear-gradient(
     to right,
     #fff7ec 0%,
@@ -2858,40 +2873,14 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #b30000 88.8889%,
     #7f0000 88.8889%,
     #7f0000 100%
-  );
-  color: black;
-  text-align: left;
-}
-
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Oranges"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Oranges"] {
-  background: linear-gradient(
-    to right,
-    #fff5eb 0%,
-    #fff5eb 11.1111%,
-    #fee6ce 11.1111%,
-    #fee6ce 22.2222%,
-    #fdd0a2 22.2222%,
-    #fdd0a2 33.3333%,
-    #fdae6b 33.3333%,
-    #fdae6b 44.4444%,
-    #fd8d3c 44.4444%,
-    #fd8d3c 55.5556%,
-    #f16913 55.5556%,
-    #f16913 66.6667%,
-    #d94801 66.6667%,
-    #d94801 77.7778%,
-    #a63603 77.7778%,
-    #a63603 88.8889%,
-    #7f2704 88.8889%,
-    #7f2704 100%
   );
   color: black;
   text-align: left;
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Greys"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Greys"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Greys"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Greys"]) {
   background: linear-gradient(
     to right,
     #ffffff 0%,
@@ -2918,7 +2907,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Greens"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Greens"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Greens"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Greens"]) {
   background: linear-gradient(
     to right,
     #f7fcf5 0%,
@@ -2945,7 +2935,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="GnBu"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="GnBu"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="GnBu"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="GnBu"]) {
   background: linear-gradient(
     to right,
     #f7fcf5 0%,
@@ -2972,7 +2963,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="BuPu"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="BuPu"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="BuPu"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="BuPu"]) {
   background: linear-gradient(
     to right,
     #f7fcfd 0%,
@@ -2999,7 +2991,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="BuGn"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="BuGn"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="BuGn"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="BuGn"]) {
   background: linear-gradient(
     to right,
     #f7fcfd 0%,
@@ -3026,7 +3019,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Blues"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Blues"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Blues"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Blues"]) {
   background: linear-gradient(
     to right,
     #f7fbff 0%,
@@ -3055,7 +3049,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 /* Viridis */
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="inferno"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="inferno"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="inferno"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="inferno"]) {
   background: linear-gradient(
     to right,
     #000004ff,
@@ -3084,7 +3079,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="plasma"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="plasma"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="plasma"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="plasma"]) {
   background: linear-gradient(
     to right,
     #0d0887ff,
@@ -3113,7 +3109,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="viridis"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="viridis"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="viridis"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="viridis"]) {
   background: linear-gradient(
     to right,
     #440154ff,
@@ -3142,7 +3139,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="cividis"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="cividis"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="cividis"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="cividis"]) {
   background: linear-gradient(
     to right,
     #00204dff,
@@ -3171,7 +3169,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="rocket"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="rocket"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="rocket"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="rocket"]) {
   background: linear-gradient(
     to right,
     #03051aff,
@@ -3200,7 +3199,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="mako"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="mako"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="mako"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="mako"]) {
   background: linear-gradient(
     to right,
     #0b0405ff,
@@ -3230,7 +3230,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 
 /* Magma */
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="magma"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="magma"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="magma"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="magma"]) {
   background: linear-gradient(
     to right,
     #000004ff,
@@ -3260,7 +3261,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 
 /* Turbo */
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="turbo"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="turbo"] {
+.selectize-dropdown.app-conversion_main-color_scale .option[data-value="turbo"],
+#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="turbo"]) {
   background: linear-gradient(
     to right,
     #30123bff,
@@ -3286,24 +3288,4 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   );
   color: white;
   text-align: left;
-}
-
-/* Spectral */
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Spectral"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Spectral"] {
-  background: linear-gradient(
-    to right,
-    #9e0142,
-    #d53e4f,
-    #f46d43,
-    #fdae61,
-    #fee08b,
-    #ffffbf,
-    #e6f598,
-    #abdda4,
-    #66c2a5,
-    #3288bd,
-    #5e4fa2
-  );
-  color: black;
 }

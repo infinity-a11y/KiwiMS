@@ -846,9 +846,6 @@ spectrum_plot <- function(
           1
       }
 
-      color_cmp <<- color_cmp
-      plot_data <<- plot_data
-
       if (!is.null(color_cmp)) {
         color_cmp <- c("#ffffff", color_cmp)
         names(color_cmp) <- c(

@@ -3296,17 +3296,8 @@ get_contrast_color <- function(hex_codes) {
 
 # Make uniform color scale for compounds
 #' @export
-get_cmp_colorScale <- function(filtered_table, scale, variable) {
-  if (variable == "Mass Shift") {
-    cmp_levels <- unique(paste0(
-      "[",
-      filtered_table[["Theor. Cmp"]],
-      "]",
-      filtered_table[["Bind. Stoich."]]
-    ))
-  } else {
-    cmp_levels <- unique(filtered_table[[variable]])
-  }
+get_cmp_colorScale <- function(filtered_table, scale) {
+  cmp_levels <- unique(filtered_table[["Theor. Cmp"]])
 
   n <- length(cmp_levels)
 
