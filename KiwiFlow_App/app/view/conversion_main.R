@@ -1240,10 +1240,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       modified_results = NULL,
       select_concentration = NULL,
       formatted_hits = NULL,
-      conc_colors = NULL
+      conc_colors = NULL,
+      expand_helper = FALSE
     )
 
-    # Trigger loading of binding analysis results interface
+    ### Binding analysis results interface ----
     shiny::observeEvent(conversion_sidebar_vars$run_analysis(), {
       # If result was computed show result interface and hide declaration interace tabs
       if (!is.null(conversion_sidebar_vars$result_list())) {
@@ -1677,18 +1678,21 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   shiny::column(
                     width = 2,
                     align = "center",
-                    shinyWidgets::pickerInput(
-                      ns("hits_tab_col_select"),
-                      label = "Select Columns",
-                      choices = names(hits_summary)[
-                        !names(hits_summary) %in% c("Sample ID", "Cmp Name")
-                      ],
-                      selected = names(hits_summary)[
-                        !names(hits_summary) %in% c("Sample ID", "Cmp Name")
-                      ][-c(1:2, 4:5, 7, 9)],
-                      multiple = TRUE,
-                      options = list(
-                        `actions-box` = TRUE
+                    shiny::div(
+                      class = "hits-tab-col-select-ui",
+                      shinyWidgets::pickerInput(
+                        ns("hits_tab_col_select"),
+                        label = "Select Columns",
+                        choices = names(hits_summary)[
+                          !names(hits_summary) %in% c("Sample ID", "Cmp Name")
+                        ],
+                        selected = names(hits_summary)[
+                          !names(hits_summary) %in% c("Sample ID", "Cmp Name")
+                        ][-c(1:2, 4:5, 7, 9)],
+                        multiple = TRUE,
+                        options = list(
+                          `actions-box` = TRUE
+                        )
                       )
                     )
                   ),
@@ -1734,12 +1738,14 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 bar_chart = input$binding_chart,
                 compounds = input$hits_tab_compound_select,
                 samples = input$hits_tab_sample_select,
-                select = TRUE
+                select = TRUE,
+                color_scale = input$color_scale,
+                expand = input$hits_tab_expand
               )
 
               hits_datatable_current(hits_datatable)
 
-              hits_datatable
+              return(hits_datatable)
             },
             server = FALSE
           )
@@ -2561,7 +2567,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     Qualitative = qualitative_scales,
                     Sequential = sequential_scales,
                     Gradient = gradient_scales
-                  )
+                  ),
+                  selected = "Viridis"
                 ),
                 shiny::div(
                   class = "tooltip-bttn",
@@ -2617,6 +2624,40 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
         # Select samples tab
         set_selected_tab("Samples", session)
+      }
+    })
+
+    ### Event 'expand samples' from hits table ----
+    shiny::observeEvent(input$hits_tab_expand, {
+      message(conversion_vars$expand_helper)
+      if (isFALSE(conversion_vars$expand_helper)) {
+        shinyjs::removeClass(
+          selector = ".hits-tab-col-select-ui .form-group",
+          class = "custom-disable"
+        )
+
+        shinyWidgets::updatePickerInput(
+          session,
+          "binding_chart",
+          choices = c("%-Binding", "Total %-Binding"),
+          selected = "Total %-Binding",
+        )
+
+        conversion_vars$expand_helper <- TRUE
+      } else {
+        shinyjs::addClass(
+          selector = ".hits-tab-col-select-ui .form-group",
+          class = "custom-disable"
+        )
+
+        shinyWidgets::updatePickerInput(
+          session,
+          "binding_chart",
+          choices = "Total %-Binding",
+          selected = "Total %-Binding"
+        )
+
+        conversion_vars$expand_helper <- FALSE
       }
     })
 
@@ -3699,7 +3740,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       )
     })
 
-    ################ Return server values ------------------
+    ### Return server values ----
     list(
       selected_tab = shiny::reactive(input$tabs),
       conversion_ready = shiny::reactive(declaration_vars$conversion_ready),

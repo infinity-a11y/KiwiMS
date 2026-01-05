@@ -1262,6 +1262,17 @@ decon-report-modal .btn-default {
   height: 100%;
   width: 100%;
   padding: 1%;
+  display: flex;
+  flex-direction: column;
+  gap: 5%;
+}
+
+.conversion-result-wrapper .row {
+  align-content: center;
+  background-color: rgba(0, 0, 0, 0.11);
+  border-radius: 3px;
+  box-shadow: inset 0px 0px 65px 2px rgba(255, 255, 255, 0.3);
+  justify-content: space-evenly;
 }
 
 .conversion-result-wrapper .far {
@@ -2101,7 +2112,7 @@ table.dataTable thead > tr > th.sorting::before {
    ========================================================================== */
 
 .bar-chart-bar {
-  background-color: #e5e5e56b;
+  background-color: rgb(0 0 0 / 42%);
   display: block;
   position: relative;
   width: 100%;
@@ -2129,7 +2140,8 @@ table.dataTable thead > tr > th.sorting::before {
 }
 
 .conversion-result-wrapper label {
-  color: white !important;
+  color: #e5e5e5 !important;
+  text-align: left;
 }
 
 .clickable-column {
@@ -2197,7 +2209,7 @@ table.dataTable tbody td {
   padding-right: 20px;
   background-color: rgb(0 0 0 / 11%);
   border-radius: 3px;
-  box-shadow: inset 0px 0px 50px 2px rgb(255 255 255 / 30%);
+  box-shadow: inset 0px 0px 65px 2px rgb(255 255 255 / 30%);
 }
 
 table.dataTable tbody tr:hover,
@@ -2286,6 +2298,10 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   width: 150px;
   right: 2%;
   position: relative;
+}
+
+.conversion-tab-items .selectize-input > * {
+  font-weight: 400;
 }
 
 .conversion-tab-items .tooltip-bttn .btn,

@@ -2708,8 +2708,21 @@ render_hits_table <- function(
   bar_chart = FALSE,
   compounds = NULL,
   samples = NULL,
-  select = FALSE
+  select = FALSE,
+  color_scale = NULL,
+  expand = FALSE
 ) {
+  if (!expand) {
+    test2 <<- hits_table
+    hits_table <- hits_table |>
+      dplyr::distinct(
+        `Sample ID`,
+        `Cmp Name`,
+        `Theor. Prot.`,
+        `Total %-Binding`
+      )
+  }
+
   # Filter compounds
   if (!is.null(compounds)) {
     hits_table <- dplyr::filter(hits_table, `Cmp Name` %in% compounds)
@@ -2721,7 +2734,7 @@ render_hits_table <- function(
   }
 
   # Filter columns
-  if (!is.null(selected_cols)) {
+  if (!is.null(selected_cols) && expand) {
     hits_table <- dplyr::select(
       hits_table,
       c("Sample ID", "Cmp Name", selected_cols)
@@ -2780,6 +2793,12 @@ render_hits_table <- function(
   } else {
     clickable_targets <- NULL
   }
+
+  # Make compound color scale
+  # colors <- get_cmp_colorScale(
+  #   filtered_table = hits_table,
+  #   scale = color_scale
+  # )
 
   # Generate datatable
   hits_datatable <- DT::datatable(
@@ -2850,21 +2869,31 @@ render_hits_table <- function(
         )
     }
   } else {
-    lvls <- unique(hits_table$Sample)
-    vals <- plotly::toRGB(viridisLite::turbo(length(lvls)))
-
+    # hits_datatable <- hits_datatable |>
+    #   DT::formatStyle(
+    #     columns = "Theor. Cmp",
+    #     target = 'row',
+    #     backgroundColor = DT::styleEqual(
+    #       levels = names(colors),
+    #       values = colors
+    #     ),
+    #     color = DT::styleEqual(
+    #       levels = names(colors),
+    #       values = get_contrast_color(colors)
+    #     )
+    #   )
     hits_datatable <- hits_datatable |>
       DT::formatStyle(
-        columns = 'Sample ID',
+        columns = "Sample ID",
         target = 'row',
         backgroundColor = DT::styleEqual(
-          levels = lvls,
-          values = gsub(
-            ",1)",
-            ",0.3)",
-            vals
-          )
-        )
+          levels = unique(hits_table$`Sample ID`),
+          values = rep(
+            c("#e5e5e5", "#c3c3c3"),
+            length(unique(hits_table$`Sample ID`))
+          )[1:length(unique(hits_table$`Sample ID`))]
+        ),
+        color = "black"
       )
   }
 
