@@ -30,6 +30,7 @@ box::use(
       fill_sample_table,
       transform_hits,
       get_cmp_colorScale,
+      get_contrast_color,
     ],
   app / logic / deconvolution_functions[spectrum_plot, ],
   app /
@@ -2116,6 +2117,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   extensions = "RowGroup",
                   rownames = FALSE,
                   selection = "none",
+                  class = "order-column",
                   options = list(
                     dom = 't',
                     scrollY = "175px",
@@ -2141,6 +2143,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   backgroundColor = DT::styleEqual(
                     levels = names(colors),
                     values = colors
+                  ),
+                  color = DT::styleEqual(
+                    levels = names(colors),
+                    values = get_contrast_color(colors)
                   )
                 )
 
@@ -2362,6 +2368,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               DT::datatable(
                 extensions = "RowGroup",
                 rownames = FALSE,
+                class = "order-column",
                 selection = "none",
                 options = list(
                   dom = 't',
@@ -2388,6 +2395,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 backgroundColor = DT::styleEqual(
                   levels = names(colors),
                   values = colors
+                ),
+                color = DT::styleEqual(
+                  levels = names(colors),
+                  values = get_contrast_color(colors)
                 )
               )
 
@@ -2456,6 +2467,20 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               variable = input$scale_select
             )
 
+            # Assign font colors to match background brightness
+            tbl <- tbl |>
+              dplyr::mutate(
+                bg_hex = colors[as.character(`Theor. Cmp`)],
+                label_color = get_contrast_color(bg_hex),
+                mass_stoich = paste0(
+                  "<span style='color:",
+                  label_color,
+                  "'>",
+                  mass_stoich,
+                  "</span>"
+                )
+              )
+
             # Pre-calculate totals for the top labels
             totals <- dplyr::group_by(tbl, `Sample ID`) |>
               dplyr::summarize(
@@ -2493,7 +2518,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 hoverlabel = list(align = "left", valign = "middle"),
                 text = ~mass_stoich,
                 textposition = 'inside',
-                textfont = list(color = '#ffffff'),
                 marker = list(line = list(color = 'white', width = 1)),
                 showlegend = FALSE
               ) |>
@@ -2513,7 +2537,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               plotly::layout(
                 barmode = 'stack',
                 bargap = 0.5,
-                font = list(color = '#ffffff'),
                 paper_bgcolor = 'rgba(0,0,0,0)',
                 plot_bgcolor = 'rgba(0,0,0,0)',
                 xaxis = list(

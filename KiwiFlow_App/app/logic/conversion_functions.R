@@ -2785,6 +2785,7 @@ render_hits_table <- function(
   hits_datatable <- DT::datatable(
     data = hits_table,
     rownames = FALSE,
+    class = "order-column",
     selection = list(mode = ifelse(select, "single", "none"), target = 'cell'),
     options = list(
       rowCallback = htmlwidgets::JS(rowCallback),
@@ -3277,6 +3278,20 @@ transform_hits <- function(hits_summary, run_ki_kinact) {
 
   colnames(summary_table) <- new_names
   return(summary_table)
+}
+
+# Calculate black/white font color depending on background brightness
+#' @export
+get_contrast_color <- function(hex_codes) {
+  rgb_vals <- grDevices::col2rgb(hex_codes)
+  # Brightness formula (YIQ)
+  brightness <- (299 *
+    rgb_vals[1, ] +
+    587 * rgb_vals[2, ] +
+    114 * rgb_vals[3, ]) /
+    1000
+  # If brightness > 128 (bright), use Black text, else White
+  ifelse(brightness > 128, "#000000", "#ffffff")
 }
 
 # Make uniform color scale for compounds

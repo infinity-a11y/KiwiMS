@@ -262,7 +262,7 @@ th {
 }
 
 .bslib-card .card-header {
-  font-size: 1vw;
+  font-size: 0.9vw;
 }
 
 .card-custom .bslib-card,
@@ -1657,7 +1657,7 @@ app-conversion_main-conversion_present_compounds_pie > div > div {
 #app-conversion_main-conversion_cmp_table tbody td {
   padding: 4px 6px !important;
   background-color: inherit;
-  color: white !important;
+  color: inherit;
   border-bottom: 2px solid #0000002b;
   border-right: 2px solid #0000002b;
   border-collapse: collapse;
@@ -2283,8 +2283,9 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 .conversion-tab-items {
   display: flex;
   gap: 15px;
-  margin-right: 10px;
   width: 300px;
+  right: 2%;
+  position: relative;
 }
 
 .conversion-tab-items .tooltip-bttn .btn,
@@ -2347,9 +2348,6 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   margin-left: auto !important;
   margin-top: 0 !important;
 }
-
-/* --- Selectize Option Styles for app-conversion_main-color_scale --- */
-
 /* Set1 */
 #app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Set1"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="Set1"] {
@@ -2486,40 +2484,6 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #f1e2cc 87.5%,
     #cccccc 87.5%,
     #cccccc 100%
-  );
-  color: black;
-  text-align: left;
-}
-
-/* Paired */
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Paired"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Paired"] {
-  background: linear-gradient(
-    to right,
-    #a6cee3 0%,
-    #a6cee3 8.33333%,
-    #1f78b4 8.33333%,
-    #1f78b4 16.6667%,
-    #b2df8a 16.6667%,
-    #b2df8a 25%,
-    #33a02c 25%,
-    #33a02c 33.3333%,
-    #fb9a99 33.3333%,
-    #fb9a99 41.6667%,
-    #e31a1c 41.6667%,
-    #e31a1c 50%,
-    #fdbf6f 50%,
-    #fdbf6f 58.3333%,
-    #ff7f00 58.3333%,
-    #ff7f00 66.6667%,
-    #cab2d6 66.6667%,
-    #cab2d6 75%,
-    #6a3d9a 75%,
-    #6a3d9a 83.3333%,
-    #ffff99 83.3333%,
-    #ffff99 91.6667%,
-    #b15928 91.6667%,
-    #b15928 100%
   );
   color: black;
   text-align: left;

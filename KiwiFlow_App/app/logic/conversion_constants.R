@@ -31,7 +31,6 @@ qualitative_scales <- list(
   "Set3",
   "Pastel1",
   "Pastel2",
-  "Paired",
   "Dark2",
   "Accent"
 )
