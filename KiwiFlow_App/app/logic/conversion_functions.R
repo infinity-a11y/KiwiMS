@@ -2073,46 +2073,86 @@ format_scientific <- function(number, digits = 2) {
 }
 
 # Smart truncation helper function
-label_smart_clean <- function(files, max_width) {
+label_smart_clean <- function(files) {
   if (!is.character(files) || length(files) == 0) {
     stop("Input must be a non-empty character vector.")
   }
-  if (!is.numeric(max_width) || length(max_width) != 1 || max_width <= 0) {
-    stop("max_width must be a positive number.")
-  }
 
   n <- length(files)
-  lens <- nchar(files)
-  short_idx <- which(lens <= max_width)
-  long_idx <- which(lens > max_width)
-
-  if (length(long_idx) == 0) {
+  if (n == 1) {
     return(files)
   }
 
+  common_prefix <- function(strings) {
+    if (length(strings) <= 1) {
+      return(strings[1])
+    }
+    min_len <- min(nchar(strings))
+    for (i in 1:min_len) {
+      chars <- substr(strings, i, i)
+      if (length(unique(chars)) > 1) return(substr(strings[1], 1, i - 1))
+    }
+    return(substr(strings[1], 1, min_len))
+  }
+
+  common_suffix <- function(strings) {
+    if (length(strings) <= 1) {
+      return(strings[1])
+    }
+    rev_strings <- sapply(strings, function(s) {
+      paste(rev(strsplit(s, "")[[1]]), collapse = "")
+    })
+    cp <- common_prefix(rev_strings)
+    paste(rev(strsplit(cp, "")[[1]]), collapse = "")
+  }
+
+  # Detect common extension
+  extensions <- character(n)
+  bases <- character(n)
+  for (i in 1:n) {
+    f <- files[i]
+    dot_pos <- gregexpr("\\.", f)[[1]]
+    if (length(dot_pos) > 0) {
+      last_dot <- tail(dot_pos, 1)
+      ext <- substr(f, last_dot, nchar(f))
+      if (
+        nchar(ext) <= 5 && nchar(ext) >= 2 && grepl("^\\.[a-zA-Z0-9]+$", ext)
+      ) {
+        extensions[i] <- ext
+        bases[i] <- substr(f, 1, last_dot - 1)
+      } else {
+        extensions[i] <- ""
+        bases[i] <- f
+      }
+    } else {
+      extensions[i] <- ""
+      bases[i] <- f
+    }
+  }
+
+  common_ext <- NULL
+  if (all(extensions != "") && length(unique(extensions)) == 1) {
+    common_ext <- unique(extensions)
+  } else {
+    bases <- files
+  }
+
+  # Now, common_prefix and common_base_suffix on bases
+  prefix <- common_prefix(bases)
+  base_suffix <- common_suffix(bases)
+  pre_len <- nchar(prefix)
+  suf_len <- nchar(base_suffix)
+
+  middles <- substr(bases, pre_len + 1, nchar(bases) - suf_len)
+
   pattern <- "[-._+# ]|[^-._+# ]+"
-  parts_list <- lapply(files, function(f) {
-    regmatches(f, gregexpr(pattern, f))[[1]]
-  })
-
-  # No common prefix/suffix
-  prefix_parts <- 0
-  suffix_parts <- 0
-  prefix <- ""
-  suffix <- ""
-
-  # Middles are full
-  middles <- files
-
   middle_parts_list <- lapply(middles, function(m) {
     if (nchar(m) > 0) regmatches(m, gregexpr(pattern, m))[[1]] else character(0)
   })
 
-  # For long
-  long_middle_parts <- middle_parts_list[long_idx]
-
-  left_m_vec <- rep(1, length(long_idx))
-  right_m_vec <- rep(1, length(long_idx))
+  long_middle_parts <- middle_parts_list
+  left_m_vec <- rep(1, n)
+  right_m_vec <- rep(1, n)
 
   max_loop <- max(0, sapply(long_middle_parts, length))
   loop_count <- 0
@@ -2122,106 +2162,46 @@ label_smart_clean <- function(files, max_width) {
   while (loop_count < max_loop) {
     loop_count <- loop_count + 1
 
-    long_labels <- character(length(long_idx))
-    lengths_long <- numeric(length(long_idx))
-    for (j in 1:length(long_idx)) {
+    long_labels <- character(n)
+    for (j in 1:n) {
       parts <- long_middle_parts[[j]]
       np <- length(parts)
       if (np == 0) {
         long_labels[j] <- ""
-        lengths_long[j] <- 0
         next
       }
       left_m <- left_m_vec[j]
       right_m <- right_m_vec[j]
       if (np <= left_m + right_m) {
         long_labels[j] <- paste0(parts, collapse = "")
-        lengths_long[j] <- nchar(long_labels[j])
       } else {
         left <- paste0(parts[1:left_m], collapse = "")
         right <- paste0(parts[(np - right_m + 1):np], collapse = "")
         long_labels[j] <- paste0(left, "...", right)
-        lengths_long[j] <- nchar(long_labels[j])
       }
     }
 
-    all_labels <- files
-    all_labels[long_idx] <- paste0(prefix, long_labels, suffix)
-    all_lengths <- nchar(all_labels)
+    all_labels <- paste0(
+      prefix,
+      long_labels,
+      base_suffix,
+      if (is.null(common_ext)) "" else common_ext
+    )
 
-    if (length(unique(all_labels)) == n && all(all_lengths <= max_width)) {
+    if (length(unique(all_labels)) == n) {
       found <- TRUE
-      # Expansion step
-      for (j in 1:length(long_idx)) {
-        parts <- long_middle_parts[[j]]
-        np <- length(parts)
-        if (np <= left_m_vec[j] + right_m_vec[j]) {
-          next
-        }
-
-        current_full <- paste0(prefix, long_labels[j], suffix)
-        current_len <- nchar(current_full)
-
-        while (TRUE) {
-          added <- FALSE
-
-          # Try add to left
-          new_left_m <- left_m_vec[j] + 1
-          new_right_m <- right_m_vec[j]
-          if (new_left_m + new_right_m >= np) {
-            new_label <- paste0(parts, collapse = "")
-          } else {
-            new_left <- paste0(parts[1:new_left_m], collapse = "")
-            new_right <- paste0(parts[(np - new_right_m + 1):np], collapse = "")
-            new_label <- paste0(new_left, "...", new_right)
-          }
-          new_full <- paste0(prefix, new_label, suffix)
-          if (nchar(new_full) <= max_width) {
-            left_m_vec[j] <- new_left_m
-            long_labels[j] <- new_label
-            current_len <- nchar(new_full)
-            added <- TRUE
-          }
-
-          # Try add to right
-          new_left_m <- left_m_vec[j]
-          new_right_m <- right_m_vec[j] + 1
-          if (new_left_m + new_right_m >= np) {
-            new_label <- paste0(parts, collapse = "")
-          } else {
-            new_left <- paste0(parts[1:new_left_m], collapse = "")
-            new_right <- paste0(parts[(np - new_right_m + 1):np], collapse = "")
-            new_label <- paste0(new_left, "...", new_right)
-          }
-          new_full <- paste0(prefix, new_label, suffix)
-          if (nchar(new_full) <= max_width) {
-            right_m_vec[j] <- new_right_m
-            long_labels[j] <- new_label
-            current_len <- nchar(new_full)
-            added <- TRUE
-          }
-
-          if (!added) break
-        }
-      }
-      result <- files
-      result[long_idx] <- paste0(prefix, long_labels, suffix)
       break
     }
 
     dup_mask <- duplicated(all_labels) | duplicated(all_labels, fromLast = TRUE)
-    if (all(!dup_mask)) {
-      break
-    }
 
     dup_labels <- unique(all_labels[dup_mask])
     for (d in dup_labels) {
       group_idx <- which(all_labels == d)
-      group_long_idx <- group_idx[group_idx %in% long_idx]
-      if (length(group_long_idx) < 2) {
+      if (length(group_idx) < 2) {
         next
       }
-      group_j <- match(group_long_idx, long_idx)
+      group_j <- group_idx
       group_parts <- long_middle_parts[group_j]
       np <- length(group_parts[[1]])
       min_pos <- np + 1
@@ -2264,22 +2244,76 @@ label_smart_clean <- function(files, max_width) {
     }
   }
 
-  if (!found) {
-    dup_mask <- duplicated(all_labels) | duplicated(all_labels, fromLast = TRUE)
-    if (all(!dup_mask)) {
-      for (i in long_idx) {
-        if (all_lengths[i] > max_width) {
-          all_labels[i] <- files[i]
-        }
+  if (found) {
+    # Adjust for right separator
+    for (j in 1:n) {
+      parts <- long_middle_parts[[j]]
+      np <- length(parts)
+      left_m <- left_m_vec[j]
+      right_m <- right_m_vec[j]
+      if (np <= left_m + right_m) {
+        next
       }
-      if (length(unique(all_labels)) == n) {
-        result <- all_labels
-      } else {
-        result <- files
+      first_right <- np - right_m + 1
+      if (
+        !grepl("[-._+# ]", parts[first_right]) &&
+          first_right > 1 &&
+          grepl("[-._+# ]", parts[first_right - 1])
+      ) {
+        right_m_vec[j] <- right_m + 1
       }
-    } else {
-      result <- files
     }
+    # Adjust for left separator
+    for (j in 1:n) {
+      parts <- long_middle_parts[[j]]
+      np <- length(parts)
+      left_m <- left_m_vec[j]
+      right_m <- right_m_vec[j]
+      if (np <= left_m + right_m) {
+        next
+      }
+      last_left <- left_m
+      if (
+        !grepl("[-._+# ]", parts[last_left]) &&
+          last_left < (np - right_m + 1 - 1) &&
+          grepl("[-._+# ]", parts[last_left + 1])
+      ) {
+        left_m_vec[j] <- left_m + 1
+      }
+    }
+    # Build long_labels
+    long_labels <- character(n)
+    for (j in 1:n) {
+      parts <- long_middle_parts[[j]]
+      np <- length(parts)
+      if (np == 0) {
+        long_labels[j] <- ""
+        next
+      }
+      left_m <- left_m_vec[j]
+      right_m <- right_m_vec[j]
+      if (np <= left_m + right_m) {
+        long_labels[j] <- paste0(parts, collapse = "")
+      } else {
+        left <- paste0(parts[1:left_m], collapse = "")
+        right <- paste0(parts[(np - right_m + 1):np], collapse = "")
+        long_labels[j] <- paste0(left, "...", right)
+      }
+    }
+    # Build result conditionally excluding common_ext
+    result <- character(n)
+    for (j in 1:n) {
+      temp <- paste0(prefix, long_labels[j], base_suffix)
+      if (
+        grepl("...", long_labels[j], fixed = TRUE) && nchar(base_suffix) > 0
+      ) {
+        result[j] <- temp
+      } else {
+        result[j] <- paste0(temp, if (is.null(common_ext)) "" else common_ext)
+      }
+    }
+  } else {
+    result <- files
   }
 
   return(result)
