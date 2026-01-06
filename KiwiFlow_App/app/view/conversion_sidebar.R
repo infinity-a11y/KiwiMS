@@ -214,57 +214,51 @@ server <- function(id, conversion_main_vars) {
       ))
 
       if (analysis_status() == "pending") {
-        #   input_list <<- conversion_main_vars$input_list()
-        #   input_peak_tolerance <<- input$peak_tolerance
-        #   max_multiples <<- input$max_multiples
+        # Search and add hits to result list
+        result_with_hits <- add_hits(
+          conversion_main_vars$input_list()$result,
+          sample_table = conversion_main_vars$input_list()$Samples_Table,
+          protein_table = conversion_main_vars$input_list()$Protein_Table,
+          compound_table = conversion_main_vars$input_list()$Compound_Table,
+          peak_tolerance = input$peak_tolerance,
+          max_multiples = input$max_multiples
+        )
 
-        #   # Search and add hits to result list
-        #   result_with_hits <- add_hits(
-        #     conversion_main_vars$input_list()$result,
-        #     sample_table = conversion_main_vars$input_list()$Samples_Table,
-        #     protein_table = conversion_main_vars$input_list()$Protein_Table,
-        #     compound_table = conversion_main_vars$input_list()$Compound_Table,
-        #     peak_tolerance = input$peak_tolerance,
-        #     max_multiples = input$max_multiples
-        #   )
+        # If Ki/kinact analysis is set to be performed
+        if (input$run_ki_kinact) {
+          result_with_hits$hits_summary <- summarize_hits(
+            result_with_hits,
+            conc_time = conversion_main_vars$input_list()$ConcTime_Table
+          )
 
-        #   # If Ki/kinact analysis is set to be performed
-        #   if (input$run_ki_kinact) {
-        #     result_with_hits$hits_summary <- summarize_hits(
-        #       result_with_hits,
-        #       conc_time = conversion_main_vars$input_list()$ConcTime_Table
-        #     )
+          # Add binding/kobs results to result list
+          result_with_hits$binding_kobs_result <- add_kobs_binding_result(
+            result_with_hits
+          )
 
-        #     # Add binding/kobs results to result list
-        #     result_with_hits$binding_kobs_result <- add_kobs_binding_result(
-        #       result_with_hits
-        #     )
+          # Add Ki/kinact results to result list
+          result_with_hits$ki_kinact_result <- add_ki_kinact_result(
+            result_with_hits
+          )
+        } else {
+          # Only protein conversion without Ki/kinact analysus
+          result_with_hits$hits_summary <- summarize_hits(
+            result_with_hits,
+            conc_time = NULL
+          )
+        }
 
-        #     # Add Ki/kinact results to result list
-        #     result_with_hits$ki_kinact_result <- add_ki_kinact_result(
-        #       result_with_hits
-        #     )
-        #   } else {
-        #     # Only protein conversion without Ki/kinact analysus
-        #     result_with_hits$hits_summary <- summarize_hits(
-        #       result_with_hits,
-        #       conc_time = NULL
-        #     )
-        #   }
-
-        #   result_with_hits <<- result_with_hits
-
-        #   # Assign result list and hits table to reactive vars
-        #   result_list(result_with_hits)
+        # Assign result list and hits table to reactive vars
+        result_list(result_with_hits)
 
         # TODO
         # Dev Mode
         # result_list(readRDS(
         #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results.rds"
         # ))
-        result_list(readRDS(
-          "C:\\Users\\Marian\\Desktop\\KF_Testing\\results_conversion.rds"
-        ))
+        # result_list(readRDS(
+        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results_conversion.rds"
+        # ))
 
         shiny::updateActionButton(
           session = session,

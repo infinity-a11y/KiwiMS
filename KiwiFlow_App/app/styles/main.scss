@@ -2311,10 +2311,19 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 
 .conversion-tab-items {
   display: flex;
-  gap: 15px;
-  width: 150px;
+  gap: 25px;
+  width: fit-content;
   right: 2%;
+  height: 100%;
   position: relative;
+  align-items: center;
+}
+
+.conversion-tab-items-label {
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 100;
+  align-self: center;
 }
 
 .conversion-tab-items .selectize-input > * {
@@ -2326,8 +2335,16 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   color: white !important;
 }
 
+.conversion-tab-items > .tooltip-bttn {
+  margin-left: 15px;
+  border-left: 1px solid #e5e5e5;
+  height: 32.5px;
+  padding-left: 10px;
+  align-content: center;
+}
+
 .conversion-tab-items .tooltip-bttn .btn {
-  margin-top: 5px;
+  margin-top: unset;
 }
 
 .conversion-tab-items .selectize-control {
@@ -2342,6 +2359,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   align-content: center;
   padding-left: 5px;
   background: #e5e5e5;
+  width: 100px;
 }
 
 .conversion-tab-items .selectize-control.single .selectize-input:not(.no-arrow):after {
@@ -3325,4 +3343,36 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 
 #app-conversion_main-cmp_distribution > div > div > svg:nth-child(5) > g > g > text.name {
   fill: black !important;
+}
+
+.material-switch {
+  top: -2px;
+  position: relative;
+}
+
+.conversion-tab-items-truncate {
+  display: flex;
+  gap: 10px;
+  align-content: center;
+  align-items: center;
+  height: 32.5px;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.material-switch > input[type="checkbox"]:checked + label.switch:before {
+  background: #7777f9;
+  opacity: 1;
+  box-shadow: inset 0 0 10px rgb(255 255 255 / 25%);
+}
+
+.material-switch > label.switch:before {
+  background: #4d4b4b;
+  margin-top: -12px;
+  height: 17px;
+}
+
+.material-switch > label.switch:after {
+  height: 20px;
+  width: 20px;
 }

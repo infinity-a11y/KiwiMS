@@ -2073,6 +2073,7 @@ format_scientific <- function(number, digits = 2) {
 }
 
 # Smart truncation helper function
+#' @export
 label_smart_clean <- function(files) {
   if (!is.character(files) || length(files) == 0) {
     stop("Input must be a non-empty character vector.")
@@ -2113,7 +2114,7 @@ label_smart_clean <- function(files) {
     f <- files[i]
     dot_pos <- gregexpr("\\.", f)[[1]]
     if (length(dot_pos) > 0) {
-      last_dot <- tail(dot_pos, 1)
+      last_dot <- utils::tail(dot_pos, 1)
       ext <- substr(f, last_dot, nchar(f))
       if (
         nchar(ext) <= 5 && nchar(ext) >= 2 && grepl("^\\.[a-zA-Z0-9]+$", ext)
@@ -2327,7 +2328,8 @@ multiple_spectra <- function(
   cubic = TRUE,
   show_labels = FALSE,
   time = FALSE,
-  color_cmp = NULL
+  color_cmp = NULL,
+  truncated = TRUE
 ) {
   # Get spectrum data
   spectrum_data <- data.frame()
@@ -2346,7 +2348,13 @@ multiple_spectra <- function(
     spectrum_data <- rbind(spectrum_data, add_df)
   }
 
-  spectrum_data$z <- stringr::str_trunc(spectrum_data$z, 13, side = "left")
+  # If truncated active adapt z variable
+  if (!isFALSE(truncated)) {
+    spectrum_data$z <- truncated$truncated[match(
+      spectrum_data$z,
+      truncated$original
+    )]
+  }
 
   spectrum_data$z <- factor(
     spectrum_data$z,
@@ -2370,8 +2378,15 @@ multiple_spectra <- function(
     peaks_data <- rbind(peaks_data, add_df)
   }
 
-  peaks_data$z <- stringr::str_trunc(peaks_data$z, 13, side = "left")
+  # If truncated active adapt z variable
+  if (!isFALSE(truncated)) {
+    peaks_data$z <- truncated$truncated[match(
+      peaks_data$z,
+      truncated$original
+    )]
+  }
 
+  # Transform z variable to factor
   peaks_data$z <- factor(
     peaks_data$z,
     levels = sort(unique(peaks_data$z))
@@ -2640,9 +2655,6 @@ multiple_spectra <- function(
             center = list(x = -0.05, y = -0.18, z = 0),
             eye = list(x = 1.2, y = 0.9, z = 1.2),
             up = list(x = 0, y = 1.5, z = 0)
-            # center = list(x = -0.05, y = -0.25, z = 0),
-            # eye = list(x = 1.3, y = 1, z = 1.3),
-            # up = list(x = 0, y = 2, z = 0)
           )
         )
       )
@@ -2746,8 +2758,11 @@ render_hits_table <- function(
   color_scale = NULL,
   expand = FALSE
 ) {
+  # Remove truncated labels
+  hits_table <- dplyr::select(hits_table, -c("truncSample_ID"))
+
+  # Modify if samples are summarized instead of expanded
   if (!expand) {
-    test2 <<- hits_table
     hits_table <- hits_table |>
       dplyr::distinct(
         `Sample ID`,

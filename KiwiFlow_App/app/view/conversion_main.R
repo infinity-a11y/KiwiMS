@@ -31,6 +31,7 @@ box::use(
       transform_hits,
       get_cmp_colorScale,
       get_contrast_color,
+      label_smart_clean,
     ],
   app / logic / deconvolution_functions[spectrum_plot, ],
   app /
@@ -2059,6 +2060,19 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             run_ki_kinact = FALSE
           )
 
+          #### Append truncated sample IDs ----
+          # Create a mapping data frame
+          mapping <- data.frame(
+            original = unique(hits_summary$`Sample ID`),
+            truncated = label_smart_clean(unique(hits_summary$`Sample ID`))
+          )
+
+          # Add column with truncated IDs
+          hits_summary$truncSample_ID <- mapping$truncated[match(
+            hits_summary$`Sample ID`,
+            mapping$original
+          )]
+
           #### Hits table tab ----
           bslib::nav_insert(
             "tabs",
@@ -2117,10 +2131,12 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                         ns("hits_tab_col_select"),
                         label = "Select Columns",
                         choices = names(hits_summary)[
-                          !names(hits_summary) %in% c("Sample ID", "Cmp Name")
+                          !names(hits_summary) %in%
+                            c("Sample ID", "Cmp Name", "truncSample_ID")
                         ],
                         selected = names(hits_summary)[
-                          !names(hits_summary) %in% c("Sample ID", "Cmp Name")
+                          !names(hits_summary) %in%
+                            c("Sample ID", "Cmp Name", "truncSample_ID")
                         ][-c(1:2, 4:5, 7, 9)],
                         multiple = TRUE,
                         options = list(
@@ -2747,11 +2763,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             tbl <- hits_summary |>
               dplyr::filter(`Cmp Name` == input$conversion_compound_picker) |>
               dplyr::mutate(
-                `Sample ID` = stringr::str_trunc(
-                  `Sample ID`,
-                  13,
-                  side = "left"
-                ),
+                `Sample ID` = if (input$truncate_names) {
+                  `truncSample_ID`
+                } else {
+                  `Sample ID`
+                },
                 mass_stoich = paste0(
                   "[",
                   `Theor. Cmp`,
@@ -2882,7 +2898,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 TRUE,
                 FALSE
               ),
-              color_cmp = colors
+              color_cmp = colors,
+              truncated = if (input$truncate_names) mapping else FALSE
             )
           })
 
@@ -2965,6 +2982,18 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               class = "conversion-tab-item-wrapper",
               shiny::div(
                 class = "conversion-tab-items",
+                shiny::div(
+                  class = "conversion-tab-items-truncate",
+                  shiny::div(
+                    class = "conversion-tab-items-label",
+                    shiny::HTML("Shorten Samples")
+                  ),
+                  shinyWidgets::materialSwitch(
+                    ns("truncate_names"),
+                    label = NULL,
+                    value = TRUE
+                  )
+                ),
                 shiny::selectInput(
                   ns("color_scale"),
                   label = NULL,
