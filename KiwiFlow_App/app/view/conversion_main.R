@@ -2506,11 +2506,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   "<span style='opacity: 0.8'>%-Binding:</span> <b>",
                   `%-Binding`,
                   "</b>",
-                  "<extra><div style='text-align: left'>",
-                  "<span style='opacity: 0.8'>Cmp Name: </span><b>",
+                  "<extra><div style='text-align: left;'>",
+                  "<span style='opacity: 0.8;;'>Cmp Name: </span><b>",
                   `Cmp Name`,
                   "</b><br>",
-                  "<span style='opacity: 0.8'>Sample ID: </span><b>",
+                  "<span style='opacity: 0.8;'>Sample ID: </span><b>",
                   `Sample ID`,
                   "</b>",
                   "</div></extra>"
@@ -2568,7 +2568,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     Sequential = sequential_scales,
                     Gradient = gradient_scales
                   ),
-                  selected = "Viridis"
+                  selected = "viridis"
                 ),
                 shiny::div(
                   class = "tooltip-bttn",
@@ -2629,7 +2629,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
     ### Event 'expand samples' from hits table ----
     shiny::observeEvent(input$hits_tab_expand, {
-      message(conversion_vars$expand_helper)
       if (isFALSE(conversion_vars$expand_helper)) {
         shinyjs::removeClass(
           selector = ".hits-tab-col-select-ui .form-group",

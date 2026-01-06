@@ -1265,6 +1265,7 @@ decon-report-modal .btn-default {
   display: flex;
   flex-direction: column;
   gap: 5%;
+  align-items: center;
 }
 
 .conversion-result-wrapper .row {
@@ -1272,7 +1273,8 @@ decon-report-modal .btn-default {
   background-color: rgba(0, 0, 0, 0.11);
   border-radius: 3px;
   box-shadow: inset 0px 0px 65px 2px rgba(255, 255, 255, 0.3);
-  justify-content: space-evenly;
+  justify-content: space-between;
+  width: 100%;
 }
 
 .conversion-result-wrapper .far {
@@ -2159,11 +2161,26 @@ table.dataTable tbody td {
   height: 47px;
 }
 
-#app-conversion_main-conversion_present_compounds_table,
-#app-conversion_main-conversion_conversion_cmp_table {
-  width: 99% !important;
+#app-conversion_main-conversion_cmp_table,
+#app-conversion_main-conversion_present_compounds_table {
   height: 1px !important;
+}
+
+#app-conversion_main-conversion_present_compounds_table div.dataTables_scrollBody,
+#app-conversion_main-conversion_present_compounds_table div.dataTables_scrollHead,
+#app-conversion_main-conversion_cmp_table div.dataTables_scrollBody,
+#app-conversion_main-conversion_cmp_table div.dataTables_scrollHead {
+  width: 99% !important;
   flex-basis: unset !important;
+}
+
+#app-conversion_main-conversion_present_compounds_table .table,
+#app-conversion_main-conversion_cmp_table .table {
+  margin-top: 0px !important;
+  width: 100% !important;
+  margin: 0;
+  --bs-table-bg: transparent;
+  height: fit-content;
 }
 
 .conversion-samples-control {
@@ -2319,7 +2336,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 
 .conversion-tab-items .selectize-control.single .selectize-input {
   height: 32.5px;
-  border: none;
+  border: 1px solid #e5e5e5;
   min-height: fit-content;
   text-align: left;
   align-content: center;
@@ -3304,4 +3321,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   );
   color: white;
   text-align: left;
+}
+
+#app-conversion_main-cmp_distribution > div > div > svg:nth-child(5) > g > g > text.name {
+  fill: black !important;
 }
