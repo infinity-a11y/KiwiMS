@@ -2061,7 +2061,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           hits_summary <- transform_hits(
             hits_summary = conversion_sidebar_vars$result_list()$"hits_summary",
             run_ki_kinact = FALSE
-          )
+          ) |>
+            dplyr::arrange(as.numeric(gsub("%", "", `Total %-Binding`)))
 
           #### Append truncated sample IDs ----
           # Create a mapping data frame
@@ -2277,7 +2278,14 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     shinyWidgets::pickerInput(
                       ns("conversion_sample_picker"),
                       "Select Sample",
-                      choices = unique(hits_summary$`Sample ID`)
+                      choices = list(
+                        Hits = unique(hits_summary$`Sample ID`[
+                          !is.na(hits_summary$`Cmp Name`)
+                        ]),
+                        `No Hits` = unique(hits_summary$`Sample ID`[
+                          is.na(hits_summary$`Cmp Name`)
+                        ])
+                      )
                     ),
                     shiny::div(
                       class = "conversion-samples-stats",
@@ -2543,10 +2551,21 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             {
               shiny::req(input$conversion_sample_picker)
 
+              # Filter for selected sample
               tbl <- hits_summary |>
                 dplyr::filter(
-                  `Sample ID` == input$conversion_sample_picker
+                  `Sample ID` == input$conversion_sample_picker &
+                    !is.na(`Cmp Name`)
                 )
+
+              # If table empty
+              if (!nrow(tbl)) {
+                return(DT::datatable(
+                  `Mass Shift` = as.character(),
+                  Stoichiometry = as.character(),
+                  `%-Binding` = as.character()
+                ))
+              }
 
               # Prepare compound coloring
               colors <- get_cmp_colorScale(
@@ -2621,7 +2640,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     shinyWidgets::pickerInput(
                       ns("conversion_compound_picker"),
                       "Select Compound",
-                      choices = unique(hits_summary$`Cmp Name`)
+                      choices = unique(hits_summary$`Cmp Name`)[
+                        !is.na(unique(hits_summary$`Cmp Name`))
+                      ]
                     ),
                     shiny::div(
                       class = "conversion-samples-stats",
@@ -2750,7 +2771,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             shiny::req(input$conversion_sample_picker)
 
             total_bind <- hits_summary$`Total %-Binding`[
-              hits_summary$`Cmp Name` == input$conversion_compound_picker
+              hits_summary$`Cmp Name` == input$conversion_compound_picker &
+                !is.na(hits_summary$`Cmp Name`)
             ]
 
             if (length(total_bind) == 1) {
@@ -2805,6 +2827,12 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   })
                 )
               )
+
+            # Factorize sample ID to sort by %-binding
+            tbl$`Sample ID` <- factor(
+              tbl$`Sample ID`,
+              levels = tbl$`Sample ID`
+            )
 
             # Make compound color scale
             colors <- get_cmp_colorScale(
@@ -2950,7 +2978,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             # Create data table
             cmp_table <- tbl |>
               dplyr::group_by(`Sample ID`) |>
-              dplyr::arrange(dplyr::desc(`Theor. Cmp`), `Bind. Stoich.`) |>
               dplyr::reframe(
                 `Mass Shift` = `Theor. Cmp`,
                 `Stoichiometry` = `Bind. Stoich.`,
@@ -2963,6 +2990,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 `Total %-Binding` = `Total %-Binding`
               ) |>
               dplyr::relocate(`Mass Shift`, .before = 1) |>
+              dplyr::arrange(
+                dplyr::desc(`Mass Shift`),
+                `Stoichiometry`,
+                as.numeric(gsub("%", "", `Total %-Binding`))
+              ) |>
               DT::datatable(
                 extensions = "RowGroup",
                 rownames = FALSE,
@@ -3015,7 +3047,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   class = "conversion-tab-items-truncate",
                   shiny::div(
                     class = "conversion-tab-items-label",
-                    shiny::HTML("Shorten Samples")
+                    shiny::HTML("Short Sample IDs")
                   ),
                   shinyWidgets::materialSwitch(
                     ns("truncate_names"),

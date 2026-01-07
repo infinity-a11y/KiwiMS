@@ -1381,9 +1381,7 @@ add_hits <- function(
     #   )
     # }
 
-    # Throttle next iteration
     log_done()
-    Sys.sleep(0.3)
   }
 
   log_summary(length(samples))
@@ -2226,9 +2224,65 @@ label_smart_clean <- function(files) {
   pre_len <- nchar(prefix)
   suf_len <- nchar(base_suffix)
 
+  pattern <- "[-._+# ]|[^-._+# ]+"
+  prefix_parts <- if (nchar(prefix) > 0) {
+    regmatches(prefix, gregexpr(pattern, prefix))[[1]]
+  } else {
+    character(0)
+  }
+
+  # Shorten prefix if long
+  if (length(prefix_parts) > 6) {
+    first_kept <- 2
+    last_kept <- 1
+    if (
+      nchar(prefix_parts[length(prefix_parts)]) != 1 ||
+        !grepl("[-._+# ]", prefix_parts[length(prefix_parts)])
+    ) {
+      last_kept <- 2
+    }
+    prefix <- paste0(
+      paste0(prefix_parts[1:first_kept], collapse = ""),
+      "...",
+      paste0(
+        prefix_parts[
+          (length(prefix_parts) - last_kept + 1):length(prefix_parts)
+        ],
+        collapse = ""
+      )
+    )
+  }
+
+  base_suffix_parts <- if (nchar(base_suffix) > 0) {
+    regmatches(base_suffix, gregexpr(pattern, base_suffix))[[1]]
+  } else {
+    character(0)
+  }
+
+  # Shorten base_suffix if long
+  if (length(base_suffix_parts) > 6) {
+    first_kept <- 1
+    if (
+      nchar(base_suffix_parts[1]) != 1 ||
+        !grepl("[-._+# ]", base_suffix_parts[1])
+    ) {
+      first_kept <- 2
+    }
+    last_kept <- 2
+    base_suffix <- paste0(
+      paste0(base_suffix_parts[1:first_kept], collapse = ""),
+      "...",
+      paste0(
+        base_suffix_parts[
+          (length(base_suffix_parts) - last_kept + 1):length(base_suffix_parts)
+        ],
+        collapse = ""
+      )
+    )
+  }
+
   middles <- substr(bases, pre_len + 1, nchar(bases) - suf_len)
 
-  pattern <- "[-._+# ]|[^-._+# ]+"
   middle_parts_list <- lapply(middles, function(m) {
     if (nchar(m) > 0) regmatches(m, gregexpr(pattern, m))[[1]] else character(0)
   })
@@ -2411,8 +2465,20 @@ multiple_spectra <- function(
   show_labels = FALSE,
   time = FALSE,
   color_cmp = NULL,
+  color_var = NULL,
   truncated = TRUE
 ) {
+  results_list <<- results_list
+  samples <<- samples
+  cubic <<- TRUE
+  show_labels <<- FALSE
+  time <<- FALSE
+  color_cmp <<- color_cmp
+  truncated <<- truncated
+
+  # Omit NA in samples
+  samples <- samples[!is.na(samples)]
+
   # Get spectrum data
   spectrum_data <- data.frame()
   for (i in seq_along(samples)) {
@@ -2440,7 +2506,11 @@ multiple_spectra <- function(
 
   spectrum_data$z <- factor(
     spectrum_data$z,
-    levels = sort(unique(spectrum_data$z))
+    levels = if (time) {
+      sort(unique(spectrum_data$z))
+    } else {
+      unique(spectrum_data$z)
+    }
   )
 
   # Get peaks data
@@ -2471,7 +2541,11 @@ multiple_spectra <- function(
   # Transform z variable to factor
   peaks_data$z <- factor(
     peaks_data$z,
-    levels = sort(unique(peaks_data$z))
+    levels = if (time) {
+      sort(unique(peaks_data$z))
+    } else {
+      unique(peaks_data$z)
+    }
   )
 
   # Prepare compound marker colors
@@ -2841,6 +2915,19 @@ render_hits_table <- function(
   expand = FALSE,
   na_include = TRUE
 ) {
+  hits_table <<- hits_table
+  concentration_colors <<- concentration_colors
+  single_conc <<- NULL
+  withzero <<- withzero
+  selected_cols <<- selected_cols
+  bar_chart <<- bar_chart
+  compounds <<- compounds
+  samples <<- samples
+  select <<- select
+  color_scale <<- color_scale
+  expand <<- expand
+  na_include <<- na_include
+
   # Remove truncated labels
   hits_table <- dplyr::select(hits_table, -c("truncSample_ID"))
 
@@ -2894,7 +2981,7 @@ render_hits_table <- function(
   if (!is.null(selected_cols) && expand) {
     hits_table <- dplyr::select(
       hits_table,
-      c("Sample ID", "Cmp Name", selected_cols)
+      c("Sample ID", "Cmp Name", all_of(selected_cols))
     )
   }
 
@@ -2940,11 +3027,21 @@ render_hits_table <- function(
     "}"
   )
 
-  # Make compound color scale
-  # colors <- get_cmp_colorScale(
-  #   filtered_table = hits_table,
-  #   scale = color_scale
-  # )
+  # Make bar chart columns
+  if (length(bar_chart) && bar_chart %in% names(hits_table)) {
+    bar_cols <- list(
+      list(
+        targets = bar_chart,
+        render = htmlwidgets::JS(chart_js)
+      ),
+      list(
+        targets = -1,
+        className = 'dt-last-col'
+      )
+    )
+  } else {
+    bar_cols <- NULL
+  }
 
   # Generate datatable
   hits_datatable <- DT::datatable(
@@ -2961,16 +3058,7 @@ render_hits_table <- function(
       stripe = FALSE,
       dom = dom_value,
       paging = FALSE,
-      columnDefs = list(
-        list(
-          targets = bar_chart,
-          render = htmlwidgets::JS(chart_js)
-        ),
-        list(
-          targets = -1,
-          className = 'dt-last-col'
-        )
-      )
+      columnDefs = bar_cols
     )
   )
 
