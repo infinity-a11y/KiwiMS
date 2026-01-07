@@ -2469,7 +2469,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               "#e5e5e5",
               get_cmp_colorScale(
                 filtered_table = tbl,
-                scale = input$color_scale
+                scale = input$color_scale,
+                variable = input$color_variable,
+                trunc = input$truncate_names
               )
             )
             names(colors) <- c(
@@ -2535,7 +2537,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             # Prepare compound coloring
             colors <- get_cmp_colorScale(
               filtered_table = tbl,
-              scale = input$color_scale
+              scale = input$color_scale,
+              variable = input$color_variable,
+              trunc = input$truncate_names
             )
 
             spectrum_plot(
@@ -2570,7 +2574,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               # Prepare compound coloring
               colors <- get_cmp_colorScale(
                 filtered_table = tbl,
-                scale = input$color_scale
+                scale = input$color_scale,
+                variable = input$color_variable,
+                trunc = input$truncate_names
               )
 
               cmp_table <- tbl |>
@@ -2809,11 +2815,14 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           output$cmp_distribution <- plotly::renderPlotly({
             shiny::req(input$conversion_compound_picker)
 
+            color_variable <- input$color_variable
+            truncate_names <- input$truncate_names
+
             # Filter hits for selected compound
             tbl <- hits_summary |>
               dplyr::filter(`Cmp Name` == input$conversion_compound_picker) |>
               dplyr::mutate(
-                `Sample ID` = if (input$truncate_names) {
+                `Sample ID` = if (truncate_names) {
                   `truncSample_ID`
                 } else {
                   `Sample ID`
@@ -2837,13 +2846,19 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             # Make compound color scale
             colors <- get_cmp_colorScale(
               filtered_table = tbl,
-              scale = input$color_scale
+              scale = input$color_scale,
+              variable = color_variable,
+              trunc = truncate_names
             )
 
             # Assign font colors to match background brightness
             tbl <- tbl |>
               dplyr::mutate(
-                bg_hex = colors[as.character(`Theor. Cmp`)],
+                bg_hex = if (color_variable == "Compounds") {
+                  colors[as.character(`Theor. Cmp`)]
+                } else if (color_variable == "Samples") {
+                  colors[as.character(`Sample ID`)]
+                },
                 label_color = get_contrast_color(bg_hex),
                 mass_stoich = paste0(
                   "<span style='color:",
@@ -2860,12 +2875,18 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 total_val = sum(as.numeric(gsub("%", "", `%-Binding`)))
               )
 
+            if (color_variable == "Compounds") {
+              color <- ~`Theor. Cmp`
+            } else if (color_variable == "Samples") {
+              color <- ~`Sample ID`
+            }
+
             # Create plotly bar chart
             plotly::plot_ly(data = tbl) |>
               plotly::add_trace(
                 x = ~`Sample ID`,
                 y = ~ as.numeric(gsub("%", "", `%-Binding`)),
-                color = ~`Theor. Cmp`,
+                color = color,
                 colors = colors,
                 type = 'bar',
                 name = ~mass_stoich,
@@ -2931,23 +2952,33 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           output$conversion_cmp_spectra <- plotly::renderPlotly({
             shiny::req(input$conversion_compound_picker)
 
+            conversion_compound_picker <- input$conversion_compound_picker
+            truncate_names <- input$truncate_names
+            color_variable <- input$color_variable
+
             # Filter hits for selected compound
             tbl <- dplyr::filter(
               hits_summary,
-              `Cmp Name` == input$conversion_compound_picker
+              `Cmp Name` == conversion_compound_picker
             )
 
             # Make compound color scale
             colors <- get_cmp_colorScale(
               filtered_table = tbl,
-              scale = input$color_scale
+              scale = input$color_scale,
+              variable = color_variable,
+              trunc = truncate_names
             )
+
+            tbl1 <<- tbl
+            scale1 <<- input$color_scale
+            results_list1 <<- conversion_sidebar_vars$result_list()
 
             # Create spectra plot
             multiple_spectra(
               results_list = conversion_sidebar_vars$result_list(),
               samples = unique(hits_summary$`Sample ID`[
-                hits_summary$`Cmp Name` == input$conversion_compound_picker
+                hits_summary$`Cmp Name` == conversion_compound_picker
               ]),
               cubic = ifelse(
                 TRUE,
@@ -2955,7 +2986,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 FALSE
               ),
               color_cmp = colors,
-              truncated = if (input$truncate_names) mapping else FALSE
+              truncated = if (truncate_names) mapping else FALSE,
+              color_variable = color_variable
             )
           })
 
@@ -2972,7 +3004,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             # Prepare compound coloring
             colors <- get_cmp_colorScale(
               filtered_table = tbl,
-              scale = input$color_scale
+              scale = input$color_scale,
+              variable = input$color_variable,
+              trunc = input$truncate_names
             )
 
             # Create data table
@@ -3054,6 +3088,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     label = NULL,
                     value = TRUE
                   )
+                ),
+                shiny::selectInput(
+                  ns("color_variable"),
+                  label = NULL,
+                  choices = c("Samples", "Compounds")
                 ),
                 shiny::selectInput(
                   ns("color_scale"),
