@@ -1186,7 +1186,7 @@ conversion <- function(hits) {
     )
     return(NULL)
   } else if (anyNA(hits)) {
-    message("No binding events in sample.")
+    message("No binding events in sample.\n")
 
     hits <- hits |>
       dplyr::mutate(
@@ -1249,7 +1249,7 @@ conversion <- function(hits) {
       sum(unique(hits$intensity)),
       " (",
       scales::label_percent(accuracy = 0.1)(hits$`%binding_tot`[1]),
-      ")"
+      ")\n"
     )
   }
 
@@ -1282,7 +1282,9 @@ add_hits <- function(
   protein_table,
   compound_table,
   peak_tolerance,
-  max_multiples
+  max_multiples,
+  session,
+  ns
 ) {
   samples <- names(results$deconvolution)
   protein_mw <- protein_table$`Mass 1`
@@ -1290,7 +1292,22 @@ add_hits <- function(
   rownames(compound_mw) <- compound_table[, 1]
 
   for (i in seq_along(samples)) {
-    message("### Checking hits for ", samples[i])
+    shinyWidgets::updateProgressBar(
+      session = session,
+      id = ns("conversion_progress"),
+      value = ifelse(i == 1, 0, (i - 1) / length(samples) * 100),
+      title = paste(
+        "[",
+        i,
+        "/",
+        length(samples),
+        "] Checking hits for",
+        samples[i]
+      )
+    )
+
+    message("Checking hits for ", samples[i])
+
     results$deconvolution[[samples[i]]][["hits"]] <- check_hits(
       sample_table = sample_table,
       protein_mw = protein_mw,
@@ -1309,14 +1326,29 @@ add_hits <- function(
     ]])
 
     # Add plot to sample
-    if (!is.null(results$deconvolution[[samples[i]]][["hits"]])) {
-      results$deconvolution[[samples[i]]][["hits_spectrum"]] <- spectrum_plot(
-        sample = results$deconvolution[[samples[i]]]
-      )
-    }
+    # TODO - necessary?
+    # if (!is.null(results$deconvolution[[samples[i]]][["hits"]])) {
+    #   results$deconvolution[[samples[i]]][["hits_spectrum"]] <- spectrum_plot(
+    #     sample = results$deconvolution[[samples[i]]]
+    #   )
+    # }
+
+    # TODO
+    # Throttle next iteration
+    Sys.sleep(1)
   }
 
-  message("Search for hits in ", length(samples), " samples completed.")
+  # message("Search for hits in ", length(samples), " samples completed.")
+  shinyWidgets::updateProgressBar(
+    session = session,
+    id = ns("conversion_progress"),
+    value = 100,
+    title = paste0(
+      "Search for hits in ",
+      length(samples),
+      " samples completed."
+    )
+  )
   return(results)
 }
 
@@ -3425,3 +3457,50 @@ get_cmp_colorScale <- function(filtered_table, scale) {
   names(colors) <- cmp_levels
   return(colors)
 }
+
+# JS function for conversion process tracking
+#' @export
+conversion_tracking_js <- "
+    var el = document.getElementById('%s');
+    var btn = document.getElementById('%s');
+    
+    el.innerHTML = '';
+    btn.style.setProperty('display', 'none', 'important'); 
+    var isAutoScrolling = false;
+
+    el.doAutoScroll = function() {
+      // Check if user is near bottom
+      var isAtBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) <= 150;
+      
+      if (isAtBottom) {
+        isAutoScrolling = true;
+        // Instant scroll is more reliable for high-frequency logs, 
+        // but if you want smooth, we use a 'double-tap' to ensure it hits bottom.
+        el.scrollTo({top: el.scrollHeight, behavior: 'auto'}); 
+        
+        // Brief timeout to prevent the onscroll event from flickering the button
+        setTimeout(function() { isAutoScrolling = false; }, 50);
+      }
+    };
+
+    el.onscroll = function() {
+      if (isAutoScrolling) return;
+
+      // Only scrollable if content is significantly larger than box (e.g. > 30px)
+      var isScrollable = el.scrollHeight > (el.clientHeight + 30);
+      var isAtBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) <= 50;
+      
+      if (isScrollable && !isAtBottom) {
+        btn.style.display = 'block';
+      } else {
+        btn.style.display = 'none';
+      }
+    };
+
+    btn.onclick = function() {
+      isAutoScrolling = true;
+      el.scrollTo({top: el.scrollHeight, behavior: 'smooth'});
+      btn.style.display = 'none';
+      setTimeout(function() { isAutoScrolling = false; }, 500);
+    };
+  "

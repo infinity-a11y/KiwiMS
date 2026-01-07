@@ -53,7 +53,7 @@ $(document).on('shown.bs.modal', () => {
   // Update scroll state when user scrolls
   preElement.addEventListener('scroll', () => {
     const atBottom = (preElement.scrollHeight - preElement.scrollTop
-    - preElement.clientHeight) <= 10;
+      - preElement.clientHeight) <= 10;
     shouldAutoScroll = atBottom;
   });
 
@@ -126,7 +126,7 @@ export function smartScroll(elementID) {
   // Update scroll state when user scrolls
   preElement.addEventListener('scroll', () => {
     const atBottom = (preElement.scrollHeight - preElement.scrollTop
-    - preElement.clientHeight) <= 10;
+      - preElement.clientHeight) <= 10;
     shouldAutoScroll = atBottom;
   });
 

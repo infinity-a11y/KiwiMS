@@ -18,10 +18,6 @@ box::use(
   utils[read.delim, read.table],
 )
 
-box::use(
-  app / logic / conversion_constants[warning_sym, ],
-)
-
 # Processing a single waters dir
 #' @export
 process_single_dir <- function(
@@ -619,7 +615,7 @@ process_plot_data <- function(
     # If duplicated peaks throw message
     if (any(duplicated(peaks))) {
       message(
-        warning_sym,
+        "\u26A0",
         " ",
         sample$hits$Sample[1],
         " has multiple hits for ",

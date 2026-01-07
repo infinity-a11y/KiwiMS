@@ -1071,6 +1071,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       } else {
         declaration_vars$conversion_ready <- FALSE
       }
+
+      message(declaration_vars$conversion_ready)
     })
 
     ## Continuiation from deconvolution to conversion ----
@@ -2979,6 +2981,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           bslib::nav_insert(
             id = "tabs",
             bslib::nav_item(
+              id = ns("conversion_tab_items"),
               class = "conversion-tab-item-wrapper",
               shiny::div(
                 class = "conversion-tab-items",
@@ -3093,7 +3096,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         }
         bslib::nav_remove("tabs", "Compounds View")
         bslib::nav_remove("tabs", "Samples View")
-
+        shiny::removeUI(
+          selector = paste0("#", ns("conversion_tab_items"))
+        )
         #### Reset reactive variables ----
         conversion_vars <- shiny::reactiveValues(
           modified_results = NULL,

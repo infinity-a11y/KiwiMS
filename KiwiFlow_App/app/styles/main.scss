@@ -757,9 +757,16 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 
 .unit-selectors .bootstrap-select > .dropdown-toggle {
-  padding-left: 10px;
+  color: #000;
+  height: 40px;
+  padding: 8px;
+  padding-left: 15px;
   padding-right: 10px;
-  color: black;
+}
+
+.unit-selectors .shiny-input-container .control-label {
+  bottom: -2px;
+  position: relative;
 }
 
 .bootstrap-select .dropdown-menu {
@@ -1069,7 +1076,8 @@ td.listbox.htDimmed.current.highlight {
 }
 
 /* Logs & Text */
-#app-deconvolution_main-logtext {
+#app-deconvolution_main-logtext,
+#app-conversion_sidebar-console_log {
   overflow-y: auto;
   max-height: 22rem;
   height: 100%;
@@ -1077,7 +1085,8 @@ td.listbox.htDimmed.current.highlight {
   word-wrap: break-word;
 }
 
-#app-deconvolution_main-logtext::-webkit-scrollbar-track {
+#app-deconvolution_main-logtext::-webkit-scrollbar-track,
+#app-conversion_sidebar-console_log::-webkit-scrollbar-track {
   border-bottom-right-radius: 5px;
   border-top-right-radius: 5px;
 }
@@ -3375,4 +3384,48 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 .material-switch > label.switch:after {
   height: 20px;
   width: 20px;
+}
+
+.conversion-progress .progress-group {
+  height: unset;
+  width: 100%;
+}
+
+.conversion-progress .progress-text {
+  font-size: 12px;
+}
+
+#app-conversion_sidebar-console_log {
+  margin: 0;
+  margin-top: 10px;
+  height: 350px;
+  font-size: 12px;
+  padding-right: 30px;
+}
+
+.console-container {
+  position: relative;
+}
+
+#app-conversion_sidebar-scroll_btn {
+  display: none;
+  opacity: 0.5;
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  border-radius: 5px;
+  background: rgb(0 0 0 / 75%);
+  color: white;
+  border: none;
+  z-index: 9999;
+}
+
+#app-conversion_sidebar-scroll_btn:hover {
+  opacity: 1;
+}
+
+#app-conversion_main-proteins_table > .ht_master > .wtHolder,
+#app-conversion_main-compounds_table > .ht_master > .wtHolder,
+#app-conversion_main-samples_table > .ht_master > .wtHolder {
+  width: fit-content !important;
 }

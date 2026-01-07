@@ -13,6 +13,7 @@ box::use(
       summarize_hits,
       add_kobs_binding_result,
       add_ki_kinact_result,
+      conversion_tracking_js,
     ],
   app /
     logic /
@@ -169,15 +170,14 @@ server <- function(id, conversion_main_vars) {
                 value = FALSE
               )
             ),
-            #TODO
-            # shinyjs::disabled(
-            shiny::actionButton(
-              ns("run_binding_analysis"),
-              "Run",
-              icon = shiny::icon("play"),
-              width = "100%"
-            ),
-            # )
+            shinyjs::disabled(
+              shiny::actionButton(
+                ns("run_binding_analysis"),
+                "Run",
+                icon = shiny::icon("play"),
+                width = "100%"
+              )
+            )
           )
         )
       )
@@ -189,23 +189,90 @@ server <- function(id, conversion_main_vars) {
     })
 
     # Enable/Disable conversion parameter and launch input UI
-    # shiny::observe({
-    #   if (isTRUE(conversion_main_vars$conversion_ready())) {
-    #     shinyjs::enable("run_binding_analysis")
-    #     shinyjs::addClass(
-    #       id = "run_binding_analysis",
-    #       class = "btn-highlight"
-    #     )
-    #   } else {
-    #     shinyjs::disable("run_binding_analysis")
-    #     shinyjs::removeClass(
-    #       id = "run_binding_analysis",
-    #       class = "btn-highlight"
-    #     )
-    #   }
-    # })
+    shiny::observe({
+      if (isTRUE(conversion_main_vars$conversion_ready())) {
+        shinyjs::enable("run_binding_analysis")
+        shinyjs::addClass(
+          id = "run_binding_analysis",
+          class = "btn-highlight"
+        )
+      } else {
+        shinyjs::disable("run_binding_analysis")
+        shinyjs::removeClass(
+          id = "run_binding_analysis",
+          class = "btn-highlight"
+        )
+      }
+    })
 
-    # Event run conversion
+    # # Event run conversion
+    shiny::observeEvent(
+      input$run_binding_analysis,
+      {
+        shiny::req(analysis_status() == "pending")
+
+        shiny::showModal(
+          shiny::div(
+            class = "start-modal",
+            shiny::modalDialog(
+              shiny::fluidRow(
+                shiny::br(),
+                shiny::column(
+                  width = 12,
+                  shinyjs::useShinyjs(),
+                  shiny::div(
+                    class = "conversion-progress",
+                    shinyWidgets::progressBar(
+                      id = ns("conversion_progress"),
+                      value = 0,
+                      title = "Initiating Conversion",
+                      display_pct = TRUE
+                    )
+                  ),
+                  shiny::div(
+                    class = "console-container",
+                    shiny::tags$pre(id = ns("console_log")),
+                    shiny::actionButton(
+                      ns("scroll_btn"),
+                      NULL,
+                      icon = shiny::icon("arrow-down"),
+                      class = "btn-info btn-sm"
+                    )
+                  )
+                )
+              ),
+              title = "Deconvolution Output",
+              easyClose = TRUE,
+              footer = shiny::tagList(
+                shiny::div(
+                  class = "modal-button",
+                  shiny::modalButton("Dismiss")
+                ),
+                shiny::div(
+                  class = "modal-button",
+                  shiny::actionButton(
+                    ns("copy_deconvolution_log"),
+                    "Clip",
+                    icon = shiny::icon("clipboard")
+                  )
+                ),
+                shiny::div(
+                  class = "modal-button",
+                  shiny::downloadButton(
+                    ns("save_deconvolution_log"),
+                    "Save",
+                    class = "load-db",
+                    width = "auto"
+                  )
+                )
+              )
+            )
+          )
+        )
+      },
+      priority = 10
+    )
+
     shiny::observeEvent(input$run_binding_analysis, {
       # Block UI
       shinyjs::runjs(paste0(
@@ -214,14 +281,49 @@ server <- function(id, conversion_main_vars) {
       ))
 
       if (analysis_status() == "pending") {
-        # Search and add hits to result list
-        result_with_hits <- add_hits(
-          conversion_main_vars$input_list()$result,
-          sample_table = conversion_main_vars$input_list()$Samples_Table,
-          protein_table = conversion_main_vars$input_list()$Protein_Table,
-          compound_table = conversion_main_vars$input_list()$Compound_Table,
-          peak_tolerance = input$peak_tolerance,
-          max_multiples = input$max_multiples
+        # Delay conversion start
+        Sys.sleep(1)
+
+        # Activate JS function for conversion process tracking
+        shinyjs::runjs(sprintf(
+          conversion_tracking_js,
+          ns("console_log"),
+          ns("scroll_btn")
+        ))
+
+        # Add hits
+        withCallingHandlers(
+          expr = {
+            result_with_hits <- add_hits(
+              conversion_main_vars$input_list()$result,
+              sample_table = conversion_main_vars$input_list()$Samples_Table,
+              protein_table = conversion_main_vars$input_list()$Protein_Table,
+              compound_table = conversion_main_vars$input_list()$Compound_Table,
+              peak_tolerance = input$peak_tolerance,
+              max_multiples = input$max_multiples,
+              session = session,
+              ns = ns
+            )
+          },
+          message = function(m) {
+            clean_msg <- gsub("\\", "\\\\", m$message, fixed = TRUE)
+            clean_msg <- gsub("'", "\\'", clean_msg, fixed = TRUE)
+            clean_msg <- gsub("\n", "<br>", clean_msg, fixed = TRUE)
+
+            js_cmd <- sprintf(
+              "
+            var el = document.getElementById('%s');
+            if (el) {
+              el.innerHTML += '%s';
+              el.doAutoScroll();
+            }
+              ",
+              ns("console_log"),
+              clean_msg
+            )
+
+            shinyjs::runjs(js_cmd)
+          }
         )
 
         # If Ki/kinact analysis is set to be performed
