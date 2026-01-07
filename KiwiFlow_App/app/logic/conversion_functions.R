@@ -841,18 +841,7 @@ get_peaks <- function(peak_file = NULL, result_sample, results) {
   names(peaks) <- c("mass", "intensity")
 
   # Message information
-  message(
-    "-> ",
-    nrow(peaks),
-    " mass peaks detected ranging from ",
-    min(peaks$mass),
-    " to ",
-    max(peaks$mass),
-    " Da and intensities ranging from ",
-    min(peaks$intensity),
-    " to ",
-    max(peaks$intensity)
-  )
+  log_status(nrow(peaks), min(peaks$mass), max(peaks$mass))
 
   return(peaks)
 }
@@ -1004,7 +993,7 @@ check_hits <- function(
 
   # Abort if peaks show invalid peaks
   if (!any(protein_peak)) {
-    message(warning_sym, " No protein peak detected")
+    log_alert()
 
     hits_df <- data.frame(
       well = "A1",
@@ -1030,7 +1019,7 @@ check_hits <- function(
   if (any(peaks_valid) && sum(peaks_valid) > 1) {
     peaks_filtered <- as.data.frame(peaks[peaks_valid, ])
   } else {
-    message(warning_sym, " No peaks other than the protein were detected")
+    log_alert()
 
     hits_df <- data.frame(
       well = "A1",
@@ -1154,7 +1143,7 @@ check_hits <- function(
     )
   }
 
-  message("-> ", nrow(hits_df), " hits detected.")
+  log_hits_count(nrow(hits_df))
   return(hits_df)
 }
 
@@ -1172,22 +1161,12 @@ check_hits <- function(
 conversion <- function(hits) {
   # Check 'hits' argument validity
   if (!is.data.frame(hits) || nrow(hits) < 1) {
-    message(
-      warning_sym,
-      " 'hits' argument has to be a data frame with at least one row"
-    )
+    log_err_no_df()
     return(NULL)
   } else if (ncol(hits) != 13) {
-    message(
-      warning_sym,
-      " 'hits' data frame has ",
-      ncol(hits),
-      " columns, but 13 are required."
-    )
+    log_err_cols()
     return(NULL)
   } else if (anyNA(hits)) {
-    message("No binding events in sample.\n")
-
     hits <- hits |>
       dplyr::mutate(
         `%binding` = NA
@@ -1203,7 +1182,6 @@ conversion <- function(hits) {
     # Gesamtintensität: IA + IB + IC + ID = Itotal
     I_total <- sum(unique(hits$intensity)) + unique(hits$prot_intensity)
     perc_bind_prot <- unique(hits$prot_intensity) / I_total
-    message("-> Total intensity = ", I_total)
 
     # nicht umgesetztes / ungebundenes Protein: IA / Itotal * 100
 
@@ -1227,29 +1205,14 @@ conversion <- function(hits) {
     # Plausibilitätscheck check result < 100 - richtig so?
     total_relBinding <- hits$`%binding_tot`[1] + perc_bind_prot
     if (!all.equal(total_relBinding, 1)) {
-      message(
-        warning_sym,
-        " total relative binding is not 100%."
-      )
+      log_err_binding()
       return(NULL)
     }
 
-    # Inform unbound protein intensity
-    message(
-      "-> Unbound protein intensity = ",
-      hits$intensity[1],
-      " (",
-      scales::label_percent(accuracy = 0.1)(hits$`%binding`[1]),
-      ")"
-    )
-
-    # Inform %binding except protein
-    message(
-      "-> Total binding compounds intensity = ",
-      sum(unique(hits$intensity)),
-      " (",
-      scales::label_percent(accuracy = 0.1)(hits$`%binding_tot`[1]),
-      ")\n"
+    log_intensities(
+      I_total,
+      unique(hits$prot_intensity),
+      sum(unique(hits$intensity))
     )
   }
 
@@ -1273,6 +1236,91 @@ conversion <- function(hits) {
   )
 
   return(hits)
+}
+
+# 1. Header: The Sample Name
+log_start <- function(sample_name) {
+  message(sprintf("PROCESSING: %s\n  │", sample_name))
+  Sys.sleep(0.1)
+}
+
+# 2. Status: Peak Info
+log_status <- function(n_peaks, m_min, m_max) {
+  message(sprintf(
+    "  ├─ Status: %s peaks detected [%.2f - %.2f Da]",
+    n_peaks,
+    m_min,
+    m_max
+  ))
+  Sys.sleep(0.1)
+}
+
+# 3. The hit count
+log_hits_count <- function(n_hits) {
+  message(sprintf("  ├─ Result: %s hits detected", n_hits))
+  Sys.sleep(0.1)
+}
+
+log_intensities <- function(total, unbound, binding) {
+  # Calculate percentages
+  perc_unbound <- (unbound / total) * 100
+  perc_binding <- (binding / total) * 100
+
+  message(paste0(
+    sprintf("  │  ├─ Total Intensity: %.2f (100%%)\n", total),
+    sprintf("  │  ├─ Unbound Protein: %.2f (%.1f%%)\n", unbound, perc_unbound),
+    sprintf("  │  └─ Total Binding:   %.2f (%.1f%%)", binding, perc_binding)
+  ))
+  Sys.sleep(0.1)
+}
+
+# 4. Alert: No Peaks
+log_alert <- function(msg = "No protein peak detected") {
+  message(sprintf("  ├─ ⚠️ %s.  ", msg))
+  Sys.sleep(0.1)
+}
+
+# 5. Footer: Closing a successful sample
+log_done <- function() {
+  message(paste0("  │\n", "  └─ ☑ Sample completed.\n  "))
+  Sys.sleep(0.1)
+}
+
+log_summary <- function(n_samples) {
+  time_stamp <- format(Sys.time(), "%H:%M:%S")
+  divider <- paste0(rep("─", 40), collapse = "")
+  message(sprintf(
+    "\n%s\n[%s] BATCH SUMMARY\nStatus:  Process Finished\nSamples: %s total\n%s\n",
+    divider,
+    time_stamp,
+    n_samples,
+    divider
+  ))
+}
+
+log_err_no_df <- function() {
+  msg <- sprintf(
+    "  │  └─ %s ALERT: 'hits' argument must be a data frame with at least one row. Skipping.\n",
+    warning_sym
+  )
+  message(msg)
+}
+
+log_err_cols <- function(current_cols) {
+  msg <- sprintf(
+    "  │  └─ %s ALERT: 'hits' data frame has %s columns, but 13 are required.\n",
+    warning_sym,
+    current_cols
+  )
+  message(msg)
+}
+
+log_err_binding <- function() {
+  msg <- sprintf(
+    "  │  └─ %s ALERT: Total relative binding is not 100%%. Check data integrity.\n",
+    warning_sym
+  )
+  message(msg)
 }
 
 #' @export
@@ -1306,7 +1354,7 @@ add_hits <- function(
       )
     )
 
-    message("Checking hits for ", samples[i])
+    log_start(samples[i])
 
     results$deconvolution[[samples[i]]][["hits"]] <- check_hits(
       sample_table = sample_table,
@@ -1333,12 +1381,13 @@ add_hits <- function(
     #   )
     # }
 
-    # TODO
     # Throttle next iteration
-    Sys.sleep(1)
+    log_done()
+    Sys.sleep(0.3)
   }
 
-  # message("Search for hits in ", length(samples), " samples completed.")
+  log_summary(length(samples))
+
   shinyWidgets::updateProgressBar(
     session = session,
     id = ns("conversion_progress"),
@@ -1349,6 +1398,7 @@ add_hits <- function(
       " samples completed."
     )
   )
+
   return(results)
 }
 
@@ -2788,7 +2838,8 @@ render_hits_table <- function(
   samples = NULL,
   select = FALSE,
   color_scale = NULL,
-  expand = FALSE
+  expand = FALSE,
+  na_include = TRUE
 ) {
   # Remove truncated labels
   hits_table <- dplyr::select(hits_table, -c("truncSample_ID"))
@@ -2802,24 +2853,6 @@ render_hits_table <- function(
         `Theor. Prot.`,
         `Total %-Binding`
       )
-  }
-
-  # Filter compounds
-  if (!is.null(compounds)) {
-    hits_table <- dplyr::filter(hits_table, `Cmp Name` %in% compounds)
-  }
-
-  # Filter samples
-  if (!is.null(samples)) {
-    hits_table <- dplyr::filter(hits_table, `Sample ID` %in% samples)
-  }
-
-  # Filter columns
-  if (!is.null(selected_cols) && expand) {
-    hits_table <- dplyr::select(
-      hits_table,
-      c("Sample ID", "Cmp Name", selected_cols)
-    )
   }
 
   if (length(bar_chart)) {
@@ -2839,17 +2872,31 @@ render_hits_table <- function(
     }
   }
 
-  # JS function to display NA values
-  rowCallback <- c(
-    "function(row, data){",
-    "  for(var i=0; i<data.length; i++){",
-    "    if(data[i] === null){",
-    "      $('td:eq('+i+')', row).html('N/A')",
-    "        .css({'color': 'black'});",
-    "    }",
-    "  }",
-    "}"
-  )
+  # Filter compounds
+  if (!is.null(compounds) && na_include) {
+    hits_table <- dplyr::filter(
+      hits_table,
+      `Cmp Name` %in% compounds | is.na(`Cmp Name`)
+    )
+  } else if (!is.null(compounds)) {
+    hits_table <- dplyr::filter(
+      hits_table,
+      `Cmp Name` %in% compounds
+    )
+  }
+
+  # Filter samples
+  if (!is.null(samples)) {
+    hits_table <- dplyr::filter(hits_table, `Sample ID` %in% samples)
+  }
+
+  # Filter columns
+  if (!is.null(selected_cols) && expand) {
+    hits_table <- dplyr::select(
+      hits_table,
+      c("Sample ID", "Cmp Name", selected_cols)
+    )
+  }
 
   if (!is.null(single_conc)) {
     menu_length <- list(c(25, -1), c('25', 'All'))
@@ -2875,6 +2922,24 @@ render_hits_table <- function(
     clickable_targets <- NULL
   }
 
+  rowCallback <- c(
+    "function(row, data){",
+    "  var targets = ",
+    jsonlite::toJSON(clickable_targets),
+    ";",
+    "  for(var i=0; i<data.length; i++){",
+    "    // 1. Handle N/A display",
+    "    if(data[i] === null){",
+    "      $('td:eq('+i+')', row).html('N/A').css({'color': 'black'});",
+    "    }",
+    "    // 2. Add clickable class only if target index matches AND data is NOT null",
+    "    if(targets.includes(i) && data[i] !== null){",
+    "      $('td:eq('+i+')', row).addClass('clickable-column');",
+    "    }",
+    "  }",
+    "}"
+  )
+
   # Make compound color scale
   # colors <- get_cmp_colorScale(
   #   filtered_table = hits_table,
@@ -2897,7 +2962,6 @@ render_hits_table <- function(
       dom = dom_value,
       paging = FALSE,
       columnDefs = list(
-        list(className = 'clickable-column', targets = clickable_targets),
         list(
           targets = bar_chart,
           render = htmlwidgets::JS(chart_js)
@@ -2950,19 +3014,6 @@ render_hits_table <- function(
         )
     }
   } else {
-    # hits_datatable <- hits_datatable |>
-    #   DT::formatStyle(
-    #     columns = "Theor. Cmp",
-    #     target = 'row',
-    #     backgroundColor = DT::styleEqual(
-    #       levels = names(colors),
-    #       values = colors
-    #     ),
-    #     color = DT::styleEqual(
-    #       levels = names(colors),
-    #       values = get_contrast_color(colors)
-    #     )
-    #   )
     hits_datatable <- hits_datatable |>
       DT::formatStyle(
         columns = "Sample ID",

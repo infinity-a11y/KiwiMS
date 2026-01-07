@@ -19,6 +19,7 @@ box::use(
     logic /
     logging[
       write_log,
+      get_session_id,
     ]
 )
 
@@ -251,17 +252,17 @@ server <- function(id, conversion_main_vars) {
                 shiny::div(
                   class = "modal-button",
                   shiny::actionButton(
-                    ns("copy_deconvolution_log"),
+                    ns("copy_conversion_log"),
                     "Clip",
                     icon = shiny::icon("clipboard")
                   )
                 ),
                 shiny::div(
                   class = "modal-button",
-                  shiny::downloadButton(
-                    ns("save_deconvolution_log"),
+                  shiny::actionButton(
+                    ns("save_conversion_log"),
                     "Save",
-                    class = "load-db",
+                    icon = shiny::icon("download"),
                     width = "auto"
                   )
                 )
@@ -389,6 +390,55 @@ server <- function(id, conversion_main_vars) {
         '= "none";'
       ))
     })
+
+    # --- 1. Copy to Clipboard ---
+    shiny::observeEvent(input$copy_conversion_log, {
+      shinyjs::runjs(sprintf(
+        "
+    var text = document.getElementById('%s').innerText;
+    navigator.clipboard.writeText(text).then(function() {
+      alert('Log copied to clipboard!');
+    });
+  ",
+        session$ns("console_log")
+      ))
+    })
+
+    # --- 2. Save as .txt ---
+    shiny::observeEvent(input$save_conversion_log, {
+      # Generate a filename with a timestamp
+      fname <- paste0(
+        "conversion_SESSION",
+        get_session_id(),
+        ".txt"
+      )
+
+      shinyjs::runjs(sprintf(
+        "
+    var text = document.getElementById('app-conversion_sidebar-console_log').innerText;
+    var element = document.createElement('a');
+    element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+    element.setAttribute('download', '%s');
+    element.style.display = 'none';
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
+  ",
+        fname
+      ))
+    })
+
+    #  #### Save log ----
+    # output$save_conversion_log <- shiny$downloadHandler(
+    #   filename = function() {
+    #     paste0(
+    #     "conversion_SESSION", get_session_id(), ".txt"
+    #     ".txt"
+    #   )
+    #   },
+    #   content = function(file) {
+    #   }
+    # )
 
     output$conversion_info_ui <- shiny::renderUI({
       shiny::req(conversion_main_vars$selected_tab())

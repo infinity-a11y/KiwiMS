@@ -2057,6 +2057,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           ### Protein conversion interface ----
 
           #### Transform hits for summary table ----
+
           hits_summary <- transform_hits(
             hits_summary = conversion_sidebar_vars$result_list()$"hits_summary",
             run_ki_kinact = FALSE
@@ -2082,7 +2083,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               title = "Hits",
               shiny::div(
                 class = "conversion-result-wrapper",
-                # shiny::div(
                 shiny::fluidRow(
                   shiny::column(
                     width = 2,
@@ -2093,34 +2093,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                         ns("hits_tab_expand"),
                         label = "Expand Samples",
                         value = TRUE
-                      )
-                    )
-                  ),
-                  shiny::column(
-                    width = 2,
-                    align = "center",
-                    shinyWidgets::pickerInput(
-                      ns("hits_tab_sample_select"),
-                      label = "Select Samples",
-                      choices = unique(hits_summary$`Sample ID`),
-                      selected = unique(hits_summary$`Sample ID`),
-                      multiple = TRUE,
-                      options = list(
-                        `actions-box` = TRUE
-                      )
-                    )
-                  ),
-                  shiny::column(
-                    width = 2,
-                    align = "center",
-                    shinyWidgets::pickerInput(
-                      ns("hits_tab_compound_select"),
-                      label = "Select Compounds",
-                      choices = unique(hits_summary$`Cmp Name`),
-                      selected = unique(hits_summary$`Cmp Name`),
-                      multiple = TRUE,
-                      options = list(
-                        `actions-box` = TRUE
+                      ),
+                      shiny::checkboxInput(
+                        ns("hits_tab_na"),
+                        label = "Include NA",
+                        value = TRUE
                       )
                     )
                   ),
@@ -2128,7 +2105,45 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     width = 2,
                     align = "center",
                     shiny::div(
-                      class = "hits-tab-col-select-ui",
+                      class = "hits-table-control-select",
+                      shinyWidgets::pickerInput(
+                        ns("hits_tab_sample_select"),
+                        label = "Select Samples",
+                        choices = unique(hits_summary$`Sample ID`),
+                        selected = unique(hits_summary$`Sample ID`),
+                        multiple = TRUE,
+                        options = list(
+                          `actions-box` = TRUE
+                        )
+                      )
+                    )
+                  ),
+                  shiny::column(
+                    width = 2,
+                    align = "center",
+                    shiny::div(
+                      class = "hits-table-control-select",
+                      shinyWidgets::pickerInput(
+                        ns("hits_tab_compound_select"),
+                        label = "Select Compounds",
+                        choices = unique(hits_summary$`Cmp Name`)[
+                          !is.na(unique(hits_summary$`Cmp Name`))
+                        ],
+                        selected = unique(hits_summary$`Cmp Name`)[
+                          !is.na(unique(hits_summary$`Cmp Name`))
+                        ],
+                        multiple = TRUE,
+                        options = list(
+                          `actions-box` = TRUE
+                        )
+                      )
+                    )
+                  ),
+                  shiny::column(
+                    width = 2,
+                    align = "center",
+                    shiny::div(
+                      class = "hits-table-control-select",
                       shinyWidgets::pickerInput(
                         ns("hits_tab_col_select"),
                         label = "Select Columns",
@@ -2150,19 +2165,21 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   shiny::column(
                     width = 2,
                     align = "center",
-                    shinyWidgets::pickerInput(
-                      ns("binding_chart"),
-                      label = "Show Binding Bars",
-                      choices = c("%-Binding", "Total %-Binding"),
-                      selected = "Total %-Binding",
-                      multiple = TRUE,
-                      options = list(
-                        `actions-box` = TRUE
+                    shiny::div(
+                      class = "hits-table-control-select",
+                      shinyWidgets::pickerInput(
+                        ns("binding_chart"),
+                        label = "Show Binding Bars",
+                        choices = c("%-Binding", "Total %-Binding"),
+                        selected = "Total %-Binding",
+                        multiple = TRUE,
+                        options = list(
+                          `actions-box` = TRUE
+                        )
                       )
                     )
                   )
                 ),
-                # ),
                 shinycssloaders::withSpinner(
                   DT::DTOutput(ns("conversion_hits_tab")),
                   type = 1,
@@ -2175,7 +2192,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           ##### Render hits table ----
           output$conversion_hits_tab <- DT::renderDT(
             {
-              shiny::req(input$hits_tab_col_select)
+              shiny::req(
+                input$hits_tab_col_select,
+                input$hits_tab_sample_select,
+                input$hits_tab_compound_select
+              )
 
               hits_datatable <- render_hits_table(
                 hits_table = hits_summary,
@@ -2187,7 +2208,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 samples = input$hits_tab_sample_select,
                 select = TRUE,
                 color_scale = input$color_scale,
-                expand = input$hits_tab_expand
+                expand = input$hits_tab_expand,
+                na_include = input$hits_tab_na
               )
 
               hits_datatable_current(hits_datatable)
@@ -2209,7 +2231,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
             if (
               !is.null(cell_clicked) &&
-                length(cell_clicked)
+                length(cell_clicked) &&
+                !is.na(hits_datatable_current()$x$data[
+                  input$conversion_hits_tab_cell_clicked$row,
+                  input$conversion_hits_tab_cell_clicked$col + 1
+                ])
             ) {
               # Get current column indeces of sample and compound columns
               cols <- names(hits_datatable_current()$x$data)

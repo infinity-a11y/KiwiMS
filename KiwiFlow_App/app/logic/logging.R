@@ -43,6 +43,14 @@ start_logging <- function() {
   log_open(log_path, logdir = FALSE)
 }
 
+# Get the current 4-digit session ID
+#' @export
+get_session_id <- function() {
+  # Regex looks for "id" followed by 4 digits before the .log extension
+  session_id <- gsub(".*_id(\\d{4})\\.log$", "\\1", log_path)
+  return(session_id)
+}
+
 # Log messages
 #' @export
 write_log <- function(msg, level = "INFO") {

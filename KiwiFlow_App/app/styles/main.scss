@@ -2139,15 +2139,33 @@ table.dataTable thead > tr > th.sorting::before {
   border-radius: 2px;
 }
 
-.hits-tab-expand .shiny-input-container:not(.shiny-input-container-inline) {
-  height: 47px;
-  margin: 0;
-  align-content: center;
-  margin-top: 23px;
+.hits-tab-expand {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  height: 100%;
+  align-items: baseline;
+  width: fit-content;
 }
 
 .hits-tab-expand .checkbox {
   margin: 0;
+  width: fit-content;
+}
+
+.hits-tab-expand .form-group {
+  margin-bottom: 0;
+  width: fit-content;
+}
+
+.hits-tab-expand label {
+  display: flex;
+  gap: 5px;
+}
+
+.hits-tab-expand .shiny-input-container .checkbox input,
+.hits-tab-expand span {
+  font-size: 16px;
 }
 
 .conversion-result-wrapper label {
@@ -3428,4 +3446,13 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 #app-conversion_main-compounds_table > .ht_master > .wtHolder,
 #app-conversion_main-samples_table > .ht_master > .wtHolder {
   width: fit-content !important;
+}
+
+.hits-table-control-select .bootstrap-select > .dropdown-toggle {
+  height: 40px;
+  padding: 8px;
+}
+
+.hits-table-control-select .form-group {
+  margin-bottom: 10px;
 }

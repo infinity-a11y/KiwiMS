@@ -33,6 +33,12 @@ box::use(
       deconvolution_running_ui_plate,
       deconvolution_running_ui_noplate,
       deconvolution_init_ui
+    ],
+  app /
+    logic /
+    logging[
+      write_log,
+      get_session_id,
     ]
 )
 
@@ -1820,7 +1826,7 @@ server <- function(
     #### Save log ----
     output$save_deconvolution_log <- shiny$downloadHandler(
       filename = function() {
-        paste0(Sys.Date(), "_Deconvolution_Log.txt")
+        paste0("deconvolution_SESSION", get_session_id(), ".txt")
       },
       content = function(file) {
         file.copy(reactVars$decon_process_out, file)
@@ -1831,6 +1837,7 @@ server <- function(
     shiny$observeEvent(input$copy_deconvolution_log, {
       shiny$req(reactVars$deconvolution_log)
 
+      shinyjs::runjs("alert('Log copied to clipboard!');")
       write_clip(reactVars$deconvolution_log, allow_non_interactive = TRUE)
     })
 
