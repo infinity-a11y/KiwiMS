@@ -2058,11 +2058,14 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
           #### Transform hits for summary table ----
 
-          hits_summary <- transform_hits(
-            hits_summary = conversion_sidebar_vars$result_list()$"hits_summary",
-            run_ki_kinact = FALSE
-          ) |>
-            dplyr::arrange(as.numeric(gsub("%", "", `Total %-Binding`)))
+          hits_summary <- conversion_sidebar_vars$result_list()$"hits_summary" |>
+            transform_hits(
+              run_ki_kinact = FALSE
+            ) |>
+            dplyr::arrange(
+              `Total %-Binding` == "N/A",
+              as.numeric(gsub("[^0-9.-]", "", `Total %-Binding`))
+            )
 
           #### Append truncated sample IDs ----
           # Create a mapping data frame
@@ -2194,7 +2197,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           output$conversion_hits_tab <- DT::renderDT(
             {
               shiny::req(
-                input$hits_tab_col_select,
                 input$hits_tab_sample_select,
                 input$hits_tab_compound_select
               )
@@ -2355,7 +2357,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     bslib::card(
                       bslib::card_header(
                         class = "bg-dark help-header",
-                        "Present Compounds"
+                        "Table View"
                       ),
                       shinycssloaders::withSpinner(
                         DT::DTOutput(
@@ -2774,7 +2776,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     bslib::card(
                       bslib::card_header(
                         class = "bg-dark help-header",
-                        "Present Compounds"
+                        "Table View"
                       ),
                       # shiny::div(
                       shinycssloaders::withSpinner(
@@ -3181,10 +3183,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     value = TRUE
                   )
                 ),
-                shiny::selectInput(
-                  ns("color_variable"),
-                  label = NULL,
-                  choices = c("Samples", "Compounds")
+                shiny::div(
+                  class = "color_variable_ui",
+                  shiny::selectInput(
+                    ns("color_variable"),
+                    label = NULL,
+                    choices = c("Samples", "Compounds")
+                  )
                 ),
                 shiny::selectInput(
                   ns("color_scale"),
@@ -3303,12 +3308,19 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     })
 
     ## Events for conversion result interface ----
+
     ### Expand samples from hits table ----
     shiny::observeEvent(input$hits_tab_expand, {
       if (isFALSE(conversion_vars$expand_helper)) {
         shinyjs::removeClass(
           selector = ".hits-tab-col-select-ui .form-group",
           class = "custom-disable"
+        )
+
+        shinyWidgets::updatePickerInput(
+          session,
+          "hits_tab_col_select",
+          choices = c("Theor. Prot.", "Total %-Binding")
         )
 
         shinyWidgets::updatePickerInput(

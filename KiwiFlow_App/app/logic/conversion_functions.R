@@ -2928,6 +2928,20 @@ render_hits_table <- function(
   na_include = TRUE,
   truncated = NULL
 ) {
+  hits_table <<- hits_table
+  concentration_colors <<- concentration_colors
+  withzero <<- withzero
+  selected_cols <<- selected_cols
+  bar_chart <<- bar_chart
+  compounds <<- compounds
+  samples <<- samples
+  select <<- TRUE
+  colors <<- colors
+  truncated <<- truncated
+  color_variable <<- color_variable
+  expand <<- expand
+  na_include <<- na_include
+
   # Modify if samples are summarized instead of expanded
   if (!expand) {
     hits_table <- hits_table |>
@@ -2935,20 +2949,31 @@ render_hits_table <- function(
         `Sample ID`,
         `Cmp Name`,
         `Theor. Prot.`,
-        `Total %-Binding`
+        `Total %-Binding`,
+        `truncSample_ID`
       )
   }
 
   if (length(bar_chart)) {
-    if (any("Total %-Binding" %in% bar_chart)) {
+    if (
+      "Total %-Binding" %in%
+        names(hits_table) &
+        any("Total %-Binding" %in% bar_chart)
+    ) {
+      hits_table$`Total %-Binding`[hits_table$`Total %-Binding` == "N/A"] <- NA
       hits_table$`Total %-Binding` <- as.numeric(gsub(
         "%",
         "",
         hits_table$`Total %-Binding`
       ))
     }
-    if (any("%-Binding" %in% bar_chart)) {
-      hits_table$`%-Binding` <- as.numeric(gsub(
+    if (
+      "%-Binding" %in%
+        names(hits_table) &
+        any("%-Binding" %in% bar_chart)
+    ) {
+      hits_table$`%-Binding`[hits_table$`%-Binding` == "N/A"] <- NA
+      hits_table$` %-Binding` <- as.numeric(gsub(
         "%",
         "",
         hits_table$`%-Binding`
@@ -2975,12 +3000,11 @@ render_hits_table <- function(
   }
 
   # Filter columns
-  if (!is.null(selected_cols) && expand) {
-    hits_table <- dplyr::select(
-      hits_table,
-      c("Sample ID", "Cmp Name", "truncSample_ID", all_of(selected_cols))
-    )
-  }
+  selected_cols <- selected_cols[selected_cols %in% names(hits_table)]
+  hits_table <- dplyr::select(
+    hits_table,
+    c("Sample ID", "Cmp Name", "truncSample_ID", all_of(selected_cols))
+  )
 
   if (!is.null(single_conc)) {
     menu_length <- list(c(25, -1), c('25', 'All'))
@@ -3012,27 +3036,15 @@ render_hits_table <- function(
     jsonlite::toJSON(clickable_targets),
     ";",
     "  for(var i=0; i<data.length; i++){",
-    "    // 1. Handle N/A display",
     "    if(data[i] === null){",
-    "      $('td:eq('+i+')', row).html('N/A').css({'color': 'black'});",
+    "      $('td:eq('+i+')', row).html('N/A').css({'color': 'inherit'});",
     "    }",
-    "    // 2. Add clickable class only if target index matches AND data is NOT null",
     "    if(targets.includes(i) && data[i] !== null){",
     "      $('td:eq('+i+')', row).addClass('clickable-column');",
     "    }",
     "  }",
     "}"
   )
-
-  # Make bar chart columns
-  if (length(bar_chart) && bar_chart %in% names(hits_table)) {
-    bar_cols <- list(
-      targets = bar_chart,
-      render = htmlwidgets::JS(chart_js)
-    )
-  } else {
-    bar_cols <- NULL
-  }
 
   # Generate datatable
   hits_datatable <- DT::datatable(
@@ -3050,11 +3062,22 @@ render_hits_table <- function(
       dom = dom_value,
       paging = FALSE,
       columnDefs = list(
-        bar_cols,
-        list(
-          visible = FALSE,
-          targets = "truncSample_ID"
-        ),
+        if (length(bar_chart) > 0 & any(bar_chart %in% names(hits_table))) {
+          list(
+            targets = bar_chart[bar_chart %in% names(hits_table)],
+            render = htmlwidgets::JS(chart_js)
+          )
+        } else {
+          list()
+        },
+        if ("truncSample_ID" %in% names(hits_table)) {
+          list(
+            visible = FALSE,
+            targets = "truncSample_ID"
+          )
+        } else {
+          list()
+        },
         list(
           targets = -1,
           className = 'dt-last-col'
@@ -3482,6 +3505,10 @@ transform_hits <- function(hits_summary, run_ki_kinact) {
           "N/A",
           paste(format(.x, nsmall = 1, trim = TRUE), "Da")
         )
+      ),
+      dplyr::across(
+        !Compound,
+        ~ tidyr::replace_na(as.character(.x), "N/A")
       )
     ) |>
     dplyr::relocate(`Total % Binding`, .after = "% Binding")

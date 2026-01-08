@@ -2386,7 +2386,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   align-content: center;
   padding-left: 5px;
   background: #e5e5e5;
-  width: 100px;
+  width: fit-content;
+  min-width: 100px;
 }
 
 .conversion-tab-items .selectize-control.single .selectize-input:not(.no-arrow):after {
@@ -3455,4 +3456,14 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 
 .hits-table-control-select .form-group {
   margin-bottom: 10px;
+}
+
+.color_variable_ui .selectize-control.single .selectize-input:hover {
+  color: black;
+}
+
+.selectize-control.single .selectize-input.input-active input:not(:read-only) {
+  cursor: none !important;
+  opacity: 0 !important;
+  width: 0px !important;
 }

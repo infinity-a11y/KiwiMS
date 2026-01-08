@@ -242,29 +242,29 @@ server <- function(id, conversion_main_vars) {
                   )
                 )
               ),
-              title = "Deconvolution Output",
+              title = "Binding Analysis",
               easyClose = TRUE,
               footer = shiny::tagList(
                 shiny::div(
                   class = "modal-button",
-                  shiny::modalButton("Dismiss")
+                  shinyjs::disabled(shiny::modalButton("Dismiss"))
                 ),
                 shiny::div(
                   class = "modal-button",
-                  shiny::actionButton(
+                  shinyjs::disabled(shiny::actionButton(
                     ns("copy_conversion_log"),
                     "Clip",
                     icon = shiny::icon("clipboard")
-                  )
+                  ))
                 ),
                 shiny::div(
                   class = "modal-button",
-                  shiny::actionButton(
+                  shinyjs::disabled(shiny::actionButton(
                     ns("save_conversion_log"),
                     "Save",
                     icon = shiny::icon("download"),
                     width = "auto"
-                  )
+                  ))
                 )
               )
             )
@@ -383,6 +383,29 @@ server <- function(id, conversion_main_vars) {
           disabled = TRUE
         )
       }
+
+      # Enable modal window buttons
+      shinyjs::removeClass(
+        id = "save_conversion_log",
+        class = "disabled"
+      )
+      copy_conversion_log
+      shinyjs::removeClass(
+        id = "copy_conversion_log",
+        class = "disabled"
+      )
+      shinyjs::removeClass(
+        selector = paste0(
+          ".modal-button button"
+        ),
+        class = "disabled"
+      )
+      shinyjs::addClass(
+        selector = paste0(
+          ".modal-button button"
+        ),
+        class = "btn-highlight"
+      )
 
       # Unblock UI
       shinyjs::runjs(paste0(
