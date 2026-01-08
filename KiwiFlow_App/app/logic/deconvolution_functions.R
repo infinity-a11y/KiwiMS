@@ -664,7 +664,8 @@ spectrum_plot <- function(
   interactive = TRUE,
   bin_width = 0.01,
   theme = "dark",
-  color_cmp = NULL
+  color_cmp = NULL,
+  color_variable = NULL
 ) {
   plot_data <- process_plot_data(
     sample,
@@ -680,14 +681,22 @@ spectrum_plot <- function(
     font_color <- "black"
     grid_color <- "rgba(0, 0, 0, 0.1)"
     zeroline_color <- "rgba(0, 0, 0, 0.5)"
-    data_line_color <- "black"
+    data_line_color <- ifelse(
+      !is.null(color_variable) && color_variable == "Compounds",
+      "black",
+      color_cmp
+    )
   } else {
     bg_color <- "rgba(0,0,0,0)"
     plot_bg_color <- "rgba(0,0,0,0)"
     font_color <- "white"
     grid_color <- "rgba(255, 255, 255, 0.2)"
     zeroline_color <- "rgba(255, 255, 255, 0.5)"
-    data_line_color <- "white"
+    data_line_color <- ifelse(
+      !is.null(color_variable) && color_variable == "Compounds",
+      "white",
+      color_cmp
+    )
   }
 
   marker_border_color <- ifelse(!is.null(color_cmp), "#000000", "#7777f9")
@@ -734,7 +743,7 @@ spectrum_plot <- function(
     return(plot)
   }
 
-  # PLOTLY (Interactive) Section
+  # Interactive plotly
   if (raw) {
     plot <- plotly::plot_ly(
       plot_data$mass,
@@ -844,13 +853,26 @@ spectrum_plot <- function(
 
       if (!is.null(color_cmp)) {
         color_cmp <- c("#ffffff", color_cmp)
-        names(color_cmp) <- c(
-          as.character(max(unique(plot_data$highlight_peaks$mw))),
-          names(color_cmp)[-1]
-        )
+        if (color_variable == "Compounds") {
+          names(color_cmp) <- c(
+            plot_data$highlight_peaks$name[
+              !plot_data$highlight_peaks$name %in% names(color_cmp)
+            ],
+            names(color_cmp)[-1]
+          )
+        } else if (color_variable == "Samples") {
+          names(color_cmp) <- c(
+            as.character(max(unique(plot_data$highlight_peaks$mw))),
+            names(color_cmp)[-1]
+          )
+        }
 
-        plot_data$highlight_peaks$mw_color <- color_cmp[match(
-          as.character(plot_data$highlight_peaks$mw),
+        plot_data$highlight_peaks$color <- color_cmp[match(
+          if (color_variable == "Samples") {
+            as.character(plot_data$highlight_peaks$mw)
+          } else if (color_variable == "Compounds") {
+            plot_data$highlight_peaks$name
+          },
           gsub("\\.?0+$", "", gsub(" Da", "", names(color_cmp)))
         )]
       }
@@ -862,7 +884,7 @@ spectrum_plot <- function(
         y = ~intensity,
         marker = list(
           color = if (!is.null(color_cmp)) {
-            ~ I(mw_color)
+            ~ I(color)
           } else {
             "#e8cb97"
           },

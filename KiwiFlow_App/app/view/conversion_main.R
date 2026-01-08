@@ -2198,6 +2198,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 input$hits_tab_sample_select,
                 input$hits_tab_compound_select
               )
+              color_variable <- input$color_variable
+              truncate_names <- input$truncate_names
 
               hits_datatable <- render_hits_table(
                 hits_table = hits_summary,
@@ -2208,7 +2210,14 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 compounds = input$hits_tab_compound_select,
                 samples = input$hits_tab_sample_select,
                 select = TRUE,
-                color_scale = input$color_scale,
+                colors = get_cmp_colorScale(
+                  filtered_table = hits_summary,
+                  scale = input$color_scale,
+                  variable = color_variable,
+                  trunc = truncate_names
+                ),
+                truncated = truncate_names,
+                color_variable = color_variable,
                 expand = input$hits_tab_expand,
                 na_include = input$hits_tab_na
               )
@@ -2420,6 +2429,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           output$conversion_present_compounds_pie <- plotly::renderPlotly({
             shiny::req(input$conversion_sample_picker)
 
+            color_variable <- input$color_variable
+            truncate_names <- input$truncate_names
+
             tbl <- hits_summary |>
               dplyr::filter(
                 `Sample ID` == input$conversion_sample_picker
@@ -2429,6 +2441,12 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               dplyr::group_by(`Cmp Name`) |>
               dplyr::arrange(dplyr::desc(`Theor. Cmp`), `Bind. Stoich.`) |>
               dplyr::reframe(
+                `Cmp Name` = `Cmp Name`,
+                `Sample ID` = if (truncate_names) {
+                  `truncSample_ID`
+                } else {
+                  `Sample ID`
+                },
                 total_bind = `Total %-Binding`,
                 mass_shift = `Theor. Cmp`,
                 mass_stoich = paste0(
@@ -2443,8 +2461,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               ) |>
               rbind(
                 data.frame(
-                  tbl$`Cmp Name`[1],
-                  tbl$`Total %-Binding`[1],
+                  "empty",
+                  "empty",
+                  "empty",
                   "empty",
                   "Unbound",
                   1 -
@@ -2456,6 +2475,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                       100
                 ) |>
                   stats::setNames(c(
+                    "Sample ID",
                     "Cmp Name",
                     "total_bind",
                     "mass_shift",
@@ -2470,8 +2490,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               get_cmp_colorScale(
                 filtered_table = tbl,
                 scale = input$color_scale,
-                variable = input$color_variable,
-                trunc = input$truncate_names
+                variable = color_variable,
+                trunc = truncate_names
               )
             )
             names(colors) <- c(
@@ -2479,10 +2499,19 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               names(colors)[-1]
             )
 
-            cmp_table$mw_color <- colors[match(
-              cmp_table$mass_shift,
-              names(colors)
-            )]
+            if (color_variable == "Compounds") {
+              cmp_table$color <- colors[match(
+                cmp_table$`Cmp Name`,
+                names(colors)
+              )]
+            } else {
+              cmp_table$color <- colors[match(
+                cmp_table$`Sample ID`,
+                names(colors)
+              )]
+
+              cmp_table$color[cmp_table$mass_shift == "empty"] <- "#e5e5e5"
+            }
 
             plotly::plot_ly(
               data = cmp_table,
@@ -2497,7 +2526,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               textposition = 'auto',
               outsidetextfont = list(color = 'white'),
               marker = list(
-                colors = ~ I(mw_color),
+                colors = ~ I(color),
                 line = list(color = '#e5e5e5', width = 1)
               )
             ) |>
@@ -2534,19 +2563,19 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 `Sample ID` == selected_sample
               )
 
-            # Prepare compound coloring
-            colors <- get_cmp_colorScale(
-              filtered_table = tbl,
-              scale = input$color_scale,
-              variable = input$color_variable,
-              trunc = input$truncate_names
-            )
+            color_variable <- input$color_variable
 
             spectrum_plot(
               sample = conversion_sidebar_vars$result_list()$deconvolution[[
                 selected_sample
               ]],
-              color_cmp = colors
+              color_cmp = get_cmp_colorScale(
+                filtered_table = tbl,
+                scale = input$color_scale,
+                variable = color_variable,
+                trunc = input$truncate_names
+              ),
+              color_variable = color_variable
             )
           })
 
@@ -2554,6 +2583,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           output$conversion_present_compounds_table <- DT::renderDataTable(
             {
               shiny::req(input$conversion_sample_picker)
+
+              color_variable <- input$color_variable
+              truncate_names <- input$truncate_names
 
               # Filter for selected sample
               tbl <- hits_summary |>
@@ -2565,9 +2597,17 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               # If table empty
               if (!nrow(tbl)) {
                 return(DT::datatable(
-                  `Mass Shift` = as.character(),
-                  Stoichiometry = as.character(),
-                  `%-Binding` = as.character()
+                  data.frame(as.character(), as.character(), as.character()) |>
+                    stats::setNames(c(
+                      "Mass Shift",
+                      "Stoichiometry",
+                      "%-Binding"
+                    )),
+                  selection = "none",
+                  class = "order-column",
+                  options = list(
+                    dom = 't'
+                  )
                 ))
               }
 
@@ -2583,6 +2623,12 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 dplyr::group_by(`Cmp Name`) |>
                 dplyr::arrange(dplyr::desc(`Theor. Cmp`), `Bind. Stoich.`) |>
                 dplyr::reframe(
+                  `Sample ID` = if (truncate_names) {
+                    `truncSample_ID`
+                  } else {
+                    `Sample ID`
+                  },
+                  `Cmp Name` = `Cmp Name`,
                   `Mass Shift` = `Theor. Cmp`,
                   Stoichiometry = `Bind. Stoich.`,
                   `%-Binding` = as.numeric(gsub(
@@ -2600,12 +2646,27 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     dom = 't',
                     scrollY = "175px",
                     scrollCollapse = TRUE,
-                    rowGroup = list(dataSrc = 0),
+                    rowGroup = if (
+                      length(unique(tbl$`Cmp Name`)) == nrow(tbl)
+                    ) {
+                      NULL
+                    } else {
+                      list(dataSrc = 1)
+                    },
                     columnDefs = list(
-                      list(visible = FALSE, targets = 0),
+                      list(
+                        visible = FALSE,
+                        targets = if (
+                          length(unique(tbl$`Cmp Name`)) == nrow(tbl)
+                        ) {
+                          1
+                        } else {
+                          c(0, 1)
+                        }
+                      ),
                       list(className = 'dt-center', targets = "_all"),
                       list(
-                        targets = 3,
+                        targets = 4,
                         render = htmlwidgets::JS(chart_js)
                       ),
                       list(
@@ -2616,7 +2677,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   )
                 ) |>
                 DT::formatStyle(
-                  columns = "Mass Shift",
+                  columns = ifelse(
+                    color_variable == "Compounds",
+                    "Cmp Name",
+                    "Sample ID"
+                  ),
                   target = 'row',
                   backgroundColor = DT::styleEqual(
                     levels = names(colors),
@@ -2855,7 +2920,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             tbl <- tbl |>
               dplyr::mutate(
                 bg_hex = if (color_variable == "Compounds") {
-                  colors[as.character(`Theor. Cmp`)]
+                  colors[as.character(`Cmp Name`)]
                 } else if (color_variable == "Samples") {
                   colors[as.character(`Sample ID`)]
                 },
@@ -2876,7 +2941,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               )
 
             if (color_variable == "Compounds") {
-              color <- ~`Theor. Cmp`
+              color <- ~`Cmp Name`
             } else if (color_variable == "Samples") {
               color <- ~`Sample ID`
             }
@@ -2921,7 +2986,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 y = ~total_val,
                 type = 'scatter',
                 mode = 'text',
-                text = ~ paste0("Total ", total_val, "%"),
+                text = ~ paste0(total_val, "%"),
                 textposition = 'top center',
                 showlegend = FALSE,
                 hoverinfo = 'none',
@@ -2970,10 +3035,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               trunc = truncate_names
             )
 
-            tbl1 <<- tbl
-            scale1 <<- input$color_scale
-            results_list1 <<- conversion_sidebar_vars$result_list()
-
             # Create spectra plot
             multiple_spectra(
               results_list = conversion_sidebar_vars$result_list(),
@@ -2995,6 +3056,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           output$conversion_cmp_table <- DT::renderDataTable({
             shiny::req(input$conversion_compound_picker)
 
+            color_variable <- input$color_variable
+            truncate_names <- input$truncate_names
+
             # Filter table for selected compound
             tbl <- hits_summary |>
               dplyr::filter(
@@ -3005,17 +3069,22 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             colors <- get_cmp_colorScale(
               filtered_table = tbl,
               scale = input$color_scale,
-              variable = input$color_variable,
-              trunc = input$truncate_names
+              variable = color_variable,
+              trunc = truncate_names
             )
 
             # Create data table
             cmp_table <- tbl |>
               dplyr::group_by(`Sample ID`) |>
               dplyr::reframe(
+                `Cmp Name` = `Cmp Name`,
                 `Mass Shift` = `Theor. Cmp`,
                 `Stoichiometry` = `Bind. Stoich.`,
-                `Sample ID` = `Sample ID`,
+                `Sample ID` = if (truncate_names) {
+                  `truncSample_ID`
+                } else {
+                  `Sample ID`
+                },
                 `%-Binding` = as.numeric(gsub(
                   "%",
                   "",
@@ -3023,7 +3092,14 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 )),
                 `Total %-Binding` = `Total %-Binding`
               ) |>
-              dplyr::relocate(`Mass Shift`, .before = 1) |>
+              dplyr::relocate(
+                `Mass Shift`,
+                .before = ifelse(
+                  length(unique(tbl$`Sample ID`)) == nrow(tbl),
+                  3,
+                  2
+                )
+              ) |>
               dplyr::arrange(
                 dplyr::desc(`Mass Shift`),
                 `Stoichiometry`,
@@ -3038,12 +3114,24 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   dom = 't',
                   scrollY = "175px",
                   scrollCollapse = TRUE,
-                  rowGroup = list(dataSrc = 1),
+                  rowGroup = if (length(unique(tbl$`Sample ID`)) == nrow(tbl)) {
+                    NULL
+                  } else {
+                    list(dataSrc = 2)
+                  },
                   columnDefs = list(
-                    list(visible = FALSE, targets = 1),
+                    list(targets = 1, visible = FALSE),
+                    list(
+                      visible = ifelse(
+                        length(unique(tbl$`Sample ID`)) == nrow(tbl),
+                        TRUE,
+                        FALSE
+                      ),
+                      targets = 0
+                    ),
                     list(className = 'dt-center', targets = "_all"),
                     list(
-                      targets = 3,
+                      targets = 4,
                       render = htmlwidgets::JS(chart_js)
                     ),
                     list(
@@ -3054,7 +3142,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 )
               ) |>
               DT::formatStyle(
-                columns = "Mass Shift",
+                columns = ifelse(
+                  color_variable == "Compounds",
+                  "Cmp Name",
+                  "Sample ID"
+                ),
                 target = 'row',
                 backgroundColor = DT::styleEqual(
                   levels = names(colors),

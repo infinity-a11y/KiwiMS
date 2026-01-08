@@ -2465,7 +2465,6 @@ multiple_spectra <- function(
   show_labels = FALSE,
   time = FALSE,
   color_cmp = NULL,
-  color_var = NULL,
   truncated = TRUE,
   color_variable = NULL
 ) {
@@ -2546,18 +2545,18 @@ multiple_spectra <- function(
     if (color_variable == "Compounds") {
       color_cmp <- c("#ffffff", color_cmp)
       names(color_cmp) <- c(
-        as.character(max(unique(peaks_data$mw))),
+        unique(peaks_data$name)[!unique(peaks_data$name) %in% names(color_cmp)],
         names(color_cmp)[-1]
       )
 
-      peaks_data$mw_color <- color_cmp[match(
-        as.character(peaks_data$mw),
+      peaks_data$color <- color_cmp[match(
+        as.character(peaks_data$name),
         gsub("\\.?0+$", "", gsub(" Da", "", names(color_cmp)))
       )]
 
       color <- NULL
       line <- list(color = "white", width = 2)
-      marker_color <- ~ I(mw_color)
+      marker_color <- ~ I(color)
     } else if (color_variable == "Samples") {
       peaks_data$z_color <- color_cmp[match(peaks_data$z, names(color_cmp))]
       spectrum_data$z_color <- color_cmp[match(
@@ -2923,26 +2922,12 @@ render_hits_table <- function(
   compounds = NULL,
   samples = NULL,
   select = FALSE,
-  color_scale = NULL,
+  colors = NULL,
+  color_variable = NULL,
   expand = FALSE,
-  na_include = TRUE
+  na_include = TRUE,
+  truncated = NULL
 ) {
-  hits_table <<- hits_table
-  concentration_colors <<- concentration_colors
-  single_conc <<- NULL
-  withzero <<- withzero
-  selected_cols <<- selected_cols
-  bar_chart <<- bar_chart
-  compounds <<- compounds
-  samples <<- samples
-  select <<- select
-  color_scale <<- color_scale
-  expand <<- expand
-  na_include <<- na_include
-
-  # Remove truncated labels
-  hits_table <- dplyr::select(hits_table, -c("truncSample_ID"))
-
   # Modify if samples are summarized instead of expanded
   if (!expand) {
     hits_table <- hits_table |>
@@ -2993,7 +2978,7 @@ render_hits_table <- function(
   if (!is.null(selected_cols) && expand) {
     hits_table <- dplyr::select(
       hits_table,
-      c("Sample ID", "Cmp Name", all_of(selected_cols))
+      c("Sample ID", "Cmp Name", "truncSample_ID", all_of(selected_cols))
     )
   }
 
@@ -3042,14 +3027,8 @@ render_hits_table <- function(
   # Make bar chart columns
   if (length(bar_chart) && bar_chart %in% names(hits_table)) {
     bar_cols <- list(
-      list(
-        targets = bar_chart,
-        render = htmlwidgets::JS(chart_js)
-      ),
-      list(
-        targets = -1,
-        className = 'dt-last-col'
-      )
+      targets = bar_chart,
+      render = htmlwidgets::JS(chart_js)
     )
   } else {
     bar_cols <- NULL
@@ -3070,7 +3049,17 @@ render_hits_table <- function(
       stripe = FALSE,
       dom = dom_value,
       paging = FALSE,
-      columnDefs = bar_cols
+      columnDefs = list(
+        bar_cols,
+        list(
+          visible = FALSE,
+          targets = "truncSample_ID"
+        ),
+        list(
+          targets = -1,
+          className = 'dt-last-col'
+        )
+      )
     )
   )
 
@@ -3114,18 +3103,28 @@ render_hits_table <- function(
         )
     }
   } else {
+    if (color_variable == "Compounds" & anyNA(hits_table$`Cmp Name`)) {
+      names(colors)[
+        names(colors) %in% c("NA", "N/A", as.character(NA))
+      ] <- as.character(NA)
+    }
+
     hits_datatable <- hits_datatable |>
       DT::formatStyle(
-        columns = "Sample ID",
+        columns = ifelse(
+          color_variable == "Compounds",
+          "Cmp Name",
+          ifelse(truncated, "truncSample_ID", "Sample ID")
+        ),
         target = 'row',
         backgroundColor = DT::styleEqual(
-          levels = unique(hits_table$`Sample ID`),
-          values = rep(
-            c("#e5e5e5", "#c3c3c3"),
-            length(unique(hits_table$`Sample ID`))
-          )[1:length(unique(hits_table$`Sample ID`))]
+          levels = names(colors),
+          values = colors
         ),
-        color = "black"
+        color = DT::styleEqual(
+          levels = names(colors),
+          values = get_contrast_color(colors)
+        )
       )
   }
 
@@ -3559,7 +3558,8 @@ get_contrast_color <- function(hex_codes) {
 #' @export
 get_cmp_colorScale <- function(filtered_table, scale, variable, trunc) {
   if (variable == "Compounds") {
-    cmp_levels <- unique(filtered_table[["Theor. Cmp"]])
+    # cmp_levels <- unique(filtered_table[["Theor. Cmp"]])
+    cmp_levels <- unique(filtered_table[["Cmp Name"]])
   } else if (variable == "Samples") {
     if (trunc) {
       cmp_levels <- unique(filtered_table[["truncSample_ID"]])
