@@ -214,7 +214,7 @@ server <- function(id, conversion_main_vars) {
 
         shiny::showModal(
           shiny::div(
-            class = "start-modal",
+            class = "start-modal conversion-modal",
             shiny::modalDialog(
               shiny::fluidRow(
                 shiny::br(),
@@ -243,27 +243,33 @@ server <- function(id, conversion_main_vars) {
                 )
               ),
               title = "Binding Analysis",
-              easyClose = TRUE,
+              easyClose = FALSE,
               footer = shiny::tagList(
                 shiny::div(
-                  class = "modal-button",
-                  shinyjs::disabled(shiny::modalButton("Dismiss"))
+                  class = "conversion-save-buttons",
+                  shiny::div(
+                    class = "modal-button",
+                    shinyjs::disabled(shiny::actionButton(
+                      ns("copy_conversion_log"),
+                      "Clip",
+                      icon = shiny::icon("clipboard")
+                    ))
+                  ),
+                  shiny::div(
+                    class = "modal-button",
+                    shinyjs::disabled(shiny::actionButton(
+                      ns("save_conversion_log"),
+                      "Save",
+                      icon = shiny::icon("download"),
+                      width = "auto"
+                    ))
+                  )
                 ),
                 shiny::div(
                   class = "modal-button",
                   shinyjs::disabled(shiny::actionButton(
-                    ns("copy_conversion_log"),
-                    "Clip",
-                    icon = shiny::icon("clipboard")
-                  ))
-                ),
-                shiny::div(
-                  class = "modal-button",
-                  shinyjs::disabled(shiny::actionButton(
-                    ns("save_conversion_log"),
-                    "Save",
-                    icon = shiny::icon("download"),
-                    width = "auto"
+                    ns("dismiss_conversion"),
+                    "Dismiss"
                   ))
                 )
               )
@@ -370,6 +376,15 @@ server <- function(id, conversion_main_vars) {
           icon = shiny::icon("repeat")
         )
 
+        # Enable modal window buttons
+        shinyjs::enable("save_conversion_log")
+        shinyjs::enable("copy_conversion_log")
+        shinyjs::enable("dismiss_conversion")
+        shinyjs::addClass(
+          id = "dismiss_conversion",
+          class = "btn-highlight"
+        )
+
         analysis_status("done")
       } else {
         result_list(NULL)
@@ -384,29 +399,6 @@ server <- function(id, conversion_main_vars) {
         )
       }
 
-      # Enable modal window buttons
-      shinyjs::removeClass(
-        id = "save_conversion_log",
-        class = "disabled"
-      )
-      copy_conversion_log
-      shinyjs::removeClass(
-        id = "copy_conversion_log",
-        class = "disabled"
-      )
-      shinyjs::removeClass(
-        selector = paste0(
-          ".modal-button button"
-        ),
-        class = "disabled"
-      )
-      shinyjs::addClass(
-        selector = paste0(
-          ".modal-button button"
-        ),
-        class = "btn-highlight"
-      )
-
       # Unblock UI
       shinyjs::runjs(paste0(
         'document.getElementById("blocking-overlay").style.display ',
@@ -414,7 +406,12 @@ server <- function(id, conversion_main_vars) {
       ))
     })
 
-    # --- 1. Copy to Clipboard ---
+    # Dismiss conversion
+    shiny::observeEvent(input$dismiss_conversion, {
+      shiny::removeModal()
+    })
+
+    # Copy conversion log to clipboard
     shiny::observeEvent(input$copy_conversion_log, {
       shinyjs::runjs(sprintf(
         "
@@ -427,7 +424,7 @@ server <- function(id, conversion_main_vars) {
       ))
     })
 
-    # --- 2. Save as .txt ---
+    # Save conversion log
     shiny::observeEvent(input$save_conversion_log, {
       # Generate a filename with a timestamp
       fname <- paste0(
@@ -450,18 +447,6 @@ server <- function(id, conversion_main_vars) {
         fname
       ))
     })
-
-    #  #### Save log ----
-    # output$save_conversion_log <- shiny$downloadHandler(
-    #   filename = function() {
-    #     paste0(
-    #     "conversion_SESSION", get_session_id(), ".txt"
-    #     ".txt"
-    #   )
-    #   },
-    #   content = function(file) {
-    #   }
-    # )
 
     output$conversion_info_ui <- shiny::renderUI({
       shiny::req(conversion_main_vars$selected_tab())

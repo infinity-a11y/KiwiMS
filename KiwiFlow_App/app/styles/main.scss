@@ -3467,3 +3467,12 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   opacity: 0 !important;
   width: 0px !important;
 }
+
+.conversion-save-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.conversion-modal .modal-footer {
+  justify-content: space-between;
+}
