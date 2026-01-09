@@ -254,7 +254,7 @@ th {
 
 /* --- Cards --- */
 .bslib-card {
-  background: rgb(0 0 0 / 33%);
+  background: rgb(0 0 0 / 50%);
   color: #fff;
   border: 1px solid #00000000;
   box-shadow: inset 0px 0px 50px 14px rgb(0 0 0 / 10%);
@@ -646,7 +646,7 @@ input[type="number"]::-webkit-inner-spin-button {
   height: 100%;
   background: rgba(0, 0, 0, 0);
   cursor: wait;
-  z-index: 99999;
+  z-index: 9999999;
 }
 
 #overlay-message {
@@ -3480,4 +3480,44 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 
 .bslib-page-fill {
   background: linear-gradient(135deg, #35357a, #4a4a89, #77778f, #b0b0b8, #e0e0e0) !important;
+}
+
+#app-conversion_main-conversion_present_compounds_na {
+  height: 100%;
+  max-height: unset;
+  align-content: center;
+  text-align: center;
+  font-size: 12px;
+}
+
+#app-settings:hover,
+#app-settings:focus,
+#app-settings,
+#app-licence:hover,
+#app-licence:focus,
+#app-licence {
+  background-color: transparent !important;
+  box-shadow: unset !important;
+  border-radius: 0px !important;
+  min-width: 90px;
+}
+
+.navbar .nav-underline .nav-link,
+.navbar .nav-underline :where(ul.nav.navbar-nav > li) > a {
+  margin-bottom: -7px;
+}
+
+.nav-underline .nav-link:not(:empty).active,
+.nav-underline :where(ul.nav.navbar-nav > li) > a:not(:empty).active {
+  font-weight: 600;
+}
+
+.nav-item a {
+  color: black;
+  min-width: 90px;
+  text-align: center;
+}
+
+#unidec-tag {
+  height: 47px;
 }

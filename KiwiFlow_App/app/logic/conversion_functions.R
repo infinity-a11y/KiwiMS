@@ -2468,6 +2468,13 @@ multiple_spectra <- function(
   truncated = TRUE,
   color_variable = NULL
 ) {
+  results_list <<- results_list
+  samples <<- samples
+  cubic <<- TRUE
+  color_cmp <<- color_cmp
+  truncated <<- truncated
+  color_variable <<- color_variable
+
   # Omit NA in samples
   samples <- samples[!is.na(samples)]
 
@@ -2540,18 +2547,25 @@ multiple_spectra <- function(
     }
   )
 
-  # Prepare compound marker colors
+  # Prepare marker symbols
+  peaks_data <- dplyr::mutate(
+    peaks_data,
+    symbol = ifelse(name == peaks_data$name[1], "diamond", "circle")
+  )
+
+  # Prepare compound marker colors and symbols
   if (!is.null(color_cmp) && !is.null(color_variable)) {
     if (color_variable == "Compounds") {
       color_cmp <- c("#ffffff", color_cmp)
+
       names(color_cmp) <- c(
-        unique(peaks_data$name)[!unique(peaks_data$name) %in% names(color_cmp)],
+        peaks_data$name[1],
         names(color_cmp)[-1]
       )
 
       peaks_data$color <- color_cmp[match(
         as.character(peaks_data$name),
-        gsub("\\.?0+$", "", gsub(" Da", "", names(color_cmp)))
+        names(color_cmp)
       )]
 
       color <- NULL
@@ -2622,7 +2636,7 @@ multiple_spectra <- function(
       inherit = FALSE,
       marker = list(
         color = marker_color,
-        symbol = "circle",
+        symbol = ~ I(symbol),
         size = 5,
         zindex = 100,
         line = list(color = "black", width = 1.5)
@@ -2693,7 +2707,11 @@ multiple_spectra <- function(
         ),
         camera = list(
           center = list(x = -0.05, y = -0.18, z = 0),
-          eye = list(x = 1.1, y = 0.8, z = 1.1),
+          eye = list(
+            x = 1.1 + length(unique(peaks_data$z)) / 12,
+            y = 0.8 + length(unique(peaks_data$z)) / 12,
+            z = 1.1 + length(unique(peaks_data$z)) / 12
+          ),
           up = list(x = 0, y = 1.5, z = 0)
         )
       )
@@ -2973,7 +2991,7 @@ render_hits_table <- function(
         any("%-Binding" %in% bar_chart)
     ) {
       hits_table$`%-Binding`[hits_table$`%-Binding` == "N/A"] <- NA
-      hits_table$` %-Binding` <- as.numeric(gsub(
+      hits_table$`%-Binding` <- as.numeric(gsub(
         "%",
         "",
         hits_table$`%-Binding`

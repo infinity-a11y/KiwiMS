@@ -47,6 +47,7 @@ box::use(
       sequential_scales,
       qualitative_scales,
       gradient_scales,
+      hits_table_names,
     ],
 )
 
@@ -552,13 +553,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     output$samples_table <- rhandsontable::renderRHandsontable({
       shiny::req(
         sample_table_data()
-        # ,
-        # declaration_vars$protein_table,
-        # declaration_vars$compound_table
       )
-
-      message("TRIGGER SAMPLES TABLE")
-      message(unlist(declaration_vars$compound_table$Compound))
 
       sample_handsontable(
         tab = sample_table_data(),
@@ -968,8 +963,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             sample_table_data(
               new_sample_table(
                 result = declaration_vars$result,
-                protein_table = declaration_vars$protein_table,
-                compound_table = compound_table
+                protein_table = protein_table,
+                compound_table = declaration_vars$compound_table
               )
             )
             sample_table_trigger(sample_table_trigger() + 1)
@@ -1091,8 +1086,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       } else {
         declaration_vars$conversion_ready <- FALSE
       }
-
-      message(declaration_vars$conversion_ready)
     })
 
     ## Continuiation from deconvolution to conversion ----
@@ -1110,8 +1103,85 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         '= "block";'
       ))
 
-      # Remove dialogue window
-      shiny::removeModal()
+      # Load conversion declaration interface
+      if (is.null(conversion_sidebar_vars$result_list())) {
+        # Reset ui elements
+        output$binding_tab <- NULL
+        output$kinact <- NULL
+        output$Ki <- NULL
+        output$Ki_kinact <- NULL
+        output$kobs_result <- NULL
+        output$binding_plot <- NULL
+        output$kobs_plot <- NULL
+        output$hits_tab <- NULL
+        output$conversion_hits_tab <- NULL
+        output$total_pct_binding <- NULL
+        output$conversion_present_compounds_pie <- NULL
+        output$conversion_sample_spectrum <- NULL
+        output$conversion_present_compounds_table <- NULL
+        output$total_pct_cmps_binding <- NULL
+        output$cmp_distribution <- NULL
+        output$conversion_cmp_spectra <- NULL
+        output$conversion_cmp_table <- NULL
+        output$conversion_cmp_protein <- NULL
+        output$conversion_sample_protein <- NULL
+
+        # Show declaration tabs
+        bslib::nav_show(
+          "tabs",
+          "Proteins"
+        )
+        bslib::nav_show(
+          "tabs",
+          "Compounds"
+        )
+        bslib::nav_show(
+          "tabs",
+          "Samples"
+        )
+
+        # Remove results tabs
+        bslib::nav_remove("tabs", "Binding")
+        bslib::nav_remove("tabs", "Hits")
+        for (i in names(conversion_vars$select_concentration)) {
+          bslib::nav_remove(
+            "tabs",
+            paste0("[", i, "]")
+          )
+        }
+        bslib::nav_remove("tabs", "Compounds View")
+        bslib::nav_remove("tabs", "Samples View")
+        shiny::removeUI(
+          selector = paste0("#", ns("conversion_tab_items"))
+        )
+        # Reset reactive variables
+        conversion_vars <- shiny::reactiveValues(
+          modified_results = NULL,
+          select_concentration = NULL,
+          formatted_hits = NULL,
+          conc_colors = NULL,
+          expand_helper = FALSE
+        )
+      }
+
+      # Activate table observer
+      declaration_vars$sample_table_active <- TRUE
+
+      # Read results .rds file from previous deconvolution
+      declaration_vars$result <- readRDS(
+        deconvolution_main_vars$continue_conversion()
+      )
+
+      # Reset concentration / time input table
+      conc_time_table_data(NULL)
+
+      # New table data
+      sample_table_data(new_sample_table(
+        result = declaration_vars$result,
+        protein_table = declaration_vars$protein_table,
+        compound_table = declaration_vars$compound_table
+      ))
+      sample_table_trigger(sample_table_trigger() + 1)
 
       # Change buttons
       shiny::updateActionButton(
@@ -1138,24 +1208,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         'document.querySelector(".nav-link[data-value=\'Samples\']").classList.remove("done");'
       )
 
-      # Activate table observer
-      declaration_vars$sample_table_active <- TRUE
+      # Select samples tab
+      set_selected_tab("Samples", session)
 
-      # Read results .rds file from previous deconvolution
-      declaration_vars$result <- readRDS(
-        deconvolution_main_vars$continue_conversion()
-      )
-
-      # Reset concentration / time input table
-      conc_time_table_data(NULL)
-
-      # New table data
-      sample_table_data(new_sample_table(
-        result = declaration_vars$result,
-        protein_table = declaration_vars$protein_table,
-        compound_table = declaration_vars$compound_table
-      ))
-      sample_table_trigger(sample_table_trigger() + 1)
+      # Remove dialogue window
+      shiny::removeModal()
 
       # Unblock UI
       shinyjs::runjs(paste0(
@@ -2077,6 +2134,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           ### Protein conversion interface ----
 
           #### Transform hits for summary table ----
+          test <<- conversion_sidebar_vars$result_list()$"hits_summary"
 
           hits_summary <- conversion_sidebar_vars$result_list()$"hits_summary" |>
             transform_hits(
@@ -2309,14 +2367,18 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     shinyWidgets::pickerInput(
                       ns("conversion_sample_picker"),
                       "Select Sample",
-                      choices = list(
-                        Hits = unique(hits_summary$`Sample ID`[
-                          !is.na(hits_summary$`Cmp Name`)
-                        ]),
-                        `No Hits` = unique(hits_summary$`Sample ID`[
-                          is.na(hits_summary$`Cmp Name`)
-                        ])
-                      )
+                      choices = if (anyNA(hits_summary$`Cmp Name`)) {
+                        list(
+                          Hits = unique(hits_summary$`Sample ID`[
+                            !is.na(hits_summary$`Cmp Name`)
+                          ]),
+                          `No Hits` = unique(hits_summary$`Sample ID`[
+                            is.na(hits_summary$`Cmp Name`)
+                          ])
+                        )
+                      } else {
+                        unique(hits_summary$`Sample ID`)
+                      }
                     ),
                     shiny::div(
                       class = "conversion-samples-stats",
@@ -2404,13 +2466,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                           )
                         )
                       ),
-                      shinycssloaders::withSpinner(
-                        plotly::plotlyOutput(
-                          ns("conversion_present_compounds_pie"),
-                          height = "100%"
-                        ),
-                        type = 1,
-                        color = "#7777f9"
+                      shiny::uiOutput(
+                        ns("conversion_present_compounds_pie_ui")
                       ),
                       full_screen = TRUE
                     )
@@ -2448,6 +2505,32 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           })
 
           ##### Compound distribution donut chart ----
+          output$conversion_present_compounds_pie_ui <- shiny::renderUI({
+            shiny::req(input$conversion_sample_picker)
+
+            tbl <- hits_summary |>
+              dplyr::filter(
+                `Sample ID` == input$conversion_sample_picker
+              )
+
+            if (anyNA(tbl)) {
+              shiny::textOutput(ns("conversion_present_compounds_na"))
+            } else {
+              shinycssloaders::withSpinner(
+                plotly::plotlyOutput(
+                  ns("conversion_present_compounds_pie"),
+                  height = "100%"
+                ),
+                type = 1,
+                color = "#7777f9"
+              )
+            }
+          })
+
+          output$conversion_present_compounds_na <- shiny::renderText(
+            "No binding events"
+          )
+
           output$conversion_present_compounds_pie <- plotly::renderPlotly({
             shiny::req(input$conversion_sample_picker)
 
@@ -2459,119 +2542,125 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 `Sample ID` == input$conversion_sample_picker
               )
 
-            cmp_table <- tbl |>
-              dplyr::group_by(`Cmp Name`) |>
-              dplyr::arrange(dplyr::desc(`Theor. Cmp`), `Bind. Stoich.`) |>
-              dplyr::reframe(
-                `Cmp Name` = `Cmp Name`,
-                `Sample ID` = if (truncate_names) {
-                  `truncSample_ID`
-                } else {
-                  `Sample ID`
-                },
-                total_bind = `Total %-Binding`,
-                mass_shift = `Theor. Cmp`,
-                mass_stoich = paste0(
-                  "[",
-                  `Theor. Cmp`,
-                  "]",
-                  sapply(`Bind. Stoich.`, function(x) {
-                    as.character(htmltools::tags$sub(x))
-                  })
-                ),
-                relBinding = as.numeric(gsub("%", "", `%-Binding`)) / 100
-              ) |>
-              rbind(
-                data.frame(
-                  "empty",
-                  "empty",
-                  "empty",
-                  "empty",
-                  "Unbound",
-                  1 -
-                    as.numeric(gsub(
-                      "%",
-                      "",
-                      tbl$`Total %-Binding`[1]
-                    )) /
-                      100
+            if (!anyNA(tbl)) {
+              cmp_table <- tbl |>
+                dplyr::group_by(`Cmp Name`) |>
+                dplyr::arrange(dplyr::desc(`Theor. Cmp`), `Bind. Stoich.`) |>
+                dplyr::reframe(
+                  `Cmp Name` = `Cmp Name`,
+                  `Sample ID` = if (truncate_names) {
+                    `truncSample_ID`
+                  } else {
+                    `Sample ID`
+                  },
+                  total_bind = `Total %-Binding`,
+                  mass_shift = `Theor. Cmp`,
+                  mass_stoich = paste0(
+                    "[",
+                    `Theor. Cmp`,
+                    "]",
+                    sapply(`Bind. Stoich.`, function(x) {
+                      as.character(htmltools::tags$sub(x))
+                    })
+                  ),
+                  # if (nrow(tbl) > 1) {
+                  relBinding = as.numeric(gsub("%", "", `%-Binding`)) / 100
+                  # } else {
+                  #   `%-Binding`
+                  # }
                 ) |>
-                  stats::setNames(c(
-                    "Sample ID",
-                    "Cmp Name",
-                    "total_bind",
-                    "mass_shift",
-                    "mass_stoich",
-                    "relBinding"
-                  ))
-              )
+                rbind(
+                  data.frame(
+                    "empty",
+                    "empty",
+                    "empty",
+                    "empty",
+                    "Unbound",
+                    1 -
+                      as.numeric(gsub(
+                        "%",
+                        "",
+                        tbl$`Total %-Binding`[1]
+                      )) /
+                        100
+                  ) |>
+                    stats::setNames(c(
+                      "Sample ID",
+                      "Cmp Name",
+                      "total_bind",
+                      "mass_shift",
+                      "mass_stoich",
+                      "relBinding"
+                    ))
+                )
 
-            # Prepare compound marker colors
-            colors <- c(
-              "#e5e5e5",
-              get_cmp_colorScale(
-                filtered_table = tbl,
-                scale = input$color_scale,
-                variable = color_variable,
-                trunc = truncate_names
-              )
-            )
-            names(colors) <- c(
-              "empty",
-              names(colors)[-1]
-            )
-
-            if (color_variable == "Compounds") {
-              cmp_table$color <- colors[match(
-                cmp_table$`Cmp Name`,
-                names(colors)
-              )]
-            } else {
-              cmp_table$color <- colors[match(
-                cmp_table$`Sample ID`,
-                names(colors)
-              )]
-
-              cmp_table$color[cmp_table$mass_shift == "empty"] <- "#e5e5e5"
-            }
-
-            plotly::plot_ly(
-              data = cmp_table,
-              labels = ~mass_stoich,
-              values = ~relBinding,
-              sort = FALSE,
-              type = 'pie',
-              hole = 0.4,
-              textinfo = 'label+percent',
-              texttemplate = "%{label}<br>%{percent}",
-              hoverinfo = 'skip',
-              textposition = 'auto',
-              outsidetextfont = list(color = 'white'),
-              marker = list(
-                colors = ~ I(color),
-                line = list(color = '#e5e5e5', width = 1)
-              )
-            ) |>
-              plotly::layout(
-                showlegend = FALSE,
-                annotations = list(
-                  list(
-                    x = 0.5,
-                    y = 0.5,
-                    text = paste0(
-                      "<b>",
-                      cmp_table$total_bind[1],
-                      "</b><br>Bound"
-                    ),
-                    xref = "paper",
-                    yref = "paper",
-                    xanchor = "center",
-                    yanchor = "middle",
-                    showarrow = FALSE,
-                    font = list(size = 22, color = "white")
-                  )
+              # Prepare compound marker colors
+              colors <- c(
+                "#e5e5e5",
+                get_cmp_colorScale(
+                  filtered_table = tbl,
+                  scale = input$color_scale,
+                  variable = color_variable,
+                  trunc = truncate_names
                 )
               )
+              names(colors) <- c(
+                "empty",
+                names(colors)[-1]
+              )
+
+              if (color_variable == "Compounds") {
+                cmp_table$color <- colors[match(
+                  cmp_table$`Cmp Name`,
+                  names(colors)
+                )]
+              } else {
+                cmp_table$color <- colors[match(
+                  cmp_table$`Sample ID`,
+                  names(colors)
+                )]
+
+                cmp_table$color[cmp_table$mass_shift == "empty"] <- "#e5e5e5"
+              }
+
+              plotly::plot_ly(
+                data = cmp_table,
+                labels = ~mass_stoich,
+                values = ~relBinding,
+                sort = FALSE,
+                type = 'pie',
+                hole = 0.4,
+                textinfo = 'label+percent',
+                texttemplate = "%{label}<br>%{percent}",
+                hoverinfo = 'skip',
+                textposition = 'auto',
+                outsidetextfont = list(color = 'white'),
+                marker = list(
+                  colors = ~ I(color),
+                  line = list(color = '#e5e5e5', width = 1)
+                )
+              ) |>
+                plotly::layout(
+                  showlegend = FALSE,
+                  annotations = list(
+                    list(
+                      x = 0.5,
+                      y = 0.5,
+                      text = paste0(
+                        "<b>",
+                        cmp_table$total_bind[1],
+                        "</b><br>Bound"
+                      ),
+                      xref = "paper",
+                      yref = "paper",
+                      xanchor = "center",
+                      yanchor = "middle",
+                      showarrow = FALSE,
+                      font = list(size = 22, color = "white")
+                    )
+                  )
+                )
+            }
           })
 
           ##### Sample spectrum plot ----
@@ -2641,6 +2730,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 trunc = input$truncate_names
               )
 
+              tbl1 <<- tbl
+
               cmp_table <- tbl |>
                 dplyr::group_by(`Cmp Name`) |>
                 dplyr::arrange(dplyr::desc(`Theor. Cmp`), `Bind. Stoich.`) |>
@@ -2673,7 +2764,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     ) {
                       NULL
                     } else {
-                      list(dataSrc = 1)
+                      list(dataSrc = 0)
                     },
                     columnDefs = list(
                       list(
@@ -2927,7 +3018,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             # Factorize sample ID to sort by %-binding
             tbl$`Sample ID` <- factor(
               tbl$`Sample ID`,
-              levels = tbl$`Sample ID`
+              levels = unique(tbl$`Sample ID`)
             )
 
             # Make compound color scale
@@ -3116,16 +3207,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               ) |>
               dplyr::relocate(
                 `Mass Shift`,
-                .before = ifelse(
-                  length(unique(tbl$`Sample ID`)) == nrow(tbl),
-                  3,
-                  2
-                )
+                .before = 3
               ) |>
               dplyr::arrange(
+                # `Sample ID`,
+                as.numeric(gsub("%", "", `Total %-Binding`)),
                 dplyr::desc(`Mass Shift`),
-                `Stoichiometry`,
-                as.numeric(gsub("%", "", `Total %-Binding`))
+                `Stoichiometry`
               ) |>
               DT::datatable(
                 extensions = "RowGroup",
@@ -3139,10 +3227,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   rowGroup = if (length(unique(tbl$`Sample ID`)) == nrow(tbl)) {
                     NULL
                   } else {
-                    list(dataSrc = 2)
+                    list(dataSrc = 0)
                   },
                   columnDefs = list(
-                    list(targets = 1, visible = FALSE),
+                    list(
+                      visible = FALSE,
+                      targets = 1
+                    ),
                     list(
                       visible = ifelse(
                         length(unique(tbl$`Sample ID`)) == nrow(tbl),
@@ -3330,43 +3421,60 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     ## Events for conversion result interface ----
 
     ### Expand samples from hits table ----
-    shiny::observeEvent(input$hits_tab_expand, {
-      if (isFALSE(conversion_vars$expand_helper)) {
-        shinyjs::removeClass(
-          selector = ".hits-tab-col-select-ui .form-group",
-          class = "custom-disable"
-        )
+    shiny::observeEvent(
+      input$hits_tab_expand,
+      {
+        if (isFALSE(conversion_vars$expand_helper)) {
+          shinyjs::removeClass(
+            selector = ".hits-tab-col-select-ui .form-group",
+            class = "custom-disable"
+          )
 
-        shinyWidgets::updatePickerInput(
-          session,
-          "hits_tab_col_select",
-          choices = c("Theor. Prot.", "Total %-Binding")
-        )
+          shinyWidgets::updatePickerInput(
+            session,
+            "hits_tab_col_select",
+            choices = hits_table_names[
+              !hits_table_names %in%
+                c("Sample ID", "Cmp Name", "truncSample_ID")
+            ],
+            selected = hits_table_names[
+              !hits_table_names %in%
+                c("Sample ID", "Cmp Name", "truncSample_ID")
+            ][-c(1:2, 4:5, 7, 9)],
+          )
 
-        shinyWidgets::updatePickerInput(
-          session,
-          "binding_chart",
-          choices = c("%-Binding", "Total %-Binding"),
-          selected = "Total %-Binding",
-        )
+          shinyWidgets::updatePickerInput(
+            session,
+            "binding_chart",
+            choices = c("%-Binding", "Total %-Binding"),
+            selected = "Total %-Binding",
+          )
 
-        conversion_vars$expand_helper <- TRUE
-      } else {
-        shinyjs::addClass(
-          selector = ".hits-tab-col-select-ui .form-group",
-          class = "custom-disable"
-        )
+          conversion_vars$expand_helper <- TRUE
+        } else {
+          shinyjs::addClass(
+            selector = ".hits-tab-col-select-ui .form-group",
+            class = "custom-disable"
+          )
 
-        shinyWidgets::updatePickerInput(
-          session,
-          "binding_chart",
-          choices = "Total %-Binding",
-          selected = "Total %-Binding"
-        )
+          shinyWidgets::updatePickerInput(
+            session,
+            "hits_tab_col_select",
+            choices = c("Theor. Prot.", "Total %-Binding"),
+            selected = c("Theor. Prot.", "Total %-Binding")
+          )
 
-        conversion_vars$expand_helper <- FALSE
+          shinyWidgets::updatePickerInput(
+            session,
+            "binding_chart",
+            choices = "Total %-Binding",
+            selected = "Total %-Binding"
+          )
+
+          conversion_vars$expand_helper <- FALSE
+        }
       }
-    })
+    )
 
     ### Recalculate results depending on excluded concentrations ----
     shiny::observeEvent(input[["kobs_result_cell_edit"]], {

@@ -206,7 +206,7 @@ server <- function(id, conversion_main_vars) {
       }
     })
 
-    # # Event run conversion
+    # Show modal for conversion log
     shiny::observeEvent(
       input$run_binding_analysis,
       {
@@ -280,6 +280,7 @@ server <- function(id, conversion_main_vars) {
       priority = 10
     )
 
+    # Event run conversion
     shiny::observeEvent(input$run_binding_analysis, {
       # Block UI
       shinyjs::runjs(paste0(
@@ -288,7 +289,7 @@ server <- function(id, conversion_main_vars) {
       ))
 
       if (analysis_status() == "pending") {
-        # Delay conversion start
+        # # Delay conversion start
         Sys.sleep(1)
 
         # Activate JS function for conversion process tracking
@@ -311,6 +312,32 @@ server <- function(id, conversion_main_vars) {
               session = session,
               ns = ns
             )
+
+            result_with_hits1 <<- result_with_hits
+
+            # If Ki/kinact analysis is set to be performed
+            if (input$run_ki_kinact) {
+              result_with_hits$hits_summary <- summarize_hits(
+                result_with_hits,
+                conc_time = conversion_main_vars$input_list()$ConcTime_Table
+              )
+
+              # Add binding/kobs results to result list
+              result_with_hits$binding_kobs_result <- add_kobs_binding_result(
+                result_with_hits
+              )
+
+              # Add Ki/kinact results to result list
+              result_with_hits$ki_kinact_result <- add_ki_kinact_result(
+                result_with_hits
+              )
+            } else {
+              # Only protein conversion without Ki/kinact analysus
+              result_with_hits$hits_summary <- summarize_hits(
+                result_with_hits,
+                conc_time = NULL
+              )
+            }
           },
           message = function(m) {
             clean_msg <- gsub("\\", "\\\\", m$message, fixed = TRUE)
@@ -332,30 +359,6 @@ server <- function(id, conversion_main_vars) {
             shinyjs::runjs(js_cmd)
           }
         )
-
-        # If Ki/kinact analysis is set to be performed
-        if (input$run_ki_kinact) {
-          result_with_hits$hits_summary <- summarize_hits(
-            result_with_hits,
-            conc_time = conversion_main_vars$input_list()$ConcTime_Table
-          )
-
-          # Add binding/kobs results to result list
-          result_with_hits$binding_kobs_result <- add_kobs_binding_result(
-            result_with_hits
-          )
-
-          # Add Ki/kinact results to result list
-          result_with_hits$ki_kinact_result <- add_ki_kinact_result(
-            result_with_hits
-          )
-        } else {
-          # Only protein conversion without Ki/kinact analysus
-          result_with_hits$hits_summary <- summarize_hits(
-            result_with_hits,
-            conc_time = NULL
-          )
-        }
 
         # Assign result list and hits table to reactive vars
         result_list(result_with_hits)
@@ -395,7 +398,7 @@ server <- function(id, conversion_main_vars) {
           "run_binding_analysis",
           label = "Run",
           icon = shiny::icon("play"),
-          disabled = TRUE
+          disabled = FALSE
         )
       }
 

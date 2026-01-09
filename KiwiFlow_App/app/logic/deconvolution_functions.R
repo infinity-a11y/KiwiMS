@@ -822,7 +822,8 @@ spectrum_plot <- function(
           color = "#e8cb97",
           line = list(
             color = marker_border_color,
-            width = 1.5
+            width = 1.5,
+            zindex = 100
           ),
           symbol = "circle",
           size = 12,
@@ -848,6 +849,17 @@ spectrum_plot <- function(
       }
 
       if (!is.null(color_cmp)) {
+        # Prepare marker symbols
+        plot_data$highlight_peaks <- dplyr::mutate(
+          plot_data$highlight_peaks,
+          symbol = ifelse(
+            name == plot_data$highlight_peaks$name[1],
+            "diamond",
+            "circle"
+          )
+        )
+
+        # Prepare marker colors
         color_cmp <- c("#ffffff", color_cmp)
         if (color_variable == "Compounds") {
           names(color_cmp) <- c(
@@ -888,7 +900,7 @@ spectrum_plot <- function(
             color = marker_border_color,
             width = ifelse(!is.null(color_cmp), 1, 1.5)
           ),
-          symbol = "circle",
+          symbol = ~ I(symbol),
           size = 12,
           zindex = 100
         ),

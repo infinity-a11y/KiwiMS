@@ -1,5 +1,22 @@
 # app/logic/conversion_constants.R
 
+# Hits table variable names
+#' @export
+hits_table_names <- c(
+  "Well",
+  "Theor. Prot.",
+  "Meas. Prot.",
+  "Δ Prot.",
+  "Ⅰ Prot.",
+  "Peak Signal",
+  "Ⅰ Cmp",
+  "Theor. Cmp",
+  "Δ Cmp",
+  "Bind. Stoich.",
+  "%-Binding",
+  "Total %-Binding"
+)
+
 # Sequential color scales
 #' @export
 sequential_scales <- list(

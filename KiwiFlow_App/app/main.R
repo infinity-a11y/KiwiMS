@@ -97,6 +97,34 @@ ui <- function(id) {
         )
       ),
       bslib$nav_spacer(),
+      bslib$nav_item(
+        shiny::actionButton(
+          ns("settings"),
+          "Settings",
+          icon = shiny::icon("list-check"),
+          class = "nav-link"
+        )
+      ),
+      bslib$nav_item(
+        shiny::actionButton(
+          ns("licence"),
+          "License",
+          icon = shiny::icon("info"),
+          class = "nav-link"
+        )
+      ),
+      bslib$nav_item(
+        shiny::tags$a(
+          id = "unidec-tag",
+          href = "https://github.com/michaelmarty/UniDec",
+          shiny::tags$img(
+            src = "static/UniDec.png",
+            width = "auto",
+            height = "20px"
+          ),
+          "UniDec"
+        )
+      ),
       bslib$nav_menu(
         title = "Links",
         align = "right",
