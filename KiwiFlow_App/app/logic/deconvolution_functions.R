@@ -681,22 +681,18 @@ spectrum_plot <- function(
     font_color <- "black"
     grid_color <- "rgba(0, 0, 0, 0.1)"
     zeroline_color <- "rgba(0, 0, 0, 0.5)"
-    data_line_color <- ifelse(
-      !is.null(color_variable) && color_variable == "Compounds",
-      "black",
-      color_cmp
-    )
+    data_line_color <- "black"
   } else {
     bg_color <- "rgba(0,0,0,0)"
     plot_bg_color <- "rgba(0,0,0,0)"
     font_color <- "white"
     grid_color <- "rgba(255, 255, 255, 0.2)"
     zeroline_color <- "rgba(255, 255, 255, 0.5)"
-    data_line_color <- ifelse(
-      !is.null(color_variable) && color_variable == "Compounds",
-      "white",
-      color_cmp
-    )
+    data_line_color <- "white"
+  }
+
+  if (identical(color_variable, "Samples") && !is.null(color_cmp)) {
+    data_line_color <- color_cmp
   }
 
   marker_border_color <- ifelse(!is.null(color_cmp), "#000000", "#7777f9")

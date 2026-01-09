@@ -214,7 +214,7 @@ server <- function(id, conversion_main_vars) {
 
         shiny::showModal(
           shiny::div(
-            class = "start-modal conversion-modal",
+            class = "start-modal conversion-log-modal",
             shiny::modalDialog(
               shiny::fluidRow(
                 shiny::br(),

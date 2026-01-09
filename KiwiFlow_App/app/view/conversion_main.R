@@ -551,10 +551,14 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
     output$samples_table <- rhandsontable::renderRHandsontable({
       shiny::req(
-        sample_table_data(),
-        declaration_vars$protein_table,
-        declaration_vars$compound_table
+        sample_table_data()
+        # ,
+        # declaration_vars$protein_table,
+        # declaration_vars$compound_table
       )
+
+      message("TRIGGER SAMPLES TABLE")
+      message(unlist(declaration_vars$compound_table$Compound))
 
       sample_handsontable(
         tab = sample_table_data(),
@@ -778,6 +782,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     shiny::observe({
       samples_table_input <- sample_table_input()
 
+      test <<- declaration_vars
+
       # Conditional observe actions
       if (
         isTRUE(declaration_vars$protein_table_active) ||
@@ -959,6 +965,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
           # Render sample table with new input
           if (!is.null(input$samples_table)) {
+            sample_table_data(
+              new_sample_table(
+                result = declaration_vars$result,
+                protein_table = declaration_vars$protein_table,
+                compound_table = compound_table
+              )
+            )
             sample_table_trigger(sample_table_trigger() + 1)
           }
 
@@ -993,6 +1006,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
           # Render sample table with new input
           if (!is.null(input$samples_table)) {
+            sample_table_data(
+              new_sample_table(
+                result = declaration_vars$result,
+                protein_table = declaration_vars$protein_table,
+                compound_table = compound_table
+              )
+            )
             sample_table_trigger(sample_table_trigger() + 1)
           }
 

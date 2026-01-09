@@ -120,6 +120,7 @@ th {
 /* Sidebar Layout Overrides */
 .bslib-sidebar-layout {
   background: linear-gradient(135deg, #35357a, #4a4a89, #77778f, #b0b0b8, #e0e0e0) !important;
+  box-shadow: inset 0px 0px 5px 1px #00000099;
 }
 
 .bslib-sidebar-layout > .sidebar {
@@ -168,9 +169,9 @@ th {
 }
 
 .bslib-page-navbar > .navbar {
-  background: linear-gradient(90deg, #e8cb97, #c6c5b4, #ddddde) !important;
-  box-shadow: 0px 6px 6px 0px rgb(0 0 0 / 38%) !important;
   z-index: 999 !important;
+  background: linear-gradient(135deg, #a2a2f5, #9797df, #f0ffe085, #b0b0b8, #8f8fa5) !important;
+  box-shadow: inset 0px 0px 20px 1px #ffffff63 !important;
 }
 
 .bslib-page-navbar > .navbar .navbar-header {
@@ -3473,6 +3474,10 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   gap: 10px;
 }
 
-.conversion-modal .modal-footer {
+.conversion-log-modal .modal-footer {
   justify-content: space-between;
+}
+
+.bslib-page-fill {
+  background: linear-gradient(135deg, #35357a, #4a4a89, #77778f, #b0b0b8, #e0e0e0) !important;
 }
