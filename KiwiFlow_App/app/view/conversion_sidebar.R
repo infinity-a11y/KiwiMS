@@ -36,7 +36,7 @@ ui <- function(id) {
 }
 
 #' @export
-server <- function(id, conversion_main_vars) {
+server <- function(id, conversion_main_vars, deconvolution_main_vars) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -206,6 +206,18 @@ server <- function(id, conversion_main_vars) {
       }
     })
 
+    # Update sidebar inputs on result interface reset
+    shiny::observeEvent(deconvolution_main_vars$continue_conversion(), {
+      shiny::updateActionButton(
+        session = session,
+        "run_binding_analysis",
+        label = "Run",
+        icon = shiny::icon("play")
+      )
+      shinyjs::enable("peak_tolerance")
+      shinyjs::enable("max_multiples")
+    })
+
     # Show modal for conversion log
     shiny::observeEvent(
       input$run_binding_analysis,
@@ -366,12 +378,15 @@ server <- function(id, conversion_main_vars) {
         #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results_conversion.rds"
         # ))
 
+        # Update sidebar control inputs
         shiny::updateActionButton(
           session = session,
           "run_binding_analysis",
           label = "Reset",
           icon = shiny::icon("repeat")
         )
+        shinyjs::disable("peak_tolerance")
+        shinyjs::disable("max_multiples")
 
         # Enable modal window buttons
         shinyjs::enable("save_conversion_log")
@@ -386,6 +401,9 @@ server <- function(id, conversion_main_vars) {
       } else {
         result_list(NULL)
         analysis_status("pending")
+
+        shinyjs::enable("peak_tolerance")
+        shinyjs::enable("max_multiples")
 
         shiny::updateActionButton(
           session = session,

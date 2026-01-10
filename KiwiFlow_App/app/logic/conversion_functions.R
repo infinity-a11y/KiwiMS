@@ -2701,6 +2701,7 @@ multiple_spectra <- function(
           showline = FALSE,
           showzeroline = FALSE,
           showticklabels = TRUE,
+          showlabels = ifelse(length(unique(peaks_data$z)) > 8, FALSE, TRUE),
           showspikes = FALSE,
           showbackground = FALSE,
           type = 'category'
@@ -3219,6 +3220,7 @@ new_sample_table <- function(
   compound_table,
   ki_kinact = FALSE
 ) {
+  protein_table1 <<- protein_table
   sample_tab <- data.frame(
     Sample = names(result$deconvolution),
     Protein = ifelse(

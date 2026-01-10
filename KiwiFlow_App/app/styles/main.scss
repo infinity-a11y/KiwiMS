@@ -3460,7 +3460,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   margin-bottom: 10px;
 }
 
-.color_variable_ui .selectize-control.single .selectize-input:hover {
+#app-conversion_main-color_variable_ui .selectize-control.single .selectize-input:hover {
   color: black;
 }
 
@@ -3526,4 +3526,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 .unidec-modal .modal-footer {
   padding: 10px;
   padding-right: 1.5rem;
+}
+
+.conversion-samples-control .bootstrap-select .dropdown-menu {
+  max-height: 350px !important;
 }

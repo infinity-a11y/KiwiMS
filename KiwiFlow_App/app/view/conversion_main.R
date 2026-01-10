@@ -450,7 +450,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         rhandsontable::rhandsontable(
           conc_time_tbl,
           rowHeaders = NULL,
-          height = 28 + 23 * ifelse(nrow(tab > 16), 16, nrow(tab)),
+          height = 28 +
+            23 * ifelse(nrow(conc_time_tbl > 16), 16, nrow(conc_time_tbl)),
           stretchH = "all"
         )
       } else {
@@ -1102,9 +1103,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         'document.getElementById("blocking-overlay").style.display ',
         '= "block";'
       ))
-
+      test5 <<- conversion_sidebar_vars$result_list()
       # Load conversion declaration interface
-      if (is.null(conversion_sidebar_vars$result_list())) {
+      if (!is.null(conversion_sidebar_vars$result_list())) {
         # Reset ui elements
         output$binding_tab <- NULL
         output$kinact <- NULL
@@ -2368,13 +2369,17 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                       ns("conversion_sample_picker"),
                       "Select Sample",
                       choices = if (anyNA(hits_summary$`Cmp Name`)) {
+                        # Extract the vectors
+                        hits_vec <- unique(hits_summary$`Sample ID`[
+                          !is.na(hits_summary$`Cmp Name`)
+                        ])
+                        no_hits_vec <- unique(hits_summary$`Sample ID`[is.na(
+                          hits_summary$`Cmp Name`
+                        )])
+
                         list(
-                          Hits = unique(hits_summary$`Sample ID`[
-                            !is.na(hits_summary$`Cmp Name`)
-                          ]),
-                          `No Hits` = unique(hits_summary$`Sample ID`[
-                            is.na(hits_summary$`Cmp Name`)
-                          ])
+                          Hits = stats::setNames(hits_vec, hits_vec),
+                          `No Hits` = stats::setNames(no_hits_vec, no_hits_vec)
                         )
                       } else {
                         unique(hits_summary$`Sample ID`)
@@ -2973,11 +2978,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   class = "conversion-sample-protein",
                   shiny::HTML(
                     paste0(
-                      min(total_bind_num),
+                      round(min(total_bind_num), 2),
                       "% - ",
-                      max(total_bind_num),
+                      round(max(total_bind_num), 2),
                       "%<br>",
-                      mean(total_bind_num),
+                      round(mean(total_bind_num), 2),
                       "% ± ",
                       round(stats::sd(total_bind_num), 2)
                     )
@@ -3294,14 +3299,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     value = TRUE
                   )
                 ),
-                shiny::div(
-                  class = "color_variable_ui",
-                  shiny::selectInput(
-                    ns("color_variable"),
-                    label = NULL,
-                    choices = c("Samples", "Compounds")
-                  )
-                ),
+                shiny::uiOutput(ns("color_variable_ui")),
                 shiny::selectInput(
                   ns("color_scale"),
                   label = NULL,
@@ -3326,6 +3324,18 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             position = "after",
             select = FALSE
           )
+
+          output$color_variable_ui <- shiny::renderUI({
+            condition <- length(unique(hits_summary$`Sample ID`)) >
+              hits_summary$`Cmp Name`[!is.na(hits_summary$`Cmp Name`)]
+
+            shiny::selectInput(
+              ns("color_variable"),
+              label = NULL,
+              choices = c("Samples", "Compounds"),
+              selected = ifelse(condition, "Samples", "Compounds")
+            )
+          })
 
           ### Selected protein info ----
           output$conversion_cmp_protein <- output$conversion_sample_protein <- shiny::renderUI(
@@ -3375,6 +3385,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         output$conversion_cmp_table <- NULL
         output$conversion_cmp_protein <- NULL
         output$conversion_sample_protein <- NULL
+        output$color_variable_ui <- NULL
 
         #### Show declaration tabs ----
         bslib::nav_show(

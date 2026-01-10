@@ -129,7 +129,9 @@ ui <- function(id) {
           shiny::tags$img(
             src = "static/UniDec.png",
             width = "auto",
-            height = "20px"
+            style = "    top: -1px;
+    position: relative;",
+            height = "18px"
           ),
           "UniDec"
         )
@@ -220,7 +222,8 @@ server <- function(id) {
     # Conversion sidebar server
     conversion_sidebar_vars <- conversion_sidebar$server(
       "conversion_sidebar",
-      conversion_main_vars
+      conversion_main_vars,
+      deconvolution_main_vars
     )
 
     # Conversion main server
