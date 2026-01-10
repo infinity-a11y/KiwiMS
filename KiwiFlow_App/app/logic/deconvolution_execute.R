@@ -63,7 +63,7 @@ tryCatch(
     log <- if (file.exists(logfile)) {
       readLines(logfile, warn = FALSE)
     } else {
-      c("No log")
+      "No log"
     }
 
     output <- if (file.exists(file.path(temp, "output.txt"))) {

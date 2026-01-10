@@ -18,7 +18,7 @@ box::use(
   utils[read.delim, read.table],
 )
 
-# Processing a single waters dir
+# process_single_dir(): Processing a single waters dir ----
 #' @export
 process_single_dir <- function(
   waters_dir,
@@ -156,6 +156,7 @@ engine.pick_peaks()
   )
 }
 
+# deconvolute(): Deconvolution ----
 #' @export
 deconvolute <- function(
   raw_dirs,
@@ -357,6 +358,7 @@ deconvolute <- function(
   }
 }
 
+# create_384_plate_heatmap(): Make 384 well plate layout ----
 #' @export
 create_384_plate_heatmap <- function(data) {
   # Create plate layout coordinates
@@ -515,7 +517,7 @@ create_384_plate_heatmap <- function(data) {
   }
 }
 
-# Helper function to harmonize data for plotting
+# process_plot_data(): Helper function to harmonize data for plotting ----
 #' @export
 process_plot_data <- function(
   sample = NULL,
@@ -655,7 +657,7 @@ process_plot_data <- function(
   return(list(mass = mass, highlight_peaks = highlight_peaks))
 }
 
-# Make spectrum plot interactively (plotly) or non-interactively (ggplot2)
+# spectrum_plot(): Make spectrum plot interactively (plotly) or non-interactively (ggplot2)
 #' @export
 spectrum_plot <- function(
   result_path = NULL,
@@ -963,7 +965,7 @@ spectrum_plot <- function(
   return(plot)
 }
 
-# Optimized file reader function
+# read_file_safe(): Optimized file reader function ----
 read_file_safe <- function(filename, col_names = NULL) {
   if (!file.exists(filename)) {
     return(data.frame())
@@ -981,7 +983,7 @@ read_file_safe <- function(filename, col_names = NULL) {
   return(df)
 }
 
-# Generate deconvolution report
+# generate_decon_rslt(): Generate deconvolution report ----
 #' @export
 generate_decon_rslt <- function(
   paths,
@@ -1045,16 +1047,16 @@ generate_decon_rslt <- function(
     ))
 
     plots <- readRDS(file.path(rslt_folder, "plots.rds"))
-    # decon_spec <- spectrum_plot(
-    #   result_path = rslt_folder,
-    #   raw = FALSE,
-    #   interactive = FALSE
-    # )
-    # raw_spec <- spectrum_plot(
-    #   result_path = rslt_folder,
-    #   raw = TRUE,
-    #   interactive = FALSE
-    # )
+    decon_spec <- spectrum_plot(
+      result_path = rslt_folder,
+      raw = FALSE,
+      interactive = FALSE
+    )
+    raw_spec <- spectrum_plot(
+      result_path = rslt_folder,
+      raw = TRUE,
+      interactive = FALSE
+    )
 
     return(list(
       config = conf_df,

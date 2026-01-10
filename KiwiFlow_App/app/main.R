@@ -89,6 +89,7 @@ ui <- function(id) {
       ),
       bslib$nav_panel(
         title = "Logs",
+        icon = shiny::icon("list-check"),
         bslib$page_sidebar(
           sidebar = log_sidebar$ui(ns("log_sidebar")),
           bslib$card(
@@ -101,7 +102,7 @@ ui <- function(id) {
         shiny::actionButton(
           ns("settings"),
           "Settings",
-          icon = shiny::icon("list-check"),
+          icon = shiny::icon("gear"),
           class = "nav-link"
         )
       ),
@@ -116,7 +117,8 @@ ui <- function(id) {
       bslib$nav_item(
         shiny::tags$a(
           id = "unidec-tag",
-          href = "https://github.com/michaelmarty/UniDec",
+          style = "cursor: pointer;",
+          onclick = "Shiny.setInputValue('app-unidec_click', Math.random());",
           shiny::tags$img(
             src = "static/UniDec.png",
             width = "auto",
@@ -282,6 +284,88 @@ server <- function(id) {
         "tabs",
         session = session,
         "Deconvolution"
+      )
+    })
+
+    shiny::observeEvent(input$unidec_click, {
+      shiny$showModal(
+        shiny$div(
+          class = "unidec-modal",
+          shiny$modalDialog(
+            title = shiny$span(
+              shiny$icon("info-circle"),
+              "UniDec - Acknowledgement"
+            ),
+            size = "l",
+            easyClose = TRUE,
+
+            shiny$div(
+              style = "font-size: 14px;",
+
+              # Description Section
+              shiny::HTML(
+                '
+        <p>The deconvolution and peak picking algorithms within this software are powered by 
+        <b>UniDec</b> - Universal Deconvolution of Mass and Ion Mobility Spectra (<a href="https://github.com/michaelmarty/UniDec" target="_blank">github.com/michaelmarty/UniDec</a>).</p>
+        
+        <p>We gratefully acknowledge the work of <b>Marty et al.</b> in developing these 
+        Bayesian deconvolution methods.</p>
+        
+        <hr style="margin: 1rem 0;">
+        
+        <h5 style="color: #2c3e50;">Citation Request</h4>
+        <p>If you utilize the deconvolution or peak picking results from this software in 
+        your research or publications, the authors of UniDec request that you cite their original paper:</p>
+        
+        <div style="background-color: #f8f9fa; padding: 15px; border-left: 5px solid #007bff; margin-bottom: 10px;">
+          M. T. Marty, A. J. Baldwin, E. G. Marklund, G. K. A. Hochberg, J. L. P. Benesch, C. V. Robinson. 
+          <br><b>"UniDec: Universal Deconvolution of Mass and Ion Mobility Spectra."</b> 
+          <br><i>Anal. Chem.</i> 2015, 87, 4370-4376.
+        </div>
+      '
+              ),
+
+              # BibTeX Label and Copy Button
+              shiny::div(
+                shiny$tags$textarea(
+                  id = "bibtex_unidec",
+                  readonly = "readonly",
+                  style = "width: 100%; height: 140px; font-family: monospace; font-size: 12px; 
+             background-color: #f4f4f4; padding: 10px;  
+             resize: none; border: 1px solid #ccc; border-radius: 4px;",
+                  "@article{Marty2015UniDec,
+  author = {Marty, Michael T. and Baldwin, Andrew J. and Marklund, Erik G. and Hochberg, Georg K. A. and Benesch, Justin L. P. and Robinson, Carol V.},
+  title = {UniDec: Universal Deconvolution of Mass and Ion Mobility Spectra},
+  journal = {Analytical Chemistry},
+  volume = {87},
+  number = {8},
+  pages = {4370-4376},
+  year = {2015},
+  doi = {10.1021/acs.analchem.5b00140}
+}"
+                ),
+                shiny$tags$button(
+                  "Copy",
+                  id = "copy_btn",
+                  class = "btn btn-default btn-sm",
+                  style = "position: absolute; bottom: 40px; right: 2.5rem; z-index: 10; opacity: 0.8;",
+                  onclick = "
+      var textArea = document.getElementById('bibtex_unidec');
+      textArea.select();
+      document.execCommand('copy');
+      var btn = document.getElementById('copy_btn');
+      btn.innerHTML = 'Copied!';
+      setTimeout(function(){ btn.innerHTML = 'Copy'; }, 2000);
+    "
+                )
+              )
+            ),
+
+            footer = shiny$tagList(
+              shiny$modalButton("Dismiss")
+            )
+          )
+        )
       )
     })
 
