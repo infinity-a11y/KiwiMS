@@ -23,6 +23,7 @@ box::use(
       get_kiwiflow_version,
       get_latest_release_url,
     ],
+  app / logic / conversion_constants[gpl3_licence, ]
 )
 
 suppressWarnings(library(logr))
@@ -135,9 +136,20 @@ ui <- function(id) {
           shiny$tags$a(
             shiny$tags$span(
               shiny$tags$i(class = "fa-brands fa-github me-1"),
-              "GitHub"
+              "KiwiFlow GitHub"
             ),
             href = "https://github.com/infinity-a11y/MSFlow",
+            target = "_blank",
+            class = "nav-link"
+          )
+        ),
+        bslib$nav_item(
+          shiny$tags$a(
+            shiny$tags$span(
+              shiny$tags$i(class = "fa-brands fa-github me-1"),
+              "UniDec GitHub"
+            ),
+            href = "https://github.com/michaelmarty/UniDec",
             target = "_blank",
             class = "nav-link"
           )
@@ -287,6 +299,35 @@ server <- function(id) {
       )
     })
 
+    # Licence Modal Window ----
+    shiny::observeEvent(input$licence, {
+      shiny$showModal(
+        shiny$div(
+          class = "unidec-modal",
+          shiny$modalDialog(
+            title = "End-User License Agreement (GPL v3)",
+            size = "l",
+            easyClose = TRUE,
+            shiny$div(
+              style = "font-size: 14px;",
+              shiny$tags$p(
+                "KiwiFlow is released under the following license:"
+              ),
+              shiny$tags$pre(
+                style = "height: 400px; overflow-y: scroll; background-color: #f8f9fa; 
+                 font-size: 11px; padding: 30px; border: 1px solid #ddd; width: fit-content; margin: 0; justify-self: center;",
+                shiny::HTML(gpl3_licence)
+              )
+            ),
+            footer = shiny$tagList(
+              shiny$modalButton("Close")
+            )
+          )
+        )
+      )
+    })
+
+    # Unidec Modal Window ----
     shiny::observeEvent(input$unidec_click, {
       shiny$showModal(
         shiny$div(
@@ -301,8 +342,6 @@ server <- function(id) {
 
             shiny$div(
               style = "font-size: 14px;",
-
-              # Description Section
               shiny::HTML(
                 '
         <p>The deconvolution and peak picking algorithms within this software are powered by 
@@ -324,8 +363,6 @@ server <- function(id) {
         </div>
       '
               ),
-
-              # BibTeX Label and Copy Button
               shiny::div(
                 shiny$tags$textarea(
                   id = "bibtex_unidec",

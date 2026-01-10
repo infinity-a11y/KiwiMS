@@ -265,6 +265,7 @@ deconvolute <- function(
     parallel::clusterExport(
       cl,
       c(
+        "process_plot_data",
         "process_single_dir",
         "spectrum_plot",
         "process_wrapper",
@@ -657,7 +658,7 @@ process_plot_data <- function(
   return(list(mass = mass, highlight_peaks = highlight_peaks))
 }
 
-# spectrum_plot(): Make spectrum plot interactively (plotly) or non-interactively (ggplot2)
+# spectrum_plot(): Make spectrum plot interactively (plotly) or non-interactively (ggplot2) ----
 #' @export
 spectrum_plot <- function(
   result_path = NULL,

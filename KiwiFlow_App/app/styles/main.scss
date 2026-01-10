@@ -95,6 +95,7 @@ th {
   overflow-y: scroll;
   z-index: 9999;
   box-shadow: inset 0px 0px 1px 1px #e5e5e5;
+  min-height: 35px;
 }
 
 *::-webkit-scrollbar-corner {

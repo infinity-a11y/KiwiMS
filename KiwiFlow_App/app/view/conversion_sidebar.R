@@ -282,12 +282,6 @@ server <- function(id, conversion_main_vars) {
 
     # Event run conversion
     shiny::observeEvent(input$run_binding_analysis, {
-      # Block UI
-      shinyjs::runjs(paste0(
-        'document.getElementById("blocking-overlay").style.display ',
-        '= "block";'
-      ))
-
       if (analysis_status() == "pending") {
         # # Delay conversion start
         Sys.sleep(1)
@@ -401,12 +395,6 @@ server <- function(id, conversion_main_vars) {
           disabled = FALSE
         )
       }
-
-      # Unblock UI
-      shinyjs::runjs(paste0(
-        'document.getElementById("blocking-overlay").style.display ',
-        '= "none";'
-      ))
     })
 
     # Dismiss conversion
