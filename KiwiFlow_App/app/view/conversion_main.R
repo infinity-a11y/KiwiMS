@@ -450,7 +450,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         rhandsontable::rhandsontable(
           conc_time_tbl,
           rowHeaders = NULL,
-          height = 28 + 23 * nrow(conc_time_tbl),
+          height = 28 + 23 * ifelse(nrow(tab > 16), 16, nrow(tab)),
           stretchH = "all"
         )
       } else {

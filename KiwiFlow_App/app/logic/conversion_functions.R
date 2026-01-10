@@ -256,7 +256,7 @@ prot_comp_handsontable <- function(
   table <- rhandsontable::rhandsontable(
     tab,
     rowHeaders = NULL,
-    height = 400,
+    height = 28 + 23 * ifelse(nrow(tab > 16), 16, nrow(tab)),
     stretchH = ifelse(disabled, "none", "all")
   ) |>
     rhandsontable::hot_cols(fixedColumnsLeft = 1, renderer = renderer_js) |>
@@ -395,7 +395,7 @@ return true;
     tab,
     rowHeaders = NULL,
     allowed_per_col = allowed_per_col,
-    height = 28 + 23 * nrow(tab),
+    height = 28 + 23 * ifelse(nrow(tab > 16), 16, nrow(tab)),
     stretchH = ifelse(disabled, "none", "all")
   ) |>
     rhandsontable::hot_cols(

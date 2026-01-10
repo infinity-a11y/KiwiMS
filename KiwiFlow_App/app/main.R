@@ -115,6 +115,12 @@ ui <- function(id) {
           class = "nav-link"
         )
       ),
+      bslib$nav_item(shiny::uiOutput(
+        ns("update_button"),
+        class = "nav-link",
+        style = "cursor: pointer;",
+        onclick = "Shiny.setInputValue('app-open_update_modal', Math.random());"
+      )),
       bslib$nav_item(
         shiny::tags$a(
           id = "unidec-tag",
@@ -273,12 +279,17 @@ server <- function(id) {
     output$update_button <- shiny$renderUI({
       shiny$req(icon, label)
 
-      shiny$actionButton(
-        inputId = ns("open_update_modal"),
-        label = label,
-        icon = icon,
-        class = "nav-link"
+      shiny::tags$a(
+        icon,
+        label
       )
+
+      # shiny$actionButton(
+      #   inputId = ns("open_update_modal"),
+      #   label = label,
+      #   icon = icon,
+      #   class = "nav-link"
+      # )
     })
 
     # Switch Protein Conversion tab when user forwards
