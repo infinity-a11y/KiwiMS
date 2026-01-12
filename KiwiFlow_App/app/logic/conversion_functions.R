@@ -1241,7 +1241,7 @@ conversion <- function(hits) {
 # 1. Header: The Sample Name
 log_start <- function(sample_name) {
   message(sprintf("PROCESSING: %s\n  │", sample_name))
-  Sys.sleep(0.1)
+  Sys.sleep(0.05)
 }
 
 # 2. Status: Peak Info
@@ -1252,13 +1252,13 @@ log_status <- function(n_peaks, m_min, m_max) {
     m_min,
     m_max
   ))
-  Sys.sleep(0.1)
+  # Sys.sleep(0.05)
 }
 
 # 3. The hit count
 log_hits_count <- function(n_hits) {
   message(sprintf("  ├─ Result: %s hits detected", n_hits))
-  Sys.sleep(0.1)
+  # Sys.sleep(0.05)
 }
 
 log_intensities <- function(total, unbound, binding) {
@@ -1271,19 +1271,19 @@ log_intensities <- function(total, unbound, binding) {
     sprintf("  │  ├─ Unbound Protein: %.2f (%.1f%%)\n", unbound, perc_unbound),
     sprintf("  │  └─ Total Binding:   %.2f (%.1f%%)", binding, perc_binding)
   ))
-  Sys.sleep(0.1)
+  # Sys.sleep(0.05)
 }
 
 # 4. Alert: No Peaks
 log_alert <- function(msg = "No protein peak detected") {
   message(sprintf("  ├─ ⚠️ %s.  ", msg))
-  Sys.sleep(0.1)
+  # Sys.sleep(0.05)
 }
 
 # 5. Footer: Closing a successful sample
 log_done <- function() {
   message(paste0("  │\n", "  └─ ☑ Sample completed.\n  "))
-  Sys.sleep(0.1)
+  # Sys.sleep(0.05)
 }
 
 log_summary <- function(n_samples) {
@@ -2553,6 +2553,15 @@ multiple_spectra <- function(
     symbol = ifelse(name == peaks_data$name[1], "diamond", "circle")
   )
 
+  color_cmp <<- color_cmp
+  color_variable <<- color_variable
+
+  peaks_data$z <- substr(peaks_data$z, 1, 22)
+  spectrum_data$z <- substr(spectrum_data$z, 1, 22)
+
+  peaks_data <<- peaks_data
+  spectrum_data <<- spectrum_data
+
   # Prepare compound marker colors and symbols
   if (!is.null(color_cmp) && !is.null(color_variable)) {
     if (color_variable == "Compounds") {
@@ -2583,6 +2592,13 @@ multiple_spectra <- function(
       marker_color <- ~ I(z_color)
     }
   }
+
+  peaks_data2 <<- peaks_data
+  spectrum_data2 <<- spectrum_data
+
+  # Condition on data size
+  condition <- length(unique(peaks_data$z)) > 8 |
+    max(nchar(as.character(peaks_data$z))) > 22
 
   plotly::plot_ly(
     data = spectrum_data,
@@ -2672,7 +2688,7 @@ multiple_spectra <- function(
         aspectratio = list(
           x = 1,
           y = 1,
-          z = ifelse(length(unique(spectrum_data$z)) <= 3, 0.3, 1.0)
+          z = ifelse(length(unique(peaks_data$z)) <= 3, 0.3, 1.0)
         ),
         xaxis = list(
           title = "Mass [Da]",
@@ -2700,19 +2716,45 @@ multiple_spectra <- function(
           showgrid = ifelse(time, TRUE, FALSE),
           showline = FALSE,
           showzeroline = FALSE,
-          showticklabels = TRUE,
-          showlabels = ifelse(length(unique(peaks_data$z)) > 8, FALSE, TRUE),
+          showticklabels = ifelse(condition, FALSE, TRUE),
           showspikes = FALSE,
           showbackground = FALSE,
           type = 'category'
         ),
         camera = list(
-          center = list(x = -0.05, y = -0.18, z = 0),
-          eye = list(
-            x = 1.1 + length(unique(peaks_data$z)) / 12,
-            y = 0.8 + length(unique(peaks_data$z)) / 12,
-            z = 1.1 + length(unique(peaks_data$z)) / 12
-          ),
+          center = list(x = -0.05, y = -0.15, z = 0),
+          eye = if (length(unique(peaks_data$z)) <= 8) {
+            list(
+              x = 1 +
+                length(unique(peaks_data$z)) / 20 +
+                ifelse(condition, 0, 0.2),
+              y = 0.7 +
+                length(unique(peaks_data$z)) / 20 +
+                ifelse(condition, 0, 0.2),
+              z = 1 +
+                length(unique(peaks_data$z)) / 20 +
+                ifelse(condition, 0, 0.2)
+            )
+          } else {
+            list(x = 1.4, y = 1.1, z = 1.4)
+          },
+          # if (
+          # length(unique(peaks_data$z)) <= 8
+          # &
+          # max(nchar(as.character(peaks_data$z))) <= 22
+          # ) {
+          #   list(
+          #     x = 1.1 + length(unique(peaks_data$z)) / 12,
+          #     y = 0.8 + length(unique(peaks_data$z)) / 12,
+          #     z = 1.1 + length(unique(peaks_data$z)) / 12
+          #   )
+          # } else {
+          #   list(
+          #     x = 1.3,
+          #     y = 1.0,
+          #     z = 1.3
+          #   )
+          # },
           up = list(x = 0, y = 1.5, z = 0)
         )
       )
@@ -3025,21 +3067,19 @@ render_hits_table <- function(
     c("Sample ID", "Cmp Name", "truncSample_ID", all_of(selected_cols))
   )
 
+  # Adapt table layout
   if (!is.null(single_conc)) {
     menu_length <- list(c(25, -1), c('25', 'All'))
+    dom_value <- "t"
   } else {
     menu_length <- list(
       c(15, 25, 50, 100, -1),
       c('15', '25', '50', '100', 'All')
     )
-  }
-
-  if (!is.null(single_conc)) {
-    dom_value <- "t"
-  } else {
     dom_value <- "fti"
   }
 
+  # Determine clickable cells
   if (any(names(hits_table) %in% c("Sample ID", "Cmp Name"))) {
     clickable_targets <- which(
       names(hits_table) %in% c("Sample ID", "Cmp Name")
@@ -3065,6 +3105,16 @@ render_hits_table <- function(
     "}"
   )
 
+  # Sorting
+  hits_table <- hits_table |>
+    dplyr::arrange(
+      # if (color_variable == "Samples") `Sample ID` else `Cmp Name`,
+      # if (color_variable == "Samples") `Cmp Name` else `Sample ID`,
+      `Cmp Name`,
+      `Total %-Binding`,
+      `%-Binding`
+    )
+
   # Generate datatable
   hits_datatable <- DT::datatable(
     data = hits_table,
@@ -3079,7 +3129,8 @@ render_hits_table <- function(
       fixedHeader = TRUE,
       stripe = FALSE,
       dom = dom_value,
-      paging = FALSE,
+      paging = ifelse(!is.null(single_conc), TRUE, FALSE),
+      # paging = FALSE,
       columnDefs = list(
         if (length(bar_chart) > 0 & any(bar_chart %in% names(hits_table))) {
           list(
@@ -3710,3 +3761,30 @@ conversion_tracking_js <- "
       setTimeout(function() { isAutoScrolling = false; }, 500);
     };
   "
+
+# Filter RColorBrewer scales by number of distinct colors
+#' @export
+filter_color_list <- function(color_list, min_n) {
+  # Get the RColorBrewer metadata table
+  info <- RColorBrewer::brewer.pal.info
+
+  # Process each sub-list (Qualitative, Sequential, etc.)
+  filtered_list <- lapply(color_list, function(subgroup) {
+    # Filter the names within each subgroup
+    Filter(
+      function(pal_name) {
+        if (pal_name %in% rownames(info)) {
+          # If it's a Brewer palette, check maxcolors
+          return(info[pal_name, "maxcolors"] >= min_n)
+        } else {
+          # If it's a Gradient/Viridis palette, they are usually
+          # continuous and can support any n. We'll keep them.
+          return(TRUE)
+        }
+      },
+      subgroup
+    )
+  })
+
+  return(filtered_list)
+}

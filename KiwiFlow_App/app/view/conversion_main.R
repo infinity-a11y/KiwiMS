@@ -32,6 +32,7 @@ box::use(
       get_cmp_colorScale,
       get_contrast_color,
       label_smart_clean,
+      filter_color_list,
     ],
   app / logic / deconvolution_functions[spectrum_plot, ],
   app /
@@ -778,8 +779,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     shiny::observe({
       samples_table_input <- sample_table_input()
 
-      test <<- declaration_vars
-
       # Conditional observe actions
       if (
         isTRUE(declaration_vars$protein_table_active) ||
@@ -1103,7 +1102,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         'document.getElementById("blocking-overlay").style.display ',
         '= "block";'
       ))
-      test5 <<- conversion_sidebar_vars$result_list()
+
       # Load conversion declaration interface
       if (!is.null(conversion_sidebar_vars$result_list())) {
         # Reset ui elements
@@ -1126,6 +1125,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         output$conversion_cmp_table <- NULL
         output$conversion_cmp_protein <- NULL
         output$conversion_sample_protein <- NULL
+        output$color_variable_ui <- NULL
 
         # Show declaration tabs
         bslib::nav_show(
@@ -1163,6 +1163,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           conc_colors = NULL,
           expand_helper = FALSE
         )
+        hits_summary <- NULL
       }
 
       # Activate table observer
@@ -1761,6 +1762,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 class = "compact row-border nowrap",
                 options = list(
                   dom = "t",
+                  paging = FALSE,
                   autoWidth = TRUE,
                   scrollX = TRUE,
                   scrollY = TRUE,
@@ -2159,6 +2161,12 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             mapping$original
           )]
 
+          hits_summary$truncSample_ID <- substr(
+            hits_summary$truncSample_ID,
+            1,
+            22
+          )
+
           #### Hits table tab ----
           bslib::nav_insert(
             "tabs",
@@ -2276,8 +2284,12 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           output$conversion_hits_tab <- DT::renderDT(
             {
               shiny::req(
+                hits_summary,
                 input$hits_tab_sample_select,
-                input$hits_tab_compound_select
+                input$hits_tab_compound_select,
+                input$color_variable,
+                !is.null(input$truncate_names),
+                input$color_scale
               )
               color_variable <- input$color_variable
               truncate_names <- input$truncate_names
@@ -2502,7 +2514,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
           ##### Total %-binding for one sample across compounds ----
           output$total_pct_binding <- shiny::renderUI({
-            shiny::req(input$conversion_sample_picker)
+            shiny::req(hits_summary, input$conversion_sample_picker)
 
             hits_summary$`Total %-Binding`[
               hits_summary$`Sample ID` == input$conversion_sample_picker
@@ -2511,7 +2523,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
           ##### Compound distribution donut chart ----
           output$conversion_present_compounds_pie_ui <- shiny::renderUI({
-            shiny::req(input$conversion_sample_picker)
+            shiny::req(hits_summary, input$conversion_sample_picker)
 
             tbl <- hits_summary |>
               dplyr::filter(
@@ -2537,7 +2549,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           )
 
           output$conversion_present_compounds_pie <- plotly::renderPlotly({
-            shiny::req(input$conversion_sample_picker)
+            shiny::req(
+              hits_summary,
+              input$conversion_sample_picker,
+              input$color_scale,
+              input$color_variable,
+              !is.null(input$truncate_names)
+            )
 
             color_variable <- input$color_variable
             truncate_names <- input$truncate_names
@@ -2670,16 +2688,22 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
           ##### Sample spectrum plot ----
           output$conversion_sample_spectrum <- plotly::renderPlotly({
+            shiny::req(
+              hits_summary,
+              input$color_variable,
+              input$conversion_sample_picker,
+              input$color_scale,
+              !is.null(input$truncate_names)
+            )
+
             selected_sample <- input$conversion_sample_picker
-            shiny::req(selected_sample)
+            color_variable <- input$color_variable
 
             # Filter table for selected sample
             tbl <- hits_summary |>
               dplyr::filter(
                 `Sample ID` == selected_sample
               )
-
-            color_variable <- input$color_variable
 
             spectrum_plot(
               sample = conversion_sidebar_vars$result_list()$deconvolution[[
@@ -2698,7 +2722,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           ##### Samples view table ----
           output$conversion_present_compounds_table <- DT::renderDataTable(
             {
-              shiny::req(input$conversion_sample_picker)
+              shiny::req(
+                hits_summary,
+                input$conversion_sample_picker,
+                input$color_scale,
+                input$color_variable,
+                !is.null(input$truncate_names)
+              )
 
               color_variable <- input$color_variable
               truncate_names <- input$truncate_names
@@ -2722,7 +2752,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   selection = "none",
                   class = "order-column",
                   options = list(
-                    dom = 't'
+                    dom = 't',
+                    paging = FALSE
                   )
                 ))
               }
@@ -2731,11 +2762,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               colors <- get_cmp_colorScale(
                 filtered_table = tbl,
                 scale = input$color_scale,
-                variable = input$color_variable,
-                trunc = input$truncate_names
+                variable = color_variable,
+                trunc = truncate_names
               )
-
-              tbl1 <<- tbl
 
               cmp_table <- tbl |>
                 dplyr::group_by(`Cmp Name`) |>
@@ -2762,6 +2791,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   class = "order-column",
                   options = list(
                     dom = 't',
+                    paging = FALSE,
                     scrollY = "175px",
                     scrollCollapse = TRUE,
                     rowGroup = if (
@@ -2957,7 +2987,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
           ##### Total %-binding for one compound across samples ----
           output$total_pct_cmps_binding <- shiny::renderUI({
-            shiny::req(input$conversion_sample_picker)
+            shiny::req(
+              hits_summary,
+              input$conversion_sample_picker
+            )
 
             total_bind <- hits_summary$`Total %-Binding`[
               hits_summary$`Cmp Name` == input$conversion_compound_picker &
@@ -2996,11 +3029,15 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
           ##### Compound distribution bar chart ----
           output$cmp_distribution <- plotly::renderPlotly({
-            shiny::req(input$conversion_compound_picker)
-
+            shiny::req(
+              hits_summary,
+              input$color_scale,
+              input$conversion_compound_picker,
+              input$color_variable,
+              !is.null(input$truncate_names)
+            )
             color_variable <- input$color_variable
             truncate_names <- input$truncate_names
-
             # Filter hits for selected compound
             tbl <- hits_summary |>
               dplyr::filter(`Cmp Name` == input$conversion_compound_picker) |>
@@ -3019,13 +3056,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   })
                 )
               )
-
             # Factorize sample ID to sort by %-binding
             tbl$`Sample ID` <- factor(
               tbl$`Sample ID`,
               levels = unique(tbl$`Sample ID`)
             )
-
             # Make compound color scale
             colors <- get_cmp_colorScale(
               filtered_table = tbl,
@@ -3033,7 +3068,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               variable = color_variable,
               trunc = truncate_names
             )
-
             # Assign font colors to match background brightness
             tbl <- tbl |>
               dplyr::mutate(
@@ -3051,21 +3085,14 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   "</span>"
                 )
               )
-
-            # Pre-calculate totals for the top labels
-            totals <- dplyr::group_by(tbl, `Sample ID`) |>
-              dplyr::summarize(
-                total_val = sum(as.numeric(gsub("%", "", `%-Binding`)))
-              )
-
+            # Conditional color variable
             if (color_variable == "Compounds") {
               color <- ~`Cmp Name`
             } else if (color_variable == "Samples") {
               color <- ~`Sample ID`
             }
-
             # Create plotly bar chart
-            plotly::plot_ly(data = tbl) |>
+            bar_chart <- plotly::plot_ly(data = tbl) |>
               plotly::add_trace(
                 x = ~`Sample ID`,
                 y = ~ as.numeric(gsub("%", "", `%-Binding`)),
@@ -3097,20 +3124,38 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 textposition = 'inside',
                 marker = list(line = list(color = 'white', width = 1)),
                 showlegend = FALSE
-              ) |>
-              plotly::add_trace(
-                data = totals,
-                x = ~`Sample ID`,
-                y = ~total_val,
-                type = 'scatter',
-                mode = 'text',
-                text = ~ paste0(total_val, "%"),
-                textposition = 'top center',
-                showlegend = FALSE,
-                hoverinfo = 'none',
-                inherit = FALSE,
-                textfont = list(color = '#ffffff', size = 16)
-              ) |>
+              )
+            if (length(tbl$`Sample ID`) <= 20) {
+              # Calculate totals for the top labels
+              totals <- dplyr::group_by(tbl, `Sample ID`) |>
+                dplyr::summarize(
+                  total_val = sum(as.numeric(gsub("%", "", `%-Binding`)))
+                )
+              bar_chart <- bar_chart |>
+                plotly::add_trace(
+                  data = totals,
+                  x = ~`Sample ID`,
+                  y = ~total_val,
+                  type = 'scatter',
+                  mode = 'text',
+                  text = ~ paste0(total_val, "%"),
+                  textposition = 'top center',
+                  showlegend = FALSE,
+                  hoverinfo = 'none',
+                  inherit = FALSE,
+                  textfont = list(
+                    color = '#ffffff',
+                    size = if (length(tbl$`Sample ID`) <= 8) {
+                      16
+                    } else if (length(tbl$`Sample ID`) <= 16) {
+                      14
+                    } else {
+                      12
+                    }
+                  )
+                )
+            }
+            bar_chart |>
               plotly::layout(
                 barmode = 'stack',
                 bargap = 0.5,
@@ -3120,9 +3165,18 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   title = list(text = NULL),
                   showgrid = FALSE,
                   zeroline = FALSE,
-                  color = '#ffffff'
+                  color = '#ffffff',
+                  showticklabels = ifelse(
+                    max(nchar(levels(tbl$`Sample ID`))) > 22,
+                    FALSE,
+                    TRUE
+                  )
                 ),
                 yaxis = list(
+                  range = c(
+                    0,
+                    max(as.numeric(gsub("%", "", tbl$`%-Binding`))) + 10
+                  ),
                   title = list(text = "%-Binding"),
                   zeroline = FALSE,
                   gridcolor = "#7f7f7fff",
@@ -3133,7 +3187,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
           ##### Compound spectra plots ----
           output$conversion_cmp_spectra <- plotly::renderPlotly({
-            shiny::req(input$conversion_compound_picker)
+            shiny::req(
+              hits_summary,
+              input$color_scale,
+              input$conversion_compound_picker,
+              !is.null(input$truncate_names),
+              input$color_variable
+            )
 
             conversion_compound_picker <- input$conversion_compound_picker
             truncate_names <- input$truncate_names
@@ -3172,7 +3232,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
           ##### Compounds view table ----
           output$conversion_cmp_table <- DT::renderDataTable({
-            shiny::req(input$conversion_compound_picker)
+            shiny::req(
+              hits_summary,
+              input$color_scale,
+              input$conversion_compound_picker,
+              input$color_variable,
+              !is.null(input$truncate_names)
+            )
 
             color_variable <- input$color_variable
             truncate_names <- input$truncate_names
@@ -3227,6 +3293,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 selection = "none",
                 options = list(
                   dom = 't',
+                  paging = FALSE,
                   scrollY = "175px",
                   scrollCollapse = TRUE,
                   rowGroup = if (length(unique(tbl$`Sample ID`)) == nrow(tbl)) {
@@ -3300,16 +3367,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   )
                 ),
                 shiny::uiOutput(ns("color_variable_ui")),
-                shiny::selectInput(
-                  ns("color_scale"),
-                  label = NULL,
-                  choices = list(
-                    Qualitative = qualitative_scales,
-                    Sequential = sequential_scales,
-                    Gradient = gradient_scales
-                  ),
-                  selected = "viridis"
-                ),
+                shiny::uiOutput(ns("color_scale_ui")),
                 shiny::div(
                   class = "tooltip-bttn",
                   shiny::actionButton(
@@ -3326,14 +3384,45 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           )
 
           output$color_variable_ui <- shiny::renderUI({
+            shiny::req(hits_summary)
+
             condition <- length(unique(hits_summary$`Sample ID`)) >
-              hits_summary$`Cmp Name`[!is.na(hits_summary$`Cmp Name`)]
+              length(unique(hits_summary$`Cmp Name`[
+                !is.na(hits_summary$`Cmp Name`)
+              ]))
 
             shiny::selectInput(
               ns("color_variable"),
               label = NULL,
               choices = c("Samples", "Compounds"),
               selected = ifelse(condition, "Samples", "Compounds")
+            )
+          })
+
+          output$color_scale_ui <- shiny::renderUI({
+            shiny::req(hits_summary, input$color_variable)
+
+            scales <- filter_color_list(
+              list(
+                Qualitative = qualitative_scales,
+                Sequential = sequential_scales
+              ),
+              length(unique(
+                if (input$color_variable == "Samples") {
+                  hits_summary$`Sample ID`
+                } else {
+                  hits_summary$`Cmp Name`
+                }
+              ))
+            )
+
+            scales[["Gradient"]] <- gradient_scales
+
+            shiny::selectInput(
+              ns("color_scale"),
+              label = NULL,
+              choices = scales,
+              selected = "viridis"
             )
           })
 
@@ -3423,6 +3512,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           conc_colors = NULL,
           expand_helper = FALSE
         )
+        hits_summary <- NULL
 
         # Select samples tab
         set_selected_tab("Samples", session)

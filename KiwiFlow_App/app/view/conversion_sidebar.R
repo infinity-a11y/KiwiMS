@@ -171,14 +171,14 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
                 value = FALSE
               )
             ),
-            shinyjs::disabled(
-              shiny::actionButton(
-                ns("run_binding_analysis"),
-                "Run",
-                icon = shiny::icon("play"),
-                width = "100%"
-              )
+            # shinyjs::disabled(
+            shiny::actionButton(
+              ns("run_binding_analysis"),
+              "Run",
+              icon = shiny::icon("play"),
+              width = "100%"
             )
+            # )
           )
         )
       )
@@ -216,6 +216,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
       )
       shinyjs::enable("peak_tolerance")
       shinyjs::enable("max_multiples")
+      analysis_status("pending")
     })
 
     # Show modal for conversion log
@@ -371,6 +372,32 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
 
         # TODO
         # Dev Mode
+
+        # result_list(readRDS(
+        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_7.rds"
+        # ))
+        # result_list(readRDS(
+        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_13.rds"
+        # ))
+        # result_list(readRDS(
+        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_19.rds"
+        # ))
+        # result_list(readRDS(
+        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_25.rds"
+        # ))
+        # result_list(readRDS(
+        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_33.rds"
+        # ))
+        # result_list(readRDS(
+        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_42.rds"
+        # ))
+        # result_list(readRDS(
+        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_55.rds"
+        # ))
+        # result_list(readRDS(
+        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_61.rds"
+        # ))
+
         # result_list(readRDS(
         #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results.rds"
         # ))
