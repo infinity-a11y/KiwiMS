@@ -171,14 +171,14 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
                 value = FALSE
               )
             ),
-            # shinyjs::disabled(
-            shiny::actionButton(
-              ns("run_binding_analysis"),
-              "Run",
-              icon = shiny::icon("play"),
-              width = "100%"
+            shinyjs::disabled(
+              shiny::actionButton(
+                ns("run_binding_analysis"),
+                "Run",
+                icon = shiny::icon("play"),
+                width = "100%"
+              )
             )
-            # )
           )
         )
       )

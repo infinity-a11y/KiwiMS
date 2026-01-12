@@ -759,30 +759,30 @@ check_table <- function(tab, tolerance) {
 }
 
 
-# Parse filename according to nomenclature of test files
-parse_filename <- function(s) {
-  # Remove file extension if present
-  s <- sub("\\.[^\\.]+$", "", s)
+# # Parse filename according to nomenclature of test files
+# parse_filename <- function(s) {
+#   # Remove file extension if present
+#   s <- sub("\\.[^\\.]+$", "", s)
 
-  # Split on + (corrected escaping for fixed=TRUE)
-  parts <- strsplit(s, "+", fixed = TRUE)[[1]]
+#   # Split on + (corrected escaping for fixed=TRUE)
+#   parts <- strsplit(s, "+", fixed = TRUE)[[1]]
 
-  if (length(parts) != 2) {
-    stop("String does not contain exactly one +")
-  }
+#   if (length(parts) != 2) {
+#     stop("String does not contain exactly one +")
+#   }
 
-  before <- parts[1]
+#   before <- parts[1]
 
-  after <- parts[2]
+#   after <- parts[2]
 
-  # Now split after on _
-  after_parts <- strsplit(after, "_", fixed = TRUE)[[1]]
+#   # Now split after on _
+#   after_parts <- strsplit(after, "_", fixed = TRUE)[[1]]
 
-  # Combine into a vector
-  result <- c(before, after_parts)
+#   # Combine into a vector
+#   result <- c(before, after_parts)
 
-  return(result)
-}
+#   return(result)
+# }
 
 # Read in file containing the peaks picked from spectrum
 get_peaks <- function(peak_file = NULL, result_sample, results) {
@@ -988,8 +988,8 @@ check_hits <- function(
   sample
 ) {
   # Find protein peak
-  protein_peak <- peaks$mass >= protein_mw - peak_tolerance &
-    peaks$mass <= protein_mw + peak_tolerance
+  protein_peak <- peaks$mass >= protein_mw[, -1] - peak_tolerance &
+    peaks$mass <= protein_mw[, -1] + peak_tolerance
 
   # Abort if peaks show invalid peaks
   if (!any(protein_peak)) {
@@ -998,8 +998,8 @@ check_hits <- function(
     hits_df <- data.frame(
       well = "A1",
       sample = sample,
-      protein = parse_filename(sample)[1],
-      theor_prot = as.numeric(protein_mw),
+      protein = protein_mw[, 1],
+      theor_prot = as.numeric(protein_mw[, -1]),
       measured_prot = NA,
       delta_prot = NA,
       prot_intensity = NA,
@@ -1015,7 +1015,7 @@ check_hits <- function(
   }
 
   # Keep only peaks above protein mw
-  peaks_valid <- peaks$mass >= protein_mw - peak_tolerance
+  peaks_valid <- peaks$mass >= protein_mw[, -1] - peak_tolerance
   if (any(peaks_valid) && sum(peaks_valid) > 1) {
     peaks_filtered <- as.data.frame(peaks[peaks_valid, ])
   } else {
@@ -1024,11 +1024,11 @@ check_hits <- function(
     hits_df <- data.frame(
       well = "A1",
       sample = sample,
-      protein = parse_filename(sample)[1],
-      theor_prot = as.numeric(protein_mw),
+      protein = protein_mw[, 1],
+      theor_prot = as.numeric(protein_mw[, -1]),
       measured_prot = peaks$mass[which(protein_peak)],
       delta_prot = abs(
-        as.numeric(protein_mw) - peaks$mass[which(protein_peak)]
+        as.numeric(protein_mw[, -1]) - peaks$mass[which(protein_peak)]
       ),
       prot_intensity = peaks$intensity[which(protein_peak)],
       peak = NA,
@@ -1042,19 +1042,9 @@ check_hits <- function(
     return(hits_df)
   }
 
-  # Only keep compounds that are in sample
-  if (nrow(compound_mw) == 1) {
-    cmp_mat <- t(compound_mw)
-  } else {
-    sample_compounds <- sample_table[which(sample == sample_table$Sample), ]
-    sample_compound_vector <- unlist(sample_compounds[-c(1, 2)])
-    if (length(sample_compound_vector) == 1) {
-      cmp_mat <- as.matrix(compound_mw[sample_compound_vector, ])
-    } else {
-      cmp_mat <- t(as.matrix(compound_mw[sample_compound_vector, ]))
-    }
-    colnames(cmp_mat) <- sample_compound_vector
-  }
+  # Transform compounds to matrix
+  cmp_mat <- as.matrix(compound_mw[, -1])
+  colnames(cmp_mat) <- compound_mw[, 1]
 
   # Fill multiples matrix
   for (i in 1:max_multiples) {
@@ -1069,7 +1059,7 @@ check_hits <- function(
   }
 
   # Addition of protein mw with multiples matrix
-  complex_mat <- mat + protein_mw
+  complex_mat <- mat + protein_mw[, -1]
 
   # Initiate empty hits data frame
   hits_df <- data.frame()
@@ -1096,12 +1086,12 @@ check_hits <- function(
         hits_add <- data.frame(
           well = "A1",
           sample = sample,
-          protein = parse_filename(sample)[1],
-          theor_prot = as.numeric(protein_mw),
+          protein = protein_mw[, 1],
+          theor_prot = as.numeric(protein_mw[, -1]),
           measured_prot = peaks$mass[which(protein_peak)],
           delta_prot = round(
             abs(
-              as.numeric(protein_mw) - peaks$mass[which(protein_peak)]
+              as.numeric(protein_mw[, -1]) - peaks$mass[which(protein_peak)]
             ),
             2
           ),
@@ -1112,7 +1102,7 @@ check_hits <- function(
           cmp_mass = cmp_mass,
           delta_cmp = abs(
             (as.numeric(cmp_mass) * multiple) -
-              (peaks_filtered[j, "mass"] - as.numeric(protein_mw))
+              (peaks_filtered[j, "mass"] - as.numeric(protein_mw[, -1]))
           ),
           multiple = multiple
         )
@@ -1127,11 +1117,11 @@ check_hits <- function(
     hits_df <- data.frame(
       well = "A1",
       sample = sample,
-      protein = parse_filename(sample)[1],
-      theor_prot = as.numeric(protein_mw),
+      protein = protein_mw[, 1],
+      theor_prot = as.numeric(protein_mw[, -1]),
       measured_prot = peaks$mass[which(protein_peak)],
       delta_prot = abs(
-        as.numeric(protein_mw) - peaks$mass[which(protein_peak)]
+        as.numeric(protein_mw[, -1]) - peaks$mass[which(protein_peak)]
       ),
       prot_intensity = peaks$intensity[which(protein_peak)],
       peak = NA,
@@ -1334,6 +1324,13 @@ add_hits <- function(
   session,
   ns
 ) {
+  results <<- results
+  sample_table <<- sample_table
+  protein_table <<- protein_table
+  compound_table <<- compound_table
+  peak_tolerance <<- peak_tolerance
+  max_multiples <<- max_multiples
+
   samples <- names(results$deconvolution)
   protein_mw <- protein_table$`Mass 1`
   compound_mw <- as.matrix(compound_table[, -1])
@@ -1356,10 +1353,13 @@ add_hits <- function(
 
     log_start(samples[i])
 
+    present_protein <- sample_table$Protein[sample_table$Sample == samples[i]]
+    present_cmp <- sample_table[sample_table$Sample == samples[i], -c(1, 2)]
+
     results$deconvolution[[samples[i]]][["hits"]] <- check_hits(
       sample_table = sample_table,
-      protein_mw = protein_mw,
-      compound_mw = compound_mw,
+      protein_mw = protein_table[protein_table$Protein == present_protein, ],
+      compound_mw = compound_table[compound_table$Compound == present_cmp, ],
       peaks = get_peaks(result_sample = samples[i], results = results),
       peak_tolerance = peak_tolerance,
       max_multiples = max_multiples,
