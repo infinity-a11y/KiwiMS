@@ -2466,7 +2466,8 @@ multiple_spectra <- function(
   time = FALSE,
   color_cmp = NULL,
   truncated = TRUE,
-  color_variable = NULL
+  color_variable = NULL,
+  hits_summary = NULL
 ) {
   results_list <<- results_list
   samples <<- samples
@@ -2548,19 +2549,16 @@ multiple_spectra <- function(
   )
 
   # Prepare marker symbols
+  prot_peaks <- as.numeric(gsub(
+    " Da",
+    "",
+    hits_summary$`Meas. Prot.`[hits_summary$truncSample_ID %in% peaks_data$z]
+  ))
+
   peaks_data <- dplyr::mutate(
     peaks_data,
-    symbol = ifelse(name == peaks_data$name[1], "diamond", "circle")
+    symbol = ifelse(mw %in% prot_peaks, "diamond", "circle")
   )
-
-  color_cmp <<- color_cmp
-  color_variable <<- color_variable
-
-  peaks_data$z <- substr(peaks_data$z, 1, 22)
-  spectrum_data$z <- substr(spectrum_data$z, 1, 22)
-
-  peaks_data <<- peaks_data
-  spectrum_data <<- spectrum_data
 
   # Prepare compound marker colors and symbols
   if (!is.null(color_cmp) && !is.null(color_variable)) {
@@ -3064,7 +3062,13 @@ render_hits_table <- function(
   selected_cols <- selected_cols[selected_cols %in% names(hits_table)]
   hits_table <- dplyr::select(
     hits_table,
-    c("Sample ID", "Cmp Name", "truncSample_ID", all_of(selected_cols))
+    c(
+      "Sample ID",
+      "Protein",
+      "Cmp Name",
+      "truncSample_ID",
+      all_of(selected_cols)
+    )
   )
 
   # Adapt table layout
@@ -3110,6 +3114,7 @@ render_hits_table <- function(
     dplyr::arrange(
       # if (color_variable == "Samples") `Sample ID` else `Cmp Name`,
       # if (color_variable == "Samples") `Cmp Name` else `Sample ID`,
+      `Protein`,
       `Cmp Name`,
       `Total %-Binding`,
       `%-Binding`
@@ -3613,12 +3618,10 @@ transform_hits <- function(hits_summary, run_ki_kinact) {
       "Total %-Binding"
     )
   } else {
-    summary_table <- summary_table |>
-      dplyr::select(-3)
-
     new_names <- c(
       "Well",
       "Sample ID",
+      "Protein",
       "Theor. Prot.",
       "Meas. Prot.",
       "Δ Prot.",

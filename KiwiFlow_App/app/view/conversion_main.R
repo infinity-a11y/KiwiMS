@@ -1116,7 +1116,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         output$hits_tab <- NULL
         output$conversion_hits_tab <- NULL
         output$total_pct_binding <- NULL
-        output$conversion_present_compounds_pie <- NULL
+        output$samples_present_compounds_pie <- NULL
         output$conversion_sample_spectrum <- NULL
         output$conversion_present_compounds_table <- NULL
         output$total_pct_cmps_binding <- NULL
@@ -1124,7 +1124,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         output$conversion_cmp_spectra <- NULL
         output$conversion_cmp_table <- NULL
         output$conversion_cmp_protein <- NULL
-        output$conversion_sample_protein <- NULL
+        output$cmp_selected_compound <- NULL
         output$color_variable_ui <- NULL
 
         # Show declaration tabs
@@ -1151,6 +1151,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           )
         }
         bslib::nav_remove("tabs", "Compounds View")
+        bslib::nav_remove("tabs", "Proteins View")
         bslib::nav_remove("tabs", "Samples View")
         shiny::removeUI(
           selector = paste0("#", ns("conversion_tab_items"))
@@ -2148,6 +2149,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               as.numeric(gsub("[^0-9.-]", "", `Total %-Binding`))
             )
 
+          test2 <<- hits_summary
+
           #### Append truncated sample IDs ----
           # Create a mapping data frame
           mapping <- data.frame(
@@ -2160,12 +2163,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             hits_summary$`Sample ID`,
             mapping$original
           )]
-
-          hits_summary$truncSample_ID <- substr(
-            hits_summary$truncSample_ID,
-            1,
-            22
-          )
 
           #### Hits table tab ----
           bslib::nav_insert(
@@ -2377,25 +2374,31 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   class = "conversion-samples-wrapper",
                   shiny::div(
                     class = "conversion-samples-control",
-                    shinyWidgets::pickerInput(
-                      ns("conversion_sample_picker"),
-                      "Select Sample",
-                      choices = if (anyNA(hits_summary$`Cmp Name`)) {
-                        # Extract the vectors
-                        hits_vec <- unique(hits_summary$`Sample ID`[
-                          !is.na(hits_summary$`Cmp Name`)
-                        ])
-                        no_hits_vec <- unique(hits_summary$`Sample ID`[is.na(
-                          hits_summary$`Cmp Name`
-                        )])
+                    shiny::div(
+                      class = "sample-cmp-prot-picker",
+                      shinyWidgets::pickerInput(
+                        ns("conversion_sample_picker"),
+                        "Select Sample",
+                        choices = if (anyNA(hits_summary$`Cmp Name`)) {
+                          # Extract the vectors
+                          hits_vec <- unique(hits_summary$`Sample ID`[
+                            !is.na(hits_summary$`Cmp Name`)
+                          ])
+                          no_hits_vec <- unique(hits_summary$`Sample ID`[is.na(
+                            hits_summary$`Cmp Name`
+                          )])
 
-                        list(
-                          Hits = stats::setNames(hits_vec, hits_vec),
-                          `No Hits` = stats::setNames(no_hits_vec, no_hits_vec)
-                        )
-                      } else {
-                        unique(hits_summary$`Sample ID`)
-                      }
+                          list(
+                            Hits = stats::setNames(hits_vec, hits_vec),
+                            `No Hits` = stats::setNames(
+                              no_hits_vec,
+                              no_hits_vec
+                            )
+                          )
+                        } else {
+                          unique(hits_summary$`Sample ID`)
+                        }
+                      )
                     ),
                     shiny::div(
                       class = "conversion-samples-stats",
@@ -2417,7 +2420,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                           shiny::div(
                             class = "kobs-val",
                             shinycssloaders::withSpinner(
-                              shiny::uiOutput(ns("conversion_cmp_protein")),
+                              shiny::uiOutput(ns("samples_selected_protein")),
                               type = 1,
                               color = "#7777f9"
                             )
@@ -2484,7 +2487,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                         )
                       ),
                       shiny::uiOutput(
-                        ns("conversion_present_compounds_pie_ui")
+                        ns("samples_present_compounds_pie_ui")
                       ),
                       full_screen = TRUE
                     )
@@ -2512,6 +2515,65 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             )
           )
 
+          ##### Selected protein info ----
+          output$samples_selected_protein <- shiny::renderUI(
+            {
+              shiny::req(hits_summary, input$conversion_sample_picker)
+
+              selected <- input$conversion_sample_picker
+
+              protein <- hits_summary$`Protein`[
+                hits_summary$`Sample ID` == selected
+              ]
+
+              measured_protein_mw <- hits_summary$`Meas. Prot.`[
+                hits_summary$`Sample ID` == selected
+              ]
+
+              theor_protein_mw <- hits_summary$`Theor. Prot.`[
+                hits_summary$`Sample ID` == selected
+              ]
+
+              shiny::div(
+                class = "conversion-sample-protein-box",
+                shiny::div(
+                  class = "conversion-sample-protein-names",
+                  shiny::HTML("Name<br>Mw<br>Signal")
+                ),
+                shiny::div(
+                  class = "conversion-sample-protein",
+                  shiny::HTML(paste(
+                    protein,
+                    "<br>",
+                    format(
+                      as.numeric(gsub(
+                        " Da",
+                        "",
+                        theor_protein_mw[1]
+                      )),
+                      big.mark = ",",
+                      scientific = FALSE
+                    ),
+                    "Da <br>",
+                    format(
+                      round(
+                        mean(as.numeric(gsub(
+                          " Da",
+                          "",
+                          measured_protein_mw
+                        ))),
+                        2
+                      ),
+                      big.mark = ",",
+                      scientific = FALSE
+                    ),
+                    "Da"
+                  ))
+                )
+              )
+            }
+          )
+
           ##### Total %-binding for one sample across compounds ----
           output$total_pct_binding <- shiny::renderUI({
             shiny::req(hits_summary, input$conversion_sample_picker)
@@ -2522,7 +2584,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           })
 
           ##### Compound distribution donut chart ----
-          output$conversion_present_compounds_pie_ui <- shiny::renderUI({
+          output$samples_present_compounds_pie_ui <- shiny::renderUI({
             shiny::req(hits_summary, input$conversion_sample_picker)
 
             tbl <- hits_summary |>
@@ -2531,11 +2593,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               )
 
             if (anyNA(tbl)) {
-              shiny::textOutput(ns("conversion_present_compounds_na"))
+              shiny::textOutput(ns("samples_present_compounds_na"))
             } else {
               shinycssloaders::withSpinner(
                 plotly::plotlyOutput(
-                  ns("conversion_present_compounds_pie"),
+                  ns("samples_present_compounds_pie"),
                   height = "100%"
                 ),
                 type = 1,
@@ -2544,11 +2606,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             }
           })
 
-          output$conversion_present_compounds_na <- shiny::renderText(
+          output$samples_present_compounds_na <- shiny::renderText(
             "No binding events"
           )
 
-          output$conversion_present_compounds_pie <- plotly::renderPlotly({
+          output$samples_present_compounds_pie <- plotly::renderPlotly({
             shiny::req(
               hits_summary,
               input$conversion_sample_picker,
@@ -2856,12 +2918,15 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   class = "conversion-samples-wrapper",
                   shiny::div(
                     class = "conversion-samples-control",
-                    shinyWidgets::pickerInput(
-                      ns("conversion_compound_picker"),
-                      "Select Compound",
-                      choices = unique(hits_summary$`Cmp Name`)[
-                        !is.na(unique(hits_summary$`Cmp Name`))
-                      ]
+                    shiny::div(
+                      class = "sample-cmp-prot-picker",
+                      shinyWidgets::pickerInput(
+                        ns("conversion_compound_picker"),
+                        "Select Compound",
+                        choices = unique(hits_summary$`Cmp Name`)[
+                          !is.na(unique(hits_summary$`Cmp Name`))
+                        ]
+                      )
                     ),
                     shiny::div(
                       class = "conversion-samples-stats",
@@ -2883,7 +2948,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                           shiny::div(
                             class = "kobs-val",
                             shinycssloaders::withSpinner(
-                              shiny::uiOutput(ns("conversion_sample_protein")),
+                              shiny::uiOutput(ns("cmp_selected_compound")),
                               type = 1,
                               color = "#7777f9"
                             )
@@ -2985,11 +3050,49 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             )
           )
 
+          ##### Selected Compound info ----
+          output$cmp_selected_compound <- shiny::renderUI({
+            shiny::req(hits_summary, input$conversion_compound_picker)
+
+            selected <- input$conversion_compound_picker
+
+            theor_cmp_mw <- hits_summary[
+              hits_summary$`Cmp Name` %in% selected,
+            ]
+
+            if (length(unique(theor_cmp_mw$`Theor. Cmp`))) {
+              shiny::div(
+                class = "conversion-sample-protein-box",
+                shiny::div(
+                  class = "conversion-sample-protein-names",
+                  shiny::HTML("Name<br>Mw")
+                ),
+                shiny::div(
+                  class = "conversion-sample-protein",
+                  shiny::HTML(paste(
+                    selected,
+                    "<br>",
+                    format(
+                      as.numeric(gsub(
+                        " Da",
+                        "",
+                        unique(theor_cmp_mw$`Theor. Cmp`)
+                      )),
+                      big.mark = ",",
+                      scientific = FALSE
+                    ),
+                    "Da"
+                  ))
+                )
+              )
+            }
+          })
+
           ##### Total %-binding for one compound across samples ----
           output$total_pct_cmps_binding <- shiny::renderUI({
             shiny::req(
               hits_summary,
-              input$conversion_sample_picker
+              input$conversion_compound_picker
             )
 
             total_bind <- hits_summary$`Total %-Binding`[
@@ -3226,7 +3329,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               ),
               color_cmp = colors,
               truncated = if (truncate_names) mapping else FALSE,
-              color_variable = color_variable
+              color_variable = color_variable,
+              hits_summary = hits_summary
             )
           })
 
@@ -3346,6 +3450,656 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             return(cmp_table)
           })
 
+          #### Protein View tab ----
+          bslib::nav_insert(
+            "tabs",
+            bslib::nav_panel(
+              title = "Proteins View",
+              shiny::div(
+                class = "conversion-result-wrapper",
+                shiny::div(
+                  class = "conversion-samples-wrapper",
+                  shiny::div(
+                    class = "conversion-samples-control",
+                    shiny::div(
+                      class = "sample-cmp-prot-picker",
+                      shinyWidgets::pickerInput(
+                        ns("conversion_protein_picker"),
+                        "Select Protein",
+                        choices = unique(hits_summary$`Protein`)[
+                          !is.na(unique(hits_summary$`Protein`))
+                        ]
+                      )
+                    ),
+                    shiny::div(
+                      class = "conversion-samples-stats",
+                      shiny::div(
+                        class = "card-custom",
+                        bslib::card(
+                          bslib::card_header(
+                            class = "bg-dark help-header",
+                            "Protein",
+                            shiny::div(
+                              class = "tooltip-bttn",
+                              shiny::actionButton(
+                                ns("conversion_samples_protein_tooltip_bttn"),
+                                label = "",
+                                icon = shiny::icon("circle-question")
+                              )
+                            )
+                          ),
+                          shiny::div(
+                            class = "kobs-val",
+                            shinycssloaders::withSpinner(
+                              shiny::uiOutput(ns("proteins_selected_protein")),
+                              type = 1,
+                              color = "#7777f9"
+                            )
+                          )
+                        )
+                      ),
+                      shiny::div(
+                        class = "card-custom",
+                        bslib::card(
+                          bslib::card_header(
+                            class = "bg-dark help-header",
+                            "Total %-Binding",
+                            shiny::div(
+                              class = "tooltip-bttn",
+                              shiny::actionButton(
+                                ns("total_pct_bind_tooltip_bttn"),
+                                label = "",
+                                icon = shiny::icon("circle-question")
+                              )
+                            )
+                          ),
+                          shiny::div(
+                            class = "kobs-val",
+                            shinycssloaders::withSpinner(
+                              shiny::uiOutput(ns(
+                                "total_pct_prot_binding_select_ui"
+                              )),
+                              type = 1,
+                              color = "#7777f9"
+                            ),
+                            shinycssloaders::withSpinner(
+                              shiny::uiOutput(ns("total_pct_prot_binding")),
+                              type = 1,
+                              color = "#7777f9"
+                            )
+                          )
+                        )
+                      )
+                    )
+                  ),
+                  shiny::div(
+                    class = "card-custom cmp-table",
+                    bslib::card(
+                      bslib::card_header(
+                        class = "bg-dark help-header",
+                        "Table View"
+                      ),
+                      shinycssloaders::withSpinner(
+                        DT::DTOutput(
+                          ns("conversion_prot_table")
+                        ),
+                        type = 1,
+                        color = "#7777f9"
+                      ),
+                      full_screen = TRUE
+                    )
+                  ),
+                  shiny::div(
+                    class = "card-custom",
+                    bslib::card(
+                      bslib::card_header(
+                        class = "bg-dark help-header",
+                        "Compound Distribution",
+                        shiny::div(
+                          class = "tooltip-bttn",
+                          shiny::actionButton(
+                            ns("mass_spectra_tooltip_bttn"),
+                            label = "",
+                            icon = shiny::icon("circle-question")
+                          )
+                        )
+                      ),
+                      shinycssloaders::withSpinner(
+                        plotly::plotlyOutput(
+                          ns("protein_view_cmp_distribution"),
+                          height = "100%"
+                        ),
+                        type = 1,
+                        color = "#7777f9"
+                      ),
+                      full_screen = TRUE
+                    )
+                  ),
+                  shiny::div(
+                    class = "card-custom",
+                    bslib::card(
+                      bslib::card_header(
+                        class = "bg-dark help-header",
+                        "Annotated Spectrum"
+                      ),
+                      shinycssloaders::withSpinner(
+                        plotly::plotlyOutput(
+                          ns("conversion_prot_spectra"),
+                          height = "100%"
+                        ),
+                        type = 1,
+                        color = "#7777f9"
+                      ),
+                      full_screen = TRUE
+                    )
+                  )
+                )
+              )
+            )
+          )
+
+          ##### Selected protein info ----
+          output$proteins_selected_protein <- shiny::renderUI(
+            {
+              shiny::req(hits_summary, input$conversion_protein_picker)
+
+              selected <- input$conversion_protein_picker
+
+              measured_protein_mw <- hits_summary$`Meas. Prot.`[
+                hits_summary$Protein == selected
+              ]
+
+              theor_protein_mw <- hits_summary$`Theor. Prot.`[
+                hits_summary$Protein == selected
+              ]
+
+              shiny::div(
+                class = "conversion-sample-protein-box",
+                shiny::div(
+                  class = "conversion-sample-protein-names",
+                  shiny::HTML("Name<br>Mw<br>Signal")
+                ),
+                shiny::div(
+                  class = "conversion-sample-protein",
+                  shiny::HTML(paste(
+                    selected,
+                    "<br>",
+                    format(
+                      as.numeric(gsub(
+                        " Da",
+                        "",
+                        theor_protein_mw[1]
+                      )),
+                      big.mark = ",",
+                      scientific = FALSE
+                    ),
+                    "Da <br>",
+                    format(
+                      round(
+                        mean(as.numeric(gsub(
+                          " Da",
+                          "",
+                          measured_protein_mw
+                        ))),
+                        2
+                      ),
+                      big.mark = ",",
+                      scientific = FALSE
+                    ),
+                    "Da",
+                    if (length(measured_protein_mw) > 1) {
+                      "±"
+                    },
+                    if (length(measured_protein_mw) > 1) {
+                      round(
+                        stats::sd(as.numeric(gsub(
+                          " Da",
+                          "",
+                          measured_protein_mw
+                        ))),
+                        2
+                      )
+                    }
+                  ))
+                )
+              )
+            }
+          )
+
+          ##### Total %-binding for one compound across samples ----
+          output$total_pct_prot_binding_select_ui <- shiny::renderUI({
+            shiny::req(
+              hits_summary,
+              input$conversion_sample_picker
+            )
+
+            choices <- unique(hits_summary$`Cmp Name`[
+              hits_summary$`Protein` == input$conversion_protein_picker &
+                !is.na(hits_summary$`Cmp Name`)
+            ])
+
+            shiny::div(
+              class = "prot-binding-ui",
+              shiny::div(
+                "Select Compound",
+                style = "
+                                align-self: center;
+                                font-size: 0.8em;
+                                text-align: left;
+                                line-height: 1;
+                                margin-bottom: 0;
+                                font-style: italic;
+                                font-size: 14px;
+                                "
+              ),
+              shiny::selectInput(
+                ns("total_pct_prot_binding_select"),
+                NULL,
+                choices = choices
+              )
+            )
+          })
+
+          output$total_pct_prot_binding <- shiny::renderUI({
+            shiny::req(
+              hits_summary,
+              input$conversion_protein_picker,
+              input$total_pct_prot_binding_select
+            )
+            total_bind <- hits_summary$`Total %-Binding`[
+              hits_summary$`Protein` == input$conversion_protein_picker &
+                hits_summary$`Cmp Name` == input$total_pct_prot_binding_select &
+                !is.na(hits_summary$`Cmp Name`)
+            ]
+
+            if (length(total_bind) == 1) {
+              msg <- total_bind
+            } else {
+              total_bind_num <- as.numeric(gsub("%", "", total_bind))
+              msg <- shiny::div(
+                class = "conversion-sample-protein-box",
+                shiny::div(
+                  class = "conversion-sample-protein-names",
+                  shiny::HTML("Range<br>Mean ± SD")
+                ),
+                shiny::div(
+                  class = "conversion-sample-protein",
+                  shiny::HTML(
+                    paste0(
+                      round(min(total_bind_num), 2),
+                      "% - ",
+                      round(max(total_bind_num), 2),
+                      "%<br>",
+                      round(mean(total_bind_num), 2),
+                      "% ± ",
+                      round(stats::sd(total_bind_num), 2)
+                    )
+                  )
+                )
+              )
+            }
+
+            return(msg)
+          })
+
+          ##### Compound distribution bar chart ----
+          output$proteins_present_compounds_pie_ui <- shiny::renderUI({
+            shiny::req(hits_summary, input$conversion_protein_picker)
+
+            tbl <- hits_summary |>
+              dplyr::filter(
+                `Sample ID` == input$conversion_protein_picker
+              )
+
+            if (anyNA(tbl)) {
+              shiny::textOutput(ns("proteins_present_compounds_na"))
+            } else {
+              shinycssloaders::withSpinner(
+                plotly::plotlyOutput(
+                  ns("protein_view_cmp_distribution"),
+                  height = "100%"
+                ),
+                type = 1,
+                color = "#7777f9"
+              )
+            }
+          })
+
+          output$proteins_present_compounds_na <- shiny::renderText(
+            "No binding events"
+          )
+
+          output$protein_view_cmp_distribution <- plotly::renderPlotly({
+            shiny::req(
+              hits_summary,
+              input$color_scale,
+              input$conversion_protein_picker,
+              input$color_variable,
+              !is.null(input$truncate_names)
+            )
+            color_variable <- input$color_variable
+            truncate_names <- input$truncate_names
+
+            # Filter hits for selected compound
+            tbl <- hits_summary |>
+              dplyr::filter(
+                `Protein` == input$conversion_protein_picker &
+                  !is.na(`Cmp Name`)
+              ) |>
+              dplyr::mutate(
+                `Sample ID` = if (truncate_names) {
+                  `truncSample_ID`
+                } else {
+                  `Sample ID`
+                },
+                mass_stoich = paste0(
+                  "[",
+                  `Theor. Cmp`,
+                  "]",
+                  sapply(`Bind. Stoich.`, function(x) {
+                    as.character(htmltools::tags$sub(x))
+                  })
+                )
+              )
+
+            # Factorize sample ID to sort by %-binding
+            tbl$`Cmp Name` <- factor(
+              tbl$`Cmp Name`,
+              levels = unique(tbl$`Cmp Name`)
+            )
+
+            # Make compound color scale
+            colors <- get_cmp_colorScale(
+              filtered_table = tbl,
+              scale = input$color_scale,
+              variable = color_variable,
+              trunc = truncate_names
+            )
+
+            # Assign font colors to match background brightness
+            tbl <- tbl |>
+              dplyr::mutate(
+                bg_hex = if (color_variable == "Compounds") {
+                  colors[as.character(`Cmp Name`)]
+                } else if (color_variable == "Samples") {
+                  colors[as.character(`Sample ID`)]
+                },
+                label_color = get_contrast_color(bg_hex),
+                mass_stoich = paste0(
+                  "<span style='color:",
+                  label_color,
+                  "'>",
+                  mass_stoich,
+                  "</span>"
+                )
+              )
+
+            # Conditional color variable
+            if (color_variable == "Compounds") {
+              color <- ~`Cmp Name`
+            } else if (color_variable == "Samples") {
+              color <- ~`Sample ID`
+            }
+
+            # Create plotly bar chart
+            bar_chart <- plotly::plot_ly(data = tbl) |>
+              plotly::add_trace(
+                x = ~`Cmp Name`,
+                y = ~ as.numeric(gsub("%", "", `%-Binding`)),
+                color = color,
+                colors = colors,
+                type = 'bar',
+                name = ~mass_stoich,
+                hovertemplate = ~ paste0(
+                  "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
+                  `Theor. Cmp`,
+                  "</b><br>",
+                  "<span style='opacity: 0.8'>Stoichiometry:</span> <b>",
+                  `Bind. Stoich.`,
+                  "</b><br>",
+                  "<span style='opacity: 0.8'>%-Binding:</span> <b>",
+                  `%-Binding`,
+                  "</b>",
+                  "<extra><div style='text-align: left;'>",
+                  "<span style='opacity: 0.8;;'>Cmp Name: </span><b>",
+                  `Cmp Name`,
+                  "</b><br>",
+                  "<span style='opacity: 0.8;'>Sample ID: </span><b>",
+                  `Sample ID`,
+                  "</b>",
+                  "</div></extra>"
+                ),
+                hoverlabel = list(align = "left", valign = "middle"),
+                text = ~mass_stoich,
+                textposition = 'inside',
+                marker = list(line = list(color = 'white', width = 1)),
+                showlegend = FALSE
+              )
+
+            if (length(tbl$`Cmp Name`) <= 20) {
+              # Calculate totals for the top labels
+              totals <- dplyr::group_by(tbl, `Cmp Name`) |>
+                dplyr::summarize(
+                  total_val = sum(as.numeric(gsub("%", "", `%-Binding`)))
+                )
+              bar_chart <- bar_chart |>
+                plotly::add_trace(
+                  data = totals,
+                  x = ~`Cmp Name`,
+                  y = ~total_val,
+                  type = 'scatter',
+                  mode = 'text',
+                  text = ~ paste0(total_val, "%"),
+                  textposition = 'top center',
+                  showlegend = FALSE,
+                  hoverinfo = 'none',
+                  inherit = FALSE,
+                  textfont = list(
+                    color = '#ffffff',
+                    size = if (length(tbl$`Cmp Name`) <= 8) {
+                      16
+                    } else if (length(tbl$`Cmp Name`) <= 16) {
+                      14
+                    } else {
+                      12
+                    }
+                  )
+                )
+            }
+            bar_chart |>
+              plotly::layout(
+                barmode = 'stack',
+                bargap = 0.5,
+                paper_bgcolor = 'rgba(0,0,0,0)',
+                plot_bgcolor = 'rgba(0,0,0,0)',
+                xaxis = list(
+                  title = list(text = NULL),
+                  showgrid = FALSE,
+                  zeroline = FALSE,
+                  color = '#ffffff',
+                  showticklabels = ifelse(
+                    max(nchar(levels(tbl$`Cmp Name`))) > 22,
+                    FALSE,
+                    TRUE
+                  )
+                ),
+                yaxis = list(
+                  range = c(
+                    0,
+                    max(as.numeric(gsub("%", "", tbl$`%-Binding`))) + 10
+                  ),
+                  title = list(text = "%-Binding"),
+                  zeroline = FALSE,
+                  gridcolor = "#7f7f7fff",
+                  color = '#ffffff'
+                )
+              )
+          })
+
+          ##### Compound spectra plots ----
+          output$conversion_prot_spectra <- plotly::renderPlotly({
+            shiny::req(
+              hits_summary,
+              input$color_scale,
+              input$conversion_protein_picker,
+              !is.null(input$truncate_names),
+              input$color_variable
+            )
+
+            conversion_compound_picker <- input$conversion_protein_picker
+            truncate_names <- input$truncate_names
+            color_variable <- input$color_variable
+
+            # Filter hits for selected compound
+            tbl <- dplyr::filter(
+              hits_summary,
+              `Protein` == input$conversion_protein_picker & !is.na(`Cmp Name`)
+            )
+
+            # Make compound color scale
+            colors <- get_cmp_colorScale(
+              filtered_table = tbl,
+              scale = input$color_scale,
+              variable = color_variable,
+              trunc = truncate_names
+            )
+
+            # Create spectra plot
+            multiple_spectra(
+              results_list = conversion_sidebar_vars$result_list(),
+              samples = unique(hits_summary$`Sample ID`[
+                hits_summary$`Protein` == input$conversion_protein_picker &
+                  !is.na(hits_summary$`Cmp Name`)
+              ]),
+              cubic = ifelse(
+                TRUE,
+                TRUE,
+                FALSE
+              ),
+              color_cmp = colors,
+              truncated = if (truncate_names) mapping else FALSE,
+              color_variable = color_variable,
+              hits_summary = hits_summary
+            )
+          })
+
+          ##### Compounds view table ----
+          output$conversion_prot_table <- DT::renderDataTable({
+            shiny::req(
+              hits_summary,
+              input$color_scale,
+              input$conversion_protein_picker,
+              input$color_variable,
+              !is.null(input$truncate_names)
+            )
+
+            color_variable <- input$color_variable
+            truncate_names <- input$truncate_names
+
+            # Filter table for selected compound
+            tbl <- hits_summary |>
+              dplyr::filter(
+                `Protein` == input$conversion_protein_picker &
+                  !is.na(`Cmp Name`)
+              )
+
+            # Prepare compound coloring
+            colors <- get_cmp_colorScale(
+              filtered_table = tbl,
+              scale = input$color_scale,
+              variable = color_variable,
+              trunc = truncate_names
+            )
+
+            # Create data table
+            cmp_table <- tbl |>
+              dplyr::group_by(`Cmp Name`) |>
+              dplyr::reframe(
+                `Cmp Name` = `Cmp Name`,
+                `Mass Shift` = `Theor. Cmp`,
+                `Stoichiometry` = `Bind. Stoich.`,
+                `Sample ID` = if (truncate_names) {
+                  `truncSample_ID`
+                } else {
+                  `Sample ID`
+                },
+                `%-Binding` = as.numeric(gsub(
+                  "%",
+                  "",
+                  `%-Binding`
+                )),
+                `Total %-Binding` = `Total %-Binding`
+              ) |>
+              dplyr::relocate(
+                `Mass Shift`,
+                .before = 3
+              ) |>
+              dplyr::arrange(
+                # `Sample ID`,
+                as.numeric(gsub("%", "", `Total %-Binding`)),
+                dplyr::desc(`Mass Shift`),
+                `Stoichiometry`
+              ) |>
+              DT::datatable(
+                extensions = "RowGroup",
+                rownames = FALSE,
+                class = "order-column",
+                selection = "none",
+                options = list(
+                  dom = 't',
+                  paging = FALSE,
+                  scrollY = "175px",
+                  scrollCollapse = TRUE,
+                  rowGroup = if (length(unique(tbl$`Cmp Name`)) == nrow(tbl)) {
+                    NULL
+                  } else {
+                    list(dataSrc = 0)
+                  },
+                  columnDefs = list(
+                    list(
+                      visible = FALSE,
+                      targets = 1
+                    ),
+                    list(
+                      visible = ifelse(
+                        length(unique(tbl$`Cmp Name`)) == nrow(tbl),
+                        TRUE,
+                        FALSE
+                      ),
+                      targets = 0
+                    ),
+                    list(className = 'dt-center', targets = "_all"),
+                    list(
+                      targets = 4,
+                      render = htmlwidgets::JS(chart_js)
+                    ),
+                    list(
+                      targets = -1,
+                      className = 'dt-last-col'
+                    )
+                  )
+                )
+              ) |>
+              DT::formatStyle(
+                columns = ifelse(
+                  color_variable == "Compounds",
+                  "Cmp Name",
+                  "Sample ID"
+                ),
+                target = 'row',
+                backgroundColor = DT::styleEqual(
+                  levels = names(colors),
+                  values = colors
+                ),
+                color = DT::styleEqual(
+                  levels = names(colors),
+                  values = get_contrast_color(colors)
+                )
+              )
+
+            return(cmp_table)
+          })
+
           ### Insert tabset input panel ----
           bslib::nav_insert(
             id = "tabs",
@@ -3426,27 +4180,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             )
           })
 
-          ### Selected protein info ----
-          output$conversion_cmp_protein <- output$conversion_sample_protein <- shiny::renderUI(
-            {
-              shiny::div(
-                class = "conversion-sample-protein-box",
-                shiny::div(
-                  class = "conversion-sample-protein-names",
-                  shiny::HTML("Name<br>Mw")
-                ),
-                shiny::div(
-                  class = "conversion-sample-protein",
-                  shiny::HTML(paste(
-                    "RACA<br>",
-                    format(27234, big.mark = ",", scientific = FALSE),
-                    "Da"
-                  ))
-                )
-              )
-            }
-          )
-
           # Switch to Hits tab
           set_selected_tab("Hits", session)
         }
@@ -3465,7 +4198,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         output$hits_tab <- NULL
         output$conversion_hits_tab <- NULL
         output$total_pct_binding <- NULL
-        output$conversion_present_compounds_pie <- NULL
+        output$samples_present_compounds_pie <- NULL
         output$conversion_sample_spectrum <- NULL
         output$conversion_present_compounds_table <- NULL
         output$total_pct_cmps_binding <- NULL
@@ -3473,7 +4206,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         output$conversion_cmp_spectra <- NULL
         output$conversion_cmp_table <- NULL
         output$conversion_cmp_protein <- NULL
-        output$conversion_sample_protein <- NULL
+        output$cmp_selected_compound <- NULL
         output$color_variable_ui <- NULL
 
         #### Show declaration tabs ----
@@ -3500,6 +4233,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           )
         }
         bslib::nav_remove("tabs", "Compounds View")
+        bslib::nav_remove("tabs", "Proteins View")
         bslib::nav_remove("tabs", "Samples View")
         shiny::removeUI(
           selector = paste0("#", ns("conversion_tab_items"))

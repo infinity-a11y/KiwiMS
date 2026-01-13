@@ -408,6 +408,9 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
         # Dev Mode
 
         # result_list(readRDS(
+        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits1.rds"
+        # ))
+        # result_list(readRDS(
         #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_7.rds"
         # ))
         # result_list(readRDS(
