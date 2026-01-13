@@ -1338,7 +1338,7 @@ decon-report-modal .btn-default {
   display: flex;
   margin-bottom: 10px !important;
   padding-bottom: 5px !important;
-  font-size: 1em !important;
+  font-size: 1.1em !important;
   gap: 5px;
   justify-content: space-between;
 }
@@ -3530,4 +3530,71 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 
 .conversion-samples-control .bootstrap-select .dropdown-menu {
   max-height: 350px !important;
+}
+
+#app-conversion_sidebar-analysis_select {
+  font-size: 15px;
+  margin-top: 20px;
+}
+
+.result-interface-selector-ui .shiny-options-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.result-interface-selector-ui .shiny-input-container .radio {
+  box-shadow: inset 0px 0px 17px 1px #ffffffb5;
+  border-radius: 5px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  padding-left: 5px;
+  margin: 0;
+  height: 45px;
+}
+
+.result-interface-selector-ui .shiny-input-container .radio label {
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+  align-content: center;
+}
+
+.complex-picker .form-group {
+  margin-top: -10px;
+  width: 80% !important;
+  justify-self: end;
+}
+
+.complex-picker .bootstrap-select > .dropdown-toggle {
+  height: 32.5px;
+  padding: 5px;
+  font-weight: 200;
+}
+
+.complex-picker .bootstrap-select .dropdown-menu {
+  max-height: 150px !important;
+  max-width: 195px !important;
+}
+
+.complex-picker-ui {
+  position: relative;
+  top: -25px;
+}
+
+#complex-picker-connector {
+  border: 1px solid #858585;
+  position: relative;
+  height: 30px;
+  border-right-color: transparent;
+  border-top-color: transparent;
+  left: 7%;
+  top: 9px;
+  width: 13%;
+  border-bottom-left-radius: 5px;
+}
+
+.complex-picker-connector-color {
+  border-left-color: #404040 !important;
+  border-bottom-color: #404040 !important;
 }

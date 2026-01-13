@@ -54,55 +54,6 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
       )
     })
 
-    # Render conversion result controls UI
-    output$conversion_result_controls_ui <- shiny::renderUI({
-      # List of protein-compound-complexes
-      complexes <- list(
-        "Global Overview",
-        "COOB" = paste0("Cmp-", 30:40),
-        "KRAS" = paste0("ALMP3kALMP3kALMP3k-", 1:5)
-      )
-
-      # shinyjs::disabled(
-      picker_ui <- shinyWidgets::pickerInput(
-        ns("sample_picker"),
-        shiny::div(
-          class = "label-tooltip",
-          shiny::tags$label("Complexes"),
-          shiny::div(
-            class = "tooltip-bttn",
-            shiny::actionButton(
-              ns("result_picker_tooltip_bttn"),
-              label = "",
-              icon = shiny::icon("circle-question")
-            )
-          )
-        ),
-        choices = complexes
-      )
-      # )
-
-      shiny::div(
-        class = "interaction-analysis-flex",
-        shiny::fluidRow(
-          shiny::column(
-            width = 12,
-            shiny::div(
-              class = "sidebar-title conversion-title",
-              "Results"
-            ),
-            picker_ui,
-            shiny::actionButton(
-              ns("report_conversion_results"),
-              "Report",
-              icon = shiny::icon("square-poll-vertical"),
-              width = "100%"
-            )
-          )
-        )
-      )
-    })
-
     # Render conversion analysis controls UI
     output$conversion_analysis_controls_ui <- shiny::renderUI(
       shiny::div(
@@ -171,18 +122,101 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
                 value = FALSE
               )
             ),
-            shinyjs::disabled(
-              shiny::actionButton(
-                ns("run_binding_analysis"),
-                "Run",
-                icon = shiny::icon("play"),
-                width = "100%"
-              )
+            # shinyjs::disabled(
+            shiny::actionButton(
+              ns("run_binding_analysis"),
+              "Run",
+              icon = shiny::icon("play"),
+              width = "100%"
             )
+            # )
           )
         )
       )
     )
+
+    # Render conversion result controls UI
+    output$conversion_result_controls_ui <- shiny::renderUI({
+      complexes <- list(
+        "Global Overview",
+        "COOB" = paste0("Cmp-", 30:40),
+        "KRAS" = paste0("ALMP3kALMP3kALMP3k-", 1:5)
+      )
+
+      shiny::div(
+        class = "interaction-analysis-flex",
+        shiny::fluidRow(
+          shiny::column(
+            width = 12,
+            shiny::div(
+              class = "sidebar-title conversion-title",
+              "Results Menu"
+            ),
+            shiny::div(
+              class = "result-interface-selector-ui",
+              shiny::radioButtons(
+                inputId = ns("analysis_select"),
+                label = NULL,
+                choiceNames = list(
+                  "Relative Binding",
+                  shiny::span(
+                    "K",
+                    htmltools::tags$sub("i"),
+                    " / k",
+                    htmltools::tags$sub("inact")
+                  )
+                ),
+                choiceValues = list(1, 2)
+              ),
+              shiny::div(
+                class = "complex-picker-ui",
+                shiny::div(id = "complex-picker-connector"),
+                shiny::div(
+                  class = "complex-picker",
+                  shinyWidgets::pickerInput(
+                    ns("complex"),
+                    NULL,
+                    choices = complexes
+                  )
+                )
+              )
+            ),
+            shiny::actionButton(
+              ns("report_conversion_results"),
+              "Report",
+              icon = shiny::icon("square-poll-vertical"),
+              width = "100%"
+            )
+          )
+        )
+      )
+    })
+
+    shiny::observe({
+      shiny::req(input$analysis_select)
+
+      if (input$analysis_select == 1) {
+        shinyjs::addClass(
+          selector = ".complex-picker .form-group .bootstrap-select",
+          class = "custom-disable"
+        )
+        shinyjs::removeClass(
+          id = "complex-picker-connector",
+          class = "complex-picker-connector-color",
+          asis = TRUE
+        )
+      } else {
+        shinyjs::removeClass(
+          selector = ".complex-picker .form-group .bootstrap-select",
+          class = "custom-disable"
+        )
+        shinyjs::addClass(
+          id = "complex-picker-connector",
+          class = "complex-picker-connector-color",
+          asis = TRUE
+        )
+      }
+    })
 
     shiny::observeEvent(conversion_main_vars$samples_confirmed(), {
       shinyjs::toggleState("run_ki_kinact")
@@ -297,78 +331,78 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
     shiny::observeEvent(input$run_binding_analysis, {
       if (analysis_status() == "pending") {
         # # Delay conversion start
-        Sys.sleep(1)
+        # Sys.sleep(1)
 
-        # Activate JS function for conversion process tracking
-        shinyjs::runjs(sprintf(
-          conversion_tracking_js,
-          ns("console_log"),
-          ns("scroll_btn")
-        ))
+        # # Activate JS function for conversion process tracking
+        # shinyjs::runjs(sprintf(
+        #   conversion_tracking_js,
+        #   ns("console_log"),
+        #   ns("scroll_btn")
+        # ))
 
-        # Add hits
-        withCallingHandlers(
-          expr = {
-            result_with_hits <- add_hits(
-              conversion_main_vars$input_list()$result,
-              sample_table = conversion_main_vars$input_list()$Samples_Table,
-              protein_table = conversion_main_vars$input_list()$Protein_Table,
-              compound_table = conversion_main_vars$input_list()$Compound_Table,
-              peak_tolerance = input$peak_tolerance,
-              max_multiples = input$max_multiples,
-              session = session,
-              ns = ns
-            )
+        # # Add hits
+        # withCallingHandlers(
+        #   expr = {
+        #     result_with_hits <- add_hits(
+        #       conversion_main_vars$input_list()$result,
+        #       sample_table = conversion_main_vars$input_list()$Samples_Table,
+        #       protein_table = conversion_main_vars$input_list()$Protein_Table,
+        #       compound_table = conversion_main_vars$input_list()$Compound_Table,
+        #       peak_tolerance = input$peak_tolerance,
+        #       max_multiples = input$max_multiples,
+        #       session = session,
+        #       ns = ns
+        #     )
 
-            result_with_hits1 <<- result_with_hits
+        #     result_with_hits1 <<- result_with_hits
 
-            # If Ki/kinact analysis is set to be performed
-            if (input$run_ki_kinact) {
-              result_with_hits$hits_summary <- summarize_hits(
-                result_with_hits,
-                conc_time = conversion_main_vars$input_list()$ConcTime_Table
-              )
+        #     # If Ki/kinact analysis is set to be performed
+        #     if (input$run_ki_kinact) {
+        #       result_with_hits$hits_summary <- summarize_hits(
+        #         result_with_hits,
+        #         conc_time = conversion_main_vars$input_list()$ConcTime_Table
+        #       )
 
-              # Add binding/kobs results to result list
-              result_with_hits$binding_kobs_result <- add_kobs_binding_result(
-                result_with_hits
-              )
+        #       # Add binding/kobs results to result list
+        #       result_with_hits$binding_kobs_result <- add_kobs_binding_result(
+        #         result_with_hits
+        #       )
 
-              # Add Ki/kinact results to result list
-              result_with_hits$ki_kinact_result <- add_ki_kinact_result(
-                result_with_hits
-              )
-            } else {
-              # Only protein conversion without Ki/kinact analysus
-              result_with_hits$hits_summary <- summarize_hits(
-                result_with_hits,
-                conc_time = NULL
-              )
-            }
-          },
-          message = function(m) {
-            clean_msg <- gsub("\\", "\\\\", m$message, fixed = TRUE)
-            clean_msg <- gsub("'", "\\'", clean_msg, fixed = TRUE)
-            clean_msg <- gsub("\n", "<br>", clean_msg, fixed = TRUE)
+        #       # Add Ki/kinact results to result list
+        #       result_with_hits$ki_kinact_result <- add_ki_kinact_result(
+        #         result_with_hits
+        #       )
+        #     } else {
+        #       # Only protein conversion without Ki/kinact analysus
+        #       result_with_hits$hits_summary <- summarize_hits(
+        #         result_with_hits,
+        #         conc_time = NULL
+        #       )
+        #     }
+        #   },
+        #   message = function(m) {
+        #     clean_msg <- gsub("\\", "\\\\", m$message, fixed = TRUE)
+        #     clean_msg <- gsub("'", "\\'", clean_msg, fixed = TRUE)
+        #     clean_msg <- gsub("\n", "<br>", clean_msg, fixed = TRUE)
 
-            js_cmd <- sprintf(
-              "
-            var el = document.getElementById('%s');
-            if (el) {
-              el.innerHTML += '%s';
-              el.doAutoScroll();
-            }
-              ",
-              ns("console_log"),
-              clean_msg
-            )
+        #     js_cmd <- sprintf(
+        #       "
+        #     var el = document.getElementById('%s');
+        #     if (el) {
+        #       el.innerHTML += '%s';
+        #       el.doAutoScroll();
+        #     }
+        #       ",
+        #       ns("console_log"),
+        #       clean_msg
+        #     )
 
-            shinyjs::runjs(js_cmd)
-          }
-        )
+        #     shinyjs::runjs(js_cmd)
+        #   }
+        # )
 
-        # Assign result list and hits table to reactive vars
-        result_list(result_with_hits)
+        # # Assign result list and hits table to reactive vars
+        # result_list(result_with_hits)
 
         # TODO
         # Dev Mode
@@ -398,9 +432,9 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
         #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_61.rds"
         # ))
 
-        # result_list(readRDS(
-        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results.rds"
-        # ))
+        result_list(readRDS(
+          "C:\\Users\\Marian\\Desktop\\KF_Testing\\results.rds"
+        ))
         # result_list(readRDS(
         #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results_conversion.rds"
         # ))
@@ -860,7 +894,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
     return(
       shiny::reactiveValues(
         result_list = shiny::reactive(result_list()),
-        sample_picker = shiny::reactive(input$sample_picker),
+        complex = shiny::reactive(input$complex),
         run_analysis = shiny::reactive(input$run_binding_analysis),
         peak_tolerance = shiny::reactive(input$peak_tolerance),
         run_ki_kinact = shiny::reactive(input$run_ki_kinact)
