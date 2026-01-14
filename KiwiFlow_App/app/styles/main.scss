@@ -907,7 +907,7 @@ td.listbox.htDimmed.current.highlight {
 
 .bslib-full-screen-enter {
   opacity: 1 !important;
-  background-color: hsl(0deg 0% 100% / 29%) !important;
+  background-color: hsl(0deg 0% 100% / 50%) !important;
 }
 
 .bslib-full-screen-enter > svg {
@@ -1280,7 +1280,7 @@ decon-report-modal .btn-default {
   display: flex;
   flex-direction: column;
   gap: 5%;
-  align-items: center;
+  // align-items: center;
 }
 
 .conversion-result-wrapper .row {
@@ -1711,8 +1711,9 @@ app-conversion_main-samples_present_compounds_pie > div > div {
   background: transparent;
 }
 
-#app-conversion_main-hits_tab,
-.conc-hits-table {
+#app-conversion_main-hits_tab
+// .conc-hits-table
+{
   height: 100%;
   font-size: 12px;
 }
@@ -1894,9 +1895,9 @@ app-conversion_main-samples_present_compounds_pie > div > div {
 }
 
 /* Hits Table Specifics */
-.conc-hits-table th {
-  background: transparent;
-}
+// .conc-hits-table th {
+//   background: transparent;
+// }
 
 .result-conc-tab .plotly,
 .result-conc-tab .js-plotly-plot .plotly,
@@ -2206,7 +2207,8 @@ table.dataTable tbody td {
 
 #app-conversion_main-conversion_cmp_table,
 #app-conversion_main-conversion_prot_table,
-#app-conversion_main-conversion_present_compounds_table {
+#app-conversion_main-conversion_present_compounds_table,
+.conc-hits-table .datatables {
   height: 1px !important;
 }
 
@@ -2215,14 +2217,17 @@ table.dataTable tbody td {
 #app-conversion_main-conversion_cmp_table div.dataTables_scrollBody,
 #app-conversion_main-conversion_cmp_table div.dataTables_scrollHead,
 #app-conversion_main-conversion_prot_table div.dataTables_scrollBody,
-#app-conversion_main-conversion_prot_table div.dataTables_scrollHead {
+#app-conversion_main-conversion_prot_table div.dataTables_scrollHead,
+.conc-hits-table div.dataTables_scrollBody,
+.conc-hits-table div.dataTables_scrollHead {
   width: 99% !important;
   flex-basis: unset !important;
 }
 
 #app-conversion_main-conversion_present_compounds_table .table,
 #app-conversion_main-conversion_cmp_table .table,
-#app-conversion_main-conversion_prot_table .table {
+#app-conversion_main-conversion_prot_table .table,
+.conc-hits-table .table {
   margin-top: 0px !important;
   width: 100% !important;
   margin: 0;
@@ -2342,7 +2347,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 
 #app-conversion_main-conversion_cmp_table,
 #app-conversion_main-conversion_prot_table,
-#app-conversion_main-conversion_present_compounds_table {
+#app-conversion_main-conversion_present_compounds_table,
+.conc-hits-table .datatables {
   width: 99% !important;
   height: 1px !important;
   flex-basis: unset !important;
@@ -3649,4 +3655,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 .conversion-samples-stats .selectize-dropdown-content {
   max-height: 150px !important;
   max-width: 195px !important;
+}
+
+.disabled label {
+  cursor: auto !important;
 }

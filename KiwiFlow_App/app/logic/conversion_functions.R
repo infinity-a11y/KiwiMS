@@ -2465,16 +2465,19 @@ multiple_spectra <- function(
   show_labels = FALSE,
   time = FALSE,
   color_cmp = NULL,
-  truncated = TRUE,
+  truncated = FALSE,
   color_variable = NULL,
   hits_summary = NULL
 ) {
   results_list <<- results_list
   samples <<- samples
   cubic <<- TRUE
+  show_labels <<- show_labels
+  time <<- time
   color_cmp <<- color_cmp
   truncated <<- truncated
   color_variable <<- color_variable
+  hits_summary <<- hits_summary
 
   # Omit NA in samples
   samples <- samples[!is.na(samples)]
@@ -2552,12 +2555,20 @@ multiple_spectra <- function(
   prot_peaks <- as.numeric(gsub(
     " Da",
     "",
-    hits_summary$`Meas. Prot.`[hits_summary$truncSample_ID %in% peaks_data$z]
+    hits_summary$`Meas. Prot.`[
+      if (time) {
+        hits_summary$`Sample ID` %in% samples
+      } else if (!isFALSE(truncated)) {
+        hits_summary$truncSample_ID %in% peaks_data$z
+      } else {
+        hits_summary$`Sample ID` %in% peaks_data$z
+      }
+    ]
   ))
 
   peaks_data <- dplyr::mutate(
     peaks_data,
-    symbol = ifelse(mw %in% prot_peaks, "diamond", "circle")
+    symbol = ifelse(mass %in% prot_peaks, "diamond", "circle")
   )
 
   # Prepare compound marker colors and symbols
@@ -2589,14 +2600,18 @@ multiple_spectra <- function(
       line <- list(width = 1)
       marker_color <- ~ I(z_color)
     }
+  } else {
+    marker_color <- "white"
+    color <- viridisLite::viridis(length(unique(spectrum_data$z)))
   }
 
   peaks_data2 <<- peaks_data
   spectrum_data2 <<- spectrum_data
 
   # Condition on data size
-  condition <- length(unique(peaks_data$z)) > 8 |
-    max(nchar(as.character(peaks_data$z))) > 22
+  condition <- (length(unique(peaks_data$z)) > 8 |
+    max(nchar(as.character(peaks_data$z))) > 22) &
+    isFALSE(time)
 
   plotly::plot_ly(
     data = spectrum_data,
@@ -2605,8 +2620,8 @@ multiple_spectra <- function(
     z = ~z,
     split = ~z,
     # marker = list(
-    color = color,
-    # )
+    # color = color,
+    # ),
     # colors = c("#ffffff", pal),
     # color = ~z,
     # colors = if (time) {
@@ -2619,7 +2634,7 @@ multiple_spectra <- function(
     # },
     type = "scatter3d",
     mode = "lines",
-    line = line,
+    # line = line,
     showlegend = FALSE,
     hoverinfo = "text",
     text = ~ paste0(
@@ -2736,23 +2751,6 @@ multiple_spectra <- function(
           } else {
             list(x = 1.4, y = 1.1, z = 1.4)
           },
-          # if (
-          # length(unique(peaks_data$z)) <= 8
-          # &
-          # max(nchar(as.character(peaks_data$z))) <= 22
-          # ) {
-          #   list(
-          #     x = 1.1 + length(unique(peaks_data$z)) / 12,
-          #     y = 0.8 + length(unique(peaks_data$z)) / 12,
-          #     z = 1.1 + length(unique(peaks_data$z)) / 12
-          #   )
-          # } else {
-          #   list(
-          #     x = 1.3,
-          #     y = 1.0,
-          #     z = 1.3
-          #   )
-          # },
           up = list(x = 0, y = 1.5, z = 0)
         )
       )
@@ -2977,15 +2975,16 @@ render_hits_table <- function(
   single_conc = NULL,
   withzero = FALSE,
   selected_cols = NULL,
-  bar_chart = FALSE,
+  bar_chart = character(),
   compounds = NULL,
   samples = NULL,
   select = FALSE,
   colors = NULL,
   color_variable = NULL,
-  expand = FALSE,
+  expand = TRUE,
   na_include = TRUE,
-  truncated = NULL
+  truncated = NULL,
+  clickable = FALSE
 ) {
   hits_table <<- hits_table
   concentration_colors <<- concentration_colors
@@ -3000,12 +2999,15 @@ render_hits_table <- function(
   color_variable <<- color_variable
   expand <<- expand
   na_include <<- na_include
+  clickable <<- clickable
+  single_conc <<- single_conc
 
   # Modify if samples are summarized instead of expanded
   if (!expand) {
     hits_table <- hits_table |>
       dplyr::distinct(
         `Sample ID`,
+        `Protein`,
         `Cmp Name`,
         `Theor. Prot.`,
         `Total %-Binding`,
@@ -3059,17 +3061,24 @@ render_hits_table <- function(
   }
 
   # Filter columns
-  selected_cols <- selected_cols[selected_cols %in% names(hits_table)]
-  hits_table <- dplyr::select(
-    hits_table,
-    c(
+  if (!is.null(selected_cols)) {
+    selected_cols <- selected_cols[selected_cols %in% names(hits_table)]
+
+    std_cols <- c(
       "Sample ID",
       "Protein",
       "Cmp Name",
-      "truncSample_ID",
-      all_of(selected_cols)
+      if (any("[Cmp]" == names(hits_table))) "[Cmp]" else NULL,
+      if (any("Time" == names(hits_table))) "Time" else NULL,
+      "truncSample_ID"
     )
-  )
+
+    hits_table <- hits_table |>
+      dplyr::select(
+        all_of(std_cols),
+        all_of(selected_cols)
+      )
+  }
 
   # Adapt table layout
   if (!is.null(single_conc)) {
@@ -3084,41 +3093,46 @@ render_hits_table <- function(
   }
 
   # Determine clickable cells
-  if (any(names(hits_table) %in% c("Sample ID", "Cmp Name"))) {
-    clickable_targets <- which(
-      names(hits_table) %in% c("Sample ID", "Cmp Name")
-    ) -
-      1
-  } else {
-    clickable_targets <- NULL
+  rowCallback <- NULL
+  if (clickable) {
+    if (any(names(hits_table) %in% c("Sample ID", "Cmp Name"))) {
+      clickable_targets <- which(
+        names(hits_table) %in% c("Sample ID", "Cmp Name")
+      ) -
+        1
+
+      rowCallback <- c(
+        "function(row, data){",
+        "  var targets = ",
+        jsonlite::toJSON(clickable_targets),
+        ";",
+        "  for(var i=0; i<data.length; i++){",
+        "    if(data[i] === null){",
+        "      $('td:eq('+i+')', row).html('N/A').css({'color': 'inherit'});",
+        "    }",
+        "    if(targets.includes(i) && data[i] !== null){",
+        "      $('td:eq('+i+')', row).addClass('clickable-column');",
+        "    }",
+        "  }",
+        "}"
+      )
+    } else {
+      clickable_targets <- NULL
+    }
   }
 
-  rowCallback <- c(
-    "function(row, data){",
-    "  var targets = ",
-    jsonlite::toJSON(clickable_targets),
-    ";",
-    "  for(var i=0; i<data.length; i++){",
-    "    if(data[i] === null){",
-    "      $('td:eq('+i+')', row).html('N/A').css({'color': 'inherit'});",
-    "    }",
-    "    if(targets.includes(i) && data[i] !== null){",
-    "      $('td:eq('+i+')', row).addClass('clickable-column');",
-    "    }",
-    "  }",
-    "}"
-  )
-
   # Sorting
-  hits_table <- hits_table |>
-    dplyr::arrange(
-      # if (color_variable == "Samples") `Sample ID` else `Cmp Name`,
-      # if (color_variable == "Samples") `Cmp Name` else `Sample ID`,
-      `Protein`,
-      `Cmp Name`,
-      `Total %-Binding`,
-      `%-Binding`
-    )
+  if (clickable) {
+    hits_table <- hits_table |>
+      dplyr::arrange(
+        # if (color_variable == "Samples") `Sample ID` else `Cmp Name`,
+        # if (color_variable == "Samples") `Cmp Name` else `Sample ID`,
+        `Protein`,
+        `Cmp Name`,
+        `Total %-Binding`,
+        if (any("%-Binding" == names(hits_table))) `%-Binding` else NULL
+      )
+  }
 
   # Generate datatable
   hits_datatable <- DT::datatable(
@@ -3183,7 +3197,7 @@ render_hits_table <- function(
         vals <- plotly::toRGB(c("#e5e5e5", concentration_colors))
       } else {
         lvls <- paste(names(concentration_colors), "µM")
-        vals <- plotly::toRGB(, concentration_colors)
+        vals <- plotly::toRGB(concentration_colors)
       }
 
       hits_datatable <- hits_datatable |>
@@ -3561,6 +3575,8 @@ handle_file_upload <- function(
 # Transform summarized hits into readable table
 #' @export
 transform_hits <- function(hits_summary, run_ki_kinact) {
+  hits_summary2 <<- hits_summary
+
   # Shared transformations
   summary_table <- hits_summary |>
     dplyr::mutate(
@@ -3596,12 +3612,14 @@ transform_hits <- function(hits_summary, run_ki_kinact) {
         time = paste(time, "min"),
         concentration = paste(concentration, "µM")
       ) |>
-      dplyr::select(-c(3, 17)) |>
+      dplyr::select(-c(17)) |>
+      # dplyr::select(-c(3, 17)) |>
       dplyr::relocate(c(concentration, time), .before = `Mw Protein [Da]`)
 
     new_names <- c(
       "Well",
       "Sample ID",
+      "Protein",
       "[Cmp]",
       "Time",
       "Theor. Prot.",

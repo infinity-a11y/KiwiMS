@@ -40,11 +40,11 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
-    # Declare reactive vars
+    # Declare reactive vars ----
     result_list <- shiny::reactiveVal(NULL)
     analysis_status <- shiny::reactiveVal("pending")
 
-    # Render sidebar ui
+    # Render sidebar UI ----
     output$conversion_sidebar_ui <- shiny::renderUI({
       shiny::div(
         class = "conversion-sidebar-ui",
@@ -54,7 +54,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
       )
     })
 
-    # Render conversion analysis controls UI
+    ## Analysis controls UI ----
     output$conversion_analysis_controls_ui <- shiny::renderUI(
       shiny::div(
         class = "interaction-analysis-flex",
@@ -135,7 +135,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
       )
     )
 
-    # Render conversion result controls UI
+    ## Result controls UI ----
     output$conversion_result_controls_ui <- shiny::renderUI({
       complexes <- list(
         "Global Overview",
@@ -192,38 +192,14 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
       )
     })
 
-    shiny::observe({
-      shiny::req(input$analysis_select)
-
-      if (input$analysis_select == 1) {
-        shinyjs::addClass(
-          selector = ".complex-picker .form-group .bootstrap-select",
-          class = "custom-disable"
-        )
-        shinyjs::removeClass(
-          id = "complex-picker-connector",
-          class = "complex-picker-connector-color",
-          asis = TRUE
-        )
-      } else {
-        shinyjs::removeClass(
-          selector = ".complex-picker .form-group .bootstrap-select",
-          class = "custom-disable"
-        )
-        shinyjs::addClass(
-          id = "complex-picker-connector",
-          class = "complex-picker-connector-color",
-          asis = TRUE
-        )
-      }
-    })
-
+    # Analysis launch UI ----
+    ## Toggle checkbox ----
     shiny::observeEvent(conversion_main_vars$samples_confirmed(), {
       shinyjs::toggleState("run_ki_kinact")
       shinyjs::toggleClass(selector = ".checkbox", class = "checkbox-disable")
     })
 
-    # Enable/Disable conversion parameter and launch input UI
+    ## Toggle button ----
     shiny::observe({
       if (isTRUE(conversion_main_vars$conversion_ready())) {
         shinyjs::enable("run_binding_analysis")
@@ -240,7 +216,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
       }
     })
 
-    # Update sidebar inputs on result interface reset
+    # Update UI on reset results event ----
     shiny::observeEvent(deconvolution_main_vars$continue_conversion(), {
       shiny::updateActionButton(
         session = session,
@@ -253,7 +229,9 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
       analysis_status("pending")
     })
 
-    # Show modal for conversion log
+    # Analysis run event ----
+
+    ## Running analysis UI ----
     shiny::observeEvent(
       input$run_binding_analysis,
       {
@@ -327,7 +305,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
       priority = 10
     )
 
-    # Event run conversion
+    ## Conditional processing ----
     shiny::observeEvent(input$run_binding_analysis, {
       if (analysis_status() == "pending") {
         # # Delay conversion start
@@ -451,6 +429,16 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
         )
         shinyjs::disable("peak_tolerance")
         shinyjs::disable("max_multiples")
+        shinyjs::removeClass(
+          selector = "#app-conversion_sidebar-analysis_select > div > div:nth-child(1)",
+          class = "custom-disable"
+        )
+        if (input$run_ki_kinact) {
+          shinyjs::removeClass(
+            selector = "#app-conversion_sidebar-analysis_select > div > div:nth-child(2)",
+            class = "custom-disable"
+          )
+        }
 
         # Enable modal window buttons
         shinyjs::enable("save_conversion_log")
@@ -479,12 +467,12 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
       }
     })
 
-    # Dismiss conversion
+    ## Dismiss conversion ----
     shiny::observeEvent(input$dismiss_conversion, {
       shiny::removeModal()
     })
 
-    # Copy conversion log to clipboard
+    ## Copy conversion log to clipboard ----
     shiny::observeEvent(input$copy_conversion_log, {
       shinyjs::runjs(sprintf(
         "
@@ -497,7 +485,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
       ))
     })
 
-    # Save conversion log
+    ## Save conversion log ----
     shiny::observeEvent(input$save_conversion_log, {
       # Generate a filename with a timestamp
       fname <- paste0(
@@ -521,6 +509,46 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
       ))
     })
 
+    # Analysis select UI conditional rendering ----
+    ## Toggle classes ----
+    shiny::observe({
+      shiny::req(input$analysis_select)
+
+      if (input$analysis_select == 1) {
+        shinyjs::addClass(
+          selector = ".complex-picker .form-group .bootstrap-select",
+          class = "custom-disable"
+        )
+        shinyjs::removeClass(
+          id = "complex-picker-connector",
+          class = "complex-picker-connector-color",
+          asis = TRUE
+        )
+      } else {
+        shinyjs::removeClass(
+          selector = ".complex-picker .form-group .bootstrap-select",
+          class = "custom-disable"
+        )
+        shinyjs::addClass(
+          id = "complex-picker-connector",
+          class = "complex-picker-connector-color",
+          asis = TRUE
+        )
+      }
+    })
+
+    ## Initial disable of analysis select input ----
+    shinyjs::addClass(
+      selector = "#app-conversion_sidebar-analysis_select > div > div:nth-child(1)",
+      class = "custom-disable"
+    )
+    shinyjs::addClass(
+      selector = "#app-conversion_sidebar-analysis_select > div > div:nth-child(2)",
+      class = "custom-disable"
+    )
+
+    # TODO Info / Hints ----
+    ## Info UI ----
     output$conversion_info_ui <- shiny::renderUI({
       shiny::req(conversion_main_vars$selected_tab())
 
@@ -570,6 +598,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
       )
     })
 
+    ## Info title ----
     output$selected_module <- shiny::renderUI({
       shiny::req(conversion_main_vars$selected_tab())
 
@@ -600,9 +629,10 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
       )
     })
 
-    # Tooltip events
+    # Tooltips ----
     shiny::observeEvent(input$sidebar_tooltip_bttn, {
       if (conversion_main_vars$selected_tab() == "Proteins") {
+        ## Protein declaration ----
         title <- "Protein Declaration"
         hints <- shiny::column(
           width = 12,
@@ -620,6 +650,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
           shiny::br()
         )
       } else if (conversion_main_vars$selected_tab() == "Compounds") {
+        ## Compound declaration ----
         title <- "Compound Declaration"
         hints <- shiny::column(
           width = 12,
@@ -639,6 +670,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
           shiny::br()
         )
       } else if (conversion_main_vars$selected_tab() == "Samples") {
+        ## Sample declaration ----
         title <- "Samples Declaration"
         hints <- shiny::column(
           width = 12,
@@ -658,6 +690,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
           shiny::br()
         )
       } else if (conversion_main_vars$selected_tab() == "Binding") {
+        ## Binding analysis ----
         title <- "Binding Analysis"
         hints <- shiny::column(
           width = 12,
@@ -686,6 +719,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
           )
         )
       } else if (conversion_main_vars$selected_tab() == "Hits") {
+        ## Hits table ----
         title <- "Hits Table"
         hints <- shiny::fluidRow(
           shiny::br(),
@@ -771,6 +805,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
           )
         )
       } else {
+        ## Concentration time series ----
         title <- "Single Concentration Time Series"
         hints <- "Binding parameters derived from mass spectra of time series measurements of a single concentration."
       }
@@ -790,6 +825,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
       )
     })
 
+    ## Peak tolerance ----
     shiny::observeEvent(input$peak_tol_tooltip_bttn, {
       shiny::showModal(
         shiny::div(
@@ -856,6 +892,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
       )
     })
 
+    ## Maximum stoichiometry ----
     shiny::observeEvent(input$max_mult_tooltip_bttn, {
       shiny::showModal(
         shiny::div(
@@ -893,14 +930,15 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
       )
     })
 
-    # Server return values
+    # Server return values ----
     return(
       shiny::reactiveValues(
         result_list = shiny::reactive(result_list()),
         complex = shiny::reactive(input$complex),
         run_analysis = shiny::reactive(input$run_binding_analysis),
         peak_tolerance = shiny::reactive(input$peak_tolerance),
-        run_ki_kinact = shiny::reactive(input$run_ki_kinact)
+        run_ki_kinact = shiny::reactive(input$run_ki_kinact),
+        analysis_select = shiny::reactive(input$analysis_select)
       )
     )
   })
