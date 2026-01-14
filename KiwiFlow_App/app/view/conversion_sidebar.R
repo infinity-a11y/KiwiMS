@@ -154,20 +154,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
             ),
             shiny::div(
               class = "result-interface-selector-ui",
-              shiny::radioButtons(
-                inputId = ns("analysis_select"),
-                label = NULL,
-                choiceNames = list(
-                  "Relative Binding",
-                  shiny::span(
-                    "K",
-                    htmltools::tags$sub("i"),
-                    " / k",
-                    htmltools::tags$sub("inact")
-                  )
-                ),
-                choiceValues = list(1, 2)
-              ),
+              shiny::uiOutput(ns("analysis_select_ui")),
               shiny::div(
                 class = "complex-picker-ui",
                 shiny::div(id = "complex-picker-connector"),
@@ -429,6 +416,16 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
         )
         shinyjs::disable("peak_tolerance")
         shinyjs::disable("max_multiples")
+
+        # Enable modal window buttons
+        shinyjs::enable("save_conversion_log")
+        shinyjs::enable("copy_conversion_log")
+        shinyjs::enable("dismiss_conversion")
+        shinyjs::addClass(
+          id = "dismiss_conversion",
+          class = "btn-highlight"
+        )
+
         shinyjs::removeClass(
           selector = "#app-conversion_sidebar-analysis_select > div > div:nth-child(1)",
           class = "custom-disable"
@@ -439,15 +436,6 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
             class = "custom-disable"
           )
         }
-
-        # Enable modal window buttons
-        shinyjs::enable("save_conversion_log")
-        shinyjs::enable("copy_conversion_log")
-        shinyjs::enable("dismiss_conversion")
-        shinyjs::addClass(
-          id = "dismiss_conversion",
-          class = "btn-highlight"
-        )
 
         analysis_status("done")
       } else {
@@ -465,6 +453,39 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
           disabled = FALSE
         )
       }
+    })
+
+    ## Render analysis select input element ----
+    output$analysis_select_ui <- shiny::renderUI({
+      shiny::tagList(
+        shiny::radioButtons(
+          inputId = ns("analysis_select"),
+          label = NULL,
+          choiceNames = list(
+            "Relative Binding",
+            shiny::span(
+              "K",
+              htmltools::tags$sub("i"),
+              " / k",
+              htmltools::tags$sub("inact")
+            )
+          ),
+          choiceValues = list(1, 2)
+        ),
+        # This script runs the moment this UI is added to the page
+        shiny::tags$script(paste0(
+          "
+      (function() {
+        var selector = '#",
+          ns("analysis_select"),
+          " .radio:nth-child(1), #",
+          ns("analysis_select"),
+          " .radio:nth-child(2)';
+        $(selector).addClass('custom-disable');
+      })();
+    "
+        ))
+      )
     })
 
     ## Dismiss conversion ----

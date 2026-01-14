@@ -1160,12 +1160,12 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         conversion_vars <- shiny::reactiveValues(
           modified_results = NULL,
           select_concentration = NULL,
-          formatted_hits = NULL,
           conc_colors = NULL,
           expand_helper = FALSE,
           hits_summary = NULL
         )
-        hits_summary <- NULL
+
+        hits_summary <- conversion_vars$hits_summary <- NULL
       }
 
       # Activate table observer
@@ -1329,7 +1329,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     conversion_vars <- shiny::reactiveValues(
       modified_results = NULL,
       select_concentration = NULL,
-      formatted_hits = NULL,
       conc_colors = NULL,
       expand_helper = FALSE,
       hits_summary = NULL
@@ -1386,18 +1385,15 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         result_list <<- result_list
 
         analysis_select <- conversion_sidebar_vars$analysis_select()
-        analysis_select <<- analysis_select
 
         shiny::isolate({
           run_ki_kinact <- conversion_sidebar_vars$run_ki_kinact()
-          run_ki_kinact <<- run_ki_kinact
           select_concentration <- conversion_vars$select_concentration
-          select_concentration1 <<- select_concentration
         })
 
         if (!is.null(result_list)) {
           ### Compute hits summary ----
-          hits_summary <- result_list$"hits_summary" |>
+          hits_summary <- conversion_vars$hits_summary <- result_list$"hits_summary" |>
             transform_hits(
               run_ki_kinact = run_ki_kinact
             ) |>
@@ -1466,12 +1462,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           conversion_vars <- shiny::reactiveValues(
             modified_results = NULL,
             select_concentration = NULL,
-            formatted_hits = NULL,
             conc_colors = NULL,
             expand_helper = FALSE,
             hits_summary = NULL
           )
-          hits_summary <- NULL
+          hits_summary <- conversion_vars$hits_summary <- NULL
 
           # Select samples tab
           set_selected_tab("Samples", session)
@@ -1494,6 +1489,28 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             "Samples"
           )
 
+          #### Remove Ki/kinact interface elements ----
+          output$binding_tab <- NULL
+          output$kinact <- NULL
+          output$Ki <- NULL
+          output$Ki_kinact <- NULL
+          output$kobs_result <- NULL
+          output$binding_plot <- NULL
+          output$kobs_plot <- NULL
+          output$hits_tab <- NULL
+          if (!is.null(conversion_vars$select_concentration)) {
+            lapply(names(conversion_vars$select_concentration), function(id) {
+              output[[paste0("concentration_tab", id)]] <- NULL
+              output[[paste0("concentration_tab_", id, "_hits")]] <- NULL
+              output[[paste0(
+                "concentration_tab_",
+                id,
+                "_binding_plot"
+              )]] <- NULL
+              output[[paste0("concentration_tab_", id, "_spectra")]] <- NULL
+            })
+          }
+
           #### Remove tabs from Ki/kinact interface ----
           bslib::nav_remove("tabs", "Binding")
           bslib::nav_remove("tabs", "Hits")
@@ -1508,7 +1525,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           # Create a mapping data frame
           mapping <- data.frame(
             original = unique(hits_summary$`Sample ID`),
-            truncated = label_smart_clean(unique(hits_summary$`Sample ID`))
+            truncated = label_smart_clean(unique(
+              hits_summary$`Sample ID`
+            ))
           )
 
           # Add column with truncated IDs
@@ -1529,12 +1548,15 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     width = 2,
                     align = "center",
                     shiny::div(
-                      class = "hits-tab-expand",
-                      shinyjs::disabled(
-                        shiny::checkboxInput(
-                          ns("hits_tab_expand"),
-                          label = "Expand Samples",
-                          value = TRUE
+                      class = "hits-tab-checkboxes",
+                      shiny::div(
+                        class = "hits-tab-expand-box",
+                        shinyjs::disabled(
+                          shiny::checkboxInput(
+                            ns("hits_tab_expand"),
+                            label = "Expand Samples",
+                            value = TRUE
+                          )
                         )
                       ),
                       shiny::checkboxInput(
@@ -1552,8 +1574,12 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                       shinyWidgets::pickerInput(
                         ns("hits_tab_sample_select"),
                         label = "Select Samples",
-                        choices = unique(hits_summary$`Sample ID`),
-                        selected = unique(hits_summary$`Sample ID`),
+                        choices = unique(
+                          hits_summary$`Sample ID`
+                        ),
+                        selected = unique(
+                          hits_summary$`Sample ID`
+                        ),
                         multiple = TRUE,
                         options = list(
                           `actions-box` = TRUE
@@ -1569,11 +1595,19 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                       shinyWidgets::pickerInput(
                         ns("hits_tab_compound_select"),
                         label = "Select Compounds",
-                        choices = unique(hits_summary$`Cmp Name`)[
-                          !is.na(unique(hits_summary$`Cmp Name`))
+                        choices = unique(
+                          hits_summary$`Cmp Name`
+                        )[
+                          !is.na(unique(
+                            hits_summary$`Cmp Name`
+                          ))
                         ],
-                        selected = unique(hits_summary$`Cmp Name`)[
-                          !is.na(unique(hits_summary$`Cmp Name`))
+                        selected = unique(
+                          hits_summary$`Cmp Name`
+                        )[
+                          !is.na(unique(
+                            hits_summary$`Cmp Name`
+                          ))
                         ],
                         multiple = TRUE,
                         options = list(
@@ -1697,6 +1731,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               # Get current column indeces of sample and compound columns
               cols <- names(hits_datatable_current()$x$data)
               sample_col <- which(cols == "Sample ID") - 1
+              prot_col <- which(cols == "Protein") - 1
               cmp_col <- which(cols == "Cmp Name") - 1
 
               # Actions if click corresponds to sample or compound
@@ -1708,6 +1743,14 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 )
 
                 set_selected_tab("Samples View", session)
+              } else if (length(prot_col) && cell_clicked$col == prot_col) {
+                shinyWidgets::updatePickerInput(
+                  session,
+                  "conversion_protein_picker",
+                  selected = cell_clicked$value
+                )
+
+                set_selected_tab("Proteins View", session)
               } else if (length(cmp_col) && cell_clicked$col == cmp_col) {
                 shinyWidgets::updatePickerInput(
                   session,
@@ -1875,7 +1918,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           ##### Selected protein info ----
           output$samples_selected_protein <- shiny::renderUI(
             {
-              shiny::req(hits_summary, input$conversion_sample_picker)
+              shiny::req(
+                hits_summary,
+                input$conversion_sample_picker
+              )
 
               selected <- input$conversion_sample_picker
 
@@ -1933,7 +1979,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
           ##### Total %-binding for one sample across compounds ----
           output$total_pct_binding <- shiny::renderUI({
-            shiny::req(hits_summary, input$conversion_sample_picker)
+            shiny::req(
+              hits_summary,
+              input$conversion_sample_picker
+            )
 
             hits_summary$`Total %-Binding`[
               hits_summary$`Sample ID` == input$conversion_sample_picker
@@ -1942,7 +1991,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
           ##### Compound distribution donut chart ----
           output$samples_present_compounds_pie_ui <- shiny::renderUI({
-            shiny::req(hits_summary, input$conversion_sample_picker)
+            shiny::req(
+              hits_summary,
+              input$conversion_sample_picker
+            )
 
             tbl <- hits_summary |>
               dplyr::filter(
@@ -2114,16 +2166,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               input$color_scale,
               !is.null(input$truncate_names)
             )
-
             selected_sample <- input$conversion_sample_picker
             color_variable <- input$color_variable
-
             # Filter table for selected sample
             tbl <- hits_summary |>
               dplyr::filter(
                 `Sample ID` == selected_sample
               )
-
             spectrum_plot(
               sample = result_list$deconvolution[[
                 selected_sample
@@ -2280,8 +2329,12 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                       shinyWidgets::pickerInput(
                         ns("conversion_compound_picker"),
                         "Select Compound",
-                        choices = unique(hits_summary$`Cmp Name`)[
-                          !is.na(unique(hits_summary$`Cmp Name`))
+                        choices = unique(
+                          hits_summary$`Cmp Name`
+                        )[
+                          !is.na(unique(
+                            hits_summary$`Cmp Name`
+                          ))
                         ]
                       )
                     ),
@@ -2409,7 +2462,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
           ##### Selected Compound info ----
           output$cmp_selected_compound <- shiny::renderUI({
-            shiny::req(hits_summary, input$conversion_compound_picker)
+            shiny::req(
+              hits_summary,
+              input$conversion_compound_picker
+            )
 
             selected <- input$conversion_compound_picker
 
@@ -2830,7 +2886,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                       shinyWidgets::pickerInput(
                         ns("conversion_protein_picker"),
                         "Select Protein",
-                        choices = unique(hits_summary$`Protein`)[
+                        choices = unique(
+                          hits_summary$`Protein`
+                        )[
                           !is.na(unique(hits_summary$`Protein`))
                         ]
                       )
@@ -2965,7 +3023,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           ##### Selected protein info ----
           output$proteins_selected_protein <- shiny::renderUI(
             {
-              shiny::req(hits_summary, input$conversion_protein_picker)
+              shiny::req(
+                hits_summary,
+                input$conversion_protein_picker
+              )
 
               selected <- input$conversion_protein_picker
 
@@ -3108,7 +3169,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
           ##### Compound distribution bar chart ----
           output$proteins_present_compounds_pie_ui <- shiny::renderUI({
-            shiny::req(hits_summary, input$conversion_protein_picker)
+            shiny::req(
+              hits_summary,
+              input$conversion_protein_picker
+            )
 
             tbl <- hits_summary |>
               dplyr::filter(
@@ -3505,7 +3569,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           output$color_variable_ui <- shiny::renderUI({
             shiny::req(hits_summary)
 
-            condition <- length(unique(hits_summary$`Sample ID`)) >
+            condition <- length(unique(
+              hits_summary$`Sample ID`
+            )) >
               length(unique(hits_summary$`Cmp Name`[
                 !is.na(hits_summary$`Cmp Name`)
               ]))
@@ -3569,7 +3635,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           binding_kobs_result_names <- names(
             result_list$binding_kobs_result
           )
-          concentrations <- binding_kobs_result_names[
+          concentrations <- conversion_vars$concentrations <- binding_kobs_result_names[
             !binding_kobs_result_names %in%
               c("binding_table", "binding_plot", "kobs_result_table")
           ]
@@ -4246,8 +4312,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
               ##### Hits table ----
               output[[paste0(local_ui_id, "_hits")]] <- DT::renderDT({
-                hits_summary1 <<- hits_summary
-
                 render_hits_table(
                   hits_table = hits_summary |>
                     dplyr::filter(
@@ -4326,17 +4390,17 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       suspended = TRUE
     )
 
-    ## Observer for converion result interface ----
+    ## Observer for conversion result interface ----
     ### Enable/Disable hits table expand samples input ----
     shiny::observe({
       shiny::req(input$hits_tab_expand, conversion_vars$hits_summary)
 
       shinyjs::toggleState(
         id = "hits_tab_expand",
-        condition = any(duplicated(hits_summary$`Sample ID`))
+        condition = any(duplicated(conversion_vars$hits_summary$`Sample ID`))
       )
       shinyjs::toggleClass(
-        selector = ".hits-tab-expand .checkbox",
+        selector = ".hits-tab-expand-box .checkbox",
         class = "checkbox-disable"
       )
     })
@@ -4358,11 +4422,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             "hits_tab_col_select",
             choices = hits_table_names[
               !hits_table_names %in%
-                c("Sample ID", "Cmp Name", "truncSample_ID")
+                c("Sample ID", "Cmp Name", "[Cmp]", "Time", "truncSample_ID")
             ],
             selected = hits_table_names[
               !hits_table_names %in%
-                c("Sample ID", "Cmp Name", "truncSample_ID")
+                c("Sample ID", "Cmp Name", "[Cmp]", "Time", "truncSample_ID")
             ][-c(1:2, 4:5, 7, 9)],
           )
 

@@ -775,6 +775,7 @@ input[type="number"]::-webkit-inner-spin-button {
   box-shadow: 0px 0px 10px 2px #00000087;
   border-radius: 4px;
   background: #e5e5e5;
+  max-height: 250px;
 }
 
 /* --- DataTables --- */
@@ -1709,6 +1710,7 @@ app-conversion_main-samples_present_compounds_pie > div > div {
   text-decoration: none;
   border-left: none !important;
   background: transparent;
+  align-content: center;
 }
 
 #app-conversion_main-hits_tab
@@ -2156,7 +2158,7 @@ table.dataTable thead > tr > th.sorting::before {
   border-radius: 2px;
 }
 
-.hits-tab-expand {
+.hits-tab-checkboxes {
   display: flex;
   flex-direction: column;
   justify-content: space-evenly;
@@ -2165,23 +2167,23 @@ table.dataTable thead > tr > th.sorting::before {
   width: fit-content;
 }
 
-.hits-tab-expand .checkbox {
+.hits-tab-checkboxes .checkbox {
   margin: 0;
   width: fit-content;
 }
 
-.hits-tab-expand .form-group {
+.hits-tab-checkboxes .form-group {
   margin-bottom: 0;
   width: fit-content;
 }
 
-.hits-tab-expand label {
+.hits-tab-checkboxes label {
   display: flex;
   gap: 5px;
 }
 
-.hits-tab-expand .shiny-input-container .checkbox input,
-.hits-tab-expand span {
+.hits-tab-checkboxes .shiny-input-container .checkbox input,
+.hits-tab-checkboxes span {
   font-size: 16px;
 }
 

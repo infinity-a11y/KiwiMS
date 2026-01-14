@@ -3063,22 +3063,21 @@ render_hits_table <- function(
   # Filter columns
   if (!is.null(selected_cols)) {
     selected_cols <- selected_cols[selected_cols %in% names(hits_table)]
-
-    std_cols <- c(
-      "Sample ID",
-      "Protein",
-      "Cmp Name",
-      if (any("[Cmp]" == names(hits_table))) "[Cmp]" else NULL,
-      if (any("Time" == names(hits_table))) "Time" else NULL,
-      "truncSample_ID"
-    )
-
-    hits_table <- hits_table |>
-      dplyr::select(
-        all_of(std_cols),
-        all_of(selected_cols)
-      )
   }
+
+  std_cols <- c(
+    "Sample ID",
+    "Protein",
+    "Cmp Name",
+    if (any("[Cmp]" == names(hits_table))) "[Cmp]" else NULL,
+    if (any("Time" == names(hits_table))) "Time" else NULL,
+    "truncSample_ID"
+  )
+  hits_table <- hits_table |>
+    dplyr::select(
+      all_of(std_cols),
+      all_of(selected_cols)
+    )
 
   # Adapt table layout
   if (!is.null(single_conc)) {
@@ -3095,9 +3094,9 @@ render_hits_table <- function(
   # Determine clickable cells
   rowCallback <- NULL
   if (clickable) {
-    if (any(names(hits_table) %in% c("Sample ID", "Cmp Name"))) {
+    if (any(names(hits_table) %in% c("Sample ID", "Protein", "Cmp Name"))) {
       clickable_targets <- which(
-        names(hits_table) %in% c("Sample ID", "Cmp Name")
+        names(hits_table) %in% c("Sample ID", "Protein", "Cmp Name")
       ) -
         1
 
@@ -3129,7 +3128,11 @@ render_hits_table <- function(
         # if (color_variable == "Samples") `Cmp Name` else `Sample ID`,
         `Protein`,
         `Cmp Name`,
-        `Total %-Binding`,
+        if (any("Total %-Binding" == names(hits_table))) {
+          `Total %-Binding`
+        } else {
+          NULL
+        },
         if (any("%-Binding" == names(hits_table))) `%-Binding` else NULL
       )
   }
