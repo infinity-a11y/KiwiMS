@@ -870,33 +870,54 @@ spectrum_plot <- function(
             name == plot_data$highlight_peaks$name[1],
             "diamond",
             "circle"
+          ),
+          color = ifelse(
+            name == plot_data$highlight_peaks$name[1],
+            "#ffffff",
+            "#000000"
+          ),
+          linecolor = ifelse(
+            name == plot_data$highlight_peaks$name[1],
+            "#000000",
+            "#ffffff"
           )
         )
 
         # Prepare marker colors
-        color_cmp <- c("#ffffff", color_cmp)
+        # color_cmp <- c("#ffffff", color_cmp)
         if (color_variable == "Compounds") {
+          color_cmp <- c("#ffffff", color_cmp)
           names(color_cmp) <- c(
             plot_data$highlight_peaks$name[
               !plot_data$highlight_peaks$name %in% names(color_cmp)
             ],
             names(color_cmp)[-1]
           )
-        } else if (color_variable == "Samples") {
-          names(color_cmp) <- c(
-            as.character(max(unique(plot_data$highlight_peaks$mw))),
-            names(color_cmp)[-1]
-          )
-        }
 
-        plot_data$highlight_peaks$color <- color_cmp[match(
-          if (color_variable == "Samples") {
-            as.character(plot_data$highlight_peaks$mw)
-          } else if (color_variable == "Compounds") {
-            plot_data$highlight_peaks$name
-          },
-          gsub("\\.?0+$", "", gsub(" Da", "", names(color_cmp)))
-        )]
+          plot_data$highlight_peaks$color <- color_cmp[match(
+            if (color_variable == "Samples") {
+              as.character(plot_data$highlight_peaks$mw)
+            } else if (color_variable == "Compounds") {
+              plot_data$highlight_peaks$name
+            },
+            gsub("\\.?0+$", "", gsub(" Da", "", names(color_cmp)))
+          )]
+        }
+        # else if (color_variable == "Samples") {
+        #   names(color_cmp) <- c(
+        #     as.character(max(unique(plot_data$highlight_peaks$mw))),
+        #     names(color_cmp)[-1]
+        #   )
+        # }
+
+        # plot_data$highlight_peaks$color <- color_cmp[match(
+        #   if (color_variable == "Samples") {
+        #     as.character(plot_data$highlight_peaks$mw)
+        #   } else if (color_variable == "Compounds") {
+        #     plot_data$highlight_peaks$name
+        #   },
+        #   gsub("\\.?0+$", "", gsub(" Da", "", names(color_cmp)))
+        # )]
       }
 
       plot <- plotly::add_markers(
@@ -911,8 +932,9 @@ spectrum_plot <- function(
             "#e8cb97"
           },
           line = list(
-            color = marker_border_color,
-            width = ifelse(!is.null(color_cmp), 1, 1.5)
+            # color = marker_border_color,
+            color = ~ I(linecolor),
+            width = 1
           ),
           symbol = ~ I(symbol),
           size = 12,
@@ -986,7 +1008,7 @@ spectrum_plot <- function(
           y0 = i1,
           x1 = x1,
           y1 = y_line,
-          line = list(color = font_color, width = 2, dash = "dot")
+          line = list(color = font_color, width = 1, dash = "dot")
         ),
         list(
           type = "line",
@@ -994,7 +1016,7 @@ spectrum_plot <- function(
           y0 = i2,
           x1 = x2,
           y1 = y_line,
-          line = list(color = font_color, width = 2, dash = "dot")
+          line = list(color = font_color, width = 1, dash = "dot")
         ),
         list(
           type = "line",
@@ -1002,7 +1024,7 @@ spectrum_plot <- function(
           y0 = y_line,
           x1 = x2,
           y1 = y_line,
-          line = list(color = font_color, width = 2)
+          line = list(color = font_color, width = 1, dash = "dot")
         )
       )
 
@@ -1064,15 +1086,16 @@ spectrum_plot <- function(
           x1 = end_x,
           y1 = end_y,
           line = list(color = font_color, width = 1.5),
-          arrowhead = 2, # arrow at end (pointing to text direction)
+          arrowhead = 2, # arrow at end
           arrowsize = 0.9,
           arrowwidth = 1.3,
-          standoff = 3 # small gap at start
+          standoff = 3, # small gap at start
+          layer = "below" # <-- KEY CHANGE: place behind markers
         )
 
-        # Text label slightly right and above the arrow end (reduced shift)
-        label_x <- end_x + (delta_x * 0.02) # reduced from 0.05 to 0.02
-        label_y <- end_y + 0.1 # reduced small y shift from 0.5
+        # Text label slightly right and above the arrow end
+        label_x <- end_x + (delta_x * 0.02)
+        label_y <- end_y
 
         # Format mass nicely
         label_text <- sprintf("%.1f Da", px)
@@ -1123,8 +1146,18 @@ spectrum_plot <- function(
       na.rm = TRUE
     )
 
-    # Add a small buffer for text rendering (e.g., font height in data units approximation)
-    text_buffer <- 3 # Reduced buffer; adjust if text still clips
+    # Add buffer depending on whether annotations are present
+    if (show_peak_labels && nrow(plot_data$highlight_peaks) > 0) {
+      # When peak labels are active → need more headroom for text above the highest peak
+      text_buffer <- 5 # increased to prevent clipping of highest label
+    } else if (show_mass_diff && length(unique_masses) == 2) {
+      # When only mass diff is active → smaller buffer is usually enough
+      text_buffer <- 3
+    } else {
+      # No annotations → minimal or no extra buffer needed
+      text_buffer <- 2
+    }
+
     max_y_needed <- overall_max_y + text_buffer
 
     yaxis_list$range <- c(0, max_y_needed)

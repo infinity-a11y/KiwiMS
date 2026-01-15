@@ -1896,8 +1896,27 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     class = "card-custom",
                     bslib::card(
                       bslib::card_header(
-                        class = "bg-dark help-header",
-                        "Annotated Spectrum"
+                        class = "bg-dark help-header d-flex justify-content-between",
+                        "Annotated Spectrum",
+                        bslib::popover(
+                          shiny::icon("gear"),
+                          shiny::div(
+                            shinyWidgets::materialSwitch(
+                              ns("sample_view_spectrum_diff"),
+                              label = "Show Distance",
+                              value = TRUE,
+                              right = TRUE
+                            ),
+                            shinyWidgets::materialSwitch(
+                              ns("sample_view_spectrum_annotation"),
+                              label = "Annotate Hits",
+                              value = FALSE,
+                              right = TRUE
+                            ),
+                            style = "margin-right: 20px;"
+                          ),
+                          title = NULL
+                        )
                       ),
                       shinycssloaders::withSpinner(
                         plotly::plotlyOutput(
@@ -2183,7 +2202,17 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 variable = color_variable,
                 trunc = input$truncate_names
               ),
-              color_variable = color_variable
+              color_variable = color_variable,
+              show_peak_labels = ifelse(
+                is.null(input$sample_view_spectrum_annotation),
+                FALSE,
+                input$sample_view_spectrum_annotation
+              ),
+              show_mass_diff = ifelse(
+                is.null(input$sample_view_spectrum_diff),
+                TRUE,
+                input$sample_view_spectrum_diff
+              )
             )
           })
 

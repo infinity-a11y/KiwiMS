@@ -2,6 +2,7 @@
    1. ANIMATIONS (KEYFRAMES)
    ========================================================================== */
 @keyframes pulsate-shadow {
+
   0%,
   100% {
     box-shadow: 0 0 12px rgb(0 0 0 / 80%);
@@ -45,7 +46,7 @@
   --bs-body-font-size: 1vw;
 }
 
-body > div.waiter-overlay.waiter-fullscreen {
+body>div.waiter-overlay.waiter-fullscreen {
   background: linear-gradient(135deg, #35357a, #4a4a89, #77778f, #b0b0b8, #e0e0e0);
   cursor: wait;
 }
@@ -106,11 +107,11 @@ th {
    3. LAYOUT & STRUCTURE
    ========================================================================== */
 .full-height-row,
-.full-height-row > div {
+.full-height-row>div {
   height: 100%;
 }
 
-.full-height-row > div > div {
+.full-height-row>div>div {
   display: flex;
   flex-direction: column;
   align-content: space-evenly;
@@ -124,7 +125,7 @@ th {
   box-shadow: inset 0px 0px 5px 1px #00000099;
 }
 
-.bslib-sidebar-layout > .sidebar {
+.bslib-sidebar-layout>.sidebar {
   margin-top: 23px;
   margin-bottom: 24px;
   border-top-right-radius: 7px;
@@ -133,8 +134,8 @@ th {
   box-shadow: inset 0px 0px 50px 14px #ffffff61;
 }
 
-.bslib-sidebar-layout > .sidebar *::-webkit-scrollbar-track,
-.bslib-sidebar-layout > .sidebar::-webkit-scrollbar-track {
+.bslib-sidebar-layout>.sidebar *::-webkit-scrollbar-track,
+.bslib-sidebar-layout>.sidebar::-webkit-scrollbar-track {
   border-top-right-radius: 7px;
   border-bottom-right-radius: 7px;
 }
@@ -144,19 +145,19 @@ th {
   border-color: lightgrey;
 }
 
-.bslib-sidebar-layout > .collapse-toggle {
+.bslib-sidebar-layout>.collapse-toggle {
   color: transparent;
   display: none;
 }
 
 /* Locked/Blurred State */
-.locked-panel .bslib-sidebar-layout > .sidebar,
+.locked-panel .bslib-sidebar-layout>.sidebar,
 .locked-panel .bslib-sidebar-layout .bslib-page-main {
   filter: blur(3px);
   pointer-events: none;
 }
 
-.locked-panel .bslib-sidebar-layout > .collapse-toggle {
+.locked-panel .bslib-sidebar-layout>.collapse-toggle {
   display: none;
 }
 
@@ -169,19 +170,19 @@ th {
   color: black !important;
 }
 
-.bslib-page-navbar > .navbar {
+.bslib-page-navbar>.navbar {
   z-index: 999 !important;
   background: linear-gradient(135deg, #a2a2f5, #9797df, #f0ffe085, #b0b0b8, #8f8fa5) !important;
   box-shadow: inset 0px 0px 20px 1px #ffffff63 !important;
 }
 
-.bslib-page-navbar > .navbar .navbar-header {
+.bslib-page-navbar>.navbar .navbar-header {
   height: 2rem;
   margin-right: 4rem;
   margin-top: -5px;
 }
 
-.navbar + .container-fluid > .tab-content > .tab-pane.active.html-fill-container {
+.navbar+.container-fluid>.tab-content>.tab-pane.active.html-fill-container {
   padding: 0;
 }
 
@@ -194,9 +195,9 @@ th {
 }
 
 .dropdown-item:hover,
-.dropdown-menu > li > a:hover,
+.dropdown-menu>li>a:hover,
 .dropdown-item:focus,
-.dropdown-menu > li > a:focus {
+.dropdown-menu>li>a:focus {
   color: var(--bs-dropdown-link-hover-color);
   background-color: var(--bs-dropdown-link-hover-bg) !important;
 }
@@ -206,11 +207,11 @@ th {
 }
 
 .dropdown-item,
-.dropdown-menu > li > a {
+.dropdown-menu>li>a {
   background: #e5e5e5;
 }
 
-.dropdown-menu > li.active > a {
+.dropdown-menu>li.active>a {
   background: #35357a !important;
   color: white;
 }
@@ -221,11 +222,11 @@ th {
 
 /* Tabs */
 .nav-tabs .nav-link,
-.nav-tabs > li > a {
+.nav-tabs>li>a {
   color: white !important;
 }
 
-.tab-content > .active {
+.tab-content>.active {
   display: block;
   background: rgb(255 255 255 / 10%);
 }
@@ -237,13 +238,13 @@ th {
 }
 
 .nav-tabs .nav-link:hover,
-.nav-tabs > li > a:hover,
-.nav-tabs .nav-pills > li > a:hover,
-.nav-tabs :where(ul.nav.navbar-nav > li) > a:hover,
+.nav-tabs>li>a:hover,
+.nav-tabs .nav-pills>li>a:hover,
+.nav-tabs :where(ul.nav.navbar-nav > li)>a:hover,
 .nav-tabs .nav-link:focus,
-.nav-tabs > li > a:focus,
-.nav-tabs .nav-pills > li > a:focus,
-.nav-tabs :where(ul.nav.navbar-nav > li) > a:focus {
+.nav-tabs>li>a:focus,
+.nav-tabs .nav-pills>li>a:focus,
+.nav-tabs :where(ul.nav.navbar-nav > li)>a:focus {
   isolation: isolate;
   border-color: var(--bs-nav-tabs-link-hover-border-color);
   border-bottom-color: transparent !important;
@@ -381,19 +382,16 @@ button:focus:not(:focus-visible) {
   color: white;
 }
 
-.card-body
-  .btn-default:not(
-    .btn-primary,
-    .btn-secondary,
-    .btn-info,
-    .btn-success,
-    .btn-danger,
-    .btn-warning,
-    .btn-light,
-    .btn-dark,
-    .btn-link,
-    [class*="btn-outline-"]
-  ) {
+.card-body .btn-default:not(.btn-primary,
+  .btn-secondary,
+  .btn-info,
+  .btn-success,
+  .btn-danger,
+  .btn-warning,
+  .btn-light,
+  .btn-dark,
+  .btn-link,
+  [class*="btn-outline-"]) {
   --bs-btn-color: #ffffff;
   --bs-border-color: #ffffff;
 }
@@ -421,7 +419,7 @@ button:focus:not(:focus-visible) {
   color: white;
 }
 
-.btn-group > .btn {
+.btn-group>.btn {
   background-color: #e5e5e5;
   color: #404040 !important;
   border: none;
@@ -429,17 +427,17 @@ button:focus:not(:focus-visible) {
   font-size: 14px;
 }
 
-.btn-group > .btn:hover {
+.btn-group>.btn:hover {
   background-color: #404040;
   color: white !important;
 }
 
-.btn-group .btn-group-sm .btn-group > .btn {
+.btn-group .btn-group-sm .btn-group>.btn {
   border-color: #404040;
 }
 
-.btn-check:checked + .btn:hover,
-.btn-group > .btn-check:checked + .btn {
+.btn-check:checked+.btn:hover,
+.btn-group>.btn-check:checked+.btn {
   color: #fff !important;
   background-color: #38387c !important;
   border-color: #38387c !important;
@@ -523,6 +521,7 @@ input[type="number"]::-webkit-inner-spin-button {
 #app-conversion_sidebar-run_ki_kinact {
   margin: 0;
 }
+
 .ki-kinact-checkbox {
   margin-bottom: 1.5rem;
   margin-top: 1.5rem;
@@ -634,7 +633,7 @@ input[type="number"]::-webkit-inner-spin-button {
   top: 2px;
 }
 
-.waver > div {
+.waver>div {
   background-color: #7777f9;
 }
 
@@ -675,7 +674,7 @@ input[type="number"]::-webkit-inner-spin-button {
   right: calc(0.75rem + 0px);
 }
 
-.selectize-input > * {
+.selectize-input>* {
   max-width: 92%;
   overflow: clip;
   vertical-align: -webkit-baseline-middle;
@@ -751,14 +750,14 @@ input[type="number"]::-webkit-inner-spin-button {
   font-size: calc(var(--base-size, 14px) * var(--scale-factor, 1));
 }
 
-.bootstrap-select > .dropdown-toggle {
+.bootstrap-select>.dropdown-toggle {
   padding-left: 15px;
   padding-right: 15px;
   border-color: transparent;
   background: #e5e5e5;
 }
 
-.unit-selectors .bootstrap-select > .dropdown-toggle {
+.unit-selectors .bootstrap-select>.dropdown-toggle {
   color: #000;
   height: 40px;
   padding: 8px;
@@ -783,22 +782,22 @@ div.dataTables_scrollBody {
   border-left: none;
 }
 
-table.dataTable thead > tr > th.sorting:before,
-table.dataTable thead > tr > th.sorting:after {
+table.dataTable thead>tr>th.sorting:before,
+table.dataTable thead>tr>th.sorting:after {
   font-size: 10px !important;
 }
 
-table.dataTable > tbody > tr.selected > * {
+table.dataTable>tbody>tr.selected>* {
   box-shadow: inset 0 0 0 9999px #38387c !important;
 }
 
-.active > .page-link {
+.active>.page-link {
   color: white;
   border-color: #38387c;
   background: #38387c;
 }
 
-.active > .page-link:hover {
+.active>.page-link:hover {
   color: black;
 }
 
@@ -911,7 +910,7 @@ td.listbox.htDimmed.current.highlight {
   background-color: hsl(0deg 0% 100% / 50%) !important;
 }
 
-.bslib-full-screen-enter > svg {
+.bslib-full-screen-enter>svg {
   fill: rgb(0 0 0) !important;
 }
 
@@ -926,7 +925,7 @@ td.listbox.htDimmed.current.highlight {
   flex-direction: column;
 }
 
-#app-deconvolution_main-deconvolution_init_ui > div {
+#app-deconvolution_main-deconvolution_init_ui>div {
   height: 100%;
   margin-bottom: unset;
 }
@@ -953,7 +952,7 @@ td.listbox.htDimmed.current.highlight {
   display: contents;
 }
 
-.deconvolution-parent-card > div {
+.deconvolution-parent-card>div {
   margin-top: auto;
   margin-bottom: auto;
   flex: 1 1 auto;
@@ -991,10 +990,10 @@ td.listbox.htDimmed.current.highlight {
   align-content: center;
 }
 
-.deconvolution-result-content-noplate > div,
-.deconvolution-result-content-plate > div,
-.deconvolution-result-content-plate > div > div,
-.deconvolution-result-content-noplate > div > div {
+.deconvolution-result-content-noplate>div,
+.deconvolution-result-content-plate>div,
+.deconvolution-result-content-plate>div>div,
+.deconvolution-result-content-noplate>div>div {
   height: 100%;
   align-content: center;
 }
@@ -1034,7 +1033,7 @@ td.listbox.htDimmed.current.highlight {
   padding-right: 3rem;
 }
 
-#app-deconvolution_main-target_sel_ui > div > div {
+#app-deconvolution_main-target_sel_ui>div>div {
   width: inherit;
 }
 
@@ -1128,9 +1127,9 @@ td.listbox.htDimmed.current.highlight {
   padding-bottom: 1em;
 }
 
-#app-deconvolution_pars-folder-modal > div > div > div.modal-body > div.sF-navigation.btn-toolbar > select,
-#app-deconvolution_pars-target_folder-modal > div > div > div.modal-body > div.sF-navigation.btn-toolbar > select,
-#app-deconvolution_pars-file-modal > div > div > div.modal-body > div.sF-navigation.btn-toolbar > select {
+#app-deconvolution_pars-folder-modal>div>div>div.modal-body>div.sF-navigation.btn-toolbar>select,
+#app-deconvolution_pars-target_folder-modal>div>div>div.modal-body>div.sF-navigation.btn-toolbar>select,
+#app-deconvolution_pars-file-modal>div>div>div.modal-body>div.sF-navigation.btn-toolbar>select {
   width: calc(70% - 340px);
 }
 
@@ -1163,7 +1162,7 @@ td.listbox.htDimmed.current.highlight {
 }
 
 /* File Browser Specifics */
-.sF-dirList div.selected > .sF-file-name > div {
+.sF-dirList div.selected>.sF-file-name>div {
   background: #35357a !important;
 }
 
@@ -1172,7 +1171,7 @@ td.listbox.htDimmed.current.highlight {
   height: 100%;
 }
 
-.deconvolution-process-spinner > div {
+.deconvolution-process-spinner>div {
   display: flex;
   justify-content: center;
   height: 100%;
@@ -1297,7 +1296,7 @@ decon-report-modal .btn-default {
   color: black;
 }
 
-.conversion-sidebar > div {
+.conversion-sidebar>div {
   height: 100%;
   padding: 5% !important;
   padding-left: 0 !important;
@@ -1385,7 +1384,7 @@ div[data-value="Protein Conversion"] .collapse-toggle {
   display: none;
 }
 
-div[data-value="Protein Conversion"] .bslib-sidebar-layout.sidebar-collapsed > .collapse-toggle {
+div[data-value="Protein Conversion"] .bslib-sidebar-layout.sidebar-collapsed>.collapse-toggle {
   color: white;
   top: 35px;
   border-color: white;
@@ -1443,8 +1442,8 @@ div[data-value="Protein Conversion"] .tab-pane {
   margin-bottom: 0;
 }
 
-.samples-controls > div,
-.comp-prot-controls > div {
+.samples-controls>div,
+.comp-prot-controls>div {
   align-items: end;
 }
 
@@ -1490,7 +1489,7 @@ div[data-value="Protein Conversion"] .tab-pane {
   cursor: auto !important;
 }
 
-.file-select-nomargin > div {
+.file-select-nomargin>div {
   margin: 0;
 }
 
@@ -1589,24 +1588,24 @@ div[data-value="Protein Conversion"] .tab-pane {
   text-align: center;
 }
 
-.kobs-val div:where(.shiny-html-output):has(> *).recalculating > * {
+.kobs-val div:where(.shiny-html-output):has(> *).recalculating>* {
   opacity: 1 !important;
 }
 
 /* Conversion Plots */
-#app-conversion_main-binding_plot > div,
-#app-conversion_main-binding_plot > div > div,
-#app-conversion_main-kobs_plot > div,
-#app-conversion_main-kobs_plot > div > div,
-#app-conversion_main-conversion_sample_spectrum > div,
-#app-conversion_main-conversion_sample_spectrum > div > div,
-#app-conversion_main-samples_present_compounds_pie > div,
-app-conversion_main-samples_present_compounds_pie > div > div {
+#app-conversion_main-binding_plot>div,
+#app-conversion_main-binding_plot>div>div,
+#app-conversion_main-kobs_plot>div,
+#app-conversion_main-kobs_plot>div>div,
+#app-conversion_main-conversion_sample_spectrum>div,
+#app-conversion_main-conversion_sample_spectrum>div>div,
+#app-conversion_main-samples_present_compounds_pie>div,
+app-conversion_main-samples_present_compounds_pie>div>div {
   width: unset !important;
   height: unset !important;
 }
 
-#app-conversion_main-binding_plot > div > div > svg:nth-child(3) > g.infolayer > g.legend > rect.bg {
+#app-conversion_main-binding_plot>div>div>svg:nth-child(3)>g.infolayer>g.legend>rect.bg {
   fill-opacity: 0 !important;
 }
 
@@ -1616,12 +1615,12 @@ app-conversion_main-samples_present_compounds_pie > div > div {
   font-size: 12px;
 }
 
-#app-conversion_main-conversion_hits_tab > div {
+#app-conversion_main-conversion_hits_tab>div {
   height: 100% !important;
 }
 
 #app-conversion_main-hits_tab,
-#app-conversion_main-hits_tab > div {
+#app-conversion_main-hits_tab>div {
   height: 100% !important;
 }
 
@@ -1713,9 +1712,9 @@ app-conversion_main-samples_present_compounds_pie > div > div {
   align-content: center;
 }
 
-#app-conversion_main-hits_tab
-// .conc-hits-table
-{
+#app-conversion_main-hits_tab // .conc-hits-table
+
+  {
   height: 100%;
   font-size: 12px;
 }
@@ -1942,8 +1941,8 @@ th.sorting {
 //   overflow: unset !important;
 // }
 
-table.dataTable thead > tr > th.sorting::after,
-table.dataTable thead > tr > th.sorting::before {
+table.dataTable thead>tr>th.sorting::after,
+table.dataTable thead>tr>th.sorting::before {
   opacity: 0.5 !important;
 }
 
@@ -2113,13 +2112,11 @@ table.dataTable thead > tr > th.sorting::before {
 
 .duplicated-mass {
   background-color: rgb(243 243 206);
-  background: repeating-linear-gradient(
-    -45deg,
-    rgb(243 237 206),
-    rgb(243, 243, 206) 5px,
-    rgb(255 255 255) 5px,
-    rgb(231 179 74 / 91%) 10px
-  );
+  background: repeating-linear-gradient(-45deg,
+      rgb(243 237 206),
+      rgb(243, 243, 206) 5px,
+      rgb(255 255 255) 5px,
+      rgb(231 179 74 / 91%) 10px);
 }
 
 .duplicated-mass-between {
@@ -2255,7 +2252,7 @@ table.dataTable tbody td {
 }
 
 .conversion-samples-wrapper .card-custom .card,
-.conversion-samples-control > div {
+.conversion-samples-control>div {
   height: 100%;
   margin: 0;
 }
@@ -2357,7 +2354,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   font-size: 12px;
 }
 
-.scale-div .bootstrap-select > .dropdown-toggle,
+.scale-div .bootstrap-select>.dropdown-toggle,
 .conversion-tab-items .selectize-input {
   padding: 3px;
 }
@@ -2384,7 +2381,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   align-self: center;
 }
 
-.conversion-tab-items .selectize-input > * {
+.conversion-tab-items .selectize-input>* {
   font-weight: 400;
 }
 
@@ -2393,7 +2390,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   color: white !important;
 }
 
-.conversion-tab-items > .tooltip-bttn {
+.conversion-tab-items>.tooltip-bttn {
   margin-left: 15px;
   border-left: 1px solid #e5e5e5;
   height: 32.5px;
@@ -2455,952 +2452,886 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 /* Set1 */
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Set1"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="Set1"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="Set1"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Set1"]) {
-  background: linear-gradient(
-    to right,
-    #e41a1c 0%,
-    #e41a1c 11%,
-    #377eb8 11%,
-    #377eb8 22%,
-    #4daf4a 22%,
-    #4daf4a 33%,
-    #984ea3 33%,
-    #984ea3 44%,
-    #ff7f00 44%,
-    #ff7f00 55%,
-    #ffff33 55%,
-    #ffff33 66%,
-    #a65628 66%,
-    #a65628 77%,
-    #f781bf 77%,
-    #f781bf 88%,
-    #999999 88%,
-    #999999 100%
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="Set1"]) {
+  background: linear-gradient(to right,
+      #e41a1c 0%,
+      #e41a1c 11%,
+      #377eb8 11%,
+      #377eb8 22%,
+      #4daf4a 22%,
+      #4daf4a 33%,
+      #984ea3 33%,
+      #984ea3 44%,
+      #ff7f00 44%,
+      #ff7f00 55%,
+      #ffff33 55%,
+      #ffff33 66%,
+      #a65628 66%,
+      #a65628 77%,
+      #f781bf 77%,
+      #f781bf 88%,
+      #999999 88%,
+      #999999 100%);
   color: black;
   text-align: left;
 }
 
 /* Set2 */
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Set2"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="Set2"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="Set2"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Set2"]) {
-  background: linear-gradient(
-    to right,
-    #66c2a5 0%,
-    #66c2a5 12.5%,
-    #fc8d62 12.5%,
-    #fc8d62 25%,
-    #8da0cb 25%,
-    #8da0cb 37.5%,
-    #e78ac3 37.5%,
-    #e78ac3 50%,
-    #a6d854 50%,
-    #a6d854 62.5%,
-    #ffd92f 62.5%,
-    #ffd92f 75%,
-    #e5c494 75%,
-    #e5c494 87.5%,
-    #b3b3b3 87.5%,
-    #b3b3b3 100%
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="Set2"]) {
+  background: linear-gradient(to right,
+      #66c2a5 0%,
+      #66c2a5 12.5%,
+      #fc8d62 12.5%,
+      #fc8d62 25%,
+      #8da0cb 25%,
+      #8da0cb 37.5%,
+      #e78ac3 37.5%,
+      #e78ac3 50%,
+      #a6d854 50%,
+      #a6d854 62.5%,
+      #ffd92f 62.5%,
+      #ffd92f 75%,
+      #e5c494 75%,
+      #e5c494 87.5%,
+      #b3b3b3 87.5%,
+      #b3b3b3 100%);
   color: black;
   text-align: left;
 }
 
 /* Set3 */
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Set3"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="Set3"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="Set3"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Set3"]) {
-  background: linear-gradient(
-    to right,
-    #8dd3c7 0%,
-    #8dd3c7 8.33333%,
-    #ffffb3 8.33333%,
-    #ffffb3 16.6667%,
-    #bebada 16.6667%,
-    #bebada 25%,
-    #fb8072 25%,
-    #fb8072 33.3333%,
-    #80b1d3 33.3333%,
-    #80b1d3 41.6667%,
-    #fdb462 41.6667%,
-    #fdb462 50%,
-    #b3de69 50%,
-    #b3de69 58.3333%,
-    #fccde5 58.3333%,
-    #fccde5 66.6667%,
-    #d9d9d9 66.6667%,
-    #d9d9d9 75%,
-    #bc80bd 75%,
-    #bc80bd 83.3333%,
-    #ccebc5 83.3333%,
-    #ccebc5 91.6667%,
-    #ffed6f 91.6667%,
-    #ffed6f 100%
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="Set3"]) {
+  background: linear-gradient(to right,
+      #8dd3c7 0%,
+      #8dd3c7 8.33333%,
+      #ffffb3 8.33333%,
+      #ffffb3 16.6667%,
+      #bebada 16.6667%,
+      #bebada 25%,
+      #fb8072 25%,
+      #fb8072 33.3333%,
+      #80b1d3 33.3333%,
+      #80b1d3 41.6667%,
+      #fdb462 41.6667%,
+      #fdb462 50%,
+      #b3de69 50%,
+      #b3de69 58.3333%,
+      #fccde5 58.3333%,
+      #fccde5 66.6667%,
+      #d9d9d9 66.6667%,
+      #d9d9d9 75%,
+      #bc80bd 75%,
+      #bc80bd 83.3333%,
+      #ccebc5 83.3333%,
+      #ccebc5 91.6667%,
+      #ffed6f 91.6667%,
+      #ffed6f 100%);
   color: black;
   text-align: left;
 }
 
 /* Pastel1 */
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Pastel1"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="Pastel1"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="Pastel1"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Pastel1"]) {
-  background: linear-gradient(
-    to right,
-    #fbb4ae 0%,
-    #fbb4ae 11.1111%,
-    #b3cde3 11.1111%,
-    #b3cde3 22.2222%,
-    #ccebc5 22.2222%,
-    #ccebc5 33.3333%,
-    #decbe4 33.3333%,
-    #decbe4 44.4444%,
-    #fed9a6 44.4444%,
-    #fed9a6 55.5556%,
-    #ffffcc 55.5556%,
-    #ffffcc 66.6667%,
-    #e5d8bd 66.6667%,
-    #e5d8bd 77.7778%,
-    #fddaec 77.7778%,
-    #fddaec 88.8889%,
-    #f2f2f2 88.8889%,
-    #f2f2f2 100%
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="Pastel1"]) {
+  background: linear-gradient(to right,
+      #fbb4ae 0%,
+      #fbb4ae 11.1111%,
+      #b3cde3 11.1111%,
+      #b3cde3 22.2222%,
+      #ccebc5 22.2222%,
+      #ccebc5 33.3333%,
+      #decbe4 33.3333%,
+      #decbe4 44.4444%,
+      #fed9a6 44.4444%,
+      #fed9a6 55.5556%,
+      #ffffcc 55.5556%,
+      #ffffcc 66.6667%,
+      #e5d8bd 66.6667%,
+      #e5d8bd 77.7778%,
+      #fddaec 77.7778%,
+      #fddaec 88.8889%,
+      #f2f2f2 88.8889%,
+      #f2f2f2 100%);
   color: black;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Pastel2"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="Pastel2"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="Pastel2"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Pastel2"]) {
-  background: linear-gradient(
-    to right,
-    #b3e2cd 0%,
-    #b3e2cd 12.5%,
-    #fdcdac 12.5%,
-    #fdcdac 25%,
-    #cbd5e8 25%,
-    #cbd5e8 37.5%,
-    #f4cae4 37.5%,
-    #f4cae4 50%,
-    #e6f5c9 50%,
-    #e6f5c9 62.5%,
-    #fff2ae 62.5%,
-    #fff2ae 75%,
-    #f1e2cc 75%,
-    #f1e2cc 87.5%,
-    #cccccc 87.5%,
-    #cccccc 100%
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="Pastel2"]) {
+  background: linear-gradient(to right,
+      #b3e2cd 0%,
+      #b3e2cd 12.5%,
+      #fdcdac 12.5%,
+      #fdcdac 25%,
+      #cbd5e8 25%,
+      #cbd5e8 37.5%,
+      #f4cae4 37.5%,
+      #f4cae4 50%,
+      #e6f5c9 50%,
+      #e6f5c9 62.5%,
+      #fff2ae 62.5%,
+      #fff2ae 75%,
+      #f1e2cc 75%,
+      #f1e2cc 87.5%,
+      #cccccc 87.5%,
+      #cccccc 100%);
   color: black;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Dark2"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="Dark2"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="Dark2"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Dark2"]) {
-  background: linear-gradient(
-    to right,
-    #1b9e77 0%,
-    #1b9e77 12.5%,
-    #d95f02 12.5%,
-    #d95f02 25%,
-    #7570b3 25%,
-    #7570b3 37.5%,
-    #e7298a 37.5%,
-    #e7298a 50%,
-    #66a61e 50%,
-    #66a61e 62.5%,
-    #e6ab02 62.5%,
-    #e6ab02 75%,
-    #a6761d 75%,
-    #a6761d 87.5%,
-    #666666 87.5%,
-    #666666 100%
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="Dark2"]) {
+  background: linear-gradient(to right,
+      #1b9e77 0%,
+      #1b9e77 12.5%,
+      #d95f02 12.5%,
+      #d95f02 25%,
+      #7570b3 25%,
+      #7570b3 37.5%,
+      #e7298a 37.5%,
+      #e7298a 50%,
+      #66a61e 50%,
+      #66a61e 62.5%,
+      #e6ab02 62.5%,
+      #e6ab02 75%,
+      #a6761d 75%,
+      #a6761d 87.5%,
+      #666666 87.5%,
+      #666666 100%);
   color: black;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Accent"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="Accent"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="Accent"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Accent"]) {
-  background: linear-gradient(
-    to right,
-    #7fc97f 0%,
-    #7fc97f 12.5%,
-    #beaed4 12.5%,
-    #beaed4 25%,
-    #fdc086 25%,
-    #fdc086 37.5%,
-    #ffff99 37.5%,
-    #ffff99 50%,
-    #386cb0 50%,
-    #386cb0 62.5%,
-    #f0027f 62.5%,
-    #f0027f 75%,
-    #bf5b17 75%,
-    #bf5b17 87.5%,
-    #666666 87.5%,
-    #666666 100%
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="Accent"]) {
+  background: linear-gradient(to right,
+      #7fc97f 0%,
+      #7fc97f 12.5%,
+      #beaed4 12.5%,
+      #beaed4 25%,
+      #fdc086 25%,
+      #fdc086 37.5%,
+      #ffff99 37.5%,
+      #ffff99 50%,
+      #386cb0 50%,
+      #386cb0 62.5%,
+      #f0027f 62.5%,
+      #f0027f 75%,
+      #bf5b17 75%,
+      #bf5b17 87.5%,
+      #666666 87.5%,
+      #666666 100%);
   color: black;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="YlOrRd"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="YlOrRd"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="YlOrRd"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="YlOrRd"]) {
-  background: linear-gradient(
-    to right,
-    #ffffcc 0%,
-    #ffffcc 11.1111%,
-    #ffeda0 11.1111%,
-    #ffeda0 22.2222%,
-    #fed976 22.2222%,
-    #fed976 33.3333%,
-    #feb24c 33.3333%,
-    #feb24c 44.4444%,
-    #fd8d3c 44.4444%,
-    #fd8d3c 55.5556%,
-    #fc4e2a 55.5556%,
-    #fc4e2a 66.6667%,
-    #e31a1c 66.6667%,
-    #e31a1c 77.7778%,
-    #bd0026 77.7778%,
-    #bd0026 88.8889%,
-    #800026 88.8889%,
-    #800026 100%
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="YlOrRd"]) {
+  background: linear-gradient(to right,
+      #ffffcc 0%,
+      #ffffcc 11.1111%,
+      #ffeda0 11.1111%,
+      #ffeda0 22.2222%,
+      #fed976 22.2222%,
+      #fed976 33.3333%,
+      #feb24c 33.3333%,
+      #feb24c 44.4444%,
+      #fd8d3c 44.4444%,
+      #fd8d3c 55.5556%,
+      #fc4e2a 55.5556%,
+      #fc4e2a 66.6667%,
+      #e31a1c 66.6667%,
+      #e31a1c 77.7778%,
+      #bd0026 77.7778%,
+      #bd0026 88.8889%,
+      #800026 88.8889%,
+      #800026 100%);
   color: black;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="YlOrBr"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="YlOrBr"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="YlOrBr"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="YlOrBr"]) {
-  background: linear-gradient(
-    to right,
-    #ffffe5 0%,
-    #ffffe5 11.1111%,
-    #fff7bc 11.1111%,
-    #fff7bc 22.2222%,
-    #fee391 22.2222%,
-    #fee391 33.3333%,
-    #fec44f 33.3333%,
-    #fec44f 44.4444%,
-    #fe9929 44.4444%,
-    #fe9929 55.5556%,
-    #ec7014 55.5556%,
-    #ec7014 66.6667%,
-    #cc4c02 66.6667%,
-    #cc4c02 77.7778%,
-    #993404 77.7778%,
-    #993404 88.8889%,
-    #662506 88.8889%,
-    #662506 100%
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="YlOrBr"]) {
+  background: linear-gradient(to right,
+      #ffffe5 0%,
+      #ffffe5 11.1111%,
+      #fff7bc 11.1111%,
+      #fff7bc 22.2222%,
+      #fee391 22.2222%,
+      #fee391 33.3333%,
+      #fec44f 33.3333%,
+      #fec44f 44.4444%,
+      #fe9929 44.4444%,
+      #fe9929 55.5556%,
+      #ec7014 55.5556%,
+      #ec7014 66.6667%,
+      #cc4c02 66.6667%,
+      #cc4c02 77.7778%,
+      #993404 77.7778%,
+      #993404 88.8889%,
+      #662506 88.8889%,
+      #662506 100%);
   color: black;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="YlGnBu"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="YlGnBu"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="YlGnBu"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="YlGnBu"]) {
-  background: linear-gradient(
-    to right,
-    #ffffd9 0%,
-    #ffffd9 11.1111%,
-    #edf8b1 11.1111%,
-    #edf8b1 22.2222%,
-    #c7e9b4 22.2222%,
-    #c7e9b4 33.3333%,
-    #7fcdbb 33.3333%,
-    #7fcdbb 44.4444%,
-    #41b6c4 44.4444%,
-    #41b6c4 55.5556%,
-    #1d91c0 55.5556%,
-    #1d91c0 66.6667%,
-    #225ea8 66.6667%,
-    #225ea8 77.7778%,
-    #253494 77.7778%,
-    #253494 88.8889%,
-    #081d58 88.8889%,
-    #081d58 100%
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="YlGnBu"]) {
+  background: linear-gradient(to right,
+      #ffffd9 0%,
+      #ffffd9 11.1111%,
+      #edf8b1 11.1111%,
+      #edf8b1 22.2222%,
+      #c7e9b4 22.2222%,
+      #c7e9b4 33.3333%,
+      #7fcdbb 33.3333%,
+      #7fcdbb 44.4444%,
+      #41b6c4 44.4444%,
+      #41b6c4 55.5556%,
+      #1d91c0 55.5556%,
+      #1d91c0 66.6667%,
+      #225ea8 66.6667%,
+      #225ea8 77.7778%,
+      #253494 77.7778%,
+      #253494 88.8889%,
+      #081d58 88.8889%,
+      #081d58 100%);
   color: black;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="YlGn"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="YlGn"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="YlGn"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="YlGn"]) {
-  background: linear-gradient(
-    to right,
-    #ffffe5 0%,
-    #ffffe5 11.1111%,
-    #f7fcb9 11.1111%,
-    #f7fcb9 22.2222%,
-    #d9f0a3 22.2222%,
-    #d9f0a3 33.3333%,
-    #addd8e 33.3333%,
-    #addd8e 44.4444%,
-    #78c679 44.4444%,
-    #78c679 55.5556%,
-    #41ab5d 55.5556%,
-    #41ab5d 66.6667%,
-    #238443 66.6667%,
-    #238443 77.7778%,
-    #006837 77.7778%,
-    #006837 88.8889%,
-    #004529 88.8889%,
-    #004529 100%
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="YlGn"]) {
+  background: linear-gradient(to right,
+      #ffffe5 0%,
+      #ffffe5 11.1111%,
+      #f7fcb9 11.1111%,
+      #f7fcb9 22.2222%,
+      #d9f0a3 22.2222%,
+      #d9f0a3 33.3333%,
+      #addd8e 33.3333%,
+      #addd8e 44.4444%,
+      #78c679 44.4444%,
+      #78c679 55.5556%,
+      #41ab5d 55.5556%,
+      #41ab5d 66.6667%,
+      #238443 66.6667%,
+      #238443 77.7778%,
+      #006837 77.7778%,
+      #006837 88.8889%,
+      #004529 88.8889%,
+      #004529 100%);
   color: black;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Reds"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="Reds"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="Reds"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Reds"]) {
-  background: linear-gradient(
-    to right,
-    #fff5f0 0%,
-    #fff5f0 11.1111%,
-    #fee0d2 11.1111%,
-    #fee0d2 22.2222%,
-    #fcbba1 22.2222%,
-    #fcbba1 33.3333%,
-    #fc9272 33.3333%,
-    #fc9272 44.4444%,
-    #fb6a4a 44.4444%,
-    #fb6a4a 55.5556%,
-    #ef3b2c 55.5556%,
-    #ef3b2c 66.6667%,
-    #cb181d 66.6667%,
-    #cb181d 77.7778%,
-    #a50f15 77.7778%,
-    #a50f15 88.8889%,
-    #67000d 88.8889%,
-    #67000d 100%
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="Reds"]) {
+  background: linear-gradient(to right,
+      #fff5f0 0%,
+      #fff5f0 11.1111%,
+      #fee0d2 11.1111%,
+      #fee0d2 22.2222%,
+      #fcbba1 22.2222%,
+      #fcbba1 33.3333%,
+      #fc9272 33.3333%,
+      #fc9272 44.4444%,
+      #fb6a4a 44.4444%,
+      #fb6a4a 55.5556%,
+      #ef3b2c 55.5556%,
+      #ef3b2c 66.6667%,
+      #cb181d 66.6667%,
+      #cb181d 77.7778%,
+      #a50f15 77.7778%,
+      #a50f15 88.8889%,
+      #67000d 88.8889%,
+      #67000d 100%);
   color: black;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="RdPu"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="RdPu"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="RdPu"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="RdPu"]) {
-  background: linear-gradient(
-    to right,
-    #fff7f3 0%,
-    #fff7f3 11.1111%,
-    #fde0dd 11.1111%,
-    #fde0dd 22.2222%,
-    #fcc5c0 22.2222%,
-    #fcc5c0 33.3333%,
-    #fa9fb5 33.3333%,
-    #fa9fb5 44.4444%,
-    #f768a1 44.4444%,
-    #f768a1 55.5556%,
-    #dd3497 55.5556%,
-    #dd3497 66.6667%,
-    #ae017e 66.6667%,
-    #ae017e 77.7778%,
-    #7a0177 77.7778%,
-    #7a0177 88.8889%,
-    #49006a 88.8889%,
-    #49006a 100%
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="RdPu"]) {
+  background: linear-gradient(to right,
+      #fff7f3 0%,
+      #fff7f3 11.1111%,
+      #fde0dd 11.1111%,
+      #fde0dd 22.2222%,
+      #fcc5c0 22.2222%,
+      #fcc5c0 33.3333%,
+      #fa9fb5 33.3333%,
+      #fa9fb5 44.4444%,
+      #f768a1 44.4444%,
+      #f768a1 55.5556%,
+      #dd3497 55.5556%,
+      #dd3497 66.6667%,
+      #ae017e 66.6667%,
+      #ae017e 77.7778%,
+      #7a0177 77.7778%,
+      #7a0177 88.8889%,
+      #49006a 88.8889%,
+      #49006a 100%);
   color: black;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Purples"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="Purples"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="Purples"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Purples"]) {
-  background: linear-gradient(
-    to right,
-    #fcfbfd 0%,
-    #fcfbfd 11.1111%,
-    #efedf5 11.1111%,
-    #efedf5 22.2222%,
-    #dadaeb 22.2222%,
-    #dadaeb 33.3333%,
-    #bcbddc 33.3333%,
-    #bcbddc 44.4444%,
-    #9e9ac8 44.4444%,
-    #9e9ac8 55.5556%,
-    #807dba 55.5556%,
-    #807dba 66.6667%,
-    #6a51a3 66.6667%,
-    #6a51a3 77.7778%,
-    #54278f 77.7778%,
-    #54278f 88.8889%,
-    #3f007d 88.8889%,
-    #3f007d 100%
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="Purples"]) {
+  background: linear-gradient(to right,
+      #fcfbfd 0%,
+      #fcfbfd 11.1111%,
+      #efedf5 11.1111%,
+      #efedf5 22.2222%,
+      #dadaeb 22.2222%,
+      #dadaeb 33.3333%,
+      #bcbddc 33.3333%,
+      #bcbddc 44.4444%,
+      #9e9ac8 44.4444%,
+      #9e9ac8 55.5556%,
+      #807dba 55.5556%,
+      #807dba 66.6667%,
+      #6a51a3 66.6667%,
+      #6a51a3 77.7778%,
+      #54278f 77.7778%,
+      #54278f 88.8889%,
+      #3f007d 88.8889%,
+      #3f007d 100%);
   color: black;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="PuRd"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="PuRd"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="PuRd"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="PuRd"]) {
-  background: linear-gradient(
-    to right,
-    #f7f4f9 0%,
-    #f7f4f9 11.1111%,
-    #e7e1ef 11.1111%,
-    #e7e1ef 22.2222%,
-    #d4b9da 22.2222%,
-    #d4b9da 33.3333%,
-    #c994c7 33.3333%,
-    #c994c7 44.4444%,
-    #df65b0 44.4444%,
-    #df65b0 55.5556%,
-    #e7298a 55.5556%,
-    #e7298a 66.6667%,
-    #ce1256 66.6667%,
-    #ce1256 77.7778%,
-    #980043 77.7778%,
-    #980043 88.8889%,
-    #67001f 88.8889%,
-    #67001f 100%
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="PuRd"]) {
+  background: linear-gradient(to right,
+      #f7f4f9 0%,
+      #f7f4f9 11.1111%,
+      #e7e1ef 11.1111%,
+      #e7e1ef 22.2222%,
+      #d4b9da 22.2222%,
+      #d4b9da 33.3333%,
+      #c994c7 33.3333%,
+      #c994c7 44.4444%,
+      #df65b0 44.4444%,
+      #df65b0 55.5556%,
+      #e7298a 55.5556%,
+      #e7298a 66.6667%,
+      #ce1256 66.6667%,
+      #ce1256 77.7778%,
+      #980043 77.7778%,
+      #980043 88.8889%,
+      #67001f 88.8889%,
+      #67001f 100%);
   color: black;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="PuBuGn"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="PuBuGn"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="PuBuGn"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="PuBuGn"]) {
-  background: linear-gradient(
-    to right,
-    #fff7fb 0%,
-    #fff7fb 11.1111%,
-    #ece2f0 11.1111%,
-    #ece2f0 22.2222%,
-    #d0d1e6 22.2222%,
-    #d0d1e6 33.3333%,
-    #a6bddb 33.3333%,
-    #a6bddb 44.4444%,
-    #67a9cf 44.4444%,
-    #67a9cf 55.5556%,
-    #3690c0 55.5556%,
-    #3690c0 66.6667%,
-    #02818a 66.6667%,
-    #02818a 77.7778%,
-    #016c59 77.7778%,
-    #016c59 88.8889%,
-    #014636 88.8889%,
-    #014636 100%
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="PuBuGn"]) {
+  background: linear-gradient(to right,
+      #fff7fb 0%,
+      #fff7fb 11.1111%,
+      #ece2f0 11.1111%,
+      #ece2f0 22.2222%,
+      #d0d1e6 22.2222%,
+      #d0d1e6 33.3333%,
+      #a6bddb 33.3333%,
+      #a6bddb 44.4444%,
+      #67a9cf 44.4444%,
+      #67a9cf 55.5556%,
+      #3690c0 55.5556%,
+      #3690c0 66.6667%,
+      #02818a 66.6667%,
+      #02818a 77.7778%,
+      #016c59 77.7778%,
+      #016c59 88.8889%,
+      #014636 88.8889%,
+      #014636 100%);
   color: black;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="PuBu"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="PuBu"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="PuBu"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="PuBu"]) {
-  background: linear-gradient(
-    to right,
-    #fff7fb 0%,
-    #fff7fb 11.1111%,
-    #ece7f2 11.1111%,
-    #ece7f2 22.2222%,
-    #d0d1e6 22.2222%,
-    #d0d1e6 33.3333%,
-    #a6bddb 33.3333%,
-    #a6bddb 44.4444%,
-    #74a9cf 44.4444%,
-    #74a9cf 55.5556%,
-    #3690c0 55.5556%,
-    #3690c0 66.6667%,
-    #0570b0 66.6667%,
-    #0570b0 77.7778%,
-    #045a8d 77.7778%,
-    #045a8d 88.8889%,
-    #023858 88.8889%,
-    #023858 100%
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="PuBu"]) {
+  background: linear-gradient(to right,
+      #fff7fb 0%,
+      #fff7fb 11.1111%,
+      #ece7f2 11.1111%,
+      #ece7f2 22.2222%,
+      #d0d1e6 22.2222%,
+      #d0d1e6 33.3333%,
+      #a6bddb 33.3333%,
+      #a6bddb 44.4444%,
+      #74a9cf 44.4444%,
+      #74a9cf 55.5556%,
+      #3690c0 55.5556%,
+      #3690c0 66.6667%,
+      #0570b0 66.6667%,
+      #0570b0 77.7778%,
+      #045a8d 77.7778%,
+      #045a8d 88.8889%,
+      #023858 88.8889%,
+      #023858 100%);
   color: black;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="OrRd"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="OrRd"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="OrRd"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="OrRd"]) {
-  background: linear-gradient(
-    to right,
-    #fff7ec 0%,
-    #fff7ec 11.1111%,
-    #fee8c8 11.1111%,
-    #fee8c8 22.2222%,
-    #fdd49e 22.2222%,
-    #fdd49e 33.3333%,
-    #fdbb84 33.3333%,
-    #fdbb84 44.4444%,
-    #fc8d59 44.4444%,
-    #fc8d59 55.5556%,
-    #ef6548 55.5556%,
-    #ef6548 66.6667%,
-    #d7301f 66.6667%,
-    #d7301f 77.7778%,
-    #b30000 77.7778%,
-    #b30000 88.8889%,
-    #7f0000 88.8889%,
-    #7f0000 100%
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="OrRd"]) {
+  background: linear-gradient(to right,
+      #fff7ec 0%,
+      #fff7ec 11.1111%,
+      #fee8c8 11.1111%,
+      #fee8c8 22.2222%,
+      #fdd49e 22.2222%,
+      #fdd49e 33.3333%,
+      #fdbb84 33.3333%,
+      #fdbb84 44.4444%,
+      #fc8d59 44.4444%,
+      #fc8d59 55.5556%,
+      #ef6548 55.5556%,
+      #ef6548 66.6667%,
+      #d7301f 66.6667%,
+      #d7301f 77.7778%,
+      #b30000 77.7778%,
+      #b30000 88.8889%,
+      #7f0000 88.8889%,
+      #7f0000 100%);
   color: black;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Oranges"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="Oranges"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="Oranges"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Oranges"]) {
-  background: linear-gradient(
-    to right,
-    #fff7ec 0%,
-    #fff7ec 11.1111%,
-    #fee8c8 11.1111%,
-    #fee8c8 22.2222%,
-    #fdd49e 22.2222%,
-    #fdd49e 33.3333%,
-    #fdbb84 33.3333%,
-    #fdbb84 44.4444%,
-    #fc8d59 44.4444%,
-    #fc8d59 55.5556%,
-    #ef6548 55.5556%,
-    #ef6548 66.6667%,
-    #d7301f 66.6667%,
-    #d7301f 77.7778%,
-    #b30000 77.7778%,
-    #b30000 88.8889%,
-    #7f0000 88.8889%,
-    #7f0000 100%
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="Oranges"]) {
+  background: linear-gradient(to right,
+      #fff7ec 0%,
+      #fff7ec 11.1111%,
+      #fee8c8 11.1111%,
+      #fee8c8 22.2222%,
+      #fdd49e 22.2222%,
+      #fdd49e 33.3333%,
+      #fdbb84 33.3333%,
+      #fdbb84 44.4444%,
+      #fc8d59 44.4444%,
+      #fc8d59 55.5556%,
+      #ef6548 55.5556%,
+      #ef6548 66.6667%,
+      #d7301f 66.6667%,
+      #d7301f 77.7778%,
+      #b30000 77.7778%,
+      #b30000 88.8889%,
+      #7f0000 88.8889%,
+      #7f0000 100%);
   color: black;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Greys"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="Greys"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="Greys"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Greys"]) {
-  background: linear-gradient(
-    to right,
-    #ffffff 0%,
-    #ffffff 11.1111%,
-    #f0f0f0 11.1111%,
-    #f0f0f0 22.2222%,
-    #d9d9d9 22.2222%,
-    #d9d9d9 33.3333%,
-    #bdbdbd 33.3333%,
-    #bdbdbd 44.4444%,
-    #969696 44.4444%,
-    #969696 55.5556%,
-    #737373 55.5556%,
-    #737373 66.6667%,
-    #525252 66.6667%,
-    #525252 77.7778%,
-    #252525 77.7778%,
-    #252525 88.8889%,
-    #000000 88.8889%,
-    #000000 100%
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="Greys"]) {
+  background: linear-gradient(to right,
+      #ffffff 0%,
+      #ffffff 11.1111%,
+      #f0f0f0 11.1111%,
+      #f0f0f0 22.2222%,
+      #d9d9d9 22.2222%,
+      #d9d9d9 33.3333%,
+      #bdbdbd 33.3333%,
+      #bdbdbd 44.4444%,
+      #969696 44.4444%,
+      #969696 55.5556%,
+      #737373 55.5556%,
+      #737373 66.6667%,
+      #525252 66.6667%,
+      #525252 77.7778%,
+      #252525 77.7778%,
+      #252525 88.8889%,
+      #000000 88.8889%,
+      #000000 100%);
   color: black;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Greens"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="Greens"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="Greens"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Greens"]) {
-  background: linear-gradient(
-    to right,
-    #f7fcf5 0%,
-    #f7fcf5 11.1111%,
-    #e5f5e0 11.1111%,
-    #e5f5e0 22.2222%,
-    #c7e9c0 22.2222%,
-    #c7e9c0 33.3333%,
-    #a1d99b 33.3333%,
-    #a1d99b 44.4444%,
-    #74c476 44.4444%,
-    #74c476 55.5556%,
-    #41ab5d 55.5556%,
-    #41ab5d 66.6667%,
-    #238b45 66.6667%,
-    #238b45 77.7778%,
-    #006d2c 77.7778%,
-    #006d2c 88.8889%,
-    #00441b 88.8889%,
-    #00441b 100%
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="Greens"]) {
+  background: linear-gradient(to right,
+      #f7fcf5 0%,
+      #f7fcf5 11.1111%,
+      #e5f5e0 11.1111%,
+      #e5f5e0 22.2222%,
+      #c7e9c0 22.2222%,
+      #c7e9c0 33.3333%,
+      #a1d99b 33.3333%,
+      #a1d99b 44.4444%,
+      #74c476 44.4444%,
+      #74c476 55.5556%,
+      #41ab5d 55.5556%,
+      #41ab5d 66.6667%,
+      #238b45 66.6667%,
+      #238b45 77.7778%,
+      #006d2c 77.7778%,
+      #006d2c 88.8889%,
+      #00441b 88.8889%,
+      #00441b 100%);
   color: black;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="GnBu"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="GnBu"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="GnBu"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="GnBu"]) {
-  background: linear-gradient(
-    to right,
-    #f7fcf5 0%,
-    #f7fcf5 11.1111%,
-    #e5f5e0 11.1111%,
-    #e5f5e0 22.2222%,
-    #c7e9c0 22.2222%,
-    #c7e9c0 33.3333%,
-    #a1d99b 33.3333%,
-    #a1d99b 44.4444%,
-    #74c476 44.4444%,
-    #74c476 55.5556%,
-    #41ab5d 55.5556%,
-    #41ab5d 66.6667%,
-    #238b45 66.6667%,
-    #238b45 77.7778%,
-    #006d2c 77.7778%,
-    #006d2c 88.8889%,
-    #00441b 88.8889%,
-    #00441b 100%
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="GnBu"]) {
+  background: linear-gradient(to right,
+      #f7fcf5 0%,
+      #f7fcf5 11.1111%,
+      #e5f5e0 11.1111%,
+      #e5f5e0 22.2222%,
+      #c7e9c0 22.2222%,
+      #c7e9c0 33.3333%,
+      #a1d99b 33.3333%,
+      #a1d99b 44.4444%,
+      #74c476 44.4444%,
+      #74c476 55.5556%,
+      #41ab5d 55.5556%,
+      #41ab5d 66.6667%,
+      #238b45 66.6667%,
+      #238b45 77.7778%,
+      #006d2c 77.7778%,
+      #006d2c 88.8889%,
+      #00441b 88.8889%,
+      #00441b 100%);
   color: black;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="BuPu"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="BuPu"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="BuPu"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="BuPu"]) {
-  background: linear-gradient(
-    to right,
-    #f7fcfd 0%,
-    #f7fcfd 11.1111%,
-    #e0ecf4 11.1111%,
-    #e0ecf4 22.2222%,
-    #bfd3e6 22.2222%,
-    #bfd3e6 33.3333%,
-    #9ebcda 33.3333%,
-    #9ebcda 44.4444%,
-    #8c96c6 44.4444%,
-    #8c96c6 55.5556%,
-    #8c6bb1 55.5556%,
-    #8c6bb1 66.6667%,
-    #88419d 66.6667%,
-    #88419d 77.7778%,
-    #810f7c 77.7778%,
-    #810f7c 88.8889%,
-    #4d004b 88.8889%,
-    #4d004b 100%
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="BuPu"]) {
+  background: linear-gradient(to right,
+      #f7fcfd 0%,
+      #f7fcfd 11.1111%,
+      #e0ecf4 11.1111%,
+      #e0ecf4 22.2222%,
+      #bfd3e6 22.2222%,
+      #bfd3e6 33.3333%,
+      #9ebcda 33.3333%,
+      #9ebcda 44.4444%,
+      #8c96c6 44.4444%,
+      #8c96c6 55.5556%,
+      #8c6bb1 55.5556%,
+      #8c6bb1 66.6667%,
+      #88419d 66.6667%,
+      #88419d 77.7778%,
+      #810f7c 77.7778%,
+      #810f7c 88.8889%,
+      #4d004b 88.8889%,
+      #4d004b 100%);
   color: black;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="BuGn"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="BuGn"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="BuGn"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="BuGn"]) {
-  background: linear-gradient(
-    to right,
-    #f7fcfd 0%,
-    #f7fcfd 11.1111%,
-    #e5f5f9 11.1111%,
-    #e5f5f9 22.2222%,
-    #ccece6 22.2222%,
-    #ccece6 33.3333%,
-    #99d8c9 33.3333%,
-    #99d8c9 44.4444%,
-    #66c2a4 44.4444%,
-    #66c2a4 55.5556%,
-    #41ae76 55.5556%,
-    #41ae76 66.6667%,
-    #238b45 66.6667%,
-    #238b45 77.7778%,
-    #006d2c 77.7778%,
-    #006d2c 88.8889%,
-    #00441b 88.8889%,
-    #00441b 100%
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="BuGn"]) {
+  background: linear-gradient(to right,
+      #f7fcfd 0%,
+      #f7fcfd 11.1111%,
+      #e5f5f9 11.1111%,
+      #e5f5f9 22.2222%,
+      #ccece6 22.2222%,
+      #ccece6 33.3333%,
+      #99d8c9 33.3333%,
+      #99d8c9 44.4444%,
+      #66c2a4 44.4444%,
+      #66c2a4 55.5556%,
+      #41ae76 55.5556%,
+      #41ae76 66.6667%,
+      #238b45 66.6667%,
+      #238b45 77.7778%,
+      #006d2c 77.7778%,
+      #006d2c 88.8889%,
+      #00441b 88.8889%,
+      #00441b 100%);
   color: black;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Blues"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="Blues"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="Blues"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Blues"]) {
-  background: linear-gradient(
-    to right,
-    #f7fbff 0%,
-    #f7fbff 11.1111%,
-    #deebf7 11.1111%,
-    #deebf7 22.2222%,
-    #c6dbef 22.2222%,
-    #c6dbef 33.3333%,
-    #9ecae1 33.3333%,
-    #9ecae1 44.4444%,
-    #6baed6 44.4444%,
-    #6baed6 55.5556%,
-    #4292c6 55.5556%,
-    #4292c6 66.6667%,
-    #2171b5 66.6667%,
-    #2171b5 77.7778%,
-    #08519c 77.7778%,
-    #08519c 88.8889%,
-    #08306b 88.8889%,
-    #08306b 100%
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="Blues"]) {
+  background: linear-gradient(to right,
+      #f7fbff 0%,
+      #f7fbff 11.1111%,
+      #deebf7 11.1111%,
+      #deebf7 22.2222%,
+      #c6dbef 22.2222%,
+      #c6dbef 33.3333%,
+      #9ecae1 33.3333%,
+      #9ecae1 44.4444%,
+      #6baed6 44.4444%,
+      #6baed6 55.5556%,
+      #4292c6 55.5556%,
+      #4292c6 66.6667%,
+      #2171b5 66.6667%,
+      #2171b5 77.7778%,
+      #08519c 77.7778%,
+      #08519c 88.8889%,
+      #08306b 88.8889%,
+      #08306b 100%);
   color: black;
   text-align: left;
 }
 
 /* Viridis */
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="inferno"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="inferno"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="inferno"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="inferno"]) {
-  background: linear-gradient(
-    to right,
-    #000004ff,
-    #08051eff,
-    #190c3eff,
-    #300a5bff,
-    #460b6aff,
-    #5c126eff,
-    #711a6eff,
-    #87216bff,
-    #9c2964ff,
-    #b1325aff,
-    #c43c4eff,
-    #d64b40ff,
-    #e55c30ff,
-    #f17020ff,
-    #f8870eff,
-    #fca007ff,
-    #fbb91fff,
-    #f7d340ff,
-    #f1ed6fff,
-    #fcffa4ff
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="inferno"]) {
+  background: linear-gradient(to right,
+      #000004ff,
+      #08051eff,
+      #190c3eff,
+      #300a5bff,
+      #460b6aff,
+      #5c126eff,
+      #711a6eff,
+      #87216bff,
+      #9c2964ff,
+      #b1325aff,
+      #c43c4eff,
+      #d64b40ff,
+      #e55c30ff,
+      #f17020ff,
+      #f8870eff,
+      #fca007ff,
+      #fbb91fff,
+      #f7d340ff,
+      #f1ed6fff,
+      #fcffa4ff);
   color: white;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="plasma"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="plasma"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="plasma"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="plasma"]) {
-  background: linear-gradient(
-    to right,
-    #0d0887ff,
-    #2d0594ff,
-    #44039eff,
-    #5901a5ff,
-    #6f00a8ff,
-    #8305a7ff,
-    #9512a1ff,
-    #a72197ff,
-    #b6308bff,
-    #c5407eff,
-    #d14e72ff,
-    #dd5e66ff,
-    #e76e5bff,
-    #ef7f4fff,
-    #f79044ff,
-    #fba238ff,
-    #feb72dff,
-    #fdcb26ff,
-    #f7e225ff,
-    #f0f921ff
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="plasma"]) {
+  background: linear-gradient(to right,
+      #0d0887ff,
+      #2d0594ff,
+      #44039eff,
+      #5901a5ff,
+      #6f00a8ff,
+      #8305a7ff,
+      #9512a1ff,
+      #a72197ff,
+      #b6308bff,
+      #c5407eff,
+      #d14e72ff,
+      #dd5e66ff,
+      #e76e5bff,
+      #ef7f4fff,
+      #f79044ff,
+      #fba238ff,
+      #feb72dff,
+      #fdcb26ff,
+      #f7e225ff,
+      #f0f921ff);
   color: white;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="viridis"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="viridis"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="viridis"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="viridis"]) {
-  background: linear-gradient(
-    to right,
-    #440154ff,
-    #481568ff,
-    #482677ff,
-    #453781ff,
-    #3f4788ff,
-    #39558cff,
-    #32648eff,
-    #2d718eff,
-    #287d8eff,
-    #238a8dff,
-    #1f968bff,
-    #20a386ff,
-    #29af7fff,
-    #3cbc75ff,
-    #56c667ff,
-    #74d055ff,
-    #94d840ff,
-    #b8de29ff,
-    #dce318ff,
-    #fde725ff
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="viridis"]) {
+  background: linear-gradient(to right,
+      #440154ff,
+      #481568ff,
+      #482677ff,
+      #453781ff,
+      #3f4788ff,
+      #39558cff,
+      #32648eff,
+      #2d718eff,
+      #287d8eff,
+      #238a8dff,
+      #1f968bff,
+      #20a386ff,
+      #29af7fff,
+      #3cbc75ff,
+      #56c667ff,
+      #74d055ff,
+      #94d840ff,
+      #b8de29ff,
+      #dce318ff,
+      #fde725ff);
   color: white;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="cividis"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="cividis"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="cividis"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="cividis"]) {
-  background: linear-gradient(
-    to right,
-    #00204dff,
-    #002a64ff,
-    #00336fff,
-    #1f3c6dff,
-    #35466bff,
-    #444f6bff,
-    #53596cff,
-    #5f636eff,
-    #6b6c71ff,
-    #777776ff,
-    #838079ff,
-    #908b79ff,
-    #9d9677ff,
-    #aba074ff,
-    #b9ac70ff,
-    #c7b76bff,
-    #d7c463ff,
-    #e5d05aff,
-    #f5dd4dff,
-    #ffea46ff
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="cividis"]) {
+  background: linear-gradient(to right,
+      #00204dff,
+      #002a64ff,
+      #00336fff,
+      #1f3c6dff,
+      #35466bff,
+      #444f6bff,
+      #53596cff,
+      #5f636eff,
+      #6b6c71ff,
+      #777776ff,
+      #838079ff,
+      #908b79ff,
+      #9d9677ff,
+      #aba074ff,
+      #b9ac70ff,
+      #c7b76bff,
+      #d7c463ff,
+      #e5d05aff,
+      #f5dd4dff,
+      #ffea46ff);
   color: white;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="rocket"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="rocket"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="rocket"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="rocket"]) {
-  background: linear-gradient(
-    to right,
-    #03051aff,
-    #150e26ff,
-    #281535ff,
-    #3c1a42ff,
-    #511e4dff,
-    #661f54ff,
-    #7c1f5aff,
-    #931c5bff,
-    #aa185aff,
-    #c11754ff,
-    #d3214bff,
-    #e33541ff,
-    #ed4e3eff,
-    #f26847ff,
-    #f4815aff,
-    #f5986fff,
-    #f6ae86ff,
-    #f7c2a2ff,
-    #f8d7bfff,
-    #faebddff
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="rocket"]) {
+  background: linear-gradient(to right,
+      #03051aff,
+      #150e26ff,
+      #281535ff,
+      #3c1a42ff,
+      #511e4dff,
+      #661f54ff,
+      #7c1f5aff,
+      #931c5bff,
+      #aa185aff,
+      #c11754ff,
+      #d3214bff,
+      #e33541ff,
+      #ed4e3eff,
+      #f26847ff,
+      #f4815aff,
+      #f5986fff,
+      #f6ae86ff,
+      #f7c2a2ff,
+      #f8d7bfff,
+      #faebddff);
   color: white;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="mako"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="mako"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="mako"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="mako"]) {
-  background: linear-gradient(
-    to right,
-    #0b0405ff,
-    #190e19ff,
-    #27182dff,
-    #312142ff,
-    #3a2c59ff,
-    #3f3770ff,
-    #414388ff,
-    #3c5397ff,
-    #38639dff,
-    #3573a1ff,
-    #3482a4ff,
-    #3491a8ff,
-    #35a0abff,
-    #3aaeadff,
-    #46beadff,
-    #5accadff,
-    #7ed7afff,
-    #a4e0bbff,
-    #c3e9ceff,
-    #def5e5ff
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="mako"]) {
+  background: linear-gradient(to right,
+      #0b0405ff,
+      #190e19ff,
+      #27182dff,
+      #312142ff,
+      #3a2c59ff,
+      #3f3770ff,
+      #414388ff,
+      #3c5397ff,
+      #38639dff,
+      #3573a1ff,
+      #3482a4ff,
+      #3491a8ff,
+      #35a0abff,
+      #3aaeadff,
+      #46beadff,
+      #5accadff,
+      #7ed7afff,
+      #a4e0bbff,
+      #c3e9ceff,
+      #def5e5ff);
   color: white;
   text-align: left;
 }
 
 /* Magma */
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="magma"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="magma"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="magma"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="magma"]) {
-  background: linear-gradient(
-    to right,
-    #000004ff,
-    #07071dff,
-    #160f3bff,
-    #29115aff,
-    #400f73ff,
-    #56147dff,
-    #6b1d81ff,
-    #802582ff,
-    #952c80ff,
-    #ab337cff,
-    #c03a76ff,
-    #d6456cff,
-    #e85362ff,
-    #f4685cff,
-    #fa815fff,
-    #fd9a6aff,
-    #feb37bff,
-    #fecc8fff,
-    #fde4a6ff,
-    #fcfdbfff
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="magma"]) {
+  background: linear-gradient(to right,
+      #000004ff,
+      #07071dff,
+      #160f3bff,
+      #29115aff,
+      #400f73ff,
+      #56147dff,
+      #6b1d81ff,
+      #802582ff,
+      #952c80ff,
+      #ab337cff,
+      #c03a76ff,
+      #d6456cff,
+      #e85362ff,
+      #f4685cff,
+      #fa815fff,
+      #fd9a6aff,
+      #feb37bff,
+      #fecc8fff,
+      #fde4a6ff,
+      #fcfdbfff);
   color: white;
   text-align: left;
 }
 
 /* Turbo */
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="turbo"],
+#app-conversion_main-color_scale+.selectize-control .selectize-dropdown .option[data-value="turbo"],
 .selectize-dropdown.app-conversion_main-color_scale .option[data-value="turbo"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="turbo"]) {
-  background: linear-gradient(
-    to right,
-    #30123bff,
-    #3f3994ff,
-    #455ed2ff,
-    #4681f7ff,
-    #3aa2fcff,
-    #23c3e4ff,
-    #18dec1ff,
-    #2cf09eff,
-    #5bfb72ff,
-    #8eff49ff,
-    #b5f836ff,
-    #d6e635ff,
-    #efcd3aff,
-    #fcb036ff,
-    #fd8a26ff,
-    #f36215ff,
-    #e14209ff,
-    #c82803ff,
-    #a51301ff,
-    #7a0403ff
-  );
+#app-conversion_main-color_scale+.selectize-control .selectize-input:has(> .item[data-value="turbo"]) {
+  background: linear-gradient(to right,
+      #30123bff,
+      #3f3994ff,
+      #455ed2ff,
+      #4681f7ff,
+      #3aa2fcff,
+      #23c3e4ff,
+      #18dec1ff,
+      #2cf09eff,
+      #5bfb72ff,
+      #8eff49ff,
+      #b5f836ff,
+      #d6e635ff,
+      #efcd3aff,
+      #fcb036ff,
+      #fd8a26ff,
+      #f36215ff,
+      #e14209ff,
+      #c82803ff,
+      #a51301ff,
+      #7a0403ff);
   color: white;
   text-align: left;
 }
 
-#app-conversion_main-cmp_distribution > div > div > svg:nth-child(5) > g > g > text.name {
+#app-conversion_main-cmp_distribution>div>div>svg:nth-child(5)>g>g>text.name {
   fill: black !important;
 }
 
@@ -3419,19 +3350,19 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   padding-right: 10px;
 }
 
-.material-switch > input[type="checkbox"]:checked + label.switch:before {
+.material-switch>input[type="checkbox"]:checked+label.switch:before {
   background: #7777f9;
   opacity: 1;
   box-shadow: inset 0 0 10px rgb(255 255 255 / 25%);
 }
 
-.material-switch > label.switch:before {
+.material-switch>label.switch:before {
   background: #ffffff;
   margin-top: -12px;
   height: 17px;
 }
 
-.material-switch > label.switch:after {
+.material-switch>label.switch:after {
   height: 20px;
   width: 20px;
 }
@@ -3474,13 +3405,13 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   opacity: 1;
 }
 
-#app-conversion_main-proteins_table > .ht_master > .wtHolder,
-#app-conversion_main-compounds_table > .ht_master > .wtHolder,
-#app-conversion_main-samples_table > .ht_master > .wtHolder {
+#app-conversion_main-proteins_table>.ht_master>.wtHolder,
+#app-conversion_main-compounds_table>.ht_master>.wtHolder,
+#app-conversion_main-samples_table>.ht_master>.wtHolder {
   width: fit-content !important;
 }
 
-.hits-table-control-select .bootstrap-select > .dropdown-toggle {
+.hits-table-control-select .bootstrap-select>.dropdown-toggle {
   height: 40px;
   padding: 8px;
 }
@@ -3533,12 +3464,12 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 .navbar .nav-underline .nav-link,
-.navbar .nav-underline :where(ul.nav.navbar-nav > li) > a {
+.navbar .nav-underline :where(ul.nav.navbar-nav > li)>a {
   margin-bottom: -7px;
 }
 
 .nav-underline .nav-link:not(:empty).active,
-.nav-underline :where(ul.nav.navbar-nav > li) > a:not(:empty).active {
+.nav-underline :where(ul.nav.navbar-nav > li)>a:not(:empty).active {
   font-weight: 600;
 }
 
@@ -3595,7 +3526,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   justify-self: end;
 }
 
-.complex-picker .bootstrap-select > .dropdown-toggle {
+.complex-picker .bootstrap-select>.dropdown-toggle {
   height: 32.5px;
   padding: 5px;
   font-weight: 200;
@@ -3661,4 +3592,9 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 
 .disabled label {
   cursor: auto !important;
+}
+
+.popover-body {
+  background: #e5e5e5;
+  border-radius: 5px;
 }
