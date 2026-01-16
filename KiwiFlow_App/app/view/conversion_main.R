@@ -298,7 +298,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     ns <- session$ns
 
     # Set file upload limit
-    options(shiny.maxRequestSize = 1000 * 1024^2)
+    options(shiny.maxRequestSize = 1000^10 * 1024^2)
 
     # Conversion Declarations/Initiation ----
 
@@ -1542,7 +1542,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             bslib::nav_panel(
               title = "Hits",
               shiny::div(
-                class = "conversion-result-wrapper",
+                class = "conversion-result-wrapper hits-tab",
                 shiny::fluidRow(
                   shiny::column(
                     width = 2,

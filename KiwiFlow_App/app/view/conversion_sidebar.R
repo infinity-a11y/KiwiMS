@@ -168,11 +168,13 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
                 )
               )
             ),
-            shiny::actionButton(
-              ns("report_conversion_results"),
-              "Report",
-              icon = shiny::icon("square-poll-vertical"),
-              width = "100%"
+            shinyjs::disabled(
+              shiny::actionButton(
+                ns("report_conversion_results"),
+                "Report",
+                icon = shiny::icon("square-poll-vertical"),
+                width = "100%"
+              )
             )
           )
         )
@@ -295,79 +297,79 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
     ## Conditional processing ----
     shiny::observeEvent(input$run_binding_analysis, {
       if (analysis_status() == "pending") {
-        # # Delay conversion start
-        # Sys.sleep(1)
+        # Delay conversion start
+        Sys.sleep(1)
 
-        # # Activate JS function for conversion process tracking
-        # shinyjs::runjs(sprintf(
-        #   conversion_tracking_js,
-        #   ns("console_log"),
-        #   ns("scroll_btn")
-        # ))
+        # Activate JS function for conversion process tracking
+        shinyjs::runjs(sprintf(
+          conversion_tracking_js,
+          ns("console_log"),
+          ns("scroll_btn")
+        ))
 
-        # # Add hits
-        # withCallingHandlers(
-        #   expr = {
-        #     result_with_hits <- add_hits(
-        #       conversion_main_vars$input_list()$result,
-        #       sample_table = conversion_main_vars$input_list()$Samples_Table,
-        #       protein_table = conversion_main_vars$input_list()$Protein_Table,
-        #       compound_table = conversion_main_vars$input_list()$Compound_Table,
-        #       peak_tolerance = input$peak_tolerance,
-        #       max_multiples = input$max_multiples,
-        #       session = session,
-        #       ns = ns
-        #     )
+        # Add hits
+        withCallingHandlers(
+          expr = {
+            result_with_hits <- add_hits(
+              conversion_main_vars$input_list()$result,
+              sample_table = conversion_main_vars$input_list()$Samples_Table,
+              protein_table = conversion_main_vars$input_list()$Protein_Table,
+              compound_table = conversion_main_vars$input_list()$Compound_Table,
+              peak_tolerance = input$peak_tolerance,
+              max_multiples = input$max_multiples,
+              session = session,
+              ns = ns
+            )
 
-        #     result_with_hits1 <<- result_with_hits
+            result_with_hits1 <<- result_with_hits
 
-        #     # If Ki/kinact analysis is set to be performed
-        #     if (input$run_ki_kinact) {
-        #       result_with_hits$hits_summary <- summarize_hits(
-        #         result_with_hits,
-        #         conc_time = conversion_main_vars$input_list()$ConcTime_Table
-        #       )
+            # If Ki/kinact analysis is set to be performed
+            if (input$run_ki_kinact) {
+              result_with_hits$hits_summary <- summarize_hits(
+                result_with_hits,
+                conc_time = conversion_main_vars$input_list()$ConcTime_Table
+              )
 
-        #       # Add binding/kobs results to result list
-        #       result_with_hits$binding_kobs_result <- add_kobs_binding_result(
-        #         result_with_hits
-        #       )
+              # Add binding/kobs results to result list
+              result_with_hits$binding_kobs_result <- add_kobs_binding_result(
+                result_with_hits
+              )
 
-        #       # Add Ki/kinact results to result list
-        #       result_with_hits$ki_kinact_result <- add_ki_kinact_result(
-        #         result_with_hits
-        #       )
-        #     } else {
-        #       # Only protein conversion without Ki/kinact analysus
-        #       result_with_hits$hits_summary <- summarize_hits(
-        #         result_with_hits,
-        #         conc_time = NULL
-        #       )
-        #     }
-        #   },
-        #   message = function(m) {
-        #     clean_msg <- gsub("\\", "\\\\", m$message, fixed = TRUE)
-        #     clean_msg <- gsub("'", "\\'", clean_msg, fixed = TRUE)
-        #     clean_msg <- gsub("\n", "<br>", clean_msg, fixed = TRUE)
+              # Add Ki/kinact results to result list
+              result_with_hits$ki_kinact_result <- add_ki_kinact_result(
+                result_with_hits
+              )
+            } else {
+              # Only protein conversion without Ki/kinact analysus
+              result_with_hits$hits_summary <- summarize_hits(
+                result_with_hits,
+                conc_time = NULL
+              )
+            }
+          },
+          message = function(m) {
+            clean_msg <- gsub("\\", "\\\\", m$message, fixed = TRUE)
+            clean_msg <- gsub("'", "\\'", clean_msg, fixed = TRUE)
+            clean_msg <- gsub("\n", "<br>", clean_msg, fixed = TRUE)
 
-        #     js_cmd <- sprintf(
-        #       "
-        #     var el = document.getElementById('%s');
-        #     if (el) {
-        #       el.innerHTML += '%s';
-        #       el.doAutoScroll();
-        #     }
-        #       ",
-        #       ns("console_log"),
-        #       clean_msg
-        #     )
+            js_cmd <- sprintf(
+              "
+            var el = document.getElementById('%s');
+            if (el) {
+              el.innerHTML += '%s';
+              el.doAutoScroll();
+            }
+              ",
+              ns("console_log"),
+              clean_msg
+            )
 
-        #     shinyjs::runjs(js_cmd)
-        #   }
-        # )
+            shinyjs::runjs(js_cmd)
+          }
+        )
 
-        # # Assign result list and hits table to reactive vars
-        # result_list(result_with_hits)
+        # Assign result list and hits table to reactive vars
+        result_list(result_with_hits)
 
         # TODO
         # Dev Mode

@@ -1448,13 +1448,11 @@ extract_minutes <- function(strings) {
 # Function to add binding/kobs results to result list
 #' @export
 add_kobs_binding_result <- function(result_list, concentrations_select = NULL) {
-  # Replace NA's with 0
-  # hits_summary <- result_list[["hits_summary"]]
-  # hits_summary[is.na(hits_summary)] <- 0
+  # Filter NA
   hits_summary <- result_list$hits_summary |>
     dplyr::filter(!is.na(Compound))
 
-  # Compute and model kobs values
+  # Optional concentration filter
   if (!is.null(concentrations_select)) {
     hits_summary <- dplyr::filter(
       hits_summary,

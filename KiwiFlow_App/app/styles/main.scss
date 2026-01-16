@@ -232,9 +232,11 @@ th {
 }
 
 .card-header-tabs .nav-link.active {
-  background-color: rgba(255, 255, 255, 0.1);
-  border: 1px solid #e5e5e5;
-  border-bottom-color: transparent;
+  background-color: rgba(255, 255, 255, .1);
+  border-top: 1px solid #e5e5e5;
+  border-left: 1px solid #e5e5e5;
+  border-right: 1px solid #e5e5e5;
+  border-bottom: none;
 }
 
 .nav-tabs .nav-link:hover,
@@ -3597,4 +3599,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 .popover-body {
   background: #e5e5e5;
   border-radius: 5px;
+}
+
+.hits-tab {
+  align-items: center;
 }
