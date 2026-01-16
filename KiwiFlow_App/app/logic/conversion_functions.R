@@ -2566,7 +2566,8 @@ multiple_spectra <- function(
 
   peaks_data <- dplyr::mutate(
     peaks_data,
-    symbol = ifelse(mass %in% prot_peaks, "diamond", "circle")
+    symbol = ifelse(mass %in% prot_peaks, "diamond", "circle"),
+    linecolor = ifelse(mass %in% prot_peaks, "#000000", "#ffffff")
   )
 
   # Prepare compound marker colors and symbols
@@ -2585,8 +2586,9 @@ multiple_spectra <- function(
       )]
 
       color <- NULL
-      line <- list(color = "white", width = 2)
+      line <- list(color = "white", width = 1)
       marker_color <- ~ I(color)
+      z_linecolor <- list(color = "#ffffff")
     } else if (color_variable == "Samples") {
       peaks_data$z_color <- color_cmp[match(peaks_data$z, names(color_cmp))]
       spectrum_data$z_color <- color_cmp[match(
@@ -2597,6 +2599,7 @@ multiple_spectra <- function(
       color <- ~ I(z_color)
       line <- list(width = 1)
       marker_color <- ~ I(z_color)
+      z_linecolor <- NULL
     }
   } else {
     marker_color <- "white"
@@ -2617,22 +2620,10 @@ multiple_spectra <- function(
     y = ~intensity,
     z = ~z,
     split = ~z,
-    # marker = list(
-    # color = color,
-    # ),
-    # colors = c("#ffffff", pal),
-    # color = ~z,
-    # colors = if (time) {
-    #   viridisLite::viridis(
-    #     length(unique(peaks_data$z)),
-    #     begin = 0.5
-    #   )
-    # } else {
-    #   rep("white", length(unique(peaks_data$z)))
-    # },
+    color = color,
+    line = z_linecolor,
     type = "scatter3d",
     mode = "lines",
-    # line = line,
     showlegend = FALSE,
     hoverinfo = "text",
     text = ~ paste0(
@@ -2666,7 +2657,7 @@ multiple_spectra <- function(
         symbol = ~ I(symbol),
         size = 5,
         zindex = 100,
-        line = list(color = "black", width = 1.5)
+        line = list(color = ~ I(linecolor), width = 1)
       ),
       hoverinfo = "text",
       text = ~ paste0(

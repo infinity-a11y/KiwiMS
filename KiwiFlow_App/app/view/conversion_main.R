@@ -1382,7 +1382,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         ))
 
         result_list <- conversion_sidebar_vars$result_list()
-        result_list <<- result_list
 
         analysis_select <- conversion_sidebar_vars$analysis_select()
 
@@ -1944,13 +1943,41 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
               selected <- input$conversion_sample_picker
 
+              hits_summary <<- hits_summary
+              selected <<- selected
+
               protein <- hits_summary$`Protein`[
                 hits_summary$`Sample ID` == selected
               ]
 
+              # Get protein signal
               measured_protein_mw <- hits_summary$`Meas. Prot.`[
                 hits_summary$`Sample ID` == selected
               ]
+
+              # Filter out NAs
+              measured_protein_mw <- measured_protein_mw[
+                measured_protein_mw != "N/A"
+              ]
+              if (length(measured_protein_mw)) {
+                signal_average <- paste(
+                  format(
+                    round(
+                      mean(as.numeric(gsub(
+                        " Da",
+                        "",
+                        measured_protein_mw
+                      ))),
+                      2
+                    ),
+                    big.mark = ",",
+                    scientific = FALSE
+                  ),
+                  "Da"
+                )
+              } else {
+                signal_average <- "No signal"
+              }
 
               theor_protein_mw <- hits_summary$`Theor. Prot.`[
                 hits_summary$`Sample ID` == selected
@@ -1977,19 +2004,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                       scientific = FALSE
                     ),
                     "Da <br>",
-                    format(
-                      round(
-                        mean(as.numeric(gsub(
-                          " Da",
-                          "",
-                          measured_protein_mw
-                        ))),
-                        2
-                      ),
-                      big.mark = ",",
-                      scientific = FALSE
-                    ),
-                    "Da"
+                    signal_average
                   ))
                 )
               )
@@ -3059,10 +3074,35 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
               selected <- input$conversion_protein_picker
 
+              # Get all protein signals
               measured_protein_mw <- hits_summary$`Meas. Prot.`[
                 hits_summary$Protein == selected
               ]
+              # Filter out NAs
+              measured_protein_mw <- measured_protein_mw[
+                measured_protein_mw != "N/A"
+              ]
+              if (length(measured_protein_mw)) {
+                signal_average <- paste(
+                  format(
+                    round(
+                      mean(as.numeric(gsub(
+                        " Da",
+                        "",
+                        measured_protein_mw
+                      ))),
+                      2
+                    ),
+                    big.mark = ",",
+                    scientific = FALSE
+                  ),
+                  "Da"
+                )
+              } else {
+                signal_average <- "No signal"
+              }
 
+              # Get theoretical protein mw
               theor_protein_mw <- hits_summary$`Theor. Prot.`[
                 hits_summary$Protein == selected
               ]
@@ -3088,19 +3128,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                       scientific = FALSE
                     ),
                     "Da <br>",
-                    format(
-                      round(
-                        mean(as.numeric(gsub(
-                          " Da",
-                          "",
-                          measured_protein_mw
-                        ))),
-                        2
-                      ),
-                      big.mark = ",",
-                      scientific = FALSE
-                    ),
-                    "Da",
+                    signal_average,
                     if (length(measured_protein_mw) > 1) {
                       "±"
                     },
@@ -3126,6 +3154,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               hits_summary,
               input$conversion_sample_picker
             )
+
+            hits_summary <<- hits_summary
 
             choices <- unique(hits_summary$`Cmp Name`[
               hits_summary$`Protein` == input$conversion_protein_picker &
@@ -3260,9 +3290,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               )
 
             # Factorize sample ID to sort by %-binding
-            tbl$`Cmp Name` <- factor(
-              tbl$`Cmp Name`,
-              levels = unique(tbl$`Cmp Name`)
+            tbl$`Sample ID` <- factor(
+              tbl$`Sample ID`,
+              levels = unique(tbl$`Sample ID`)
             )
 
             # Make compound color scale
@@ -3301,7 +3331,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             # Create plotly bar chart
             bar_chart <- plotly::plot_ly(data = tbl) |>
               plotly::add_trace(
-                x = ~`Cmp Name`,
+                # x = ~`Cmp Name`,
+                x = ~`Sample ID`,
                 y = ~ as.numeric(gsub("%", "", `%-Binding`)),
                 color = color,
                 colors = colors,
@@ -3333,16 +3364,16 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 showlegend = FALSE
               )
 
-            if (length(tbl$`Cmp Name`) <= 20) {
+            if (length(tbl$`Sample ID`) <= 20) {
               # Calculate totals for the top labels
-              totals <- dplyr::group_by(tbl, `Cmp Name`) |>
+              totals <- dplyr::group_by(tbl, `Sample ID`) |>
                 dplyr::summarize(
                   total_val = sum(as.numeric(gsub("%", "", `%-Binding`)))
                 )
               bar_chart <- bar_chart |>
                 plotly::add_trace(
                   data = totals,
-                  x = ~`Cmp Name`,
+                  x = ~`Sample ID`,
                   y = ~total_val,
                   type = 'scatter',
                   mode = 'text',
@@ -3353,9 +3384,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   inherit = FALSE,
                   textfont = list(
                     color = '#ffffff',
-                    size = if (length(tbl$`Cmp Name`) <= 8) {
+                    size = if (length(tbl$`Sample ID`) <= 8) {
                       16
-                    } else if (length(tbl$`Cmp Name`) <= 16) {
+                    } else if (length(tbl$`Sample ID`) <= 16) {
                       14
                     } else {
                       12
@@ -3376,7 +3407,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   zeroline = FALSE,
                   color = '#ffffff',
                   showticklabels = ifelse(
-                    max(nchar(levels(tbl$`Cmp Name`))) > 22,
+                    max(nchar(levels(tbl$`Sample ID`))) > 22,
                     FALSE,
                     TRUE
                   )
