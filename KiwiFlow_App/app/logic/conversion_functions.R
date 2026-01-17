@@ -3135,7 +3135,7 @@ render_hits_table <- function(
     options = list(
       rowCallback = htmlwidgets::JS(rowCallback),
       scrollX = TRUE,
-      scrollY = "365px",
+      scrollY = TRUE,
       scrollCollapse = TRUE,
       fixedHeader = TRUE,
       stripe = FALSE,

@@ -1657,10 +1657,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     )
                   )
                 ),
-                shinycssloaders::withSpinner(
-                  DT::DTOutput(ns("conversion_hits_tab")),
-                  type = 1,
-                  color = "#7777f9"
+                shiny::div(
+                  class = "hits-table-wrapper",
+                  shinycssloaders::withSpinner(
+                    DT::DTOutput(ns("conversion_hits_tab")),
+                    type = 1,
+                    color = "#7777f9"
+                  )
                 )
               )
             )
@@ -1867,6 +1870,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   ),
                   shiny::div(
                     class = "card-custom cmp-table",
+                    id = "upper-section",
                     bslib::card(
                       bslib::card_header(
                         class = "bg-dark help-header",
@@ -2329,7 +2333,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   options = list(
                     dom = 't',
                     paging = FALSE,
-                    scrollY = "175px",
+                    scrollY = TRUE,
                     scrollCollapse = TRUE,
                     rowGroup = if (
                       length(unique(tbl$`Cmp Name`)) == nrow(tbl)
@@ -2469,6 +2473,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   ),
                   shiny::div(
                     class = "card-custom cmp-table",
+                    id = "upper-section",
                     bslib::card(
                       bslib::card_header(
                         class = "bg-dark help-header",
@@ -2926,7 +2931,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 options = list(
                   dom = 't',
                   paging = FALSE,
-                  scrollY = "175px",
+                  scrollY = TRUE,
                   scrollCollapse = TRUE,
                   rowGroup = if (length(unique(tbl$`Sample ID`)) == nrow(tbl)) {
                     NULL
@@ -3598,9 +3603,12 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               trunc = truncate_names
             )
 
+            tbl1 <<- tbl
+            colors1 <<- colors
+
             # Create data table
             cmp_table <- tbl |>
-              dplyr::group_by(`Cmp Name`) |>
+              dplyr::group_by(`Cmp Name`, `Sample ID`) |>
               dplyr::reframe(
                 `Cmp Name` = `Cmp Name`,
                 `Mass Shift` = `Theor. Cmp`,
@@ -3622,8 +3630,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 .before = 3
               ) |>
               dplyr::arrange(
-                # `Sample ID`,
                 as.numeric(gsub("%", "", `Total %-Binding`)),
+                as.numeric(gsub("%", "", `%-Binding`)),
                 dplyr::desc(`Mass Shift`),
                 `Stoichiometry`
               ) |>
@@ -3635,7 +3643,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 options = list(
                   dom = 't',
                   paging = FALSE,
-                  scrollY = "175px",
+                  scrollY = TRUE,
                   scrollCollapse = TRUE,
                   rowGroup = if (length(unique(tbl$`Cmp Name`)) == nrow(tbl)) {
                     NULL
@@ -4587,18 +4595,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         if (
           !is.null(input$color_scale) && input$color_scale %in% unlist(scales)
         ) {
-          message(TRUE)
-          scales1 <<- unlist(scales)
-          color_scale1 <<- input$color_scale
-
           selected <- input$color_scale
-          message(selected)
           render_trigger(render_trigger() + 1)
         } else {
-          scales1 <<- unlist(scales)
-          message(FALSE)
           selected <- "viridis"
-          message(selected)
         }
 
         shiny::updateSelectInput(
