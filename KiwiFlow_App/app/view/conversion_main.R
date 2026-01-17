@@ -1956,12 +1956,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 hits_summary,
                 input$conversion_sample_picker
               )
-
               selected <- input$conversion_sample_picker
 
-              protein <- hits_summary$`Protein`[
+              protein <- unique(hits_summary$`Protein`[
                 hits_summary$`Sample ID` == selected
-              ]
+              ])
 
               # Get protein signal
               measured_protein_mw <- hits_summary$`Meas. Prot.`[
@@ -2546,7 +2545,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               hits_summary,
               input$conversion_compound_picker
             )
-
             selected <- input$conversion_compound_picker
 
             theor_cmp_mw <- hits_summary[
@@ -2558,22 +2556,46 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 class = "conversion-sample-protein-box",
                 shiny::div(
                   class = "conversion-sample-protein-names",
-                  shiny::HTML("Name<br>Mw")
+                  shiny::HTML("Name<br>Mass Shifts<br>Mw")
                 ),
                 shiny::div(
                   class = "conversion-sample-protein",
                   shiny::HTML(paste(
                     selected,
                     "<br>",
-                    format(
-                      as.numeric(gsub(
-                        " Da",
-                        "",
-                        unique(theor_cmp_mw$`Theor. Cmp`)
-                      )),
-                      big.mark = ",",
-                      scientific = FALSE
-                    ),
+                    length(unique(theor_cmp_mw$`Theor. Cmp`)),
+                    "<br>",
+                    if (length(unique(theor_cmp_mw$`Theor. Cmp`)) > 1) {
+                      paste(
+                        format(
+                          c(
+                            min(as.numeric(gsub(
+                              " Da",
+                              "",
+                              unique(theor_cmp_mw$`Theor. Cmp`)
+                            ))),
+                            max(as.numeric(gsub(
+                              " Da",
+                              "",
+                              unique(theor_cmp_mw$`Theor. Cmp`)
+                            )))
+                          ),
+                          big.mark = ",",
+                          scientific = FALSE
+                        ),
+                        collapse = " - "
+                      )
+                    } else {
+                      format(
+                        as.numeric(gsub(
+                          " Da",
+                          "",
+                          unique(theor_cmp_mw$`Theor. Cmp`)
+                        )),
+                        big.mark = ",",
+                        scientific = FALSE
+                      )
+                    },
                     "Da"
                   ))
                 )
