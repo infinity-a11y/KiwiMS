@@ -3665,6 +3665,20 @@ get_contrast_color <- function(hex_codes) {
   ifelse(brightness > 128, "#000000", "#ffffff")
 }
 
+# Adjust brightness
+brighten_hex <- function(hex_colors, factor = 1.2) {
+  # Convert Hex to HSV
+  rgb_vals <- grDevices::col2rgb(hex_colors)
+  hsv_vals <- grDevices::rgb2hsv(rgb_vals)
+
+  # Multiply the 'Value' (brightness) channel
+  # We use pmin to ensure we don't exceed the maximum value of 1
+  hsv_vals[3, ] <- pmin(hsv_vals[3, ] * factor, 1)
+
+  # Convert back to Hex
+  grDevices::hsv(hsv_vals[1, ], hsv_vals[2, ], hsv_vals[3, ])
+}
+
 # Make uniform color scale for compounds
 #' @export
 get_cmp_colorScale <- function(filtered_table, scale, variable, trunc) {
@@ -3684,47 +3698,56 @@ get_cmp_colorScale <- function(filtered_table, scale, variable, trunc) {
   # Initialize output
   colors <- NULL
 
-  # RColorBrewer Scales
-  if (scale %in% c(qualitative_scales, sequential_scales)) {
-    # Check max colors available for this specific Brewer palette
-    max_colors <- RColorBrewer::brewer.pal.info[scale, "maxcolors"]
+  for (i in 1:2) {
+    # RColorBrewer Scales
+    if (scale %in% c(qualitative_scales, sequential_scales)) {
+      # Check max colors available for this specific Brewer palette
+      max_colors <- RColorBrewer::brewer.pal.info[scale, "maxcolors"]
 
-    # Return NULL if n exceeds the palette's max limit
-    if (n > max_colors) {
-      warning(paste(
-        "N =",
-        n,
-        "exceeds max colors (",
-        max_colors,
-        ") for palette",
-        scale
-      ))
-      return(NULL)
-    }
+      # Shift to gradient scale if n exceeds the palette's max limit
+      if (n > max_colors) {
+        message(paste(
+          "N =",
+          n,
+          "exceeds max colors (",
+          max_colors,
+          ") for palette",
+          scale
+        ))
 
-    # Handle n < 3 (Brewer minimum request is 3)
-    n_request <- max(n, 3)
-    raw_colors <- RColorBrewer::brewer.pal(n_request, scale)
+        scale <- "viridis"
+      } else {
+        # Handle n < 3 (Brewer minimum request is 3)
+        n_request <- max(n, 3)
+        raw_colors <- RColorBrewer::brewer.pal(n_request, scale)
 
-    # Apply custom subsetting for contrast at low n
-    if (n == 2) {
-      colors <- raw_colors[c(1, 3)]
-    } else if (n == 1) {
-      colors <- raw_colors[1]
+        # Apply custom subsetting for contrast at low n
+        if (n == 2) {
+          colors <- raw_colors[c(1, 2)]
+        } else if (n == 1) {
+          colors <- raw_colors[1]
+        } else {
+          colors <- raw_colors[1:n]
+        }
+
+        break
+      }
+
+      # ViridisLite Scales
+    } else if (scale %in% gradient_scales) {
+      vir_func <- getExportedValue("viridisLite", scale)
+      colors <- vir_func(n)
     } else {
-      colors <- raw_colors[1:n]
+      stop(paste("Scale", scale, "not recognized in provided lists."))
     }
-
-    # ViridisLite Scales
-  } else if (scale %in% gradient_scales) {
-    vir_func <- getExportedValue("viridisLite", scale)
-    colors <- vir_func(n)
-  } else {
-    stop(paste("Scale", scale, "not recognized in provided lists."))
   }
+
+  # Adjust brightness
+  colors <- brighten_hex(colors, factor = 1.33)
 
   # Assign names mapping the colors to the specific variable levels
   names(colors) <- cmp_levels
+
   return(colors)
 }
 
