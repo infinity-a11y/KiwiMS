@@ -402,12 +402,12 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
         #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_61.rds"
         # ))
 
-        result_list(readRDS(
-          "C:\\Users\\Marian\\Desktop\\KF_Testing\\results.rds"
-        ))
         # result_list(readRDS(
-        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results_conversion.rds"
+        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results.rds"
         # ))
+        result_list(readRDS(
+          "C:\\Users\\Marian\\Desktop\\KF_Testing\\results_conversion.rds"
+        ))
 
         # Update sidebar control inputs
         shiny::updateActionButton(

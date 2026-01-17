@@ -4546,6 +4546,20 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       )
     })
 
+    ### Enable/Disable hits table NA exclude input ----
+    shiny::observe({
+      shiny::req(input$hits_tab_na, conversion_vars$hits_summary)
+
+      shinyjs::toggleState(
+        id = "hits_tab_na",
+        condition = anyNA(conversion_vars$hits_summary)
+      )
+      shinyjs::toggleClass(
+        selector = ".hits-tab-expand-box .checkbox",
+        class = "checkbox-disable"
+      )
+    })
+
     ## Events for conversion result interface ----
 
     ### Reevaluate color scales depending on n of unique variable values ----
