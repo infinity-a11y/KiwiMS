@@ -2307,8 +2307,12 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               )
 
               cmp_table <- tbl |>
-                dplyr::group_by(`Cmp Name`) |>
-                dplyr::arrange(dplyr::desc(`Theor. Cmp`), `Bind. Stoich.`) |>
+                dplyr::arrange(
+                  `Cmp Name`,
+                  as.numeric(gsub("%", "", `%-Binding`)),
+                  `Theor. Cmp`,
+                  `Bind. Stoich.`
+                ) |>
                 dplyr::reframe(
                   `Sample ID` = if (truncate_names) {
                     `truncSample_ID`
@@ -2891,15 +2895,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             shiny::req(
               hits_summary,
               input$conversion_compound_picker,
-              shiny::isolate(input$color_variable),
+              input$color_variable,
               !is.null(input$truncate_names),
               input$color_scale
             )
 
             color_scale <- input$color_scale
-            shiny::isolate({
-              color_variable <- input$color_variable
-            })
+            color_variable <- input$color_variable
             truncate_names <- input$truncate_names
 
             # Filter table for selected compound
@@ -2918,7 +2920,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
             # Create data table
             cmp_table <- tbl |>
-              dplyr::group_by(`Sample ID`) |>
+              # dplyr::group_by(`Sample ID`) |>
               dplyr::reframe(
                 `Cmp Name` = `Cmp Name`,
                 `Mass Shift` = `Theor. Cmp`,
@@ -2940,8 +2942,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 .before = 3
               ) |>
               dplyr::arrange(
-                # `Sample ID`,
+                `Sample ID`,
                 as.numeric(gsub("%", "", `Total %-Binding`)),
+                as.numeric(gsub("%", "", `%-Binding`)),
                 dplyr::desc(`Mass Shift`),
                 `Stoichiometry`
               ) |>
@@ -3625,12 +3628,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               trunc = truncate_names
             )
 
-            tbl1 <<- tbl
-            colors1 <<- colors
-
             # Create data table
             cmp_table <- tbl |>
-              dplyr::group_by(`Cmp Name`, `Sample ID`) |>
+              # dplyr::group_by(`Cmp Name`, `Sample ID`) |>
               dplyr::reframe(
                 `Cmp Name` = `Cmp Name`,
                 `Mass Shift` = `Theor. Cmp`,
@@ -3652,6 +3652,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 .before = 3
               ) |>
               dplyr::arrange(
+                `Cmp Name`,
                 as.numeric(gsub("%", "", `Total %-Binding`)),
                 as.numeric(gsub("%", "", `%-Binding`)),
                 dplyr::desc(`Mass Shift`),
@@ -3767,18 +3768,18 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           output$color_variable_ui <- shiny::renderUI({
             shiny::req(hits_summary)
 
-            condition <- length(unique(
-              hits_summary$`Sample ID`
-            )) >
-              length(unique(hits_summary$`Cmp Name`[
-                !is.na(hits_summary$`Cmp Name`)
-              ]))
-
             shiny::selectInput(
               ns("color_variable"),
               label = NULL,
               choices = c("Samples", "Compounds"),
-              selected = ifelse(condition, "Samples", "Compounds")
+              selected = ifelse(
+                length(unique(hits_summary$`Cmp Name`[
+                  !is.na(hits_summary$`Cmp Name`)
+                ])) ==
+                  1,
+                "Samples",
+                "Compounds"
+              )
             )
           })
 
