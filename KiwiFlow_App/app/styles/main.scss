@@ -2242,13 +2242,13 @@ table.dataTable tbody td {
   display: flex;
   flex-direction: column;
   height: 100%;
-  gap: 2%;
+  gap: 10px;
   justify-content: space-between;
 }
 
 .conversion-samples-wrapper {
   display: grid;
-  gap: 1%;
+  gap: 10px;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 2fr 3fr;
   height: 100%;
@@ -3699,6 +3699,22 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 .popover-body {
   background: #e5e5e5;
   border-radius: 5px;
+}
+
+.popover-body .form-group {
+  margin: 0;
+}
+
+.box-header-settings-help {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.box-header-settings-help .fas {
+  font-size: 14px;
+  position: relative;
+  top: 1px;
 }
 
 .hits-tab {

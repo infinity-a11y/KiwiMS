@@ -3119,14 +3119,32 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     class = "card-custom",
                     bslib::card(
                       bslib::card_header(
-                        class = "bg-dark help-header",
+                        class = "bg-dark help-header d-flex justify-content-between",
                         "Compound Distribution",
                         shiny::div(
-                          class = "tooltip-bttn",
-                          shiny::actionButton(
-                            ns("mass_spectra_tooltip_bttn"),
-                            label = "",
-                            icon = shiny::icon("circle-question")
+                          bslib::popover(
+                            shiny::icon("gear"),
+                            shiny::div(
+                              class = "box-header-settings-help",
+                              shiny::radioButtons(
+                                inputId = ns("distribution_scale"),
+                                label = "Range",
+                                choices = c(
+                                  "Maximum",
+                                  "100"
+                                )
+                              ),
+                              style = "margin-right: 20px;"
+                            ),
+                            title = NULL
+                          ),
+                          shiny::div(
+                            class = "tooltip-bttn",
+                            shiny::actionButton(
+                              ns("mass_spectra_tooltip_bttn"),
+                              label = "",
+                              icon = shiny::icon("circle-question")
+                            )
                           )
                         )
                       ),
@@ -3387,13 +3405,14 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     as.character(htmltools::tags$sub(x))
                   })
                 )
+              ) |>
+              dplyr::arrange(
+                `Cmp Name`,
+                as.numeric(gsub("%", "", `Total %-Binding`)),
+                as.numeric(gsub("%", "", `%-Binding`))
               )
 
-            # Factorize sample ID to sort by %-binding
-            tbl$`Sample ID` <- factor(
-              tbl$`Sample ID`,
-              levels = unique(tbl$`Sample ID`)
-            )
+            tbl1 <<- tbl
 
             # Make compound color scale
             colors <- get_cmp_colorScale(
@@ -3403,9 +3422,27 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               trunc = truncate_names
             )
 
-            # Assign font colors to match background brightness
+            colors1 <<- colors
+
+            # Conditional color variable
+            if (color_variable == "Compounds") {
+              color <- ~`Cmp Name`
+            } else if (color_variable == "Samples") {
+              color <- ~`Sample ID`
+            }
+
             tbl <- tbl |>
+              dplyr::arrange(
+                `Cmp Name`,
+                `Sample ID`,
+                dplyr::desc(as.numeric(gsub("%", "", `%-Binding`)))
+              ) |>
+              dplyr::group_by(`Cmp Name`) |>
               dplyr::mutate(
+                Group = match(`Sample ID`, unique(`Sample ID`)),
+                `Cmp Name` = factor(`Cmp Name`, levels = unique(`Cmp Name`)),
+                `Sample ID` = factor(`Sample ID`, levels = unique(`Sample ID`)),
+                `%-Binding` = factor(`%-Binding`, levels = unique(`%-Binding`)),
                 bg_hex = if (color_variable == "Compounds") {
                   colors[as.character(`Cmp Name`)]
                 } else if (color_variable == "Samples") {
@@ -3419,116 +3456,151 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   mass_stoich,
                   "</span>"
                 )
-              )
+              ) |>
+              dplyr::ungroup()
 
-            # Conditional color variable
-            if (color_variable == "Compounds") {
-              color <- ~`Cmp Name`
-            } else if (color_variable == "Samples") {
-              color <- ~`Sample ID`
+            # Unique groups and mapping to numeric indices (for offsetgroup)
+            groups <- unique(tbl$Group)
+            n_groups <- length(groups)
+            group_map <- stats::setNames(0:(n_groups - 1), groups)
+
+            # Bar styling params
+            bar_width <- 0.3
+            group_gap <- 0.05
+
+            # Y-Axis range
+            range <- c(
+              0,
+              max(as.numeric(gsub("%", "", tbl$`Total %-Binding`))) + 10
+            )
+
+            if (
+              !is.null(input$distribution_scale) &&
+                input$distribution_scale == "100"
+            ) {
+              range <- c(0, 101)
             }
 
-            # Create plotly bar chart
-            bar_chart <- plotly::plot_ly(data = tbl) |>
-              plotly::add_trace(
-                # x = ~`Cmp Name`,
-                x = ~`Sample ID`,
-                y = ~ as.numeric(gsub("%", "", `%-Binding`)),
-                color = color,
-                colors = colors,
-                type = 'bar',
-                name = ~mass_stoich,
-                hovertemplate = ~ paste0(
-                  "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
-                  `Theor. Cmp`,
-                  "</b><br>",
-                  "<span style='opacity: 0.8'>Stoichiometry:</span> <b>",
-                  `Bind. Stoich.`,
-                  "</b><br>",
-                  "<span style='opacity: 0.8'>%-Binding:</span> <b>",
-                  `%-Binding`,
-                  "</b>",
-                  "<extra><div style='text-align: left;'>",
-                  "<span style='opacity: 0.8;;'>Cmp Name: </span><b>",
-                  `Cmp Name`,
-                  "</b><br>",
-                  "<span style='opacity: 0.8;'>Sample ID: </span><b>",
-                  `Sample ID`,
-                  "</b>",
-                  "</div></extra>"
-                ),
-                hoverlabel = list(align = "left", valign = "middle"),
-                text = ~mass_stoich,
+            # Initialize plot_ly with layout
+            layout_list <- list(
+              barmode = "relative",
+              paper_bgcolor = 'rgba(0,0,0,0)',
+              plot_bgcolor = 'rgba(0,0,0,0)',
+              xaxis = list(
+                title = "Compound Name",
+                type = "category",
+                tickson = "boundaries",
+                categoryorder = "array",
+                categoryarray = levels(tbl$`Cmp Name`),
+                showgrid = FALSE,
+                zeroline = FALSE,
+                color = '#ffffff'
+              ),
+              yaxis = list(
+                range = range,
+                title = list(text = "%-Binding"),
+                zeroline = FALSE,
+                gridcolor = "#7f7f7fff",
+                color = '#ffffff',
+                dtick = 20,
+                tick0 = 0
+              )
+            )
+
+            # Add yaxis2, yaxis3, …
+            if (n_groups > 1) {
+              for (i in 2:n_groups) {
+                axis_name <- paste0("yaxis", i)
+                layout_list[[axis_name]] <- list(
+                  visible = FALSE,
+                  matches = "y",
+                  overlaying = "y",
+                  anchor = "x",
+                  range = range,
+                  dtick = 20,
+                  tick0 = 0
+                )
+              }
+            }
+
+            # Create the empty plot
+            p <- plotly::plot_ly(showlegend = FALSE)
+
+            # Apply the dynamic layout
+            p <- do.call(plotly::layout, c(list(p), layout_list))
+
+            # Loop over each row and add as separate bar trace
+            for (i in 1:nrow(tbl)) {
+              row <- tbl[i, ]
+              g <- row$Group[[1]]
+              i_group <- group_map[[g]]
+              yax <- ifelse(i_group == 0, "y", "y2")
+              off <- bar_width * (i_group - n_groups / 2) + i_group * group_gap
+
+              if (color_variable == "Compounds") {
+                var <- as.character(row$`Cmp Name`[[1]])
+              } else if (color_variable == "Samples") {
+                var <- as.character(row$`Sample ID`[[1]])
+              }
+
+              col <- colors[[var]]
+              y_val <- as.numeric(gsub("%", "", row$`%-Binding`[[1]]))
+
+              hover_text <- paste0(
+                "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
+                row$`Theor. Cmp`[[1]],
+                "</b><br>",
+                "<span style='opacity: 0.8'>Stoichiometry:</span> <b>",
+                row$`Bind. Stoich.`[[1]],
+                "</b><br>",
+                "<span style='opacity: 0.8'>%-Binding:</span> <b>",
+                row$`%-Binding`[[1]],
+                "</b>",
+                "<extra><div style='text-align: left;'>",
+                "<span style='opacity: 0.8;;'>Cmp Name: </span><b>",
+                row$`Cmp Name`[[1]],
+                "</b><br>",
+                "<span style='opacity: 0.8;'>Sample ID: </span><b>",
+                row$`Sample ID`[[1]],
+                "</b>",
+                "</div></extra>"
+              )
+
+              p <- plotly::add_bars(
+                p,
+                x = row$`Cmp Name`[[1]],
+                y = y_val,
+                offsetgroup = i_group,
+                offset = off,
+                width = bar_width,
+                text = row$mass_stoich[[1]],
                 textposition = 'inside',
-                marker = list(line = list(color = 'white', width = 1)),
+                insidetextanchor = 'middle',
+                hovertemplate = hover_text,
+                hoverlabel = list(align = "left", valign = "middle"),
+                marker = list(
+                  color = col,
+                  line = list(color = 'black', width = 1)
+                ),
+                yaxis = yax,
                 showlegend = FALSE
               )
-
-            if (length(tbl$`Sample ID`) <= 20) {
-              # Calculate totals for the top labels
-              totals <- dplyr::group_by(tbl, `Sample ID`) |>
-                dplyr::summarize(
-                  total_val = sum(as.numeric(gsub("%", "", `%-Binding`)))
-                )
-              bar_chart <- bar_chart |>
-                plotly::add_trace(
-                  data = totals,
-                  x = ~`Sample ID`,
-                  y = ~total_val,
-                  type = 'scatter',
-                  mode = 'text',
-                  text = ~ paste0(total_val, "%"),
-                  textposition = 'top center',
-                  showlegend = FALSE,
-                  hoverinfo = 'none',
-                  inherit = FALSE,
-                  textfont = list(
-                    color = '#ffffff',
-                    size = if (length(tbl$`Sample ID`) <= 8) {
-                      16
-                    } else if (length(tbl$`Sample ID`) <= 16) {
-                      14
-                    } else {
-                      12
-                    }
-                  )
-                )
             }
 
-            bar_chart |>
+            # Final layout adjustments
+            p <- p |>
               plotly::layout(
-                barmode = 'stack',
-                bargap = 0.5,
-                paper_bgcolor = 'rgba(0,0,0,0)',
-                plot_bgcolor = 'rgba(0,0,0,0)',
-                xaxis = list(
-                  title = list(text = NULL),
-                  showgrid = FALSE,
-                  zeroline = FALSE,
-                  color = '#ffffff',
-                  showticklabels = ifelse(
-                    max(nchar(levels(tbl$`Sample ID`))) > 22,
-                    FALSE,
-                    TRUE
-                  )
-                ),
-                yaxis = list(
-                  range = c(
-                    0,
-                    max(as.numeric(gsub("%", "", tbl$`%-Binding`))) + 10
-                  ),
-                  title = list(text = "%-Binding"),
-                  zeroline = FALSE,
-                  gridcolor = "#7f7f7fff",
-                  color = '#ffffff'
-                )
+                xaxis = list(title = list(text = NULL))
               )
+
+            p
           }) |>
             shiny::bindEvent(
               render_trigger(),
               input$color_scale,
               input$conversion_protein_picker,
-              input$truncate_names
+              input$truncate_names,
+              input$distribution_scale
             )
 
           ##### Compound spectra plots ----
