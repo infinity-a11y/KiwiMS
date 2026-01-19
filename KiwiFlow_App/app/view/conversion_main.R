@@ -49,6 +49,7 @@ box::use(
       qualitative_scales,
       gradient_scales,
       hits_table_names,
+      popover_autoclose,
     ],
 )
 
@@ -130,7 +131,10 @@ ui <- function(id) {
           table_legend
         )
       ),
-      keybind_menu_ui
+      keybind_menu_ui,
+      shiny::tags$script(
+        popover_autoclose
+      )
     ),
     bslib::nav_panel(
       "Compounds",
@@ -199,7 +203,10 @@ ui <- function(id) {
           table_legend
         )
       ),
-      keybind_menu_ui
+      keybind_menu_ui,
+      shiny::tags$script(
+        popover_autoclose
+      )
     ),
     bslib::nav_panel(
       "Samples",
@@ -287,7 +294,10 @@ ui <- function(id) {
         )
       ),
       sample_table_legend,
-      keybind_menu_ui
+      keybind_menu_ui,
+      shiny::tags$script(
+        popover_autoclose
+      )
     )
   )
 }
@@ -1873,8 +1883,26 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     id = "upper-section",
                     bslib::card(
                       bslib::card_header(
-                        class = "bg-dark help-header",
-                        "Table View"
+                        class = "bg-dark help-header d-flex justify-content-between",
+                        "Table View",
+                        shiny::div(
+                          class = "box-header-settings-help",
+                          bslib::popover(
+                            shiny::icon("gear"),
+                            shiny::div(
+                              style = "margin-right: 20px;"
+                            ),
+                            title = NULL
+                          ),
+                          shiny::div(
+                            class = "tooltip-bttn",
+                            shiny::actionButton(
+                              ns("mass_spectra_tooltip_bttn"),
+                              label = "",
+                              icon = shiny::icon("circle-question")
+                            )
+                          )
+                        )
                       ),
                       shinycssloaders::withSpinner(
                         DT::DTOutput(
@@ -1913,24 +1941,35 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                       bslib::card_header(
                         class = "bg-dark help-header d-flex justify-content-between",
                         "Annotated Spectrum",
-                        bslib::popover(
-                          shiny::icon("gear"),
-                          shiny::div(
-                            shinyWidgets::materialSwitch(
-                              ns("sample_view_spectrum_diff"),
-                              label = "Show Distance",
-                              value = TRUE,
-                              right = TRUE
+                        shiny::div(
+                          class = "box-header-settings-help",
+                          bslib::popover(
+                            shiny::icon("gear"),
+                            shiny::div(
+                              shinyWidgets::materialSwitch(
+                                ns("sample_view_spectrum_diff"),
+                                label = "Show Distance",
+                                value = TRUE,
+                                right = TRUE
+                              ),
+                              shinyWidgets::materialSwitch(
+                                ns("sample_view_spectrum_annotation"),
+                                label = "Annotate Hits",
+                                value = FALSE,
+                                right = TRUE
+                              ),
+                              style = "margin-right: 20px;"
                             ),
-                            shinyWidgets::materialSwitch(
-                              ns("sample_view_spectrum_annotation"),
-                              label = "Annotate Hits",
-                              value = FALSE,
-                              right = TRUE
-                            ),
-                            style = "margin-right: 20px;"
+                            title = NULL
                           ),
-                          title = NULL
+                          shiny::div(
+                            class = "tooltip-bttn",
+                            shiny::actionButton(
+                              ns("mass_spectra_tooltip_bttn"),
+                              label = "",
+                              icon = shiny::icon("circle-question")
+                            )
+                          )
                         )
                       ),
                       shinycssloaders::withSpinner(
@@ -1945,6 +1984,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     )
                   )
                 )
+              ),
+              shiny::tags$script(
+                popover_autoclose
               )
             )
           )
@@ -2218,6 +2260,12 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               input$color_scale
             )
 
+            hits_summary <<- hits_summary
+            color_scale <<- input$color_scale
+            color_variable <<- input$color_variable
+            selected_sample <<- input$conversion_sample_picker
+            truncate_names <<- input$truncate_names
+
             color_scale <- input$color_scale
             color_variable <- input$color_variable
             selected_sample <- input$conversion_sample_picker
@@ -2255,7 +2303,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               render_trigger(),
               input$conversion_sample_picker,
               input$truncate_names,
-              input$color_scale
+              input$color_scale,
+              input$sample_view_spectrum_annotation,
+              input$sample_view_spectrum_diff
             )
 
           ##### Samples view table ----
@@ -2427,7 +2477,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                         bslib::card(
                           bslib::card_header(
                             class = "bg-dark help-header",
-                            "Protein",
+                            "Compound",
                             shiny::div(
                               class = "tooltip-bttn",
                               shiny::actionButton(
@@ -2479,10 +2529,27 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     id = "upper-section",
                     bslib::card(
                       bslib::card_header(
-                        class = "bg-dark help-header",
-                        "Table View"
+                        class = "bg-dark help-header d-flex justify-content-between",
+                        "Table View",
+                        shiny::div(
+                          class = "box-header-settings-help",
+                          bslib::popover(
+                            shiny::icon("gear"),
+                            shiny::div(
+                              style = "margin-right: 20px;"
+                            ),
+                            title = NULL
+                          ),
+                          shiny::div(
+                            class = "tooltip-bttn",
+                            shiny::actionButton(
+                              ns("mass_spectra_tooltip_bttn"),
+                              label = "",
+                              icon = shiny::icon("circle-question")
+                            )
+                          )
+                        )
                       ),
-                      # shiny::div(
                       shinycssloaders::withSpinner(
                         DT::DTOutput(
                           ns("conversion_cmp_table")
@@ -2490,7 +2557,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                         type = 1,
                         color = "#7777f9"
                       ),
-                      # ),
                       full_screen = TRUE
                     )
                   ),
@@ -2501,11 +2567,30 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                         class = "bg-dark help-header",
                         "Compound Distribution",
                         shiny::div(
-                          class = "tooltip-bttn",
-                          shiny::actionButton(
-                            ns("mass_spectra_tooltip_bttn"),
-                            label = "",
-                            icon = shiny::icon("circle-question")
+                          class = "box-header-settings-help",
+                          bslib::popover(
+                            shiny::icon("gear"),
+                            shiny::div(
+                              shiny::radioButtons(
+                                inputId = ns("cmp_distribution_scale"),
+                                label = "Range",
+                                choices = c(
+                                  "Maximum",
+                                  "100"
+                                )
+                              ),
+                              shiny::uiOutput(ns("cmp_distribution_labels_ui")),
+                              style = "margin-right: 20px;"
+                            ),
+                            title = NULL
+                          ),
+                          shiny::div(
+                            class = "tooltip-bttn",
+                            shiny::actionButton(
+                              ns("mass_spectra_tooltip_bttn"),
+                              label = "",
+                              icon = shiny::icon("circle-question")
+                            )
                           )
                         )
                       ),
@@ -2525,7 +2610,25 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     bslib::card(
                       bslib::card_header(
                         class = "bg-dark help-header",
-                        "Annotated Spectrum"
+                        "Annotated Spectrum",
+                        shiny::div(
+                          class = "box-header-settings-help",
+                          bslib::popover(
+                            shiny::icon("gear"),
+                            shiny::div(
+                              style = "margin-right: 20px;"
+                            ),
+                            title = NULL
+                          ),
+                          shiny::div(
+                            class = "tooltip-bttn",
+                            shiny::actionButton(
+                              ns("mass_spectra_tooltip_bttn"),
+                              label = "",
+                              icon = shiny::icon("circle-question")
+                            )
+                          )
+                        )
                       ),
                       shinycssloaders::withSpinner(
                         plotly::plotlyOutput(
@@ -2539,6 +2642,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     )
                   )
                 )
+              ),
+              shiny::tags$script(
+                popover_autoclose
               )
             )
           )
@@ -2787,6 +2893,19 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 )
             }
 
+            # Y-axis range
+            range <- c(
+              0,
+              max(as.numeric(gsub("%", "", tbl$`Total %-Binding`))) + 10
+            )
+
+            if (
+              !is.null(input$cmp_distribution_scale) &&
+                input$cmp_distribution_scale == "100"
+            ) {
+              range <- c(0, 101)
+            }
+
             bar_chart |>
               plotly::layout(
                 barmode = 'stack',
@@ -2798,17 +2917,23 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   showgrid = FALSE,
                   zeroline = FALSE,
                   color = '#ffffff',
+                  # showticklabels = max(nchar(levels(tbl$`Sample ID`))) > 22,
                   showticklabels = ifelse(
-                    max(nchar(levels(tbl$`Sample ID`))) > 22,
-                    FALSE,
-                    TRUE
+                    !is.null(input$cmp_distribution_labels),
+                    input$cmp_distribution_labels,
+                    ifelse(
+                      max(nchar(levels(tbl$`Sample ID`))) > 22,
+                      FALSE,
+                      TRUE
+                    )
                   )
                 ),
                 yaxis = list(
-                  range = c(
-                    0,
-                    max(as.numeric(gsub("%", "", tbl$`%-Binding`))) + 10
-                  ),
+                  # range = c(
+                  #   0,
+                  #   max(as.numeric(gsub("%", "", tbl$`%-Binding`))) + 10
+                  # ),
+                  range = range,
                   title = list(text = "%-Binding"),
                   zeroline = FALSE,
                   gridcolor = "#7f7f7fff",
@@ -2820,8 +2945,29 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               input$conversion_compound_picker,
               render_trigger(),
               input$truncate_names,
-              input$color_scale
+              input$color_scale,
+              input$cmp_distribution_labels,
+              input$cmp_distribution_scale
             )
+
+          ###### Show label input UI ----
+          output$cmp_distribution_labels_ui <- shiny::renderUI({
+            shiny::req(hits_summary, input$conversion_compound_picker)
+
+            tbl <- hits_summary |>
+              dplyr::filter(`Cmp Name` == input$conversion_compound_picker)
+
+            shinyWidgets::materialSwitch(
+              ns("cmp_distribution_labels"),
+              label = "Show Labels",
+              value = ifelse(
+                max(nchar(unique(tbl$`Sample ID`))) > 22,
+                FALSE,
+                TRUE
+              ),
+              right = TRUE
+            )
+          })
 
           ##### Compound spectra plots ----
           output$conversion_cmp_spectra <- plotly::renderPlotly({
@@ -3068,26 +3214,32 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                         class = "card-custom",
                         bslib::card(
                           bslib::card_header(
-                            class = "bg-dark help-header",
+                            class = "bg-dark help-header d-flex justify-content-between",
                             "Total %-Binding",
                             shiny::div(
-                              class = "tooltip-bttn",
-                              shiny::actionButton(
-                                ns("total_pct_bind_tooltip_bttn"),
-                                label = "",
-                                icon = shiny::icon("circle-question")
+                              class = "box-header-settings-help",
+                              bslib::popover(
+                                shiny::icon("gear"),
+                                shiny::div(
+                                  shiny::uiOutput(ns(
+                                    "total_pct_prot_binding_select_ui"
+                                  )),
+                                  style = "margin-right: 20px;"
+                                ),
+                                title = NULL
+                              ),
+                              shiny::div(
+                                class = "tooltip-bttn",
+                                shiny::actionButton(
+                                  ns("total_pct_bind_tooltip_bttn"),
+                                  label = "",
+                                  icon = shiny::icon("circle-question")
+                                )
                               )
                             )
                           ),
                           shiny::div(
                             class = "kobs-val",
-                            shinycssloaders::withSpinner(
-                              shiny::uiOutput(ns(
-                                "total_pct_prot_binding_select_ui"
-                              )),
-                              type = 1,
-                              color = "#7777f9"
-                            ),
                             shinycssloaders::withSpinner(
                               shiny::uiOutput(ns("total_pct_prot_binding")),
                               type = 1,
@@ -3102,8 +3254,26 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     class = "card-custom cmp-table",
                     bslib::card(
                       bslib::card_header(
-                        class = "bg-dark help-header",
-                        "Table View"
+                        class = "bg-dark help-header d-flex justify-content-between",
+                        "Table View",
+                        shiny::div(
+                          class = "box-header-settings-help",
+                          bslib::popover(
+                            shiny::icon("gear"),
+                            shiny::div(
+                              style = "margin-right: 20px;"
+                            ),
+                            title = NULL
+                          ),
+                          shiny::div(
+                            class = "tooltip-bttn",
+                            shiny::actionButton(
+                              ns("mass_spectra_tooltip_bttn"),
+                              label = "",
+                              icon = shiny::icon("circle-question")
+                            )
+                          )
+                        )
                       ),
                       shinycssloaders::withSpinner(
                         DT::DTOutput(
@@ -3122,12 +3292,12 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                         class = "bg-dark help-header d-flex justify-content-between",
                         "Compound Distribution",
                         shiny::div(
+                          class = "box-header-settings-help",
                           bslib::popover(
                             shiny::icon("gear"),
                             shiny::div(
-                              class = "box-header-settings-help",
                               shiny::radioButtons(
-                                inputId = ns("distribution_scale"),
+                                inputId = ns("protein_distribution_scale"),
                                 label = "Range",
                                 choices = c(
                                   "Maximum",
@@ -3163,8 +3333,26 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     class = "card-custom",
                     bslib::card(
                       bslib::card_header(
-                        class = "bg-dark help-header",
-                        "Annotated Spectrum"
+                        class = "bg-dark help-header d-flex justify-content-between",
+                        "Annotated Spectrum",
+                        shiny::div(
+                          class = "box-header-settings-help",
+                          bslib::popover(
+                            shiny::icon("gear"),
+                            shiny::div(
+                              style = "margin-right: 20px;"
+                            ),
+                            title = NULL
+                          ),
+                          shiny::div(
+                            class = "tooltip-bttn",
+                            shiny::actionButton(
+                              ns("mass_spectra_tooltip_bttn"),
+                              label = "",
+                              icon = shiny::icon("circle-question")
+                            )
+                          )
+                        )
                       ),
                       shinycssloaders::withSpinner(
                         plotly::plotlyOutput(
@@ -3178,6 +3366,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     )
                   )
                 )
+              ),
+              shiny::tags$script(
+                popover_autoclose
               )
             )
           )
@@ -3280,21 +3471,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
             shiny::div(
               class = "prot-binding-ui",
-              shiny::div(
-                "Select Compound",
-                style = "
-                                align-self: center;
-                                font-size: 0.8em;
-                                text-align: left;
-                                line-height: 1;
-                                margin-bottom: 0;
-                                font-style: italic;
-                                font-size: 14px;
-                                "
-              ),
               shiny::selectInput(
                 ns("total_pct_prot_binding_select"),
-                NULL,
+                "Select Compound",
                 choices = choices
               )
             )
@@ -3303,29 +3482,49 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           output$total_pct_prot_binding <- shiny::renderUI({
             shiny::req(
               hits_summary,
-              input$conversion_protein_picker,
-              input$total_pct_prot_binding_select
+              input$conversion_protein_picker
             )
-            total_bind <- hits_summary$`Total %-Binding`[
+
+            # Prefilter hits by selected protein and non-NA compound
+            total_bind_pre <- hits_summary[
               hits_summary$`Protein` == input$conversion_protein_picker &
-                hits_summary$`Cmp Name` == input$total_pct_prot_binding_select &
-                !is.na(hits_summary$`Cmp Name`)
+                !is.na(hits_summary$`Cmp Name`),
             ]
 
-            if (length(total_bind) == 1) {
-              msg <- total_bind
+            # Get selected compound
+            total_pct_prot_binding_select <- ifelse(
+              !is.null(input$total_pct_prot_binding_select),
+              input$total_pct_prot_binding_select,
+              total_bind_pre$`Cmp Name`
+            )
+
+            # Filter by selected compound
+            total_bind <- total_bind_pre[
+              hits_summary$`Cmp Name` == total_pct_prot_binding_select,
+            ]
+
+            if (nrow(total_bind) == 1) {
+              msg <- total_bind$`Total %-Binding`
             } else {
-              total_bind_num <- as.numeric(gsub("%", "", total_bind))
+              total_bind_num <- as.numeric(gsub(
+                "%",
+                "",
+                total_bind$`Total %-Binding`
+              ))
               msg <- shiny::div(
                 class = "conversion-sample-protein-box",
                 shiny::div(
                   class = "conversion-sample-protein-names",
-                  shiny::HTML("Range<br>Mean ± SD")
+                  shiny::HTML("Compounds<br>Selected<br>Range<br>Mean ± SD")
                 ),
                 shiny::div(
                   class = "conversion-sample-protein",
                   shiny::HTML(
                     paste0(
+                      length(unique(total_bind_pre$`Cmp Name`)),
+                      "<br>",
+                      total_pct_prot_binding_select,
+                      "<br>",
                       round(min(total_bind_num), 2),
                       "% - ",
                       round(max(total_bind_num), 2),
@@ -3390,29 +3589,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               dplyr::filter(
                 `Protein` == input$conversion_protein_picker &
                   !is.na(`Cmp Name`)
-              ) |>
-              dplyr::mutate(
-                `Sample ID` = if (truncate_names) {
-                  `truncSample_ID`
-                } else {
-                  `Sample ID`
-                },
-                mass_stoich = paste0(
-                  "[",
-                  `Theor. Cmp`,
-                  "]",
-                  sapply(`Bind. Stoich.`, function(x) {
-                    as.character(htmltools::tags$sub(x))
-                  })
-                )
-              ) |>
-              dplyr::arrange(
-                `Cmp Name`,
-                as.numeric(gsub("%", "", `Total %-Binding`)),
-                as.numeric(gsub("%", "", `%-Binding`))
               )
-
-            tbl1 <<- tbl
 
             # Make compound color scale
             colors <- get_cmp_colorScale(
@@ -3421,8 +3598,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               variable = color_variable,
               trunc = truncate_names
             )
-
-            colors1 <<- colors
 
             # Conditional color variable
             if (color_variable == "Compounds") {
@@ -3439,6 +3614,19 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               ) |>
               dplyr::group_by(`Cmp Name`) |>
               dplyr::mutate(
+                `Sample ID` = if (truncate_names) {
+                  `truncSample_ID`
+                } else {
+                  `Sample ID`
+                },
+                mass_stoich = paste0(
+                  "[",
+                  `Theor. Cmp`,
+                  "]",
+                  sapply(`Bind. Stoich.`, function(x) {
+                    as.character(htmltools::tags$sub(x))
+                  })
+                ),
                 Group = match(`Sample ID`, unique(`Sample ID`)),
                 `Cmp Name` = factor(`Cmp Name`, levels = unique(`Cmp Name`)),
                 `Sample ID` = factor(`Sample ID`, levels = unique(`Sample ID`)),
@@ -3468,15 +3656,15 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             bar_width <- 0.3
             group_gap <- 0.05
 
-            # Y-Axis range
+            # Y-axis range
             range <- c(
               0,
               max(as.numeric(gsub("%", "", tbl$`Total %-Binding`))) + 10
             )
 
             if (
-              !is.null(input$distribution_scale) &&
-                input$distribution_scale == "100"
+              !is.null(input$protein_distribution_scale) &&
+                input$protein_distribution_scale == "100"
             ) {
               range <- c(0, 101)
             }
@@ -3600,7 +3788,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               input$color_scale,
               input$conversion_protein_picker,
               input$truncate_names,
-              input$distribution_scale
+              input$protein_distribution_scale
             )
 
           ##### Compound spectra plots ----
@@ -3905,6 +4093,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               shiny::div(
                 class = "conversion-result-wrapper",
                 shiny::uiOutput(ns("binding_tab"))
+              ),
+              shiny::tags$script(
+                popover_autoclose
               )
             )
           )
@@ -4323,6 +4514,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   type = 1,
                   color = "#7777f9"
                 )
+              ),
+              shiny::tags$script(
+                popover_autoclose
               )
             )
           )
@@ -4360,6 +4554,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 shiny::div(
                   class = "conversion-result-wrapper",
                   shiny::uiOutput(ns(ui_id))
+                ),
+                shiny::tags$script(
+                  popover_autoclose
                 )
               )
             )

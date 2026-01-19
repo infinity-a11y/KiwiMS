@@ -3661,16 +3661,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   border-bottom-color: #404040 !important;
 }
 
-.prot-binding-ui {
-  display: flex;
-  align-content: space-evenly;
-  gap: 10px;
-  justify-content: space-evenly;
-  margin-bottom: 5%;
-}
-
 .prot-binding-ui .form-group {
-  width: 50%;
   margin: 0;
 }
 
@@ -3701,7 +3692,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   border-radius: 5px;
 }
 
-.popover-body .form-group {
+#app-conversion_main-protein_distribution_scale .form-group,
+#app-conversion_main-cmp_distribution_scale .form-group {
   margin: 0;
 }
 
@@ -3719,4 +3711,24 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 
 .hits-tab {
   align-items: center;
+}
+
+#app-conversion_main-protein_distribution_scale label,
+#app-conversion_main-cmp_distribution_scale label {
+  margin-bottom: 0.5rem;
+}
+
+.prot-binding-ui .selectize-control.single .selectize-input:hover {
+  color: #000;
+}
+
+.prot-binding-ui .selectize-control.single .selectize-input {
+  height: 32.5px;
+  min-height: fit-content;
+  text-align: left;
+  align-content: center;
+  padding-left: 5px;
+  background: #ffffff;
+  width: fit-content;
+  min-width: 100px;
 }

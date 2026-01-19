@@ -2507,11 +2507,7 @@ multiple_spectra <- function(
 
   spectrum_data$z <- factor(
     spectrum_data$z,
-    levels = if (time) {
-      sort(unique(spectrum_data$z))
-    } else {
-      unique(spectrum_data$z)
-    }
+    levels = sort(unique(spectrum_data$z))
   )
 
   # Get peaks data
@@ -2542,11 +2538,7 @@ multiple_spectra <- function(
   # Transform z variable to factor
   peaks_data$z <- factor(
     peaks_data$z,
-    levels = if (time) {
-      sort(unique(peaks_data$z))
-    } else {
-      unique(peaks_data$z)
-    }
+    levels = sort(unique(peaks_data$z))
   )
 
   # Prepare marker symbols

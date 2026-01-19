@@ -1,5 +1,24 @@
 # app/logic/conversion_constants.R
 
+# Popover JS auto-close
+#' @export
+popover_autoclose <- shiny::HTML(
+  "
+      $(document).ready(function () {
+        $('body').on('click', function (e) {
+          $('[data-bs-toggle=\"popover\"]').each(function () {
+            // Check if click is NOT on the trigger AND NOT inside any popover
+            if (!$(this).is(e.target) && 
+                $(this).has(e.target).length === 0 && 
+                $('.popover').has(e.target).length === 0) {
+              $(this).popover('hide');
+            }
+          });
+        });
+      });
+      "
+)
+
 # Hits table variable names
 #' @export
 hits_table_names <- c(
