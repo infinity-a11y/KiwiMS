@@ -2996,17 +2996,7 @@ render_table_view <- function(table, colors, tab, inputs) {
         "&thinsp;<sub>",
         `Bind. Stoich.`,
         "</sub>"
-      ),
-      `%-Binding` = as.numeric(gsub(
-        "%",
-        "",
-        `%-Binding`
-      )),
-      `Total %-Binding` = as.numeric(gsub(
-        "%",
-        "",
-        `Total %-Binding`
-      ))
+      )
     ) |>
     dplyr::select(
       `Sample ID` = `Sample ID`,
@@ -3194,11 +3184,6 @@ render_hits_table <- function(
         any("Total %-Binding" %in% bar_chart)
     ) {
       hits_table$`Total %-Binding`[hits_table$`Total %-Binding` == "N/A"] <- NA
-      hits_table$`Total %-Binding` <- as.numeric(gsub(
-        "%",
-        "",
-        hits_table$`Total %-Binding`
-      ))
     }
     if (
       "%-Binding" %in%
@@ -3206,11 +3191,6 @@ render_hits_table <- function(
         any("%-Binding" %in% bar_chart)
     ) {
       hits_table$`%-Binding`[hits_table$`%-Binding` == "N/A"] <- NA
-      hits_table$`%-Binding` <- as.numeric(gsub(
-        "%",
-        "",
-        hits_table$`%-Binding`
-      ))
     }
   }
 
@@ -3761,7 +3741,15 @@ transform_hits <- function(hits_summary) {
         ~ tidyr::replace_na(as.character(.x), "N/A")
       )
     ) |>
-    dplyr::relocate(`Total % Binding`, .after = "% Binding")
+    dplyr::relocate(`Total % Binding`, .after = "% Binding") |>
+    dplyr::mutate(
+      `Total % Binding` = as.numeric(gsub(
+        "%",
+        "",
+        gsub("N/A", "0", `Total % Binding`)
+      )),
+      `% Binding` = as.numeric(gsub("%", "", gsub("N/A", "0", `% Binding`)))
+    )
 
   # Interface dependent logic
   if (all(c("time", "binding") %in% names(summary_table))) {

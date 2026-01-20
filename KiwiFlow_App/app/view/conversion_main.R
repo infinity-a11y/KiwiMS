@@ -1135,11 +1135,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         output$total_pct_binding <- NULL
         output$samples_present_compounds_pie <- NULL
         output$conversion_sample_spectrum <- NULL
-        output$conversion_present_compounds_table <- NULL
+        output$samples_table_view <- NULL
         output$total_pct_cmps_binding <- NULL
         output$cmp_distribution <- NULL
         output$conversion_cmp_spectra <- NULL
-        output$conversion_cmp_table <- NULL
+        output$compounds_table_view <- NULL
         output$conversion_cmp_protein <- NULL
         output$cmp_selected_compound <- NULL
         output$color_variable_ui <- NULL
@@ -1429,9 +1429,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               dplyr::arrange(
                 `Protein`,
                 `Cmp Name`,
-                # `Sample ID`,
-                as.numeric(gsub("%", "", gsub("N/A", "0", `Total %-Binding`))),
-                as.numeric(gsub("%", "", gsub("N/A", "0", `%-Binding`)))
+                `Total %-Binding`,
+                `%-Binding`
               )
           }
 
@@ -1454,11 +1453,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           output$total_pct_binding <- NULL
           output$samples_present_compounds_pie <- NULL
           output$conversion_sample_spectrum <- NULL
-          output$conversion_present_compounds_table <- NULL
+          output$samples_table_view <- NULL
           output$total_pct_cmps_binding <- NULL
           output$cmp_distribution <- NULL
           output$conversion_cmp_spectra <- NULL
-          output$conversion_cmp_table <- NULL
+          output$compounds_table_view <- NULL
           output$conversion_cmp_protein <- NULL
           output$cmp_selected_compound <- NULL
           output$color_variable_ui <- NULL
@@ -1923,7 +1922,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                             shiny::div(
                               shinyWidgets::materialSwitch(
                                 ns(
-                                  "conversion_present_compounds_table_binding_bar"
+                                  "samples_table_view_binding_bar"
                                 ),
                                 label = "%-Binding Bar",
                                 value = TRUE,
@@ -1931,7 +1930,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                               ),
                               shinyWidgets::materialSwitch(
                                 ns(
-                                  "conversion_present_compounds_table_tot_binding_bar"
+                                  "samples_table_view_tot_binding_bar"
                                 ),
                                 label = "Total %-Binding Bar",
                                 value = FALSE,
@@ -1953,7 +1952,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                       ),
                       shinycssloaders::withSpinner(
                         DT::DTOutput(
-                          ns("conversion_present_compounds_table")
+                          ns("samples_table_view")
                         ),
                         type = 1,
                         color = "#7777f9"
@@ -2193,7 +2192,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                       as.character(htmltools::tags$sub(x))
                     })
                   ),
-                  relBinding = as.numeric(gsub("%", "", `%-Binding`)) / 100
+                  relBinding = `%-Binding` / 100
                 ) |>
                 rbind(
                   data.frame(
@@ -2356,7 +2355,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             )
 
           ##### Samples view table ----
-          output$conversion_present_compounds_table <- DT::renderDataTable(
+          output$samples_table_view <- DT::renderDataTable(
             {
               shiny::req(
                 hits_summary,
@@ -2382,8 +2381,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 ),
                 tab = "Samples",
                 inputs = list(
-                  binding_bar = input$conversion_present_compounds_table_binding_bar,
-                  tot_binding_bar = input$conversion_present_compounds_table_tot_binding_bar,
+                  binding_bar = input$samples_table_view_binding_bar,
+                  tot_binding_bar = input$samples_table_view_tot_binding_bar,
                   truncate_names = input$truncate_names,
                   color_variable = input$color_variable
                 )
@@ -2395,8 +2394,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               render_trigger(),
               input$truncate_names,
               input$color_scale,
-              input$conversion_present_compounds_table_binding_bar,
-              input$conversion_present_compounds_table_tot_binding_bar
+              input$samples_table_view_binding_bar,
+              input$samples_table_view_tot_binding_bar
             )
 
           #### Compound View tab ----
@@ -2491,13 +2490,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                             shiny::icon("gear"),
                             shiny::div(
                               shinyWidgets::materialSwitch(
-                                ns("conversion_cmp_table_binding_bar"),
+                                ns("compounds_table_view_binding_bar"),
                                 label = "%-Binding Bar",
                                 value = TRUE,
                                 right = TRUE
                               ),
                               shinyWidgets::materialSwitch(
-                                ns("conversion_cmp_table_tot_binding_bar"),
+                                ns("compounds_table_view_tot_binding_bar"),
                                 label = "Total %-Binding Bar",
                                 value = FALSE,
                                 right = TRUE
@@ -2518,7 +2517,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                       ),
                       shinycssloaders::withSpinner(
                         DT::DTOutput(
-                          ns("conversion_cmp_table")
+                          ns("compounds_table_view")
                         ),
                         type = 1,
                         color = "#7777f9"
@@ -2694,30 +2693,29 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             if (length(total_bind) == 1) {
               msg <- total_bind
             } else {
-              total_bind_num <- as.numeric(gsub("%", "", total_bind))
               msg <- shiny::div(
                 class = "conversion-sample-protein-box",
                 shiny::div(
                   class = "conversion-sample-protein-names",
                   shiny::HTML(paste(
                     "Range<br>Mean",
-                    if (length(total_bind_num) > 1) "± SD"
+                    if (length(total_bind) > 1) "± SD"
                   ))
                 ),
                 shiny::div(
                   class = "conversion-sample-protein",
                   shiny::HTML(
                     paste0(
-                      round(min(total_bind_num), 2),
+                      round(min(total_bind), 2),
                       "% - ",
-                      round(max(total_bind_num), 2),
+                      round(max(total_bind), 2),
                       "%<br>",
-                      round(mean(total_bind_num), 2),
+                      round(mean(total_bind), 2),
                       "%",
-                      if (length(total_bind_num) > 1) {
+                      if (length(total_bind) > 1) {
                         paste0(
                           " ± ",
-                          round(stats::sd(total_bind_num), 2)
+                          round(stats::sd(total_bind), 2)
                         )
                       }
                     )
@@ -2805,7 +2803,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             bar_chart <- plotly::plot_ly(data = tbl) |>
               plotly::add_trace(
                 x = ~`Sample ID`,
-                y = ~ as.numeric(gsub("%", "", `%-Binding`)),
+                y = ~`%-Binding`,
                 color = color,
                 colors = colors,
                 type = 'bar',
@@ -2840,7 +2838,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               # Calculate totals for the top labels
               totals <- dplyr::group_by(tbl, `Sample ID`) |>
                 dplyr::summarize(
-                  total_val = sum(as.numeric(gsub("%", "", `%-Binding`)))
+                  total_val = sum(`%-Binding`)
                 )
               bar_chart <- bar_chart |>
                 plotly::add_trace(
@@ -2870,7 +2868,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             # Y-axis range
             range <- c(
               0,
-              max(as.numeric(gsub("%", "", tbl$`Total %-Binding`))) + 10
+              max(tbl$`Total %-Binding`) + 10
             )
 
             if (
@@ -2902,10 +2900,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   )
                 ),
                 yaxis = list(
-                  # range = c(
-                  #   0,
-                  #   max(as.numeric(gsub("%", "", tbl$`%-Binding`))) + 10
-                  # ),
                   range = range,
                   title = list(text = "%-Binding"),
                   zeroline = FALSE,
@@ -3019,7 +3013,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             )
 
           ##### Compounds view table ----
-          output$conversion_cmp_table <- DT::renderDataTable({
+          output$compounds_table_view <- DT::renderDataTable({
             shiny::req(
               hits_summary,
               input$conversion_compound_picker,
@@ -3043,8 +3037,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               ),
               tab = "Compounds",
               inputs = list(
-                binding_bar = input$conversion_cmp_table_binding_bar,
-                tot_binding_bar = input$conversion_cmp_table_tot_binding_bar,
+                binding_bar = input$compounds_table_view_binding_bar,
+                tot_binding_bar = input$compounds_table_view_tot_binding_bar,
                 truncate_names = input$truncate_names,
                 color_variable = input$color_variable
               )
@@ -3055,8 +3049,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               render_trigger(),
               input$truncate_names,
               input$color_scale,
-              input$conversion_cmp_table_binding_bar,
-              input$conversion_cmp_table_tot_binding_bar
+              input$compounds_table_view_binding_bar,
+              input$compounds_table_view_tot_binding_bar
             )
 
           #### Protein View tab ----
@@ -3161,13 +3155,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                             shiny::icon("gear"),
                             shiny::div(
                               shinyWidgets::materialSwitch(
-                                ns("conversion_prot_table_binding_bar"),
+                                ns("proteins_table_view_binding_bar"),
                                 label = "%-Binding Bar",
                                 value = TRUE,
                                 right = TRUE
                               ),
                               shinyWidgets::materialSwitch(
-                                ns("conversion_prot_table_tot_binding_bar"),
+                                ns("proteins_table_view_tot_binding_bar"),
                                 label = "Total %-Binding Bar",
                                 value = FALSE,
                                 right = TRUE
@@ -3188,7 +3182,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                       ),
                       shinycssloaders::withSpinner(
                         DT::DTOutput(
-                          ns("conversion_prot_table")
+                          ns("proteins_table_view")
                         ),
                         type = 1,
                         color = "#7777f9"
@@ -3422,21 +3416,15 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 !is.na(total_bind_pre$`Cmp Name`),
             ]
 
-            total_bind_num <- as.numeric(gsub(
-              "%",
-              "",
-              total_bind$`Total %-Binding`
-            ))
-
             msg <- shiny::div(
               class = "conversion-sample-protein-box",
               shiny::div(
                 class = "conversion-sample-protein-names",
                 shiny::HTML(paste(
                   "Compounds<br>Selected<br>",
-                  if (length(total_bind_num) > 1) "Range<br>",
+                  if (length(total_bind$`Total %-Binding`) > 1) "Range<br>",
                   "Mean",
-                  if (length(total_bind_num) > 1) "± SD"
+                  if (length(total_bind$`Total %-Binding`) > 1) "± SD"
                 ))
               ),
               shiny::div(
@@ -3449,21 +3437,20 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     "<br>",
                     total_pct_prot_binding_select,
                     "<br>",
-                    if (length(total_bind_num) > 1) {
+                    if (length(total_bind$`Total %-Binding`) > 1) {
                       paste0(
-                        round(min(total_bind_num), 2),
+                        round(min(total_bind$`Total %-Binding`), 2),
                         "% - ",
-                        round(max(total_bind_num), 2),
-                        "%<br>",
+                        round(max(total_bind$`Total %-Binding`), 2),
+                        "%<br>"
                       )
                     },
-                    round(mean(total_bind_num), 2),
+                    round(mean(total_bind$`Total %-Binding`), 2),
                     "%",
-                    if (length(total_bind_num) > 1) {
+                    if (length(total_bind$`Total %-Binding`) > 1) {
                       paste0(
-                        round(mean(total_bind_num), 2),
                         " ± ",
-                        round(stats::sd(total_bind_num), 2)
+                        round(stats::sd(total_bind$`Total %-Binding`), 2)
                       )
                     }
                   )
@@ -3585,7 +3572,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 dplyr::arrange(
                   `Cmp Name`,
                   `Sample ID`,
-                  dplyr::desc(as.numeric(gsub("%", "", `%-Binding`)))
+                  dplyr::desc(`%-Binding`)
                 )
             }
 
@@ -3628,7 +3615,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             # Y-axis range
             range <- c(
               0,
-              max(as.numeric(gsub("%", "", tbl$`Total %-Binding`))) + 10
+              max(tbl$`Total %-Binding`) + 10
             )
 
             if (
@@ -3733,7 +3720,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 }
 
                 col <- colors[[var]]
-                y_val <- as.numeric(gsub("%", "", row$`%-Binding`[[1]]))
+                y_val <- row$`%-Binding`[[1]]
 
                 hover_text <- paste0(
                   "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
@@ -3785,7 +3772,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               bar_chart <- plotly::plot_ly(data = tbl) |>
                 plotly::add_trace(
                   x = ~`Sample ID`,
-                  y = ~ as.numeric(gsub("%", "", `%-Binding`)),
+                  y = ~`%-Binding`,
                   color = color,
                   colors = colors,
                   type = 'bar',
@@ -3820,7 +3807,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 # Calculate totals for the top labels
                 totals <- dplyr::group_by(tbl, `Sample ID`) |>
                   dplyr::summarize(
-                    total_val = sum(as.numeric(gsub("%", "", `%-Binding`)))
+                    total_val = sum(`%-Binding`)
                   )
                 bar_chart <- bar_chart |>
                   plotly::add_trace(
@@ -3971,7 +3958,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             )
 
           ##### Compounds view table ----
-          output$conversion_prot_table <- DT::renderDataTable({
+          output$proteins_table_view <- DT::renderDataTable({
             shiny::req(
               hits_summary,
               input$conversion_protein_picker,
@@ -3996,8 +3983,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               ),
               tab = "Proteins",
               inputs = list(
-                binding_bar = input$conversion_prot_table_binding_bar,
-                tot_binding_bar = input$conversion_prot_table_tot_binding_bar,
+                binding_bar = input$proteins_table_view_binding_bar,
+                tot_binding_bar = input$proteins_table_view_tot_binding_bar,
                 truncate_names = input$truncate_names,
                 color_variable = input$color_variable
               )
@@ -4008,8 +3995,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               input$color_scale,
               input$conversion_protein_picker,
               input$truncate_names,
-              input$conversion_prot_table_binding_bar,
-              input$conversion_prot_table_tot_binding_bar
+              input$proteins_table_view_binding_bar,
+              input$proteins_table_view_tot_binding_bar
             )
 
           #### Insert tabset input panel ----
