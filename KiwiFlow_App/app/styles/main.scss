@@ -262,7 +262,7 @@ th {
   border: 1px solid #00000000;
   box-shadow: inset 0px 0px 50px 14px rgb(0 0 0 / 10%);
   border: none;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 .bslib-card .card-header {
@@ -2193,6 +2193,7 @@ table.dataTable thead > tr > th.sorting::before {
 .hits-tab-checkboxes .shiny-input-container .checkbox input,
 .hits-tab-checkboxes span {
   font-size: 16px;
+  cursor: pointer;
 }
 
 .conversion-result-wrapper label {
@@ -3545,7 +3546,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   background: linear-gradient(135deg, #35357a, #4a4a89, #77778f, #b0b0b8, #e0e0e0) !important;
 }
 
-#app-conversion_main-samples_present_compounds_na {
+#app-conversion_main-samples_present_compounds_na,
+#app-conversion_main-proteins_present_compounds_na {
   height: 100%;
   max-height: unset;
   align-content: center;

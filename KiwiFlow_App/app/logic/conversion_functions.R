@@ -295,6 +295,9 @@ sample_handsontable <- function(
   compounds = NULL,
   disabled = FALSE
 ) {
+  tab1 <<- tab
+  proteins1 <<- proteins
+
   cmp_cols <- grep("Compound", colnames(tab))
 
   # Allowed protein and compound values
@@ -2948,6 +2951,194 @@ multiple_spectra <- function(
   # }
 }
 
+# Rendering function for relative binding table view
+#' @export
+render_table_view <- function(table, colors, tab, inputs) {
+  # If table empty
+  if (!nrow(table)) {
+    return(DT::datatable(
+      data.frame(rep(list(as.character()), 5)) |>
+        stats::setNames(c(
+          "Sample ID",
+          "Cmp Name",
+          "Mass Shift",
+          "%-Binding",
+          "Total %"
+        )),
+      selection = "none",
+      class = "order-column",
+      options = list(
+        dom = 't',
+        paging = FALSE
+      )
+    ))
+  }
+
+  # Get optional concentration and time cols
+  optional_cols <- if (all(c("[Cmp]", "Time") %in% names(table))) {
+    c("[Cmp]", "Time")
+  } else {
+    NULL
+  }
+
+  # Prepate data frame for table
+  tbl <- table |>
+    dplyr::mutate(
+      `Sample ID` = if (inputs$truncate_names) {
+        `truncSample_ID`
+      } else {
+        `Sample ID`
+      },
+      `Theor. Cmp` = paste0(
+        "[",
+        `Theor. Cmp`,
+        "]",
+        "&thinsp;<sub>",
+        `Bind. Stoich.`,
+        "</sub>"
+      ),
+      `%-Binding` = as.numeric(gsub(
+        "%",
+        "",
+        `%-Binding`
+      )),
+      `Total %-Binding` = as.numeric(gsub(
+        "%",
+        "",
+        `Total %-Binding`
+      ))
+    ) |>
+    dplyr::select(
+      `Sample ID` = `Sample ID`,
+      `Cmp Name` = `Cmp Name`,
+      dplyr::any_of(optional_cols),
+      `Mass Shift` = `Theor. Cmp`,
+      `%-Binding` = `%-Binding`,
+      `Total %` = `Total %-Binding`
+    )
+
+  # Prepare table data frame
+  # tab <- tbl |>
+  #   dplyr::reframe(
+  #     `Cmp Name` = `Cmp Name`,
+  #     `Mass Shift` = `Theor. Cmp`,
+  #     `Stoichiometry` = `Bind. Stoich.`,
+  #     `Sample ID` = if (truncate_names) {
+  #       `truncSample_ID`
+  #     } else {
+  #       `Sample ID`
+  #     },
+  #     `%-Binding` = as.numeric(gsub(
+  #       "%",
+  #       "",
+  #       `%-Binding`
+  #     )),
+  #     `Total %-Binding` = `Total %-Binding`
+  #   ) |>
+  #   dplyr::relocate(
+  #     `Mass Shift`,
+  #     .before = 3
+  #   ) |>
+  #   dplyr::arrange(
+  #     `Sample ID`,
+  #     as.numeric(gsub("%", "", `Total %-Binding`)),
+  #     as.numeric(gsub("%", "", `%-Binding`)),
+  #     dplyr::desc(`Mass Shift`),
+  #     `Stoichiometry`
+  #   )
+
+  # Apply bar renderer to binding column
+  if (
+    is.null(inputs$binding_bar) ||
+      isTRUE(inputs$binding_bar)
+  ) {
+    render_binding <- htmlwidgets::JS(chart_js)
+  } else {
+    render_binding <- NULL
+  }
+
+  # Apply bar renderer to total binding column
+  if (
+    is.null(inputs$tot_binding_bar) ||
+      isTRUE(inputs$tot_binding_bar)
+  ) {
+    render_tot_binding <- htmlwidgets::JS(chart_js)
+  } else {
+    render_tot_binding <- NULL
+  }
+
+  if (tab == "Compounds") {
+    group_variable <- "Sample ID"
+  } else if (any(tab %in% c("Samples", "Proteins"))) {
+    group_variable <- "Cmp Name"
+  }
+
+  if (length(unique(tbl["Sample ID"])) == nrow(tbl)) {
+    row_group <- NULL
+  } else {
+    row_group <- list(dataSrc = which(names(tbl) == "Sample ID") - 1)
+  }
+
+  DT::datatable(
+    data = tbl,
+    escape = FALSE,
+    extensions = "RowGroup",
+    rownames = FALSE,
+    class = "order-column",
+    selection = "none",
+    options = list(
+      dom = 't',
+      paging = FALSE,
+      scrollY = TRUE,
+      scrollCollapse = TRUE,
+      rowGroup = if (length(unique(tbl[group_variable])) == nrow(tbl)) {
+        NULL
+      } else {
+        list(dataSrc = which(names(tbl) == group_variable) - 1)
+      },
+      columnDefs = list(
+        list(
+          visible = ifelse(
+            length(unique(tbl[group_variable])) == nrow(tbl),
+            TRUE,
+            FALSE
+          ),
+          targets = group_variable
+        ),
+        list(className = 'dt-center', targets = "_all"),
+        list(
+          targets = "%-Binding",
+          render = render_binding
+        ),
+        list(
+          targets = "Total %",
+          render = render_tot_binding
+        ),
+        list(
+          targets = -1,
+          className = 'dt-last-col'
+        )
+      )
+    )
+  ) |>
+    DT::formatStyle(
+      columns = ifelse(
+        inputs$color_variable == "Compounds",
+        "Cmp Name",
+        "Sample ID"
+      ),
+      target = 'row',
+      backgroundColor = DT::styleEqual(
+        levels = names(colors),
+        values = colors
+      ),
+      color = DT::styleEqual(
+        levels = names(colors),
+        values = get_contrast_color(colors)
+      )
+    )
+}
+
 # Rendering function of hits table
 #' @export
 render_hits_table <- function(
@@ -3099,23 +3290,6 @@ render_hits_table <- function(
     } else {
       clickable_targets <- NULL
     }
-  }
-
-  # Sorting
-  if (clickable) {
-    hits_table <- hits_table |>
-      dplyr::arrange(
-        # if (color_variable == "Samples") `Sample ID` else `Cmp Name`,
-        # if (color_variable == "Samples") `Cmp Name` else `Sample ID`,
-        `Protein`,
-        `Cmp Name`,
-        if (any("Total %-Binding" == names(hits_table))) {
-          `Total %-Binding`
-        } else {
-          NULL
-        },
-        if (any("%-Binding" == names(hits_table))) `%-Binding` else NULL
-      )
   }
 
   # Generate datatable
@@ -3558,7 +3732,7 @@ handle_file_upload <- function(
 
 # Transform summarized hits into readable table
 #' @export
-transform_hits <- function(hits_summary, run_ki_kinact) {
+transform_hits <- function(hits_summary) {
   hits_summary2 <<- hits_summary
 
   # Shared transformations
@@ -3590,14 +3764,13 @@ transform_hits <- function(hits_summary, run_ki_kinact) {
     dplyr::relocate(`Total % Binding`, .after = "% Binding")
 
   # Interface dependent logic
-  if (run_ki_kinact) {
+  if (all(c("time", "binding") %in% names(summary_table))) {
     summary_table <- summary_table |>
       dplyr::mutate(
         time = paste(time, "min"),
         concentration = paste(concentration, "µM")
       ) |>
       dplyr::select(-c(17)) |>
-      # dplyr::select(-c(3, 17)) |>
       dplyr::relocate(c(concentration, time), .before = `Mw Protein [Da]`)
 
     new_names <- c(

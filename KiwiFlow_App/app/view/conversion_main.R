@@ -33,6 +33,7 @@ box::use(
       get_contrast_color,
       label_smart_clean,
       filter_color_list,
+      render_table_view,
     ],
   app / logic / deconvolution_functions[spectrum_plot, ],
   app /
@@ -355,11 +356,12 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     protein_table_input <- shiny::reactive({
       proteins_table <- input$proteins_table
       shiny::req(proteins_table)
-      suppressWarnings(
-        rhandsontable::hot_to_r(
-          proteins_table
-        )
-      )
+      suppressWarnings({
+        tab <- rhandsontable::hot_to_r(proteins_table)
+      })
+
+      # Trim whitespace
+      dplyr::mutate(tab, across(where(is.character), trimws))
     }) |>
       shiny::debounce(millis = 500)
 
@@ -367,11 +369,12 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     compound_table_input <- shiny::reactive({
       compounds_table <- input$compounds_table
       shiny::req(compounds_table)
-      suppressWarnings(
-        rhandsontable::hot_to_r(
-          compounds_table
-        )
-      )
+      suppressWarnings({
+        tab <- rhandsontable::hot_to_r(compounds_table)
+      })
+
+      # Trim whitespace
+      dplyr::mutate(tab, across(where(is.character), trimws))
     }) |>
       shiny::debounce(millis = 500)
 
@@ -567,6 +570,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       shiny::req(
         sample_table_data()
       )
+
+      test <<- declaration_vars$protein_table$Protein
+      test2 <<- sample_table_data()
 
       sample_handsontable(
         tab = sample_table_data(),
@@ -1403,14 +1409,33 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
         if (!is.null(result_list)) {
           ### Compute hits summary ----
-          hits_summary <- conversion_vars$hits_summary <- result_list$"hits_summary" |>
-            transform_hits(
-              run_ki_kinact = run_ki_kinact
-            ) |>
-            dplyr::arrange(
-              `Total %-Binding` == "N/A",
-              as.numeric(gsub("[^0-9.-]", "", `Total %-Binding`))
-            )
+          hits_summary <- transform_hits(result_list$"hits_summary")
+
+          if (all(c("[Cmp]", "Time") %in% names(hits_summary))) {
+            hits_summary <- hits_summary |>
+              # dplyr::mutate(
+              #   "[Cmp]" = as.numeric(gsub("µM|mM", "", `[Cmp]`)),
+              #   Time = as.numeric(gsub("min|s", "", Time))
+              # ) |>
+              # dplyr::arrange(`Cmp Name`, `[Cmp]`, Time)
+              dplyr::arrange(
+                `Protein`,
+                `Cmp Name`,
+                as.numeric(gsub("µM|mM", "", `[Cmp]`)),
+                as.numeric(gsub("min|s", "", Time))
+              )
+          } else {
+            hits_summary <- hits_summary |>
+              dplyr::arrange(
+                `Protein`,
+                `Cmp Name`,
+                # `Sample ID`,
+                as.numeric(gsub("%", "", gsub("N/A", "0", `Total %-Binding`))),
+                as.numeric(gsub("%", "", gsub("N/A", "0", `%-Binding`)))
+              )
+          }
+
+          conversion_vars$hits_summary <- hits_summary
         }
 
         if (is.null(result_list)) {
@@ -1561,18 +1586,21 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                       class = "hits-tab-checkboxes",
                       shiny::div(
                         class = "hits-tab-expand-box",
-                        shinyjs::disabled(
-                          shiny::checkboxInput(
-                            ns("hits_tab_expand"),
-                            label = "Expand Samples",
-                            value = TRUE
-                          )
+                        # shinyjs::disabled(
+                        shiny::checkboxInput(
+                          ns("hits_tab_expand"),
+                          label = "Expand Samples",
+                          value = TRUE
                         )
+                        # )
                       ),
-                      shiny::checkboxInput(
-                        ns("hits_tab_na"),
-                        label = "Include NA",
-                        value = TRUE
+                      shiny::div(
+                        class = "hits-tab-na-box",
+                        shiny::checkboxInput(
+                          ns("hits_tab_na"),
+                          label = "Include NA",
+                          value = TRUE
+                        )
                       )
                     )
                   ),
@@ -1685,15 +1713,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               shiny::req(
                 hits_summary,
                 input$hits_tab_sample_select,
-                input$hits_tab_compound_select,
                 input$color_variable,
                 !is.null(input$truncate_names),
                 input$color_scale
               )
-
-              color_scale <- input$color_scale
-              color_variable <- input$color_variable
-              truncate_names <- input$truncate_names
 
               hits_datatable <- render_hits_table(
                 hits_table = hits_summary,
@@ -1706,17 +1729,18 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 select = TRUE,
                 colors = get_cmp_colorScale(
                   filtered_table = hits_summary,
-                  scale = color_scale,
-                  variable = color_variable,
-                  trunc = truncate_names
+                  scale = input$color_scale,
+                  variable = input$color_variable,
+                  trunc = input$truncate_names
                 ),
-                truncated = truncate_names,
-                color_variable = color_variable,
+                truncated = input$truncate_names,
+                color_variable = input$color_variable,
                 expand = input$hits_tab_expand,
                 na_include = input$hits_tab_na,
                 clickable = TRUE
               )
 
+              # Save datatable in reactive variable
               hits_datatable_current(hits_datatable)
 
               return(hits_datatable)
@@ -1730,7 +1754,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               input$binding_chart,
               input$hits_tab_compound_select,
               input$hits_tab_sample_select,
-              input$hits_tab_expand,
               input$hits_tab_na
             )
 
@@ -1812,13 +1835,21 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                             hits_summary$`Cmp Name`
                           )])
 
-                          list(
-                            Hits = stats::setNames(hits_vec, hits_vec),
-                            `No Hits` = stats::setNames(
+                          choices_list <- list()
+                          if (length(hits_vec)) {
+                            choices_list[["Hits"]] <- stats::setNames(
+                              hits_vec,
+                              hits_vec
+                            )
+                          }
+                          if (length(no_hits_vec)) {
+                            choices_list[["No Hits"]] <- stats::setNames(
                               no_hits_vec,
                               no_hits_vec
                             )
-                          )
+                          }
+
+                          choices_list
                         } else {
                           unique(hits_summary$`Sample ID`)
                         }
@@ -1890,6 +1921,22 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                           bslib::popover(
                             shiny::icon("gear"),
                             shiny::div(
+                              shinyWidgets::materialSwitch(
+                                ns(
+                                  "conversion_present_compounds_table_binding_bar"
+                                ),
+                                label = "%-Binding Bar",
+                                value = TRUE,
+                                right = TRUE
+                              ),
+                              shinyWidgets::materialSwitch(
+                                ns(
+                                  "conversion_present_compounds_table_tot_binding_bar"
+                                ),
+                                label = "Total %-Binding Bar",
+                                value = FALSE,
+                                right = TRUE
+                              ),
                               style = "margin-right: 20px;"
                             ),
                             title = NULL
@@ -2319,130 +2366,37 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 input$color_scale
               )
 
-              color_scale <- input$color_scale
-              color_variable <- input$color_variable
-              truncate_names <- input$truncate_names
-
-              # Filter for selected sample
               tbl <- hits_summary |>
                 dplyr::filter(
                   `Sample ID` == input$conversion_sample_picker &
                     !is.na(`Cmp Name`)
                 )
 
-              # If table empty
-              if (!nrow(tbl)) {
-                return(DT::datatable(
-                  data.frame(as.character(), as.character(), as.character()) |>
-                    stats::setNames(c(
-                      "Mass Shift",
-                      "Stoichiometry",
-                      "%-Binding"
-                    )),
-                  selection = "none",
-                  class = "order-column",
-                  options = list(
-                    dom = 't',
-                    paging = FALSE
-                  )
-                ))
-              }
-
-              # Prepare compound coloring
-              colors <- get_cmp_colorScale(
-                filtered_table = tbl,
-                scale = color_scale,
-                variable = color_variable,
-                trunc = truncate_names
-              )
-
-              cmp_table <- tbl |>
-                dplyr::arrange(
-                  `Cmp Name`,
-                  as.numeric(gsub("%", "", `%-Binding`)),
-                  `Theor. Cmp`,
-                  `Bind. Stoich.`
-                ) |>
-                dplyr::reframe(
-                  `Sample ID` = if (truncate_names) {
-                    `truncSample_ID`
-                  } else {
-                    `Sample ID`
-                  },
-                  `Cmp Name` = `Cmp Name`,
-                  `Mass Shift` = `Theor. Cmp`,
-                  Stoichiometry = `Bind. Stoich.`,
-                  `%-Binding` = as.numeric(gsub(
-                    "%",
-                    "",
-                    `%-Binding`
-                  ))
-                ) |>
-                DT::datatable(
-                  extensions = "RowGroup",
-                  rownames = FALSE,
-                  selection = "none",
-                  class = "order-column",
-                  options = list(
-                    dom = 't',
-                    paging = FALSE,
-                    scrollY = TRUE,
-                    scrollCollapse = TRUE,
-                    rowGroup = if (
-                      length(unique(tbl$`Cmp Name`)) == nrow(tbl)
-                    ) {
-                      NULL
-                    } else {
-                      list(dataSrc = 0)
-                    },
-                    columnDefs = list(
-                      list(
-                        visible = FALSE,
-                        targets = if (
-                          length(unique(tbl$`Cmp Name`)) == nrow(tbl)
-                        ) {
-                          1
-                        } else {
-                          c(0, 1)
-                        }
-                      ),
-                      list(className = 'dt-center', targets = "_all"),
-                      list(
-                        targets = 4,
-                        render = htmlwidgets::JS(chart_js)
-                      ),
-                      list(
-                        targets = -1,
-                        className = 'dt-last-col'
-                      )
-                    )
-                  )
-                ) |>
-                DT::formatStyle(
-                  columns = ifelse(
-                    color_variable == "Compounds",
-                    "Cmp Name",
-                    "Sample ID"
-                  ),
-                  target = 'row',
-                  backgroundColor = DT::styleEqual(
-                    levels = names(colors),
-                    values = colors
-                  ),
-                  color = DT::styleEqual(
-                    levels = names(colors),
-                    values = get_contrast_color(colors)
-                  )
+              render_table_view(
+                table = tbl,
+                colors = get_cmp_colorScale(
+                  filtered_table = tbl,
+                  scale = input$color_scale,
+                  variable = input$color_variable,
+                  trunc = input$truncate_names
+                ),
+                tab = "Samples",
+                inputs = list(
+                  binding_bar = input$conversion_present_compounds_table_binding_bar,
+                  tot_binding_bar = input$conversion_present_compounds_table_tot_binding_bar,
+                  truncate_names = input$truncate_names,
+                  color_variable = input$color_variable
                 )
-
-              return(cmp_table)
+              )
             }
           ) |>
             shiny::bindEvent(
               input$conversion_sample_picker,
               render_trigger(),
               input$truncate_names,
-              input$color_scale
+              input$color_scale,
+              input$conversion_present_compounds_table_binding_bar,
+              input$conversion_present_compounds_table_tot_binding_bar
             )
 
           #### Compound View tab ----
@@ -2536,6 +2490,18 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                           bslib::popover(
                             shiny::icon("gear"),
                             shiny::div(
+                              shinyWidgets::materialSwitch(
+                                ns("conversion_cmp_table_binding_bar"),
+                                label = "%-Binding Bar",
+                                value = TRUE,
+                                right = TRUE
+                              ),
+                              shinyWidgets::materialSwitch(
+                                ns("conversion_cmp_table_tot_binding_bar"),
+                                label = "Total %-Binding Bar",
+                                value = FALSE,
+                                right = TRUE
+                              ),
                               style = "margin-right: 20px;"
                             ),
                             title = NULL
@@ -2733,7 +2699,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 class = "conversion-sample-protein-box",
                 shiny::div(
                   class = "conversion-sample-protein-names",
-                  shiny::HTML("Range<br>Mean ± SD")
+                  shiny::HTML(paste(
+                    "Range<br>Mean",
+                    if (length(total_bind_num) > 1) "± SD"
+                  ))
                 ),
                 shiny::div(
                   class = "conversion-sample-protein",
@@ -2744,8 +2713,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                       round(max(total_bind_num), 2),
                       "%<br>",
                       round(mean(total_bind_num), 2),
-                      "% ± ",
-                      round(stats::sd(total_bind_num), 2)
+                      "%",
+                      if (length(total_bind_num) > 1) {
+                        paste0(
+                          " ± ",
+                          round(stats::sd(total_bind_num), 2)
+                        )
+                      }
                     )
                   )
                 )
@@ -2917,7 +2891,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   showgrid = FALSE,
                   zeroline = FALSE,
                   color = '#ffffff',
-                  # showticklabels = max(nchar(levels(tbl$`Sample ID`))) > 22,
                   showticklabels = ifelse(
                     !is.null(input$cmp_distribution_labels),
                     input$cmp_distribution_labels,
@@ -3005,6 +2978,15 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             )
 
             # Create spectra plot
+            if (nrow(tbl) == 1) {
+              plot <- spectrum_plot(
+                sample = result_list$deconvolution[[tbl$`Sample ID`]],
+                color_cmp = colors,
+                color_variable = color_variable,
+                show_peak_labels = TRUE,
+                show_mass_diff = FALSE
+              )
+            }
             plot <- multiple_spectra(
               results_list = result_list,
               samples = unique(hits_summary$`Sample ID`[
@@ -3046,118 +3028,35 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               input$color_scale
             )
 
-            color_scale <- input$color_scale
-            color_variable <- input$color_variable
-            truncate_names <- input$truncate_names
-
-            # Filter table for selected compound
             tbl <- hits_summary |>
               dplyr::filter(
                 `Cmp Name` == input$conversion_compound_picker
               )
 
-            # Prepare compound coloring
-            colors <- get_cmp_colorScale(
-              filtered_table = tbl,
-              scale = color_scale,
-              variable = color_variable,
-              trunc = truncate_names
-            )
-
-            # Create data table
-            cmp_table <- tbl |>
-              # dplyr::group_by(`Sample ID`) |>
-              dplyr::reframe(
-                `Cmp Name` = `Cmp Name`,
-                `Mass Shift` = `Theor. Cmp`,
-                `Stoichiometry` = `Bind. Stoich.`,
-                `Sample ID` = if (truncate_names) {
-                  `truncSample_ID`
-                } else {
-                  `Sample ID`
-                },
-                `%-Binding` = as.numeric(gsub(
-                  "%",
-                  "",
-                  `%-Binding`
-                )),
-                `Total %-Binding` = `Total %-Binding`
-              ) |>
-              dplyr::relocate(
-                `Mass Shift`,
-                .before = 3
-              ) |>
-              dplyr::arrange(
-                `Sample ID`,
-                as.numeric(gsub("%", "", `Total %-Binding`)),
-                as.numeric(gsub("%", "", `%-Binding`)),
-                dplyr::desc(`Mass Shift`),
-                `Stoichiometry`
-              ) |>
-              DT::datatable(
-                extensions = "RowGroup",
-                rownames = FALSE,
-                class = "order-column",
-                selection = "none",
-                options = list(
-                  dom = 't',
-                  paging = FALSE,
-                  scrollY = TRUE,
-                  scrollCollapse = TRUE,
-                  rowGroup = if (length(unique(tbl$`Sample ID`)) == nrow(tbl)) {
-                    NULL
-                  } else {
-                    list(dataSrc = 0)
-                  },
-                  columnDefs = list(
-                    list(
-                      visible = FALSE,
-                      targets = 1
-                    ),
-                    list(
-                      visible = ifelse(
-                        length(unique(tbl$`Sample ID`)) == nrow(tbl),
-                        TRUE,
-                        FALSE
-                      ),
-                      targets = 0
-                    ),
-                    list(className = 'dt-center', targets = "_all"),
-                    list(
-                      targets = 4,
-                      render = htmlwidgets::JS(chart_js)
-                    ),
-                    list(
-                      targets = -1,
-                      className = 'dt-last-col'
-                    )
-                  )
-                )
-              ) |>
-              DT::formatStyle(
-                columns = ifelse(
-                  color_variable == "Compounds",
-                  "Cmp Name",
-                  "Sample ID"
-                ),
-                target = 'row',
-                backgroundColor = DT::styleEqual(
-                  levels = names(colors),
-                  values = colors
-                ),
-                color = DT::styleEqual(
-                  levels = names(colors),
-                  values = get_contrast_color(colors)
-                )
+            render_table_view(
+              table = tbl,
+              colors = get_cmp_colorScale(
+                filtered_table = tbl,
+                scale = input$color_scale,
+                variable = input$color_variable,
+                trunc = input$truncate_names
+              ),
+              tab = "Compounds",
+              inputs = list(
+                binding_bar = input$conversion_cmp_table_binding_bar,
+                tot_binding_bar = input$conversion_cmp_table_tot_binding_bar,
+                truncate_names = input$truncate_names,
+                color_variable = input$color_variable
               )
-
-            return(cmp_table)
+            )
           }) |>
             shiny::bindEvent(
               input$conversion_compound_picker,
               render_trigger(),
               input$truncate_names,
-              input$color_scale
+              input$color_scale,
+              input$conversion_cmp_table_binding_bar,
+              input$conversion_cmp_table_tot_binding_bar
             )
 
           #### Protein View tab ----
@@ -3261,6 +3160,18 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                           bslib::popover(
                             shiny::icon("gear"),
                             shiny::div(
+                              shinyWidgets::materialSwitch(
+                                ns("conversion_prot_table_binding_bar"),
+                                label = "%-Binding Bar",
+                                value = TRUE,
+                                right = TRUE
+                              ),
+                              shinyWidgets::materialSwitch(
+                                ns("conversion_prot_table_tot_binding_bar"),
+                                label = "Total %-Binding Bar",
+                                value = FALSE,
+                                right = TRUE
+                              ),
                               style = "margin-right: 20px;"
                             ),
                             title = NULL
@@ -3304,6 +3215,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                                   "100"
                                 )
                               ),
+                              shiny::uiOutput(ns(
+                                "protein_distribution_labels_ui"
+                              )),
                               style = "margin-right: 20px;"
                             ),
                             title = NULL
@@ -3318,14 +3232,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                           )
                         )
                       ),
-                      shinycssloaders::withSpinner(
-                        plotly::plotlyOutput(
-                          ns("protein_view_cmp_distribution"),
-                          height = "100%"
-                        ),
-                        type = 1,
-                        color = "#7777f9"
-                      ),
+                      shiny::uiOutput(ns("proteins_present_compounds_pie_ui")),
                       full_screen = TRUE
                     )
                   ),
@@ -3469,6 +3376,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 !is.na(hits_summary$`Cmp Name`)
             ])
 
+            if (!length(choices)) {
+              choices <- NULL
+            }
+
             shiny::div(
               class = "prot-binding-ui",
               shiny::selectInput(
@@ -3485,63 +3396,110 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               input$conversion_protein_picker
             )
 
+            hits_summary8 <<- hits_summary
+            conversion_protein_picker <<- input$conversion_protein_picker
+            total_pct_prot_binding_select <<- input$total_pct_prot_binding_select
+
             # Prefilter hits by selected protein and non-NA compound
             total_bind_pre <- hits_summary[
-              hits_summary$`Protein` == input$conversion_protein_picker &
-                !is.na(hits_summary$`Cmp Name`),
+              hits_summary$`Protein` == input$conversion_protein_picker,
             ]
+
+            if (all(is.na(total_bind_pre$`Cmp Name`))) {
+              return("N/A")
+            }
 
             # Get selected compound
             total_pct_prot_binding_select <- ifelse(
               !is.null(input$total_pct_prot_binding_select),
               input$total_pct_prot_binding_select,
-              total_bind_pre$`Cmp Name`
+              total_bind_pre$`Cmp Name`[!is.na(total_bind_pre$`Cmp Name`)][1]
             )
 
             # Filter by selected compound
             total_bind <- total_bind_pre[
-              hits_summary$`Cmp Name` == total_pct_prot_binding_select,
+              total_bind_pre$`Cmp Name` == total_pct_prot_binding_select &
+                !is.na(total_bind_pre$`Cmp Name`),
             ]
 
-            if (nrow(total_bind) == 1) {
-              msg <- total_bind$`Total %-Binding`
-            } else {
-              total_bind_num <- as.numeric(gsub(
-                "%",
-                "",
-                total_bind$`Total %-Binding`
-              ))
-              msg <- shiny::div(
-                class = "conversion-sample-protein-box",
-                shiny::div(
-                  class = "conversion-sample-protein-names",
-                  shiny::HTML("Compounds<br>Selected<br>Range<br>Mean ± SD")
-                ),
-                shiny::div(
-                  class = "conversion-sample-protein",
-                  shiny::HTML(
-                    paste0(
-                      length(unique(total_bind_pre$`Cmp Name`)),
-                      "<br>",
-                      total_pct_prot_binding_select,
-                      "<br>",
-                      round(min(total_bind_num), 2),
-                      "% - ",
-                      round(max(total_bind_num), 2),
-                      "%<br>",
-                      round(mean(total_bind_num), 2),
-                      "% ± ",
-                      round(stats::sd(total_bind_num), 2)
-                    )
+            total_bind_num <- as.numeric(gsub(
+              "%",
+              "",
+              total_bind$`Total %-Binding`
+            ))
+
+            msg <- shiny::div(
+              class = "conversion-sample-protein-box",
+              shiny::div(
+                class = "conversion-sample-protein-names",
+                shiny::HTML(paste(
+                  "Compounds<br>Selected<br>",
+                  if (length(total_bind_num) > 1) "Range<br>",
+                  "Mean",
+                  if (length(total_bind_num) > 1) "± SD"
+                ))
+              ),
+              shiny::div(
+                class = "conversion-sample-protein",
+                shiny::HTML(
+                  paste0(
+                    length(unique(total_bind_pre$`Cmp Name`[
+                      !is.na(total_bind_pre$`Cmp Name`)
+                    ])),
+                    "<br>",
+                    total_pct_prot_binding_select,
+                    "<br>",
+                    if (length(total_bind_num) > 1) {
+                      paste0(
+                        round(min(total_bind_num), 2),
+                        "% - ",
+                        round(max(total_bind_num), 2),
+                        "%<br>",
+                      )
+                    },
+                    round(mean(total_bind_num), 2),
+                    "%",
+                    if (length(total_bind_num) > 1) {
+                      paste0(
+                        round(mean(total_bind_num), 2),
+                        " ± ",
+                        round(stats::sd(total_bind_num), 2)
+                      )
+                    }
                   )
                 )
               )
-            }
+            )
 
             return(msg)
           })
 
-          ##### Compound distribution bar chart ----
+          ###### Show label input UI ----
+          output$protein_distribution_labels_ui <- shiny::renderUI({
+            shiny::req(hits_summary, input$conversion_protein_picker)
+
+            tbl <- hits_summary |>
+              dplyr::filter(`Protein` == input$conversion_protein_picker)
+
+            # X-axis tick labels
+            condition <- ifelse(
+              length(unique(tbl$`Cmp Name`)) > 1,
+              max(nchar(unique(tbl$`Sample ID`))) > 22,
+              max(nchar(unique(tbl$`Cmp Name`))) > 22
+            )
+
+            shinyWidgets::materialSwitch(
+              ns("protein_distribution_labels"),
+              label = "Show Labels",
+              value = ifelse(
+                condition,
+                FALSE,
+                TRUE
+              ),
+              right = TRUE
+            )
+          })
+
           output$proteins_present_compounds_pie_ui <- shiny::renderUI({
             shiny::req(
               hits_summary,
@@ -3550,7 +3508,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
             tbl <- hits_summary |>
               dplyr::filter(
-                `Sample ID` == input$conversion_protein_picker
+                `Protein` == input$conversion_protein_picker
               )
 
             if (anyNA(tbl)) {
@@ -3571,6 +3529,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             "No binding events"
           )
 
+          ##### Compound distribution bar chart ----
           output$protein_view_cmp_distribution <- plotly::renderPlotly({
             shiny::req(
               hits_summary,
@@ -3579,6 +3538,14 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               !is.null(input$truncate_names),
               input$color_scale
             )
+
+            hits_summary5 <<- hits_summary
+            color_scale <<- input$color_scale
+            color_variable <<- input$color_variable
+            truncate_names <<- input$truncate_names
+            conversion_protein_picker <<- input$conversion_protein_picker
+            protein_distribution_labels <<- input$protein_distribution_labels
+            protein_distribution_scale <<- input$protein_distribution_scale
 
             color_scale <- input$color_scale
             color_variable <- input$color_variable
@@ -3606,12 +3573,23 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               color <- ~`Sample ID`
             }
 
+            if (all(c("Time", "[Cmp]") %in% names(tbl))) {
+              tbl <- tbl |>
+                dplyr::mutate(
+                  "[Cmp]" = as.numeric(gsub("µM|mM", "", `[Cmp]`)),
+                  Time = as.numeric(gsub("min|s", "", Time))
+                ) |>
+                dplyr::arrange(`[Cmp]`, Time)
+            } else {
+              tbl <- tbl |>
+                dplyr::arrange(
+                  `Cmp Name`,
+                  `Sample ID`,
+                  dplyr::desc(as.numeric(gsub("%", "", `%-Binding`)))
+                )
+            }
+
             tbl <- tbl |>
-              dplyr::arrange(
-                `Cmp Name`,
-                `Sample ID`,
-                dplyr::desc(as.numeric(gsub("%", "", `%-Binding`)))
-              ) |>
               dplyr::group_by(`Cmp Name`) |>
               dplyr::mutate(
                 `Sample ID` = if (truncate_names) {
@@ -3647,15 +3625,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               ) |>
               dplyr::ungroup()
 
-            # Unique groups and mapping to numeric indices (for offsetgroup)
-            groups <- unique(tbl$Group)
-            n_groups <- length(groups)
-            group_map <- stats::setNames(0:(n_groups - 1), groups)
-
-            # Bar styling params
-            bar_width <- 0.3
-            group_gap <- 0.05
-
             # Y-axis range
             range <- c(
               0,
@@ -3669,126 +3638,247 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               range <- c(0, 101)
             }
 
-            # Initialize plot_ly with layout
-            layout_list <- list(
-              barmode = "relative",
-              paper_bgcolor = 'rgba(0,0,0,0)',
-              plot_bgcolor = 'rgba(0,0,0,0)',
-              xaxis = list(
-                title = "Compound Name",
-                type = "category",
-                tickson = "boundaries",
-                categoryorder = "array",
-                categoryarray = levels(tbl$`Cmp Name`),
-                showgrid = FALSE,
-                zeroline = FALSE,
-                color = '#ffffff'
-              ),
-              yaxis = list(
-                range = range,
-                title = list(text = "%-Binding"),
-                zeroline = FALSE,
-                gridcolor = "#7f7f7fff",
-                color = '#ffffff',
-                dtick = 20,
-                tick0 = 0
+            # X-axis tick labels
+            condition <- ifelse(
+              length(unique(tbl$`Cmp Name`)) > 1,
+              max(nchar(levels(tbl$`Cmp Name`))) > 22,
+              max(nchar(levels(tbl$`Sample ID`))) > 22
+            )
+
+            showticklabels <- ifelse(
+              !is.null(input$protein_distribution_labels),
+              input$protein_distribution_labels,
+              ifelse(
+                condition,
+                FALSE,
+                TRUE
               )
             )
 
-            # Add yaxis2, yaxis3, …
-            if (n_groups > 1) {
-              for (i in 2:n_groups) {
-                axis_name <- paste0("yaxis", i)
-                layout_list[[axis_name]] <- list(
-                  visible = FALSE,
-                  matches = "y",
-                  overlaying = "y",
-                  anchor = "x",
+            if (length(unique(tbl$`Cmp Name`)) > 1) {
+              # Initialize plot_ly with layout
+              layout_list <- list(
+                barmode = "relative",
+                paper_bgcolor = 'rgba(0,0,0,0)',
+                plot_bgcolor = 'rgba(0,0,0,0)',
+                xaxis = list(
+                  type = "category",
+                  tickson = "boundaries",
+                  categoryorder = "array",
+                  categoryarray = levels(tbl$`Cmp Name`),
+                  showgrid = FALSE,
+                  zeroline = FALSE,
+                  color = '#ffffff',
+                  showticklabels = showticklabels
+                ),
+                yaxis = list(
                   range = range,
+                  title = list(text = "%-Binding"),
+                  zeroline = FALSE,
+                  gridcolor = "#7f7f7fff",
+                  color = '#ffffff',
                   dtick = 20,
                   tick0 = 0
                 )
+              )
+
+              # Unique groups and mapping to numeric indices (for offsetgroup)
+              groups <- unique(tbl$Group)
+              n_groups <- length(groups)
+              group_map <- stats::setNames(0:(n_groups - 1), groups)
+
+              # Bar styling params
+              bar_width <- 0.3
+              group_gap <- 0.05
+
+              # Add yaxis2, yaxis3, …
+              if (n_groups > 1) {
+                for (i in 2:n_groups) {
+                  axis_name <- paste0("yaxis", i)
+                  layout_list[[axis_name]] <- list(
+                    visible = FALSE,
+                    matches = "y",
+                    overlaying = "y",
+                    anchor = "x",
+                    range = range,
+                    dtick = 20,
+                    tick0 = 0
+                  )
+                }
               }
+
+              # Create the empty plot
+              bar_chart <- plotly::plot_ly(showlegend = FALSE)
+
+              # Apply the dynamic layout
+              bar_chart <- do.call(
+                plotly::layout,
+                c(list(bar_chart), layout_list)
+              )
+
+              # Loop over each row and add as separate bar trace
+              for (i in 1:nrow(tbl)) {
+                row <- tbl[i, ]
+                g <- row$Group[[1]]
+                i_group <- group_map[[g]]
+                yax <- ifelse(i_group == 0, "y", "y2")
+                off <- bar_width *
+                  (i_group - n_groups / 2) +
+                  i_group * group_gap
+
+                if (color_variable == "Compounds") {
+                  var <- as.character(row$`Cmp Name`[[1]])
+                } else if (color_variable == "Samples") {
+                  var <- as.character(row$`Sample ID`[[1]])
+                }
+
+                col <- colors[[var]]
+                y_val <- as.numeric(gsub("%", "", row$`%-Binding`[[1]]))
+
+                hover_text <- paste0(
+                  "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
+                  row$`Theor. Cmp`[[1]],
+                  "</b><br>",
+                  "<span style='opacity: 0.8'>Stoichiometry:</span> <b>",
+                  row$`Bind. Stoich.`[[1]],
+                  "</b><br>",
+                  "<span style='opacity: 0.8'>%-Binding:</span> <b>",
+                  row$`%-Binding`[[1]],
+                  "</b>",
+                  "<extra><div style='text-align: left;'>",
+                  "<span style='opacity: 0.8;;'>Cmp Name: </span><b>",
+                  row$`Cmp Name`[[1]],
+                  "</b><br>",
+                  "<span style='opacity: 0.8;'>Sample ID: </span><b>",
+                  row$`Sample ID`[[1]],
+                  "</b>",
+                  "</div></extra>"
+                )
+
+                bar_chart <- plotly::add_bars(
+                  bar_chart,
+                  x = row$`Cmp Name`[[1]],
+                  y = y_val,
+                  offsetgroup = i_group,
+                  offset = off,
+                  width = bar_width,
+                  text = row$mass_stoich[[1]],
+                  textposition = 'inside',
+                  insidetextanchor = 'middle',
+                  hovertemplate = hover_text,
+                  hoverlabel = list(align = "left", valign = "middle"),
+                  marker = list(
+                    color = col,
+                    line = list(color = 'black', width = 1)
+                  ),
+                  yaxis = yax,
+                  showlegend = FALSE
+                )
+              }
+
+              # Final layout adjustments
+              bar_chart <- bar_chart |>
+                plotly::layout(
+                  xaxis = list(title = list(text = NULL))
+                )
+            } else {
+              bar_chart <- plotly::plot_ly(data = tbl) |>
+                plotly::add_trace(
+                  x = ~`Sample ID`,
+                  y = ~ as.numeric(gsub("%", "", `%-Binding`)),
+                  color = color,
+                  colors = colors,
+                  type = 'bar',
+                  name = ~mass_stoich,
+                  hovertemplate = ~ paste0(
+                    "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
+                    `Theor. Cmp`,
+                    "</b><br>",
+                    "<span style='opacity: 0.8'>Stoichiometry:</span> <b>",
+                    `Bind. Stoich.`,
+                    "</b><br>",
+                    "<span style='opacity: 0.8'>%-Binding:</span> <b>",
+                    `%-Binding`,
+                    "</b>",
+                    "<extra><div style='text-align: left;'>",
+                    "<span style='opacity: 0.8;;'>Cmp Name: </span><b>",
+                    `Cmp Name`,
+                    "</b><br>",
+                    "<span style='opacity: 0.8;'>Sample ID: </span><b>",
+                    `Sample ID`,
+                    "</b>",
+                    "</div></extra>"
+                  ),
+                  hoverlabel = list(align = "left", valign = "middle"),
+                  text = ~mass_stoich,
+                  textposition = 'inside',
+                  marker = list(line = list(color = 'white', width = 1)),
+                  showlegend = FALSE
+                )
+
+              if (length(tbl$`Sample ID`) <= 20) {
+                # Calculate totals for the top labels
+                totals <- dplyr::group_by(tbl, `Sample ID`) |>
+                  dplyr::summarize(
+                    total_val = sum(as.numeric(gsub("%", "", `%-Binding`)))
+                  )
+                bar_chart <- bar_chart |>
+                  plotly::add_trace(
+                    data = totals,
+                    x = ~`Sample ID`,
+                    y = ~total_val,
+                    type = 'scatter',
+                    mode = 'text',
+                    text = ~ paste0(total_val, "%"),
+                    textposition = 'top center',
+                    showlegend = FALSE,
+                    hoverinfo = 'none',
+                    inherit = FALSE,
+                    textfont = list(
+                      color = '#ffffff',
+                      size = if (length(tbl$`Sample ID`) <= 8) {
+                        16
+                      } else if (length(tbl$`Sample ID`) <= 16) {
+                        14
+                      } else {
+                        12
+                      }
+                    )
+                  )
+              }
+
+              bar_chart <- bar_chart |>
+                plotly::layout(
+                  barmode = 'stack',
+                  bargap = 0.5,
+                  paper_bgcolor = 'rgba(0,0,0,0)',
+                  plot_bgcolor = 'rgba(0,0,0,0)',
+                  xaxis = list(
+                    title = list(text = NULL),
+                    showgrid = FALSE,
+                    zeroline = FALSE,
+                    color = '#ffffff',
+                    showticklabels = showticklabels
+                  ),
+                  yaxis = list(
+                    range = range,
+                    title = list(text = "%-Binding"),
+                    zeroline = FALSE,
+                    gridcolor = "#7f7f7fff",
+                    color = '#ffffff'
+                  )
+                )
             }
 
-            # Create the empty plot
-            p <- plotly::plot_ly(showlegend = FALSE)
-
-            # Apply the dynamic layout
-            p <- do.call(plotly::layout, c(list(p), layout_list))
-
-            # Loop over each row and add as separate bar trace
-            for (i in 1:nrow(tbl)) {
-              row <- tbl[i, ]
-              g <- row$Group[[1]]
-              i_group <- group_map[[g]]
-              yax <- ifelse(i_group == 0, "y", "y2")
-              off <- bar_width * (i_group - n_groups / 2) + i_group * group_gap
-
-              if (color_variable == "Compounds") {
-                var <- as.character(row$`Cmp Name`[[1]])
-              } else if (color_variable == "Samples") {
-                var <- as.character(row$`Sample ID`[[1]])
-              }
-
-              col <- colors[[var]]
-              y_val <- as.numeric(gsub("%", "", row$`%-Binding`[[1]]))
-
-              hover_text <- paste0(
-                "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
-                row$`Theor. Cmp`[[1]],
-                "</b><br>",
-                "<span style='opacity: 0.8'>Stoichiometry:</span> <b>",
-                row$`Bind. Stoich.`[[1]],
-                "</b><br>",
-                "<span style='opacity: 0.8'>%-Binding:</span> <b>",
-                row$`%-Binding`[[1]],
-                "</b>",
-                "<extra><div style='text-align: left;'>",
-                "<span style='opacity: 0.8;;'>Cmp Name: </span><b>",
-                row$`Cmp Name`[[1]],
-                "</b><br>",
-                "<span style='opacity: 0.8;'>Sample ID: </span><b>",
-                row$`Sample ID`[[1]],
-                "</b>",
-                "</div></extra>"
-              )
-
-              p <- plotly::add_bars(
-                p,
-                x = row$`Cmp Name`[[1]],
-                y = y_val,
-                offsetgroup = i_group,
-                offset = off,
-                width = bar_width,
-                text = row$mass_stoich[[1]],
-                textposition = 'inside',
-                insidetextanchor = 'middle',
-                hovertemplate = hover_text,
-                hoverlabel = list(align = "left", valign = "middle"),
-                marker = list(
-                  color = col,
-                  line = list(color = 'black', width = 1)
-                ),
-                yaxis = yax,
-                showlegend = FALSE
-              )
-            }
-
-            # Final layout adjustments
-            p <- p |>
-              plotly::layout(
-                xaxis = list(title = list(text = NULL))
-              )
-
-            p
+            return(bar_chart)
           }) |>
             shiny::bindEvent(
               render_trigger(),
               input$color_scale,
               input$conversion_protein_picker,
               input$truncate_names,
-              input$protein_distribution_scale
+              input$protein_distribution_scale,
+              input$protein_distribution_labels
             )
 
           ##### Compound spectra plots ----
@@ -3806,6 +3896,12 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               'document.getElementById("blocking-overlay").style.display ',
               '= "block";'
             ))
+
+            hits_summary7 <<- hits_summary
+            color_scale <- input$color_scale
+            color_variable <- input$color_variable
+            conversion_compound_picker <- input$conversion_protein_picker
+            truncate_names <- input$truncate_names
 
             color_scale <- input$color_scale
             color_variable <- input$color_variable
@@ -3826,23 +3922,38 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               trunc = truncate_names
             )
 
+            samples <- unique(hits_summary$`Sample ID`[
+              hits_summary$`Protein` == input$conversion_protein_picker
+            ])
+
             # Create spectra plot
-            plot <- multiple_spectra(
-              results_list = result_list,
-              samples = unique(hits_summary$`Sample ID`[
-                hits_summary$`Protein` == input$conversion_protein_picker &
-                  !is.na(hits_summary$`Cmp Name`)
-              ]),
-              cubic = ifelse(
-                TRUE,
-                TRUE,
-                FALSE
-              ),
-              color_cmp = colors,
-              truncated = if (truncate_names) mapping else FALSE,
-              color_variable = color_variable,
-              hits_summary = hits_summary
-            )
+            if (length(samples) == 1) {
+              plot <- spectrum_plot(
+                sample = result_list$deconvolution[[
+                  samples
+                ]],
+                color_cmp = colors,
+                color_variable = color_variable,
+                show_peak_labels = TRUE,
+                show_mass_diff = FALSE
+              )
+            } else {
+              plot <- multiple_spectra(
+                results_list = result_list,
+                samples = unique(hits_summary$`Sample ID`[
+                  hits_summary$`Protein` == input$conversion_protein_picker
+                ]),
+                cubic = ifelse(
+                  TRUE,
+                  TRUE,
+                  FALSE
+                ),
+                color_cmp = colors,
+                truncated = if (truncate_names) mapping else FALSE,
+                color_variable = color_variable,
+                hits_summary = hits_summary
+              )
+            }
 
             # Unblock UI
             shinyjs::runjs(paste0(
@@ -3869,119 +3980,36 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               input$color_scale
             )
 
-            color_scale <- input$color_scale
-            color_variable <- input$color_variable
-            truncate_names <- input$truncate_names
-
-            # Filter table for selected compound
             tbl <- hits_summary |>
               dplyr::filter(
                 `Protein` == input$conversion_protein_picker &
                   !is.na(`Cmp Name`)
               )
 
-            # Prepare compound coloring
-            colors <- get_cmp_colorScale(
-              filtered_table = tbl,
-              scale = color_scale,
-              variable = color_variable,
-              trunc = truncate_names
-            )
-
-            # Create data table
-            cmp_table <- tbl |>
-              # dplyr::group_by(`Cmp Name`, `Sample ID`) |>
-              dplyr::reframe(
-                `Cmp Name` = `Cmp Name`,
-                `Mass Shift` = `Theor. Cmp`,
-                `Stoichiometry` = `Bind. Stoich.`,
-                `Sample ID` = if (truncate_names) {
-                  `truncSample_ID`
-                } else {
-                  `Sample ID`
-                },
-                `%-Binding` = as.numeric(gsub(
-                  "%",
-                  "",
-                  `%-Binding`
-                )),
-                `Total %-Binding` = `Total %-Binding`
-              ) |>
-              dplyr::relocate(
-                `Mass Shift`,
-                .before = 3
-              ) |>
-              dplyr::arrange(
-                `Cmp Name`,
-                as.numeric(gsub("%", "", `Total %-Binding`)),
-                as.numeric(gsub("%", "", `%-Binding`)),
-                dplyr::desc(`Mass Shift`),
-                `Stoichiometry`
-              ) |>
-              DT::datatable(
-                extensions = "RowGroup",
-                rownames = FALSE,
-                class = "order-column",
-                selection = "none",
-                options = list(
-                  dom = 't',
-                  paging = FALSE,
-                  scrollY = TRUE,
-                  scrollCollapse = TRUE,
-                  rowGroup = if (length(unique(tbl$`Cmp Name`)) == nrow(tbl)) {
-                    NULL
-                  } else {
-                    list(dataSrc = 0)
-                  },
-                  columnDefs = list(
-                    list(
-                      visible = FALSE,
-                      targets = 1
-                    ),
-                    list(
-                      visible = ifelse(
-                        length(unique(tbl$`Cmp Name`)) == nrow(tbl),
-                        TRUE,
-                        FALSE
-                      ),
-                      targets = 0
-                    ),
-                    list(className = 'dt-center', targets = "_all"),
-                    list(
-                      targets = 4,
-                      render = htmlwidgets::JS(chart_js)
-                    ),
-                    list(
-                      targets = -1,
-                      className = 'dt-last-col'
-                    )
-                  )
-                )
-              ) |>
-              DT::formatStyle(
-                columns = ifelse(
-                  color_variable == "Compounds",
-                  "Cmp Name",
-                  "Sample ID"
-                ),
-                target = 'row',
-                backgroundColor = DT::styleEqual(
-                  levels = names(colors),
-                  values = colors
-                ),
-                color = DT::styleEqual(
-                  levels = names(colors),
-                  values = get_contrast_color(colors)
-                )
+            render_table_view(
+              table = tbl,
+              colors = get_cmp_colorScale(
+                filtered_table = tbl,
+                scale = input$color_scale,
+                variable = input$color_variable,
+                trunc = input$truncate_names
+              ),
+              tab = "Proteins",
+              inputs = list(
+                binding_bar = input$conversion_prot_table_binding_bar,
+                tot_binding_bar = input$conversion_prot_table_tot_binding_bar,
+                truncate_names = input$truncate_names,
+                color_variable = input$color_variable
               )
-
-            return(cmp_table)
+            )
           }) |>
             shiny::bindEvent(
               render_trigger(),
               input$color_scale,
               input$conversion_protein_picker,
-              input$truncate_names
+              input$truncate_names,
+              input$conversion_prot_table_binding_bar,
+              input$conversion_prot_table_tot_binding_bar
             )
 
           #### Insert tabset input panel ----
@@ -4852,10 +4880,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
       shinyjs::toggleState(
         id = "hits_tab_na",
-        condition = anyNA(conversion_vars$hits_summary)
+        condition = anyNA(conversion_vars$hits_summary) &
+          !all(is.na(conversion_vars$hits_summary$`Cmp Name`))
       )
       shinyjs::toggleClass(
-        selector = ".hits-tab-expand-box .checkbox",
+        selector = ".hits-tab-na-box .checkbox",
         class = "checkbox-disable"
       )
     })
