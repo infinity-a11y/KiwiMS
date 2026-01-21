@@ -1601,10 +1601,18 @@ div[data-value="Protein Conversion"] .tab-pane {
 #app-conversion_main-binding_plot > div > div,
 #app-conversion_main-kobs_plot > div,
 #app-conversion_main-kobs_plot > div > div,
-#app-conversion_main-conversion_sample_spectrum > div,
-#app-conversion_main-conversion_sample_spectrum > div > div,
-#app-conversion_main-samples_present_compounds_pie > div,
-app-conversion_main-samples_present_compounds_pie > div > div {
+#app-conversion_main-samples_annotated_spectrum > div,
+#app-conversion_main-samples_annotated_spectrum > div > div,
+// #app-conversion_main-compounds_annotated_spectrum > div,
+// #app-conversion_main-compounds_annotated_spectrum > div > div,
+// #app-conversion_main-proteins_annotated_spectrum > div,
+// #app-conversion_main-proteins_annotated_spectrum > div > div,
+#app-conversion_main-samples_compound_distribution > div,
+#app-conversion_main-samples_compound_distribution > div > div,
+#app-conversion_main-compounds_compound_distribution > div,
+#app-conversion_main-compounds_compound_distribution > div > div,
+#app-conversion_main-proteins_compound_distribution > div,
+#app-conversion_main-proteins_compound_distribution > div > div {
   width: unset !important;
   height: unset !important;
 }
@@ -3434,7 +3442,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   text-align: left;
 }
 
-#app-conversion_main-cmp_distribution > div > div > svg:nth-child(5) > g > g > text.name {
+#app-conversion_main-compounds_compound_distribution > div > div > svg:nth-child(5) > g > g > text.name {
   fill: black !important;
 }
 

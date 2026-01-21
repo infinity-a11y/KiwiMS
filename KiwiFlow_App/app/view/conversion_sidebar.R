@@ -405,9 +405,9 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
         ### TESTING
 
         # Single entry
-        result_list(readRDS(
-          "C:\\Users\\Marian\\Desktop\\KF_Testing\\one_entry.rds"
-        ))
+        # result_list(readRDS(
+        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\one_entry.rds"
+        # ))
 
         # NA entry
         # result_list(readRDS(
@@ -420,9 +420,9 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
         # ))
 
         # HiDrive-kinact-K
-        # result_list(readRDS(
-        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\HiDrive-kinact-K.rds"
-        # ))
+        result_list(readRDS(
+          "C:\\Users\\Marian\\Desktop\\KF_Testing\\HiDrive-kinact-K.rds"
+        ))
 
         # 2025-12-10_MS_in-house_protein
         # result_list(readRDS(

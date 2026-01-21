@@ -295,9 +295,6 @@ sample_handsontable <- function(
   compounds = NULL,
   disabled = FALSE
 ) {
-  tab1 <<- tab
-  proteins1 <<- proteins
-
   cmp_cols <- grep("Compound", colnames(tab))
 
   # Allowed protein and compound values
@@ -1327,12 +1324,12 @@ add_hits <- function(
   session,
   ns
 ) {
-  results <<- results
-  sample_table <<- sample_table
-  protein_table <<- protein_table
-  compound_table <<- compound_table
-  peak_tolerance <<- peak_tolerance
-  max_multiples <<- max_multiples
+  # results <<- results
+  # sample_table <<- sample_table
+  # protein_table <<- protein_table
+  # compound_table <<- compound_table
+  # peak_tolerance <<- peak_tolerance
+  # max_multiples <<- max_multiples
 
   samples <- names(results$deconvolution)
   protein_mw <- protein_table$`Mass 1`
@@ -2463,7 +2460,7 @@ multiple_spectra <- function(
   results_list,
   samples,
   cubic = TRUE,
-  show_labels = FALSE,
+  labels_show = NULL,
   time = FALSE,
   color_cmp = NULL,
   truncated = FALSE,
@@ -2473,7 +2470,7 @@ multiple_spectra <- function(
   results_list <<- results_list
   samples <<- samples
   cubic <<- TRUE
-  show_labels <<- show_labels
+  labels_show <<- labels_show
   time <<- time
   color_cmp <<- color_cmp
   truncated <<- truncated
@@ -2510,7 +2507,7 @@ multiple_spectra <- function(
 
   spectrum_data$z <- factor(
     spectrum_data$z,
-    levels = sort(unique(spectrum_data$z))
+    levels = rev(unique(spectrum_data$z))
   )
 
   # Get peaks data
@@ -2541,7 +2538,7 @@ multiple_spectra <- function(
   # Transform z variable to factor
   peaks_data$z <- factor(
     peaks_data$z,
-    levels = sort(unique(peaks_data$z))
+    levels = rev(unique(peaks_data$z))
   )
 
   # Prepare marker symbols
@@ -2601,13 +2598,16 @@ multiple_spectra <- function(
     color <- viridisLite::viridis(length(unique(spectrum_data$z)))
   }
 
-  peaks_data2 <<- peaks_data
-  spectrum_data2 <<- spectrum_data
-
   # Condition on data size
-  condition <- (length(unique(peaks_data$z)) > 8 |
-    max(nchar(as.character(peaks_data$z))) > 22) &
-    isFALSE(time)
+  message("Initial:", labels_show)
+  if (is.null(labels_show)) {
+    labels_show <- (length(unique(peaks_data$z)) <= 8 &
+      max(nchar(as.character(peaks_data$z))) <= 20) |
+      isTRUE(time)
+  }
+  message("Data Length", length(unique(peaks_data$z)))
+  message("ID nchars", max(nchar(as.character(peaks_data$z))))
+  message("OUTCOME", labels_show)
 
   plotly::plot_ly(
     data = spectrum_data,
@@ -2713,7 +2713,7 @@ multiple_spectra <- function(
           showgrid = ifelse(time, TRUE, FALSE),
           showline = FALSE,
           showzeroline = FALSE,
-          showticklabels = ifelse(condition, FALSE, TRUE),
+          showticklabels = labels_show,
           showspikes = FALSE,
           showbackground = FALSE,
           type = 'category'
@@ -2724,13 +2724,13 @@ multiple_spectra <- function(
             list(
               x = 1 +
                 length(unique(peaks_data$z)) / 20 +
-                ifelse(condition, 0, 0.2),
+                ifelse(labels_show, 0.2, 0),
               y = 0.7 +
                 length(unique(peaks_data$z)) / 20 +
-                ifelse(condition, 0, 0.2),
+                ifelse(labels_show, 0.2, 0),
               z = 1 +
                 length(unique(peaks_data$z)) / 20 +
-                ifelse(condition, 0, 0.2)
+                ifelse(labels_show, 0.2, 0)
             )
           } else {
             list(x = 1.4, y = 1.1, z = 1.4)
@@ -3007,36 +3007,6 @@ render_table_view <- function(table, colors, tab, inputs) {
       `Total %` = `Total %-Binding`
     )
 
-  # Prepare table data frame
-  # tab <- tbl |>
-  #   dplyr::reframe(
-  #     `Cmp Name` = `Cmp Name`,
-  #     `Mass Shift` = `Theor. Cmp`,
-  #     `Stoichiometry` = `Bind. Stoich.`,
-  #     `Sample ID` = if (truncate_names) {
-  #       `truncSample_ID`
-  #     } else {
-  #       `Sample ID`
-  #     },
-  #     `%-Binding` = as.numeric(gsub(
-  #       "%",
-  #       "",
-  #       `%-Binding`
-  #     )),
-  #     `Total %-Binding` = `Total %-Binding`
-  #   ) |>
-  #   dplyr::relocate(
-  #     `Mass Shift`,
-  #     .before = 3
-  #   ) |>
-  #   dplyr::arrange(
-  #     `Sample ID`,
-  #     as.numeric(gsub("%", "", `Total %-Binding`)),
-  #     as.numeric(gsub("%", "", `%-Binding`)),
-  #     dplyr::desc(`Mass Shift`),
-  #     `Stoichiometry`
-  #   )
-
   # Apply bar renderer to binding column
   if (
     is.null(inputs$binding_bar) ||
@@ -3081,7 +3051,7 @@ render_table_view <- function(table, colors, tab, inputs) {
       paging = FALSE,
       scrollY = TRUE,
       scrollCollapse = TRUE,
-      rowGroup = if (length(unique(tbl[group_variable])) == nrow(tbl)) {
+      rowGroup = if (length(unique(tbl[[group_variable]])) == nrow(tbl)) {
         NULL
       } else {
         list(dataSrc = which(names(tbl) == group_variable) - 1)
@@ -3089,7 +3059,7 @@ render_table_view <- function(table, colors, tab, inputs) {
       columnDefs = list(
         list(
           visible = ifelse(
-            length(unique(tbl[group_variable])) == nrow(tbl),
+            length(unique(tbl[[group_variable]])) == nrow(tbl),
             TRUE,
             FALSE
           ),
@@ -3148,22 +3118,6 @@ render_hits_table <- function(
   truncated = NULL,
   clickable = FALSE
 ) {
-  hits_table <<- hits_table
-  concentration_colors <<- concentration_colors
-  withzero <<- withzero
-  selected_cols <<- selected_cols
-  bar_chart <<- bar_chart
-  compounds <<- compounds
-  samples <<- samples
-  select <<- TRUE
-  colors <<- colors
-  truncated <<- truncated
-  color_variable <<- color_variable
-  expand <<- expand
-  na_include <<- na_include
-  clickable <<- clickable
-  single_conc <<- single_conc
-
   # Modify if samples are summarized instead of expanded
   if (!expand) {
     hits_table <- hits_table |>
@@ -3428,7 +3382,6 @@ new_sample_table <- function(
   compound_table,
   ki_kinact = FALSE
 ) {
-  protein_table1 <<- protein_table
   sample_tab <- data.frame(
     Sample = names(result$deconvolution),
     Protein = ifelse(
@@ -3713,8 +3666,6 @@ handle_file_upload <- function(
 # Transform summarized hits into readable table
 #' @export
 transform_hits <- function(hits_summary) {
-  hits_summary2 <<- hits_summary
-
   # Shared transformations
   summary_table <- hits_summary |>
     dplyr::mutate(
