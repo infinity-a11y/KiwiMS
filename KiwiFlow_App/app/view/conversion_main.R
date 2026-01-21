@@ -1410,6 +1410,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         })
 
         if (!is.null(result_list)) {
+          testi <<- result_list$"hits_summary"
           ### Compute hits summary ----
           hits_summary <- transform_hits(result_list$"hits_summary")
 
@@ -1430,6 +1431,21 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 `%-Binding`
               )
           }
+
+          #### Append truncated sample IDs ----
+          # Create a mapping data frame
+          mapping <- data.frame(
+            original = unique(hits_summary$`Sample ID`),
+            truncated = label_smart_clean(unique(
+              hits_summary$`Sample ID`
+            ))
+          )
+
+          # Add column with truncated IDs
+          hits_summary$truncSample_ID <- mapping$truncated[match(
+            hits_summary$`Sample ID`,
+            mapping$original
+          )]
 
           conversion_vars$hits_summary <- hits_summary
         }
@@ -1551,22 +1567,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               paste0("[", i, "]")
             )
           }
-
-          #### Append truncated sample IDs ----
-          # Create a mapping data frame
-          mapping <- data.frame(
-            original = unique(hits_summary$`Sample ID`),
-            truncated = label_smart_clean(unique(
-              hits_summary$`Sample ID`
-            ))
-          )
-          mapping1 <<- mapping
-
-          # Add column with truncated IDs
-          hits_summary$truncSample_ID <- mapping$truncated[match(
-            hits_summary$`Sample ID`,
-            mapping$original
-          )]
 
           #### Hits table tab ----
           bslib::nav_insert(
@@ -1973,8 +1973,12 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                           )
                         )
                       ),
-                      shiny::uiOutput(
-                        ns("samples_compound_distribution_ui")
+                      shinycssloaders::withSpinner(
+                        shiny::uiOutput(
+                          ns("samples_compound_distribution_ui")
+                        ),
+                        type = 1,
+                        color = "#7777f9"
                       ),
                       full_screen = TRUE
                     )
@@ -2352,11 +2356,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               input$color_scale
             )
 
-            hits_summary <<- hits_summary
-            color_scale <<- input$color_scale
-            color_variable <<- input$color_variable
-            selected_sample <<- input$conversion_sample_picker
-            truncate_names <<- input$truncate_names
+            # hits_summary <<- hits_summary
+            # color_scale <<- input$color_scale
+            # color_variable <<- input$color_variable
+            # selected_sample <<- input$conversion_sample_picker
+            # truncate_names <<- input$truncate_names
 
             color_scale <- input$color_scale
             color_variable <- input$color_variable
@@ -2958,8 +2962,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             shiny::bindEvent(
               input$conversion_compound_picker,
               render_trigger(),
-              input$truncate_names,
               input$color_scale,
+              input$truncate_names,
               input$cmp_distribution_labels,
               input$cmp_distribution_scale
             )
@@ -3072,8 +3076,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             shiny::bindEvent(
               input$conversion_compound_picker,
               render_trigger(),
-              input$truncate_names,
               input$color_scale,
+              input$truncate_names,
               input$compounds_spectrum_labels
             )
 
@@ -3327,7 +3331,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                           )
                         )
                       ),
-                      shiny::uiOutput(ns("proteins_present_compounds_pie_ui")),
+                      shinycssloaders::withSpinner(
+                        shiny::uiOutput(ns(
+                          "proteins_present_compounds_pie_ui"
+                        )),
+                        type = 1,
+                        color = "#7777f9"
+                      ),
                       full_screen = TRUE
                     )
                   ),
@@ -3342,6 +3352,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                           bslib::popover(
                             shiny::icon("gear"),
                             shiny::div(
+                              shiny::uiOutput(ns(
+                                "proteins_spectrum_labels_ui"
+                              )),
                               style = "margin-right: 20px;"
                             ),
                             title = NULL
@@ -3465,16 +3478,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               hits_summary,
               input$conversion_sample_picker
             )
-
             choices <- unique(hits_summary$`Cmp Name`[
               hits_summary$`Protein` == input$conversion_protein_picker &
                 !is.na(hits_summary$`Cmp Name`)
             ])
-
             if (!length(choices)) {
               choices <- NULL
             }
-
             shiny::div(
               class = "prot-binding-ui",
               shiny::selectInput(
@@ -3491,32 +3501,24 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               input$conversion_protein_picker
             )
 
-            hits_summary8 <<- hits_summary
-            conversion_protein_picker <<- input$conversion_protein_picker
-            total_pct_prot_binding_select <<- input$total_pct_prot_binding_select
-
             # Prefilter hits by selected protein and non-NA compound
             total_bind_pre <- hits_summary[
               hits_summary$`Protein` == input$conversion_protein_picker,
             ]
-
             if (all(is.na(total_bind_pre$`Cmp Name`))) {
               return("N/A")
             }
-
             # Get selected compound
             total_pct_prot_binding_select <- ifelse(
               !is.null(input$total_pct_prot_binding_select),
               input$total_pct_prot_binding_select,
               total_bind_pre$`Cmp Name`[!is.na(total_bind_pre$`Cmp Name`)][1]
             )
-
             # Filter by selected compound
             total_bind <- total_bind_pre[
               total_bind_pre$`Cmp Name` == total_pct_prot_binding_select &
                 !is.na(total_bind_pre$`Cmp Name`),
             ]
-
             msg <- shiny::div(
               class = "conversion-sample-protein-box",
               shiny::div(
@@ -3558,34 +3560,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 )
               )
             )
-
             return(msg)
-          })
-
-          ###### Show label input UI ----
-          output$protein_distribution_labels_ui <- shiny::renderUI({
-            shiny::req(hits_summary, input$conversion_protein_picker)
-
-            tbl <- hits_summary |>
-              dplyr::filter(`Protein` == input$conversion_protein_picker)
-
-            # X-axis tick labels
-            condition <- ifelse(
-              length(unique(tbl$`Cmp Name`)) > 1,
-              max(nchar(unique(tbl$`Sample ID`))) > 22,
-              max(nchar(unique(tbl$`Cmp Name`))) > 22
-            )
-
-            shinyWidgets::materialSwitch(
-              ns("protein_distribution_labels"),
-              label = "Show Labels",
-              value = ifelse(
-                condition,
-                FALSE,
-                TRUE
-              ),
-              right = TRUE
-            )
           })
 
           output$proteins_present_compounds_pie_ui <- shiny::renderUI({
@@ -3596,10 +3571,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
             tbl <- hits_summary |>
               dplyr::filter(
-                `Protein` == input$conversion_protein_picker
+                `Protein` == input$conversion_protein_picker &
+                  !is.na(`Cmp Name`)
               )
 
-            if (anyNA(tbl)) {
+            if (nrow(tbl) < 1) {
               shiny::textOutput(ns("proteins_present_compounds_na"))
             } else {
               shinycssloaders::withSpinner(
@@ -3668,14 +3644,15 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   Time = as.numeric(gsub("min|s", "", Time))
                 ) |>
                 dplyr::arrange(`[Cmp]`, Time)
-            } else {
-              tbl <- tbl |>
-                dplyr::arrange(
-                  `Cmp Name`,
-                  `Sample ID`,
-                  dplyr::desc(`%-Binding`)
-                )
             }
+            # else {
+            #   tbl <- tbl |>
+            #     dplyr::arrange(
+            #       `Cmp Name`,
+            #       `Sample ID`,
+            #       dplyr::desc(`%-Binding`)
+            #     )
+            # }
 
             tbl <- tbl |>
               dplyr::group_by(`Cmp Name`) |>
@@ -3729,18 +3706,14 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             # X-axis tick labels
             condition <- ifelse(
               length(unique(tbl$`Cmp Name`)) > 1,
-              max(nchar(levels(tbl$`Cmp Name`))) > 22,
-              max(nchar(levels(tbl$`Sample ID`))) > 22
+              max(nchar(levels(tbl$`Cmp Name`))) <= 22,
+              max(nchar(levels(tbl$`Sample ID`))) <= 22
             )
 
             showticklabels <- ifelse(
               !is.null(input$protein_distribution_labels),
               input$protein_distribution_labels,
-              ifelse(
-                condition,
-                FALSE,
-                TRUE
-              )
+              condition
             )
 
             if (length(unique(tbl$`Cmp Name`)) > 1) {
@@ -3846,7 +3819,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 bar_chart <- plotly::add_bars(
                   bar_chart,
                   x = row$`Cmp Name`[[1]],
-                  y = y_val,
+                  y = as.numeric(as.character(y_val)),
+                  # y = y_val,
                   offsetgroup = i_group,
                   offset = off,
                   width = bar_width,
@@ -3873,7 +3847,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               bar_chart <- plotly::plot_ly(data = tbl) |>
                 plotly::add_trace(
                   x = ~`Sample ID`,
-                  y = ~`%-Binding`,
+                  y = ~ as.numeric(as.character(`%-Binding`)),
                   color = color,
                   colors = colors,
                   type = 'bar',
@@ -3908,7 +3882,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 # Calculate totals for the top labels
                 totals <- dplyr::group_by(tbl, `Sample ID`) |>
                   dplyr::summarize(
-                    total_val = sum(`%-Binding`)
+                    total_val = sum(as.numeric(as.character(`%-Binding`)))
                   )
                 bar_chart <- bar_chart |>
                   plotly::add_trace(
@@ -3969,6 +3943,37 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               input$protein_distribution_labels
             )
 
+          ###### Show label input UI ----
+          output$protein_distribution_labels_ui <- shiny::renderUI({
+            shiny::req(
+              hits_summary,
+              input$conversion_protein_picker,
+              input$truncate_names
+            )
+
+            tbl <- hits_summary |>
+              dplyr::filter(`Protein` == input$conversion_protein_picker)
+
+            if (input$truncate_names) {
+              sample_ids <- tbl$`truncSample_ID`
+            } else {
+              sample_ids <- tbl$`Sample ID`
+            }
+
+            condition <- ifelse(
+              length(unique(tbl$`Cmp Name`)) > 1,
+              max(nchar(unique(sample_ids))) <= 22,
+              max(nchar(unique(tbl$`Cmp Name`))) <= 22
+            )
+
+            shinyWidgets::materialSwitch(
+              ns("protein_distribution_labels"),
+              label = "Show Labels",
+              value = condition,
+              right = TRUE
+            )
+          })
+
           ##### Annotated spectrum ----
           output$proteins_annotated_spectrum <- plotly::renderPlotly({
             shiny::req(
@@ -3993,7 +3998,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             # Filter hits for selected compound
             tbl <- dplyr::filter(
               hits_summary,
-              `Protein` == input$conversion_protein_picker & !is.na(`Cmp Name`)
+              `Protein` == input$conversion_protein_picker
+              # & !is.na(`Cmp Name`)
             )
 
             # Make compound color scale
@@ -4033,7 +4039,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 color_cmp = colors,
                 truncated = if (truncate_names) mapping else FALSE,
                 color_variable = color_variable,
-                hits_summary = hits_summary
+                hits_summary = hits_summary,
+                labels_show = input$proteins_spectrum_labels
               )
             }
 
@@ -4049,10 +4056,47 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               render_trigger(),
               input$color_scale,
               input$conversion_protein_picker,
-              input$truncate_names
+              input$truncate_names,
+              input$proteins_spectrum_labels
             )
 
-          ##### Compounds view table ----
+          ###### Show label input UI ----
+          output$proteins_spectrum_labels_ui <- shiny::renderUI({
+            shiny::req(hits_summary, input$conversion_protein_picker)
+
+            tbl <- hits_summary |>
+              dplyr::filter(`Protein` == input$conversion_protein_picker)
+
+            if (nrow(tbl) < 2) {
+              return(shinyjs::disabled(
+                shinyWidgets::materialSwitch(
+                  ns("proteins_spectrum_labels"),
+                  label = "Show Labels",
+                  value = TRUE,
+                  right = TRUE
+                )
+              ))
+            }
+
+            if (input$truncate_names) {
+              sample_ids <- tbl$`truncSample_ID`
+            } else {
+              sample_ids <- tbl$`Sample ID`
+            }
+
+            labels_show <- (length(unique(sample_ids)) <= 8 &
+              max(nchar(as.character(sample_ids))) <= 20) |
+              isTRUE(run_ki_kinact)
+
+            shinyWidgets::materialSwitch(
+              ns("proteins_spectrum_labels"),
+              label = "Show Labels",
+              value = labels_show,
+              right = TRUE
+            )
+          })
+
+          ##### Proteins view table ----
           output$proteins_table_view <- DT::renderDataTable({
             shiny::req(
               hits_summary,
@@ -4942,6 +4986,44 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     )
 
     ## Observer for conversion result interface ----
+
+    ### Update label inputs depending on truncated samples ----
+    shiny::observe({
+      shiny::req(
+        conversion_vars$hits_summary,
+        !is.null(conversion_sidebar_vars$run_ki_kinact()),
+        input$truncate_names,
+        input$conversion_compound_picker
+      )
+
+      tbl <- dplyr::filter(
+        conversion_vars$hits_summary,
+        `Cmp Name` == input$conversion_compound_picker
+      )
+
+      if (input$truncate_names) {
+        sample_ids <- tbl$`truncSample_ID`
+      } else {
+        sample_ids <- tbl$`Sample ID`
+      }
+
+      shinyWidgets::updateMaterialSwitch(
+        session = session,
+        "cmp_distribution_labels",
+        value = max(nchar(unique(sample_ids))) <= 22 |
+          nrow(tbl) < 4
+      )
+
+      shinyWidgets::updateMaterialSwitch(
+        session = session,
+        "compounds_spectrum_labels",
+        value = (length(unique(sample_ids)) <= 8 &
+          max(nchar(as.character(sample_ids))) <= 20) |
+          isTRUE(conversion_sidebar_vars$run_ki_kinact())
+      )
+    }) |>
+      shiny::bindEvent(input$truncate_names)
+
     ### Enable/Disable hits table expand samples input ----
     shiny::observe({
       shiny::req(input$hits_tab_expand, conversion_vars$hits_summary)

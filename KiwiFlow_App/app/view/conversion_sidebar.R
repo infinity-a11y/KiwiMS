@@ -419,10 +419,20 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
         #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\two_entryNA.rds"
         # ))
 
+        # NA diff
+        # result_list(readRDS(
+        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\NA_diff.rds"
+        # ))
+
+        # NA diff2
+        # result_list(readRDS(
+        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\NA_diff2.rds"
+        # ))
+
         # HiDrive-kinact-K
-        result_list(readRDS(
-          "C:\\Users\\Marian\\Desktop\\KF_Testing\\HiDrive-kinact-K.rds"
-        ))
+        # result_list(readRDS(
+        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\HiDrive-kinact-K.rds"
+        # ))
 
         # 2025-12-10_MS_in-house_protein
         # result_list(readRDS(
@@ -430,9 +440,9 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
         # ))
 
         # HiDrive-kinact-KI Testdaten
-        # result_list(readRDS(
-        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results.rds"
-        # ))
+        result_list(readRDS(
+          "C:\\Users\\Marian\\Desktop\\KF_Testing\\results.rds"
+        ))
 
         # HiDrive-2025-09-04_New-Test-data
         # result_list(readRDS(

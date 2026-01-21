@@ -2541,11 +2541,9 @@ multiple_spectra <- function(
     levels = rev(unique(peaks_data$z))
   )
 
-  # Prepare marker symbols
-  prot_peaks <- as.numeric(gsub(
-    " Da",
-    "",
-    hits_summary$`Meas. Prot.`[
+  # Prepare hit marker symbols
+  if (!all(is.na(peaks_data$mass))) {
+    prot_peaks <- hits_summary$`Meas. Prot.`[
       if (time) {
         hits_summary$`Sample ID` %in% samples
       } else if (!isFALSE(truncated)) {
@@ -2554,32 +2552,45 @@ multiple_spectra <- function(
         hits_summary$`Sample ID` %in% peaks_data$z
       }
     ]
-  ))
+    prot_peaks <- prot_peaks[prot_peaks != "N/A"]
+    prot_peaks <- as.numeric(gsub(
+      " Da",
+      "",
+      prot_peaks
+    ))
 
-  peaks_data <- dplyr::mutate(
-    peaks_data,
-    symbol = ifelse(mass %in% prot_peaks, "diamond", "circle"),
-    linecolor = ifelse(mass %in% prot_peaks, "#000000", "#ffffff")
-  )
+    prot_names <- unique(peaks_data$name[peaks_data$mass %in% prot_peaks])
+
+    peaks_data <- dplyr::mutate(
+      peaks_data,
+      symbol = ifelse(mass %in% prot_peaks, "diamond", "circle"),
+      linecolor = ifelse(mass %in% prot_peaks, "#000000", "#ffffff")
+    )
+  }
+
+  color_cmp <- color_cmp[!is.na(names(color_cmp))]
 
   # Prepare compound marker colors and symbols
   if (!is.null(color_cmp) && !is.null(color_variable)) {
     if (color_variable == "Compounds") {
-      color_cmp <- c("#ffffff", color_cmp)
+      if (length(color_cmp)) {
+        prot_colors <- rep("#ffffff", length(prot_names))
+        names(prot_colors) <- prot_names
 
-      names(color_cmp) <- c(
-        peaks_data$name[1],
-        names(color_cmp)[-1]
-      )
+        color_cmp <- c(prot_colors, color_cmp)
 
-      peaks_data$color <- color_cmp[match(
-        as.character(peaks_data$name),
-        names(color_cmp)
-      )]
+        peaks_data$color <- color_cmp[match(
+          as.character(peaks_data$name),
+          names(color_cmp)
+        )]
+
+        marker_color <- ~ I(color)
+      } else {
+        marker_color <- "#ffffff"
+      }
 
       color <- NULL
       line <- list(color = "white", width = 1)
-      marker_color <- ~ I(color)
       z_linecolor <- list(color = "#ffffff")
     } else if (color_variable == "Samples") {
       peaks_data$z_color <- color_cmp[match(peaks_data$z, names(color_cmp))]
@@ -2599,17 +2610,13 @@ multiple_spectra <- function(
   }
 
   # Condition on data size
-  message("Initial:", labels_show)
   if (is.null(labels_show)) {
     labels_show <- (length(unique(peaks_data$z)) <= 8 &
       max(nchar(as.character(peaks_data$z))) <= 20) |
       isTRUE(time)
   }
-  message("Data Length", length(unique(peaks_data$z)))
-  message("ID nchars", max(nchar(as.character(peaks_data$z))))
-  message("OUTCOME", labels_show)
 
-  plotly::plot_ly(
+  plot <- plotly::plot_ly(
     data = spectrum_data,
     x = ~mass,
     y = ~intensity,
@@ -2639,37 +2646,47 @@ multiple_spectra <- function(
         ""
       )
     )
-  ) |>
-    plotly::add_markers(
-      data = peaks_data,
-      x = ~mass,
-      y = ~intensity,
-      z = ~z,
-      mode = "markers",
-      inherit = FALSE,
-      marker = list(
-        color = marker_color,
-        symbol = ~ I(symbol),
-        size = 5,
-        zindex = 100,
-        line = list(color = ~ I(linecolor), width = 1)
-      ),
-      hoverinfo = "text",
-      text = ~ paste0(
-        "Name: ",
-        name,
-        "\nMeasured: ",
-        mass,
-        " Da\nIntensity: ",
-        round(intensity, 2),
-        ifelse(time, "%\nTime: ", "%\nSample: "),
-        z,
-        ifelse(time, " min", ""),
-        "\nTheor. Mw: ",
-        mw
-      ),
-      showlegend = FALSE
-    ) |>
+  )
+
+  # Remove NA peaks
+  peaks_data <- peaks_data[!is.na(peaks_data$mass), ]
+
+  # Add hit markers
+  if (nrow(peaks_data) > 0) {
+    plot <- plot |>
+      plotly::add_markers(
+        data = peaks_data,
+        x = ~mass,
+        y = ~intensity,
+        z = ~z,
+        mode = "markers",
+        inherit = FALSE,
+        marker = list(
+          color = marker_color,
+          symbol = ~ I(symbol),
+          size = 5,
+          zindex = 100,
+          line = list(color = ~ I(linecolor), width = 1)
+        ),
+        hoverinfo = "text",
+        text = ~ paste0(
+          "Name: ",
+          name,
+          "\nMeasured: ",
+          mass,
+          " Da\nIntensity: ",
+          round(intensity, 2),
+          ifelse(time, "%\nTime: ", "%\nSample: "),
+          z,
+          ifelse(time, " min", ""),
+          "\nTheor. Mw: ",
+          mw
+        ),
+        showlegend = FALSE
+      )
+  }
+
+  plot <- plot |>
     plotly::layout(
       paper_bgcolor = "rgba(0,0,0,0)",
       paper_bgcolor = "rgba(255,255,255,0)",
