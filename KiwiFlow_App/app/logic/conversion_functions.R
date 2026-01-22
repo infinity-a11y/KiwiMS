@@ -2971,6 +2971,11 @@ multiple_spectra <- function(
 # Rendering function for relative binding table view
 #' @export
 render_table_view <- function(table, colors, tab, inputs) {
+  table1 <<- table
+  colors1 <<- colors
+  tab1 <<- tab
+  inputs1 <<- inputs
+
   # If table empty
   if (!nrow(table)) {
     return(DT::datatable(
@@ -2998,6 +3003,9 @@ render_table_view <- function(table, colors, tab, inputs) {
     NULL
   }
 
+  # Replace NA in color names
+  names(colors)[is.na(names(colors))] <- "N/A"
+
   # Prepate data frame for table
   tbl <- table |>
     dplyr::mutate(
@@ -3006,13 +3014,18 @@ render_table_view <- function(table, colors, tab, inputs) {
       } else {
         `Sample ID`
       },
-      `Theor. Cmp` = paste0(
-        "[",
-        `Theor. Cmp`,
-        "]",
-        "&thinsp;<sub>",
-        `Bind. Stoich.`,
-        "</sub>"
+      `Cmp Name` = ifelse(is.na(`Cmp Name`), "N/A", `Cmp Name`),
+      `Theor. Cmp` = ifelse(
+        `Theor. Cmp` == "N/A",
+        "N/A",
+        paste0(
+          "[",
+          `Theor. Cmp`,
+          "]",
+          "&thinsp;<sub>",
+          `Bind. Stoich.`,
+          "</sub>"
+        )
       )
     ) |>
     dplyr::select(
@@ -3046,8 +3059,16 @@ render_table_view <- function(table, colors, tab, inputs) {
 
   if (tab == "Compounds") {
     group_variable <- "Sample ID"
+    if (all(tbl$`Sample ID` %in% names(colors))) {
+      names(colors) <- paste("Sample ID:", names(colors))
+    }
+    tbl$`Sample ID` <- paste("Sample ID:", tbl$`Sample ID`)
   } else if (any(tab %in% c("Samples", "Proteins"))) {
     group_variable <- "Cmp Name"
+    if (all(tbl$`Cmp Name` %in% names(colors))) {
+      names(colors) <- paste("Compound:", names(colors))
+    }
+    tbl$`Cmp Name` <- paste("Compound:", tbl$`Cmp Name`)
   }
 
   if (length(unique(tbl["Sample ID"])) == nrow(tbl)) {
