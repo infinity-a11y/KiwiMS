@@ -440,14 +440,14 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
         # ))
 
         # HiDrive-kinact-KI Testdaten
-        result_list(readRDS(
-          "C:\\Users\\Marian\\Desktop\\KF_Testing\\results.rds"
-        ))
+        # result_list(readRDS(
+        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results.rds"
+        # ))
 
         # HiDrive-2025-09-04_New-Test-data
-        # result_list(readRDS(
-        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results_conversion.rds"
-        # ))
+        result_list(readRDS(
+          "C:\\Users\\Marian\\Desktop\\KF_Testing\\results_conversion.rds"
+        ))
 
         # Update sidebar control inputs
         shiny::updateActionButton(

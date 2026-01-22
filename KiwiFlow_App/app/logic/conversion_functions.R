@@ -1324,13 +1324,6 @@ add_hits <- function(
   session,
   ns
 ) {
-  # results <<- results
-  # sample_table <<- sample_table
-  # protein_table <<- protein_table
-  # compound_table <<- compound_table
-  # peak_tolerance <<- peak_tolerance
-  # max_multiples <<- max_multiples
-
   samples <- names(results$deconvolution)
   protein_mw <- protein_table$`Mass 1`
   compound_mw <- as.matrix(compound_table[, -1])
@@ -3059,16 +3052,22 @@ render_table_view <- function(table, colors, tab, inputs) {
 
   if (tab == "Compounds") {
     group_variable <- "Sample ID"
-    if (all(tbl$`Sample ID` %in% names(colors))) {
-      names(colors) <- paste("Sample ID:", names(colors))
+    if (length(unique(tbl[[group_variable]])) != nrow(tbl)) {
+      if (all(tbl$`Sample ID` %in% names(colors))) {
+        names(colors) <- paste("Sample ID:", names(colors))
+      }
+
+      tbl$`Sample ID` <- paste("Sample ID:", tbl$`Sample ID`)
     }
-    tbl$`Sample ID` <- paste("Sample ID:", tbl$`Sample ID`)
   } else if (any(tab %in% c("Samples", "Proteins"))) {
     group_variable <- "Cmp Name"
-    if (all(tbl$`Cmp Name` %in% names(colors))) {
-      names(colors) <- paste("Compound:", names(colors))
+    if (length(unique(tbl[[group_variable]])) != nrow(tbl)) {
+      if (all(tbl$`Cmp Name` %in% names(colors))) {
+        names(colors) <- paste("Compound:", names(colors))
+      }
+
+      tbl$`Cmp Name` <- paste("Compound:", tbl$`Cmp Name`)
     }
-    tbl$`Cmp Name` <- paste("Compound:", tbl$`Cmp Name`)
   }
 
   if (length(unique(tbl["Sample ID"])) == nrow(tbl)) {

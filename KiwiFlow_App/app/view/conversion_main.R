@@ -570,10 +570,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       shiny::req(
         sample_table_data()
       )
-
-      test <<- declaration_vars$protein_table$Protein
-      test2 <<- sample_table_data()
-
       sample_handsontable(
         tab = sample_table_data(),
         proteins = declaration_vars$protein_table$Protein,
@@ -1406,8 +1402,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         ))
 
         result_list <- conversion_sidebar_vars$result_list()
-
-        result_list3 <<- result_list
 
         analysis_select <- conversion_sidebar_vars$analysis_select()
 
@@ -2370,12 +2364,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               input$color_scale
             )
 
-            hits_summary <<- hits_summary
-            color_scale <<- input$color_scale
-            color_variable <<- input$color_variable
-            selected_sample <<- input$conversion_sample_picker
-            truncate_names <<- input$truncate_names
-
             color_scale <- input$color_scale
             color_variable <- input$color_variable
             selected_sample <- input$conversion_sample_picker
@@ -3026,14 +3014,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               '= "block";'
             ))
 
-            hits_summary11 <<- hits_summary
-            color_scale <<- input$color_scale
-            color_variable <<- input$color_variable
-            conversion_compound_picker <<- input$conversion_compound_picker
-            truncate_names <<- input$truncate_names
-            result_list4 <<- result_list
-            mapping <<- mapping
-
             color_scale <- input$color_scale
             color_variable <- input$color_variable
             conversion_compound_picker <- input$conversion_compound_picker
@@ -3080,8 +3060,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 labels_show = input$compounds_spectrum_labels
               )
             }
-
-            plot1 <<- plot
 
             # Unblock UI
             shinyjs::runjs(paste0(
@@ -3522,10 +3500,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               input$conversion_protein_picker
             )
 
-            hits_summary8 <<- hits_summary
-            conversion_protein_picker <<- input$conversion_protein_picker
-            total_pct_prot_binding_select <<- input$total_pct_prot_binding_select
-
             # Prefilter hits by selected protein and non-NA compound
             total_bind_pre <- hits_summary[
               hits_summary$`Protein` == input$conversion_protein_picker,
@@ -3632,14 +3606,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               !is.null(input$truncate_names),
               input$color_scale
             )
-
-            hits_summary5 <<- hits_summary
-            color_scale <<- input$color_scale
-            color_variable <<- input$color_variable
-            truncate_names <<- input$truncate_names
-            conversion_protein_picker <<- input$conversion_protein_picker
-            protein_distribution_labels <<- input$protein_distribution_labels
-            protein_distribution_scale <<- input$protein_distribution_scale
 
             color_scale <- input$color_scale
             color_variable <- input$color_variable
@@ -4025,20 +3991,25 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             conversion_compound_picker <- input$conversion_protein_picker
             truncate_names <- input$truncate_names
 
+            hits_summary2 <<- hits_summary
+
             # Filter hits for selected compound
             tbl <- dplyr::filter(
               hits_summary,
-              `Protein` == input$conversion_protein_picker &
-                `Meas. Prot.` != "N/A"
+              `Protein` == input$conversion_protein_picker
+              # &
+              #   `Meas. Prot.` != "N/A"
             )
 
-            # Make compound color scale
-            colors <- get_cmp_colorScale(
-              filtered_table = tbl,
-              scale = color_scale,
-              variable = color_variable,
-              trunc = truncate_names
-            )
+            if (nrow(tbl)) {
+              # Make compound color scale
+              colors <- get_cmp_colorScale(
+                filtered_table = tbl,
+                scale = color_scale,
+                variable = color_variable,
+                trunc = truncate_names
+              )
+            }
 
             samples <- unique(hits_summary$`Sample ID`[
               hits_summary$`Protein` == input$conversion_protein_picker
@@ -4059,8 +4030,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               plot <- multiple_spectra(
                 results_list = result_list,
                 samples = unique(hits_summary$`Sample ID`[
-                  hits_summary$`Protein` == input$conversion_protein_picker &
-                    hits_summary$`Meas. Prot.` != "N/A"
+                  hits_summary$`Protein` == input$conversion_protein_picker
+                  # &
+                  #   hits_summary$`Meas. Prot.` != "N/A"
                 ]),
                 cubic = ifelse(
                   TRUE,
@@ -4139,8 +4111,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
             tbl <- hits_summary |>
               dplyr::filter(
-                `Protein` == input$conversion_protein_picker &
-                  `Meas. Prot.` != "N/A"
+                `Protein` == input$conversion_protein_picker
+                # &
+                #   `Meas. Prot.` != "N/A"
               )
 
             render_table_view(
