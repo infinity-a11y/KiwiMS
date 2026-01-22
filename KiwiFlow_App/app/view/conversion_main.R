@@ -1122,27 +1122,34 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
       # Load conversion declaration interface
       if (!is.null(conversion_sidebar_vars$result_list())) {
-        # Reset ui elements
-        output$binding_tab <- NULL
-        output$kinact <- NULL
-        output$Ki <- NULL
-        output$Ki_kinact <- NULL
-        output$kobs_result <- NULL
-        output$binding_plot <- NULL
-        output$kobs_plot <- NULL
-        output$hits_tab <- NULL
-        output$conversion_hits_tab <- NULL
+        # Remove sample view elements
+        output$samples_selected_protein <- NULL
         output$samples_total_pct_binding <- NULL
+        output$samples_compound_distribution_ui <- NULL
+        output$samples_present_compounds_na <- NULL
         output$samples_compound_distribution <- NULL
         output$samples_annotated_spectrum <- NULL
         output$samples_table_view <- NULL
+
+        # Remove compound view elements
+        output$compounds_selected_compound <- NULL
         output$compounds_total_pct_binding <- NULL
         output$compounds_compound_distribution <- NULL
         output$compounds_annotated_spectrum <- NULL
+        output$compounds_spectrum_labels_ui <- NULL
         output$compounds_table_view <- NULL
-        output$conversion_cmp_protein <- NULL
-        output$cmp_selected_compound <- NULL
-        output$color_variable_ui <- NULL
+        output$compound_distribution_labels_ui <- NULL
+
+        # Remove protein view elements
+        output$proteins_selected_protein <- NULL
+        output$proteins_total_pct_binding <- NULL
+        output$proteins_compound_distribution <- NULL
+        output$proteins_annotated_spectrum <- NULL
+        output$proteins_spectrum_labels_ui <- NULL
+        output$proteins_table_view <- NULL
+        output$proteins_present_compounds_na <- NULL
+        output$proteins_present_compounds_ui <- NULL
+        output$proteins_distribution_labels_ui <- NULL
 
         # Show declaration tabs
         bslib::nav_show(
@@ -1410,7 +1417,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         })
 
         if (!is.null(result_list)) {
-          testi <<- result_list$"hits_summary"
           ### Compute hits summary ----
           hits_summary <- transform_hits(result_list$"hits_summary")
 
@@ -1454,26 +1460,34 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           ### Reset conversion declaration interface ----
 
           #### Reset ui elements ----
-          output$binding_tab <- NULL
-          output$kinact <- NULL
-          output$Ki <- NULL
-          output$Ki_kinact <- NULL
-          output$kobs_result <- NULL
-          output$binding_plot <- NULL
-          output$kobs_plot <- NULL
-          output$hits_tab <- NULL
-          output$conversion_hits_tab <- NULL
+          # Remove sample view elements
+          output$samples_selected_protein <- NULL
           output$samples_total_pct_binding <- NULL
+          output$samples_compound_distribution_ui <- NULL
+          output$samples_present_compounds_na <- NULL
           output$samples_compound_distribution <- NULL
           output$samples_annotated_spectrum <- NULL
           output$samples_table_view <- NULL
+
+          # Remove compound view elements
+          output$compounds_selected_compound <- NULL
           output$compounds_total_pct_binding <- NULL
           output$compounds_compound_distribution <- NULL
           output$compounds_annotated_spectrum <- NULL
+          output$compounds_spectrum_labels_ui <- NULL
           output$compounds_table_view <- NULL
-          output$conversion_cmp_protein <- NULL
-          output$cmp_selected_compound <- NULL
-          output$color_variable_ui <- NULL
+          output$compound_distribution_labels_ui <- NULL
+
+          # Remove protein view elements
+          output$proteins_selected_protein <- NULL
+          output$proteins_total_pct_binding <- NULL
+          output$proteins_compound_distribution <- NULL
+          output$proteins_annotated_spectrum <- NULL
+          output$proteins_spectrum_labels_ui <- NULL
+          output$proteins_table_view <- NULL
+          output$proteins_present_compounds_na <- NULL
+          output$proteins_present_compounds_ui <- NULL
+          output$proteins_distribution_labels_ui <- NULL
 
           #### Show declaration tabs ----
           bslib::nav_show(
@@ -2356,11 +2370,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               input$color_scale
             )
 
-            # hits_summary <<- hits_summary
-            # color_scale <<- input$color_scale
-            # color_variable <<- input$color_variable
-            # selected_sample <<- input$conversion_sample_picker
-            # truncate_names <<- input$truncate_names
+            hits_summary <<- hits_summary
+            color_scale <<- input$color_scale
+            color_variable <<- input$color_variable
+            selected_sample <<- input$conversion_sample_picker
+            truncate_names <<- input$truncate_names
 
             color_scale <- input$color_scale
             color_variable <- input$color_variable
@@ -2493,7 +2507,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                           shiny::div(
                             class = "kobs-val",
                             shinycssloaders::withSpinner(
-                              shiny::uiOutput(ns("cmp_selected_compound")),
+                              shiny::uiOutput(ns(
+                                "compounds_selected_compound"
+                              )),
                               type = 1,
                               color = "#7777f9"
                             )
@@ -2596,7 +2612,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                                   "100"
                                 )
                               ),
-                              shiny::uiOutput(ns("cmp_distribution_labels_ui")),
+                              shiny::uiOutput(ns(
+                                "compounds_distribution_labels_ui"
+                              )),
                               style = "margin-right: 20px;"
                             ),
                             title = NULL
@@ -2670,7 +2688,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           )
 
           ##### Selected Compound info ----
-          output$cmp_selected_compound <- shiny::renderUI({
+          output$compounds_selected_compound <- shiny::renderUI({
             shiny::req(
               hits_summary,
               input$conversion_compound_picker
@@ -2962,14 +2980,14 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             shiny::bindEvent(
               input$conversion_compound_picker,
               render_trigger(),
-              input$color_scale,
               input$truncate_names,
+              input$color_scale,
               input$cmp_distribution_labels,
               input$cmp_distribution_scale
             )
 
           ###### Show label input UI ----
-          output$cmp_distribution_labels_ui <- shiny::renderUI({
+          output$compounds_distribution_labels_ui <- shiny::renderUI({
             shiny::req(hits_summary, input$conversion_compound_picker)
 
             tbl <- hits_summary |>
@@ -3076,8 +3094,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             shiny::bindEvent(
               input$conversion_compound_picker,
               render_trigger(),
-              input$color_scale,
               input$truncate_names,
+              input$color_scale,
               input$compounds_spectrum_labels
             )
 
@@ -3315,7 +3333,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                                 )
                               ),
                               shiny::uiOutput(ns(
-                                "protein_distribution_labels_ui"
+                                "proteins_distribution_labels_ui"
                               )),
                               style = "margin-right: 20px;"
                             ),
@@ -3333,7 +3351,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                       ),
                       shinycssloaders::withSpinner(
                         shiny::uiOutput(ns(
-                          "proteins_present_compounds_pie_ui"
+                          "proteins_present_compounds_ui"
                         )),
                         type = 1,
                         color = "#7777f9"
@@ -3478,13 +3496,16 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               hits_summary,
               input$conversion_sample_picker
             )
+
             choices <- unique(hits_summary$`Cmp Name`[
               hits_summary$`Protein` == input$conversion_protein_picker &
                 !is.na(hits_summary$`Cmp Name`)
             ])
+
             if (!length(choices)) {
               choices <- NULL
             }
+
             shiny::div(
               class = "prot-binding-ui",
               shiny::selectInput(
@@ -3501,24 +3522,32 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               input$conversion_protein_picker
             )
 
+            hits_summary8 <<- hits_summary
+            conversion_protein_picker <<- input$conversion_protein_picker
+            total_pct_prot_binding_select <<- input$total_pct_prot_binding_select
+
             # Prefilter hits by selected protein and non-NA compound
             total_bind_pre <- hits_summary[
               hits_summary$`Protein` == input$conversion_protein_picker,
             ]
+
             if (all(is.na(total_bind_pre$`Cmp Name`))) {
               return("N/A")
             }
+
             # Get selected compound
             total_pct_prot_binding_select <- ifelse(
               !is.null(input$total_pct_prot_binding_select),
               input$total_pct_prot_binding_select,
               total_bind_pre$`Cmp Name`[!is.na(total_bind_pre$`Cmp Name`)][1]
             )
+
             # Filter by selected compound
             total_bind <- total_bind_pre[
               total_bind_pre$`Cmp Name` == total_pct_prot_binding_select &
                 !is.na(total_bind_pre$`Cmp Name`),
             ]
+
             msg <- shiny::div(
               class = "conversion-sample-protein-box",
               shiny::div(
@@ -3560,10 +3589,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 )
               )
             )
+
             return(msg)
           })
 
-          output$proteins_present_compounds_pie_ui <- shiny::renderUI({
+          output$proteins_present_compounds_ui <- shiny::renderUI({
             shiny::req(
               hits_summary,
               input$conversion_protein_picker
@@ -3998,8 +4028,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             # Filter hits for selected compound
             tbl <- dplyr::filter(
               hits_summary,
-              `Protein` == input$conversion_protein_picker
-              # & !is.na(`Cmp Name`)
+              `Protein` == input$conversion_protein_picker &
+                `Meas. Prot.` != "N/A"
             )
 
             # Make compound color scale
@@ -4029,7 +4059,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               plot <- multiple_spectra(
                 results_list = result_list,
                 samples = unique(hits_summary$`Sample ID`[
-                  hits_summary$`Protein` == input$conversion_protein_picker
+                  hits_summary$`Protein` == input$conversion_protein_picker &
+                    hits_summary$`Meas. Prot.` != "N/A"
                 ]),
                 cubic = ifelse(
                   TRUE,
@@ -4109,7 +4140,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             tbl <- hits_summary |>
               dplyr::filter(
                 `Protein` == input$conversion_protein_picker &
-                  !is.na(`Cmp Name`)
+                  `Meas. Prot.` != "N/A"
               )
 
             render_table_view(
@@ -4204,6 +4235,36 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             analysis_select == 2
         ) {
           ### Render Ki/kinact interface ----
+
+          #### Remove relative binding interface elements ----
+          # Remove sample view elements
+          output$samples_selected_protein <- NULL
+          output$samples_total_pct_binding <- NULL
+          output$samples_compound_distribution_ui <- NULL
+          output$samples_present_compounds_na <- NULL
+          output$samples_compound_distribution <- NULL
+          output$samples_annotated_spectrum <- NULL
+          output$samples_table_view <- NULL
+
+          # Remove compound view elements
+          output$compounds_selected_compound <- NULL
+          output$compounds_total_pct_binding <- NULL
+          output$compounds_compound_distribution <- NULL
+          output$compounds_annotated_spectrum <- NULL
+          output$compounds_spectrum_labels_ui <- NULL
+          output$compounds_table_view <- NULL
+          output$compound_distribution_labels_ui <- NULL
+
+          # Remove protein view elements
+          output$proteins_selected_protein <- NULL
+          output$proteins_total_pct_binding <- NULL
+          output$proteins_compound_distribution <- NULL
+          output$proteins_annotated_spectrum <- NULL
+          output$proteins_spectrum_labels_ui <- NULL
+          output$proteins_table_view <- NULL
+          output$proteins_present_compounds_na <- NULL
+          output$proteins_present_compounds_ui <- NULL
+          output$proteins_distribution_labels_ui <- NULL
 
           #### Hide tabs of relative binding interface ----
           bslib::nav_remove("tabs", "Hits")
