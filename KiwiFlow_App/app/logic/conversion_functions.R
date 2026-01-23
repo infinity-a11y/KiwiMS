@@ -2498,9 +2498,19 @@ multiple_spectra <- function(
     )]
   }
 
+  if (time) {
+    lvls <- rev(sort(unique(spectrum_data$z)))
+  } else {
+    lvls <- rev(unique(spectrum_data$z))
+  }
+
   spectrum_data$z <- factor(
     spectrum_data$z,
-    levels = rev(unique(spectrum_data$z))
+    levels = if (time) {
+      rev(sort(unique(spectrum_data$z)))
+    } else {
+      rev(unique(spectrum_data$z))
+    }
   )
 
   # Get peaks data
@@ -2531,7 +2541,11 @@ multiple_spectra <- function(
   # Transform z variable to factor
   peaks_data$z <- factor(
     peaks_data$z,
-    levels = rev(unique(peaks_data$z))
+    levels = if (time) {
+      rev(sort(unique(peaks_data$z)))
+    } else {
+      rev(unique(peaks_data$z))
+    }
   )
 
   # Prepare hit marker symbols
@@ -2567,11 +2581,12 @@ multiple_spectra <- function(
   if (!is.null(color_cmp) && !is.null(color_variable)) {
     if (color_variable == "Compounds") {
       if (length(color_cmp)) {
+        # Adding protein peak marker
         prot_colors <- rep("#ffffff", length(prot_names))
         names(prot_colors) <- prot_names
-
         color_cmp <- c(prot_colors, color_cmp)
 
+        # Match colors to peaks data
         peaks_data$color <- color_cmp[match(
           as.character(peaks_data$name),
           names(color_cmp)
@@ -2582,24 +2597,49 @@ multiple_spectra <- function(
         marker_color <- "#ffffff"
       }
 
+      # Declare coloring variables for graph elements
       color <- NULL
       line <- list(color = "white", width = 1)
       z_linecolor <- list(color = "#ffffff")
     } else if (color_variable == "Samples") {
+      # Match colors to peaks and spectrum data
       peaks_data$z_color <- color_cmp[match(peaks_data$z, names(color_cmp))]
       spectrum_data$z_color <- color_cmp[match(
         spectrum_data$z,
         names(color_cmp)
       )]
 
+      # Declare coloring variables for graph elements
       color <- ~ I(z_color)
       line <- list(width = 1)
       marker_color <- ~ I(z_color)
       z_linecolor <- NULL
     }
   } else {
-    marker_color <- "white"
-    color <- viridisLite::viridis(length(unique(spectrum_data$z)))
+    # Make color palette
+    color_cmp <- brighten_hex(
+      viridisLite::viridis(length(unique(spectrum_data$z))),
+      factor = 1.33
+    )
+    names(color_cmp) <- levels(spectrum_data$z)
+
+    # Adding protein peak marker
+    peaks_data <- dplyr::mutate(
+      peaks_data,
+      color = ifelse(symbol == "diamond", "#ffffff", "#000000")
+    )
+    marker_color <- ~ I(color)
+
+    # Match colors to spectrum data
+    spectrum_data$z_color <- color_cmp[match(
+      spectrum_data$z,
+      names(color_cmp)
+    )]
+
+    # Declare coloring variables for graph elements
+    color <- ~ I(z_color)
+    line <- list(width = 1)
+    z_linecolor <- NULL
   }
 
   # Condition on data size
@@ -2609,58 +2649,241 @@ multiple_spectra <- function(
       isTRUE(time)
   }
 
-  plot <- plotly::plot_ly(
-    data = spectrum_data,
-    x = ~mass,
-    y = ~intensity,
-    z = ~z,
-    split = ~z,
-    color = color,
-    line = z_linecolor,
-    type = "scatter3d",
-    mode = "lines",
-    showlegend = FALSE,
-    hoverinfo = "text",
-    text = ~ paste0(
-      "Mass: ",
-      mass,
-      " Da\nIntensity: ",
-      round(intensity, 2),
-      "%",
-      ifelse(
-        time == TRUE,
-        "\nTime: ",
-        "\nSample: "
-      ),
-      z,
-      ifelse(
-        time == TRUE,
-        " min",
-        ""
-      )
-    )
-  )
-
   # Remove NA peaks
   peaks_data <- peaks_data[!is.na(peaks_data$mass), ]
 
-  # Add hit markers
-  if (nrow(peaks_data) > 0) {
-    plot <- plot |>
-      plotly::add_markers(
-        data = peaks_data,
-        x = ~mass,
-        y = ~intensity,
-        z = ~z,
-        mode = "markers",
-        inherit = FALSE,
-        marker = list(
+  if (cubic) {
+    plot <- plotly::plot_ly(
+      data = spectrum_data,
+      x = ~mass,
+      y = ~intensity,
+      z = ~z,
+      split = ~z,
+      legendgroup = ~z,
+      color = color,
+      line = z_linecolor,
+      type = "scatter3d",
+      mode = "lines",
+      showlegend = TRUE,
+      hoverinfo = "text",
+      text = ~ paste0(
+        "Mass: ",
+        mass,
+        " Da\nIntensity: ",
+        round(intensity, 2),
+        "%",
+        ifelse(
+          time == TRUE,
+          "\nTime: ",
+          "\nSample: "
+        ),
+        z,
+        ifelse(
+          time == TRUE,
+          " min",
+          ""
+        )
+      )
+    )
+
+    # Add hit markers
+    if (nrow(peaks_data) > 0) {
+      if (time) {
+        marker_list <- list(
+          size = 5,
+          zindex = 100,
+          line = list(color = ~ I(linecolor), width = 2)
+        )
+      } else {
+        marker_list <- list(
           color = marker_color,
           symbol = ~ I(symbol),
           size = 5,
           zindex = 100,
-          line = list(color = ~ I(linecolor), width = 1)
+          line = list(color = ~ I(linecolor), width = 2)
+        )
+      }
+
+      plot <- plot |>
+        plotly::add_markers(
+          data = peaks_data,
+          x = ~mass,
+          y = ~intensity,
+          z = ~z,
+          split = ~ seq_len(nrow(peaks_data)),
+          # split = ~ interaction(z, color),
+          legendgroup = ~z,
+          color = marker_color,
+          symbol = ~ I(symbol),
+          mode = "markers",
+          inherit = FALSE,
+          marker = marker_list,
+          hoverinfo = "text",
+          text = ~ paste0(
+            "Name: ",
+            name,
+            "\nMeasured: ",
+            mass,
+            " Da\nIntensity: ",
+            round(intensity, 2),
+            ifelse(time, "%\nTime: ", "%\nSample: "),
+            z,
+            ifelse(time, " min", ""),
+            "\nTheor. Mw: ",
+            mw
+          ),
+          showlegend = FALSE
+        )
+    }
+
+    plot |>
+      plotly::layout(
+        paper_bgcolor = "rgba(0,0,0,0)",
+        paper_bgcolor = "rgba(255,255,255,0)",
+        font = list(color = "white"),
+        legend = list(
+          bgcolor = "rgba(0,0,0,0)",
+          bordercolor = "rgba(0,0,0,0)",
+          font = list(color = "white"),
+          title = list(
+            text = paste(
+              "<b>",
+              ifelse(time, "Time [min]", "Sample ID"),
+              "</b>",
+              "[min]"
+            ),
+            color = "white"
+          )
         ),
+        # 3D Scene Styling
+        scene = list(
+          aspectmode = "manual",
+          aspectratio = list(
+            x = 1,
+            y = 1,
+            z = ifelse(length(unique(peaks_data$z)) <= 3, 0.3, 1.0)
+          ),
+          xaxis = list(
+            title = "Mass [Da]",
+            gridcolor = "#7f7f7fff",
+            showgrid = TRUE,
+            showline = FALSE,
+            showzeroline = FALSE,
+            showticklabels = TRUE,
+            showspikes = FALSE,
+            showbackground = FALSE
+          ),
+          yaxis = list(
+            title = "Intensity [%]",
+            gridcolor = "#7f7f7fff",
+            showgrid = TRUE,
+            showline = FALSE,
+            showzeroline = FALSE,
+            showticklabels = TRUE,
+            showspikes = FALSE,
+            showbackground = FALSE
+          ),
+          zaxis = list(
+            title = ifelse(time, "Time [min]", ""),
+            gridcolor = "#7f7f7fff",
+            showgrid = ifelse(time, TRUE, FALSE),
+            showline = FALSE,
+            showzeroline = FALSE,
+            showticklabels = labels_show,
+            showspikes = FALSE,
+            showbackground = FALSE,
+            type = 'category',
+            tickvals = levels(spectrum_data$z)
+          ),
+          camera = list(
+            # center = list(x = -0.05, y = -0.15, z = 0),
+            center = list(x = 0.33, y = -0.05, z = 0.05),
+            eye = if (length(unique(peaks_data$z)) <= 8) {
+              list(
+                x = 1 +
+                  length(unique(peaks_data$z)) / 20 +
+                  ifelse(labels_show, 0.2, 0),
+                y = 0.7 +
+                  length(unique(peaks_data$z)) / 20 +
+                  ifelse(labels_show, 0.2, 0),
+                z = 1 +
+                  length(unique(peaks_data$z)) / 20 +
+                  ifelse(labels_show, 0.2, 0)
+              )
+            } else {
+              list(x = 1.13, y = 0.74, z = 1.58)
+            },
+            up = list(x = -0.28, y = 0.9, z = -0.33)
+          )
+        )
+      )
+  } else {
+    plotly::plot_ly(
+      data = spectrum_data,
+      x = ~mass,
+      y = ~intensity,
+      color = ~z,
+      colors = brighten_hex(
+        viridisLite::viridis(
+          length(unique(peaks_data$z))
+        ),
+        factor = 1.33
+      ),
+      legendgroup = ~z,
+      type = "scatter",
+      mode = "lines",
+      hoverinfo = "text",
+      text = ~ paste0(
+        "Mass: ",
+        mass,
+        " Da\nIntensity: ",
+        round(intensity, 2),
+        "%",
+        ifelse(
+          time == TRUE,
+          "\nTime: ",
+          "\nSample: "
+        ),
+        z,
+        ifelse(
+          time == TRUE,
+          " min",
+          ""
+        )
+      ),
+      showlegend = TRUE
+    ) |>
+      plotly::add_markers(
+        data = dplyr::mutate(
+          peaks_data,
+          # color = paste0(color, "50"),
+          symbol = paste0(symbol, "-open")
+        ),
+        x = ~mass,
+        y = ~intensity,
+        split = ~ interaction(z, color),
+        # split = ~z, # Splitting by time
+        legendgroup = ~z,
+        mode = "markers",
+        color = marker_color,
+        symbol = ~ I(symbol),
+        inherit = FALSE,
+        marker = list(
+          size = 10,
+          zindex = 100,
+          color = "white"
+          # ,
+          # line = list(color = "white", width = 2)
+        ),
+        # marker = list(
+        #   # color = marker_color,
+        #   color = "white",
+        #   symbol = ~ I(symbol),
+        #   size = 10,
+        #   zindex = 100,
+        #   # line = list(color = ~ I(linecolor), width = 1)
+        #   line = list(color = "white", width = 1)
+        # ),
         hoverinfo = "text",
         text = ~ paste0(
           "Name: ",
@@ -2676,289 +2899,31 @@ multiple_spectra <- function(
           mw
         ),
         showlegend = FALSE
-      )
-  }
-
-  plot <- plot |>
-    plotly::layout(
-      paper_bgcolor = "rgba(0,0,0,0)",
-      paper_bgcolor = "rgba(255,255,255,0)",
-      font = list(color = "white"),
-      legend = list(
-        bgcolor = "rgba(0,0,0,0)",
-        bordercolor = "rgba(0,0,0,0)",
-        font = list(color = "white")
-      ),
-      # 3D Scene Styling
-      scene = list(
-        aspectmode = "manual",
-        aspectratio = list(
-          x = 1,
-          y = 1,
-          z = ifelse(length(unique(peaks_data$z)) <= 3, 0.3, 1.0)
-        ),
+      ) |>
+      plotly::layout(
+        paper_bgcolor = "rgba(0,0,0,0)",
+        plot_bgcolor = "rgba(0,0,0,0)",
+        font = list(color = "white"),
         xaxis = list(
           title = "Mass [Da]",
-          gridcolor = "#7f7f7fff",
-          showgrid = TRUE,
-          showline = FALSE,
-          showzeroline = FALSE,
-          showticklabels = TRUE,
-          showspikes = FALSE,
-          showbackground = FALSE
+          color = "white",
+          gridcolor = "rgba(255, 255, 255, 0.2)",
+          zerolinecolor = "rgba(255, 255, 255, 0.5)"
         ),
         yaxis = list(
           title = "Intensity [%]",
-          gridcolor = "#7f7f7fff",
-          showgrid = TRUE,
-          showline = FALSE,
-          showzeroline = FALSE,
-          showticklabels = TRUE,
-          showspikes = FALSE,
-          showbackground = FALSE
+          color = "white",
+          gridcolor = "rgba(255, 255, 255, 0.2)",
+          zerolinecolor = "rgba(255, 255, 255, 0.5)"
         ),
-        zaxis = list(
-          title = ifelse(time, "Time [min]", ""),
-          gridcolor = "#7f7f7fff",
-          showgrid = ifelse(time, TRUE, FALSE),
-          showline = FALSE,
-          showzeroline = FALSE,
-          showticklabels = labels_show,
-          showspikes = FALSE,
-          showbackground = FALSE,
-          type = 'category'
-        ),
-        camera = list(
-          center = list(x = -0.05, y = -0.15, z = 0),
-          eye = if (length(unique(peaks_data$z)) <= 8) {
-            list(
-              x = 1 +
-                length(unique(peaks_data$z)) / 20 +
-                ifelse(labels_show, 0.2, 0),
-              y = 0.7 +
-                length(unique(peaks_data$z)) / 20 +
-                ifelse(labels_show, 0.2, 0),
-              z = 1 +
-                length(unique(peaks_data$z)) / 20 +
-                ifelse(labels_show, 0.2, 0)
-            )
-          } else {
-            list(x = 1.4, y = 1.1, z = 1.4)
-          },
-          up = list(x = 0, y = 1.5, z = 0)
+        legend = list(
+          bgcolor = "rgba(0,0,0,0)",
+          bordercolor = "rgba(0,0,0,0)",
+          font = list(color = "white"),
+          title = list(text = paste('<b>Time</b>', "[min]"), color = "white")
         )
       )
-    )
-
-  # if (cubic == TRUE) {
-  #   plotly::plot_ly(
-  #     data = spectrum_data,
-  #     x = ~mass,
-  #     y = ~intensity,
-  #     z = ~z,
-  #     split = ~z,
-  #     # colors = c("#ffffff", pal),
-  #     # color = ~z,
-  #     # colors = if (time) {
-  #     #   viridisLite::viridis(
-  #     #     length(unique(peaks_data$z)),
-  #     #     begin = 0.5
-  #     #   )
-  #     # } else {
-  #     #   rep("white", length(unique(peaks_data$z)))
-  #     # },
-  #     type = "scatter3d",
-  #     mode = "lines",
-  #     line = list(color = "white", width = 2),
-  #     showlegend = FALSE,
-  #     hoverinfo = "text",
-  #     text = ~ paste0(
-  #       "Mass: ",
-  #       mass,
-  #       " Da\nIntensity: ",
-  #       round(intensity, 2),
-  #       "%",
-  #       ifelse(
-  #         time == TRUE,
-  #         "\nTime: ",
-  #         "\nSample: "
-  #       ),
-  #       z,
-  #       ifelse(
-  #         time == TRUE,
-  #         " min",
-  #         ""
-  #       )
-  #     )
-  #   ) |>
-  #     plotly::add_markers(
-  #       data = peaks_data,
-  #       x = ~mass,
-  #       y = ~intensity,
-  #       z = ~z,
-  #       mode = "markers",
-  #       inherit = FALSE,
-  #       marker = list(
-  #         color = ~ I(mw_color),
-  #         symbol = "circle",
-  #         size = 5,
-  #         zindex = 100,
-  #         line = list(color = "black", width = 1.5)
-  #       ),
-  #       hoverinfo = "text",
-  #       text = ~ paste0(
-  #         "Name: ",
-  #         name,
-  #         "\nMeasured: ",
-  #         mass,
-  #         " Da\nIntensity: ",
-  #         round(intensity, 2),
-  #         ifelse(time, "%\nTime: ", "%\nSample: "),
-  #         z,
-  #         ifelse(time, " min", ""),
-  #         "\nTheor. Mw: ",
-  #         mw
-  #       ),
-  #       showlegend = FALSE
-  #     ) |>
-  #     plotly::layout(
-  #       paper_bgcolor = "rgba(0,0,0,0)",
-  #       paper_bgcolor = "rgba(255,255,255,0)",
-  #       font = list(color = "white"),
-  #       legend = list(
-  #         bgcolor = "rgba(0,0,0,0)",
-  #         bordercolor = "rgba(0,0,0,0)",
-  #         font = list(color = "white")
-  #       ),
-  #       # 3D Scene Styling
-  #       scene = list(
-  #         aspectmode = "manual",
-  #         aspectratio = list(
-  #           x = 1,
-  #           y = 1,
-  #           z = ifelse(length(unique(spectrum_data$z)) <= 3, 0.3, 1.0)
-  #         ),
-  #         xaxis = list(
-  #           title = "Mass [Da]",
-  #           gridcolor = "#7f7f7fff",
-  #           showgrid = TRUE,
-  #           showline = FALSE,
-  #           showzeroline = FALSE,
-  #           showticklabels = TRUE,
-  #           showspikes = FALSE,
-  #           showbackground = FALSE
-  #         ),
-  #         yaxis = list(
-  #           title = "Intensity [%]",
-  #           gridcolor = "#7f7f7fff",
-  #           showgrid = TRUE,
-  #           showline = FALSE,
-  #           showzeroline = FALSE,
-  #           showticklabels = TRUE,
-  #           showspikes = FALSE,
-  #           showbackground = FALSE
-  #         ),
-  #         zaxis = list(
-  #           title = ifelse(time, "Time [min]", ""),
-  #           gridcolor = "#7f7f7fff",
-  #           showgrid = ifelse(time, TRUE, FALSE),
-  #           showline = FALSE,
-  #           showzeroline = FALSE,
-  #           showticklabels = TRUE,
-  #           showspikes = FALSE,
-  #           showbackground = FALSE,
-  #           type = 'category'
-  #         ),
-  #         camera = list(
-  #           center = list(x = -0.05, y = -0.18, z = 0),
-  #           eye = list(x = 1.2, y = 0.9, z = 1.2),
-  #           up = list(x = 0, y = 1.5, z = 0)
-  #         )
-  #       )
-  #     )
-  # } else {
-  #   plotly::plot_ly(
-  #     data = spectrum_data,
-  #     x = ~mass,
-  #     y = ~intensity,
-  #     color = ~z,
-  #     colors = viridisLite::viridis(
-  #       length(unique(peaks_data$z)),
-  #       begin = 0.5
-  #     ),
-  #     type = "scatter",
-  #     mode = "lines",
-  #     hoverinfo = "text",
-  #     text = ~ paste0(
-  #       "Mass: ",
-  #       mass,
-  #       " Da\nIntensity: ",
-  #       round(intensity, 2),
-  #       "%",
-  #       ifelse(
-  #         time == TRUE,
-  #         "\nTime: ",
-  #         "\nSample: "
-  #       ),
-  #       z,
-  #       ifelse(
-  #         time == TRUE,
-  #         " min",
-  #         ""
-  #       )
-  #     ),
-  #     showlegend = FALSE
-  #   ) |>
-  #     plotly::add_markers(
-  #       data = peaks_data,
-  #       x = ~mass,
-  #       y = ~intensity,
-  #       color = ~z,
-  #       marker = list(
-  #         symbol = "circle",
-  #         size = 10,
-  #         zindex = 100,
-  #         line = list(color = "white", width = 1)
-  #       ),
-  #       hoverinfo = "text",
-  #       text = ~ paste0(
-  #         "Name: ",
-  #         name,
-  #         "\nMeasured: ",
-  #         mass,
-  #         " Da\nIntensity: ",
-  #         round(intensity, 2),
-  #         ifelse(time, "%\nTime: ", "%\nSample: "),
-  #         z,
-  #         ifelse(time, " min", ""),
-  #         "\nTheor. Mw: ",
-  #         mw
-  #       ),
-  #       showlegend = FALSE
-  #     ) |>
-  #     plotly::layout(
-  #       paper_bgcolor = "rgba(0,0,0,0)",
-  #       plot_bgcolor = "rgba(0,0,0,0)",
-  #       font = list(color = "white"),
-  #       xaxis = list(
-  #         title = "Mass [Da]",
-  #         color = "white",
-  #         gridcolor = "rgba(255, 255, 255, 0.2)",
-  #         zerolinecolor = "rgba(255, 255, 255, 0.5)"
-  #       ),
-  #       yaxis = list(
-  #         title = "Intensity [%]",
-  #         color = "white",
-  #         gridcolor = "rgba(255, 255, 255, 0.2)",
-  #         zerolinecolor = "rgba(255, 255, 255, 0.5)"
-  #       ),
-  #       legend = list(
-  #         bgcolor = "rgba(0,0,0,0)",
-  #         bordercolor = "rgba(0,0,0,0)",
-  #         font = list(color = "white")
-  #       )
-  #     )
-  # }
+  }
 }
 
 # Rendering function for relative binding table view
@@ -3001,26 +2966,7 @@ render_table_view <- function(table, colors, tab, inputs) {
 
   # Prepate data frame for table
   tbl <- table |>
-    dplyr::mutate(
-      `Sample ID` = if (inputs$truncate_names) {
-        `truncSample_ID`
-      } else {
-        `Sample ID`
-      },
-      `Cmp Name` = ifelse(is.na(`Cmp Name`), "N/A", `Cmp Name`),
-      `Theor. Cmp` = ifelse(
-        `Theor. Cmp` == "N/A",
-        "N/A",
-        paste0(
-          "[",
-          `Theor. Cmp`,
-          "]",
-          "&thinsp;<sub>",
-          `Bind. Stoich.`,
-          "</sub>"
-        )
-      )
-    ) |>
+    dplyr::ungroup() |>
     dplyr::select(
       `Sample ID` = `Sample ID`,
       `Cmp Name` = `Cmp Name`,
@@ -3028,6 +2974,79 @@ render_table_view <- function(table, colors, tab, inputs) {
       `Mass Shift` = `Theor. Cmp`,
       `%-Binding` = `%-Binding`,
       `Total %` = `Total %-Binding`
+    ) |>
+    dplyr::mutate(
+      `Sample ID` = if (inputs$truncate_names) {
+        table$`truncSample_ID`
+      } else {
+        `Sample ID`
+      },
+      `Cmp Name` = ifelse(is.na(`Cmp Name`), "N/A", `Cmp Name`),
+      `Mass Shift` = ifelse(
+        `Mass Shift` == "N/A",
+        "N/A",
+        paste0(
+          "[",
+          `Mass Shift`,
+          "]",
+          "&thinsp;<sub>",
+          table$`Bind. Stoich.`,
+          "</sub>"
+        )
+      ),
+      label_color = get_contrast_color(colors[match(
+        if (inputs$color_variable == "[Cmp]") {
+          gsub(" µM", "", table$`[Cmp]`)
+        } else if (inputs$color_variable == "Compounds") {
+          `Cmp Name`
+        } else if (inputs$color_variable == "Samples") {
+          `Sample ID`
+        },
+        names(colors)
+      )]),
+      `%-Binding` = if (
+        is.null(inputs$binding_bar) || isTRUE(inputs$binding_bar)
+      ) {
+        `%-Binding`
+      } else {
+        as.character(`%-Binding`)
+      },
+      `Total %` = if (
+        is.null(inputs$tot_binding_bar) || isTRUE(inputs$tot_binding_bar)
+      ) {
+        `Total %`
+      } else {
+        as.character(`Total %`)
+      },
+      col_var = if (inputs$color_variable == "[Cmp]") {
+        `[Cmp]`
+      } else if (inputs$color_variable == "Compounds") {
+        `Cmp Name`
+      } else if (inputs$color_variable == "Samples") {
+        `Sample ID`
+      },
+      dplyr::across(
+        # everything(),
+        # -col_var,
+        -dplyr::any_of(c(
+          "col_var",
+          if (is.null(inputs$binding_bar) || isTRUE(inputs$binding_bar)) {
+            "%-Binding"
+          },
+          if (
+            is.null(inputs$tot_binding_bar) || isTRUE(inputs$tot_binding_bar)
+          ) {
+            "Total %"
+          }
+        )),
+        ~ paste0(
+          "<span style='color:",
+          label_color,
+          "'>",
+          .x,
+          "</span>"
+        )
+      )
     )
 
   # Apply bar renderer to binding column
@@ -3068,12 +3087,17 @@ render_table_view <- function(table, colors, tab, inputs) {
 
       tbl$`Cmp Name` <- paste("Compound:", tbl$`Cmp Name`)
     }
+  } else {
+    group_variable <- NULL
   }
 
-  if (length(unique(tbl["Sample ID"])) == nrow(tbl)) {
+  if (
+    is.null(group_variable) ||
+      length(unique(tbl[[group_variable]])) == nrow(tbl)
+  ) {
     row_group <- NULL
   } else {
-    row_group <- list(dataSrc = which(names(tbl) == "Sample ID") - 1)
+    row_group <- list(dataSrc = which(names(tbl) == group_variable) - 1)
   }
 
   DT::datatable(
@@ -3088,19 +3112,24 @@ render_table_view <- function(table, colors, tab, inputs) {
       paging = FALSE,
       scrollY = TRUE,
       scrollCollapse = TRUE,
-      rowGroup = if (length(unique(tbl[[group_variable]])) == nrow(tbl)) {
-        NULL
-      } else {
-        list(dataSrc = which(names(tbl) == group_variable) - 1)
-      },
+      rowGroup = row_group,
       columnDefs = list(
         list(
           visible = ifelse(
-            length(unique(tbl[[group_variable]])) == nrow(tbl),
+            is.null(group_variable) ||
+              length(unique(tbl[[group_variable]])) == nrow(tbl),
             TRUE,
             FALSE
           ),
           targets = group_variable
+        ),
+        list(
+          visible = FALSE,
+          targets = c(
+            "col_var",
+            "label_color",
+            if (tab == "Concentration") "Cmp Name"
+          )
         ),
         list(className = 'dt-center', targets = "_all"),
         list(
@@ -3119,18 +3148,22 @@ render_table_view <- function(table, colors, tab, inputs) {
     )
   ) |>
     DT::formatStyle(
-      columns = ifelse(
-        inputs$color_variable == "Compounds",
-        "Cmp Name",
-        "Sample ID"
-      ),
+      columns = "col_var",
       target = 'row',
       backgroundColor = DT::styleEqual(
-        levels = names(colors),
+        levels = if (inputs$color_variable == "[Cmp]") {
+          paste(names(colors), "µM")
+        } else {
+          names(colors)
+        },
         values = colors
       ),
       color = DT::styleEqual(
-        levels = names(colors),
+        levels = if (inputs$color_variable == "[Cmp]") {
+          paste(names(colors), "µM")
+        } else {
+          names(colors)
+        },
         values = get_contrast_color(colors)
       )
     )
@@ -3147,7 +3180,6 @@ render_hits_table <- function(
   bar_chart = character(),
   compounds = NULL,
   samples = NULL,
-  select = FALSE,
   colors = NULL,
   color_variable = NULL,
   expand = TRUE,
@@ -3236,10 +3268,10 @@ render_hits_table <- function(
 
   # Determine clickable cells
   rowCallback <- NULL
-  if (clickable) {
-    if (any(names(hits_table) %in% c("Sample ID", "Protein", "Cmp Name"))) {
+  if (!isFALSE(clickable)) {
+    if (any(names(hits_table) %in% clickable)) {
       clickable_targets <- which(
-        names(hits_table) %in% c("Sample ID", "Protein", "Cmp Name")
+        names(hits_table) %in% clickable
       ) -
         1
 
@@ -3268,7 +3300,10 @@ render_hits_table <- function(
     data = hits_table,
     rownames = FALSE,
     class = "order-column",
-    selection = list(mode = ifelse(select, "single", "none"), target = 'cell'),
+    selection = list(
+      mode = ifelse(!isFALSE(clickable), "single", "none"),
+      target = 'cell'
+    ),
     options = list(
       rowCallback = htmlwidgets::JS(rowCallback),
       scrollX = TRUE,

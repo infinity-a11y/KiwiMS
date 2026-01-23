@@ -1147,6 +1147,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         output$proteins_present_compounds_ui <- NULL
         output$proteins_distribution_labels_ui <- NULL
 
+        # Remove other relative binding interfac elements
+        output$color_variable_ui <- NULL
+
         # Show declaration tabs
         bslib::nav_show(
           "tabs",
@@ -1355,7 +1358,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     )
 
     # Reactive value to track current hits data frame
-    hits_datatable_current <- shiny::reactiveVal()
+    relbinding_hits_current <- shiny::reactiveVal()
+    kikinact_hits_current <- shiny::reactiveVal()
 
     ## Reactive functions ----
     # Infer Ki/kinact result from selected samples
@@ -1483,6 +1487,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           output$proteins_present_compounds_ui <- NULL
           output$proteins_distribution_labels_ui <- NULL
 
+          # Remove other relative binding interfac elements
+          output$color_variable_ui <- NULL
+
           #### Show declaration tabs ----
           bslib::nav_show(
             "tabs",
@@ -1545,26 +1552,26 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           )
 
           #### Remove Ki/kinact interface elements ----
-          output$binding_tab <- NULL
-          output$kinact <- NULL
-          output$Ki <- NULL
-          output$Ki_kinact <- NULL
-          output$kobs_result <- NULL
-          output$binding_plot <- NULL
-          output$kobs_plot <- NULL
-          output$hits_tab <- NULL
-          if (!is.null(conversion_vars$select_concentration)) {
-            lapply(names(conversion_vars$select_concentration), function(id) {
-              output[[paste0("concentration_tab", id)]] <- NULL
-              output[[paste0("concentration_tab_", id, "_hits")]] <- NULL
-              output[[paste0(
-                "concentration_tab_",
-                id,
-                "_binding_plot"
-              )]] <- NULL
-              output[[paste0("concentration_tab_", id, "_spectra")]] <- NULL
-            })
-          }
+          # output$binding_tab <- NULL
+          # output$kinact <- NULL
+          # output$Ki <- NULL
+          # output$Ki_kinact <- NULL
+          # output$kobs_result <- NULL
+          # output$binding_plot <- NULL
+          # output$kobs_plot <- NULL
+          # output$hits_tab <- NULL
+          # if (!is.null(conversion_vars$select_concentration)) {
+          #   lapply(names(conversion_vars$select_concentration), function(id) {
+          #     output[[paste0("concentration_tab", id)]] <- NULL
+          #     output[[paste0("concentration_tab_", id, "_hits")]] <- NULL
+          #     output[[paste0(
+          #       "concentration_tab_",
+          #       id,
+          #       "_binding_plot"
+          #     )]] <- NULL
+          #     output[[paste0("concentration_tab_", id, "_spectra")]] <- NULL
+          #   })
+          # }
 
           #### Remove tabs from Ki/kinact interface ----
           bslib::nav_remove("tabs", "Binding")
@@ -1591,18 +1598,16 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                       class = "hits-tab-checkboxes",
                       shiny::div(
                         class = "hits-tab-expand-box",
-                        # shinyjs::disabled(
                         shiny::checkboxInput(
-                          ns("hits_tab_expand"),
+                          ns("relbinding_hits_tab_expand"),
                           label = "Expand Samples",
                           value = TRUE
                         )
-                        # )
                       ),
                       shiny::div(
                         class = "hits-tab-na-box",
                         shiny::checkboxInput(
-                          ns("hits_tab_na"),
+                          ns("relbinding_hits_tab_na"),
                           label = "Include NA",
                           value = TRUE
                         )
@@ -1615,7 +1620,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     shiny::div(
                       class = "hits-table-control-select",
                       shinyWidgets::pickerInput(
-                        ns("hits_tab_sample_select"),
+                        ns("relbinding_hits_tab_sample_select"),
                         label = "Select Samples",
                         choices = unique(
                           hits_summary$`Sample ID`
@@ -1636,7 +1641,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     shiny::div(
                       class = "hits-table-control-select",
                       shinyWidgets::pickerInput(
-                        ns("hits_tab_compound_select"),
+                        ns("relbinding_hits_tab_compound_select"),
                         label = "Select Compounds",
                         choices = unique(
                           hits_summary$`Cmp Name`
@@ -1665,7 +1670,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     shiny::div(
                       class = "hits-table-control-select",
                       shinyWidgets::pickerInput(
-                        ns("hits_tab_col_select"),
+                        ns("relbinding_hits_tab_col_select"),
                         label = "Select Columns",
                         choices = names(hits_summary)[
                           !names(hits_summary) %in%
@@ -1688,7 +1693,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     shiny::div(
                       class = "hits-table-control-select",
                       shinyWidgets::pickerInput(
-                        ns("binding_chart"),
+                        ns("relbinding_binding_chart"),
                         label = "Show Binding Bars",
                         choices = c("%-Binding", "Total %-Binding"),
                         selected = "Total %-Binding",
@@ -1703,7 +1708,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 shiny::div(
                   class = "hits-table-wrapper",
                   shinycssloaders::withSpinner(
-                    DT::DTOutput(ns("conversion_hits_tab")),
+                    DT::DTOutput(ns("relbinding_hits_tab")),
                     type = 1,
                     color = "#7777f9"
                   )
@@ -1713,11 +1718,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           )
 
           ##### Render hits table ----
-          output$conversion_hits_tab <- DT::renderDT(
+          output$relbinding_hits_tab <- DT::renderDT(
             {
               shiny::req(
                 hits_summary,
-                input$hits_tab_sample_select,
+                input$relbinding_hits_tab_sample_select,
                 input$color_variable,
                 !is.null(input$truncate_names),
                 input$color_scale
@@ -1727,11 +1732,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 hits_table = hits_summary,
                 concentration_colors = NULL,
                 withzero = FALSE,
-                selected_cols = input$hits_tab_col_select,
-                bar_chart = input$binding_chart,
-                compounds = input$hits_tab_compound_select,
-                samples = input$hits_tab_sample_select,
-                select = TRUE,
+                selected_cols = input$relbinding_hits_tab_col_select,
+                bar_chart = input$relbinding_binding_chart,
+                compounds = input$relbinding_hits_tab_compound_select,
+                samples = input$relbinding_hits_tab_sample_select,
                 colors = get_cmp_colorScale(
                   filtered_table = hits_summary,
                   scale = input$color_scale,
@@ -1740,13 +1744,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 ),
                 truncated = input$truncate_names,
                 color_variable = input$color_variable,
-                expand = input$hits_tab_expand,
-                na_include = input$hits_tab_na,
-                clickable = TRUE
+                expand = input$relbinding_hits_tab_expand,
+                na_include = input$relbinding_hits_tab_na,
+                clickable = c("Sample ID", "Protein", "Cmp Name")
               )
 
               # Save datatable in reactive variable
-              hits_datatable_current(hits_datatable)
+              relbinding_hits_current(hits_datatable)
 
               return(hits_datatable)
             },
@@ -1755,33 +1759,33 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             shiny::bindEvent(
               render_trigger(),
               input$color_scale,
-              input$hits_tab_col_select,
-              input$binding_chart,
-              input$hits_tab_compound_select,
-              input$hits_tab_sample_select,
-              input$hits_tab_na
+              input$relbinding_hits_tab_col_select,
+              input$relbinding_binding_chart,
+              input$relbinding_hits_tab_compound_select,
+              input$relbinding_hits_tab_sample_select,
+              input$relbinding_hits_tab_na
             )
 
           ##### Hits table clicking observer ----
           shiny::observe({
             shiny::req(
-              input$conversion_hits_tab_cell_clicked,
-              hits_datatable_current()
+              input$relbinding_hits_tab_cell_clicked,
+              relbinding_hits_current()
             )
 
             # Get client side click information
-            cell_clicked <- input$conversion_hits_tab_cell_clicked
+            cell_clicked <- input$relbinding_hits_tab_cell_clicked
 
             if (
               !is.null(cell_clicked) &&
                 length(cell_clicked) &&
-                !is.na(hits_datatable_current()$x$data[
-                  input$conversion_hits_tab_cell_clicked$row,
-                  input$conversion_hits_tab_cell_clicked$col + 1
+                !is.na(relbinding_hits_current()$x$data[
+                  input$relbinding_hits_tab_cell_clicked$row,
+                  input$relbinding_hits_tab_cell_clicked$col + 1
                 ])
             ) {
               # Get current column indeces of sample and compound columns
-              cols <- names(hits_datatable_current()$x$data)
+              cols <- names(relbinding_hits_current()$x$data)
               sample_col <- which(cols == "Sample ID") - 1
               prot_col <- which(cols == "Protein") - 1
               cmp_col <- which(cols == "Cmp Name") - 1
@@ -1813,7 +1817,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 set_selected_tab("Compounds View", session)
               }
             }
-          })
+          }) |>
+            shiny::bindEvent(input$relbinding_hits_tab_cell_clicked)
 
           #### Sample view tab ----
           bslib::nav_insert(
@@ -3641,14 +3646,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 ) |>
                 dplyr::arrange(`[Cmp]`, Time)
             }
-            # else {
-            #   tbl <- tbl |>
-            #     dplyr::arrange(
-            #       `Cmp Name`,
-            #       `Sample ID`,
-            #       dplyr::desc(`%-Binding`)
-            #     )
-            # }
 
             tbl <- tbl |>
               dplyr::group_by(`Cmp Name`) |>
@@ -3991,14 +3988,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             conversion_compound_picker <- input$conversion_protein_picker
             truncate_names <- input$truncate_names
 
-            hits_summary2 <<- hits_summary
-
             # Filter hits for selected compound
             tbl <- dplyr::filter(
               hits_summary,
               `Protein` == input$conversion_protein_picker
-              # &
-              #   `Meas. Prot.` != "N/A"
             )
 
             if (nrow(tbl)) {
@@ -4211,33 +4204,36 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
           #### Remove relative binding interface elements ----
           # Remove sample view elements
-          output$samples_selected_protein <- NULL
-          output$samples_total_pct_binding <- NULL
-          output$samples_compound_distribution_ui <- NULL
-          output$samples_present_compounds_na <- NULL
-          output$samples_compound_distribution <- NULL
-          output$samples_annotated_spectrum <- NULL
-          output$samples_table_view <- NULL
+          # output$samples_selected_protein <- NULL
+          # output$samples_total_pct_binding <- NULL
+          # output$samples_compound_distribution_ui <- NULL
+          # output$samples_present_compounds_na <- NULL
+          # output$samples_compound_distribution <- NULL
+          # output$samples_annotated_spectrum <- NULL
+          # output$samples_table_view <- NULL
 
-          # Remove compound view elements
-          output$compounds_selected_compound <- NULL
-          output$compounds_total_pct_binding <- NULL
-          output$compounds_compound_distribution <- NULL
-          output$compounds_annotated_spectrum <- NULL
-          output$compounds_spectrum_labels_ui <- NULL
-          output$compounds_table_view <- NULL
-          output$compound_distribution_labels_ui <- NULL
+          # # Remove compound view elements
+          # output$compounds_selected_compound <- NULL
+          # output$compounds_total_pct_binding <- NULL
+          # output$compounds_compound_distribution <- NULL
+          # output$compounds_annotated_spectrum <- NULL
+          # output$compounds_spectrum_labels_ui <- NULL
+          # output$compounds_table_view <- NULL
+          # output$compound_distribution_labels_ui <- NULL
 
-          # Remove protein view elements
-          output$proteins_selected_protein <- NULL
-          output$proteins_total_pct_binding <- NULL
-          output$proteins_compound_distribution <- NULL
-          output$proteins_annotated_spectrum <- NULL
-          output$proteins_spectrum_labels_ui <- NULL
-          output$proteins_table_view <- NULL
-          output$proteins_present_compounds_na <- NULL
-          output$proteins_present_compounds_ui <- NULL
-          output$proteins_distribution_labels_ui <- NULL
+          # # Remove protein view elements
+          # output$proteins_selected_protein <- NULL
+          # output$proteins_total_pct_binding <- NULL
+          # output$proteins_compound_distribution <- NULL
+          # output$proteins_annotated_spectrum <- NULL
+          # output$proteins_spectrum_labels_ui <- NULL
+          # output$proteins_table_view <- NULL
+          # output$proteins_present_compounds_na <- NULL
+          # output$proteins_present_compounds_ui <- NULL
+          # output$proteins_distribution_labels_ui <- NULL
+
+          # # Remove other relative binding interfac elements
+          # output$color_variable_ui <- NULL
 
           #### Hide tabs of relative binding interface ----
           bslib::nav_remove("tabs", "Hits")
@@ -4272,6 +4268,225 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
           # Assign colors to reactive variable
           conversion_vars$conc_colors <- concentration_colors
+
+          #### Hits tab ----
+          bslib::nav_insert(
+            "tabs",
+            bslib::nav_panel(
+              title = "Hits",
+              shiny::div(
+                class = "conversion-result-wrapper hits-tab",
+                # shiny::div(
+                #   class = "tooltip-bttn hits-tab-tooltip",
+                #   shiny::actionButton(
+                #     ns("hits_table_tooltip_bttn"),
+                #     label = "",
+                #     icon = shiny::icon("circle-question")
+                #   )
+                # ),
+                shiny::fluidRow(
+                  shiny::column(
+                    width = 2,
+                    align = "center",
+                    shiny::div(
+                      class = "hits-tab-checkboxes",
+                      shiny::div(
+                        class = "hits-tab-expand-box",
+                        shiny::checkboxInput(
+                          ns("kikinact_hits_tab_expand"),
+                          label = "Expand Samples",
+                          value = TRUE
+                        )
+                      ),
+                      shiny::div(
+                        class = "hits-tab-na-box",
+                        shiny::checkboxInput(
+                          ns("kikinact_hits_tab_na"),
+                          label = "Include NA",
+                          value = TRUE
+                        )
+                      )
+                    )
+                  ),
+                  shiny::column(
+                    width = 2,
+                    align = "center",
+                    shiny::div(
+                      class = "hits-table-control-select",
+                      shinyWidgets::pickerInput(
+                        ns("kikinact_hits_tab_sample_select"),
+                        label = "Select Samples",
+                        choices = unique(
+                          hits_summary$`Sample ID`
+                        ),
+                        selected = unique(
+                          hits_summary$`Sample ID`
+                        ),
+                        multiple = TRUE,
+                        options = list(
+                          `actions-box` = TRUE
+                        )
+                      )
+                    )
+                  ),
+                  shiny::column(
+                    width = 2,
+                    align = "center",
+                    shiny::div(
+                      class = "hits-table-control-select",
+                      shinyWidgets::pickerInput(
+                        ns("kikinact_hits_tab_compound_select"),
+                        label = "Select Compounds",
+                        choices = unique(
+                          hits_summary$`Cmp Name`
+                        )[
+                          !is.na(unique(
+                            hits_summary$`Cmp Name`
+                          ))
+                        ],
+                        selected = unique(
+                          hits_summary$`Cmp Name`
+                        )[
+                          !is.na(unique(
+                            hits_summary$`Cmp Name`
+                          ))
+                        ],
+                        multiple = TRUE,
+                        options = list(
+                          `actions-box` = TRUE
+                        )
+                      )
+                    )
+                  ),
+                  shiny::column(
+                    width = 2,
+                    align = "center",
+                    shiny::div(
+                      class = "hits-table-control-select",
+                      shinyWidgets::pickerInput(
+                        ns("kikinact_hits_tab_col_select"),
+                        label = "Select Columns",
+                        choices = names(hits_summary)[
+                          !names(hits_summary) %in%
+                            c("Sample ID", "Cmp Name", "truncSample_ID")
+                        ],
+                        selected = names(hits_summary)[
+                          !names(hits_summary) %in%
+                            c("Sample ID", "Cmp Name", "truncSample_ID")
+                        ][-c(1:2, 4:5, 7, 9)],
+                        multiple = TRUE,
+                        options = list(
+                          `actions-box` = TRUE
+                        )
+                      )
+                    )
+                  ),
+                  shiny::column(
+                    width = 2,
+                    align = "center",
+                    shiny::div(
+                      class = "hits-table-control-select",
+                      shinyWidgets::pickerInput(
+                        ns("kikinact_binding_chart"),
+                        label = "Show Binding Bars",
+                        choices = c("%-Binding", "Total %-Binding"),
+                        selected = "Total %-Binding",
+                        multiple = TRUE,
+                        options = list(
+                          `actions-box` = TRUE
+                        )
+                      )
+                    )
+                  )
+                ),
+                shiny::div(
+                  class = "hits-table-wrapper",
+                  shinycssloaders::withSpinner(
+                    DT::DTOutput(ns("kikinact_hits_tab")),
+                    type = 1,
+                    color = "#7777f9"
+                  )
+                )
+              ),
+              shiny::tags$script(
+                popover_autoclose
+              )
+            )
+          )
+
+          ##### Hits table ----
+          output$kikinact_hits_tab <- DT::renderDT({
+            shiny::req(
+              conversion_vars$formatted_hits,
+              conversion_vars$conc_colors
+            )
+
+            hits_datatable <- render_hits_table(
+              hits_table = conversion_vars$formatted_hits,
+              concentration_colors = conversion_vars$conc_colors,
+              withzero = any(
+                conversion_vars$formatted_hits[["[Cmp]"]] == "0 µM"
+              ),
+              selected_cols = input$kikinact_hits_tab_col_select,
+              bar_chart = input$kikinact_binding_chart,
+              compounds = input$kikinact_hits_tab_compound_select,
+              samples = input$kikinact_hits_tab_sample_select,
+              truncated = input$truncate_names,
+              expand = input$kikinact_hits_tab_expand,
+              na_include = input$kikinact_hits_tab_na,
+              clickable = "[Cmp]"
+            )
+
+            # Save datatable in reactive variable
+            kikinact_hits_current(hits_datatable)
+
+            return(hits_datatable)
+          }) |>
+            shiny::bindEvent(
+              render_trigger(),
+              input$color_scale,
+              input$kikinact_hits_tab_col_select,
+              input$kikinact_binding_chart,
+              input$kikinact_hits_tab_compound_select,
+              input$kikinact_hits_tab_sample_select,
+              input$kikinact_hits_tab_na
+            )
+
+          #### Hits table clicking observer ----
+          shiny::observe({
+            shiny::req(
+              input$kikinact_hits_tab_cell_clicked,
+              kikinact_hits_current()
+            )
+
+            # Get client side click information
+            cell_clicked <- input$kikinact_hits_tab_cell_clicked
+
+            if (
+              !is.null(cell_clicked) &&
+                length(cell_clicked) &&
+                !is.na(kikinact_hits_current()$x$data[
+                  input$kikinact_hits_tab_cell_clicked$row,
+                  input$kikinact_hits_tab_cell_clicked$col + 1
+                ])
+            ) {
+              # Get current column indeces of sample and compound columns
+              cols <- names(kikinact_hits_current()$x$data)
+              concentration_col <- which(cols == "[Cmp]") - 1
+
+              # Actions if click corresponds to sample or compound
+              if (
+                length(concentration_col) &&
+                  cell_clicked$col == concentration_col
+              ) {
+                set_selected_tab(
+                  paste0("[", gsub(" µM|mM", "", cell_clicked$value), "]"),
+                  session
+                )
+              }
+            }
+          }) |>
+            shiny::bindEvent(input$kikinact_hits_tab_cell_clicked)
 
           #### Binding tab ----
           bslib::nav_insert(
@@ -4682,50 +4897,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             result_list$ki_kinact_result$kobs_plot
           })
 
-          #### Hits tab ----
-          bslib::nav_insert(
-            "tabs",
-            bslib::nav_panel(
-              title = "Hits",
-              shiny::div(
-                class = "conversion-result-wrapper",
-                # shiny::div(
-                #   class = "tooltip-bttn hits-tab-tooltip",
-                #   shiny::actionButton(
-                #     ns("hits_table_tooltip_bttn"),
-                #     label = "",
-                #     icon = shiny::icon("circle-question")
-                #   )
-                # ),
-                shinycssloaders::withSpinner(
-                  DT::DTOutput(ns("hits_tab")),
-                  type = 1,
-                  color = "#7777f9"
-                )
-              ),
-              shiny::tags$script(
-                popover_autoclose
-              )
-            )
-          )
-
-          ##### Hits table ----
-          output$hits_tab <- DT::renderDT({
-            shiny::req(
-              conversion_vars$formatted_hits,
-              conversion_vars$conc_colors
-            )
-
-            render_hits_table(
-              hits_table = conversion_vars$formatted_hits,
-              concentration_colors = conversion_vars$conc_colors,
-              withzero = any(
-                conversion_vars$formatted_hits[["[Cmp]"]] == "0 µM"
-              ),
-              expand = TRUE
-            )
-          })
-
           #### Concentration tabs ----
           # Define a set of IDs for the dynamic concentration tabs
           dynamic_ui_ids <- paste0("concentration_tab_", concentrations)
@@ -4781,21 +4952,31 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                         class = "bg-dark help-header",
                         "Mass Spectra",
                         shiny::div(
-                          class = "spectrum-radio-button",
-                          shinyWidgets::radioGroupButtons(
-                            ns(paste0(
-                              local_ui_id,
-                              "_kind"
-                            )),
-                            choices = c("3D", "Planar")
-                          )
-                        ),
-                        shiny::div(
-                          class = "tooltip-bttn",
-                          shiny::actionButton(
-                            ns("mass_spectra_tooltip_bttn"),
-                            label = "",
-                            icon = shiny::icon("circle-question")
+                          class = "box-header-settings-help",
+                          bslib::popover(
+                            shiny::icon("gear"),
+                            shiny::div(
+                              shiny::div(
+                                class = "spectrum-radio-button",
+                                shinyWidgets::radioGroupButtons(
+                                  ns(paste0(
+                                    local_ui_id,
+                                    "_kind"
+                                  )),
+                                  choices = c("3D", "Planar")
+                                )
+                              ),
+                              style = "margin-right: 20px;"
+                            ),
+                            title = NULL
+                          ),
+                          shiny::div(
+                            class = "tooltip-bttn",
+                            shiny::actionButton(
+                              ns("mass_spectra_tooltip_bttn"),
+                              label = "",
+                              icon = shiny::icon("circle-question")
+                            )
                           )
                         )
                       ),
@@ -4914,14 +5095,42 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     class = "card-custom hits",
                     bslib::card(
                       bslib::card_header(
-                        class = "bg-dark help-header",
-                        "Hits",
+                        class = "bg-dark help-header d-flex justify-content-between",
+                        "Table View",
                         shiny::div(
-                          class = "tooltip-bttn",
-                          shiny::actionButton(
-                            ns("hits_table_tooltip_bttn"),
-                            label = "",
-                            icon = shiny::icon("circle-question")
+                          class = "box-header-settings-help",
+                          bslib::popover(
+                            shiny::icon("gear"),
+                            shiny::div(
+                              shinyWidgets::materialSwitch(
+                                ns(paste0(
+                                  local_ui_id,
+                                  "concentrations_table_view_binding_bar"
+                                )),
+                                label = "%-Binding Bar",
+                                value = TRUE,
+                                right = TRUE
+                              ),
+                              shinyWidgets::materialSwitch(
+                                ns(paste0(
+                                  local_ui_id,
+                                  "concentrations_table_view_tot_binding_bar"
+                                )),
+                                label = "Total %-Binding Bar",
+                                value = FALSE,
+                                right = TRUE
+                              ),
+                              style = "margin-right: 20px;"
+                            ),
+                            title = NULL
+                          ),
+                          shiny::div(
+                            class = "tooltip-bttn",
+                            shiny::actionButton(
+                              ns("hits_table_tooltip_bttn"),
+                              label = "",
+                              icon = shiny::icon("circle-question")
+                            )
                           )
                         )
                       ),
@@ -4939,22 +5148,46 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 )
               })
 
-              ##### Hits table ----
+              ##### Table view ----
               output[[paste0(local_ui_id, "_hits")]] <- DT::renderDT({
-                render_hits_table(
-                  hits_table = hits_summary |>
-                    dplyr::filter(
-                      `[Cmp]` == paste(local_concentration, "µM")
-                    ) |>
-                    dplyr::select(c(
-                      "Sample ID",
-                      "Time",
-                      "Total %-Binding"
-                    )),
-                  concentration_colors = concentration_colors,
-                  single_conc = local_concentration
+                tbl <- hits_summary |>
+                  dplyr::filter(
+                    `[Cmp]` == paste(local_concentration, "µM")
+                  )
+
+                testt <<- input[[paste0(
+                  local_ui_id,
+                  "concentrations_table_view_binding_bar"
+                )]]
+
+                render_table_view(
+                  table = tbl,
+                  colors = conversion_vars$conc_colors,
+                  tab = "Concentration",
+                  inputs = list(
+                    truncate_names = TRUE,
+                    color_variable = "[Cmp]",
+                    binding_bar = input[[paste0(
+                      local_ui_id,
+                      "concentrations_table_view_binding_bar"
+                    )]],
+                    tot_binding_bar = input[[paste0(
+                      local_ui_id,
+                      "concentrations_table_view_tot_binding_bar"
+                    )]]
+                  )
                 )
-              })
+              }) |>
+                shiny::bindEvent(
+                  input[[paste0(
+                    local_ui_id,
+                    "concentrations_table_view_binding_bar"
+                  )]],
+                  input[[paste0(
+                    local_ui_id,
+                    "concentrations_table_view_tot_binding_bar"
+                  )]]
+                )
 
               ##### Binding plot ----
               output[[paste0(
@@ -4995,19 +5228,24 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     decon_samples == local_concentration
                   )],
                   cubic = ifelse(
-                    input[[paste0(local_ui_id, "_kind")]] == "3D",
+                    is.null(input[[paste0(local_ui_id, "_kind")]]) ||
+                      input[[paste0(local_ui_id, "_kind")]] == "3D",
                     TRUE,
                     FALSE
                   ),
                   time = TRUE,
                   hits_summary = hits_summary
                 )
-              })
+              }) |>
+                shiny::bindEvent(input[[paste0(
+                  local_ui_id,
+                  "_kind"
+                )]])
             })
           }
 
           # Select binding results tab
-          set_selected_tab("Binding", session)
+          set_selected_tab("Hits", session)
         }
 
         # Unblock UI
@@ -5060,40 +5298,73 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
     ### Enable/Disable hits table expand samples input ----
     shiny::observe({
-      shiny::req(input$hits_tab_expand, conversion_vars$hits_summary)
+      shiny::req(conversion_vars$hits_summary)
 
-      shinyjs::toggleState(
-        id = "hits_tab_expand",
-        condition = any(duplicated(conversion_vars$hits_summary$`Sample ID`))
-      )
-      shinyjs::toggleClass(
-        selector = ".hits-tab-expand-box .checkbox",
-        class = "checkbox-disable"
-      )
+      if (!is.null(input$relbinding_hits_tab_expand)) {
+        shinyjs::toggleState(
+          id = "relbinding_hits_tab_expand",
+          condition = any(duplicated(conversion_vars$hits_summary$`Sample ID`))
+        )
+        shinyjs::toggleClass(
+          selector = ".hits-tab-expand-box .checkbox",
+          class = "checkbox-disable"
+        )
+      }
+
+      if (!is.null(input$kikinact_hits_tab_expand)) {
+        shinyjs::toggleState(
+          id = "kikinact_hits_tab_expand",
+          condition = any(duplicated(conversion_vars$hits_summary$`Sample ID`))
+        )
+        shinyjs::toggleClass(
+          selector = ".hits-tab-expand-box .checkbox",
+          class = "checkbox-disable"
+        )
+      }
     })
 
     ### Enable/Disable hits table NA exclude input ----
     shiny::observe({
-      shiny::req(input$hits_tab_na, conversion_vars$hits_summary)
+      shiny::req(conversion_vars$hits_summary)
 
-      shinyjs::toggleState(
-        id = "hits_tab_na",
-        condition = anyNA(conversion_vars$hits_summary) &
-          !all(is.na(conversion_vars$hits_summary$`Cmp Name`))
-      )
-      shinyjs::toggleClass(
-        selector = ".hits-tab-na-box .checkbox",
-        class = "checkbox-disable"
-      )
+      if (!is.null(input$relbinding_hits_tab_na)) {
+        shinyjs::toggleState(
+          id = "relbinding_hits_tab_na",
+          condition = anyNA(conversion_vars$hits_summary) &
+            !all(is.na(conversion_vars$hits_summary$`Cmp Name`))
+        )
+        shinyjs::toggleClass(
+          selector = ".hits-tab-na-box .checkbox",
+          class = "checkbox-disable"
+        )
+      }
+
+      if (!is.null(input$kikinact_hits_tab_na)) {
+        shinyjs::toggleState(
+          id = "kikinact_hits_tab_na",
+          condition = anyNA(conversion_vars$hits_summary) &
+            !all(is.na(conversion_vars$hits_summary$`Cmp Name`))
+        )
+        shinyjs::toggleClass(
+          selector = ".hits-tab-na-box .checkbox",
+          class = "checkbox-disable"
+        )
+      }
     })
 
     ## Events for conversion result interface ----
 
     ### Reevaluate color scales depending on n of unique variable values ----
-    shiny::observeEvent(
-      input$color_variable,
+    shiny::observe(
       {
-        shiny::req(conversion_vars$hits_summary)
+        shiny::req(
+          conversion_vars$hits_summary,
+          input$color_variable,
+          conversion_sidebar_vars$analysis_select() == 1
+        )
+
+        color_scale <- input$color_scale
+        hits_summary <- conversion_vars$hits_summary
 
         scales <- filter_color_list(
           list(
@@ -5102,19 +5373,17 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           ),
           length(unique(
             if (input$color_variable == "Samples") {
-              conversion_vars$hits_summary$`Sample ID`
+              hits_summary$`Sample ID`
             } else {
-              conversion_vars$hits_summary$`Cmp Name`
+              hits_summary$`Cmp Name`
             }
           ))
         )
 
         scales[["Gradient"]] <- gradient_scales
 
-        if (
-          !is.null(input$color_scale) && input$color_scale %in% unlist(scales)
-        ) {
-          selected <- input$color_scale
+        if (!is.null(color_scale) && color_scale %in% unlist(scales)) {
+          selected <- color_scale
           render_trigger(render_trigger() + 1)
         } else {
           selected <- "viridis"
@@ -5126,65 +5395,117 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           choices = scales,
           selected = selected
         )
-      },
-      priority = 10
-    )
+      }
+    ) |>
+      shiny::bindEvent(
+        input$color_variable,
+        conversion_sidebar_vars$analysis_select()
+      )
 
     ### Expand samples from hits table ----
-    shiny::observeEvent(
-      input$hits_tab_expand,
-      {
-        if (isFALSE(conversion_vars$expand_helper)) {
-          shinyjs::removeClass(
-            selector = ".hits-tab-col-select-ui .form-group",
-            class = "custom-disable"
-          )
+    shiny::observe({
+      if (isFALSE(conversion_vars$expand_helper)) {
+        shinyjs::removeClass(
+          selector = ".hits-tab-col-select-ui .form-group",
+          class = "custom-disable"
+        )
 
+        choices <- hits_table_names[
+          !hits_table_names %in%
+            c("Sample ID", "Cmp Name", "[Cmp]", "Time", "truncSample_ID")
+        ]
+
+        selected <- hits_table_names[
+          !hits_table_names %in%
+            c("Sample ID", "Cmp Name", "[Cmp]", "Time", "truncSample_ID")
+        ][-c(1:2, 4:5, 7, 9)]
+
+        if (!is.null(input$relbinding_hits_tab_col_select)) {
           shinyWidgets::updatePickerInput(
             session,
-            "hits_tab_col_select",
-            choices = hits_table_names[
-              !hits_table_names %in%
-                c("Sample ID", "Cmp Name", "[Cmp]", "Time", "truncSample_ID")
-            ],
-            selected = hits_table_names[
-              !hits_table_names %in%
-                c("Sample ID", "Cmp Name", "[Cmp]", "Time", "truncSample_ID")
-            ][-c(1:2, 4:5, 7, 9)],
+            "relbinding_hits_tab_col_select",
+            choices = choices,
+            selected = selected
           )
+        }
 
+        if (!is.null(input$kikinact_hits_tab_col_select)) {
           shinyWidgets::updatePickerInput(
             session,
-            "binding_chart",
+            "kikinact_hits_tab_col_select",
+            choices = choices,
+            selected = selected
+          )
+        }
+
+        if (!is.null(input$relbinding_binding_chart)) {
+          shinyWidgets::updatePickerInput(
+            session,
+            "relbinding_binding_chart",
             choices = c("%-Binding", "Total %-Binding"),
             selected = "Total %-Binding",
           )
+        }
 
-          conversion_vars$expand_helper <- TRUE
-        } else {
-          shinyjs::addClass(
-            selector = ".hits-tab-col-select-ui .form-group",
-            class = "custom-disable"
-          )
-
+        if (!is.null(input$kikinact_binding_chart)) {
           shinyWidgets::updatePickerInput(
             session,
-            "hits_tab_col_select",
+            "kikinact_binding_chart",
+            choices = c("%-Binding", "Total %-Binding"),
+            selected = "Total %-Binding",
+          )
+        }
+
+        conversion_vars$expand_helper <- TRUE
+      } else {
+        shinyjs::addClass(
+          selector = ".hits-tab-col-select-ui .form-group",
+          class = "custom-disable"
+        )
+
+        if (!is.null(input$relbinding_hits_tab_col_select)) {
+          shinyWidgets::updatePickerInput(
+            session,
+            "relbinding_hits_tab_col_select",
             choices = c("Theor. Prot.", "Total %-Binding"),
             selected = c("Theor. Prot.", "Total %-Binding")
           )
+        }
 
+        if (!is.null(input$kikinact_hits_tab_col_select)) {
           shinyWidgets::updatePickerInput(
             session,
-            "binding_chart",
+            "kikinact_hits_tab_col_select",
+            choices = c("Theor. Prot.", "Total %-Binding"),
+            selected = c("Theor. Prot.", "Total %-Binding")
+          )
+        }
+
+        if (!is.null(input$relbinding_binding_chart)) {
+          shinyWidgets::updatePickerInput(
+            session,
+            "relbinding_binding_chart",
             choices = "Total %-Binding",
             selected = "Total %-Binding"
           )
-
-          conversion_vars$expand_helper <- FALSE
         }
+
+        if (!is.null(input$kikinact_binding_chart)) {
+          shinyWidgets::updatePickerInput(
+            session,
+            "kikinact_binding_chart",
+            choices = "Total %-Binding",
+            selected = "Total %-Binding"
+          )
+        }
+
+        conversion_vars$expand_helper <- FALSE
       }
-    )
+    }) |>
+      shiny::bindEvent(
+        input$relbinding_hits_tab_expand,
+        input$kikinact_hits_tab_expand
+      )
 
     ### Recalculate results depending on excluded concentrations ----
     shiny::observeEvent(input[["kobs_result_cell_edit"]], {

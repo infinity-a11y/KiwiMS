@@ -440,14 +440,14 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
         # ))
 
         # HiDrive-kinact-KI Testdaten
-        # result_list(readRDS(
-        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results.rds"
-        # ))
+        result_list(readRDS(
+          "C:\\Users\\Marian\\Desktop\\KF_Testing\\results.rds"
+        ))
 
         # HiDrive-2025-09-04_New-Test-data
-        result_list(readRDS(
-          "C:\\Users\\Marian\\Desktop\\KF_Testing\\results_conversion.rds"
-        ))
+        # result_list(readRDS(
+        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results_conversion.rds"
+        # ))
 
         # Update sidebar control inputs
         shiny::updateActionButton(
@@ -483,6 +483,26 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
       } else {
         result_list(NULL)
         analysis_status("pending")
+
+        shinyjs::addClass(
+          selector = "#app-conversion_sidebar-analysis_select > div > div:nth-child(1)",
+          class = "custom-disable"
+        )
+        if (input$run_ki_kinact) {
+          shinyjs::addClass(
+            selector = "#app-conversion_sidebar-analysis_select > div > div:nth-child(2)",
+            class = "custom-disable"
+          )
+        }
+        shinyjs::addClass(
+          selector = ".complex-picker .form-group .bootstrap-select",
+          class = "custom-disable"
+        )
+        shinyjs::removeClass(
+          id = "complex-picker-connector",
+          class = "complex-picker-connector-color",
+          asis = TRUE
+        )
 
         shinyjs::enable("peak_tolerance")
         shinyjs::enable("max_multiples")
@@ -577,6 +597,12 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
     shiny::observe({
       shiny::req(input$analysis_select)
 
+      # Block UI
+      shinyjs::runjs(paste0(
+        'document.getElementById("blocking-overlay").style.display ',
+        '= "block";'
+      ))
+
       if (input$analysis_select == 1) {
         shinyjs::addClass(
           selector = ".complex-picker .form-group .bootstrap-select",
@@ -599,6 +625,18 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
         )
       }
     })
+
+    # shiny::observeEvent(input$run_binding_analysis, {
+    #   shinyjs::addClass(
+    #     selector = ".complex-picker .form-group .bootstrap-select",
+    #     class = "custom-disable"
+    #   )
+    #   shinyjs::removeClass(
+    #     id = "complex-picker-connector",
+    #     class = "complex-picker-connector-color",
+    #     asis = TRUE
+    #   )
+    # })
 
     ## Initial disable of analysis select input ----
     shinyjs::addClass(
