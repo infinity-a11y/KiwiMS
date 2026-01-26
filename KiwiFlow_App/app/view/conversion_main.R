@@ -309,7 +309,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     ns <- session$ns
 
     # Set file upload limit
-    options(shiny.maxRequestSize = 1000^10 * 1024^2)
+    options(shiny.maxRequestSize = 10000 * 1024^2)
 
     # Conversion Declarations/Initiation ----
 
@@ -1392,8 +1392,12 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     ## Render conversion results interface ----
 
     # Activate observer on analysis launch
-    shiny::observeEvent(conversion_sidebar_vars$run_analysis(), {
-      results_observer$resume()
+    shiny::observe({
+      if (is.null(conversion_sidebar_vars$result_list())) {
+        results_observer$suspend()
+      } else {
+        results_observer$resume()
+      }
     })
 
     # Observer rendering UI on conditions
@@ -5360,7 +5364,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         shiny::req(
           conversion_vars$hits_summary,
           input$color_variable,
-          conversion_sidebar_vars$analysis_select() == 1
+          conversion_sidebar_vars$analysis_select() == 1,
+          !is.null(conversion_sidebar_vars$result_list())
         )
 
         color_scale <- input$color_scale
@@ -5399,7 +5404,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     ) |>
       shiny::bindEvent(
         input$color_variable,
-        conversion_sidebar_vars$analysis_select()
+        conversion_sidebar_vars$analysis_select(),
+        conversion_sidebar_vars$run_analysis()
       )
 
     ### Expand samples from hits table ----

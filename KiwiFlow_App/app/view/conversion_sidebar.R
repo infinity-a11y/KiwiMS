@@ -604,6 +604,8 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
       ))
 
       if (input$analysis_select == 1) {
+        shiny::updateRadioButtons(session, "analysis_select", selected = 1)
+
         shinyjs::addClass(
           selector = ".complex-picker .form-group .bootstrap-select",
           class = "custom-disable"
