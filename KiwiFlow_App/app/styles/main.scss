@@ -1435,8 +1435,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 
 #app-conversion_main-proteins_table,
 #app-conversion_main-compounds_table,
-#app-conversion_main-samples_table,
-#app-conversion_main-samples_table_conc_time {
+#app-conversion_main-samples_table {
   color: black;
 }
 
@@ -3534,12 +3533,6 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 
 #app-conversion_sidebar-scroll_btn:hover {
   opacity: 1;
-}
-
-#app-conversion_main-proteins_table > .ht_master > .wtHolder,
-#app-conversion_main-compounds_table > .ht_master > .wtHolder,
-#app-conversion_main-samples_table > .ht_master > .wtHolder {
-  width: fit-content !important;
 }
 
 .hits-table-control-select .bootstrap-select > .dropdown-toggle {

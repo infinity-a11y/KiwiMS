@@ -10,7 +10,8 @@ box::use(
       chart_js,
       sequential_scales,
       qualitative_scales,
-      gradient_scales
+      gradient_scales,
+      paste_hook_js
     ],
 )
 
@@ -200,58 +201,6 @@ prot_comp_handsontable <- function(
     js_tolerance_value
   )
 
-  # Updated onRender: Paste hook + anti-ghosting hooks (hide td during edit)
-  paste_hook_js <- "function(el, x) {
-    var hot = this.hot;
-    if (hot._pasteHookAttached) return;
-    hot._pasteHookAttached = true;
-    
-    var parts = el.id.split('-');
-    var base_id = parts.pop();
-    var nsPrefix = parts.join('-') + (parts.length > 0 ? '-' : '');
-    
-    hot.addHook('beforePaste', function(data, coords) {
-      if (typeof Shiny !== 'undefined' && Shiny.setInputValue) {
-        Shiny.setInputValue(nsPrefix + 'table_paste_instant', {
-          timestamp: Date.now(),
-          rowCount: data.length,
-          colCount: data[0] ? data[0].length : 0
-        }, {priority: 'event'});
-      }
-      return true;
-    });
-    
-    // === FIX GHOSTING: Hide td (no old content/bg visible) ===
-    hot.addHook('afterBeginEditing', function(row, col) {
-      var td = hot.getCell(row, col);
-      if (td) {
-        td.style.visibility = 'hidden';  // Hides td completely
-      }
-      // Optional: Force editor bg white (in case transparent)
-      var editor = hot.getActiveEditor();
-      if (editor && editor.TEXTAREA) {
-        editor.TEXTAREA.style.backgroundColor = 'white';
-        editor.TEXTAREA.style.opacity = '1';
-      }
-    });
-    
-    // === RESTORE AFTER EDIT ===
-    hot.addHook('afterChange', function(changes, source) {
-      if (source === 'edit') {
-        setTimeout(function() {
-          hot.render();  // Re-renders, restores visibility & applies styles
-        }, 10);
-      }
-    });
-    
-    // Also restore on deselect (e.g., ESC/cancel)
-    hot.addHook('afterDeselect', function() {
-      setTimeout(function() {
-        hot.render();
-      }, 10);
-    });
-  }"
-
   # Build the table
   table <- rhandsontable::rhandsontable(
     tab,
@@ -295,6 +244,11 @@ sample_handsontable <- function(
   compounds = NULL,
   disabled = FALSE
 ) {
+  tab5 <<- tab
+  proteins5 <<- proteins
+  compounds5 <<- compounds
+  diabled <<- disabled
+
   cmp_cols <- grep("Compound", colnames(tab))
 
   # Allowed protein and compound values
@@ -372,31 +326,13 @@ sample_handsontable <- function(
     renderer_js <- ""
   }
 
-  paste_hook_js <- "function(el, x) {
-var hot = this.hot;
-if (hot._pasteHookAttached) return;
-hot._pasteHookAttached = true;
-var parts = el.id.split('-');
-var base_id = parts.pop();
-var nsPrefix = parts.join('-') + (parts.length > 0 ? '-' : '');
-hot.addHook('beforePaste', function(data, coords) {
-if (typeof Shiny !== 'undefined' && Shiny.setInputValue) {
-Shiny.setInputValue(nsPrefix + 'table_paste_instant', {
-timestamp: Date.now(),
-rowCount: data.length,
-colCount: data[0] ? data[0].length : 0
-}, {priority: 'event'});
-}
-return true;
-});
-}"
-
   handsontable <- rhandsontable::rhandsontable(
     tab,
     rowHeaders = NULL,
     allowed_per_col = allowed_per_col,
     height = 28 + 23 * ifelse(nrow(tab > 16), 16, nrow(tab)),
-    stretchH = ifelse(disabled, "none", "all")
+    # stretchH = ifelse(disabled, "none", "all")
+    stretchH = "all"
   ) |>
     rhandsontable::hot_cols(
       fixedColumnsLeft = 2,
@@ -420,28 +356,66 @@ return true;
     ) |>
     rhandsontable::hot_table(
       contextMenu = ifelse(disabled, FALSE, TRUE),
-      stretchH = ifelse(disabled, "none", "all")
+      # stretchH = ifelse(disabled, "none", "all")
+      stretchH = "all"
     )
-  # |>
-  # htmlwidgets::onRender(paste_hook_js)
+
+  if (all(c("Concentration", "Time") %in% colnames(tab))) {
+    handsontable <- rhandsontable::hot_col(
+      handsontable,
+      col = which(colnames(tab) %in% c("Concentration", "Time")),
+      type = "numeric",
+      allowInvalid = FALSE
+    ) |>
+      rhandsontable::hot_validate_numeric(
+        cols = which(colnames(tab) %in% c("Concentration", "Time")),
+        min = 0
+      )
+  }
 
   return(handsontable)
 }
 
 # Function to fill missing columns in sample table
 #' @export
-fill_sample_table <- function(sample_table) {
+fill_sample_table <- function(sample_table, ki_kinact) {
+  sample_table <<- sample_table
+  if (ki_kinact) {
+    conc_time <- sample_table[, sapply(
+      c("Concentration", "Time"),
+      grep,
+      names(sample_table)
+    )]
+    names(conc_time) <- c("Concentration", "Time")
+
+    sample_table <- sample_table[,
+      -sapply(
+        c("Concentration", "Time"),
+        grep,
+        names(sample_table)
+      )
+    ]
+  }
+
   col_diff <- abs(ncol(sample_table) - 7)
+  # ifelse(ki_kinact, 9, 7)
   if (col_diff != 0) {
+    # Get concentration, time columns if ki_kinact active
+
     sample_table <- cbind(
       sample_table,
       (data.frame(rep(list(rep("", nrow(sample_table))), col_diff)))
     )
 
+    if (ki_kinact) {
+      sample_table <- cbind(sample_table, conc_time)
+    }
+
     names(sample_table) <- c(
       "Sample",
       "Protein",
-      paste("Compound", 1:5)
+      paste("Compound", 1:5),
+      if (ki_kinact) c("Concentration", "Time")
     )
   }
 
@@ -450,8 +424,24 @@ fill_sample_table <- function(sample_table) {
 
 # Construct cleaned-up sample table with only consecutive non-NA entries
 #' @export
-clean_sample_table <- function(sample_table) {
-  extra_cmp_section <- sample_table[, -(1:2), drop = FALSE]
+clean_sample_table <- function(sample_table, units = NULL) {
+  sample_table4 <<- sample_table
+  units4 <<- units
+  has_conc_time <- all(c("Concentration", "Time") %in% names(sample_table))
+
+  no_cmp_cols <- names(sample_table) %in%
+    c(
+      "Sample",
+      "Protein",
+      if (has_conc_time) {
+        c("Concentration", "Time")
+      }
+    )
+
+  extra_cmp_section <- sample_table[,
+    which(!no_cmp_cols),
+    drop = FALSE
+  ]
 
   df <- extra_cmp_section[,
     colSums(is.na(extra_cmp_section) | extra_cmp_section == "") !=
@@ -492,9 +482,28 @@ clean_sample_table <- function(sample_table) {
 
   # Reattach sample, protein, compound columns
   df <- cbind(sample_table[, 1:2, drop = FALSE], df)
+  if (has_conc_time) {
+    df <- cbind(
+      df,
+      sample_table[, names(sample_table) %in% c("Concentration", "Time")]
+    )
+  }
 
   # Rename columns
-  names(df) <- c("Sample", "Protein", paste("Compound", 1:(ncol(df) - 2)))
+  names(df) <- c(
+    "Sample",
+    "Protein",
+    paste("Compound", 1:(ncol(df) - ifelse(has_conc_time, 4, 2))),
+    if (has_conc_time) {
+      c(
+        paste0(
+          "Concentration",
+          if (!is.null(units)) paste0(" [", units$conc, "]")
+        ),
+        paste0("Time", if (!is.null(units)) paste0(" [", units$time, "]"))
+      )
+    }
+  )
 
   return(df)
 }
@@ -618,6 +627,20 @@ slice_cols <- function(sample_table) {
 # Validate sample table
 #' @export
 check_sample_table <- function(sample_table, proteins, compounds) {
+  sample_table2 <<- sample_table
+  proteins <<- proteins
+  compounds <<- compounds
+  has_conc_time <- all(c("Concentration", "Time") %in% names(sample_table))
+
+  if (has_conc_time) {
+    conc_time_tbl <- sample_table[,
+      names(sample_table) %in% c("Concentration", "Time")
+    ]
+    sample_table <- sample_table[,
+      !names(sample_table) %in% c("Concentration", "Time")
+    ]
+  }
+
   # Check if protein and compound names present
   if (is.null(proteins) || is.null(compounds)) {
     return("Declare Proteins and Compounds")
@@ -657,6 +680,7 @@ check_sample_table <- function(sample_table, proteins, compounds) {
     return("Assign compounds")
   }
 
+  # Check for duplicated compounds
   if (
     any(t(apply(
       sample_table[, -(1:2), drop = FALSE],
@@ -666,6 +690,18 @@ check_sample_table <- function(sample_table, proteins, compounds) {
     )))
   ) {
     return("Duplicated compounds")
+  }
+
+  if (has_conc_time) {
+    # Check for correct concentration input
+    if (any(is.na(conc_time_tbl$Concentration))) {
+      return("Fill Concentrations")
+    }
+
+    # Check for correct time input
+    if (any(is.na(conc_time_tbl$Time))) {
+      return("Fill Time")
+    }
   }
 
   return(TRUE)
@@ -3469,10 +3505,19 @@ new_sample_table <- function(
     rep(list(""), 4)
   )
 
+  if (ki_kinact) {
+    sample_tab <- cbind(
+      sample_tab,
+      Concentration = as.numeric(NA),
+      Time = as.numeric(NA)
+    )
+  }
+
   colnames(sample_tab) <- c(
     "Sample",
     "Protein",
-    paste("Compound", 1:5)
+    paste("Compound", 1:5),
+    if (ki_kinact) c("Concentration", "Time")
   )
 
   return(sample_tab)

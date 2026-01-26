@@ -1,5 +1,58 @@
 # app/logic/conversion_constants.R
 
+# Rhandsontable pasting js hook
+#' @export
+paste_hook_js <- "function(el, x) {
+    var hot = this.hot;
+    if (hot._pasteHookAttached) return;
+    hot._pasteHookAttached = true;
+    
+    var parts = el.id.split('-');
+    var base_id = parts.pop();
+    var nsPrefix = parts.join('-') + (parts.length > 0 ? '-' : '');
+    
+    hot.addHook('beforePaste', function(data, coords) {
+      if (typeof Shiny !== 'undefined' && Shiny.setInputValue) {
+        Shiny.setInputValue(nsPrefix + 'table_paste_instant', {
+          timestamp: Date.now(),
+          rowCount: data.length,
+          colCount: data[0] ? data[0].length : 0
+        }, {priority: 'event'});
+      }
+      return true;
+    });
+    
+    // === FIX GHOSTING: Hide td (no old content/bg visible) ===
+    hot.addHook('afterBeginEditing', function(row, col) {
+      var td = hot.getCell(row, col);
+      if (td) {
+        td.style.visibility = 'hidden';  // Hides td completely
+      }
+      // Optional: Force editor bg white (in case transparent)
+      var editor = hot.getActiveEditor();
+      if (editor && editor.TEXTAREA) {
+        editor.TEXTAREA.style.backgroundColor = 'white';
+        editor.TEXTAREA.style.opacity = '1';
+      }
+    });
+    
+    // === RESTORE AFTER EDIT ===
+    hot.addHook('afterChange', function(changes, source) {
+      if (source === 'edit') {
+        setTimeout(function() {
+          hot.render();  // Re-renders, restores visibility & applies styles
+        }, 10);
+      }
+    });
+    
+    // Also restore on deselect (e.g., ESC/cancel)
+    hot.addHook('afterDeselect', function() {
+      setTimeout(function() {
+        hot.render();
+      }, 10);
+    });
+  }"
+
 # Popover JS auto-close
 #' @export
 popover_autoclose <- shiny::HTML(

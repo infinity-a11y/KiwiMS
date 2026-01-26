@@ -286,12 +286,8 @@ ui <- function(id) {
       ),
       shiny::fluidRow(
         shiny::column(
-          width = 10,
+          width = 12,
           rhandsontable::rHandsontableOutput(ns("samples_table"))
-        ),
-        shiny::column(
-          width = 2,
-          rhandsontable::rHandsontableOutput(ns("samples_table_conc_time"))
         )
       ),
       sample_table_legend,
@@ -426,10 +422,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           selector = ".unit-selectors label",
           class = "custom-disable"
         )
-        shinyjs::removeClass(
-          selector = "#app-conversion_main-samples_table_conc_time",
-          class = "custom-disable"
-        )
       } else {
         shinyjs::addClass(
           selector = ".unit-selectors .form-group .bootstrap-select",
@@ -439,38 +431,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           selector = ".unit-selectors label",
           class = "custom-disable"
         )
-        shinyjs::addClass(
-          selector = "#app-conversion_main-samples_table_conc_time",
-          class = "custom-disable"
-        )
-      }
-    })
-
-    # Render concentration / time input table
-    output$samples_table_conc_time <- rhandsontable::renderRHandsontable({
-      shiny::req(sample_table_data())
-
-      shiny::isolate({
-        if (is.null(conc_time_table_data())) {
-          conc_time_tbl <- data.frame(
-            Concentration = rep("", nrow(sample_table_data())),
-            Time = rep("", nrow(sample_table_data()))
-          )
-        } else {
-          conc_time_tbl <- conc_time_table_data()
-        }
-      })
-
-      if (isFALSE(declaration_vars$samples_confirmed)) {
-        rhandsontable::rhandsontable(
-          conc_time_tbl,
-          rowHeaders = NULL,
-          height = 28 +
-            23 * ifelse(nrow(conc_time_tbl > 16), 16, nrow(conc_time_tbl)),
-          stretchH = "all"
-        )
-      } else {
-        NULL
       }
     })
 
@@ -513,29 +473,14 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         })
 
         # Remove concentration / time columns if present
-        conc_col <- grep("Concentration", colnames(samples_table))
-        time_col <- grep("Time", colnames(samples_table))
-        if (length(conc_col) & length(time_col)) {
-          samples_table <- samples_table[, -c(conc_col, time_col)]
-        }
+        # conc_col <- grep("Concentration", colnames(samples_table))
+        # time_col <- grep("Time", colnames(samples_table))
+        # if (length(conc_col) & length(time_col)) {
+        #   samples_table <- samples_table[, -c(conc_col, time_col)]
+        # }
 
         # Assign to reactive variable
         sample_table_data(samples_table)
-      },
-      priority = 100
-    )
-
-    shiny::observeEvent(
-      input$samples_table_conc_time,
-      {
-        shiny::req(input$samples_table_conc_time)
-
-        # Save current table input
-        suppressWarnings({
-          conc_time_table_data(rhandsontable::hot_to_r(
-            input$samples_table_conc_time
-          ))
-        })
       },
       priority = 100
     )
@@ -587,6 +532,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     }) |>
       shiny::bindEvent(
         list(sample_table_trigger()),
+        # conversion_sidebar_vars$run_ki_kinact(),
         ignoreInit = FALSE
       )
 
@@ -857,7 +803,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
         declaration_vars$sample_table_status <- table_observe(
           tab = "samples",
-          table = clean_sample_table(samples_table_input),
+          table = clean_sample_table(
+            samples_table_input
+          ),
           output = output,
           ns = ns,
           proteins = declaration_vars$protein_table$Protein,
@@ -870,6 +818,21 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         'document.getElementById("blocking-overlay").style.display ',
         '= "none";'
       ))
+    })
+
+    ## Event activate ki_kinact analysis ----
+    shiny::observeEvent(conversion_sidebar_vars$run_ki_kinact(), {
+      shiny::req(input$samples_table)
+
+      sample_table_data(
+        new_sample_table(
+          result = declaration_vars$result,
+          protein_table = declaration_vars$protein_table,
+          compound_table = declaration_vars$compound_table,
+          ki_kinact = conversion_sidebar_vars$run_ki_kinact()
+        )
+      )
+      sample_table_trigger(sample_table_trigger() + 1)
     })
 
     ## Edit button event ----
@@ -890,7 +853,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           # New editable full sample table data
           declaration_vars$samples_confirmed <- FALSE
           sample_table_data(fill_sample_table(
-            sample_table_data()
+            sample_table_data(),
+            ki_kinact = conversion_sidebar_vars$run_ki_kinact()
           ))
           sample_table_trigger(sample_table_trigger() + 1)
 
@@ -977,7 +941,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               new_sample_table(
                 result = declaration_vars$result,
                 protein_table = protein_table,
-                compound_table = declaration_vars$compound_table
+                compound_table = declaration_vars$compound_table,
+                ki_kinact = conversion_sidebar_vars$run_ki_kinact()
               )
             )
             sample_table_trigger(sample_table_trigger() + 1)
@@ -1018,7 +983,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               new_sample_table(
                 result = declaration_vars$result,
                 protein_table = declaration_vars$protein_table,
-                compound_table = compound_table
+                compound_table = compound_table,
+                ki_kinact = conversion_sidebar_vars$run_ki_kinact()
               )
             )
             sample_table_trigger(sample_table_trigger() + 1)
@@ -1036,27 +1002,30 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         } else if (
           input$tabs == "Samples" && declaration_vars$sample_table_status
         ) {
-          if (isTRUE(conversion_sidebar_vars$run_ki_kinact())) {
-            # Attach concentration/time table to clean non-NA sample table input
-            samples_table_conc_time <- rhandsontable::hot_to_r(
-              input$samples_table_conc_time
-            )
+          # if (isTRUE(conversion_sidebar_vars$run_ki_kinact())) {
+          #   # Attach concentration/time table to clean non-NA sample table input
+          #   samples_table_conc_time <- rhandsontable::hot_to_r(
+          #     input$samples_table_conc_time
+          #   )
 
-            # Set colnames with selected time / concentration units
-            colnames(samples_table_conc_time) <- c(
-              paste0("Concentration [", input$conc_unit, "]"),
-              paste0("Time [", input$time_unit, "]")
-            )
+          #   # Set colnames with selected time / concentration units
+          #   colnames(samples_table_conc_time) <- c(
+          #     paste0("Concentration [", input$conc_unit, "]"),
+          #     paste0("Time [", input$time_unit, "]")
+          #   )
 
-            # Merge with samples table
-            sample_table <- cbind(
-              clean_sample_table(sample_table_input()),
-              samples_table_conc_time
-            )
-          } else {
-            # Get clean non-NA sample table without concentration/time input
-            sample_table <- clean_sample_table(sample_table_input())
-          }
+          #   # Merge with samples table
+          #   sample_table <- cbind(
+          #     clean_sample_table(sample_table_input()),
+          #     samples_table_conc_time
+          #   )
+          # } else {
+          # Get clean non-NA sample table without concentration/time input
+          sample_table <- clean_sample_table(
+            sample_table_input(),
+            units = list(conc = input$conc_unit, time = input$time_unit)
+          )
+          # }
 
           # Assign table to reactive variables
           declaration_vars$sample_table <- sample_table
@@ -1206,7 +1175,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       sample_table_data(new_sample_table(
         result = declaration_vars$result,
         protein_table = declaration_vars$protein_table,
-        compound_table = declaration_vars$compound_table
+        compound_table = declaration_vars$compound_table,
+        ki_kinact = conversion_sidebar_vars$run_ki_kinact()
       ))
       sample_table_trigger(sample_table_trigger() + 1)
 
@@ -1324,7 +1294,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           sample_table_data(new_sample_table(
             result = declaration_vars$result,
             protein_table = declaration_vars$protein_table,
-            compound_table = declaration_vars$compound_table
+            compound_table = declaration_vars$compound_table,
+            ki_kinact = conversion_sidebar_vars$run_ki_kinact()
           ))
           sample_table_trigger(sample_table_trigger() + 1)
         }
