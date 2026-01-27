@@ -1385,13 +1385,27 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           ### Compute hits summary ----
           hits_summary <- transform_hits(result_list$"hits_summary")
 
-          if (all(c("[Cmp]", "Time") %in% names(hits_summary))) {
+          # Get concentration and time units
+          units <- c(
+            names(hits_summary)[grep("Conc.", names(hits_summary))],
+            names(hits_summary)[grep("Time", names(hits_summary))]
+          )
+          if (length(units) == 2) {
+            names(units) <- c("Concentration", "Time")
+          }
+
+          units33 <<- units
+
+          conversion_vars$units <- units
+
+          if (length(units) == 2) {
             hits_summary <- hits_summary |>
+              dplyr::mutate(dplyr::across(all_of(unname(units)), as.numeric)) |>
               dplyr::arrange(
                 `Protein`,
                 `Cmp Name`,
-                as.numeric(gsub("µM|mM", "", `[Cmp]`)),
-                as.numeric(gsub("min|s", "", Time))
+                as.numeric(!!rlang::sym(units[["Concentration"]])),
+                as.numeric(!!rlang::sym(units[["Time"]]))
               )
           } else {
             hits_summary <- hits_summary |>
@@ -1417,7 +1431,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             hits_summary$`Sample ID`,
             mapping$original
           )]
-
+          hits_summary9 <<- hits_summary
           conversion_vars$hits_summary <- hits_summary
         }
 
@@ -1641,11 +1655,23 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                         label = "Select Columns",
                         choices = names(hits_summary)[
                           !names(hits_summary) %in%
-                            c("Sample ID", "Cmp Name", "truncSample_ID")
+                            c(
+                              "Sample ID",
+                              "Cmp Name",
+                              units[["Concentration"]],
+                              units[["Time"]],
+                              "truncSample_ID"
+                            )
                         ],
                         selected = names(hits_summary)[
                           !names(hits_summary) %in%
-                            c("Sample ID", "Cmp Name", "truncSample_ID")
+                            c(
+                              "Sample ID",
+                              "Cmp Name",
+                              units[["Concentration"]],
+                              units[["Time"]],
+                              "truncSample_ID"
+                            )
                         ][-c(1:2, 4:5, 7, 9)],
                         multiple = TRUE,
                         options = list(
@@ -1713,7 +1739,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 color_variable = input$color_variable,
                 expand = input$relbinding_hits_tab_expand,
                 na_include = input$relbinding_hits_tab_na,
-                clickable = c("Sample ID", "Protein", "Cmp Name")
+                clickable = c("Sample ID", "Protein", "Cmp Name"),
+                units = units
               )
 
               # Save datatable in reactive variable
@@ -2409,9 +2436,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   tot_binding_bar = input$samples_table_view_tot_binding_bar,
                   truncate_names = input$truncate_names,
                   color_variable = input$color_variable
-                )
+                ),
+                units = units
               )
-            }
+            },
+            server = FALSE
           ) |>
             shiny::bindEvent(
               input$conversion_sample_picker,
@@ -3086,37 +3115,41 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           })
 
           ##### Compounds view table ----
-          output$compounds_table_view <- DT::renderDataTable({
-            shiny::req(
-              hits_summary,
-              input$conversion_compound_picker,
-              input$color_variable,
-              !is.null(input$truncate_names),
-              input$color_scale
-            )
-
-            tbl <- hits_summary |>
-              dplyr::filter(
-                `Cmp Name` == input$conversion_compound_picker
+          output$compounds_table_view <- DT::renderDataTable(
+            {
+              shiny::req(
+                hits_summary,
+                input$conversion_compound_picker,
+                input$color_variable,
+                !is.null(input$truncate_names),
+                input$color_scale
               )
 
-            render_table_view(
-              table = tbl,
-              colors = get_cmp_colorScale(
-                filtered_table = tbl,
-                scale = input$color_scale,
-                variable = input$color_variable,
-                trunc = input$truncate_names
-              ),
-              tab = "Compounds",
-              inputs = list(
-                binding_bar = input$compounds_table_view_binding_bar,
-                tot_binding_bar = input$compounds_table_view_tot_binding_bar,
-                truncate_names = input$truncate_names,
-                color_variable = input$color_variable
+              tbl <- hits_summary |>
+                dplyr::filter(
+                  `Cmp Name` == input$conversion_compound_picker
+                )
+
+              render_table_view(
+                table = tbl,
+                colors = get_cmp_colorScale(
+                  filtered_table = tbl,
+                  scale = input$color_scale,
+                  variable = input$color_variable,
+                  trunc = input$truncate_names
+                ),
+                tab = "Compounds",
+                inputs = list(
+                  binding_bar = input$compounds_table_view_binding_bar,
+                  tot_binding_bar = input$compounds_table_view_tot_binding_bar,
+                  truncate_names = input$truncate_names,
+                  color_variable = input$color_variable
+                ),
+                units = units
               )
-            )
-          }) |>
+            },
+            server = FALSE
+          ) |>
             shiny::bindEvent(
               input$conversion_compound_picker,
               render_trigger(),
@@ -3605,14 +3638,14 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               color <- ~`Sample ID`
             }
 
-            if (all(c("Time", "[Cmp]") %in% names(tbl))) {
-              tbl <- tbl |>
-                dplyr::mutate(
-                  "[Cmp]" = as.numeric(gsub("µM|mM", "", `[Cmp]`)),
-                  Time = as.numeric(gsub("min|s", "", Time))
-                ) |>
-                dplyr::arrange(`[Cmp]`, Time)
-            }
+            # if (length(units) == 2) {
+            #   tbl <- tbl |>
+            #     dplyr::mutate(
+            #       "[Cmp]" = as.numeric(gsub("µM|mM", "", `[Cmp]`)),
+            #       Time = as.numeric(gsub("min|s", "", Time))
+            #     ) |>
+            #     dplyr::arrange(`[Cmp]`, Time)
+            # }
 
             tbl <- tbl |>
               dplyr::group_by(`Cmp Name`) |>
@@ -4060,39 +4093,43 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           })
 
           ##### Proteins view table ----
-          output$proteins_table_view <- DT::renderDataTable({
-            shiny::req(
-              hits_summary,
-              input$conversion_protein_picker,
-              input$color_variable,
-              !is.null(input$truncate_names),
-              input$color_scale
-            )
-
-            tbl <- hits_summary |>
-              dplyr::filter(
-                `Protein` == input$conversion_protein_picker
-                # &
-                #   `Meas. Prot.` != "N/A"
+          output$proteins_table_view <- DT::renderDataTable(
+            {
+              shiny::req(
+                hits_summary,
+                input$conversion_protein_picker,
+                input$color_variable,
+                !is.null(input$truncate_names),
+                input$color_scale
               )
 
-            render_table_view(
-              table = tbl,
-              colors = get_cmp_colorScale(
-                filtered_table = tbl,
-                scale = input$color_scale,
-                variable = input$color_variable,
-                trunc = input$truncate_names
-              ),
-              tab = "Proteins",
-              inputs = list(
-                binding_bar = input$proteins_table_view_binding_bar,
-                tot_binding_bar = input$proteins_table_view_tot_binding_bar,
-                truncate_names = input$truncate_names,
-                color_variable = input$color_variable
+              tbl <- hits_summary |>
+                dplyr::filter(
+                  `Protein` == input$conversion_protein_picker
+                  # &
+                  #   `Meas. Prot.` != "N/A"
+                )
+
+              render_table_view(
+                table = tbl,
+                colors = get_cmp_colorScale(
+                  filtered_table = tbl,
+                  scale = input$color_scale,
+                  variable = input$color_variable,
+                  trunc = input$truncate_names
+                ),
+                tab = "Proteins",
+                inputs = list(
+                  binding_bar = input$proteins_table_view_binding_bar,
+                  tot_binding_bar = input$proteins_table_view_tot_binding_bar,
+                  truncate_names = input$truncate_names,
+                  color_variable = input$color_variable
+                ),
+                units = units
               )
-            )
-          }) |>
+            },
+            server = FALSE
+          ) |>
             shiny::bindEvent(
               render_trigger(),
               input$color_scale,
@@ -4392,7 +4429,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               hits_table = conversion_vars$formatted_hits,
               concentration_colors = conversion_vars$conc_colors,
               withzero = any(
-                conversion_vars$formatted_hits[["[Cmp]"]] == "0 µM"
+                conversion_vars$formatted_hits[[conversion_vars$units[[
+                  "Concentration"
+                ]]]] ==
+                  0
               ),
               selected_cols = input$kikinact_hits_tab_col_select,
               bar_chart = input$kikinact_binding_chart,
@@ -4401,7 +4441,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               truncated = input$truncate_names,
               expand = input$kikinact_hits_tab_expand,
               na_include = input$kikinact_hits_tab_na,
-              clickable = "[Cmp]"
+              clickable = conversion_vars$units[["Concentration"]],
+              units = units
             )
 
             # Save datatable in reactive variable
@@ -4439,7 +4480,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             ) {
               # Get current column indeces of sample and compound columns
               cols <- names(kikinact_hits_current()$x$data)
-              concentration_col <- which(cols == "[Cmp]") - 1
+              concentration_col <- which(
+                cols == conversion_vars$units["Concentration"]
+              ) -
+                1
 
               # Actions if click corresponds to sample or compound
               if (
@@ -5119,7 +5163,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               output[[paste0(local_ui_id, "_hits")]] <- DT::renderDT({
                 tbl <- hits_summary |>
                   dplyr::filter(
-                    `[Cmp]` == paste(local_concentration, "µM")
+                    !!rlang::sym(units["Concentration"]) == local_concentration
                   )
                 render_table_view(
                   table = tbl,
@@ -5127,7 +5171,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   tab = "Concentration",
                   inputs = list(
                     truncate_names = TRUE,
-                    color_variable = "[Cmp]",
+                    color_variable = units["Concentration"],
                     binding_bar = input[[paste0(
                       local_ui_id,
                       "concentrations_table_view_binding_bar"
@@ -5136,7 +5180,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                       local_ui_id,
                       "concentrations_table_view_tot_binding_bar"
                     )]]
-                  )
+                  ),
+                  units = units
                 )
               }) |>
                 shiny::bindEvent(
@@ -5373,15 +5418,33 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           class = "custom-disable"
         )
 
+        hits_table_names <<- hits_table_names
+        conversion_vars_units <<- conversion_vars$units
+
         choices <- hits_table_names[
           !hits_table_names %in%
-            c("Sample ID", "Cmp Name", "[Cmp]", "Time", "truncSample_ID")
+            c(
+              "Sample ID",
+              "Cmp Name",
+              conversion_vars$units[["Concentration"]],
+              conversion_vars$units[["Time"]],
+              "truncSample_ID"
+            )
         ]
 
         selected <- hits_table_names[
           !hits_table_names %in%
-            c("Sample ID", "Cmp Name", "[Cmp]", "Time", "truncSample_ID")
+            c(
+              "Sample ID",
+              "Cmp Name",
+              conversion_vars$units[["Concentration"]],
+              conversion_vars$units[["Time"]],
+              "truncSample_ID"
+            )
         ][-c(1:2, 4:5, 7, 9)]
+
+        choices1 <<- choices
+        selected1 <<- selected
 
         if (!is.null(input$relbinding_hits_tab_col_select)) {
           shinyWidgets::updatePickerInput(
@@ -5466,8 +5529,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       }
     }) |>
       shiny::bindEvent(
-        input$relbinding_hits_tab_expand,
-        input$kikinact_hits_tab_expand
+        input$relbinding_hits_tab_expand
+        # ,
+        # input$kikinact_hits_tab_expand
       )
 
     ### Recalculate results depending on excluded concentrations ----

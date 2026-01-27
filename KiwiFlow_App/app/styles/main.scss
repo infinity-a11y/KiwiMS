@@ -423,6 +423,7 @@ button:focus:not(:focus-visible) {
   color: white;
 }
 
+//TODO: assign height element id specific
 .btn-group > .btn {
   background-color: #e5e5e5;
   color: #404040 !important;
@@ -430,7 +431,7 @@ button:focus:not(:focus-visible) {
   font-weight: 100;
   // font-size: 14px;
   font-size: 15px;
-  height: 35px;
+  // height: 35px;
   align-content: center;
 }
 
@@ -687,13 +688,15 @@ input[type="number"]::-webkit-inner-spin-button {
   vertical-align: -webkit-baseline-middle;
 }
 
+// TODO: make text-align element id specific
 .selectize-dropdown-content {
   overflow-y: auto;
   overflow-x: hidden;
   max-height: 200px;
   min-width: fit-content;
   background: #e5e5e5;
-  text-align: end;
+  // text-align: end;
+  text-align: left;
   position: absolute;
   right: 0%;
   border-radius: 5px;
@@ -1099,8 +1102,8 @@ td.listbox.htDimmed.current.highlight {
   overflow-y: auto;
   max-height: 22rem;
   height: 100%;
-  white-space: pre-wrap;
   word-wrap: break-word;
+  white-space: pre;
 }
 
 #app-deconvolution_main-logtext::-webkit-scrollbar-track,
@@ -1963,16 +1966,6 @@ th.sorting {
   border-top-right-radius: unset;
   padding: unset;
   color: #ffffff;
-}
-
-// .dataTables_scrollHead,
-// .dataTables_scrollBody {
-//   overflow: unset !important;
-// }
-
-table.dataTable thead > tr > th.sorting::after,
-table.dataTable thead > tr > th.sorting::before {
-  opacity: 0.5 !important;
 }
 
 /* ==========================================================================
@@ -3510,8 +3503,9 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   margin: 0;
   margin-top: 10px;
   height: 350px;
-  font-size: 12px;
   padding-right: 30px;
+  line-height: 1.2;
+  font-size: 14px;
 }
 
 .console-container {
@@ -3561,6 +3555,10 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 
 .conversion-log-modal .modal-footer {
   justify-content: space-between;
+}
+
+.conversion-log-modal .modal-content {
+  min-width: fit-content;
 }
 
 .bslib-page-fill {

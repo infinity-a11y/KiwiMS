@@ -299,105 +299,100 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
     shiny::observeEvent(input$run_binding_analysis, {
       if (analysis_status() == "pending") {
         # Delay conversion start
-        Sys.sleep(1)
+        # Sys.sleep(1)
 
-        # Activate JS function for conversion process tracking
-        shinyjs::runjs(sprintf(
-          conversion_tracking_js,
-          ns("console_log"),
-          ns("scroll_btn")
-        ))
+        # # Activate JS function for conversion process tracking
+        # shinyjs::runjs(sprintf(
+        #   conversion_tracking_js,
+        #   ns("console_log"),
+        #   ns("scroll_btn")
+        # ))
 
-        # Add hits
-        withCallingHandlers(
-          expr = {
-            result_with_hits <- add_hits(
-              conversion_main_vars$input_list()$result,
-              sample_table = conversion_main_vars$input_list()$Samples_Table,
-              protein_table = conversion_main_vars$input_list()$Protein_Table,
-              compound_table = conversion_main_vars$input_list()$Compound_Table,
-              peak_tolerance = input$peak_tolerance,
-              max_multiples = input$max_multiples,
-              session = session,
-              ns = ns
-            )
+        # # Add hits
+        # withCallingHandlers(
+        #   expr = {
+        #     result_with_hits <- add_hits(
+        #       conversion_main_vars$input_list()$result,
+        #       sample_table = conversion_main_vars$input_list()$Samples_Table,
+        #       protein_table = conversion_main_vars$input_list()$Protein_Table,
+        #       compound_table = conversion_main_vars$input_list()$Compound_Table,
+        #       peak_tolerance = input$peak_tolerance,
+        #       max_multiples = input$max_multiples,
+        #       session = session,
+        #       ns = ns
+        #     )
 
-            result_with_hits$hits_summary <- summarize_hits(
-              result_with_hits,
-              sample_table = conversion_main_vars$input_list()$Samples_Table
-            )
+        #     result_with_hits$hits_summary <- summarize_hits(
+        #       result_with_hits,
+        #       sample_table = conversion_main_vars$input_list()$Samples_Table
+        #     )
 
-            result_with_hits <<- result_with_hits
+        #     result_with_hits <<- result_with_hits
 
-            # If Ki/kinact analysis is set to be performed
-            if (input$run_ki_kinact) {
-              # Get concentration and time units
-              conc_time <- names(result_with_hits$hits_summary)[unlist(sapply(
-                c("Concentration", "Time"),
-                grep,
-                names(result_with_hits$hits_summary)
-              ))]
-              units <- gsub("Concentration |Time |\\[|\\]", "", conc_time)
-              names(units) <- c("Concentration", "Time")
+        #     # If Ki/kinact analysis is set to be performed
+        #     if (input$run_ki_kinact) {
+        #       # Get concentration and time units
+        #       conc_time <- names(result_with_hits$hits_summary)[unlist(sapply(
+        #         c("Concentration", "Time"),
+        #         grep,
+        #         names(result_with_hits$hits_summary)
+        #       ))]
+        #       units <- gsub("Concentration |Time |\\[|\\]", "", conc_time)
+        #       names(units) <- c("Concentration", "Time")
 
-              # Log initiation of binding kinetics analysis
-              log_binding_kinetics(
-                concentrations = result_with_hits$hits_summary[[conc_time[1]]],
-                times = result_with_hits$hits_summary[[conc_time[2]]],
-                units = units
-              )
+        #       # Log initiation of binding kinetics analysis
+        #       log_binding_kinetics(
+        #         concentrations = result_with_hits$hits_summary[[conc_time[1]]],
+        #         times = result_with_hits$hits_summary[[conc_time[2]]],
+        #         units = units
+        #       )
 
-              # Add binding/kobs results to result list
-              result_with_hits$binding_kobs_result <- add_kobs_binding_result(
-                result_with_hits,
-                conc_time = conc_time,
-                units = units
-              )
+        #       result_with_hits2 <<- result_with_hits
 
-              # Log concentrations
-              log_concentration <- function(concentration, unit) {
-                message(paste(
-                  sprintf(
-                    "   |   ├─ Computing k_obs for %s %s",
-                    concentration,
-                    unit
-                  )
-                ))
-              }
+        #       # Add binding/kobs results to result list
+        #       result_with_hits$binding_kobs_result <- add_kobs_binding_result(
+        #         result_with_hits,
+        #         conc_time = conc_time,
+        #         units = units
+        #       )
 
-              # Add Ki/kinact results to result list
-              result_with_hits$ki_kinact_result <- add_ki_kinact_result(
-                result_with_hits,
-                units = units
-              )
-            }
-          },
-          message = function(m) {
-            clean_msg <- gsub("\\", "\\\\", m$message, fixed = TRUE)
-            clean_msg <- gsub("'", "\\'", clean_msg, fixed = TRUE)
-            clean_msg <- gsub("\n", "<br>", clean_msg, fixed = TRUE)
+        #       # Add Ki/kinact results to result list
+        #       result_with_hits$ki_kinact_result <- add_ki_kinact_result(
+        #         result_with_hits,
+        #         units = units
+        #       )
+        #     }
+        #   },
+        #   message = function(m) {
+        #     clean_msg <- gsub("\\", "\\\\", m$message, fixed = TRUE)
+        #     clean_msg <- gsub("'", "\\'", clean_msg, fixed = TRUE)
+        #     clean_msg <- gsub("\n", "<br>", clean_msg, fixed = TRUE)
 
-            js_cmd <- sprintf(
-              "
-            var el = document.getElementById('%s');
-            if (el) {
-              el.innerHTML += '%s';
-              el.doAutoScroll();
-            }
-              ",
-              ns("console_log"),
-              clean_msg
-            )
+        #     js_cmd <- sprintf(
+        #       "
+        #     var el = document.getElementById('%s');
+        #     if (el) {
+        #       el.innerHTML += '%s';
+        #       el.doAutoScroll();
+        #     }
+        #       ",
+        #       ns("console_log"),
+        #       clean_msg
+        #     )
 
-            shinyjs::runjs(js_cmd)
-          }
-        )
+        #     shinyjs::runjs(js_cmd)
+        #   }
+        # )
 
-        # Assign result list and hits table to reactive vars
-        result_list(result_with_hits)
+        # # Assign result list and hits table to reactive vars
+        # result_list(result_with_hits)
 
         # TODO
         # Dev Mode
+
+        result_list(readRDS(
+          "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_TEST.rds"
+        ))
 
         # result_list(readRDS(
         #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits1.rds"
@@ -864,7 +859,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
                   " – plate well and sample name or ID"
                 ),
                 htmltools::tags$li(
-                  shiny::strong("[Cmp]"),
+                  shiny::strong("Conc."),
                   " – compound concentration"
                 ),
                 htmltools::tags$li(

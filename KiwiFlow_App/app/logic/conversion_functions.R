@@ -1298,19 +1298,6 @@ log_done <- function() {
   # Sys.sleep(0.05)
 }
 
-# Log summary message
-log_summary <- function(n_samples) {
-  time_stamp <- format(Sys.time(), "%H:%M:%S")
-  divider <- paste0(rep("─", 40), collapse = "")
-  message(sprintf(
-    "\n%s\n[%s] BATCH SUMMARY\nStatus:  Process Finished\nSamples: %s total\n%s\n",
-    divider,
-    time_stamp,
-    n_samples,
-    divider
-  ))
-}
-
 # Alert: empty hits argument
 log_err_no_df <- function() {
   msg <- sprintf(
@@ -1342,13 +1329,12 @@ log_err_binding <- function() {
 # Log hits summary
 log_hits_summary <- function(hits_summarized) {
   message(paste(
-    "SUMMARIZING HITS\n  │",
+    "SUMMARIZING HITS\n  │\n",
     sprintf(
-      "  ├─ %s sample(s) screened.\n",
+      " ├─ %s sample(s) screened\n",
       length(unique(hits_summarized$Sample))
     ),
-    sprintf("  └─ %s hit(s) detected in total.", nrow(hits_summarized)),
-    "\n"
+    sprintf(" └─ %s hit(s) detected in total\n", nrow(hits_summarized))
   ))
 }
 
@@ -1356,44 +1342,22 @@ log_hits_summary <- function(hits_summarized) {
 #' @export
 log_binding_kinetics <- function(concentrations, times, units) {
   message(paste(
-    "COMPUTING BINDING KINETICS\n   |\n",
+    "COMPUTING BINDING KINETICS\n  │\n",
     sprintf(
-      "  ├─ %s concentrations from %s to %s [%s] \n",
+      " ├─ %s concentrations from %s to %s [%s] \n",
       length(unique(concentrations)),
       min(concentrations),
       max(concentrations),
       units[1]
     ),
     sprintf(
-      "  ├─ %s time points from %s to %s [%s] \n",
+      " ├─ %s time points from %s to %s [%s] \n",
       length(unique(times)),
       min(times),
       max(times),
       units[2]
     ),
-    "  ├─ Calculate k_obs (observed pseudo-first-order rate constant)"
-  ))
-}
-
-# Log (Kᵢ/kᵢₙₐ꜀ₜ) analysis initiation
-log_ki_kinact_analysis <- function(concentrations, times, units) {
-  message(paste(
-    "COMPUTING BINDING KINETICS\n   |\n",
-    sprintf(
-      "  ├─ %s concentrations from %s to %s [%s] \n",
-      length(unique(concentrations)),
-      min(concentrations),
-      max(concentrations),
-      units[1]
-    ),
-    sprintf(
-      "  ├─ %s time points from %s to %s [%s] \n",
-      length(unique(times)),
-      min(times),
-      max(times),
-      units[2]
-    ),
-    "  ├─ Calculate (Kᵢ/kᵢₙₐ꜀ₜ) (observed pseudo-first-order rate constant)"
+    " ├─ Infer observed first-order rate constant k_obs\n  │  │"
   ))
 }
 
@@ -1402,7 +1366,7 @@ log_filtered_samples <- function(diff) {
   if (diff > 0) {
     message(paste(
       sprintf(
-        "   |   ├─ %s sample(s) ignored due to missing hits",
+        "  │  ├─ %s sample(s) ignored due to missing hits",
         diff
       )
     ))
@@ -1419,7 +1383,7 @@ log_filtered_concentrations <- function(initial_tbl, filtered_tbl, conc_time) {
   if (length(not_present_conc)) {
     message(paste(
       sprintf(
-        "   |   ├─ Concentrations %s are omitted after filtering",
+        "  │  ├─ Concentrations %s are omitted after filtering",
         paste(not_present_conc, collapse = "; ")
       )
     ))
@@ -1432,8 +1396,8 @@ log_concentration <- function(concentration, unit, last) {
     sprintf(
       ifelse(
         last,
-        "   |   └─ Computing k_obs for %s %s",
-        "   |   ├─ Computing k_obs for %s %s"
+        "  │  └─ Computing k_obs for %s %s",
+        "  │  ├─ Computing k_obs for %s %s"
       ),
       concentration,
       unit
@@ -1447,35 +1411,82 @@ log_timepoints <- function(data, unit, last) {
     sprintf(
       ifelse(
         last,
-        "   |       ├─ %s time points included (%s - %s %s)",
-        "   |   |   ├─ %s time points included (%s - %s %s)"
+        "  │     ├─ %s time points included (%s - %s %s)",
+        "  │  │  ├─ %s time points included (%s - %s %s)"
       ),
       nrow(data),
       min(data$time),
       max(data$time),
       unit
-    )
+    ),
+    if (nrow(data) < 3) {
+      sprintf(
+        ifelse(
+          last,
+          "\n  │     └─ %s ≥ 3 time points required for nonlinear fit",
+          "\n  │  │  └─ %s ≥ 3 time points required for nonlinear fit"
+        ),
+        warning_sym
+      )
+    }
   ))
 }
 
 # Log kobs result
-log_kobs_result <- function(result, last) {
+log_kobs_result <- function(result, last, unit) {
   message(
     if (last) {
       paste(
-        "   |       ├─ Nonlinear regression model fitted.\n",
-        sprintf("  |       ├─ k_obs = %s\n", round(result$kobs, 4)),
-        sprintf("  |       ├─ v = %s\n", round(result$v, 4)),
-        sprintf("  |       └─ Plateau = %s", round(result$kobs, 4))
+        "  │     ├─ Nonlinear regression model fitted\n",
+        sprintf(
+          " │     ├─ k_obs = %s %s⁻¹\n",
+          round(result$kobs, 4),
+          unit
+        ),
+        sprintf(" │     ├─ v = %s\n", round(result$v, 4)),
+        sprintf(" │     └─ Plateau = %s\n  │", round(result$kobs, 4))
       )
     } else {
       paste(
-        "   |   |   ├─ Nonlinear regression model fitted.\n",
-        sprintf("  |   |   ├─ k_obs = %s\n", round(result$kobs, 4)),
-        sprintf("  |   |   ├─ v = %s\n", round(result$v, 4)),
-        sprintf("  |   |   └─ Plateau = %s", round(result$kobs, 4))
+        "  │  │  ├─ Nonlinear regression model fitted.\n",
+        sprintf(" │  │  ├─ k_obs = %s %s⁻¹\n", round(result$kobs, 4), unit),
+        sprintf(" │  │  ├─ v = %s\n", round(result$v, 4)),
+        sprintf(" │  │  └─ Plateau = %s\n  │  │", round(result$kobs, 4))
       )
     }
+  )
+}
+
+# Log (Kᵢ/kᵢₙₐ꜀ₜ) analysis initiation
+log_ki_kinact_analysis <- function() {
+  message(paste(
+    "  └─ Infer second-order rate constant Kᵢ/kᵢₙₐ꜀ₜ"
+  ))
+}
+
+# Log Ki/kinact results
+log_ki_kinact_results <- function(results, units) {
+  message(
+    paste0(
+      sprintf(
+        "     ├─ kᵢₙₐ꜀ₜ = %s ± %s %s⁻¹\n",
+        round(results$Params[1, 1], 4),
+        round(results$Params[1, 2], 4),
+        units[["Time"]]
+      ),
+      sprintf(
+        "     ├─ Kᵢ = %s ± %s %s\n",
+        round(results$Params[2, 1], 4),
+        round(results$Params[2, 2], 4),
+        units[["Concentration"]]
+      ),
+      sprintf(
+        "     └─ kᵢₙₐ꜀ₜ/Kᵢ = %s %s⁻¹ %s⁻¹",
+        round(results$Params[1, 1] / results$Params[2, 1], 4),
+        units[["Concentration"]],
+        units[["Time"]]
+      )
+    )
   )
 }
 
@@ -1543,8 +1554,6 @@ add_hits <- function(
 
     log_done()
   }
-
-  log_summary(length(samples))
 
   shinyWidgets::updateProgressBar(
     session = session,
@@ -1680,6 +1689,9 @@ add_kobs_binding_result <- function(
 # Function to add Ki/kinact results to result list
 #' @export
 add_ki_kinact_result <- function(result_list, units) {
+  # Log (Kᵢ/kᵢₙₐ꜀ₜ) analysis initiation
+  log_ki_kinact_analysis()
+
   # Calculcate Ki/kinact from binding/kobs result
   ki_kinact_result <- compute_ki_kinact(
     result_list[["binding_kobs_result"]],
@@ -1688,6 +1700,9 @@ add_ki_kinact_result <- function(result_list, units) {
 
   # Add and display kobs plot to Ki/kinact results
   ki_kinact_result$kobs_plot <- make_kobs_plot(ki_kinact_result)
+
+  # Log Ki/kinact results
+  log_ki_kinact_results(results = ki_kinact_result, units = units)
 
   return(ki_kinact_result)
 }
@@ -1932,7 +1947,7 @@ compute_kobs <- function(hits, units) {
   # Loop over each unique concentration
   for (i in as.character(unique(hits[[conc]]))) {
     last <- ifelse(
-      i == tail(as.character(unique(hits[[conc]])), 1),
+      i == utils::tail(as.character(unique(hits[[conc]])), 1),
       TRUE,
       FALSE
     )
@@ -1953,8 +1968,14 @@ compute_kobs <- function(hits, units) {
     # Log timepoints
     log_timepoints(data = data, unit = units["Time"], last = last)
 
+    # If less than 3 entries abort and continue with next iteration
+    if (nrow(data) < 3) {
+      next
+    }
+    # if (nrow(data) < 3) {
     # Make dummy row to anchor fitting at 0
     dummy_row <- data[1, ]
+    # }
     dummy_row$binding <- 0.0
     dummy_row$time <- 0
 
@@ -2009,7 +2030,11 @@ compute_kobs <- function(hits, units) {
     concentration_list[[i]][["hits"]] <- data
 
     # Log kobs result
-    log_kobs_result(result = concentration_list[[i]], last = last)
+    log_kobs_result(
+      result = concentration_list[[i]],
+      last = last,
+      unit = units["Time"]
+    )
   }
 
   # Reorder concentrations as factor
@@ -3131,7 +3156,12 @@ multiple_spectra <- function(
 
 # Rendering function for relative binding table view
 #' @export
-render_table_view <- function(table, colors, tab, inputs) {
+render_table_view <- function(table, colors, tab, inputs, units) {
+  table1 <<- table
+  colors1 <<- colors
+  tab1 <<- tab
+  inputs1 <<- inputs
+  units1 <<- units
   # If table empty
   if (!nrow(table)) {
     return(DT::datatable(
@@ -3153,8 +3183,8 @@ render_table_view <- function(table, colors, tab, inputs) {
   }
 
   # Get optional concentration and time cols
-  optional_cols <- if (all(c("[Cmp]", "Time") %in% names(table))) {
-    c("[Cmp]", "Time")
+  optional_cols <- if (length(units) == 2) {
+    c(units[["Concentration"]], units[["Time"]])
   } else {
     NULL
   }
@@ -3193,8 +3223,8 @@ render_table_view <- function(table, colors, tab, inputs) {
         )
       ),
       label_color = get_contrast_color(colors[match(
-        if (inputs$color_variable == "[Cmp]") {
-          gsub(" µM", "", table$`[Cmp]`)
+        if (inputs$color_variable == units["Concentration"]) {
+          table[[units["Concentration"]]]
         } else if (inputs$color_variable == "Compounds") {
           `Cmp Name`
         } else if (inputs$color_variable == "Samples") {
@@ -3216,8 +3246,8 @@ render_table_view <- function(table, colors, tab, inputs) {
       } else {
         as.character(`Total %`)
       },
-      col_var = if (inputs$color_variable == "[Cmp]") {
-        `[Cmp]`
+      col_var = if (inputs$color_variable == units["Concentration"]) {
+        !!rlang::sym(units["Concentration"])
       } else if (inputs$color_variable == "Compounds") {
         `Cmp Name`
       } else if (inputs$color_variable == "Samples") {
@@ -3349,16 +3379,16 @@ render_table_view <- function(table, colors, tab, inputs) {
       columns = "col_var",
       target = 'row',
       backgroundColor = DT::styleEqual(
-        levels = if (inputs$color_variable == "[Cmp]") {
-          paste(names(colors), "µM")
+        levels = if (inputs$color_variable == units["Concentration"]) {
+          names(colors)
         } else {
           names(colors)
         },
         values = colors
       ),
       color = DT::styleEqual(
-        levels = if (inputs$color_variable == "[Cmp]") {
-          paste(names(colors), "µM")
+        levels = if (inputs$color_variable == units["Concentration"]) {
+          names(colors)
         } else {
           names(colors)
         },
@@ -3383,8 +3413,25 @@ render_hits_table <- function(
   expand = TRUE,
   na_include = TRUE,
   truncated = NULL,
-  clickable = FALSE
+  clickable = FALSE,
+  units
 ) {
+  hits_table <<- hits_table
+  concentration_colors <<- concentration_colors
+  single_conc <<- single_conc
+  withzero <<- withzero
+  selected_cols <<- selected_cols
+  bar_chart <<- bar_chart
+  compounds <<- compounds
+  samples <<- samples
+  colors <<- colors
+  color_variable <<- color_variable
+  expand <<- expand
+  na_include <<- na_include
+  truncated <<- truncated
+  clickable <<- clickable
+  units1 <<- units
+
   # Modify if samples are summarized instead of expanded
   if (!expand) {
     hits_table <- hits_table |>
@@ -3442,8 +3489,8 @@ render_hits_table <- function(
     "Sample ID",
     "Protein",
     "Cmp Name",
-    if (any("[Cmp]" == names(hits_table))) "[Cmp]" else NULL,
-    if (any("Time" == names(hits_table))) "Time" else NULL,
+    if (length(units["Concentration"])) units[["Concentration"]] else NULL,
+    if (length(units["Time"])) units[["Time"]] else NULL,
     "truncSample_ID"
   )
   hits_table <- hits_table |>
@@ -3555,16 +3602,16 @@ render_hits_table <- function(
         )
     } else {
       if (withzero) {
-        lvls <- paste(c("0", names(concentration_colors)), "µM")
+        lvls <- c("0", names(concentration_colors))
         vals <- plotly::toRGB(c("#e5e5e5", concentration_colors))
       } else {
-        lvls <- paste(names(concentration_colors), "µM")
+        lvls <- names(concentration_colors)
         vals <- plotly::toRGB(concentration_colors)
       }
 
       hits_datatable <- hits_datatable |>
         DT::formatStyle(
-          columns = '[Cmp]',
+          columns = units["Concentration"],
           target = 'row',
           backgroundColor = DT::styleEqual(
             levels = lvls,
@@ -3981,56 +4028,58 @@ transform_hits <- function(hits_summary) {
       `% Binding` = as.numeric(gsub("%", "", gsub("N/A", "0", `% Binding`)))
     )
 
-  # Interface dependent logic
-  if (all(c("time", "binding") %in% names(summary_table))) {
-    summary_table <- summary_table |>
-      dplyr::mutate(
-        time = paste(time, "min"),
-        concentration = paste(concentration, "µM")
-      ) |>
-      dplyr::select(-c(17)) |>
-      dplyr::relocate(c(concentration, time), .before = `Mw Protein [Da]`)
+  # Define column names
+  col_names <- c(
+    "Well",
+    "Sample ID",
+    "Protein",
+    "Theor. Prot.",
+    "Meas. Prot.",
+    "Δ Prot.",
+    "Ⅰ Prot.",
+    "Peak Signal",
+    "Ⅰ Cmp",
+    "Cmp Name",
+    "Theor. Cmp",
+    "Δ Cmp",
+    "Bind. Stoich.",
+    "%-Binding",
+    "Total %-Binding"
+  )
 
-    new_names <- c(
-      "Well",
-      "Sample ID",
-      "Protein",
-      "[Cmp]",
-      "Time",
-      "Theor. Prot.",
-      "Meas. Prot.",
-      "Δ Prot.",
-      "Ⅰ Prot.",
-      "Peak Signal",
-      "Ⅰ Cmp",
-      "Cmp Name",
-      "Theor. Cmp",
-      "Δ Cmp",
-      "Bind. Stoich.",
-      "%-Binding",
-      "Total %-Binding"
-    )
-  } else {
-    new_names <- c(
-      "Well",
-      "Sample ID",
-      "Protein",
-      "Theor. Prot.",
-      "Meas. Prot.",
-      "Δ Prot.",
-      "Ⅰ Prot.",
-      "Peak Signal",
-      "Ⅰ Cmp",
-      "Cmp Name",
-      "Theor. Cmp",
-      "Δ Cmp",
-      "Bind. Stoich.",
-      "%-Binding",
-      "Total %-Binding"
+  # Interface dependent logic
+  conc_time <- sapply(
+    c("Concentration", "Time", "binding"),
+    grepl,
+    names(summary_table)
+  )
+
+  if (sum(conc_time) == 3) {
+    conc_col <- names(summary_table)[which(conc_time[,
+      "Concentration"
+    ])]
+    time_col <- names(summary_table)[which(conc_time[,
+      "Time"
+    ])]
+
+    summary_table <- summary_table |>
+      dplyr::select(-c("binding")) |>
+      dplyr::relocate(
+        c(
+          !!rlang::sym(conc_col),
+          !!rlang::sym(time_col)
+        ),
+        .before = `Mw Protein [Da]`
+      )
+
+    col_names <- append(
+      col_names,
+      c(gsub("Concentration", "Conc.", conc_col), time_col),
+      after = 3
     )
   }
 
-  colnames(summary_table) <- new_names
+  colnames(summary_table) <- col_names
   return(summary_table)
 }
 
