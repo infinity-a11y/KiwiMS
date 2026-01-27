@@ -405,7 +405,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       cbind(Compound = as.character(rep(NA, 9)), na_num)
     })
     sample_table_data <- shiny::reactiveVal()
-    conc_time_table_data <- shiny::reactiveVal()
 
     ## Concentration/Time UI ----
     # Conditional adaption of concentration/time input UI
@@ -653,9 +652,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         # Read results .rds file from selected path
         file_path <- file.path(input$samples_fileinput$datapath)
         declaration_vars$result <- readRDS(file_path)
-
-        # Reset concentration / time input table
-        conc_time_table_data(NULL)
 
         # New table data
         sample_table_data(new_sample_table(
@@ -1168,9 +1164,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         deconvolution_main_vars$continue_conversion()
       )
 
-      # Reset concentration / time input table
-      conc_time_table_data(NULL)
-
       # New table data
       sample_table_data(new_sample_table(
         result = declaration_vars$result,
@@ -1287,9 +1280,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             deconvolution_main_vars$continue_conversion()
           )
 
-          # Reset concentration / time input table
-          conc_time_table_data(NULL)
-
           # New table data
           sample_table_data(new_sample_table(
             result = declaration_vars$result,
@@ -1390,6 +1380,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         })
 
         if (!is.null(result_list)) {
+          soso <<- result_list$"hits_summary"
+
           ### Compute hits summary ----
           hits_summary <- transform_hits(result_list$"hits_summary")
 
@@ -5129,12 +5121,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   dplyr::filter(
                     `[Cmp]` == paste(local_concentration, "µM")
                   )
-
-                testt <<- input[[paste0(
-                  local_ui_id,
-                  "concentrations_table_view_binding_bar"
-                )]]
-
                 render_table_view(
                   table = tbl,
                   colors = conversion_vars$conc_colors,
@@ -6105,7 +6091,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         Protein_Table = protein_table_data(),
         Compound_Table = compound_table_data(),
         Samples_Table = declaration_vars$sample_table,
-        ConcTime_Table = conc_time_table_data(),
         result = declaration_vars$result
       )),
       samples_confirmed = shiny::reactive(declaration_vars$samples_confirmed),

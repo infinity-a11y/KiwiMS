@@ -244,11 +244,6 @@ sample_handsontable <- function(
   compounds = NULL,
   disabled = FALSE
 ) {
-  tab5 <<- tab
-  proteins5 <<- proteins
-  compounds5 <<- compounds
-  diabled <<- disabled
-
   cmp_cols <- grep("Compound", colnames(tab))
 
   # Allowed protein and compound values
@@ -331,12 +326,10 @@ sample_handsontable <- function(
     rowHeaders = NULL,
     allowed_per_col = allowed_per_col,
     height = 28 + 23 * ifelse(nrow(tab > 16), 16, nrow(tab)),
-    # stretchH = ifelse(disabled, "none", "all")
     stretchH = "all"
   ) |>
     rhandsontable::hot_cols(
       fixedColumnsLeft = 2,
-      # renderer = renderer_js,
       type = "text",
       readOnly = ifelse(disabled, TRUE, FALSE)
     ) |>
@@ -356,7 +349,6 @@ sample_handsontable <- function(
     ) |>
     rhandsontable::hot_table(
       contextMenu = ifelse(disabled, FALSE, TRUE),
-      # stretchH = ifelse(disabled, "none", "all")
       stretchH = "all"
     )
 
@@ -379,7 +371,6 @@ sample_handsontable <- function(
 # Function to fill missing columns in sample table
 #' @export
 fill_sample_table <- function(sample_table, ki_kinact) {
-  sample_table <<- sample_table
   if (ki_kinact) {
     conc_time <- sample_table[, sapply(
       c("Concentration", "Time"),
@@ -425,8 +416,6 @@ fill_sample_table <- function(sample_table, ki_kinact) {
 # Construct cleaned-up sample table with only consecutive non-NA entries
 #' @export
 clean_sample_table <- function(sample_table, units = NULL) {
-  sample_table4 <<- sample_table
-  units4 <<- units
   has_conc_time <- all(c("Concentration", "Time") %in% names(sample_table))
 
   no_cmp_cols <- names(sample_table) %in%
@@ -627,9 +616,6 @@ slice_cols <- function(sample_table) {
 # Validate sample table
 #' @export
 check_sample_table <- function(sample_table, proteins, compounds) {
-  sample_table2 <<- sample_table
-  proteins <<- proteins
-  compounds <<- compounds
   has_conc_time <- all(c("Concentration", "Time") %in% names(sample_table))
 
   if (has_conc_time) {
@@ -1264,13 +1250,13 @@ conversion <- function(hits) {
   return(hits)
 }
 
-# 1. Header: The Sample Name
+# Header: The Sample Name
 log_start <- function(sample_name) {
-  message(sprintf("PROCESSING: %s\n  │", sample_name))
+  message(sprintf("Hit Screening: %s\n  │", sample_name))
   Sys.sleep(0.05)
 }
 
-# 2. Status: Peak Info
+# Status: Peak Info
 log_status <- function(n_peaks, m_min, m_max) {
   message(sprintf(
     "  ├─ Status: %s peaks detected [%.2f - %.2f Da]",
@@ -1300,18 +1286,19 @@ log_intensities <- function(total, unbound, binding) {
   # Sys.sleep(0.05)
 }
 
-# 4. Alert: No Peaks
+# Alert: No Peaks
 log_alert <- function(msg = "No protein peak detected") {
   message(sprintf("  ├─ ⚠️ %s.  ", msg))
   # Sys.sleep(0.05)
 }
 
-# 5. Footer: Closing a successful sample
+# Footer: Closing a successful sample
 log_done <- function() {
   message(paste0("  │\n", "  └─ ☑ Sample completed.\n  "))
   # Sys.sleep(0.05)
 }
 
+# Log summary message
 log_summary <- function(n_samples) {
   time_stamp <- format(Sys.time(), "%H:%M:%S")
   divider <- paste0(rep("─", 40), collapse = "")
@@ -1324,6 +1311,7 @@ log_summary <- function(n_samples) {
   ))
 }
 
+# Alert: empty hits argument
 log_err_no_df <- function() {
   msg <- sprintf(
     "  │  └─ %s ALERT: 'hits' argument must be a data frame with at least one row. Skipping.\n",
@@ -1332,6 +1320,7 @@ log_err_no_df <- function() {
   message(msg)
 }
 
+# Alert: discrepancy in expected hits columns
 log_err_cols <- function(current_cols) {
   msg <- sprintf(
     "  │  └─ %s ALERT: 'hits' data frame has %s columns, but 13 are required.\n",
@@ -1341,6 +1330,7 @@ log_err_cols <- function(current_cols) {
   message(msg)
 }
 
+# Alert: 100% Total %-Binding plausibility check
 log_err_binding <- function() {
   msg <- sprintf(
     "  │  └─ %s ALERT: Total relative binding is not 100%%. Check data integrity.\n",
@@ -1349,6 +1339,147 @@ log_err_binding <- function() {
   message(msg)
 }
 
+# Log hits summary
+log_hits_summary <- function(hits_summarized) {
+  message(paste(
+    "SUMMARIZING HITS\n  │",
+    sprintf(
+      "  ├─ %s sample(s) screened.\n",
+      length(unique(hits_summarized$Sample))
+    ),
+    sprintf("  └─ %s hit(s) detected in total.", nrow(hits_summarized)),
+    "\n"
+  ))
+}
+
+# Log binding kinetics analysis initiation
+#' @export
+log_binding_kinetics <- function(concentrations, times, units) {
+  message(paste(
+    "COMPUTING BINDING KINETICS\n   |\n",
+    sprintf(
+      "  ├─ %s concentrations from %s to %s [%s] \n",
+      length(unique(concentrations)),
+      min(concentrations),
+      max(concentrations),
+      units[1]
+    ),
+    sprintf(
+      "  ├─ %s time points from %s to %s [%s] \n",
+      length(unique(times)),
+      min(times),
+      max(times),
+      units[2]
+    ),
+    "  ├─ Calculate k_obs (observed pseudo-first-order rate constant)"
+  ))
+}
+
+# Log (Kᵢ/kᵢₙₐ꜀ₜ) analysis initiation
+log_ki_kinact_analysis <- function(concentrations, times, units) {
+  message(paste(
+    "COMPUTING BINDING KINETICS\n   |\n",
+    sprintf(
+      "  ├─ %s concentrations from %s to %s [%s] \n",
+      length(unique(concentrations)),
+      min(concentrations),
+      max(concentrations),
+      units[1]
+    ),
+    sprintf(
+      "  ├─ %s time points from %s to %s [%s] \n",
+      length(unique(times)),
+      min(times),
+      max(times),
+      units[2]
+    ),
+    "  ├─ Calculate (Kᵢ/kᵢₙₐ꜀ₜ) (observed pseudo-first-order rate constant)"
+  ))
+}
+
+# Log filtered samples
+log_filtered_samples <- function(diff) {
+  if (diff > 0) {
+    message(paste(
+      sprintf(
+        "   |   ├─ %s sample(s) ignored due to missing hits",
+        diff
+      )
+    ))
+  }
+}
+
+# Log filtered concentrations
+log_filtered_concentrations <- function(initial_tbl, filtered_tbl, conc_time) {
+  conc_diff <- unique(initial_tbl[[conc_time[1]]]) %in%
+    unique(filtered_tbl[[conc_time[1]]])
+
+  not_present_conc <- unique(initial_tbl[[conc_time[1]]])[!conc_diff]
+
+  if (length(not_present_conc)) {
+    message(paste(
+      sprintf(
+        "   |   ├─ Concentrations %s are omitted after filtering",
+        paste(not_present_conc, collapse = "; ")
+      )
+    ))
+  }
+}
+
+# Log concentrations
+log_concentration <- function(concentration, unit, last) {
+  message(paste(
+    sprintf(
+      ifelse(
+        last,
+        "   |   └─ Computing k_obs for %s %s",
+        "   |   ├─ Computing k_obs for %s %s"
+      ),
+      concentration,
+      unit
+    )
+  ))
+}
+
+# Log timepoints
+log_timepoints <- function(data, unit, last) {
+  message(paste(
+    sprintf(
+      ifelse(
+        last,
+        "   |       ├─ %s time points included (%s - %s %s)",
+        "   |   |   ├─ %s time points included (%s - %s %s)"
+      ),
+      nrow(data),
+      min(data$time),
+      max(data$time),
+      unit
+    )
+  ))
+}
+
+# Log kobs result
+log_kobs_result <- function(result, last) {
+  message(
+    if (last) {
+      paste(
+        "   |       ├─ Nonlinear regression model fitted.\n",
+        sprintf("  |       ├─ k_obs = %s\n", round(result$kobs, 4)),
+        sprintf("  |       ├─ v = %s\n", round(result$v, 4)),
+        sprintf("  |       └─ Plateau = %s", round(result$kobs, 4))
+      )
+    } else {
+      paste(
+        "   |   |   ├─ Nonlinear regression model fitted.\n",
+        sprintf("  |   |   ├─ k_obs = %s\n", round(result$kobs, 4)),
+        sprintf("  |   |   ├─ v = %s\n", round(result$v, 4)),
+        sprintf("  |   |   └─ Plateau = %s", round(result$kobs, 4))
+      )
+    }
+  )
+}
+
+# Add screened hits to result list
 #' @export
 add_hits <- function(
   results,
@@ -1431,7 +1562,7 @@ add_hits <- function(
 
 # Concatenate and extract all hits data frames from all samples
 #' @export
-summarize_hits <- function(result_list, conc_time = NULL) {
+summarize_hits <- function(result_list, sample_table) {
   # Get samples from result list without session and output elements
   samples <- names(result_list$deconvolution)
 
@@ -1445,21 +1576,24 @@ summarize_hits <- function(result_list, conc_time = NULL) {
     )
   }
 
-  if (!is.null(conc_time)) {
+  conc_time <- names(sample_table)[unlist(sapply(
+    c("Concentration", "Time"),
+    grep,
+    names(sample_table)
+  ))]
+
+  if (length(conc_time) == 2) {
     hits_summarized <- hits_summarized |>
-      # Add concentration, time and binding columns to hits summary
-      dplyr::mutate(
-        time = extract_minutes(Sample),
-        binding = `Total % Binding` * 100,
-        concentration = gsub(
-          "o",
-          ".",
-          sapply(strsplit(hits_summarized$Sample, "_"), `[`, 3)
-        )
+      dplyr::left_join(
+        sample_table[, c("Sample", conc_time)],
+        by = "Sample"
       ) |>
-      dplyr::group_by(concentration) |>
-      dplyr::arrange(as.numeric(concentration), time)
+      dplyr::mutate(binding = `Total % Binding` * 100) |>
+      dplyr::arrange(dplyr::across(all_of(conc_time)))
   }
+
+  # Log hits summary
+  log_hits_summary(hits_summarized)
 
   return(hits_summarized)
 }
@@ -1476,10 +1610,20 @@ extract_minutes <- function(strings) {
 
 # Function to add binding/kobs results to result list
 #' @export
-add_kobs_binding_result <- function(result_list, concentrations_select = NULL) {
+add_kobs_binding_result <- function(
+  result_list,
+  concentrations_select = NULL,
+  units,
+  conc_time
+) {
   # Filter NA
   hits_summary <- result_list$hits_summary |>
     dplyr::filter(!is.na(Compound))
+
+  # Log filtered samples
+  log_filtered_samples(
+    diff = nrow(result_list$hits_summary) - nrow(hits_summary)
+  )
 
   # Optional concentration filter
   if (!is.null(concentrations_select)) {
@@ -1489,8 +1633,15 @@ add_kobs_binding_result <- function(result_list, concentrations_select = NULL) {
     )
   }
 
+  # Log filtered samples
+  log_filtered_concentrations(
+    initial_tbl = result_list$hits_summary,
+    filtered_tbl = hits_summary,
+    conc_time = conc_time
+  )
+
   # Compute kobs
-  binding_kobs_result <- compute_kobs(hits_summary, units = "µM - minutes")
+  binding_kobs_result <- compute_kobs(hits_summary, units = units)
 
   # Add and display binding plot
   binding_kobs_result$binding_plot <- make_binding_plot(binding_kobs_result)
@@ -1528,9 +1679,12 @@ add_kobs_binding_result <- function(result_list, concentrations_select = NULL) {
 
 # Function to add Ki/kinact results to result list
 #' @export
-add_ki_kinact_result <- function(result_list) {
+add_ki_kinact_result <- function(result_list, units) {
   # Calculcate Ki/kinact from binding/kobs result
-  ki_kinact_result <- compute_ki_kinact(result_list[["binding_kobs_result"]])
+  ki_kinact_result <- compute_ki_kinact(
+    result_list[["binding_kobs_result"]],
+    units = units
+  )
 
   # Add and display kobs plot to Ki/kinact results
   ki_kinact_result$kobs_plot <- make_kobs_plot(ki_kinact_result)
@@ -1757,38 +1911,58 @@ predict_values <- function(
   return(prediction_df)
 }
 
-compute_kobs <- function(hits, units = "µM - minutes") {
+compute_kobs <- function(hits, units) {
   # Prepare empty objects
   concentration_list <- list()
   binding_table <- data.frame()
 
-  # Filter non-zero concentrations
-  # TODO add dynamic outlier selection to filter
-  # hits <- dplyr::filter(hits, concentration != "0", concentration != "2.1875")
+  # Concentration and time columns
+  conc <- names(hits)[grep("Concentration", names(hits))]
+  time <- names(hits)[grep("Time", names(hits))]
+  names(hits)[grep("Time", names(hits))] <- "time"
+
+  # Starting values based on units
+  # TODO
+  if (units["Concentration"] == "M" & units["Time"] == "s") {
+    start_vals <- c(v = 1, kobs = 0.0004)
+  } else {
+    start_vals <- c(v = 1, kobs = 0.001)
+  }
 
   # Loop over each unique concentration
-  for (i in unique(hits$concentration)) {
+  for (i in as.character(unique(hits[[conc]]))) {
+    last <- ifelse(
+      i == tail(as.character(unique(hits[[conc]])), 1),
+      TRUE,
+      FALSE
+    )
+
+    # Log concentrations
+    log_concentration(
+      concentration = i,
+      unit = units["Concentration"],
+      last = last
+    )
+
     # TODO
     # Currently no duplicates/triplicates considered
     data <- hits |>
-      dplyr::filter(concentration == i, !duplicated(time))
+      dplyr::filter(!!rlang::sym(conc) == i) |>
+      dplyr::distinct(time, .keep_all = TRUE)
+
+    # Log timepoints
+    log_timepoints(data = data, unit = units["Time"], last = last)
 
     # Make dummy row to anchor fitting at 0
     dummy_row <- data[1, ]
     dummy_row$binding <- 0.0
     dummy_row$time <- 0
+
+    # If Well column exists
     if ("Well" %in% colnames(data)) {
       dummy_row$Well <- "XX"
-    } # If Well column exists
-    data <- rbind(data, dummy_row)
-
-    # Starting values based on units
-    # TODO
-    if (units == "M - seconds") {
-      start_vals <- c(v = 1, kobs = 0.0004)
-    } else {
-      start_vals <- c(v = 1, kobs = 0.001)
     }
+    data <- rbind(data, dummy_row)
 
     # Nonlinear regression with customized minpack.lm::nlsLM() function
     nonlin_mod <- nlsLM_fixed(
@@ -1800,9 +1974,9 @@ compute_kobs <- function(hits, units = "µM - minutes") {
     # Extract parameters
     params <- summary(nonlin_mod)$parameters
     result <- list(
-      kobs = params[2, 1], # Kobs value
-      v = params[1, 1], # v parameter
-      plateau = 100 * (params[1, 1] / params[2, 1]), # Computed max binding %
+      kobs = params[2, 1],
+      v = params[1, 1],
+      plateau = 100 * (params[1, 1] / params[2, 1]),
       nlm = nonlin_mod
     )
     # Add parameters to concentration list
@@ -1833,6 +2007,9 @@ compute_kobs <- function(hits, units = "µM - minutes") {
 
     # Save hits for concentration
     concentration_list[[i]][["hits"]] <- data
+
+    # Log kobs result
+    log_kobs_result(result = concentration_list[[i]], last = last)
   }
 
   # Reorder concentrations as factor
@@ -1850,7 +2027,7 @@ compute_kobs <- function(hits, units = "µM - minutes") {
   return(concentration_list)
 }
 
-compute_ki_kinact <- function(kobs_result, units = "µM - minutes") {
+compute_ki_kinact <- function(kobs_result, units = units) {
   # Get kobs subset
   kobs <- kobs_result$binding_table |>
     dplyr::filter(!duplicated(kobs_result$binding_table$kobs)) |>
@@ -1858,7 +2035,7 @@ compute_ki_kinact <- function(kobs_result, units = "µM - minutes") {
     dplyr::select(conc, kobs)
 
   # Adjust start values to units
-  if (units == "M - seconds") {
+  if (units["Concentration"] == "M" & units["Time"] == "s") {
     start_values <- c(kinact = 0.001, KI = 0.000001)
   } else {
     start_values <- c(kinact = 1000, KI = 10)
@@ -2496,16 +2673,6 @@ multiple_spectra <- function(
   color_variable = NULL,
   hits_summary = NULL
 ) {
-  results_list <<- results_list
-  samples <<- samples
-  cubic <<- TRUE
-  labels_show <<- labels_show
-  time <<- time
-  color_cmp <<- color_cmp
-  truncated <<- truncated
-  color_variable <<- color_variable
-  hits_summary <<- hits_summary
-
   # Omit NA in samples
   samples <- samples[!is.na(samples)]
 
@@ -2965,11 +3132,6 @@ multiple_spectra <- function(
 # Rendering function for relative binding table view
 #' @export
 render_table_view <- function(table, colors, tab, inputs) {
-  table1 <<- table
-  colors1 <<- colors
-  tab1 <<- tab
-  inputs1 <<- inputs
-
   # If table empty
   if (!nrow(table)) {
     return(DT::datatable(
