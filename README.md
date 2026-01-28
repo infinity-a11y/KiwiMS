@@ -32,7 +32,8 @@ KiwiFlow is an interactive pipeline with graphical user interface to perform pro
 
 2.  Run the installer to set KiwiFlow up.
 
-> \[!NOTE\] <i>You may see a security warning from Windows Defender SmartScreen. This is a standard notification that appears because the installer is new and does not yet have a widely recognized digital signature.</i>
+> [!NOTE]
+> <i>You may see a security warning from Windows Defender SmartScreen. This is a standard notification that appears because the installer is new and does not yet have a widely recognized digital signature.</i>
 
 3.  Launching the installer, a blue window titled "Windows protected your PC" may appear.
 4.  On this window, click the small text link that says "More info."
