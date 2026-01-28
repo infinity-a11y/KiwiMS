@@ -43,6 +43,14 @@ start_logging <- function() {
   log_open(log_path, logdir = FALSE)
 }
 
+# Get the current 4-digit session ID
+#' @export
+get_session_id <- function() {
+  # Regex looks for "id" followed by 4 digits before the .log extension
+  session_id <- gsub(".*_id(\\d{4})\\.log$", "\\1", log_path)
+  return(session_id)
+}
+
 # Log messages
 #' @export
 write_log <- function(msg, level = "INFO") {
@@ -110,7 +118,7 @@ format_log <- function(log_text) {
       if (grepl("^={10,}$", line)) {
         formatted_lines <- c(
           formatted_lines,
-          "<hr style='border: 1px solid #555;'>"
+          "<hr style='border: 1px solid #e5e5e5;'>"
         )
       } else if (
         # Metadata Section (Gray & Italic)
@@ -122,7 +130,7 @@ format_log <- function(log_text) {
         formatted_lines <- c(
           formatted_lines,
           paste0(
-            "<div style='color: gray; font-style: italic;'>",
+            "<div style='color: color: lightgray; font-style: italic;'>",
             line,
             "</div>"
           )

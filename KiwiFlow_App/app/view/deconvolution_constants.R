@@ -15,7 +15,7 @@ box::use(
   ],
   clipr[write_clip],
   utils[head, tail],
-  waiter[useWaiter, spin_wandering_cubes, waiter_show, waiter_hide, withWaiter],
+  waiter[useWaiter, spin_wave, waiter_show, waiter_hide, withWaiter],
 )
 
 # Deconvolution initiation interface
@@ -40,7 +40,7 @@ deconvolution_init_ui <- function(ns) {
             shiny$column(
               width = 8,
               shiny$div(
-                class = "deconvolution_info",
+                class = "instruction-info",
                 shiny$HTML(
                   paste(
                     "1. Use the sidebar to select the Waters .raw folder(s) for processing.",
@@ -67,12 +67,19 @@ deconvolution_init_ui <- function(ns) {
                 class = "card-custom",
                 card(
                   card_header(
-                    class = "bg-dark",
-                    "Charge state [z]",
+                    class = "bg-dark help-header",
                     tooltip(
-                      shiny$icon("circle-question"),
+                      "Charge state [z]",
                       "The number of charges the ionized molecule is expected to carry.",
-                      placement = "right"
+                      placement = "bottom"
+                    ),
+                    shiny$div(
+                      class = "tooltip-bttn",
+                      shiny$actionButton(
+                        ns("charge_range_tooltip_bttn"),
+                        label = "",
+                        icon = shiny$icon("circle-question")
+                      )
                     )
                   ),
                   card_body(
@@ -121,12 +128,11 @@ deconvolution_init_ui <- function(ns) {
                 class = "card-custom",
                 card(
                   card_header(
-                    class = "bg-dark",
-                    "Spectrum range [m/z]",
+                    class = "bg-dark help-header",
                     tooltip(
-                      shiny$icon("circle-question"),
-                      "The span of molecular weights to be analyzed.",
-                      placement = "right"
+                      "Deconvolution range [m/z]",
+                      "The span of molecular weights to be deconvoluted.",
+                      placement = "bottom"
                     )
                   ),
                   card_body(
@@ -178,12 +184,19 @@ deconvolution_init_ui <- function(ns) {
                 class = "card-custom",
                 card(
                   card_header(
-                    class = "bg-dark",
-                    "Mass range [Mw]",
+                    class = "bg-dark help-header",
                     tooltip(
-                      shiny$icon("circle-question"),
-                      "The range of mass-to-charge ratios to be detected.",
-                      placement = "right"
+                      "Mass range [Da]",
+                      "The span of molecular weights to be deconvoluted.",
+                      placement = "bottom"
+                    ),
+                    shiny$div(
+                      class = "tooltip-bttn",
+                      shiny$actionButton(
+                        ns("mass_range_tooltip_bttn"),
+                        label = "",
+                        icon = shiny$icon("circle-question")
+                      )
                     )
                   ),
                   card_body(
@@ -201,7 +214,7 @@ deconvolution_init_ui <- function(ns) {
                             "",
                             min = 0,
                             max = 100000,
-                            value = 35000
+                            value = 10000
                           )
                         )
                       )
@@ -220,7 +233,7 @@ deconvolution_init_ui <- function(ns) {
                             "",
                             min = 0,
                             max = 100000,
-                            value = 42000
+                            value = 60000
                           )
                         )
                       )
@@ -232,12 +245,11 @@ deconvolution_init_ui <- function(ns) {
                 class = "card-custom",
                 card(
                   card_header(
-                    class = "bg-dark",
-                    "Retention time [min]",
+                    class = "bg-dark help-header",
                     tooltip(
-                      shiny$icon("circle-question"),
+                      "Retention time [min]",
                       "The anticipated time for the analyte to travel through a chromatography column.",
-                      placement = "right"
+                      placement = "bottom"
                     )
                   ),
                   card_body(
@@ -255,7 +267,7 @@ deconvolution_init_ui <- function(ns) {
                             "",
                             min = 0,
                             max = 100,
-                            value = 1,
+                            value = 0.5,
                             step = 0.05
                           )
                         )
@@ -275,7 +287,7 @@ deconvolution_init_ui <- function(ns) {
                             "",
                             min = 0,
                             max = 100,
-                            value = 1.35,
+                            value = 1.5,
                             step = 0.05
                           )
                         )
@@ -291,10 +303,9 @@ deconvolution_init_ui <- function(ns) {
                 class = "card-custom",
                 card(
                   card_header(
-                    class = "bg-dark",
-                    "Peak parameters",
+                    class = "bg-dark help-header",
                     tooltip(
-                      shiny$icon("circle-question"),
+                      "Peak parameters",
                       "Expected characteristics of spectral peaks.",
                       placement = "right"
                     )
@@ -302,11 +313,14 @@ deconvolution_init_ui <- function(ns) {
                   card_body(
                     shiny$fluidRow(
                       shiny$column(
-                        width = 4,
-                        shiny$h6("Window", style = "margin-top: 8px;")
+                        width = 6,
+                        shiny$h6(
+                          "Detection\n window [Da]",
+                          style = "margin-top: 8px;"
+                        )
                       ),
                       shiny$column(
-                        width = 6,
+                        width = 4,
                         shiny$div(
                           class = "deconv-param-input-adv",
                           disabled(
@@ -319,24 +333,47 @@ deconvolution_init_ui <- function(ns) {
                             )
                           )
                         )
+                      ),
+                      shiny$column(
+                        width = 2,
+                        shiny$div(
+                          class = "tooltip-bttn",
+                          shiny$actionButton(
+                            ns("detection_window_tooltip_bttn"),
+                            label = "",
+                            icon = shiny$icon("circle-question")
+                          )
+                        )
                       )
                     ),
                     shiny$fluidRow(
                       shiny$column(
-                        width = 4,
-                        shiny$h6("Norm", style = "margin-top: 8px;")
+                        width = 6,
+                        tooltip(
+                          shiny$h6(
+                            "Peak\n normalization",
+                            style = "margin-top: 8px;"
+                          ),
+                          shiny$HTML(
+                            "Peak intensity normalization mode:<br> 0 = no normalization<br> 1 = max normalization<br> 2 = normalization to the sum"
+                          ),
+                          placement = "left"
+                        )
                       ),
                       shiny$column(
-                        width = 6,
+                        width = 5,
                         shiny$div(
                           class = "deconv-param-input-adv",
                           disabled(
-                            shiny$numericInput(
+                            shiny$selectInput(
                               ns("peaknorm"),
                               "",
-                              min = 0,
-                              max = 100,
-                              value = 2
+                              choices = c(
+                                "No normalization" = 0,
+                                "Max Normalization" = 1,
+                                "Normalization to Sum" = 2
+                              ),
+                              selected = "Normalization to Sum"
                             )
                           )
                         )
@@ -344,14 +381,14 @@ deconvolution_init_ui <- function(ns) {
                     ),
                     shiny$fluidRow(
                       shiny$column(
-                        width = 4,
+                        width = 6,
                         shiny$h6(
                           "Threshold",
-                          style = "font-size: 0.9em; margin-top: 8px;"
+                          style = "font-size: 1vw; margin-top: 8px;"
                         )
                       ),
                       shiny$column(
-                        width = 6,
+                        width = 4,
                         shiny$div(
                           class = "deconv-param-input-adv",
                           disabled(
@@ -365,6 +402,17 @@ deconvolution_init_ui <- function(ns) {
                             )
                           )
                         )
+                      ),
+                      shiny$column(
+                        width = 2,
+                        shiny$div(
+                          class = "tooltip-bttn",
+                          shiny$actionButton(
+                            ns("threshold_tooltip_bttn"),
+                            label = "",
+                            icon = shiny$icon("circle-question")
+                          )
+                        )
                       )
                     )
                   )
@@ -374,24 +422,31 @@ deconvolution_init_ui <- function(ns) {
                 class = "card-custom",
                 card(
                   card_header(
-                    class = "bg-dark",
-                    "Mass Bins",
+                    class = "bg-dark help-header",
                     tooltip(
-                      shiny$icon("circle-question"),
+                      "Sample Rate (Resolution)",
                       "Discrete intervals of mass values for the spectra.",
-                      placement = "right"
+                      placement = "bottom"
+                    ),
+                    shiny$div(
+                      class = "tooltip-bttn",
+                      shiny$actionButton(
+                        ns("sample_rate_tooltip_bttn"),
+                        label = "",
+                        icon = shiny$icon("circle-question")
+                      )
                     )
                   ),
                   card_body(
                     shiny$fluidRow(
                       shiny$column(
-                        width = 4,
-                        shiny$h6("Size", style = "margin-top: 8px;")
+                        width = 6,
+                        shiny$h6("Size [Da]", style = "margin-top: 8px;")
                       ),
                       shiny$column(
-                        width = 6,
+                        width = 4,
                         shiny$div(
-                          class = "deconv-param-input-adv",
+                          class = "deconv-param-input-adv mass-bin-input",
                           disabled(
                             shiny$numericInput(
                               ns("massbins"),
@@ -430,7 +485,7 @@ deconvolution_init_ui <- function(ns) {
 deconvolution_status_controls <- function(ns) {
   shiny$fluidRow(
     shiny$column(
-      width = 5,
+      width = 6,
       card(
         class = "deconvolution-running-control-card",
         shiny$fluidRow(
@@ -443,7 +498,7 @@ deconvolution_status_controls <- function(ns) {
                 shiny$HTML(
                   paste0(
                     '<i class="fa fa-spinner fa-spin fa-fw fa-2x" style="color: ',
-                    '#38387C;"></i>'
+                    '#7777f9;"></i>'
                   )
                 )
               )
@@ -454,7 +509,7 @@ deconvolution_status_controls <- function(ns) {
                 shiny$HTML(
                   paste0(
                     '<i class="fa-solid fa-spinner fa-2x" style="color: ',
-                    '#38387C;"></i>'
+                    '#7777f9;"></i>'
                   )
                 )
               )
@@ -476,74 +531,77 @@ deconvolution_status_controls <- function(ns) {
                 shiny$HTML(
                   paste0(
                     '<i class="fa-solid fa-circle-check fa-2x" style="color: ',
-                    '#38387C;"></i>'
+                    '#7777f9;"></i>'
                   )
                 )
               )
             )
           ),
           shiny$column(
-            width = 8,
+            width = 7,
             progressBar(
               id = ns("progressBar"),
               value = 0,
               title = "Initiating Deconvolution",
               display_pct = TRUE
             )
-          )
-        )
-      )
-    ),
-    shiny$column(
-      width = 7,
-      card(
-        class = "deconvolution-running-control-card",
-        shiny$fluidRow(
-          shiny$column(
-            width = 3,
-            shiny$actionButton(
-              ns("deconvolute_end"),
-              "Abort",
-              icon = shiny$icon("circle-stop"),
-              width = "100%"
-            )
           ),
           shiny$column(
-            width = 3,
+            width = 1,
             shiny$div(
               class = "decon-btn",
               shiny$actionButton(
                 ns("show_log"),
-                "Output",
+                "",
                 icon = shiny$icon("code"),
                 width = "100%"
               )
             )
           ),
-          shiny$column(
-            width = 3,
-            shiny$div(
-              class = "decon-btn",
-              disabled(
-                shiny$actionButton(
-                  ns("deconvolution_report"),
-                  "Report",
-                  icon = shiny$icon("square-poll-vertical"),
-                  width = "100%"
+        )
+      )
+    ),
+    shiny$column(
+      width = 6,
+      card(
+        class = "deconvolution-running-control-card",
+        shiny$column(
+          width = 12,
+          shiny$fluidRow(
+            shiny$column(
+              width = 4,
+              shiny$actionButton(
+                ns("deconvolute_end"),
+                "Abort",
+                icon = shiny$icon("circle-stop"),
+                width = "100%"
+              )
+            ),
+            shiny$column(
+              width = 4,
+              shiny$div(
+                class = "decon-btn",
+                disabled(
+                  shiny$actionButton(
+                    ns("deconvolution_report"),
+                    "Report",
+                    icon = shiny$icon("square-poll-vertical"),
+                    width = "100%"
+                  )
                 )
               )
-            )
-          ),
-          shiny$column(
-            width = 3,
-            shiny$div(
-              class = "decon-btn",
-              disabled(
-                shiny$actionButton(
-                  ns("forward_deconvolution"),
-                  "Continue",
-                  icon = shiny$icon("forward-fast"),
-                  width = "100%"
+            ),
+            shiny$column(
+              width = 4,
+              shiny$div(
+                class = "decon-btn",
+                disabled(
+                  shiny$actionButton(
+                    ns("forward_deconvolution"),
+                    "Conversion",
+                    icon = shiny$icon("forward-fast"),
+                    width = "100%"
+                  )
                 )
               )
             )

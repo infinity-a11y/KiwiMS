@@ -36,7 +36,6 @@ format:
         target: _blank
 ---
 
-````{html}
 <button onclick="topFunction()" id="topBtn" class="btn btn-primary">↑ Back to Top</button>
 
 <script>
@@ -81,7 +80,9 @@ format:
 
 # Load the result list from RDS file
 result <- readRDS(file.path(params$result_file))
-names_result <- names(result)[!names(result) %in% c("session", "output")]
+names_result <- names(result$deconvolution)[
+  !names(result$deconvolution) %in% c("session", "output")
+]
 ```
 
 `r if(params$comment != "") paste("<div class='comment-text'>", params$comment, "</div> <hr>")`
@@ -95,10 +96,22 @@ names_result <- names(result)[!names(result) %in% c("session", "output")]
 #| include: false
 
 # Load the result list from RDS file
-config_all <- unlist(result[[1]][1])
+config_all <- unlist(result$deconvolution[[1]][[1]])
 names(config_all) <- gsub("config.", "", names(config_all))
 
-imp_params <- names(config_all) %in% c("startz", "endz", "minmz", "maxmz", "masslb", "massub", "peakwindow", "peakthresh", "peaknorm", "massbins")
+imp_params <- names(config_all) %in%
+  c(
+    "startz",
+    "endz",
+    "minmz",
+    "maxmz",
+    "masslb",
+    "massub",
+    "peakwindow",
+    "peakthresh",
+    "peaknorm",
+    "massbins"
+  )
 
 main_params <- config_all[imp_params]
 
@@ -111,7 +124,7 @@ config_ex_path <- config_all[!names(config_all) %in% c("input", "output")]
 
 main_param_table <- data.frame(
   Parameter = names(main_params),
-  Value = as.character(main_params),  
+  Value = as.character(main_params),
   stringsAsFactors = FALSE
 )
 
@@ -126,20 +139,26 @@ main_right <- main_param_table[(2 * third_n_main + 1):nrow(main_param_table), ]
 max_rows_main <- max(nrow(main_left), nrow(main_middle), nrow(main_right))
 
 if (nrow(main_left) < max_rows_main) {
-  empty_rows <- data.frame(Parameter = rep("", max_rows_main - nrow(main_left)), 
-                           Value = rep("", max_rows_main - nrow(main_left)))
+  empty_rows <- data.frame(
+    Parameter = rep("", max_rows_main - nrow(main_left)),
+    Value = rep("", max_rows_main - nrow(main_left))
+  )
   main_left <- rbind(main_left, empty_rows)
 }
 
 if (nrow(main_middle) < max_rows_main) {
-  empty_rows <- data.frame(Parameter = rep("", max_rows_main - nrow(main_middle)), 
-                           Value = rep("", max_rows_main - nrow(main_middle)))
+  empty_rows <- data.frame(
+    Parameter = rep("", max_rows_main - nrow(main_middle)),
+    Value = rep("", max_rows_main - nrow(main_middle))
+  )
   main_middle <- rbind(main_middle, empty_rows)
 }
 
 if (nrow(main_right) < max_rows_main) {
-  empty_rows <- data.frame(Parameter = rep("", max_rows_main - nrow(main_right)), 
-                           Value = rep("", max_rows_main - nrow(main_right)))
+  empty_rows <- data.frame(
+    Parameter = rep("", max_rows_main - nrow(main_right)),
+    Value = rep("", max_rows_main - nrow(main_right))
+  )
   main_right <- rbind(main_right, empty_rows)
 }
 
@@ -148,7 +167,7 @@ main_param_table_wide <- cbind(main_left, main_middle, main_right)
 
 param_table <- data.frame(
   Parameter = names(config_ex_path),
-  Value = as.character(config_ex_path),  
+  Value = as.character(config_ex_path),
   stringsAsFactors = FALSE
 )
 
@@ -164,20 +183,26 @@ param_right <- param_table[(2 * third_n + 1):nrow(param_table), ]
 max_rows <- max(nrow(param_left), nrow(param_middle), nrow(param_right))
 
 if (nrow(param_left) < max_rows) {
-  empty_rows <- data.frame(Parameter = rep("", max_rows - nrow(param_left)), 
-                           Value = rep("", max_rows - nrow(param_left)))
+  empty_rows <- data.frame(
+    Parameter = rep("", max_rows - nrow(param_left)),
+    Value = rep("", max_rows - nrow(param_left))
+  )
   param_left <- rbind(param_left, empty_rows)
 }
 
 if (nrow(param_middle) < max_rows) {
-  empty_rows <- data.frame(Parameter = rep("", max_rows - nrow(param_middle)), 
-                           Value = rep("", max_rows - nrow(param_middle)))
+  empty_rows <- data.frame(
+    Parameter = rep("", max_rows - nrow(param_middle)),
+    Value = rep("", max_rows - nrow(param_middle))
+  )
   param_middle <- rbind(param_middle, empty_rows)
 }
 
 if (nrow(param_right) < max_rows) {
-  empty_rows <- data.frame(Parameter = rep("", max_rows - nrow(param_right)), 
-                           Value = rep("", max_rows - nrow(param_right)))
+  empty_rows <- data.frame(
+    Parameter = rep("", max_rows - nrow(param_right)),
+    Value = rep("", max_rows - nrow(param_right))
+  )
   param_right <- rbind(param_right, empty_rows)
 }
 
@@ -189,15 +214,31 @@ colnames(main_param_table_wide) <- NULL
 colnames(param_table_wide) <- NULL
 
 # Render main parameter table with no headers
-main_param_tab <- knitr::kable(main_param_table_wide, booktabs = TRUE, row.names = FALSE, align = "l") |>
-  kableExtra::kable_styling(full_width = TRUE, bootstrap_options = c("hover", "condensed")) |>
+main_param_tab <- knitr::kable(
+  main_param_table_wide,
+  booktabs = TRUE,
+  row.names = FALSE,
+  align = "l"
+) |>
+  kableExtra::kable_styling(
+    full_width = TRUE,
+    bootstrap_options = c("hover", "condensed")
+  ) |>
   kableExtra::column_spec(c(2, 4, 6), monospace = TRUE) |>
   kableExtra::kable_styling("striped")
 
 
 # Create table with the updated 6 columns
-other_param_tab <- knitr::kable(param_table_wide, booktabs = TRUE, row.names = FALSE, align = "l") |>
-  kableExtra::kable_styling(full_width = TRUE, bootstrap_options = c("hover", "condensed")) |>
+other_param_tab <- knitr::kable(
+  param_table_wide,
+  booktabs = TRUE,
+  row.names = FALSE,
+  align = "l"
+) |>
+  kableExtra::kable_styling(
+    full_width = TRUE,
+    bootstrap_options = c("hover", "condensed")
+  ) |>
   kableExtra::column_spec(c(2, 4, 6), monospace = TRUE) |>
   kableExtra::kable_styling("striped")
 
@@ -220,11 +261,11 @@ cat("</details>")
 if (file.exists(file.path(params$temp_dir, "heatmap.rds"))) {
   heatmap <- readRDS(file.path(params$temp_dir, "heatmap.rds"))
   htmltools::tagList(
-  htmltools::div(
-    style = "max-width: 65%;",
-    heatmap
+    htmltools::div(
+      style = "max-width: 65%;",
+      heatmap
+    )
   )
-)
 }
 ```
 
@@ -233,31 +274,50 @@ if (file.exists(file.path(params$temp_dir, "heatmap.rds"))) {
 #| message: false
 #| warning: false
 
-if(length(names_result) > 1) {
+if (length(names_result) > 1) {
   # Define the number of columns
-num_cols <- 2
+  num_cols <- 2
 
-# Generate clickable list of names in two columns with alternating row colors
-table_rows <- sapply(seq(1, length(names_result), by = num_cols), function(i) {
-  row_color <- ifelse((i %/% num_cols) %% 2 == 0, "#f2f2f27a", "#ffffff")  # Alternate row colors
-  
-  # Create cells for each column
-  cells <- lapply(i:(i + num_cols - 1), function(j) {
-    if (j <= length(names_result)) {
-      paste0("<td><a href='#", tolower(names_result[j]), "'>", names_result[j], "</a></td>")
-    } else {
-      "<td></td>"  # Empty cell for uneven rows
+  # Generate clickable list of names in two columns with alternating row colors
+  table_rows <- sapply(
+    seq(1, length(names_result), by = num_cols),
+    function(i) {
+      row_color <- ifelse((i %/% num_cols) %% 2 == 0, "#f2f2f27a", "#ffffff") # Alternate row colors
+
+      # Create cells for each column
+      cells <- lapply(i:(i + num_cols - 1), function(j) {
+        if (j <= length(names_result)) {
+          paste0(
+            "<td><a href='#",
+            tolower(names_result[j]),
+            "'>",
+            names_result[j],
+            "</a></td>"
+          )
+        } else {
+          "<td></td>" # Empty cell for uneven rows
+        }
+      })
+
+      paste0(
+        "<tr style='background-color:",
+        row_color,
+        ";'>",
+        paste(unlist(cells), collapse = ""),
+        "</tr>"
+      )
     }
-  })
-  
-  paste0("<tr style='background-color:", row_color, ";'>", paste(unlist(cells), collapse = ""), "</tr>")
-})
+  )
 
-# Convert table rows to a single character string with table structure
-clickable_table <- paste("<table class='table table-bordered' style='width:100%; border-collapse: collapse;'>", paste(table_rows, collapse = "\n"), "</table>", sep = "\n")
+  # Convert table rows to a single character string with table structure
+  clickable_table <- paste(
+    "<table class='table table-bordered' style='width:100%; border-collapse: collapse;'>",
+    paste(table_rows, collapse = "\n"),
+    "</table>",
+    sep = "\n"
+  )
 
-
-cat("<br>", clickable_table)
+  cat("<br>", clickable_table)
 }
 
 ```
@@ -267,16 +327,23 @@ cat("<br>", clickable_table)
 #| message: false
 #| warning: false
 
-# Function to convert ggplot to Base64 
+# Function to convert ggplot to Base64
 ggplot_to_base64 <- function(plot, width = 5, height = 5, dpi = 300) {
-  temp_file <- tempfile(fileext = ".png")  # Create temp file
-  
-  ggplot2::ggsave(temp_file, plot = plot, width = width, height = height, dpi = dpi, device = "png") 
-  
-  base64_data <- base64enc::dataURI(file = temp_file, mime = "image/png")  # Convert to Base64
-  
-  unlink(temp_file)  # Delete temp file
-  
+  temp_file <- tempfile(fileext = ".png") # Create temp file
+
+  ggplot2::ggsave(
+    temp_file,
+    plot = plot,
+    width = width,
+    height = height,
+    dpi = dpi,
+    device = "png"
+  )
+
+  base64_data <- base64enc::dataURI(file = temp_file, mime = "image/png") # Convert to Base64
+
+  unlink(temp_file) # Delete temp file
+
   return(base64_data)
 }
 
@@ -284,19 +351,22 @@ ggplot_to_base64 <- function(plot, width = 5, height = 5, dpi = 300) {
 plot_output <- list()
 
 for (name in names_result) {
-  if (!is.null(result[[name]]$decon_spec) && !is.null(result[[name]]$raw_spec)) {
+  if (
+    !is.null(result$deconvolution[[name]]$decon_spec) &&
+      !is.null(result$deconvolution[[name]]$raw_spec)
+  ) {
     # Convert ggplots to Base64 without saving to disk
-    img1_base64 <- ggplot_to_base64(result[[name]]$decon_spec)
-    img2_base64 <- ggplot_to_base64(result[[name]]$raw_spec)
-    
-    config <- result[[name]]$config
-    
+    img1_base64 <- ggplot_to_base64(result$deconvolution[[name]]$decon_spec)
+    img2_base64 <- ggplot_to_base64(result$deconvolution[[name]]$raw_spec)
+
+    config <- result$deconvolution[[name]]$config
+
     config_path <- ifelse(
       length(config$input) > 1,
       paste(config$input[1], config$input[2]),
       config$input
     )
-    
+
     # Create a linked section header and horizontal separator
     section_html <- htmltools::tagList(
       htmltools::tags$section(
@@ -306,8 +376,11 @@ for (name in names_result) {
           class = "anchored",
           `data-anchor-id` = tolower(name),
           htmltools::span(class = "name-part", paste(name)),
-          " ",  
-          htmltools::span(class = "subtitle-part", "Deconvoluted Spectrum | Original Raw Spectrum"),
+          " ",
+          htmltools::span(
+            class = "subtitle-part",
+            "Deconvoluted Spectrum | Original Raw Spectrum"
+          ),
           htmltools::a(
             class = "anchorjs-link",
             `aria-label` = "Anchor",
@@ -329,7 +402,7 @@ for (name in names_result) {
         )
       )
     )
-    
+
     # Append the section to the output list
     plot_output <- append(plot_output, list(section_html))
   }
@@ -339,9 +412,6 @@ for (name in names_result) {
 htmltools::tagList(plot_output)
 ```
 
-`r paste("<br><br>Session:<i>", paste0(Sys.Date(), "_", regmatches(
-    basename(result$session[3]),
-    regexpr("id\\d+", basename(result$session[3]))
-)), "</i>")`
+`r paste("<br><br>Session:<i>", paste0(Sys.Date(), "_", regmatches(     basename(result$session[3]),     regexpr("id\\d+", basename(result$session[3])) )), "</i>")`
 
 ------------------------------------------------------------------------

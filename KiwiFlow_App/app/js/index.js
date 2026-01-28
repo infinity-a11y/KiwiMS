@@ -43,7 +43,7 @@ $(document).ready(() => {
 });
 
 $(document).on('shown.bs.modal', () => {
-  const preElement = document.getElementById('app-deconvolution_process-logtext');
+  const preElement = document.getElementById('app-deconvolution_main-logtext');
   if (!preElement) {
     return;
   }
@@ -53,13 +53,13 @@ $(document).on('shown.bs.modal', () => {
   // Update scroll state when user scrolls
   preElement.addEventListener('scroll', () => {
     const atBottom = (preElement.scrollHeight - preElement.scrollTop
-    - preElement.clientHeight) <= 10;
+      - preElement.clientHeight) <= 10;
     shouldAutoScroll = atBottom;
   });
 
   // When Shiny updates the output, decide whether to scroll
   $(document).on('shiny:value', (event) => {
-    if (event.name === 'app-deconvolution_process-logtext') {
+    if (event.name === 'app-deconvolution_main-logtext') {
       setTimeout(() => {
         if (shouldAutoScroll) {
           preElement.scrollTo({ top: preElement.scrollHeight, behavior: 'smooth' });
@@ -70,7 +70,7 @@ $(document).on('shown.bs.modal', () => {
 });
 
 $(document).on('shown.bs.modal', () => {
-  const button = document.getElementById('app-deconvolution_process-make_deconvolution_report');
+  const button = document.getElementById('app-deconvolution_main-make_deconvolution_report');
   if (!button) {
     return;
   }
@@ -82,17 +82,17 @@ $(document).on('shown.bs.modal', () => {
     }
 
     // Check if the element already exists
-    const preElement = document.getElementById('app-deconvolution_process-decon_rep_logtext');
+    const preElement = document.getElementById('app-deconvolution_main-decon_rep_logtext');
     if (preElement) {
-      smartScroll('app-deconvolution_process-decon_rep_logtext');
+      smartScroll('app-deconvolution_main-decon_rep_logtext');
       return;
     }
 
     // Set up MutationObserver to watch for the element being added
     const observer = new MutationObserver((mutations, obs) => {
-      const preElement = document.getElementById('app-deconvolution_process-decon_rep_logtext');
+      const preElement = document.getElementById('app-deconvolution_main-decon_rep_logtext');
       if (preElement) {
-        smartScroll('app-deconvolution_process-decon_rep_logtext');
+        smartScroll('app-deconvolution_main-decon_rep_logtext');
         obs.disconnect(); // Stop observing once the element is found
       }
     });
@@ -104,9 +104,9 @@ $(document).on('shown.bs.modal', () => {
 
     // Fallback: Retry after a short delay if the element isn't found immediately
     setTimeout(() => {
-      const preElement = document.getElementById('app-deconvolution_process-decon_rep_logtext');
+      const preElement = document.getElementById('app-deconvolution_main-decon_rep_logtext');
       if (preElement) {
-        smartScroll('app-deconvolution_process-decon_rep_logtext');
+        smartScroll('app-deconvolution_main-decon_rep_logtext');
         observer.disconnect();
       }
     }, 500);
@@ -126,7 +126,7 @@ export function smartScroll(elementID) {
   // Update scroll state when user scrolls
   preElement.addEventListener('scroll', () => {
     const atBottom = (preElement.scrollHeight - preElement.scrollTop
-    - preElement.clientHeight) <= 10;
+      - preElement.clientHeight) <= 10;
     shouldAutoScroll = atBottom;
   });
 

@@ -1,3 +1,3 @@
-version=0.2.1
-release_date=2025-09-11
+version=0.3.0
+release_date=2026-01-28
 zip_url=https://github.com/infinity-a11y/KiwiFlow/archive/refs/heads/master.zip

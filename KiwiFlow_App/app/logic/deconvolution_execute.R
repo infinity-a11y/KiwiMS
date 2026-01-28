@@ -35,8 +35,8 @@ tryCatch(
 tryCatch(
   {
     deconvolute(
-      conf$dirs,
-      result_dir,
+      raw_dirs = conf$dirs,
+      result_dir = result_dir,
       startz = conf$params$startz,
       endz = conf$params$endz,
       minmz = conf$params$minmz,
@@ -63,7 +63,7 @@ tryCatch(
     log <- if (file.exists(logfile)) {
       readLines(logfile, warn = FALSE)
     } else {
-      c("No log")
+      "No log"
     }
 
     output <- if (file.exists(file.path(temp, "output.txt"))) {

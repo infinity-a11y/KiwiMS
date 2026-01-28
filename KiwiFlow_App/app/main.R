@@ -11,9 +11,8 @@ box::use(
   app / logic / dev_utils,
   app / view / conversion_main,
   app / view / conversion_sidebar,
-  app / view / deconvolution_process,
+  app / view / deconvolution_main,
   app / view / deconvolution_sidebar,
-  app / view / ki_kinact_sidebar,
   app / view / log_view,
   app / view / log_sidebar,
   app / logic / logging[start_logging, write_log, close_logging],
@@ -24,6 +23,7 @@ box::use(
       get_kiwiflow_version,
       get_latest_release_url,
     ],
+  app / logic / conversion_constants[gpl3_licence, ]
 )
 
 suppressWarnings(library(logr))
@@ -69,44 +69,28 @@ ui <- function(id) {
         )
       ),
       window_title = paste("KiwiFlow", get_kiwiflow_version()["version"]),
-      underline = TRUE,
+      navbar_options = bslib$navbar_options(underline = TRUE),
       bslib$nav_panel(
         title = "Deconvolution",
         bslib$page_sidebar(
           sidebar = deconvolution_sidebar$ui(
             ns("deconvolution_pars")
           ),
-          deconvolution_process$ui(
-            ns("deconvolution_process")
+          deconvolution_main$ui(
+            ns("deconvolution_main")
           )
         )
       ),
       bslib$nav_panel(
         title = "Protein Conversion",
-        class = "locked-panel",
-        shiny$div(id = "overlay-message", "Module still in work ..."),
         bslib$page_sidebar(
-          sidebar = conversion_sidebar$ui(ns("protein_conversion")),
-          bslib$card(
-            bslib$card_header("Conversion Table"),
-            conversion_main$ui(ns("conversion_card"))
-          )
-        )
-      ),
-      bslib$nav_panel(
-        title = "KI/Kinact",
-        class = "locked-panel",
-        shiny$div(id = "overlay-message", "Module still in work ..."),
-        bslib$page_sidebar(
-          sidebar = ki_kinact_sidebar$ui(ns("ki")),
-          bslib$navset_card_tab(
-            bslib$nav_panel(title = "Kobs Table"),
-            bslib$nav_panel(title = "Kinact Table")
-          )
+          sidebar = conversion_sidebar$ui(ns("conversion_sidebar")),
+          conversion_main$ui(ns("conversion_main"))
         )
       ),
       bslib$nav_panel(
         title = "Logs",
+        icon = shiny::icon("list-check"),
         bslib$page_sidebar(
           sidebar = log_sidebar$ui(ns("log_sidebar")),
           bslib$card(
@@ -115,6 +99,43 @@ ui <- function(id) {
         )
       ),
       bslib$nav_spacer(),
+      bslib$nav_item(
+        shiny::actionButton(
+          ns("settings"),
+          "Settings",
+          icon = shiny::icon("gear"),
+          class = "nav-link"
+        )
+      ),
+      bslib$nav_item(
+        shiny::actionButton(
+          ns("licence"),
+          "License",
+          icon = shiny::icon("info"),
+          class = "nav-link"
+        )
+      ),
+      bslib$nav_item(shiny::uiOutput(
+        ns("update_button"),
+        class = "nav-link",
+        style = "cursor: pointer;",
+        onclick = "Shiny.setInputValue('app-open_update_modal', Math.random());"
+      )),
+      bslib$nav_item(
+        shiny::tags$a(
+          id = "unidec-tag",
+          style = "cursor: pointer;",
+          onclick = "Shiny.setInputValue('app-unidec_click', Math.random());",
+          shiny::tags$img(
+            src = "static/UniDec.png",
+            width = "auto",
+            style = "    top: -1px;
+    position: relative;",
+            height = "18px"
+          ),
+          "UniDec"
+        )
+      ),
       bslib$nav_menu(
         title = "Links",
         align = "right",
@@ -123,9 +144,20 @@ ui <- function(id) {
           shiny$tags$a(
             shiny$tags$span(
               shiny$tags$i(class = "fa-brands fa-github me-1"),
-              "GitHub"
+              "KiwiFlow GitHub"
             ),
             href = "https://github.com/infinity-a11y/MSFlow",
+            target = "_blank",
+            class = "nav-link"
+          )
+        ),
+        bslib$nav_item(
+          shiny$tags$a(
+            shiny$tags$span(
+              shiny$tags$i(class = "fa-brands fa-github me-1"),
+              "UniDec GitHub"
+            ),
+            href = "https://github.com/michaelmarty/UniDec",
             target = "_blank",
             class = "nav-link"
           )
@@ -139,14 +171,11 @@ ui <- function(id) {
               ),
               "Liora Bioinformatics"
             ),
-            href = "https://www.liora-bioinformatics.com/home",
+            href = "https://www.liora-bioinformatics.com",
             target = "_blank",
             class = "nav-link"
           )
         )
-      ),
-      bslib$nav_item(
-        shiny$uiOutput(ns("update_button"))
       )
     )
   )
@@ -174,22 +203,34 @@ server <- function(id) {
     log_buttons <- log_sidebar$server("log_sidebar")
     log_view$server("logs", active_tab_reactive, log_buttons)
 
-    # Conversion server
-    conversion_main$server("conversion_card")
-
     reset_button <- shiny$reactiveVal(0)
 
     # Deconvolution sidebar server
-    dirs <- deconvolution_sidebar$server(
+    deconvolution_sidebar_vars <- deconvolution_sidebar$server(
       "deconvolution_pars",
       reset_button = reset_button
     )
 
     # Deconvolution process server
-    deconvolution_process$server(
-      "deconvolution_process",
-      dirs,
+    deconvolution_main_vars <- deconvolution_main$server(
+      "deconvolution_main",
+      deconvolution_sidebar_vars,
+      conversion_main_vars,
       reset_button = reset_button
+    )
+
+    # Conversion sidebar server
+    conversion_sidebar_vars <- conversion_sidebar$server(
+      "conversion_sidebar",
+      conversion_main_vars,
+      deconvolution_main_vars
+    )
+
+    # Conversion main server
+    conversion_main_vars <- conversion_main$server(
+      "conversion_main",
+      conversion_sidebar_vars,
+      deconvolution_main_vars
     )
 
     # Check update availability
@@ -241,11 +282,141 @@ server <- function(id) {
     output$update_button <- shiny$renderUI({
       shiny$req(icon, label)
 
-      shiny$actionButton(
-        inputId = ns("open_update_modal"),
-        label = label,
-        icon = icon,
-        class = "nav-link"
+      shiny::tags$a(
+        icon,
+        label
+      )
+
+      # shiny$actionButton(
+      #   inputId = ns("open_update_modal"),
+      #   label = label,
+      #   icon = icon,
+      #   class = "nav-link"
+      # )
+    })
+
+    # Switch Protein Conversion tab when user forwards
+    shiny$observeEvent(deconvolution_main_vars$forward_deconvolution(), {
+      bslib::nav_select(
+        "tabs",
+        session = session,
+        "Protein Conversion"
+      )
+    })
+
+    # Switch back to Deconvolution module when user forwards
+    shiny$observeEvent(conversion_main_vars$cancel_continuation(), {
+      bslib::nav_select(
+        "tabs",
+        session = session,
+        "Deconvolution"
+      )
+    })
+
+    # Licence Modal Window ----
+    shiny::observeEvent(input$licence, {
+      shiny$showModal(
+        shiny$div(
+          class = "unidec-modal",
+          shiny$modalDialog(
+            title = "End-User License Agreement (GPL v3)",
+            size = "l",
+            easyClose = TRUE,
+            shiny$div(
+              style = "font-size: 14px;",
+              shiny$tags$p(
+                "KiwiFlow is released under the following license:"
+              ),
+              shiny$tags$pre(
+                style = "height: 400px; overflow-y: scroll; background-color: #f8f9fa; 
+                 font-size: 11px; padding: 30px; border: 1px solid #ddd; width: fit-content; margin: 0; justify-self: center;",
+                shiny::HTML(gpl3_licence)
+              )
+            ),
+            footer = shiny$tagList(
+              shiny$modalButton("Close")
+            )
+          )
+        )
+      )
+    })
+
+    # Unidec Modal Window ----
+    shiny::observeEvent(input$unidec_click, {
+      shiny$showModal(
+        shiny$div(
+          class = "unidec-modal",
+          shiny$modalDialog(
+            title = shiny$span(
+              shiny$icon("info-circle"),
+              "UniDec - Acknowledgement"
+            ),
+            size = "l",
+            easyClose = TRUE,
+
+            shiny$div(
+              style = "font-size: 14px;",
+              shiny::HTML(
+                '
+        <p>The deconvolution and peak picking algorithms within this software are powered by 
+        <b>UniDec</b> - Universal Deconvolution of Mass and Ion Mobility Spectra (<a href="https://github.com/michaelmarty/UniDec" target="_blank">github.com/michaelmarty/UniDec</a>).</p>
+        
+        <p>We gratefully acknowledge the work of <b>Marty et al.</b> in developing these 
+        Bayesian deconvolution methods.</p>
+        
+        <hr style="margin: 1rem 0;">
+        
+        <h5 style="color: #2c3e50;">Citation Request</h4>
+        <p>If you utilize the deconvolution or peak picking results from this software in 
+        your research or publications, the authors of UniDec request that you cite their original paper:</p>
+        
+        <div style="background-color: #f8f9fa; padding: 15px; border-left: 5px solid #007bff; margin-bottom: 10px;">
+          M. T. Marty, A. J. Baldwin, E. G. Marklund, G. K. A. Hochberg, J. L. P. Benesch, C. V. Robinson. 
+          <br><b>"UniDec: Universal Deconvolution of Mass and Ion Mobility Spectra."</b> 
+          <br><i>Anal. Chem.</i> 2015, 87, 4370-4376.
+        </div>
+      '
+              ),
+              shiny::div(
+                shiny$tags$textarea(
+                  id = "bibtex_unidec",
+                  readonly = "readonly",
+                  style = "width: 100%; height: 140px; font-family: monospace; font-size: 12px; 
+             background-color: #f4f4f4; padding: 10px;  
+             resize: none; border: 1px solid #ccc; border-radius: 4px;",
+                  "@article{Marty2015UniDec,
+  author = {Marty, Michael T. and Baldwin, Andrew J. and Marklund, Erik G. and Hochberg, Georg K. A. and Benesch, Justin L. P. and Robinson, Carol V.},
+  title = {UniDec: Universal Deconvolution of Mass and Ion Mobility Spectra},
+  journal = {Analytical Chemistry},
+  volume = {87},
+  number = {8},
+  pages = {4370-4376},
+  year = {2015},
+  doi = {10.1021/acs.analchem.5b00140}
+}"
+                ),
+                shiny$tags$button(
+                  "Copy",
+                  id = "copy_btn",
+                  class = "btn btn-default btn-sm",
+                  style = "position: absolute; bottom: 40px; right: 2.5rem; z-index: 10; opacity: 0.8;",
+                  onclick = "
+      var textArea = document.getElementById('bibtex_unidec');
+      textArea.select();
+      document.execCommand('copy');
+      var btn = document.getElementById('copy_btn');
+      btn.innerHTML = 'Copied!';
+      setTimeout(function(){ btn.innerHTML = 'Copy'; }, 2000);
+    "
+                )
+              )
+            ),
+
+            footer = shiny$tagList(
+              shiny$modalButton("Dismiss")
+            )
+          )
+        )
       )
     })
 
@@ -306,7 +477,6 @@ server <- function(id) {
     })
 
     # Hide waiter
-    Sys.sleep(2)
     waiter_hide()
   })
 }

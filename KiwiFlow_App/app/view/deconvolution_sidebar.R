@@ -30,6 +30,7 @@ ui <- function(id) {
 
   sidebar(
     title = "Select Files",
+    width = "23rem",
     shiny::tags$div(
       style = "display: flex; gap: 0.5em;",
       shinyDirButton(
@@ -236,7 +237,7 @@ server <- function(id, reset_button) {
             shiny::HTML(
               paste0(
                 '<i class="fa-solid fa-circle-check" style="font-size:1em; c',
-                'olor:#8BC34A; margin-right: 10px;"></i>',
+                'olor:#000000; margin-right: 10px;"></i>',
                 "Destination path is valid."
               )
             )
@@ -292,7 +293,7 @@ server <- function(id, reset_button) {
               shiny::HTML(
                 paste0(
                   '<i class="fa-solid fa-circle-check" style="font-size:1em; c',
-                  'olor:#8BC34A; margin-right: 10px;"></i>',
+                  'olor:#000000; margin-right: 10px;"></i>',
                   "Directory is a valid .raw result folder."
                 )
               )
@@ -401,7 +402,7 @@ server <- function(id, reset_button) {
               shiny::HTML(
                 paste0(
                   '<i class="fa-solid fa-circle-check" style="font-size:1em; col',
-                  'or:#8BC34A; margin-right: 10px;"></i>',
+                  'or:#000000; margin-right: 10px;"></i>',
                   paste(
                     "<b>",
                     length(raw_dirs),
