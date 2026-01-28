@@ -14,7 +14,7 @@ KiwiFlow is an interactive pipeline with graphical user interface to perform pro
 
 ### Current Version: KiwiFlow 0.3.0
 
-<i> 2025-09-11 </i> <br> <b>KiwiFlow 0.2.1 - Robustified Installation</b> <br> <https://github.com/infinity-a11y/KiwiFlow/releases/tag/0.2.1>
+<i> 2026-01-28 </i> <br> <b>KiwiFlow 0.3.0 - Protein Conversion Module </b> <br> <https://github.com/infinity-a11y/KiwiFlow/releases/tag/0.3.0>
 
 <br>
 
@@ -28,7 +28,7 @@ KiwiFlow is an interactive pipeline with graphical user interface to perform pro
 
 | OS | Version | Download | SHA256 |
 |------------------|------------------|------------------|------------------|
-| Windows 10/11 | 0.2.1 | [KiwiFlow_2025-09-11_Setup.exe](https://github.com/infinity-a11y/KiwiFlow/releases/download/0.2.1/KiwiFlow_2025-09-11_Setup.exe) | <sub><sup>5B853A897342E1DA297EFF9DCDB68731AD13BEEBF74CA33494E89125AB7A2153</sup></sub> |
+| Windows 10/11 | 0.3.0 | [KiwiFlow_2026-01-28_Setup.exe](https://github.com/infinity-a11y/KiwiFlow/releases/download/0.3.0/KiwiFlow_2026-01-28_Setup.exe) | <sub><sup>F840807BB467C8F777F6CD5FF2F7A5980A7E2983266FDBB28834B70D64D32DEF</sup></sub> |
 
 2.  Run the installer to set KiwiFlow up.
 
