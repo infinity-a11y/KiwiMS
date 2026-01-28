@@ -12,7 +12,7 @@ KiwiFlow is an interactive pipeline with graphical user interface to perform pro
 
 <br>
 
-### Current Version: KiwiFlow 0.2.1
+### Current Version: KiwiFlow 0.3.0
 
 <i> 2025-09-11 </i> <br> <b>KiwiFlow 0.2.1 - Robustified Installation</b> <br> <https://github.com/infinity-a11y/KiwiFlow/releases/tag/0.2.1>
 

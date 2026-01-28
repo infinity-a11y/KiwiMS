@@ -3804,7 +3804,7 @@ new_sample_table <- function(
     "Sample",
     "Protein",
     paste("Compound", 1:5),
-    if (ki_kinact) c("Concentration", "Time")
+    if (!is.null(ki_kinact) && ki_kinact) c("Concentration", "Time")
   )
 
   return(sample_tab)

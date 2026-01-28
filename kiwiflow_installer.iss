@@ -1,7 +1,7 @@
 [Setup]
 AppName=KiwiFlow
 AppId=KiwiFlow
-AppVersion=0.2.2
+AppVersion=0.3.0
 AppPublisher=Marian Freisleben
 DefaultDirName={autopf}\KiwiFlow
 DisableDirPage=yes
@@ -9,7 +9,7 @@ DefaultGroupName=KiwiFlow
 Compression=lzma2
 SolidCompression=yes
 OutputDir=.
-OutputBaseFilename=KiwiFlow_2025-08-19_Setup
+OutputBaseFilename=KiwiFlow_2026-01-28_Setup
 SetupIconFile=setup\favicon.ico
 PrivilegesRequired=admin
 FlatComponentsList=no
