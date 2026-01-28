@@ -1652,9 +1652,6 @@ add_kobs_binding_result <- function(
   # Compute kobs
   binding_kobs_result <- compute_kobs(hits_summary, units = units)
 
-  # Add and display binding plot
-  binding_kobs_result$binding_plot <- make_binding_plot(binding_kobs_result)
-
   # Make kobs result table
   # Get measured concentrations
   concentrations <- which(
@@ -1698,9 +1695,6 @@ add_ki_kinact_result <- function(result_list, units) {
     units = units
   )
 
-  # Add and display kobs plot to Ki/kinact results
-  ki_kinact_result$kobs_plot <- make_kobs_plot(ki_kinact_result)
-
   # Log Ki/kinact results
   log_ki_kinact_results(results = ki_kinact_result, units = units)
 
@@ -1709,7 +1703,17 @@ add_ki_kinact_result <- function(result_list, units) {
 
 # Function to generate and display binding plot
 #' @export
-make_binding_plot <- function(kobs_result, filter_conc = NULL) {
+make_binding_plot <- function(
+  kobs_result,
+  filter_conc = NULL,
+  colors = NULL,
+  units = NULL
+) {
+  kobs_result <<- kobs_result
+  filter_conc <<- filter_conc
+  colors1 <<- colors
+  units1 <<- units
+
   # Filter for specified concentration
   if (!is.null(filter_conc)) {
     kobs_result$binding_table <- dplyr::filter(
@@ -1729,6 +1733,7 @@ make_binding_plot <- function(kobs_result, filter_conc = NULL) {
     symbols[1:length(levels(df_points$concentration))],
     levels(df_points$concentration)
   )
+
   # Generate plot
   binding_plot <- plotly::plot_ly() |>
     # Predicted/modeled binding
@@ -1737,38 +1742,57 @@ make_binding_plot <- function(kobs_result, filter_conc = NULL) {
       x = ~time,
       y = ~predicted_binding,
       color = ~concentration,
-      colors = "Set1",
+      legendgroup = ~concentration,
+      colors = colors,
       symbols = symbol_map,
       line = list(width = 2, opacity = 0.6),
       hovertemplate = paste(
         "<b>Predicted</b><br>",
-        "Time: %{x}<br>",
+        paste(
+          "Time: %{x}",
+          gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+          "<br>"
+        ),
         "%-Binding: %{y:.2f}<br>",
-        "K<sub>obs</sub>: %{customdata:.2f}<extra></extra>"
+        paste0(
+          "K<sub>obs</sub>: %{customdata:.2f} ",
+          gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+          "⁻¹"
+        ),
+        "<extra></extra>"
       ),
       customdata = ~kobs,
       showlegend = FALSE
     ) |>
     # Observed binding
     plotly::add_markers(
-      data = df_points,
+      data = dplyr::filter(df_points, !is.na(kobs)),
       x = ~time,
       y = ~binding,
       color = ~concentration,
-      colors = "Set1",
+      legendgroup = ~concentration,
+      colors = colors,
       symbol = ~concentration,
       marker = list(
         size = 12,
-        opacity = 0.9,
-        # Changed marker border from black to white for visibility
-        line = list(width = 1.5, color = "white")
+        opacity = 0.8,
+        line = list(width = 1, color = "white")
       ),
       legendgroup = ~concentration,
-      hovertemplate = paste(
+      hovertemplate = ~ paste(
         "<b>Observed</b><br>",
-        "Time: %{x}<br>",
+        paste(
+          "Time: %{x}",
+          gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+          "<br>"
+        ),
         "%-Binding: %{y:.2f}<br>",
-        "K<sub>obs</sub>: %{customdata:.2f}<extra></extra>"
+        paste0(
+          "K<sub>obs</sub>: %{customdata:.2f} ",
+          gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+          "⁻¹"
+        ),
+        "<extra></extra>"
       ),
       customdata = ~kobs,
       showlegend = ifelse(is.null(filter_conc), TRUE, FALSE)
@@ -1777,23 +1801,27 @@ make_binding_plot <- function(kobs_result, filter_conc = NULL) {
       hovermode = "closest",
       paper_bgcolor = "rgba(0,0,0,0)",
       plot_bgcolor = "rgba(0,0,0,0)",
-      # Global font settings (White)
       font = list(size = 14, color = "white"),
       legend = list(
-        title = list(text = "Concentration [µM]", font = list(color = "white")),
+        title = list(
+          text = paste0(
+            "Concentration [",
+            gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
+            "]"
+          ),
+          font = list(color = "white")
+        ),
         bgcolor = "rgba(0,0,0,0)",
         bordercolor = "rgba(0,0,0,0)",
         font = list(color = "white")
       ),
-      # X-Axis Styling (White)
       xaxis = list(
         title = "Time [min]",
-        color = "white", # Changes tick labels and axis line
+        color = "white",
         showgrid = TRUE,
-        gridcolor = "rgba(255, 255, 255, 0.2)", # Semi-transparent white grid
+        gridcolor = "rgba(255, 255, 255, 0.2)",
         zerolinecolor = "rgba(255, 255, 255, 0.5)"
       ),
-      # Y-Axis Styling (White)
       yaxis = list(
         title = "Binding [%]",
         color = "white",
@@ -1808,7 +1836,8 @@ make_binding_plot <- function(kobs_result, filter_conc = NULL) {
 }
 
 # Function to generate and display kobs plot
-make_kobs_plot <- function(ki_kinact_result) {
+#' @export
+make_kobs_plot <- function(ki_kinact_result, colors, units) {
   # Get predicted/modeled kobs
   df <- ki_kinact_result$Kobs_Data[
     !is.na(ki_kinact_result$Kobs_Data$predicted_kobs),
@@ -1819,25 +1848,17 @@ make_kobs_plot <- function(ki_kinact_result) {
     !is.na(ki_kinact_result$Kobs_Data$kobs) &
       ki_kinact_result$Kobs_Data$kobs != 0,
   ]
-
-  # Set colors to corresponding concentration
-  discrete_colors <- RColorBrewer::brewer.pal(
-    length(unique(df_points$conc)),
-    "Set1"
-  )
-  ordered_kobs <- df_points |>
-    dplyr::arrange(dplyr::desc(conc)) |>
-    dplyr::reframe(kobs) |>
-    unlist()
-  color_map <- stats::setNames(
-    discrete_colors,
-    ordered_kobs
-  )
+  df_points$conc <- factor(df_points$conc, levels = sort(df_points$conc))
 
   # Set symbols to corresponding concentration
+  ordered_conc <- df_points |>
+    dplyr::arrange(dplyr::desc(conc)) |>
+    dplyr::reframe(conc) |>
+    unlist()
+
   symbol_map <- stats::setNames(
-    symbols[1:length(ordered_kobs)],
-    ordered_kobs
+    symbols[1:length(ordered_conc)],
+    ordered_conc
   )
 
   # Generate plot
@@ -1847,27 +1868,54 @@ make_kobs_plot <- function(ki_kinact_result) {
       data = df,
       x = ~conc,
       y = ~predicted_kobs,
-      colors = color_map,
+      colors = colors,
       symbols = symbol_map,
-      line = list(width = 2, color = "white"),
-      hovertemplate = "<b>Predicted</b><br>[Cmp]: %{x:.2f}<br>K<sub>obs</sub>: %{y:.2f}<extra></extra>",
+      line = list(width = 1.5, color = "white"),
+      hovertemplate = paste(
+        "<b>Predicted</b><br>",
+        paste0(
+          "Concentration: %{x:.2f} ",
+          gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
+          "<br>"
+        ),
+        paste0(
+          "K<sub>obs</sub>: %{y:.2f} ",
+          gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+          "⁻¹"
+        ),
+        "<extra></extra>"
+      ),
       showlegend = FALSE
     ) |>
     # Calculated kobs
     plotly::add_markers(
       data = df_points,
-      x = ~conc,
+      x = ~ as.numeric(as.character(conc)),
       y = ~kobs,
       type = "scatter",
-      color = ~ as.character(df_points$kobs),
+      color = ~conc,
       marker = list(
         size = 12,
         opacity = 1,
         line = list(width = 1, color = "white")
       ),
       name = ~conc,
-      symbol = ~kobs,
-      hovertemplate = "<b>Calculated</b><br>[Cmp]: %{x:.2f}<br>K<sub>obs</sub>: %{y:.3f}<extra></extra>"
+      symbols = symbol_map,
+      symbol = ~ as.character(conc),
+      hovertemplate = paste(
+        "<b>Calculated</b><br>",
+        paste0(
+          "Concentration: %{x:.2f} ",
+          gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
+          "<br>"
+        ),
+        paste0(
+          "K<sub>obs</sub>: %{y:.2f} ",
+          gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+          "⁻¹"
+        ),
+        "<extra></extra>"
+      ),
     ) |>
     plotly::layout(
       hovermode = "closest",
@@ -1876,7 +1924,14 @@ make_kobs_plot <- function(ki_kinact_result) {
       # Global font settings (White)
       font = list(size = 14, color = "white"),
       legend = list(
-        title = list(text = "Concentration [µM]", font = list(color = "white")),
+        title = list(
+          text = paste0(
+            "Concentration [",
+            gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
+            "]"
+          ),
+          font = list(color = "white")
+        ),
         bgcolor = "rgba(0,0,0,0)",
         bordercolor = "rgba(0,0,0,0)",
         font = list(color = "white")
@@ -2696,7 +2751,8 @@ multiple_spectra <- function(
   color_cmp = NULL,
   truncated = FALSE,
   color_variable = NULL,
-  hits_summary = NULL
+  hits_summary = NULL,
+  units = NULL
 ) {
   # Omit NA in samples
   samples <- samples[!is.na(samples)]
@@ -2908,7 +2964,7 @@ multiple_spectra <- function(
         z,
         ifelse(
           time == TRUE,
-          " min",
+          paste0(" ", gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])),
           ""
         )
       )
@@ -2939,7 +2995,6 @@ multiple_spectra <- function(
           y = ~intensity,
           z = ~z,
           split = ~ seq_len(nrow(peaks_data)),
-          # split = ~ interaction(z, color),
           legendgroup = ~z,
           color = marker_color,
           symbol = ~ I(symbol),
@@ -2956,7 +3011,11 @@ multiple_spectra <- function(
             round(intensity, 2),
             ifelse(time, "%\nTime: ", "%\nSample: "),
             z,
-            ifelse(time, " min", ""),
+            ifelse(
+              time,
+              paste0(" ", gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])),
+              ""
+            ),
             "\nTheor. Mw: ",
             mw
           ),
@@ -2976,9 +3035,16 @@ multiple_spectra <- function(
           title = list(
             text = paste(
               "<b>",
-              ifelse(time, "Time [min]", "Sample ID"),
-              "</b>",
-              "[min]"
+              ifelse(
+                time,
+                paste0(
+                  "Time [",
+                  gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+                  "]"
+                ),
+                "Sample ID"
+              ),
+              "</b>"
             ),
             color = "white"
           )
@@ -3012,7 +3078,15 @@ multiple_spectra <- function(
             showbackground = FALSE
           ),
           zaxis = list(
-            title = ifelse(time, "Time [min]", ""),
+            title = ifelse(
+              time,
+              paste0(
+                "Time [",
+                gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+                "]"
+              ),
+              ""
+            ),
             gridcolor = "#7f7f7fff",
             showgrid = ifelse(time, TRUE, FALSE),
             showline = FALSE,
@@ -3024,7 +3098,6 @@ multiple_spectra <- function(
             tickvals = levels(spectrum_data$z)
           ),
           camera = list(
-            # center = list(x = -0.05, y = -0.15, z = 0),
             center = list(x = 0.33, y = -0.05, z = 0.05),
             eye = if (length(unique(peaks_data$z)) <= 8) {
               list(
@@ -3075,7 +3148,7 @@ multiple_spectra <- function(
         z,
         ifelse(
           time == TRUE,
-          " min",
+          paste(" ", gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])),
           ""
         )
       ),
@@ -3120,9 +3193,21 @@ multiple_spectra <- function(
           mass,
           " Da\nIntensity: ",
           round(intensity, 2),
-          ifelse(time, "%\nTime: ", "%\nSample: "),
+          ifelse(
+            time,
+            paste0(
+              "%\nTime: ",
+              gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+              " "
+            ),
+            "%\nSample: "
+          ),
           z,
-          ifelse(time, " min", ""),
+          ifelse(
+            time,
+            paste0(" ", gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])),
+            ""
+          ),
           "\nTheor. Mw: ",
           mw
         ),
@@ -3148,7 +3233,14 @@ multiple_spectra <- function(
           bgcolor = "rgba(0,0,0,0)",
           bordercolor = "rgba(0,0,0,0)",
           font = list(color = "white"),
-          title = list(text = paste('<b>Time</b>', "[min]"), color = "white")
+          title = list(
+            text = paste0(
+              "<b>Time</b> [",
+              gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+              "]"
+            ),
+            color = "white"
+          )
         )
       )
   }

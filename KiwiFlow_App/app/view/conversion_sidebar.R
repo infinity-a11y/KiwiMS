@@ -332,13 +332,13 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
         #     # If Ki/kinact analysis is set to be performed
         #     if (input$run_ki_kinact) {
         #       # Get concentration and time units
-        #       conc_time <- names(result_with_hits$hits_summary)[unlist(sapply(
-        #         c("Concentration", "Time"),
-        #         grep,
-        #         names(result_with_hits$hits_summary)
-        #       ))]
-        #       units <- gsub("Concentration |Time |\\[|\\]", "", conc_time)
-        #       names(units) <- c("Concentration", "Time")
+        # conc_time <- names(result_with_hits$hits_summary)[unlist(sapply(
+        #   c("Concentration", "Time"),
+        #   grep,
+        #   names(result_with_hits$hits_summary)
+        # ))]
+        # units <- gsub("Concentration |Time |\\[|\\]", "", conc_time)
+        # names(units) <- c("Concentration", "Time")
 
         #       # Log initiation of binding kinetics analysis
         #       log_binding_kinetics(

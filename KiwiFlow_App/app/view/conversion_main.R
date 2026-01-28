@@ -34,6 +34,7 @@ box::use(
       label_smart_clean,
       filter_color_list,
       render_table_view,
+      make_kobs_plot,
     ],
   app / logic / deconvolution_functions[spectrum_plot, ],
   app /
@@ -4751,7 +4752,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 class = "main-result",
                 paste(
                   format_scientific(ki_kinact_result()[1, 1]),
-                  "s⁻¹"
+                  paste0(gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]), "⁻¹")
                 )
               ),
               shiny::div(
@@ -4790,7 +4791,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 class = "main-result",
                 paste(
                   format_scientific(ki_kinact_result()[2, 1]),
-                  "M⁻¹"
+                  paste0(
+                    gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
+                    "⁻¹"
+                  )
                 )
               ),
               shiny::div(
@@ -4829,7 +4833,12 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 class = "main-result",
                 paste(
                   format_scientific(ki_kinact_result()[1, 1]),
-                  "M⁻¹ s⁻¹"
+                  paste0(
+                    gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
+                    "⁻¹ ",
+                    gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+                    "⁻¹"
+                  )
                 )
               )
             )
@@ -4925,7 +4934,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 editable = list(
                   target = "cell",
                   disable = list(
-                    columns = which(names(kobs_results) == "Included")
+                    columns = which(names(kobs_results) != "Included") - 1
                   )
                 ),
                 callback = htmlwidgets::JS(js_code_gen(
@@ -4968,7 +4977,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           output$binding_plot <- plotly::renderPlotly({
             shiny::req(result_list)
 
-            result_list$binding_kobs_result$binding_plot
+            make_binding_plot(
+              kobs_result = result_list$binding_kobs_result,
+              colors = concentration_colors,
+              units = units
+            )
           })
 
           ##### Kobs plot ----
@@ -4981,7 +4994,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               result_list <- conversion_vars$modified_results
             }
 
-            result_list$ki_kinact_result$kobs_plot
+            make_kobs_plot(
+              ki_kinact_result = result_list$ki_kinact_result,
+              colors = concentration_colors,
+              units = units
+            )
           })
 
           #### Concentration tabs ----
@@ -5131,7 +5148,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                         ),
                         shiny::div(
                           class = "kobs-val",
-                          format_scientific(conc_result$kobs)
+                          paste(
+                            format_scientific(conc_result$kobs),
+                            paste0(
+                              gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+                              "⁻¹"
+                            )
+                          )
                         )
                       )
                     ),
@@ -5278,7 +5301,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               )]] <- plotly::renderPlotly({
                 make_binding_plot(
                   kobs_result = result_list$binding_kobs_result,
-                  filter_conc = local_concentration
+                  filter_conc = local_concentration,
+                  colors = concentration_colors,
+                  units = NULL
                 )
               })
 
@@ -5316,7 +5341,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                     FALSE
                   ),
                   time = TRUE,
-                  hits_summary = hits_summary
+                  hits_summary = hits_summary,
+                  units = units
                 )
               }) |>
                 shiny::bindEvent(input[[paste0(
