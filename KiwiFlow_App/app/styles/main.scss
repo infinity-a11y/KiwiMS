@@ -1715,10 +1715,11 @@ div[data-value="Protein Conversion"] .tab-pane {
 }
 
 #app-conversion_main-relbinding_hits_tab tbody td,
-#app-conversion_main-kikinact_hits_tab tbody td,
 #app-conversion_main-samples_table_view tbody td,
 #app-conversion_main-compounds_table_view tbody td,
 #app-conversion_main-proteins_table_view tbody td,
+#app-conversion_main-kikinact_hits_tab tbody td,
+#app-conversion_main-kobs_result tbody td,
 .conc-hits-table tbody td {
   padding: 4px 6px !important;
   background-color: inherit;

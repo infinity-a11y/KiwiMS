@@ -3252,29 +3252,7 @@ render_table_view <- function(table, colors, tab, inputs, units) {
         `Cmp Name`
       } else if (inputs$color_variable == "Samples") {
         `Sample ID`
-      },
-      dplyr::across(
-        # everything(),
-        # -col_var,
-        -dplyr::any_of(c(
-          "col_var",
-          if (is.null(inputs$binding_bar) || isTRUE(inputs$binding_bar)) {
-            "%-Binding"
-          },
-          if (
-            is.null(inputs$tot_binding_bar) || isTRUE(inputs$tot_binding_bar)
-          ) {
-            "Total %"
-          }
-        )),
-        ~ paste0(
-          "<span style='color:",
-          label_color,
-          "'>",
-          .x,
-          "</span>"
-        )
-      )
+      }
     )
 
   # Apply bar renderer to binding column
@@ -3297,6 +3275,7 @@ render_table_view <- function(table, colors, tab, inputs, units) {
     render_tot_binding <- NULL
   }
 
+  # Determine grouped row variable
   if (tab == "Compounds") {
     group_variable <- "Sample ID"
     if (length(unique(tbl[[group_variable]])) != nrow(tbl)) {
@@ -3327,6 +3306,30 @@ render_table_view <- function(table, colors, tab, inputs, units) {
   } else {
     row_group <- list(dataSrc = which(names(tbl) == group_variable) - 1)
   }
+
+  # Add color adaptive font color to table
+  tbl <- dplyr::mutate(
+    tbl,
+    dplyr::across(
+      -dplyr::any_of(c(
+        group_variable,
+        "col_var",
+        if (is.null(inputs$binding_bar) || isTRUE(inputs$binding_bar)) {
+          "%-Binding"
+        },
+        if (is.null(inputs$tot_binding_bar) || isTRUE(inputs$tot_binding_bar)) {
+          "Total %"
+        }
+      )),
+      ~ paste0(
+        "<span style='color:",
+        label_color,
+        "'>",
+        .x,
+        "</span>"
+      )
+    )
+  )
 
   DT::datatable(
     data = tbl,
@@ -3403,7 +3406,6 @@ render_hits_table <- function(
   hits_table,
   concentration_colors,
   single_conc = NULL,
-  withzero = FALSE,
   selected_cols = NULL,
   bar_chart = character(),
   compounds = NULL,
@@ -3419,7 +3421,6 @@ render_hits_table <- function(
   hits_table <<- hits_table
   concentration_colors <<- concentration_colors
   single_conc <<- single_conc
-  withzero <<- withzero
   selected_cols <<- selected_cols
   bar_chart <<- bar_chart
   compounds <<- compounds
@@ -3558,7 +3559,6 @@ render_hits_table <- function(
       stripe = FALSE,
       dom = dom_value,
       paging = ifelse(!is.null(single_conc), TRUE, FALSE),
-      # paging = FALSE,
       columnDefs = list(
         if (length(bar_chart) > 0 & any(bar_chart %in% names(hits_table))) {
           list(
@@ -3594,32 +3594,20 @@ render_hits_table <- function(
         DT::formatStyle(
           columns = 2,
           target = 'row',
-          backgroundColor = gsub(
-            ",1)",
-            ",0.3)",
-            plotly::toRGB(conc_color)
-          )
+          backgroundColor = conc_color
         )
     } else {
-      if (withzero) {
-        lvls <- c("0", names(concentration_colors))
-        vals <- plotly::toRGB(c("#e5e5e5", concentration_colors))
-      } else {
-        lvls <- names(concentration_colors)
-        vals <- plotly::toRGB(concentration_colors)
-      }
-
       hits_datatable <- hits_datatable |>
         DT::formatStyle(
-          columns = units["Concentration"],
+          columns = units[["Concentration"]],
           target = 'row',
           backgroundColor = DT::styleEqual(
-            levels = lvls,
-            values = gsub(
-              ",1)",
-              ",0.3)",
-              vals
-            )
+            levels = names(concentration_colors),
+            values = concentration_colors
+          ),
+          color = DT::styleEqual(
+            levels = names(concentration_colors),
+            values = get_contrast_color(concentration_colors)
           )
         )
     }

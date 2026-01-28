@@ -1557,7 +1557,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           #### Remove tabs from Ki/kinact interface ----
           bslib::nav_remove("tabs", "Binding")
           bslib::nav_remove("tabs", "Hits")
-          for (i in names(select_concentration)) {
+          for (i in conversion_vars$concentrations) {
             bslib::nav_remove(
               "tabs",
               paste0("[", i, "]")
@@ -1721,16 +1721,23 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 input$color_scale
               )
 
+              # Arrange table
+              hits_table <- dplyr::arrange(
+                hits_summary,
+                `Protein`,
+                as.numeric(!!rlang::sym(units[["Concentration"]])),
+                as.numeric(!!rlang::sym(units[["Time"]]))
+              )
+
               hits_datatable <- render_hits_table(
-                hits_table = hits_summary,
+                hits_table = hits_table,
                 concentration_colors = NULL,
-                withzero = FALSE,
                 selected_cols = input$relbinding_hits_tab_col_select,
                 bar_chart = input$relbinding_binding_chart,
                 compounds = input$relbinding_hits_tab_compound_select,
                 samples = input$relbinding_hits_tab_sample_select,
                 colors = get_cmp_colorScale(
-                  filtered_table = hits_summary,
+                  filtered_table = hits_table,
                   scale = input$color_scale,
                   variable = input$color_variable,
                   trunc = input$truncate_names
@@ -4252,26 +4259,57 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           conversion_vars$formatted_hits <- hits_summary
 
           #### Get concentrations and colors ----
-          binding_kobs_result_names <- names(
-            result_list$binding_kobs_result
-          )
-          concentrations <- conversion_vars$concentrations <- binding_kobs_result_names[
-            !binding_kobs_result_names %in%
-              c("binding_table", "binding_plot", "kobs_result_table")
-          ]
-          conc_selected <- rep(TRUE, length(concentrations))
-          names(conc_selected) <- concentrations
-          conversion_vars$select_concentration <- conc_selected
+          # binding_kobs_result_names <- names(
+          #   result_list$binding_kobs_result
+          # )
+          # concentrations <- conversion_vars$concentrations <- binding_kobs_result_names[
+          #   !binding_kobs_result_names %in%
+          #     c("binding_table", "binding_plot", "kobs_result_table")
+          # ]
+          # conc_selected <- rep(TRUE, length(concentrations))
+          # names(conc_selected) <- concentrations
+          # conversion_vars$select_concentration <- conc_selected
 
-          # Assign colors to present concentrations
-          concentration_colors <- rev(RColorBrewer::brewer.pal(
-            n = length(concentrations),
-            name = "Set1"
-          ))
-          names(concentration_colors) <- concentrations
+          # # Assign colors to present concentrations
+          # concentration_colors <- rev(RColorBrewer::brewer.pal(
+          #   n = length(concentrations),
+          #   name = "Set1"
+          # ))
+
+          # concentrations <- as.character(unique(hits_summary[[units[[
+          #   "Concentration"
+          # ]]]]))
+
+          # Get concentration colors
+          concentration_colors <- RColorBrewer::brewer.pal(
+            n = length(unique(hits_summary[[units[[
+              "Concentration"
+            ]]]])),
+            name = "Set3"
+          )
+
+          names(concentration_colors) <- unique(hits_summary[[units[[
+            "Concentration"
+          ]]]])
 
           # Assign colors to reactive variable
           conversion_vars$conc_colors <- concentration_colors
+
+          # Assign concentrations to reactive variable
+          conversion_vars$concentrations <- concentrations <- dplyr::filter(
+            hits_summary,
+            `Cmp Name` != "N/A"
+          ) |>
+            dplyr::count(
+              !!rlang::sym(units[[
+                "Concentration"
+              ]])
+            ) |>
+            dplyr::filter(n > 2) |>
+            dplyr::select(1) |>
+            unlist() |>
+            unname() |>
+            as.character()
 
           #### Hits tab ----
           bslib::nav_insert(
@@ -4425,15 +4463,17 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               conversion_vars$conc_colors
             )
 
+            # Arrange table
+            hits_table <- dplyr::arrange(
+              hits_summary,
+              `Protein`,
+              as.numeric(!!rlang::sym(units[["Concentration"]])),
+              as.numeric(!!rlang::sym(units[["Time"]]))
+            )
+
             hits_datatable <- render_hits_table(
-              hits_table = conversion_vars$formatted_hits,
+              hits_table = hits_table,
               concentration_colors = conversion_vars$conc_colors,
-              withzero = any(
-                conversion_vars$formatted_hits[[conversion_vars$units[[
-                  "Concentration"
-                ]]]] ==
-                  0
-              ),
               selected_cols = input$kikinact_hits_tab_col_select,
               bar_chart = input$kikinact_binding_chart,
               compounds = input$kikinact_hits_tab_compound_select,
@@ -4806,41 +4846,65 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               # Get results
               kobs_results <- result_list$binding_kobs_result$kobs_result_table
 
+              kobs_results <<- kobs_results
+
               kobs_results <- kobs_results |>
                 dplyr::mutate(
-                  kobs = paste(format(kobs, digits = 3), "s⁻¹"),
-                  v = format(v, digits = 3),
-                  plateau = paste(format(plateau, digits = 3), "%")
-                )
-
-              # Add concentration column
-              kobs_results <- kobs_results |>
-                dplyr::mutate(
-                  Concentration = paste(rownames(kobs_results), "µM"),
-                  .before = "kobs"
-                )
-
-              # Determine checkbox index
-              checkbox_col_index <- 5
-
-              # Add the checkbox
-              kobs_results <- kobs_results |>
-                dplyr::mutate(
+                  concentration = as.numeric(rownames(kobs_results)),
+                  kobs = as.numeric(format(kobs, digits = 3)),
+                  v = as.numeric(format(v, digits = 3)),
+                  plateau = as.numeric(format(plateau, digits = 3)),
                   Included = checkboxColumn(
                     nrow(kobs_results),
-                    checkbox_col_index,
+                    5,
                     value = TRUE
                   )
-                )
+                ) |>
+                dplyr::relocate(concentration, .before = kobs) |>
+                stats::setNames(c(
+                  paste0(
+                    "Conc. [",
+                    gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
+                    "]"
+                  ),
+                  paste0(
+                    "kobs [",
+                    gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+                    "⁻¹]"
+                  ),
+                  "Velocity",
+                  "Plateau [%]",
+                  "Included"
+                ))
 
-              # Set names
-              colnames(kobs_results) <- c(
-                "Concentration",
-                "kobs",
-                "Velocity",
-                "Plateau",
-                "Included"
-              )
+              # # Determine checkbox index
+              # checkbox_col_index <- 5
+
+              # # Add the checkbox
+              # kobs_results <- kobs_results |>
+              #   dplyr::mutate(
+              #     Included = checkboxColumn(
+              #       nrow(kobs_results),
+              #       checkbox_col_index,
+              #       value = TRUE
+              #     )
+              #   )
+
+              # # Set names
+              # colnames(kobs_results) <- c(
+              #   "Concentration",
+              #   "kobs",
+              #   "Velocity",
+              #   "Plateau",
+              #   "Included"
+              # )
+
+              # Kobs present concentrations
+              kobs_conc <- kobs_results[[paste0(
+                "Conc. [",
+                gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
+                "]"
+              )]]
 
               DT::datatable(
                 data = kobs_results,
@@ -4860,24 +4924,36 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 ),
                 editable = list(
                   target = "cell",
-                  disable = list(columns = checkbox_col_index)
+                  disable = list(
+                    columns = which(names(kobs_results) == "Included")
+                  )
                 ),
                 callback = htmlwidgets::JS(js_code_gen(
                   "kobs_result",
-                  checkbox_col_index,
+                  which(names(kobs_results) == "Included"),
                   ns = session$ns
                 ))
               ) |>
                 DT::formatStyle(
-                  columns = 'Concentration',
+                  columns = paste0(
+                    "Conc. [",
+                    gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
+                    "]"
+                  ),
                   target = 'row',
                   backgroundColor = DT::styleEqual(
-                    levels = kobs_results$Concentration,
-                    values = gsub(
-                      ",1)",
-                      ",0.6)",
-                      plotly::toRGB(conversion_vars$conc_colors)
-                    )
+                    levels = kobs_conc,
+                    values = concentration_colors[match(
+                      kobs_conc,
+                      names(concentration_colors)
+                    )]
+                  ),
+                  color = DT::styleEqual(
+                    levels = kobs_conc,
+                    values = get_contrast_color(concentration_colors[match(
+                      kobs_conc,
+                      names(concentration_colors)
+                    )])
                   )
                 ) |>
                 DT::formatStyle(
