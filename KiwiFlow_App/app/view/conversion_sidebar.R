@@ -43,6 +43,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
 
     # Declare reactive vars ----
     result_list <- shiny::reactiveVal(NULL)
+    complexes <- shiny::reactiveVal(NULL)
     analysis_status <- shiny::reactiveVal("pending")
 
     # Render sidebar UI ----
@@ -123,14 +124,14 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
                 value = FALSE
               )
             ),
-            # shinyjs::disabled(
-            shiny::actionButton(
-              ns("run_binding_analysis"),
-              "Run",
-              icon = shiny::icon("play"),
-              width = "100%"
+            shinyjs::disabled(
+              shiny::actionButton(
+                ns("run_binding_analysis"),
+                "Run",
+                icon = shiny::icon("play"),
+                width = "100%"
+              )
             )
-            # )
           )
         )
       )
@@ -138,12 +139,6 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
 
     ## Result controls UI ----
     output$conversion_result_controls_ui <- shiny::renderUI({
-      complexes <- list(
-        "Global Overview",
-        "COOB" = paste0("Cmp-", 30:40),
-        "KRAS" = paste0("ALMP3kALMP3kALMP3k-", 1:5)
-      )
-
       shiny::div(
         class = "interaction-analysis-flex",
         shiny::fluidRow(
@@ -160,11 +155,11 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
                 class = "complex-picker-ui",
                 shiny::div(id = "complex-picker-connector"),
                 shiny::div(
-                  class = "complex-picker",
+                  class = "complex-picker custom-disable",
                   shinyWidgets::pickerInput(
                     ns("complex"),
                     NULL,
-                    choices = complexes
+                    choices = complexes()
                   )
                 )
               )
@@ -299,93 +294,104 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
     shiny::observeEvent(input$run_binding_analysis, {
       if (analysis_status() == "pending") {
         # Delay conversion start
-        # Sys.sleep(1)
+        Sys.sleep(1)
 
-        # # Activate JS function for conversion process tracking
-        # shinyjs::runjs(sprintf(
-        #   conversion_tracking_js,
-        #   ns("console_log"),
-        #   ns("scroll_btn")
-        # ))
+        # Activate JS function for conversion process tracking
+        shinyjs::runjs(sprintf(
+          conversion_tracking_js,
+          ns("console_log"),
+          ns("scroll_btn")
+        ))
 
-        # # Add hits
-        # withCallingHandlers(
-        #   expr = {
-        #     result_with_hits <- add_hits(
-        #       conversion_main_vars$input_list()$result,
-        #       sample_table = conversion_main_vars$input_list()$Samples_Table,
-        #       protein_table = conversion_main_vars$input_list()$Protein_Table,
-        #       compound_table = conversion_main_vars$input_list()$Compound_Table,
-        #       peak_tolerance = input$peak_tolerance,
-        #       max_multiples = input$max_multiples,
-        #       session = session,
-        #       ns = ns
-        #     )
+        # Add hits
+        withCallingHandlers(
+          expr = {
+            result_with_hits <- add_hits(
+              conversion_main_vars$input_list()$result,
+              sample_table = conversion_main_vars$input_list()$Samples_Table,
+              protein_table = conversion_main_vars$input_list()$Protein_Table,
+              compound_table = conversion_main_vars$input_list()$Compound_Table,
+              peak_tolerance = input$peak_tolerance,
+              max_multiples = input$max_multiples,
+              session = session,
+              ns = ns
+            )
 
-        #     result_with_hits$hits_summary <- summarize_hits(
-        #       result_with_hits,
-        #       sample_table = conversion_main_vars$input_list()$Samples_Table
-        #     )
+            result_with_hits$hits_summary <- summarize_hits(
+              result_with_hits,
+              sample_table = conversion_main_vars$input_list()$Samples_Table
+            )
 
-        #     result_with_hits <<- result_with_hits
+            # If Ki/kinact analysis is set to be performed
+            if (input$run_ki_kinact) {
+              # Get concentration and time units
+              conc_time <- names(result_with_hits$hits_summary)[unlist(sapply(
+                c("Concentration", "Time"),
+                grep,
+                names(result_with_hits$hits_summary)
+              ))]
+              units <- gsub("Concentration |Time |\\[|\\]", "", conc_time)
+              names(units) <- c("Concentration", "Time")
 
-        #     # If Ki/kinact analysis is set to be performed
-        #     if (input$run_ki_kinact) {
-        #       # Get concentration and time units
-        # conc_time <- names(result_with_hits$hits_summary)[unlist(sapply(
-        #   c("Concentration", "Time"),
-        #   grep,
-        #   names(result_with_hits$hits_summary)
-        # ))]
-        # units <- gsub("Concentration |Time |\\[|\\]", "", conc_time)
-        # names(units) <- c("Concentration", "Time")
+              # Log initiation of binding kinetics analysis
+              log_binding_kinetics(
+                concentrations = result_with_hits$hits_summary[[conc_time[1]]],
+                times = result_with_hits$hits_summary[[conc_time[2]]],
+                units = units
+              )
 
-        #       # Log initiation of binding kinetics analysis
-        #       log_binding_kinetics(
-        #         concentrations = result_with_hits$hits_summary[[conc_time[1]]],
-        #         times = result_with_hits$hits_summary[[conc_time[2]]],
-        #         units = units
-        #       )
+              # Add binding/kobs results to result list
+              result_with_hits$binding_kobs_result <- add_kobs_binding_result(
+                result_with_hits,
+                conc_time = conc_time,
+                units = units
+              )
 
-        #       result_with_hits2 <<- result_with_hits
+              # Add Ki/kinact results to result list
+              result_with_hits$ki_kinact_result <- add_ki_kinact_result(
+                result_with_hits,
+                units = units
+              )
+            }
+          },
+          message = function(m) {
+            clean_msg <- gsub("\\", "\\\\", m$message, fixed = TRUE)
+            clean_msg <- gsub("'", "\\'", clean_msg, fixed = TRUE)
+            clean_msg <- gsub("\n", "<br>", clean_msg, fixed = TRUE)
 
-        #       # Add binding/kobs results to result list
-        #       result_with_hits$binding_kobs_result <- add_kobs_binding_result(
-        #         result_with_hits,
-        #         conc_time = conc_time,
-        #         units = units
-        #       )
+            js_cmd <- sprintf(
+              "
+            var el = document.getElementById('%s');
+            if (el) {
+              el.innerHTML += '%s';
+              el.doAutoScroll();
+            }
+              ",
+              ns("console_log"),
+              clean_msg
+            )
 
-        #       # Add Ki/kinact results to result list
-        #       result_with_hits$ki_kinact_result <- add_ki_kinact_result(
-        #         result_with_hits,
-        #         units = units
-        #       )
-        #     }
-        #   },
-        #   message = function(m) {
-        #     clean_msg <- gsub("\\", "\\\\", m$message, fixed = TRUE)
-        #     clean_msg <- gsub("'", "\\'", clean_msg, fixed = TRUE)
-        #     clean_msg <- gsub("\n", "<br>", clean_msg, fixed = TRUE)
+            shinyjs::runjs(js_cmd)
+          }
+        )
 
-        #     js_cmd <- sprintf(
-        #       "
-        #     var el = document.getElementById('%s');
-        #     if (el) {
-        #       el.innerHTML += '%s';
-        #       el.doAutoScroll();
-        #     }
-        #       ",
-        #       ns("console_log"),
-        #       clean_msg
-        #     )
+        # Assign result list and hits table to reactive vars
+        result_list(result_with_hits)
 
-        #     shinyjs::runjs(js_cmd)
-        #   }
-        # )
+        # Save distinct protein - compound combinations/complexes
+        complex_df <- dplyr::distinct(
+          result_with_hits$hits_summary,
+          Protein,
+          Compound
+        ) |>
+          dplyr::filter(!is.na(Compound))
+        choice_values <- stats::setNames(
+          complex_df$Compound,
+          complex_df$Compound
+        )
+        complexes <- split(choice_values, complex_df$Protein)
 
-        # # Assign result list and hits table to reactive vars
-        # result_list(result_with_hits)
+        complexes(complexes)
 
         # TODO
         # Dev Mode
@@ -524,6 +530,8 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
           asis = TRUE
         )
 
+        shiny::updateRadioButtons(session, "analysis_select", selected = 1)
+
         shinyjs::enable("peak_tolerance")
         shinyjs::enable("max_multiples")
 
@@ -618,10 +626,10 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
       shiny::req(input$analysis_select)
 
       # Block UI
-      shinyjs::runjs(paste0(
-        'document.getElementById("blocking-overlay").style.display ',
-        '= "block";'
-      ))
+      # shinyjs::runjs(paste0(
+      #   'document.getElementById("blocking-overlay").style.display ',
+      #   '= "block";'
+      # ))
 
       if (input$analysis_select == 1) {
         shiny::updateRadioButtons(session, "analysis_select", selected = 1)
@@ -648,17 +656,17 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
       }
     })
 
-    # shiny::observeEvent(input$run_binding_analysis, {
-    #   shinyjs::addClass(
-    #     selector = ".complex-picker .form-group .bootstrap-select",
-    #     class = "custom-disable"
-    #   )
-    #   shinyjs::removeClass(
-    #     id = "complex-picker-connector",
-    #     class = "complex-picker-connector-color",
-    #     asis = TRUE
-    #   )
-    # })
+    shiny::observeEvent(input$run_binding_analysis, {
+      shinyjs::addClass(
+        selector = ".complex-picker .form-group .bootstrap-select",
+        class = "custom-disable"
+      )
+      shinyjs::removeClass(
+        id = "complex-picker-connector",
+        class = "complex-picker-connector-color",
+        asis = TRUE
+      )
+    })
 
     ## Initial disable of analysis select input ----
     shinyjs::addClass(

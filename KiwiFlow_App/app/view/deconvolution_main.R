@@ -1548,7 +1548,9 @@ server <- function(
           # Generate the spectrum plot
           spectrum <- spectrum_plot(
             result_path = result_dir,
-            raw = as.logical(input$toggle_result)
+            raw = as.logical(input$toggle_result),
+            show_peak_labels = FALSE,
+            show_mass_diff = FALSE
           )
 
           # Hide spinner and activate reactive spinner variable again

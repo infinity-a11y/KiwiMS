@@ -1638,7 +1638,12 @@ add_kobs_binding_result <- function(
   if (!is.null(concentrations_select)) {
     hits_summary <- dplyr::filter(
       hits_summary,
-      concentration %in% concentrations_select
+      !!rlang::sym(gsub(
+        "Conc.",
+        "Concentration",
+        conc_time[["Concentration"]]
+      )) %in%
+        concentrations_select
     )
   }
 
@@ -1709,11 +1714,6 @@ make_binding_plot <- function(
   colors = NULL,
   units = NULL
 ) {
-  kobs_result <<- kobs_result
-  filter_conc <<- filter_conc
-  colors1 <<- colors
-  units1 <<- units
-
   # Filter for specified concentration
   if (!is.null(filter_conc)) {
     kobs_result$binding_table <- dplyr::filter(
@@ -1938,7 +1938,11 @@ make_kobs_plot <- function(ki_kinact_result, colors, units) {
       ),
       # X-Axis Styling (White)
       xaxis = list(
-        title = "Compound [µM]",
+        title = paste0(
+          "Compound [",
+          gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
+          "]"
+        ),
         color = "white",
         showgrid = TRUE,
         gridcolor = "rgba(255, 255, 255, 0.2)",
@@ -1964,10 +1968,15 @@ predict_values <- function(
   predict,
   x,
   interval,
-  fitted_model
+  fitted_model,
+  max = NULL
 ) {
   # Prepare sequence of predictions
-  prediction_df <- data.frame(seq(0, max(data[[x]]), by = interval))
+  prediction_df <- data.frame(seq(
+    0,
+    ifelse(!is.null(max), max, max(data[[x]])),
+    by = interval
+  ))
   colnames(prediction_df) <- x
 
   # Predict using the fitted model
@@ -2064,7 +2073,8 @@ compute_kobs <- function(hits, units) {
       fitted_model = nonlin_mod,
       predict = "binding",
       x = "time",
-      interval = 1
+      interval = 1,
+      max = max(hits$time)
     )
 
     # Append predictions to predictions data frame
@@ -3195,11 +3205,7 @@ multiple_spectra <- function(
           round(intensity, 2),
           ifelse(
             time,
-            paste0(
-              "%\nTime: ",
-              gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
-              " "
-            ),
+            "%\nTime: ",
             "%\nSample: "
           ),
           z,
@@ -3249,11 +3255,6 @@ multiple_spectra <- function(
 # Rendering function for relative binding table view
 #' @export
 render_table_view <- function(table, colors, tab, inputs, units) {
-  table1 <<- table
-  colors1 <<- colors
-  tab1 <<- tab
-  inputs1 <<- inputs
-  units1 <<- units
   # If table empty
   if (!nrow(table)) {
     return(DT::datatable(
@@ -3315,7 +3316,9 @@ render_table_view <- function(table, colors, tab, inputs, units) {
         )
       ),
       label_color = get_contrast_color(colors[match(
-        if (inputs$color_variable == units["Concentration"]) {
+        if (
+          length(units) == 2 && inputs$color_variable == units["Concentration"]
+        ) {
           table[[units["Concentration"]]]
         } else if (inputs$color_variable == "Compounds") {
           `Cmp Name`
@@ -3338,13 +3341,18 @@ render_table_view <- function(table, colors, tab, inputs, units) {
       } else {
         as.character(`Total %`)
       },
-      col_var = if (inputs$color_variable == units["Concentration"]) {
-        !!rlang::sym(units["Concentration"])
-      } else if (inputs$color_variable == "Compounds") {
-        `Cmp Name`
-      } else if (inputs$color_variable == "Samples") {
-        `Sample ID`
-      }
+      col_var = !!rlang::sym(
+        if (
+          length(units) == 2 &&
+            inputs$color_variable == units[["Concentration"]]
+        ) {
+          units[["Concentration"]]
+        } else if (inputs$color_variable == "Compounds") {
+          "Cmp Name"
+        } else if (inputs$color_variable == "Samples") {
+          "Sample ID"
+        }
+      )
     )
 
   # Apply bar renderer to binding column
@@ -3474,7 +3482,9 @@ render_table_view <- function(table, colors, tab, inputs, units) {
       columns = "col_var",
       target = 'row',
       backgroundColor = DT::styleEqual(
-        levels = if (inputs$color_variable == units["Concentration"]) {
+        levels = if (
+          length(units) == 2 && inputs$color_variable == units["Concentration"]
+        ) {
           names(colors)
         } else {
           names(colors)
@@ -3482,7 +3492,9 @@ render_table_view <- function(table, colors, tab, inputs, units) {
         values = colors
       ),
       color = DT::styleEqual(
-        levels = if (inputs$color_variable == units["Concentration"]) {
+        levels = if (
+          length(units) == 2 && inputs$color_variable == units["Concentration"]
+        ) {
           names(colors)
         } else {
           names(colors)
@@ -3510,21 +3522,6 @@ render_hits_table <- function(
   clickable = FALSE,
   units
 ) {
-  hits_table <<- hits_table
-  concentration_colors <<- concentration_colors
-  single_conc <<- single_conc
-  selected_cols <<- selected_cols
-  bar_chart <<- bar_chart
-  compounds <<- compounds
-  samples <<- samples
-  colors <<- colors
-  color_variable <<- color_variable
-  expand <<- expand
-  na_include <<- na_include
-  truncated <<- truncated
-  clickable <<- clickable
-  units1 <<- units
-
   # Modify if samples are summarized instead of expanded
   if (!expand) {
     hits_table <- hits_table |>
@@ -3582,10 +3579,11 @@ render_hits_table <- function(
     "Sample ID",
     "Protein",
     "Cmp Name",
-    if (length(units["Concentration"])) units[["Concentration"]] else NULL,
-    if (length(units["Time"])) units[["Time"]] else NULL,
+    if ("Concentration" %in% names(units)) units[["Concentration"]] else NULL,
+    if ("Time" %in% names(units)) units[["Time"]] else NULL,
     "truncSample_ID"
   )
+
   hits_table <- hits_table |>
     dplyr::select(
       all_of(std_cols),
@@ -3794,7 +3792,7 @@ new_sample_table <- function(
     rep(list(""), 4)
   )
 
-  if (ki_kinact) {
+  if (!is.null(ki_kinact) && ki_kinact) {
     sample_tab <- cbind(
       sample_tab,
       Concentration = as.numeric(NA),

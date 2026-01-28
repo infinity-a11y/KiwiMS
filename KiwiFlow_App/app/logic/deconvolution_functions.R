@@ -672,15 +672,6 @@ spectrum_plot <- function(
   show_peak_labels = TRUE,
   show_mass_diff = TRUE
 ) {
-  result_path1 <<- result_path
-  sample1 <<- sample
-  raw1 <<- raw
-  interactive1 <<- interactive
-  bin_width1 <<- bin_width
-  theme1 <<- theme
-  color_cmp1 <<- color_cmp
-  color_variable1 <<- color_variable
-
   plot_data <- process_plot_data(
     sample,
     result_path,

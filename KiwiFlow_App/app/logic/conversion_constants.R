@@ -147,7 +147,7 @@ symbols <- c(
   "circle",
   "triangle-up",
   "square",
-  "cross-thin-open",
+  "star-triangle-down",
   "square-x-open",
   "asterisk-open",
   "diamond",

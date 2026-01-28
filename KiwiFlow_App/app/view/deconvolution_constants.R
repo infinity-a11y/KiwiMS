@@ -598,7 +598,7 @@ deconvolution_status_controls <- function(ns) {
                 disabled(
                   shiny$actionButton(
                     ns("forward_deconvolution"),
-                    "Continue",
+                    "Conversion",
                     icon = shiny$icon("forward-fast"),
                     width = "100%"
                   )

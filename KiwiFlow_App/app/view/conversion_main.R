@@ -1381,8 +1381,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         })
 
         if (!is.null(result_list)) {
-          soso <<- result_list$"hits_summary"
-
           ### Compute hits summary ----
           hits_summary <- transform_hits(result_list$"hits_summary")
 
@@ -1395,10 +1393,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             names(units) <- c("Concentration", "Time")
           }
 
-          units33 <<- units
-
           conversion_vars$units <- units
 
+          # Rearrange hits summary
           if (length(units) == 2) {
             hits_summary <- hits_summary |>
               dplyr::mutate(dplyr::across(all_of(unname(units)), as.numeric)) |>
@@ -1432,7 +1429,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             hits_summary$`Sample ID`,
             mapping$original
           )]
-          hits_summary9 <<- hits_summary
           conversion_vars$hits_summary <- hits_summary
         }
 
@@ -1469,8 +1465,33 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           output$proteins_present_compounds_ui <- NULL
           output$proteins_distribution_labels_ui <- NULL
 
-          # Remove other relative binding interfac elements
+          # Remove other relative binding interface elements
           output$color_variable_ui <- NULL
+
+          # Remove ki/kinact interface elements
+          output$binding_tab <- NULL
+          output$kinact <- NULL
+          output$Ki <- NULL
+          output$Ki_kinact <- NULL
+          output$kobs_result <- NULL
+          output$binding_plot <- NULL
+          output$kobs_plot <- NULL
+          output$hits_tab <- NULL
+          if (!is.null(conversion_vars$select_concentration)) {
+            lapply(names(conversion_vars$select_concentration), function(id) {
+              output[[paste0("concentration_tab", id)]] <- NULL
+              output[[paste0("concentration_tab_", id, "_hits")]] <- NULL
+              output[[paste0(
+                "concentration_tab_",
+                id,
+                "_binding_plot"
+              )]] <- NULL
+              output[[paste0("concentration_tab_", id, "_spectra")]] <- NULL
+            })
+          }
+
+          # Reset modified results
+          conversion_vars$modified_results <- NULL
 
           #### Show declaration tabs ----
           bslib::nav_show(
@@ -1511,6 +1532,12 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             hits_summary = NULL
           )
           hits_summary <- conversion_vars$hits_summary <- NULL
+
+          # Unblock UI
+          shinyjs::runjs(paste0(
+            'document.getElementById("blocking-overlay").style.display ',
+            '= "none";'
+          ))
 
           # Select samples tab
           set_selected_tab("Samples", session)
@@ -1659,8 +1686,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                             c(
                               "Sample ID",
                               "Cmp Name",
-                              units[["Concentration"]],
-                              units[["Time"]],
+                              if (length(units) == 2) {
+                                c(units[["Concentration"]], units[["Time"]])
+                              },
                               "truncSample_ID"
                             )
                         ],
@@ -1669,8 +1697,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                             c(
                               "Sample ID",
                               "Cmp Name",
-                              units[["Concentration"]],
-                              units[["Time"]],
+                              if (length(units) == 2) {
+                                c(units[["Concentration"]], units[["Time"]])
+                              },
                               "truncSample_ID"
                             )
                         ][-c(1:2, 4:5, 7, 9)],
@@ -1723,12 +1752,22 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               )
 
               # Arrange table
-              hits_table <- dplyr::arrange(
-                hits_summary,
-                `Protein`,
-                as.numeric(!!rlang::sym(units[["Concentration"]])),
-                as.numeric(!!rlang::sym(units[["Time"]]))
-              )
+              num_sort_cols <- c()
+              if ("Concentration" %in% names(units)) {
+                num_sort_cols <- c(num_sort_cols, units[["Concentration"]])
+              }
+              if ("Time" %in% names(units)) {
+                num_sort_cols <- c(num_sort_cols, units[["Time"]])
+              }
+
+              hits_table <- hits_summary |>
+                dplyr::arrange(
+                  Protein,
+                  dplyr::across(
+                    dplyr::all_of(num_sort_cols),
+                    ~ as.numeric(as.character(.x))
+                  )
+                )
 
               hits_datatable <- render_hits_table(
                 hits_table = hits_table,
@@ -4214,39 +4253,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         ) {
           ### Render Ki/kinact interface ----
 
-          #### Remove relative binding interface elements ----
-          # Remove sample view elements
-          # output$samples_selected_protein <- NULL
-          # output$samples_total_pct_binding <- NULL
-          # output$samples_compound_distribution_ui <- NULL
-          # output$samples_present_compounds_na <- NULL
-          # output$samples_compound_distribution <- NULL
-          # output$samples_annotated_spectrum <- NULL
-          # output$samples_table_view <- NULL
-
-          # # Remove compound view elements
-          # output$compounds_selected_compound <- NULL
-          # output$compounds_total_pct_binding <- NULL
-          # output$compounds_compound_distribution <- NULL
-          # output$compounds_annotated_spectrum <- NULL
-          # output$compounds_spectrum_labels_ui <- NULL
-          # output$compounds_table_view <- NULL
-          # output$compound_distribution_labels_ui <- NULL
-
-          # # Remove protein view elements
-          # output$proteins_selected_protein <- NULL
-          # output$proteins_total_pct_binding <- NULL
-          # output$proteins_compound_distribution <- NULL
-          # output$proteins_annotated_spectrum <- NULL
-          # output$proteins_spectrum_labels_ui <- NULL
-          # output$proteins_table_view <- NULL
-          # output$proteins_present_compounds_na <- NULL
-          # output$proteins_present_compounds_ui <- NULL
-          # output$proteins_distribution_labels_ui <- NULL
-
-          # # Remove other relative binding interfac elements
-          # output$color_variable_ui <- NULL
-
           #### Hide tabs of relative binding interface ----
           bslib::nav_remove("tabs", "Hits")
           bslib::nav_remove("tabs", "Compounds View")
@@ -4260,27 +4266,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           conversion_vars$formatted_hits <- hits_summary
 
           #### Get concentrations and colors ----
-          # binding_kobs_result_names <- names(
-          #   result_list$binding_kobs_result
-          # )
-          # concentrations <- conversion_vars$concentrations <- binding_kobs_result_names[
-          #   !binding_kobs_result_names %in%
-          #     c("binding_table", "binding_plot", "kobs_result_table")
-          # ]
-          # conc_selected <- rep(TRUE, length(concentrations))
-          # names(conc_selected) <- concentrations
-          # conversion_vars$select_concentration <- conc_selected
-
-          # # Assign colors to present concentrations
-          # concentration_colors <- rev(RColorBrewer::brewer.pal(
-          #   n = length(concentrations),
-          #   name = "Set1"
-          # ))
-
-          # concentrations <- as.character(unique(hits_summary[[units[[
-          #   "Concentration"
-          # ]]]]))
-
           # Get concentration colors
           concentration_colors <- RColorBrewer::brewer.pal(
             n = length(unique(hits_summary[[units[[
@@ -4311,6 +4296,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             unlist() |>
             unname() |>
             as.character()
+
+          conc_selected <- rep(TRUE, length(concentrations))
+          names(conc_selected) <- concentrations
+          conversion_vars$select_concentration <- conc_selected
 
           #### Hits tab ----
           bslib::nav_insert(
@@ -4750,17 +4739,17 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               class = "result-card-content",
               shiny::div(
                 class = "main-result",
-                paste(
+                shiny::HTML(paste(
                   format_scientific(ki_kinact_result()[1, 1]),
                   paste0(gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]), "⁻¹")
-                )
+                ))
               ),
               shiny::div(
                 class = "error-result",
-                paste(
+                shiny::HTML(paste(
                   "±",
                   format_scientific(ki_kinact_result()[1, 2])
-                )
+                ))
               ),
               shiny::div(
                 class = "param-result",
@@ -4789,20 +4778,19 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               class = "result-card-content",
               shiny::div(
                 class = "main-result",
-                paste(
+                shiny::HTML(paste(
                   format_scientific(ki_kinact_result()[2, 1]),
                   paste0(
-                    gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
-                    "⁻¹"
+                    gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]])
                   )
-                )
+                ))
               ),
               shiny::div(
                 class = "error-result",
-                paste(
+                shiny::HTML(paste(
                   "±",
                   format_scientific(ki_kinact_result()[2, 2])
-                )
+                ))
               ),
               shiny::div(
                 class = "param-result",
@@ -4831,15 +4819,18 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
               class = "result-card-content",
               shiny::div(
                 class = "main-result",
-                paste(
-                  format_scientific(ki_kinact_result()[1, 1]),
+                shiny::HTML(paste(
+                  format_scientific(
+                    ki_kinact_result()[1, 1] / ki_kinact_result()[2, 1]
+                  ),
+                  "<br>",
                   paste0(
                     gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
                     "⁻¹ ",
                     gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
                     "⁻¹"
                   )
-                )
+                ))
               )
             )
           })
@@ -4848,14 +4839,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           output$kobs_result <- DT::renderDT(
             {
               shiny::req(
-                result_list,
-                conversion_vars$conc_colors
+                result_list
               )
 
               # Get results
               kobs_results <- result_list$binding_kobs_result$kobs_result_table
-
-              kobs_results <<- kobs_results
 
               kobs_results <- kobs_results |>
                 dplyr::mutate(
@@ -4886,28 +4874,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   "Included"
                 ))
 
-              # # Determine checkbox index
-              # checkbox_col_index <- 5
-
-              # # Add the checkbox
-              # kobs_results <- kobs_results |>
-              #   dplyr::mutate(
-              #     Included = checkboxColumn(
-              #       nrow(kobs_results),
-              #       checkbox_col_index,
-              #       value = TRUE
-              #     )
-              #   )
-
-              # # Set names
-              # colnames(kobs_results) <- c(
-              #   "Concentration",
-              #   "kobs",
-              #   "Velocity",
-              #   "Plateau",
-              #   "Included"
-              # )
-
               # Kobs present concentrations
               kobs_conc <- kobs_results[[paste0(
                 "Conc. [",
@@ -4920,7 +4886,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 rownames = FALSE,
                 selection = "none",
                 escape = FALSE,
-                class = "compact row-border nowrap",
+                class = "order-column",
                 options = list(
                   dom = "t",
                   paging = FALSE,
@@ -4929,7 +4895,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   scrollY = TRUE,
                   scrollCollapse = TRUE,
                   fixedHeader = TRUE,
-                  stripe = FALSE
+                  stripe = FALSE,
+                  columnDefs = list(
+                    list(targets = -1, className = 'dt-last-col')
+                  )
                 ),
                 editable = list(
                   target = "cell",
@@ -4951,18 +4920,18 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   ),
                   target = 'row',
                   backgroundColor = DT::styleEqual(
-                    levels = kobs_conc,
-                    values = concentration_colors[match(
-                      kobs_conc,
-                      names(concentration_colors)
-                    )]
-                  ),
-                  color = DT::styleEqual(
-                    levels = kobs_conc,
-                    values = get_contrast_color(concentration_colors[match(
+                    levels = as.character(kobs_conc),
+                    values = unname(concentration_colors[match(
                       kobs_conc,
                       names(concentration_colors)
                     )])
+                  ),
+                  color = DT::styleEqual(
+                    levels = as.character(kobs_conc),
+                    values = unname(get_contrast_color(concentration_colors[match(
+                      kobs_conc,
+                      names(concentration_colors)
+                    )]))
                   )
                 ) |>
                 DT::formatStyle(
@@ -5303,7 +5272,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   kobs_result = result_list$binding_kobs_result,
                   filter_conc = local_concentration,
                   colors = concentration_colors,
-                  units = NULL
+                  units = units
                 )
               })
 
@@ -5520,16 +5489,17 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           class = "custom-disable"
         )
 
-        hits_table_names <<- hits_table_names
-        conversion_vars_units <<- conversion_vars$units
-
         choices <- hits_table_names[
           !hits_table_names %in%
             c(
               "Sample ID",
               "Cmp Name",
-              conversion_vars$units[["Concentration"]],
-              conversion_vars$units[["Time"]],
+              if (length(units) == 2) {
+                c(
+                  conversion_vars$units[["Concentration"]],
+                  conversion_vars$units[["Time"]]
+                )
+              },
               "truncSample_ID"
             )
         ]
@@ -5539,14 +5509,15 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             c(
               "Sample ID",
               "Cmp Name",
-              conversion_vars$units[["Concentration"]],
-              conversion_vars$units[["Time"]],
+              if (length(units) == 2) {
+                c(
+                  conversion_vars$units[["Concentration"]],
+                  conversion_vars$units[["Time"]]
+                )
+              },
               "truncSample_ID"
             )
         ][-c(1:2, 4:5, 7, 9)]
-
-        choices1 <<- choices
-        selected1 <<- selected
 
         if (!is.null(input$relbinding_hits_tab_col_select)) {
           shinyWidgets::updatePickerInput(
@@ -5632,8 +5603,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     }) |>
       shiny::bindEvent(
         input$relbinding_hits_tab_expand
-        # ,
-        # input$kikinact_hits_tab_expand
       )
 
     ### Recalculate results depending on excluded concentrations ----
@@ -5660,17 +5629,30 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       # Recalculate result object according to included concentrations
       result_list <- conversion_sidebar_vars$result_list()
 
+      # Transformed units argument
+      units_adapt <- c(
+        Concentration = gsub(
+          ".*\\[(.+)\\].*",
+          "\\1",
+          conversion_vars$units[["Concentration"]]
+        ),
+        Time = gsub(".*\\[(.+)\\].*", "\\1", conversion_vars$units[["Time"]])
+      )
+
       # Add binding/kobs results to result list
       result_list$binding_kobs_result <- add_kobs_binding_result(
         result_list,
         concentrations_select = names(
           conversion_vars$select_concentration
-        )[which(conversion_vars$select_concentration)]
+        )[which(conversion_vars$select_concentration)],
+        units = units_adapt,
+        conc_time = conversion_vars$units
       )
 
       # Add Ki/kinact results to result list
       result_list$ki_kinact_result <- add_ki_kinact_result(
-        result_list
+        result_list,
+        units = units_adapt
       )
 
       # Assign modified results to reactive variable

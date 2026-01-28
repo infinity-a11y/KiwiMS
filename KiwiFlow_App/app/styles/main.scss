@@ -433,6 +433,7 @@ button:focus:not(:focus-visible) {
   font-size: 15px;
   // height: 35px;
   align-content: center;
+  cursor: pointer !important;
 }
 
 .btn-group > .btn:hover {
@@ -1659,6 +1660,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 #app-conversion_main-samples_table_view div.dataTables_scrollBody,
 #app-conversion_main-compounds_table_view div.dataTables_scrollBody,
 #app-conversion_main-proteins_table_view div.dataTables_scrollBody,
+#app-conversion_main-kobs_result div.dataTables_scrollBody,
 .conc-hits-table div.dataTables_scrollBody {
   border: none !important;
   border-radius: 4px;
@@ -1669,6 +1671,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 #app-conversion_main-samples_table_view tbody tr:first-child td:last-child,
 #app-conversion_main-compounds_table_view tbody tr:first-child td:last-child,
 #app-conversion_main-proteins_table_view tbody tr:first-child td:last-child,
+#app-conversion_main-kobs_result tbody tr:first-child td:last-child,
 .conc-hits-table tbody tr:first-child td:last-child {
   border-top-right-radius: 4px;
 }
@@ -1678,6 +1681,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 #app-conversion_main-samples_table_view tbody tr:first-child td:first-child,
 #app-conversion_main-compounds_table_view tbody tr:first-child td:first-child,
 #app-conversion_main-proteins_table_view tbody tr:first-child td:first-child,
+#app-conversion_main-kobs_result tbody tr:first-child td:first-child,
 .conc-hits-table tbody tr:first-child td:first-child {
   border-top-left-radius: 4px;
 }
@@ -1687,6 +1691,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 #app-conversion_main-samples_table_view tbody tr:last-child td:last-child,
 #app-conversion_main-compounds_table_view tbody tr:last-child td:last-child,
 #app-conversion_main-proteins_table_view tbody tr:last-child td:last-child,
+#app-conversion_main-kobs_result tbody tr:last-child td:last-child,
 .conc-hits-table tbody tr:last-child td:last-child {
   border-bottom-right-radius: 4px;
 }
@@ -1696,6 +1701,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 #app-conversion_main-samples_table_view tbody tr:last-child td:first-child,
 #app-conversion_main-compounds_table_view tbody tr:last-child td:first-child,
 #app-conversion_main-proteins_table_view tbody tr:last-child td:first-child,
+#app-conversion_main-kobs_result tbody tr:last-child td:first-child,
 .conc-hits-table tbody tr:last-child td:first-child {
   border-bottom-left-radius: 4px;
 }
@@ -1705,6 +1711,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 #app-conversion_main-samples_table_view tbody tr:last-child td,
 #app-conversion_main-compounds_table_view tbody tr:last-child td,
 #app-conversion_main-proteins_table_view tbody tr:last-child td,
+#app-conversion_main-kobs_result tbody tr:last-child td,
 .conc-hits-table tbody tr:last-child td {
   border: none;
   border-right: 2px solid #0000002b;
@@ -1735,6 +1742,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 #app-conversion_main-samples_table_view .dataTables_scrollHead th,
 #app-conversion_main-compounds_table_view .dataTables_scrollHead th,
 #app-conversion_main-proteins_table_view .dataTables_scrollHead th,
+#app-conversion_main-kobs_result .dataTables_scrollHead th,
 .conc-hits-table .dataTables_scrollHead th {
   color: white;
   text-decoration: none;
@@ -1748,6 +1756,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 #app-conversion_main-samples_table_view thead th:first-child,
 #app-conversion_main-compounds_table_view thead th:first-child,
 #app-conversion_main-proteins_table_view thead th:first-child,
+#app-conversion_main-kobs_result thead th:first-child,
 .conc-hits-table thead th:first-child {
   border-top-left-radius: 4px;
 }
@@ -1757,6 +1766,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 #app-conversion_main-samples_table_view thead th:first-child th.sorting,
 #app-conversion_main-compounds_table_view thead th:first-child th.sorting,
 #app-conversion_main-proteins_table_view thead th:first-child th.sorting,
+#app-conversion_main-kobs_result thead th:first-child th.sorting,
 .conc-hits-table thead th:first-child th.sorting {
   border-top-left-radius: unset;
   border-top-right-radius: unset;
@@ -1840,14 +1850,6 @@ div[data-value="Protein Conversion"] .tab-pane {
   overflow: hidden;
 }
 
-// TODO - check if redundant
-.binding-analysis-tab tbody td,
-.result-conc-tab tbody td {
-  border-top: 1px solid #0000005c;
-  border-collapse: collapse;
-  color: white;
-}
-
 /* Spectrum & Plots */
 .spectrum-plot-plate,
 .heatmap-plot {
@@ -1927,11 +1929,6 @@ div[data-value="Protein Conversion"] .tab-pane {
   font-size: 0.5em;
   text-align: left;
 }
-
-/* Hits Table Specifics */
-// .conc-hits-table th {
-//   background: transparent;
-// }
 
 .result-conc-tab .plotly,
 .result-conc-tab .js-plotly-plot .plotly,
@@ -2237,6 +2234,8 @@ table.dataTable tbody td {
 #app-conversion_main-compounds_table_view div.dataTables_scrollHead,
 #app-conversion_main-proteins_table_view div.dataTables_scrollBody,
 #app-conversion_main-proteins_table_view div.dataTables_scrollHead,
+#app-conversion_main-kobs_result div.dataTables_scrollBody,
+#app-conversion_main-kobs_result div.dataTables_scrollHead,
 .conc-hits-table div.dataTables_scrollBody,
 .conc-hits-table div.dataTables_scrollHead {
   width: 99% !important;
@@ -2246,6 +2245,7 @@ table.dataTable tbody td {
 #app-conversion_main-samples_table_view .table,
 #app-conversion_main-compounds_table_view .table,
 #app-conversion_main-proteins_table_view .table,
+#app-conversion_main-kobs_result .table,
 .conc-hits-table .table {
   margin-top: 0px !important;
   width: 100% !important;
@@ -2365,6 +2365,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 #app-conversion_main-samples_table_view div.dataTables_wrapper div.dataTables_info,
 #app-conversion_main-conversion_compounds_table_view div.dataTables_wrapper div.dataTables_info,
 #app-conversion_main-conversion_proteins_table_view div.dataTables_wrapper div.dataTables_info,
+#app-conversion_main-kobs_result div.dataTables_wrapper div.dataTables_info,
 .conc-hits-table div.dataTables_wrapper div.dataTables_info {
   padding-top: 0.5em !important;
 }
@@ -2376,6 +2377,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 #app-conversion_main-compounds_table_view,
 #app-conversion_main-proteins_table_view,
 #app-conversion_main-samples_table_view,
+#app-conversion_main-kobs_result,
 .conc-hits-table .datatables {
   width: 99% !important;
   height: 80% !important;
@@ -2389,6 +2391,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 #app-conversion_main-compounds_table_view .dataTables_scroll,
 #app-conversion_main-samples_table_view > div,
 #app-conversion_main-samples_table_view .dataTables_scroll,
+#app-conversion_main-kobs_result > div,
+#app-conversion_main-kobs_result .dataTables_scroll,
 .conc-hits-table .datatables > div,
 .conc-hits-table .datatables .dataTables_scroll {
   height: 100% !important;
@@ -2397,6 +2401,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 #app-conversion_main-proteins_table_view .dataTables_scrollBody,
 #app-conversion_main-compounds_table_view .dataTables_scrollBody,
 #app-conversion_main-samples_table_view .dataTables_scrollBody,
+#app-conversion_main-kobs_result .dataTables_scrollBody,
 .conc-hits-table .datatables .dataTables_scrollBody {
   height: 100% !important;
   max-height: unset !important;
@@ -3753,4 +3758,9 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   background: #ffffff;
   width: fit-content;
   min-width: 100px;
+}
+
+#app-conversion_main-kobs_result .checkbox input {
+  height: 18px;
+  width: 18px;
 }
