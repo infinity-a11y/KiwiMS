@@ -36,7 +36,7 @@ if (-Not (Test-Path $tempPath)) {
     Write-Host "Created temporary directory: $tempPath"
 }
 
-$rtoolsPath = "C:\rtools44"
+$rtoolsPath = "C:\rtools45"
 
 try {
     Write-Host "Checking for existing Rtools installation at $rtoolsPath..."
@@ -47,7 +47,7 @@ try {
         $tempPath = "$env:TEMP\kiwiflow_setup"
         $rtoolsInstaller = "$tempPath\rtools.exe"
         Write-Host "Downloading Rtools..."
-        Download-File "https://cran.r-project.org/bin/windows/Rtools/rtools44/files/rtools44-6459-6401.exe" $rtoolsInstaller
+        Download-File "https://cran.r-project.org/bin/windows/Rtools/rtools45/files/rtools45-6691-6492.exe" $rtoolsInstaller
 
         # Installation
         Write-Host "Installing Rtools to $rtoolsPath..."
