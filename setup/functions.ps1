@@ -74,12 +74,14 @@ function Find-RtoolsExecutable {
             Write-Host "Added Rtools bin directory to system PATH: $rtoolsBinPath"
             # Update current session PATH
             $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine")
-        } else {
+        }
+        else {
             Write-Host "Rtools bin directory is already in system PATH."
         }
 
         return $rtoolsExePath
-    } else {
+    }
+    else {
         Write-Host "ERROR: Rtools executable not found in expected location: $rtoolsExePath"
         return $null
     }
@@ -146,11 +148,13 @@ function Install-Quarto {
         $quartoInfo = Find-QuartoInstallation
         if ($quartoInfo.Found) {
             Write-Host "Quarto installation verified successfully at $($quartoInfo.Path)"
-        } else {
+        }
+        else {
             Write-Host "Quarto installation completed but verification failed"
             exit 1
         }
-    } catch {
+    }
+    catch {
         Write-Host "Error installing Quarto: $_"
         exit 1
     }
@@ -167,23 +171,25 @@ function Find-QuartoInstallation {
             $quartoVersion = & quarto --version
             Write-Host "Quarto CLI version $quartoVersion found at $quartoBinDir"
             return @{
-                Found = $true
-                Path = $quartoBinDir
+                Found   = $true
+                Path    = $quartoBinDir
                 Version = $quartoVersion
             }
-        } else {
+        }
+        else {
             Write-Host "Quarto CLI is not installed or not found in PATH"
             return @{
-                Found = $false
-                Path = $null
+                Found   = $false
+                Path    = $null
                 Version = $null
             }
         }
-    } catch {
+    }
+    catch {
         Write-Host "Error checking Quarto installation: $_"
         return @{
-            Found = $false
-            Path = $null
+            Found   = $false
+            Path    = $null
             Version = $null
         }
     }
@@ -200,7 +206,8 @@ function Test-PathInEnvironment {
     if ($currentPath -like "*$Directory*") {
         Write-Host "Directory $Directory is already in system PATH"
         return $true
-    } else {
+    }
+    else {
         Write-Host "Directory $Directory is not in system PATH"
         return $false
     }
@@ -222,7 +229,8 @@ function Add-ToSystemPath {
             # Update current session PATH
             $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine")
         }
-    } catch {
+    }
+    catch {
         Write-Host "Error adding $Directory to PATH: $_"
         exit 1
     }
@@ -242,7 +250,8 @@ function Compare-Version {
         if ($installed -gt $target) { return 1 }  # Installed is newer
         elseif ($installed -eq $target) { return 0 }  # Same version
         else { return -1 }  # Installed is older
-    } catch {
+    }
+    catch {
         Write-Host "Error comparing versions: $_"
         return $null
     }
