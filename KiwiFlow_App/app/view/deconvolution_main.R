@@ -807,40 +807,41 @@ server <- function(
       write("", reactVars$decon_process_out)
 
       # Launch external deconvolution process
-      # tryCatch(
-      #   {
-      rx_process <- process$new(
-        "Rscript.exe",
-        args = c(
-          "app/logic/deconvolution_execute.R",
-          temp,
-          log_path,
-          getwd(),
-          deconvolution_sidebar_vars$targetpath()
-        ),
-        stdout = reactVars$decon_process_out,
-        stderr = reactVars$decon_process_out
+
+      tryCatch(
+        {
+          rx_process <- process$new(
+            "Rscript.exe",
+            args = c(
+              "app/logic/deconvolution_execute.R",
+              temp,
+              log_path,
+              getwd(),
+              deconvolution_sidebar_vars$targetpath()
+            ),
+            stdout = reactVars$decon_process_out,
+            stderr = reactVars$decon_process_out
+          )
+        },
+        error = function(e) {
+          # Activate error catching variable
+          reactVars$catch_error <- TRUE
+
+          # Stop spinner for spectrum and heatmap plot
+          waiter_hide(id = ns("heatmap"))
+          waiter_hide(id = ns("spectrum"))
+
+          error_msg <- paste("Failed to start deconvolution:", e$message)
+          write_log(error_msg)
+
+          # Show error notification
+          shiny$showNotification(
+            error_msg,
+            type = "error",
+            duration = 5
+          )
+        }
       )
-      #   },
-      #   error = function(e) {
-      #     # Activate error catching variable
-      #     reactVars$catch_error <- TRUE
-
-      #     # Stop spinner for spectrum and heatmap plot
-      #     waiter_hide(id = ns("heatmap"))
-      #     waiter_hide(id = ns("spectrum"))
-
-      #     error_msg <- paste("Failed to start deconvolution:", e$message)
-      #     write_log(error_msg)
-
-      #     # Show error notification
-      #     shiny$showNotification(
-      #       error_msg,
-      #       type = "error",
-      #       duration = 5
-      #     )
-      #   }
-      # )
 
       # Abort deconvolution if process initiation fails
       if (reactVars$catch_error == TRUE) {

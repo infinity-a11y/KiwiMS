@@ -494,14 +494,20 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
           class = "btn-highlight"
         )
 
-        shinyjs::removeClass(
-          selector = "#app-conversion_sidebar-analysis_select > div > div:nth-child(1)",
-          class = "custom-disable"
+        shinyjs::delay(
+          500,
+          shinyjs::removeClass(
+            selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(1)",
+            class = "custom-disable"
+          )
         )
         if (input$run_ki_kinact) {
-          shinyjs::removeClass(
-            selector = "#app-conversion_sidebar-analysis_select > div > div:nth-child(2)",
-            class = "custom-disable"
+          shinyjs::delay(
+            500,
+            shinyjs::removeClass(
+              selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(2)",
+              class = "custom-disable"
+            )
           )
         }
 
@@ -511,12 +517,12 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
         analysis_status("pending")
 
         shinyjs::addClass(
-          selector = "#app-conversion_sidebar-analysis_select > div > div:nth-child(1)",
+          selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(1)",
           class = "custom-disable"
         )
         if (input$run_ki_kinact) {
           shinyjs::addClass(
-            selector = "#app-conversion_sidebar-analysis_select > div > div:nth-child(2)",
+            selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(2)",
             class = "custom-disable"
           )
         }
@@ -562,7 +568,6 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
           ),
           choiceValues = list(1, 2)
         ),
-        # This script runs the moment this UI is added to the page
         shiny::tags$script(paste0(
           "
       (function() {
@@ -667,16 +672,6 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
         asis = TRUE
       )
     })
-
-    ## Initial disable of analysis select input ----
-    shinyjs::addClass(
-      selector = "#app-conversion_sidebar-analysis_select > div > div:nth-child(1)",
-      class = "custom-disable"
-    )
-    shinyjs::addClass(
-      selector = "#app-conversion_sidebar-analysis_select > div > div:nth-child(2)",
-      class = "custom-disable"
-    )
 
     # TODO Info / Hints ----
     ## Info UI ----
