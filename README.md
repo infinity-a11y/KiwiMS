@@ -26,9 +26,9 @@ KiwiFlow is an interactive pipeline with graphical user interface to perform pro
 
 1.  Download the KiwiFlow installer from the latest release: <br>
 
-| OS | Version | Download | SHA256 |
+| OS | Version | Download | SHA256 checksum |
 |------------------|------------------|------------------|------------------|
-| Windows 10/11 | 0.3.0 | [KiwiFlow_2026-01-28_Setup.exe](https://github.com/infinity-a11y/KiwiFlow/releases/download/0.3.0/KiwiFlow_2026-01-28_Setup.exe) | <sub><sup>C9D20049FEAFE0C4320DDFE05CA09B284783E164BA83E5DDBE29D2E440C0E9DC</sup></sub> |
+| Windows 10/11 | 0.3.0 | [KiwiFlow_2026-01-28_Setup.exe](https://github.com/infinity-a11y/KiwiFlow/releases/download/0.3.0/KiwiFlow_2026-01-28_Setup.exe) | <sub><sup>C0163C7576009061DC03869DE276311B84BA03EF28CB09778F95113DFC68475C</sup></sub> |
 
 2.  Run the installer to set KiwiFlow up.
 
