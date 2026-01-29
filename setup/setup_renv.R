@@ -17,7 +17,7 @@ tryCatch(
             )
         }
 
-        renv::restore(clean = TRUE)
+        renv::restore(clean = TRUE, rebuild = TRUE)
         message("renv::restore() completed.")
         overall_success <- TRUE
     },
