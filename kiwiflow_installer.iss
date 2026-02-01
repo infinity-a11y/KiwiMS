@@ -13,7 +13,6 @@ OutputBaseFilename=KiwiFlow_2026-01-28_Setup
 SetupIconFile=setup\favicon.ico
 PrivilegesRequired=admin
 FlatComponentsList=no
-WizardImageFile=setup\kiwiflow_big.bmp
 WizardSmallImageFile=setup\kiwiflow_small.bmp
 WizardStyle=modern
 AlwaysShowDirOnReadyPage=yes
