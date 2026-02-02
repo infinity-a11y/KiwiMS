@@ -215,7 +215,7 @@ prot_comp_handsontable <- function(
     ) |>
     rhandsontable::hot_cols(
       cols = 2:ncol(tab),
-      format = "0.000"
+      format = "0.##########",
     ) |>
     rhandsontable::hot_validate_numeric(
       cols = 2:ncol(tab),
@@ -357,7 +357,8 @@ sample_handsontable <- function(
       handsontable,
       col = which(colnames(tab) %in% c("Concentration", "Time")),
       type = "numeric",
-      allowInvalid = FALSE
+      allowInvalid = FALSE,
+      format = "0.##########"
     ) |>
       rhandsontable::hot_validate_numeric(
         cols = which(colnames(tab) %in% c("Concentration", "Time")),
