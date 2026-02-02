@@ -32,7 +32,66 @@ ui <- function(id) {
     class = "conversion-sidebar",
     width = "15%",
     shinyjs::useShinyjs(),
+    shiny::actionButton(
+      ns("testi"),
+      "TEST"
+    ),
     shiny::uiOutput(ns("conversion_sidebar_ui"))
+  )
+}
+
+safe_observer <- function(event_expr, handler_fn, ...) {
+  event_expr <- rlang::enquo(event_expr)
+
+  shiny::observeEvent(
+    rlang::eval_tidy(event_expr),
+    {
+      tryCatch(
+        {
+          handler_fn()
+        },
+        error = function(e) {
+          # Log to R console
+          message("--- KIWIFLOW SYSTEM ERROR ---")
+          message(conditionMessage(e))
+
+          shiny::removeModal()
+
+          # Show the Modal with a Restart Button
+          shiny::showModal(shiny::modalDialog(
+            title = shiny::span(
+              "⚠️ System Error",
+              style = "color: #d9534f; font-weight: bold;"
+            ),
+            shiny::tags$p(
+              "An unexpected error occurred. KiwiFlow needs to be restarted to ensure data integrity."
+            ),
+            shiny::tags$hr(),
+            shiny::tags$b("Error Details:"),
+            shiny::tags$pre(
+              conditionMessage(e),
+              style = "background-color: #f8f9fa; padding: 10px; border: 1px solid #ddd;"
+            ),
+
+            easyClose = FALSE,
+            footer = shiny::tagList(
+              shiny::tags$button(
+                "Terminate Session",
+                class = "btn btn-danger",
+                onclick = "
+                Shiny.setInputValue('app-quit_kiwiflow', Math.random(), {priority: 'event'}); 
+                setTimeout(function() {
+                  window.open('', '_self', ''); 
+                  window.close();
+                }, 500);"
+              )
+            )
+          ))
+        }
+      )
+    },
+    ignoreInit = TRUE,
+    ...
   )
 }
 
@@ -40,6 +99,23 @@ ui <- function(id) {
 server <- function(id, conversion_main_vars, deconvolution_main_vars) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+
+    # 2. Bulletproof Error Formatter
+    customErrorHandler <- function(e) {
+      # Use traceback() or simplified sys.calls
+      calls <- sys.calls()
+
+      list(
+        error = as.character(conditionMessage(e)),
+        stack = "KiwiFlow needs to be restarted"
+      )
+    }
+
+    # 4. Usage
+    safe_observer(input$testi, function() {
+      message("TRUE from safe_observer")
+      dasda # This will now trigger the alert correctly
+    })
 
     # Declare reactive vars ----
     result_list <- shiny::reactiveVal(NULL)
@@ -291,7 +367,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
     )
 
     ## Conditional processing ----
-    shiny::observeEvent(input$run_binding_analysis, {
+    safe_observer(input$run_binding_analysis, function() {
       if (analysis_status() == "pending") {
         # Delay conversion start
         Sys.sleep(1)

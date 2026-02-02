@@ -1502,6 +1502,13 @@ add_hits <- function(
   session,
   ns
 ) {
+  results <<- results
+  sample_table <<- sample_table
+  protein_table <<- protein_table
+  compound_table <<- compound_table
+  peak_tolerance <<- peak_tolerance
+  max_multiples <<- max_multiples
+
   samples <- names(results$deconvolution)
   protein_mw <- protein_table$`Mass 1`
   compound_mw <- as.matrix(compound_table[, -1])
