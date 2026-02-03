@@ -37,10 +37,6 @@ ui <- function(id) {
     class = "conversion-sidebar",
     width = "15%",
     shinyjs::useShinyjs(),
-    shiny::actionButton(
-      ns("testi"),
-      "TEST"
-    ),
     shiny::uiOutput(ns("conversion_sidebar_ui"))
   )
 }
@@ -49,33 +45,6 @@ ui <- function(id) {
 server <- function(id, conversion_main_vars, deconvolution_main_vars) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-
-    # 2. Bulletproof Error Formatter
-    # customErrorHandler <- function(e) {
-    #   # Use traceback() or simplified sys.calls
-    #   calls <- sys.calls()
-
-    #   list(
-    #     error = as.character(conditionMessage(e)),
-    #     stack = "KiwiFlow needs to be restarted"
-    #   )
-    # }
-
-    # 4. Usage
-    safe_observe(
-      event_expr = input$testi,
-      observer_name = "TEST Observer",
-      handler_fn = function() {
-        message("TRUE from safe_observer")
-        dasda # This will now trigger the alert correctly
-      }
-    )
-
-    # safe_observe(observer_name = "ASHASHAH", handler_fn = function() {
-    #   input$testi
-    #   message("TRUE Asdfadsdasdas")
-    #   # dasda
-    # })
 
     # Declare reactive vars ----
     result_list <- shiny::reactiveVal(NULL)
