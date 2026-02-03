@@ -36,6 +36,11 @@ box::use(
       render_table_view,
       make_kobs_plot,
     ],
+  app /
+    logic /
+    helper_functions[
+      safe_observe,
+    ],
   app / logic / deconvolution_functions[spectrum_plot, ],
   app /
     logic /
@@ -409,36 +414,40 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
     ## Concentration/Time UI ----
     # Conditional adaption of concentration/time input UI
-    shiny::observe({
-      if (
-        isTRUE(conversion_sidebar_vars$run_ki_kinact()) &&
-          isFALSE(declaration_vars$samples_confirmed)
-      ) {
-        shinyjs::removeClass(
-          selector = ".unit-selectors .form-group .bootstrap-select",
-          class = "custom-disable"
-        )
-        shinyjs::removeClass(
-          selector = ".unit-selectors label",
-          class = "custom-disable"
-        )
-      } else {
-        shinyjs::addClass(
-          selector = ".unit-selectors .form-group .bootstrap-select",
-          class = "custom-disable"
-        )
-        shinyjs::addClass(
-          selector = ".unit-selectors label",
-          class = "custom-disable"
-        )
+    safe_observe(
+      observer_name = "Conditional Adaption of Concentration/Time Input UI",
+      handler_fn = function() {
+        if (
+          isTRUE(conversion_sidebar_vars$run_ki_kinact()) &&
+            isFALSE(declaration_vars$samples_confirmed)
+        ) {
+          shinyjs::removeClass(
+            selector = ".unit-selectors .form-group .bootstrap-select",
+            class = "custom-disable"
+          )
+          shinyjs::removeClass(
+            selector = ".unit-selectors label",
+            class = "custom-disable"
+          )
+        } else {
+          shinyjs::addClass(
+            selector = ".unit-selectors .form-group .bootstrap-select",
+            class = "custom-disable"
+          )
+          shinyjs::addClass(
+            selector = ".unit-selectors label",
+            class = "custom-disable"
+          )
+        }
       }
-    })
+    )
 
     ## Data table input events ----
     # Silently update table data table input status variables
-    shiny::observeEvent(
-      input$proteins_table,
-      {
+    safe_observe(
+      event_expr = input$proteins_table,
+      observer_name = "Protein Table Input Status",
+      handler_fn = function() {
         shiny::req(input$proteins_table)
 
         # Save current table input
@@ -449,9 +458,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       priority = 100
     )
 
-    shiny::observeEvent(
-      input$compounds_table,
-      {
+    safe_observe(
+      event_expr = input$compounds_table,
+      observer_name = "Compound Table Input Status",
+      handler_fn = function() {
         shiny::req(input$compounds_table)
 
         # Save current table input
@@ -462,22 +472,16 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       priority = 100
     )
 
-    shiny::observeEvent(
-      input$samples_table,
-      {
+    safe_observe(
+      event_expr = input$samples_table,
+      observer_name = "Samples Table Input Status",
+      handler_fn = function() {
         shiny::req(input$samples_table)
 
         # Save current table input
         suppressWarnings({
           samples_table <- rhandsontable::hot_to_r(input$samples_table)
         })
-
-        # Remove concentration / time columns if present
-        # conc_col <- grep("Concentration", colnames(samples_table))
-        # time_col <- grep("Time", colnames(samples_table))
-        # if (length(conc_col) & length(time_col)) {
-        #   samples_table <- samples_table[, -c(conc_col, time_col)]
-        # }
 
         # Assign to reactive variable
         sample_table_data(samples_table)
@@ -587,9 +591,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     )
 
     ### Table pasting feedback ----
-    shiny::observeEvent(
-      input$table_paste_instant,
-      {
+    safe_observe(
+      event_expr = input$table_paste_instant,
+      observer_name = "Table Pasting Feedback",
+      handler_fn = function() {
         # Block UI
         shinyjs::runjs(paste0(
           'document.getElementById("blocking-overlay").style.display ',
@@ -616,35 +621,44 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
     ## File upload handler ----
     ### Protein table file upload ----
-    shiny::observeEvent(input$proteins_fileinput, {
-      protein_table_data(handle_file_upload(
-        file_input = input$proteins_fileinput,
-        header_checkbox = input$proteins_header_checkbox,
-        type = "protein",
-        output = output,
-        declaration_vars = declaration_vars
-      ))
-      declaration_vars$protein_table_disabled <- FALSE
-      protein_table_trigger(protein_table_trigger() + 1)
-    })
+    safe_observe(
+      event_expr = input$proteins_fileinput,
+      observer_name = "Protein Table File Upload",
+      handler_fn = function() {
+        protein_table_data(handle_file_upload(
+          file_input = input$proteins_fileinput,
+          header_checkbox = input$proteins_header_checkbox,
+          type = "protein",
+          output = output,
+          declaration_vars = declaration_vars
+        ))
+        declaration_vars$protein_table_disabled <- FALSE
+        protein_table_trigger(protein_table_trigger() + 1)
+      }
+    )
 
     ### Compound table file upload ----
-    shiny::observeEvent(input$compounds_fileinput, {
-      compound_table_data(handle_file_upload(
-        file_input = input$compounds_fileinput,
-        header_checkbox = input$compounds_header_checkbox,
-        type = "compound",
-        output = output,
-        declaration_vars = declaration_vars
-      ))
-      declaration_vars$compound_table_disabled <- FALSE
-      compound_table_trigger(compound_table_trigger() + 1)
-    })
+    safe_observe(
+      event_expr = input$compounds_fileinput,
+      observer_name = "Compound Table File Upload",
+      handler_fn = function() {
+        compound_table_data(handle_file_upload(
+          file_input = input$compounds_fileinput,
+          header_checkbox = input$compounds_header_checkbox,
+          type = "compound",
+          output = output,
+          declaration_vars = declaration_vars
+        ))
+        declaration_vars$compound_table_disabled <- FALSE
+        compound_table_trigger(compound_table_trigger() + 1)
+      }
+    )
 
     ### Sample file upload ----
-    shiny::observeEvent(
-      input$samples_fileinput,
-      {
+    safe_observe(
+      event_expr = input$samples_fileinput,
+      observer_name = "Sample Table File Upload",
+      handler_fn = function() {
         shiny::req(
           declaration_vars$protein_table,
           declaration_vars$compound_table
@@ -667,8 +681,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
     ## Table status observer ----
     ### Observe table status for protein table ----
-    shiny::observe(
-      {
+    safe_observe(
+      observer_name = "Protein Table Status Observer",
+      handler_fn = function() {
         shiny::req(
           protein_table_input(),
           declaration_vars$protein_table_active
@@ -699,8 +714,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     )
 
     ### Observe table status for compound table ----
-    shiny::observe(
-      {
+    safe_observe(
+      observer_name = "Compound Table Status Observer",
+      handler_fn = function() {
         shiny::req(
           compound_table_input(),
           declaration_vars$compound_table_active
@@ -732,110 +748,123 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     )
 
     ### Observe table status for samples table ----
-    shiny::observe({
-      samples_table_input <- sample_table_input()
+    safe_observe(
+      observer_name = "Sample Table Status Observer",
+      handler_fn = function() {
+        samples_table_input <- sample_table_input()
 
-      # Conditional observe actions
-      if (
-        isTRUE(declaration_vars$protein_table_active) ||
-          isTRUE(declaration_vars$compound_table_active)
-      ) {
-        # Update info text
-        output$samples_table_info <- shiny::renderText({
-          "Enter Proteins and Compounds first"
-        })
-        shinyjs::removeClass(
-          "samples_table_info",
-          "table-info-green"
-        )
-        shinyjs::removeClass(
-          "samples_table_info",
-          "table-info-red"
-        )
+        # Conditional observe actions
+        if (
+          isTRUE(declaration_vars$protein_table_active) ||
+            isTRUE(declaration_vars$compound_table_active)
+        ) {
+          # Update info text
+          output$samples_table_info <- shiny::renderText({
+            "Enter Proteins and Compounds first"
+          })
+          shinyjs::removeClass(
+            "samples_table_info",
+            "table-info-green"
+          )
+          shinyjs::removeClass(
+            "samples_table_info",
+            "table-info-red"
+          )
 
-        # Disable file upload
-        shinyjs::disable("samples_fileinput")
-        shinyjs::addClass(
-          selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
-          class = "custom-disable"
-        )
-        shinyjs::addClass(
-          selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
-          class = "custom-disable"
-        )
+          # Disable file upload
+          shinyjs::disable("samples_fileinput")
+          shinyjs::addClass(
+            selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
+            class = "custom-disable"
+          )
+          shinyjs::addClass(
+            selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
+            class = "custom-disable"
+          )
 
-        # Disable confirm button
-        shinyjs::disable("confirm_samples")
-      } else if (is.null(samples_table_input)) {
-        # if protein/compound declaration confirmed
+          # Disable confirm button
+          shinyjs::disable("confirm_samples")
+        } else if (is.null(samples_table_input)) {
+          # if protein/compound declaration confirmed
 
-        output$samples_table_info <- shiny::renderText({
-          "Add Deconvoluted Samples"
-        })
+          output$samples_table_info <- shiny::renderText({
+            "Add Deconvoluted Samples"
+          })
 
-        # Enable file upload
-        shinyjs::enable("samples_fileinput")
-        shinyjs::removeClass(
-          selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
-          class = "custom-disable"
-        )
-        shinyjs::removeClass(
-          selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
-          class = "custom-disable"
-        )
+          # Enable file upload
+          shinyjs::enable("samples_fileinput")
+          shinyjs::removeClass(
+            selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
+            class = "custom-disable"
+          )
+          shinyjs::removeClass(
+            selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
+            class = "custom-disable"
+          )
 
-        # Disable confirm button
-        shinyjs::disable("confirm_samples")
-      } else if (isTRUE(declaration_vars$sample_table_active)) {
-        # Enable file upload
-        shinyjs::enable("samples_fileinput")
-        shinyjs::removeClass(
-          selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
-          class = "custom-disable"
-        )
-        shinyjs::removeClass(
-          selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
-          class = "custom-disable"
-        )
+          # Disable confirm button
+          shinyjs::disable("confirm_samples")
+        } else if (isTRUE(declaration_vars$sample_table_active)) {
+          # Enable file upload
+          shinyjs::enable("samples_fileinput")
+          shinyjs::removeClass(
+            selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
+            class = "custom-disable"
+          )
+          shinyjs::removeClass(
+            selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
+            class = "custom-disable"
+          )
 
-        declaration_vars$sample_table_status <- table_observe(
-          tab = "samples",
-          table = clean_sample_table(
-            samples_table_input
-          ),
-          output = output,
-          ns = ns,
-          proteins = declaration_vars$protein_table$Protein,
-          compounds = declaration_vars$compound_table$Compound
-        )
-      }
+          declaration_vars$sample_table_status <- table_observe(
+            tab = "samples",
+            table = clean_sample_table(
+              samples_table_input
+            ),
+            output = output,
+            ns = ns,
+            proteins = declaration_vars$protein_table$Protein,
+            compounds = declaration_vars$compound_table$Compound
+          )
+        }
 
-      # Unblock UI
-      shinyjs::runjs(paste0(
-        'document.getElementById("blocking-overlay").style.display ',
-        '= "none";'
-      ))
-    })
+        # Unblock UI
+        shinyjs::runjs(paste0(
+          'document.getElementById("blocking-overlay").style.display ',
+          '= "none";'
+        ))
+      },
+      priority = 100
+    )
 
     ## Event activate ki_kinact analysis ----
-    shiny::observeEvent(conversion_sidebar_vars$run_ki_kinact(), {
-      shiny::req(input$samples_table)
+    safe_observe(
+      event_expr = conversion_sidebar_vars$run_ki_kinact(),
+      observer_name = "Ki/kinact Activation",
+      handler_fn = function() {
+        shiny::req(input$samples_table)
 
-      sample_table_data(
-        new_sample_table(
-          result = declaration_vars$result,
-          protein_table = declaration_vars$protein_table,
-          compound_table = declaration_vars$compound_table,
-          ki_kinact = conversion_sidebar_vars$run_ki_kinact()
+        sample_table_data(
+          new_sample_table(
+            result = declaration_vars$result,
+            protein_table = declaration_vars$protein_table,
+            compound_table = declaration_vars$compound_table,
+            ki_kinact = conversion_sidebar_vars$run_ki_kinact()
+          )
         )
-      )
-      sample_table_trigger(sample_table_trigger() + 1)
-    })
+        sample_table_trigger(sample_table_trigger() + 1)
+      }
+    )
 
     ## Edit button event ----
-    shiny::observeEvent(
-      input$edit_proteins | input$edit_compounds | input$edit_samples,
-      {
+    safe_observe(
+      event_expr = list(
+        input$edit_proteins,
+        input$edit_compounds,
+        input$edit_samples
+      ),
+      observer_name = "Edit Table Event",
+      handler_fn = function() {
         shiny::req(input$tabs)
 
         # If edit applied always activate edit mode for sample table if present
@@ -903,11 +932,14 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     )
 
     ## Confirm button event ----
-    shiny::observeEvent(
-      input$confirm_proteins |
-        input$confirm_compounds |
-        input$confirm_samples,
-      {
+    safe_observe(
+      event_expr = list(
+        input$confirm_proteins,
+        input$confirm_compounds,
+        input$confirm_samples
+      ),
+      observer_name = "Confirm Table Event",
+      handler_fn = function() {
         # Block UI
         shinyjs::runjs(paste0(
           'document.getElementById("blocking-overlay").style.display ',
@@ -999,30 +1031,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         } else if (
           input$tabs == "Samples" && declaration_vars$sample_table_status
         ) {
-          # if (isTRUE(conversion_sidebar_vars$run_ki_kinact())) {
-          #   # Attach concentration/time table to clean non-NA sample table input
-          #   samples_table_conc_time <- rhandsontable::hot_to_r(
-          #     input$samples_table_conc_time
-          #   )
-
-          #   # Set colnames with selected time / concentration units
-          #   colnames(samples_table_conc_time) <- c(
-          #     paste0("Concentration [", input$conc_unit, "]"),
-          #     paste0("Time [", input$time_unit, "]")
-          #   )
-
-          #   # Merge with samples table
-          #   sample_table <- cbind(
-          #     clean_sample_table(sample_table_input()),
-          #     samples_table_conc_time
-          #   )
-          # } else {
-          # Get clean non-NA sample table without concentration/time input
+          # Get clean non-NA sample table
           sample_table <- clean_sample_table(
             sample_table_input(),
             units = list(conc = input$conc_unit, time = input$time_unit)
           )
-          # }
 
           # Assign table to reactive variables
           declaration_vars$sample_table <- sample_table
@@ -1052,20 +1065,23 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     )
 
     ## Observe conversion readiness ----
-    shiny::observe({
-      if (
-        isTRUE(declaration_vars$protein_table_status) &
-          isTRUE(
-            declaration_vars$compound_table_status
-          ) &
-          isTRUE(declaration_vars$sample_table_status) &
-          isFALSE(declaration_vars$sample_table_active)
-      ) {
-        declaration_vars$conversion_ready <- TRUE
-      } else {
-        declaration_vars$conversion_ready <- FALSE
+    safe_observe(
+      observer_name = "Conversion Readiness Observer",
+      handler_fn = function() {
+        if (
+          isTRUE(declaration_vars$protein_table_status) &
+            isTRUE(
+              declaration_vars$compound_table_status
+            ) &
+            isTRUE(declaration_vars$sample_table_status) &
+            isFALSE(declaration_vars$sample_table_active)
+        ) {
+          declaration_vars$conversion_ready <- TRUE
+        } else {
+          declaration_vars$conversion_ready <- FALSE
+        }
       }
-    })
+    )
 
     ## Continuiation from deconvolution to conversion ----
     ### User cancels samples table overwrite ----
@@ -1075,147 +1091,152 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     })
 
     ### User confirms samples table overwrite ----
-    shiny::observeEvent(input$conversion_cont_conf, {
-      # Block UI
-      shinyjs::runjs(paste0(
-        'document.getElementById("blocking-overlay").style.display ',
-        '= "block";'
-      ))
+    safe_observe(
+      event_expr = input$conversion_cont_conf,
+      observer_name = "Samples Table Overwrite",
+      handler_fn = function() {
+        # Block UI
+        shinyjs::runjs(paste0(
+          'document.getElementById("blocking-overlay").style.display ',
+          '= "block";'
+        ))
 
-      # Load conversion declaration interface
-      if (!is.null(conversion_sidebar_vars$result_list())) {
-        # Remove sample view elements
-        output$samples_selected_protein <- NULL
-        output$samples_total_pct_binding <- NULL
-        output$samples_compound_distribution_ui <- NULL
-        output$samples_present_compounds_na <- NULL
-        output$samples_compound_distribution <- NULL
-        output$samples_annotated_spectrum <- NULL
-        output$samples_table_view <- NULL
+        # Load conversion declaration interface
+        if (!is.null(conversion_sidebar_vars$result_list())) {
+          # Remove sample view elements
+          output$samples_selected_protein <- NULL
+          output$samples_total_pct_binding <- NULL
+          output$samples_compound_distribution_ui <- NULL
+          output$samples_present_compounds_na <- NULL
+          output$samples_compound_distribution <- NULL
+          output$samples_annotated_spectrum <- NULL
+          output$samples_table_view <- NULL
 
-        # Remove compound view elements
-        output$compounds_selected_compound <- NULL
-        output$compounds_total_pct_binding <- NULL
-        output$compounds_compound_distribution <- NULL
-        output$compounds_annotated_spectrum <- NULL
-        output$compounds_spectrum_labels_ui <- NULL
-        output$compounds_table_view <- NULL
-        output$compound_distribution_labels_ui <- NULL
+          # Remove compound view elements
+          output$compounds_selected_compound <- NULL
+          output$compounds_total_pct_binding <- NULL
+          output$compounds_compound_distribution <- NULL
+          output$compounds_annotated_spectrum <- NULL
+          output$compounds_spectrum_labels_ui <- NULL
+          output$compounds_table_view <- NULL
+          output$compound_distribution_labels_ui <- NULL
 
-        # Remove protein view elements
-        output$proteins_selected_protein <- NULL
-        output$proteins_total_pct_binding <- NULL
-        output$proteins_compound_distribution <- NULL
-        output$proteins_annotated_spectrum <- NULL
-        output$proteins_spectrum_labels_ui <- NULL
-        output$proteins_table_view <- NULL
-        output$proteins_present_compounds_na <- NULL
-        output$proteins_present_compounds_ui <- NULL
-        output$proteins_distribution_labels_ui <- NULL
+          # Remove protein view elements
+          output$proteins_selected_protein <- NULL
+          output$proteins_total_pct_binding <- NULL
+          output$proteins_compound_distribution <- NULL
+          output$proteins_annotated_spectrum <- NULL
+          output$proteins_spectrum_labels_ui <- NULL
+          output$proteins_table_view <- NULL
+          output$proteins_present_compounds_na <- NULL
+          output$proteins_present_compounds_ui <- NULL
+          output$proteins_distribution_labels_ui <- NULL
 
-        # Remove other relative binding interfac elements
-        output$color_variable_ui <- NULL
+          # Remove other relative binding interfac elements
+          output$color_variable_ui <- NULL
 
-        # Show declaration tabs
-        bslib::nav_show(
-          "tabs",
-          "Proteins"
-        )
-        bslib::nav_show(
-          "tabs",
-          "Compounds"
-        )
-        bslib::nav_show(
-          "tabs",
-          "Samples"
-        )
-
-        # Remove results tabs
-        bslib::nav_remove("tabs", "Binding")
-        bslib::nav_remove("tabs", "Hits")
-        for (i in names(conversion_vars$select_concentration)) {
-          bslib::nav_remove(
+          # Show declaration tabs
+          bslib::nav_show(
             "tabs",
-            paste0("[", i, "]")
+            "Proteins"
           )
+          bslib::nav_show(
+            "tabs",
+            "Compounds"
+          )
+          bslib::nav_show(
+            "tabs",
+            "Samples"
+          )
+
+          # Remove results tabs
+          bslib::nav_remove("tabs", "Binding")
+          bslib::nav_remove("tabs", "Hits")
+          for (i in names(conversion_vars$select_concentration)) {
+            bslib::nav_remove(
+              "tabs",
+              paste0("[", i, "]")
+            )
+          }
+          bslib::nav_remove("tabs", "Compounds View")
+          bslib::nav_remove("tabs", "Proteins View")
+          bslib::nav_remove("tabs", "Samples View")
+          shiny::removeUI(
+            selector = paste0("#", ns("conversion_tab_items"))
+          )
+          # Reset reactive variables
+          conversion_vars <- shiny::reactiveValues(
+            modified_results = NULL,
+            select_concentration = NULL,
+            conc_colors = NULL,
+            expand_helper = FALSE,
+            hits_summary = NULL
+          )
+
+          hits_summary <- conversion_vars$hits_summary <- NULL
         }
-        bslib::nav_remove("tabs", "Compounds View")
-        bslib::nav_remove("tabs", "Proteins View")
-        bslib::nav_remove("tabs", "Samples View")
-        shiny::removeUI(
-          selector = paste0("#", ns("conversion_tab_items"))
-        )
-        # Reset reactive variables
-        conversion_vars <- shiny::reactiveValues(
-          modified_results = NULL,
-          select_concentration = NULL,
-          conc_colors = NULL,
-          expand_helper = FALSE,
-          hits_summary = NULL
+
+        # Activate table observer
+        declaration_vars$sample_table_active <- TRUE
+
+        # Read results .rds file from previous deconvolution
+        declaration_vars$result <- readRDS(
+          deconvolution_main_vars$continue_conversion()
         )
 
-        hits_summary <- conversion_vars$hits_summary <- NULL
+        # New table data
+        sample_table_data(new_sample_table(
+          result = declaration_vars$result,
+          protein_table = declaration_vars$protein_table,
+          compound_table = declaration_vars$compound_table,
+          ki_kinact = conversion_sidebar_vars$run_ki_kinact()
+        ))
+        sample_table_trigger(sample_table_trigger() + 1)
+
+        # Change buttons
+        shiny::updateActionButton(
+          session = session,
+          "confirm_samples",
+          icon = shiny::icon("bookmark")
+        )
+        shinyjs::enable("confirm_samples")
+        shinyjs::disable("edit_samples")
+
+        # Enable file upload
+        shinyjs::enable("samples_fileinput")
+        shinyjs::removeClass(
+          selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
+          class = "custom-disable"
+        )
+        shinyjs::removeClass(
+          selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
+          class = "custom-disable"
+        )
+
+        # Mark tab as undone
+        shinyjs::runjs(
+          'document.querySelector(".nav-link[data-value=\'Samples\']").classList.remove("done");'
+        )
+
+        # Select samples tab
+        set_selected_tab("Samples", session)
+
+        # Remove dialogue window
+        shiny::removeModal()
+
+        # Unblock UI
+        shinyjs::runjs(paste0(
+          'document.getElementById("blocking-overlay").style.display ',
+          '= "none";'
+        ))
       }
-
-      # Activate table observer
-      declaration_vars$sample_table_active <- TRUE
-
-      # Read results .rds file from previous deconvolution
-      declaration_vars$result <- readRDS(
-        deconvolution_main_vars$continue_conversion()
-      )
-
-      # New table data
-      sample_table_data(new_sample_table(
-        result = declaration_vars$result,
-        protein_table = declaration_vars$protein_table,
-        compound_table = declaration_vars$compound_table,
-        ki_kinact = conversion_sidebar_vars$run_ki_kinact()
-      ))
-      sample_table_trigger(sample_table_trigger() + 1)
-
-      # Change buttons
-      shiny::updateActionButton(
-        session = session,
-        "confirm_samples",
-        icon = shiny::icon("bookmark")
-      )
-      shinyjs::enable("confirm_samples")
-      shinyjs::disable("edit_samples")
-
-      # Enable file upload
-      shinyjs::enable("samples_fileinput")
-      shinyjs::removeClass(
-        selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
-        class = "custom-disable"
-      )
-      shinyjs::removeClass(
-        selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
-        class = "custom-disable"
-      )
-
-      # Mark tab as undone
-      shinyjs::runjs(
-        'document.querySelector(".nav-link[data-value=\'Samples\']").classList.remove("done");'
-      )
-
-      # Select samples tab
-      set_selected_tab("Samples", session)
-
-      # Remove dialogue window
-      shiny::removeModal()
-
-      # Unblock UI
-      shinyjs::runjs(paste0(
-        'document.getElementById("blocking-overlay").style.display ',
-        '= "none";'
-      ))
-    })
+    )
 
     ### Transfer results from deconvolution to sample table ----
-    shiny::observeEvent(
-      deconvolution_main_vars$continue_conversion(),
-      {
+    safe_observe(
+      event_expr = deconvolution_main_vars$continue_conversion(),
+      observer_name = "Deconvolution Results Transfer",
+      handler_fn = function() {
         shiny::req(deconvolution_main_vars$continue_conversion())
 
         # If present sample table ask confirmation
@@ -1354,17 +1375,23 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     ## Render conversion results interface ----
 
     # Activate observer on analysis launch
-    shiny::observe({
-      if (is.null(conversion_sidebar_vars$result_list())) {
-        results_observer$suspend()
-      } else {
-        results_observer$resume()
+    safe_observe(
+      observer_name = "Results Observer Activation",
+      handler_fn = function() {
+        shiny::req(results_observer)
+
+        if (is.null(conversion_sidebar_vars$result_list())) {
+          results_observer$suspend()
+        } else {
+          results_observer$resume()
+        }
       }
-    })
+    )
 
     # Observer rendering UI on conditions
-    results_observer <- shiny::observe(
-      {
+    results_observer <- safe_observe(
+      observer_name = "Results Observer Activation",
+      handler_fn = function() {
         # Block UI
         shinyjs::runjs(paste0(
           'document.getElementById("blocking-overlay").style.display ',
@@ -1808,58 +1835,61 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             )
 
           ##### Hits table clicking observer ----
-          shiny::observe({
-            shiny::req(
-              input$relbinding_hits_tab_cell_clicked,
-              relbinding_hits_current()
-            )
+          safe_observe(
+            event_expr = input$relbinding_hits_tab_cell_clicked,
+            observer_name = "Hits Table Clicking Observer (Rel. Binding)",
+            handler_fn = function() {
+              shiny::req(
+                input$relbinding_hits_tab_cell_clicked,
+                relbinding_hits_current()
+              )
 
-            # Get client side click information
-            cell_clicked <- input$relbinding_hits_tab_cell_clicked
+              # Get client side click information
+              cell_clicked <- input$relbinding_hits_tab_cell_clicked
 
-            if (
-              !is.null(cell_clicked) &&
-                length(cell_clicked) &&
-                !is.na(relbinding_hits_current()$x$data[
-                  input$relbinding_hits_tab_cell_clicked$row,
-                  input$relbinding_hits_tab_cell_clicked$col + 1
-                ])
-            ) {
-              # Get current column indeces of sample and compound columns
-              cols <- names(relbinding_hits_current()$x$data)
-              sample_col <- which(cols == "Sample ID") - 1
-              prot_col <- which(cols == "Protein") - 1
-              cmp_col <- which(cols == "Cmp Name") - 1
+              if (
+                !is.null(cell_clicked) &&
+                  length(cell_clicked) &&
+                  !is.na(relbinding_hits_current()$x$data[
+                    input$relbinding_hits_tab_cell_clicked$row,
+                    input$relbinding_hits_tab_cell_clicked$col + 1
+                  ])
+              ) {
+                # Get current column indeces of sample and compound columns
+                cols <- names(relbinding_hits_current()$x$data)
+                sample_col <- which(cols == "Sample ID") - 1
+                prot_col <- which(cols == "Protein") - 1
+                cmp_col <- which(cols == "Cmp Name") - 1
 
-              # Actions if click corresponds to sample or compound
-              if (length(sample_col) && cell_clicked$col == sample_col) {
-                shinyWidgets::updatePickerInput(
-                  session,
-                  "conversion_sample_picker",
-                  selected = cell_clicked$value
-                )
+                # Actions if click corresponds to sample or compound
+                if (length(sample_col) && cell_clicked$col == sample_col) {
+                  shinyWidgets::updatePickerInput(
+                    session,
+                    "conversion_sample_picker",
+                    selected = cell_clicked$value
+                  )
 
-                set_selected_tab("Samples View", session)
-              } else if (length(prot_col) && cell_clicked$col == prot_col) {
-                shinyWidgets::updatePickerInput(
-                  session,
-                  "conversion_protein_picker",
-                  selected = cell_clicked$value
-                )
+                  set_selected_tab("Samples View", session)
+                } else if (length(prot_col) && cell_clicked$col == prot_col) {
+                  shinyWidgets::updatePickerInput(
+                    session,
+                    "conversion_protein_picker",
+                    selected = cell_clicked$value
+                  )
 
-                set_selected_tab("Proteins View", session)
-              } else if (length(cmp_col) && cell_clicked$col == cmp_col) {
-                shinyWidgets::updatePickerInput(
-                  session,
-                  "conversion_compound_picker",
-                  selected = cell_clicked$value
-                )
+                  set_selected_tab("Proteins View", session)
+                } else if (length(cmp_col) && cell_clicked$col == cmp_col) {
+                  shinyWidgets::updatePickerInput(
+                    session,
+                    "conversion_compound_picker",
+                    selected = cell_clicked$value
+                  )
 
-                set_selected_tab("Compounds View", session)
+                  set_selected_tab("Compounds View", session)
+                }
               }
             }
-          }) |>
-            shiny::bindEvent(input$relbinding_hits_tab_cell_clicked)
+          )
 
           #### Sample view tab ----
           bslib::nav_insert(
@@ -4491,43 +4521,46 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             )
 
           #### Hits table clicking observer ----
-          shiny::observe({
-            shiny::req(
-              input$kikinact_hits_tab_cell_clicked,
-              kikinact_hits_current()
-            )
+          safe_observe(
+            event_expr = input$kikinact_hits_tab_cell_clicked,
+            observer_name = "Hits Table Clicking Observer (Ki/kinact)",
+            handler_fn = function() {
+              shiny::req(
+                input$kikinact_hits_tab_cell_clicked,
+                kikinact_hits_current()
+              )
 
-            # Get client side click information
-            cell_clicked <- input$kikinact_hits_tab_cell_clicked
+              # Get client side click information
+              cell_clicked <- input$kikinact_hits_tab_cell_clicked
 
-            if (
-              !is.null(cell_clicked) &&
-                length(cell_clicked) &&
-                !is.na(kikinact_hits_current()$x$data[
-                  input$kikinact_hits_tab_cell_clicked$row,
-                  input$kikinact_hits_tab_cell_clicked$col + 1
-                ])
-            ) {
-              # Get current column indeces of sample and compound columns
-              cols <- names(kikinact_hits_current()$x$data)
-              concentration_col <- which(
-                cols == conversion_vars$units["Concentration"]
-              ) -
-                1
-
-              # Actions if click corresponds to sample or compound
               if (
-                length(concentration_col) &&
-                  cell_clicked$col == concentration_col
+                !is.null(cell_clicked) &&
+                  length(cell_clicked) &&
+                  !is.na(kikinact_hits_current()$x$data[
+                    input$kikinact_hits_tab_cell_clicked$row,
+                    input$kikinact_hits_tab_cell_clicked$col + 1
+                  ])
               ) {
-                set_selected_tab(
-                  paste0("[", gsub(" µM|mM", "", cell_clicked$value), "]"),
-                  session
-                )
+                # Get current column indeces of sample and compound columns
+                cols <- names(kikinact_hits_current()$x$data)
+                concentration_col <- which(
+                  cols == conversion_vars$units["Concentration"]
+                ) -
+                  1
+
+                # Actions if click corresponds to sample or compound
+                if (
+                  length(concentration_col) &&
+                    cell_clicked$col == concentration_col
+                ) {
+                  set_selected_tab(
+                    paste0("[", gsub(" µM|mM", "", cell_clicked$value), "]"),
+                    session
+                  )
+                }
               }
             }
-          }) |>
-            shiny::bindEvent(input$kikinact_hits_tab_cell_clicked)
+          )
 
           #### Binding tab ----
           bslib::nav_insert(
@@ -5337,103 +5370,122 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     ## Observer for conversion result interface ----
 
     ### Update label inputs depending on truncated samples ----
-    shiny::observe({
-      shiny::req(
-        conversion_vars$hits_summary,
-        !is.null(conversion_sidebar_vars$run_ki_kinact()),
-        input$truncate_names,
-        input$conversion_compound_picker
-      )
+    safe_observe(
+      event_expr = input$truncate_names,
+      observer_name = "Truncated Label Input Updater",
+      handler_fn = function() {
+        shiny::req(
+          conversion_vars$hits_summary,
+          !is.null(conversion_sidebar_vars$run_ki_kinact()),
+          input$truncate_names,
+          input$conversion_compound_picker
+        )
 
-      tbl <- dplyr::filter(
-        conversion_vars$hits_summary,
-        `Cmp Name` == input$conversion_compound_picker
-      )
+        tbl <- dplyr::filter(
+          conversion_vars$hits_summary,
+          `Cmp Name` == input$conversion_compound_picker
+        )
 
-      if (input$truncate_names) {
-        sample_ids <- tbl$`truncSample_ID`
-      } else {
-        sample_ids <- tbl$`Sample ID`
+        if (input$truncate_names) {
+          sample_ids <- tbl$`truncSample_ID`
+        } else {
+          sample_ids <- tbl$`Sample ID`
+        }
+
+        shinyWidgets::updateMaterialSwitch(
+          session = session,
+          "cmp_distribution_labels",
+          value = max(nchar(unique(sample_ids))) <= 22 |
+            nrow(tbl) < 4
+        )
+
+        shinyWidgets::updateMaterialSwitch(
+          session = session,
+          "compounds_spectrum_labels",
+          value = (length(unique(sample_ids)) <= 8 &
+            max(nchar(as.character(sample_ids))) <= 20) |
+            isTRUE(conversion_sidebar_vars$run_ki_kinact())
+        )
       }
-
-      shinyWidgets::updateMaterialSwitch(
-        session = session,
-        "cmp_distribution_labels",
-        value = max(nchar(unique(sample_ids))) <= 22 |
-          nrow(tbl) < 4
-      )
-
-      shinyWidgets::updateMaterialSwitch(
-        session = session,
-        "compounds_spectrum_labels",
-        value = (length(unique(sample_ids)) <= 8 &
-          max(nchar(as.character(sample_ids))) <= 20) |
-          isTRUE(conversion_sidebar_vars$run_ki_kinact())
-      )
-    }) |>
-      shiny::bindEvent(input$truncate_names)
+    )
 
     ### Enable/Disable hits table expand samples input ----
-    shiny::observe({
-      shiny::req(conversion_vars$hits_summary)
+    safe_observe(
+      observer_name = "Enable/Disable Hits Table Expand Samples Input",
+      handler_fn = function() {
+        shiny::req(conversion_vars$hits_summary)
 
-      if (!is.null(input$relbinding_hits_tab_expand)) {
-        shinyjs::toggleState(
-          id = "relbinding_hits_tab_expand",
-          condition = any(duplicated(conversion_vars$hits_summary$`Sample ID`))
-        )
-        shinyjs::toggleClass(
-          selector = ".hits-tab-expand-box .checkbox",
-          class = "checkbox-disable"
-        )
-      }
+        if (!is.null(input$relbinding_hits_tab_expand)) {
+          shinyjs::toggleState(
+            id = "relbinding_hits_tab_expand",
+            condition = any(duplicated(
+              conversion_vars$hits_summary$`Sample ID`
+            ))
+          )
+          shinyjs::toggleClass(
+            selector = ".hits-tab-expand-box .checkbox",
+            class = "checkbox-disable"
+          )
+        }
 
-      if (!is.null(input$kikinact_hits_tab_expand)) {
-        shinyjs::toggleState(
-          id = "kikinact_hits_tab_expand",
-          condition = any(duplicated(conversion_vars$hits_summary$`Sample ID`))
-        )
-        shinyjs::toggleClass(
-          selector = ".hits-tab-expand-box .checkbox",
-          class = "checkbox-disable"
-        )
+        if (!is.null(input$kikinact_hits_tab_expand)) {
+          shinyjs::toggleState(
+            id = "kikinact_hits_tab_expand",
+            condition = any(duplicated(
+              conversion_vars$hits_summary$`Sample ID`
+            ))
+          )
+          shinyjs::toggleClass(
+            selector = ".hits-tab-expand-box .checkbox",
+            class = "checkbox-disable"
+          )
+        }
       }
-    })
+    )
 
     ### Enable/Disable hits table NA exclude input ----
-    shiny::observe({
-      shiny::req(conversion_vars$hits_summary)
+    safe_observe(
+      observer_name = "Enable/Disable Hits Table NA Exclude Input",
+      handler_fn = function() {
+        shiny::req(conversion_vars$hits_summary)
 
-      if (!is.null(input$relbinding_hits_tab_na)) {
-        shinyjs::toggleState(
-          id = "relbinding_hits_tab_na",
-          condition = anyNA(conversion_vars$hits_summary) &
-            !all(is.na(conversion_vars$hits_summary$`Cmp Name`))
-        )
-        shinyjs::toggleClass(
-          selector = ".hits-tab-na-box .checkbox",
-          class = "checkbox-disable"
-        )
-      }
+        if (!is.null(input$relbinding_hits_tab_na)) {
+          shinyjs::toggleState(
+            id = "relbinding_hits_tab_na",
+            condition = anyNA(conversion_vars$hits_summary) &
+              !all(is.na(conversion_vars$hits_summary$`Cmp Name`))
+          )
+          shinyjs::toggleClass(
+            selector = ".hits-tab-na-box .checkbox",
+            class = "checkbox-disable"
+          )
+        }
 
-      if (!is.null(input$kikinact_hits_tab_na)) {
-        shinyjs::toggleState(
-          id = "kikinact_hits_tab_na",
-          condition = anyNA(conversion_vars$hits_summary) &
-            !all(is.na(conversion_vars$hits_summary$`Cmp Name`))
-        )
-        shinyjs::toggleClass(
-          selector = ".hits-tab-na-box .checkbox",
-          class = "checkbox-disable"
-        )
+        if (!is.null(input$kikinact_hits_tab_na)) {
+          shinyjs::toggleState(
+            id = "kikinact_hits_tab_na",
+            condition = anyNA(conversion_vars$hits_summary) &
+              !all(is.na(conversion_vars$hits_summary$`Cmp Name`))
+          )
+          shinyjs::toggleClass(
+            selector = ".hits-tab-na-box .checkbox",
+            class = "checkbox-disable"
+          )
+        }
       }
-    })
+    )
 
     ## Events for conversion result interface ----
 
     ### Reevaluate color scales depending on n of unique variable values ----
-    shiny::observe(
-      {
+    safe_observe(
+      event_expr = list(
+        input$color_variable,
+        conversion_sidebar_vars$analysis_select(),
+        conversion_sidebar_vars$run_analysis()
+      ),
+      observer_name = "Color Scale Evaluation",
+      handler_fn = function() {
         shiny::req(
           conversion_vars$hits_summary,
           input$color_variable,
@@ -5474,190 +5526,190 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           selected = selected
         )
       }
-    ) |>
-      shiny::bindEvent(
-        input$color_variable,
-        conversion_sidebar_vars$analysis_select(),
-        conversion_sidebar_vars$run_analysis()
-      )
+    )
 
     ### Expand samples from hits table ----
-    shiny::observe({
-      if (isFALSE(conversion_vars$expand_helper)) {
-        shinyjs::removeClass(
-          selector = ".hits-tab-col-select-ui .form-group",
-          class = "custom-disable"
-        )
+    safe_observe(
+      event_expr = input$relbinding_hits_tab_expand,
+      observer_name = "Color Scale Evaluation",
+      handler_fn = function() {
+        if (isFALSE(conversion_vars$expand_helper)) {
+          shinyjs::removeClass(
+            selector = ".hits-tab-col-select-ui .form-group",
+            class = "custom-disable"
+          )
 
-        choices <- hits_table_names[
-          !hits_table_names %in%
-            c(
-              "Sample ID",
-              "Cmp Name",
-              if (length(units) == 2) {
-                c(
-                  conversion_vars$units[["Concentration"]],
-                  conversion_vars$units[["Time"]]
-                )
-              },
-              "truncSample_ID"
+          choices <- hits_table_names[
+            !hits_table_names %in%
+              c(
+                "Sample ID",
+                "Cmp Name",
+                if (length(units) == 2) {
+                  c(
+                    conversion_vars$units[["Concentration"]],
+                    conversion_vars$units[["Time"]]
+                  )
+                },
+                "truncSample_ID"
+              )
+          ]
+
+          selected <- hits_table_names[
+            !hits_table_names %in%
+              c(
+                "Sample ID",
+                "Cmp Name",
+                if (length(units) == 2) {
+                  c(
+                    conversion_vars$units[["Concentration"]],
+                    conversion_vars$units[["Time"]]
+                  )
+                },
+                "truncSample_ID"
+              )
+          ][-c(1:2, 4:5, 7, 9)]
+
+          if (!is.null(input$relbinding_hits_tab_col_select)) {
+            shinyWidgets::updatePickerInput(
+              session,
+              "relbinding_hits_tab_col_select",
+              choices = choices,
+              selected = selected
             )
-        ]
+          }
 
-        selected <- hits_table_names[
-          !hits_table_names %in%
-            c(
-              "Sample ID",
-              "Cmp Name",
-              if (length(units) == 2) {
-                c(
-                  conversion_vars$units[["Concentration"]],
-                  conversion_vars$units[["Time"]]
-                )
-              },
-              "truncSample_ID"
+          if (!is.null(input$kikinact_hits_tab_col_select)) {
+            shinyWidgets::updatePickerInput(
+              session,
+              "kikinact_hits_tab_col_select",
+              choices = choices,
+              selected = selected
             )
-        ][-c(1:2, 4:5, 7, 9)]
+          }
 
-        if (!is.null(input$relbinding_hits_tab_col_select)) {
-          shinyWidgets::updatePickerInput(
-            session,
-            "relbinding_hits_tab_col_select",
-            choices = choices,
-            selected = selected
+          if (!is.null(input$relbinding_binding_chart)) {
+            shinyWidgets::updatePickerInput(
+              session,
+              "relbinding_binding_chart",
+              choices = c("%-Binding", "Total %-Binding"),
+              selected = "Total %-Binding",
+            )
+          }
+
+          if (!is.null(input$kikinact_binding_chart)) {
+            shinyWidgets::updatePickerInput(
+              session,
+              "kikinact_binding_chart",
+              choices = c("%-Binding", "Total %-Binding"),
+              selected = "Total %-Binding",
+            )
+          }
+
+          conversion_vars$expand_helper <- TRUE
+        } else {
+          shinyjs::addClass(
+            selector = ".hits-tab-col-select-ui .form-group",
+            class = "custom-disable"
           )
+
+          if (!is.null(input$relbinding_hits_tab_col_select)) {
+            shinyWidgets::updatePickerInput(
+              session,
+              "relbinding_hits_tab_col_select",
+              choices = c("Theor. Prot.", "Total %-Binding"),
+              selected = c("Theor. Prot.", "Total %-Binding")
+            )
+          }
+
+          if (!is.null(input$kikinact_hits_tab_col_select)) {
+            shinyWidgets::updatePickerInput(
+              session,
+              "kikinact_hits_tab_col_select",
+              choices = c("Theor. Prot.", "Total %-Binding"),
+              selected = c("Theor. Prot.", "Total %-Binding")
+            )
+          }
+
+          if (!is.null(input$relbinding_binding_chart)) {
+            shinyWidgets::updatePickerInput(
+              session,
+              "relbinding_binding_chart",
+              choices = "Total %-Binding",
+              selected = "Total %-Binding"
+            )
+          }
+
+          if (!is.null(input$kikinact_binding_chart)) {
+            shinyWidgets::updatePickerInput(
+              session,
+              "kikinact_binding_chart",
+              choices = "Total %-Binding",
+              selected = "Total %-Binding"
+            )
+          }
+
+          conversion_vars$expand_helper <- FALSE
         }
-
-        if (!is.null(input$kikinact_hits_tab_col_select)) {
-          shinyWidgets::updatePickerInput(
-            session,
-            "kikinact_hits_tab_col_select",
-            choices = choices,
-            selected = selected
-          )
-        }
-
-        if (!is.null(input$relbinding_binding_chart)) {
-          shinyWidgets::updatePickerInput(
-            session,
-            "relbinding_binding_chart",
-            choices = c("%-Binding", "Total %-Binding"),
-            selected = "Total %-Binding",
-          )
-        }
-
-        if (!is.null(input$kikinact_binding_chart)) {
-          shinyWidgets::updatePickerInput(
-            session,
-            "kikinact_binding_chart",
-            choices = c("%-Binding", "Total %-Binding"),
-            selected = "Total %-Binding",
-          )
-        }
-
-        conversion_vars$expand_helper <- TRUE
-      } else {
-        shinyjs::addClass(
-          selector = ".hits-tab-col-select-ui .form-group",
-          class = "custom-disable"
-        )
-
-        if (!is.null(input$relbinding_hits_tab_col_select)) {
-          shinyWidgets::updatePickerInput(
-            session,
-            "relbinding_hits_tab_col_select",
-            choices = c("Theor. Prot.", "Total %-Binding"),
-            selected = c("Theor. Prot.", "Total %-Binding")
-          )
-        }
-
-        if (!is.null(input$kikinact_hits_tab_col_select)) {
-          shinyWidgets::updatePickerInput(
-            session,
-            "kikinact_hits_tab_col_select",
-            choices = c("Theor. Prot.", "Total %-Binding"),
-            selected = c("Theor. Prot.", "Total %-Binding")
-          )
-        }
-
-        if (!is.null(input$relbinding_binding_chart)) {
-          shinyWidgets::updatePickerInput(
-            session,
-            "relbinding_binding_chart",
-            choices = "Total %-Binding",
-            selected = "Total %-Binding"
-          )
-        }
-
-        if (!is.null(input$kikinact_binding_chart)) {
-          shinyWidgets::updatePickerInput(
-            session,
-            "kikinact_binding_chart",
-            choices = "Total %-Binding",
-            selected = "Total %-Binding"
-          )
-        }
-
-        conversion_vars$expand_helper <- FALSE
       }
-    }) |>
-      shiny::bindEvent(
-        input$relbinding_hits_tab_expand
-      )
+    )
 
     ### Recalculate results depending on excluded concentrations ----
-    shiny::observeEvent(input[["kobs_result_cell_edit"]], {
-      # Apply changes to included concentrations
-      conversion_vars$select_concentration[
-        input[["kobs_result_cell_edit"]]$row
-      ] <- input[[
-        "kobs_result_cell_edit"
-      ]]$value
+    safe_observe(
+      event_expr = input[["kobs_result_cell_edit"]],
+      observer_name = "Deconvolution Results Transfer",
+      handler_fn = function() {
+        # Apply changes to included concentrations
+        conversion_vars$select_concentration[
+          input[["kobs_result_cell_edit"]]$row
+        ] <- input[[
+          "kobs_result_cell_edit"
+        ]]$value
 
-      # Check number of selected concentrations
-      if (sum(conversion_vars$select_concentration) < 3) {
-        shinyWidgets::show_toast(
-          "≥ 3 concentrations needed",
-          type = "warning",
-          timer = 3000
+        # Check number of selected concentrations
+        if (sum(conversion_vars$select_concentration) < 3) {
+          shinyWidgets::show_toast(
+            "≥ 3 concentrations needed",
+            type = "warning",
+            timer = 3000
+          )
+
+          # Dont apply changes
+          return(NULL)
+        }
+
+        # Recalculate result object according to included concentrations
+        result_list <- conversion_sidebar_vars$result_list()
+
+        # Transformed units argument
+        units_adapt <- c(
+          Concentration = gsub(
+            ".*\\[(.+)\\].*",
+            "\\1",
+            conversion_vars$units[["Concentration"]]
+          ),
+          Time = gsub(".*\\[(.+)\\].*", "\\1", conversion_vars$units[["Time"]])
         )
 
-        # Dont apply changes
-        return(NULL)
+        # Add binding/kobs results to result list
+        result_list$binding_kobs_result <- add_kobs_binding_result(
+          result_list,
+          concentrations_select = names(
+            conversion_vars$select_concentration
+          )[which(conversion_vars$select_concentration)],
+          units = units_adapt,
+          conc_time = conversion_vars$units
+        )
+
+        # Add Ki/kinact results to result list
+        result_list$ki_kinact_result <- add_ki_kinact_result(
+          result_list,
+          units = units_adapt
+        )
+
+        # Assign modified results to reactive variable
+        conversion_vars$modified_results <- result_list
       }
-
-      # Recalculate result object according to included concentrations
-      result_list <- conversion_sidebar_vars$result_list()
-
-      # Transformed units argument
-      units_adapt <- c(
-        Concentration = gsub(
-          ".*\\[(.+)\\].*",
-          "\\1",
-          conversion_vars$units[["Concentration"]]
-        ),
-        Time = gsub(".*\\[(.+)\\].*", "\\1", conversion_vars$units[["Time"]])
-      )
-
-      # Add binding/kobs results to result list
-      result_list$binding_kobs_result <- add_kobs_binding_result(
-        result_list,
-        concentrations_select = names(
-          conversion_vars$select_concentration
-        )[which(conversion_vars$select_concentration)],
-        units = units_adapt,
-        conc_time = conversion_vars$units
-      )
-
-      # Add Ki/kinact results to result list
-      result_list$ki_kinact_result <- add_ki_kinact_result(
-        result_list,
-        units = units_adapt
-      )
-
-      # Assign modified results to reactive variable
-      conversion_vars$modified_results <- result_list
-    })
+    )
 
     # Tooltips ----
     ## Binding curve ----
