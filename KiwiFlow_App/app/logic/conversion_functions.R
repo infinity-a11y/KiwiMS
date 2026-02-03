@@ -3248,6 +3248,12 @@ multiple_spectra <- function(
 # Rendering function for relative binding table view
 #' @export
 render_table_view <- function(table, colors, tab, inputs, units) {
+  table1 <<- table
+  colors1 <<- colors
+  tab1 <<- tab
+  inputs1 <<- inputs
+  units1 <<- units
+
   # If table empty
   if (!nrow(table)) {
     return(DT::datatable(
