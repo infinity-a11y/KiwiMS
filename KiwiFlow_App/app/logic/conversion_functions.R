@@ -215,7 +215,7 @@ prot_comp_handsontable <- function(
     ) |>
     rhandsontable::hot_cols(
       cols = 2:ncol(tab),
-      format = "0.000"
+      format = "0.##########",
     ) |>
     rhandsontable::hot_validate_numeric(
       cols = 2:ncol(tab),
@@ -357,7 +357,8 @@ sample_handsontable <- function(
       handsontable,
       col = which(colnames(tab) %in% c("Concentration", "Time")),
       type = "numeric",
-      allowInvalid = FALSE
+      allowInvalid = FALSE,
+      format = "0.##########"
     ) |>
       rhandsontable::hot_validate_numeric(
         cols = which(colnames(tab) %in% c("Concentration", "Time")),
@@ -1066,7 +1067,7 @@ check_hits <- function(
 
   # Transform compounds to matrix
   cmp_mat <- as.matrix(compound_mw[, -1])
-  colnames(cmp_mat) <- compound_mw[, 1]
+  rownames(cmp_mat) <- compound_mw[, 1]
 
   # Fill multiples matrix
   for (i in 1:max_multiples) {
@@ -1120,7 +1121,7 @@ check_hits <- function(
           prot_intensity = peaks$intensity[which(protein_peak)],
           peak = peaks_filtered[j, "mass"],
           intensity = peaks_filtered[j, "intensity"],
-          compound = sub("\\*.*", "", colnames(hits)[indices[k, 2]]),
+          compound = rownames(hits)[indices[1]],
           cmp_mass = cmp_mass,
           delta_cmp = abs(
             (as.numeric(cmp_mass) * multiple) -
@@ -1543,14 +1544,6 @@ add_hits <- function(
     ]] <- conversion(results$deconvolution[[samples[i]]][[
       "hits"
     ]])
-
-    # Add plot to sample
-    # TODO - necessary?
-    # if (!is.null(results$deconvolution[[samples[i]]][["hits"]])) {
-    #   results$deconvolution[[samples[i]]][["hits_spectrum"]] <- spectrum_plot(
-    #     sample = results$deconvolution[[samples[i]]]
-    #   )
-    # }
 
     log_done()
   }
@@ -3255,6 +3248,12 @@ multiple_spectra <- function(
 # Rendering function for relative binding table view
 #' @export
 render_table_view <- function(table, colors, tab, inputs, units) {
+  table1 <<- table
+  colors1 <<- colors
+  tab1 <<- tab
+  inputs1 <<- inputs
+  units1 <<- units
+
   # If table empty
   if (!nrow(table)) {
     return(DT::datatable(

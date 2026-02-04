@@ -18,6 +18,11 @@ box::use(
     ],
   app /
     logic /
+    helper_functions[
+      safe_observe,
+    ],
+  app /
+    logic /
     logging[
       write_log,
       get_session_id,
@@ -179,47 +184,59 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
 
     # Analysis launch UI ----
     ## Toggle checkbox ----
-    shiny::observeEvent(conversion_main_vars$samples_confirmed(), {
-      shinyjs::toggleState("run_ki_kinact")
-      shinyjs::toggleClass(selector = ".checkbox", class = "checkbox-disable")
-    })
+    safe_observe(
+      event_expr = conversion_main_vars$samples_confirmed(),
+      observer_name = "Checkbox Toggle",
+      handler_fn = function() {
+        shinyjs::toggleState("run_ki_kinact")
+        shinyjs::toggleClass(selector = ".checkbox", class = "checkbox-disable")
+      }
+    )
 
     ## Toggle button ----
-    shiny::observe({
-      if (isTRUE(conversion_main_vars$conversion_ready())) {
-        shinyjs::enable("run_binding_analysis")
-        shinyjs::addClass(
-          id = "run_binding_analysis",
-          class = "btn-highlight"
-        )
-      } else {
-        shinyjs::disable("run_binding_analysis")
-        shinyjs::removeClass(
-          id = "run_binding_analysis",
-          class = "btn-highlight"
-        )
+    safe_observe(
+      observer_name = "Button Toggle",
+      handler_fn = function() {
+        if (isTRUE(conversion_main_vars$conversion_ready())) {
+          shinyjs::enable("run_binding_analysis")
+          shinyjs::addClass(
+            id = "run_binding_analysis",
+            class = "btn-highlight"
+          )
+        } else {
+          shinyjs::disable("run_binding_analysis")
+          shinyjs::removeClass(
+            id = "run_binding_analysis",
+            class = "btn-highlight"
+          )
+        }
       }
-    })
+    )
 
     # Update UI on reset results event ----
-    shiny::observeEvent(deconvolution_main_vars$continue_conversion(), {
-      shiny::updateActionButton(
-        session = session,
-        "run_binding_analysis",
-        label = "Run",
-        icon = shiny::icon("play")
-      )
-      shinyjs::enable("peak_tolerance")
-      shinyjs::enable("max_multiples")
-      analysis_status("pending")
-    })
+    safe_observe(
+      event_expr = deconvolution_main_vars$continue_conversion(),
+      observer_name = "Results Resetter",
+      handler_fn = function() {
+        shiny::updateActionButton(
+          session = session,
+          "run_binding_analysis",
+          label = "Run",
+          icon = shiny::icon("play")
+        )
+        shinyjs::enable("peak_tolerance")
+        shinyjs::enable("max_multiples")
+        analysis_status("pending")
+      }
+    )
 
     # Analysis run event ----
 
     ## Running analysis UI ----
-    shiny::observeEvent(
-      input$run_binding_analysis,
-      {
+    safe_observe(
+      event_expr = input$run_binding_analysis,
+      observer_name = "Conversion Analysis UI",
+      handler_fn = function() {
         shiny::req(analysis_status() == "pending")
 
         shiny::showModal(
@@ -291,265 +308,271 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
     )
 
     ## Conditional processing ----
-    shiny::observeEvent(input$run_binding_analysis, {
-      if (analysis_status() == "pending") {
-        # Delay conversion start
-        Sys.sleep(1)
+    safe_observe(
+      event_expr = input$run_binding_analysis,
+      observer_name = "Conversion Processing",
+      handler_fn = function() {
+        if (analysis_status() == "pending") {
+          # Delay conversion start
+          Sys.sleep(1)
 
-        # Activate JS function for conversion process tracking
-        shinyjs::runjs(sprintf(
-          conversion_tracking_js,
-          ns("console_log"),
-          ns("scroll_btn")
-        ))
+          # Activate JS function for conversion process tracking
+          shinyjs::runjs(sprintf(
+            conversion_tracking_js,
+            ns("console_log"),
+            ns("scroll_btn")
+          ))
 
-        # Add hits
-        withCallingHandlers(
-          expr = {
-            result_with_hits <- add_hits(
-              conversion_main_vars$input_list()$result,
-              sample_table = conversion_main_vars$input_list()$Samples_Table,
-              protein_table = conversion_main_vars$input_list()$Protein_Table,
-              compound_table = conversion_main_vars$input_list()$Compound_Table,
-              peak_tolerance = input$peak_tolerance,
-              max_multiples = input$max_multiples,
-              session = session,
-              ns = ns
-            )
-
-            result_with_hits$hits_summary <- summarize_hits(
-              result_with_hits,
-              sample_table = conversion_main_vars$input_list()$Samples_Table
-            )
-
-            # If Ki/kinact analysis is set to be performed
-            if (input$run_ki_kinact) {
-              # Get concentration and time units
-              conc_time <- names(result_with_hits$hits_summary)[unlist(sapply(
-                c("Concentration", "Time"),
-                grep,
-                names(result_with_hits$hits_summary)
-              ))]
-              units <- gsub("Concentration |Time |\\[|\\]", "", conc_time)
-              names(units) <- c("Concentration", "Time")
-
-              # Log initiation of binding kinetics analysis
-              log_binding_kinetics(
-                concentrations = result_with_hits$hits_summary[[conc_time[1]]],
-                times = result_with_hits$hits_summary[[conc_time[2]]],
-                units = units
+          # Add hits
+          withCallingHandlers(
+            expr = {
+              result_with_hits <- add_hits(
+                conversion_main_vars$input_list()$result,
+                sample_table = conversion_main_vars$input_list()$Samples_Table,
+                protein_table = conversion_main_vars$input_list()$Protein_Table,
+                compound_table = conversion_main_vars$input_list()$Compound_Table,
+                peak_tolerance = input$peak_tolerance,
+                max_multiples = input$max_multiples,
+                session = session,
+                ns = ns
               )
 
-              # Add binding/kobs results to result list
-              result_with_hits$binding_kobs_result <- add_kobs_binding_result(
+              result_with_hits$hits_summary <- summarize_hits(
                 result_with_hits,
-                conc_time = conc_time,
-                units = units
+                sample_table = conversion_main_vars$input_list()$Samples_Table
               )
 
-              # Add Ki/kinact results to result list
-              result_with_hits$ki_kinact_result <- add_ki_kinact_result(
-                result_with_hits,
-                units = units
-              )
-            }
-          },
-          message = function(m) {
-            clean_msg <- gsub("\\", "\\\\", m$message, fixed = TRUE)
-            clean_msg <- gsub("'", "\\'", clean_msg, fixed = TRUE)
-            clean_msg <- gsub("\n", "<br>", clean_msg, fixed = TRUE)
+              # If Ki/kinact analysis is set to be performed
+              if (input$run_ki_kinact) {
+                # Get concentration and time units
+                conc_time <- names(result_with_hits$hits_summary)[unlist(sapply(
+                  c("Concentration", "Time"),
+                  grep,
+                  names(result_with_hits$hits_summary)
+                ))]
+                units <- gsub("Concentration |Time |\\[|\\]", "", conc_time)
+                names(units) <- c("Concentration", "Time")
 
-            js_cmd <- sprintf(
-              "
+                # Log initiation of binding kinetics analysis
+                log_binding_kinetics(
+                  concentrations = result_with_hits$hits_summary[[conc_time[
+                    1
+                  ]]],
+                  times = result_with_hits$hits_summary[[conc_time[2]]],
+                  units = units
+                )
+
+                # Add binding/kobs results to result list
+                result_with_hits$binding_kobs_result <- add_kobs_binding_result(
+                  result_with_hits,
+                  conc_time = conc_time,
+                  units = units
+                )
+
+                # Add Ki/kinact results to result list
+                result_with_hits$ki_kinact_result <- add_ki_kinact_result(
+                  result_with_hits,
+                  units = units
+                )
+              }
+            },
+            message = function(m) {
+              clean_msg <- gsub("\\", "\\\\", m$message, fixed = TRUE)
+              clean_msg <- gsub("'", "\\'", clean_msg, fixed = TRUE)
+              clean_msg <- gsub("\n", "<br>", clean_msg, fixed = TRUE)
+
+              js_cmd <- sprintf(
+                "
             var el = document.getElementById('%s');
             if (el) {
               el.innerHTML += '%s';
               el.doAutoScroll();
             }
               ",
-              ns("console_log"),
-              clean_msg
-            )
+                ns("console_log"),
+                clean_msg
+              )
 
-            shinyjs::runjs(js_cmd)
-          }
-        )
-
-        # Assign result list and hits table to reactive vars
-        result_list(result_with_hits)
-
-        # Save distinct protein - compound combinations/complexes
-        complex_df <- dplyr::distinct(
-          result_with_hits$hits_summary,
-          Protein,
-          Compound
-        ) |>
-          dplyr::filter(!is.na(Compound))
-        choice_values <- stats::setNames(
-          complex_df$Compound,
-          complex_df$Compound
-        )
-        complexes <- split(choice_values, complex_df$Protein)
-
-        complexes(complexes)
-
-        # TODO
-        # Dev Mode
-
-        # result_list(readRDS(
-        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_TEST.rds"
-        # ))
-
-        # result_list(readRDS(
-        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits1.rds"
-        # ))
-        # result_list(readRDS(
-        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_7.rds"
-        # ))
-        # result_list(readRDS(
-        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_13.rds"
-        # ))
-        # result_list(readRDS(
-        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_19.rds"
-        # ))
-        # result_list(readRDS(
-        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_25.rds"
-        # ))
-        # result_list(readRDS(
-        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_33.rds"
-        # ))
-        # result_list(readRDS(
-        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_42.rds"
-        # ))
-        # result_list(readRDS(
-        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_55.rds"
-        # ))
-        # result_list(readRDS(
-        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_61.rds"
-        # ))
-
-        ### TESTING
-
-        # Single entry
-        # result_list(readRDS(
-        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\one_entry.rds"
-        # ))
-
-        # NA entry
-        # result_list(readRDS(
-        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\one_entryNA.rds"
-        # ))
-
-        # Two NA entries
-        # result_list(readRDS(
-        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\two_entryNA.rds"
-        # ))
-
-        # NA diff
-        # result_list(readRDS(
-        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\NA_diff.rds"
-        # ))
-
-        # NA diff2
-        # result_list(readRDS(
-        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\NA_diff2.rds"
-        # ))
-
-        # HiDrive-kinact-K
-        # result_list(readRDS(
-        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\HiDrive-kinact-K.rds"
-        # ))
-
-        # 2025-12-10_MS_in-house_protein
-        # result_list(readRDS(
-        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\2025-12-10_MS_in-house_protein.rds"
-        # ))
-
-        # HiDrive-kinact-KI Testdaten
-        # result_list(readRDS(
-        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results.rds"
-        # ))
-
-        # HiDrive-2025-09-04_New-Test-data
-        # result_list(readRDS(
-        #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results_conversion.rds"
-        # ))
-
-        # Update sidebar control inputs
-        shiny::updateActionButton(
-          session = session,
-          "run_binding_analysis",
-          label = "Reset",
-          icon = shiny::icon("repeat")
-        )
-        shinyjs::disable("peak_tolerance")
-        shinyjs::disable("max_multiples")
-
-        # Enable modal window buttons
-        shinyjs::enable("save_conversion_log")
-        shinyjs::enable("copy_conversion_log")
-        shinyjs::enable("dismiss_conversion")
-        shinyjs::addClass(
-          id = "dismiss_conversion",
-          class = "btn-highlight"
-        )
-
-        shinyjs::delay(
-          500,
-          shinyjs::removeClass(
-            selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(1)",
-            class = "custom-disable"
+              shinyjs::runjs(js_cmd)
+            }
           )
-        )
-        if (input$run_ki_kinact) {
+
+          # Assign result list and hits table to reactive vars
+          result_list(result_with_hits)
+
+          # Save distinct protein - compound combinations/complexes
+          complex_df <- dplyr::distinct(
+            result_with_hits$hits_summary,
+            Protein,
+            Compound
+          ) |>
+            dplyr::filter(!is.na(Compound))
+          choice_values <- stats::setNames(
+            complex_df$Compound,
+            complex_df$Compound
+          )
+          complexes <- split(choice_values, complex_df$Protein)
+
+          complexes(complexes)
+
+          # TODO
+          # Dev Mode
+
+          # result_list(readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_TEST.rds"
+          # ))
+
+          # result_list(readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits1.rds"
+          # ))
+          # result_list(readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_7.rds"
+          # ))
+          # result_list(readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_13.rds"
+          # ))
+          # result_list(readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_19.rds"
+          # ))
+          # result_list(readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_25.rds"
+          # ))
+          # result_list(readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_33.rds"
+          # ))
+          # result_list(readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_42.rds"
+          # ))
+          # result_list(readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_55.rds"
+          # ))
+          # result_list(readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_61.rds"
+          # ))
+
+          ### TESTING
+
+          # Single entry
+          # result_list(readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\one_entry.rds"
+          # ))
+
+          # NA entry
+          # result_list(readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\one_entryNA.rds"
+          # ))
+
+          # Two NA entries
+          # result_list(readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\two_entryNA.rds"
+          # ))
+
+          # NA diff
+          # result_list(readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\NA_diff.rds"
+          # ))
+
+          # NA diff2
+          # result_list(readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\NA_diff2.rds"
+          # ))
+
+          # HiDrive-kinact-K
+          # result_list(readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\HiDrive-kinact-K.rds"
+          # ))
+
+          # 2025-12-10_MS_in-house_protein
+          # result_list(readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\2025-12-10_MS_in-house_protein.rds"
+          # ))
+
+          # HiDrive-kinact-KI Testdaten
+          # result_list(readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results.rds"
+          # ))
+
+          # HiDrive-2025-09-04_New-Test-data
+          # result_list(readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results_conversion.rds"
+          # ))
+
+          # Update sidebar control inputs
+          shiny::updateActionButton(
+            session = session,
+            "run_binding_analysis",
+            label = "Reset",
+            icon = shiny::icon("repeat")
+          )
+          shinyjs::disable("peak_tolerance")
+          shinyjs::disable("max_multiples")
+
+          # Enable modal window buttons
+          shinyjs::enable("save_conversion_log")
+          shinyjs::enable("copy_conversion_log")
+          shinyjs::enable("dismiss_conversion")
+          shinyjs::addClass(
+            id = "dismiss_conversion",
+            class = "btn-highlight"
+          )
+
           shinyjs::delay(
             500,
             shinyjs::removeClass(
-              selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(2)",
+              selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(1)",
               class = "custom-disable"
             )
           )
-        }
+          if (input$run_ki_kinact) {
+            shinyjs::delay(
+              500,
+              shinyjs::removeClass(
+                selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(2)",
+                class = "custom-disable"
+              )
+            )
+          }
 
-        analysis_status("done")
-      } else {
-        result_list(NULL)
-        analysis_status("pending")
+          analysis_status("done")
+        } else {
+          result_list(NULL)
+          analysis_status("pending")
 
-        shinyjs::addClass(
-          selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(1)",
-          class = "custom-disable"
-        )
-        if (input$run_ki_kinact) {
           shinyjs::addClass(
-            selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(2)",
+            selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(1)",
             class = "custom-disable"
           )
+          if (input$run_ki_kinact) {
+            shinyjs::addClass(
+              selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(2)",
+              class = "custom-disable"
+            )
+          }
+          shinyjs::addClass(
+            selector = ".complex-picker .form-group .bootstrap-select",
+            class = "custom-disable"
+          )
+          shinyjs::removeClass(
+            id = "complex-picker-connector",
+            class = "complex-picker-connector-color",
+            asis = TRUE
+          )
+
+          shiny::updateRadioButtons(session, "analysis_select", selected = 1)
+
+          shinyjs::enable("peak_tolerance")
+          shinyjs::enable("max_multiples")
+
+          shiny::updateActionButton(
+            session = session,
+            "run_binding_analysis",
+            label = "Run",
+            icon = shiny::icon("play"),
+            disabled = FALSE
+          )
         }
-        shinyjs::addClass(
-          selector = ".complex-picker .form-group .bootstrap-select",
-          class = "custom-disable"
-        )
-        shinyjs::removeClass(
-          id = "complex-picker-connector",
-          class = "complex-picker-connector-color",
-          asis = TRUE
-        )
-
-        shiny::updateRadioButtons(session, "analysis_select", selected = 1)
-
-        shinyjs::enable("peak_tolerance")
-        shinyjs::enable("max_multiples")
-
-        shiny::updateActionButton(
-          session = session,
-          "run_binding_analysis",
-          label = "Run",
-          icon = shiny::icon("play"),
-          disabled = FALSE
-        )
       }
-    })
+    )
 
     ## Render analysis select input element ----
     output$analysis_select_ui <- shiny::renderUI({
@@ -602,16 +625,19 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
     })
 
     ## Save conversion log ----
-    shiny::observeEvent(input$save_conversion_log, {
-      # Generate a filename with a timestamp
-      fname <- paste0(
-        "conversion_SESSION",
-        get_session_id(),
-        ".txt"
-      )
+    safe_observe(
+      event_expr = input$save_conversion_log,
+      observer_name = "Conversion Log Saver",
+      handler_fn = function() {
+        # Generate a filename with a timestamp
+        fname <- paste0(
+          "conversion_SESSION",
+          get_session_id(),
+          ".txt"
+        )
 
-      shinyjs::runjs(sprintf(
-        "
+        shinyjs::runjs(sprintf(
+          "
     var text = document.getElementById('app-conversion_sidebar-console_log').innerText;
     var element = document.createElement('a');
     element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
@@ -621,45 +647,49 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
     element.click();
     document.body.removeChild(element);
   ",
-        fname
-      ))
-    })
+          fname
+        ))
+      }
+    )
 
     # Analysis select UI conditional rendering ----
     ## Toggle classes ----
-    shiny::observe({
-      shiny::req(input$analysis_select)
+    safe_observe(
+      observer_name = "Toggle Converion Sidebar Inputs",
+      handler_fn = function() {
+        shiny::req(input$analysis_select)
 
-      # Block UI
-      # shinyjs::runjs(paste0(
-      #   'document.getElementById("blocking-overlay").style.display ',
-      #   '= "block";'
-      # ))
+        # Block UI
+        # shinyjs::runjs(paste0(
+        #   'document.getElementById("blocking-overlay").style.display ',
+        #   '= "block";'
+        # ))
 
-      if (input$analysis_select == 1) {
-        shiny::updateRadioButtons(session, "analysis_select", selected = 1)
+        if (input$analysis_select == 1) {
+          shiny::updateRadioButtons(session, "analysis_select", selected = 1)
 
-        shinyjs::addClass(
-          selector = ".complex-picker .form-group .bootstrap-select",
-          class = "custom-disable"
-        )
-        shinyjs::removeClass(
-          id = "complex-picker-connector",
-          class = "complex-picker-connector-color",
-          asis = TRUE
-        )
-      } else {
-        shinyjs::removeClass(
-          selector = ".complex-picker .form-group .bootstrap-select",
-          class = "custom-disable"
-        )
-        shinyjs::addClass(
-          id = "complex-picker-connector",
-          class = "complex-picker-connector-color",
-          asis = TRUE
-        )
+          shinyjs::addClass(
+            selector = ".complex-picker .form-group .bootstrap-select",
+            class = "custom-disable"
+          )
+          shinyjs::removeClass(
+            id = "complex-picker-connector",
+            class = "complex-picker-connector-color",
+            asis = TRUE
+          )
+        } else {
+          shinyjs::removeClass(
+            selector = ".complex-picker .form-group .bootstrap-select",
+            class = "custom-disable"
+          )
+          shinyjs::addClass(
+            id = "complex-picker-connector",
+            class = "complex-picker-connector-color",
+            asis = TRUE
+          )
+        }
       }
-    })
+    )
 
     shiny::observeEvent(input$run_binding_analysis, {
       shinyjs::addClass(
@@ -756,200 +786,204 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
     })
 
     # Tooltips ----
-    shiny::observeEvent(input$sidebar_tooltip_bttn, {
-      if (conversion_main_vars$selected_tab() == "Proteins") {
-        ## Protein declaration ----
-        title <- "Protein Declaration"
-        hints <- shiny::column(
-          width = 12,
-          shiny::div(
-            class = "tooltip-text",
-            "One or more proteins can be screened for. The protein names/IDs together with their Mw values [Da] can be defined either via file upload or by entering the values into the table. The table also supports copy/paste for efficient filling."
-          ),
-          shiny::br(),
-          shiny::div(
-            class = "tooltip-img-text",
-            "The format requires the name/ID as first column and up to nine columns the theoretical mass as well as any mass shifts per protein. Headers are optional."
-          ),
-          shiny::br(),
-          shiny::tags$img(src = "static/protein_table.png"),
-          shiny::br()
-        )
-      } else if (conversion_main_vars$selected_tab() == "Compounds") {
-        ## Compound declaration ----
-        title <- "Compound Declaration"
-        hints <- shiny::column(
-          width = 12,
-          shiny::div(
-            class = "tooltip-text",
-            "One or more compounds can be screened for. The compound names/IDs together with their Mw values [Da] can be defined either via file upload or by entering the values into the table. The table also supports copy/paste for efficient filling."
-          ),
-          shiny::br(),
-          shiny::div(
-            class = "tooltip-img-text",
-            "The format requires the name/ID as first column and up to nine columns the theoretical mass as well as any mass shifts per compound. Headers are optional."
-          ),
-          shiny::br(),
-          shiny::tags$img(
-            src = "static/compound_table.png"
-          ),
-          shiny::br()
-        )
-      } else if (conversion_main_vars$selected_tab() == "Samples") {
-        ## Sample declaration ----
-        title <- "Samples Declaration"
-        hints <- shiny::column(
-          width = 12,
-          shiny::div(
-            class = "tooltip-text",
-            "One or more compounds can be screened for. The compound names/IDs together with their Mw values [Da] can be defined either via file upload or by entering the values into the table. The table also supports copy/paste for efficient filling."
-          ),
-          shiny::br(),
-          shiny::div(
-            class = "tooltip-img-text",
-            "The format requires the name/ID as first column and up to nine columns the theoretical mass as well as any mass shifts per compound. Headers are optional."
-          ),
-          shiny::br(),
-          shiny::tags$img(
-            src = "static/compound_table.png"
-          ),
-          shiny::br()
-        )
-      } else if (conversion_main_vars$selected_tab() == "Binding") {
-        ## Binding analysis ----
-        title <- "Binding Analysis"
-        hints <- shiny::column(
-          width = 12,
-          shiny::withMathJax(),
-          shiny::div(
-            class = "tooltip-text",
-            shiny::p(
-              "This tab displays the complete concentration series for a single compound, enabling global determination of the two fundamental covalent binding parameters: ",
-              shiny::strong("k", htmltools::tags$sub("inact")),
-              " (maximum inactivation rate at saturation) and ",
-              shiny::strong("K", htmltools::tags$sub("i")),
-              " (apparent dissociation constant of the initial reversible complex)."
+    safe_observe(
+      event_expr = input$sidebar_tooltip_bttn,
+      observer_name = "Tooltips Displayer",
+      handler_fn = function() {
+        if (conversion_main_vars$selected_tab() == "Proteins") {
+          ## Protein declaration ----
+          title <- "Protein Declaration"
+          hints <- shiny::column(
+            width = 12,
+            shiny::div(
+              class = "tooltip-text",
+              "One or more proteins can be screened for. The protein names/IDs together with their Mw values [Da] can be defined either via file upload or by entering the values into the table. The table also supports copy/paste for efficient filling."
             ),
-            shiny::p(
-              "Individual time-courses are fitted to extract k",
-              htmltools::tags$sub("obs"),
-              " values, which are then globally fitted to the hyperbolic two-step model to yield the second-order rate constant ",
-              shiny::strong(
-                "k",
-                htmltools::tags$sub("inact"),
-                " / K",
-                htmltools::tags$sub("i")
-              ),
-              " — the gold-standard metric of covalent binder efficiency at low occupancy."
-            )
+            shiny::br(),
+            shiny::div(
+              class = "tooltip-img-text",
+              "The format requires the name/ID as first column and up to nine columns the theoretical mass as well as any mass shifts per protein. Headers are optional."
+            ),
+            shiny::br(),
+            shiny::tags$img(src = "static/protein_table.png"),
+            shiny::br()
           )
-        )
-      } else if (conversion_main_vars$selected_tab() == "Hits") {
-        ## Hits table ----
-        title <- "Hits Table"
-        hints <- shiny::fluidRow(
-          shiny::br(),
-          shiny::column(
-            width = 11,
+        } else if (conversion_main_vars$selected_tab() == "Compounds") {
+          ## Compound declaration ----
+          title <- "Compound Declaration"
+          hints <- shiny::column(
+            width = 12,
+            shiny::div(
+              class = "tooltip-text",
+              "One or more compounds can be screened for. The compound names/IDs together with their Mw values [Da] can be defined either via file upload or by entering the values into the table. The table also supports copy/paste for efficient filling."
+            ),
+            shiny::br(),
+            shiny::div(
+              class = "tooltip-img-text",
+              "The format requires the name/ID as first column and up to nine columns the theoretical mass as well as any mass shifts per compound. Headers are optional."
+            ),
+            shiny::br(),
+            shiny::tags$img(
+              src = "static/compound_table.png"
+            ),
+            shiny::br()
+          )
+        } else if (conversion_main_vars$selected_tab() == "Samples") {
+          ## Sample declaration ----
+          title <- "Samples Declaration"
+          hints <- shiny::column(
+            width = 12,
+            shiny::div(
+              class = "tooltip-text",
+              "One or more compounds can be screened for. The compound names/IDs together with their Mw values [Da] can be defined either via file upload or by entering the values into the table. The table also supports copy/paste for efficient filling."
+            ),
+            shiny::br(),
+            shiny::div(
+              class = "tooltip-img-text",
+              "The format requires the name/ID as first column and up to nine columns the theoretical mass as well as any mass shifts per compound. Headers are optional."
+            ),
+            shiny::br(),
+            shiny::tags$img(
+              src = "static/compound_table.png"
+            ),
+            shiny::br()
+          )
+        } else if (conversion_main_vars$selected_tab() == "Binding") {
+          ## Binding analysis ----
+          title <- "Binding Analysis"
+          hints <- shiny::column(
+            width = 12,
+            shiny::withMathJax(),
             shiny::div(
               class = "tooltip-text",
               shiny::p(
-                "The hits table lists all peak signals that correspond to the declared proteins and compounds with respect to their molecular weights including mass shifts and multiple binding (stoichiometry). Signals that fall within the user-determined peak tolerance values are considered."
-              ),
-              htmltools::tags$ul(
-                htmltools::tags$li(
-                  shiny::strong("Well / Sample ID"),
-                  " – plate well and sample name or ID"
-                ),
-                htmltools::tags$li(
-                  shiny::strong("Conc."),
-                  " – compound concentration"
-                ),
-                htmltools::tags$li(
-                  shiny::strong("Time"),
-                  " – incubation time point"
-                ),
-                htmltools::tags$li(
-                  shiny::strong("Theor. Prot."),
-                  " – theoretical mass of the unmodified protein"
-                ),
-                htmltools::tags$li(
-                  shiny::strong("Meas. Prot."),
-                  " – measured deconvolved mass of the protein species"
-                ),
-                htmltools::tags$li(
-                  shiny::strong("Δ Prot."),
-                  " – difference between theoretical and measured deconvolved protein mass"
-                ),
-                htmltools::tags$li(
-                  shiny::strong("Ⅰ Prot."),
-                  " – relative intensity of the unmodified protein peak [%]"
-                ),
-                htmltools::tags$li(
-                  shiny::strong("Peak Signal"),
-                  " – raw signal intensity for present peak"
-                ),
-                htmltools::tags$li(
-                  shiny::strong("Ⅰ Cmp"),
-                  " – intensity of the peak representing the protein together with a compound adduct [%]"
-                ),
-                htmltools::tags$li(
-                  shiny::strong("Cmp Name"),
-                  " – compound name or ID of the bound compound"
-                ),
-                htmltools::tags$li(
-                  shiny::strong("Theor. Cmp"),
-                  " – theoretical mass of the bound compound"
-                ),
-                htmltools::tags$li(
-                  shiny::strong("Δ Cmp"),
-                  " – difference between theoretical complex and the obtained deconvolved mass [Da]"
-                ),
-                htmltools::tags$li(
-                  shiny::strong("Bind. Stoich."),
-                  " – detected binding stoichiometry (no. of bound compounds)"
-                ),
-                htmltools::tags$li(
-                  shiny::strong("%-Binding"),
-                  " – percentage of protein that has formed the covalent adduct at this time point"
-                ),
-                htmltools::tags$li(
-                  shiny::strong("Total %-Binding"),
-                  " – cumulative %-binding (identical to %-Binding when only one adduct is present)"
-                )
+                "This tab displays the complete concentration series for a single compound, enabling global determination of the two fundamental covalent binding parameters: ",
+                shiny::strong("k", htmltools::tags$sub("inact")),
+                " (maximum inactivation rate at saturation) and ",
+                shiny::strong("K", htmltools::tags$sub("i")),
+                " (apparent dissociation constant of the initial reversible complex)."
               ),
               shiny::p(
-                "The ",
-                shiny::strong("%-Binding"),
-                " (or ",
-                shiny::strong("Total %-Binding"),
-                ") values are used to construct the binding curve and to derive ",
-                shiny::strong("k", htmltools::tags$sub("obs")),
-                ", plateau, and initial velocity (v)."
+                "Individual time-courses are fitted to extract k",
+                htmltools::tags$sub("obs"),
+                " values, which are then globally fitted to the hyperbolic two-step model to yield the second-order rate constant ",
+                shiny::strong(
+                  "k",
+                  htmltools::tags$sub("inact"),
+                  " / K",
+                  htmltools::tags$sub("i")
+                ),
+                " — the gold-standard metric of covalent binder efficiency at low occupancy."
+              )
+            )
+          )
+        } else if (conversion_main_vars$selected_tab() == "Hits") {
+          ## Hits table ----
+          title <- "Hits Table"
+          hints <- shiny::fluidRow(
+            shiny::br(),
+            shiny::column(
+              width = 11,
+              shiny::div(
+                class = "tooltip-text",
+                shiny::p(
+                  "The hits table lists all peak signals that correspond to the declared proteins and compounds with respect to their molecular weights including mass shifts and multiple binding (stoichiometry). Signals that fall within the user-determined peak tolerance values are considered."
+                ),
+                htmltools::tags$ul(
+                  htmltools::tags$li(
+                    shiny::strong("Well / Sample ID"),
+                    " – plate well and sample name or ID"
+                  ),
+                  htmltools::tags$li(
+                    shiny::strong("Conc."),
+                    " – compound concentration"
+                  ),
+                  htmltools::tags$li(
+                    shiny::strong("Time"),
+                    " – incubation time point"
+                  ),
+                  htmltools::tags$li(
+                    shiny::strong("Theor. Prot."),
+                    " – theoretical mass of the unmodified protein"
+                  ),
+                  htmltools::tags$li(
+                    shiny::strong("Meas. Prot."),
+                    " – measured deconvolved mass of the protein species"
+                  ),
+                  htmltools::tags$li(
+                    shiny::strong("Δ Prot."),
+                    " – difference between theoretical and measured deconvolved protein mass"
+                  ),
+                  htmltools::tags$li(
+                    shiny::strong("Ⅰ Prot."),
+                    " – relative intensity of the unmodified protein peak [%]"
+                  ),
+                  htmltools::tags$li(
+                    shiny::strong("Peak Signal"),
+                    " – raw signal intensity for present peak"
+                  ),
+                  htmltools::tags$li(
+                    shiny::strong("Ⅰ Cmp"),
+                    " – intensity of the peak representing the protein together with a compound adduct [%]"
+                  ),
+                  htmltools::tags$li(
+                    shiny::strong("Cmp Name"),
+                    " – compound name or ID of the bound compound"
+                  ),
+                  htmltools::tags$li(
+                    shiny::strong("Theor. Cmp"),
+                    " – theoretical mass of the bound compound"
+                  ),
+                  htmltools::tags$li(
+                    shiny::strong("Δ Cmp"),
+                    " – difference between theoretical complex and the obtained deconvolved mass [Da]"
+                  ),
+                  htmltools::tags$li(
+                    shiny::strong("Bind. Stoich."),
+                    " – detected binding stoichiometry (no. of bound compounds)"
+                  ),
+                  htmltools::tags$li(
+                    shiny::strong("%-Binding"),
+                    " – percentage of protein that has formed the covalent adduct at this time point"
+                  ),
+                  htmltools::tags$li(
+                    shiny::strong("Total %-Binding"),
+                    " – cumulative %-binding (identical to %-Binding when only one adduct is present)"
+                  )
+                ),
+                shiny::p(
+                  "The ",
+                  shiny::strong("%-Binding"),
+                  " (or ",
+                  shiny::strong("Total %-Binding"),
+                  ") values are used to construct the binding curve and to derive ",
+                  shiny::strong("k", htmltools::tags$sub("obs")),
+                  ", plateau, and initial velocity (v)."
+                )
+              )
+            )
+          )
+        } else {
+          ## Concentration time series ----
+          title <- "Single Concentration Time Series"
+          hints <- "Binding parameters derived from mass spectra of time series measurements of a single concentration."
+        }
+
+        shiny::showModal(
+          shiny::div(
+            class = "tip-modal",
+            shiny::modalDialog(
+              hints,
+              title = title,
+              easyClose = TRUE,
+              footer = shiny::tagList(
+                shiny::modalButton("Dismiss")
               )
             )
           )
         )
-      } else {
-        ## Concentration time series ----
-        title <- "Single Concentration Time Series"
-        hints <- "Binding parameters derived from mass spectra of time series measurements of a single concentration."
       }
-
-      shiny::showModal(
-        shiny::div(
-          class = "tip-modal",
-          shiny::modalDialog(
-            hints,
-            title = title,
-            easyClose = TRUE,
-            footer = shiny::tagList(
-              shiny::modalButton("Dismiss")
-            )
-          )
-        )
-      )
-    })
+    )
 
     ## Peak tolerance ----
     shiny::observeEvent(input$peak_tol_tooltip_bttn, {

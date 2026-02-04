@@ -11,6 +11,95 @@ box::use(
   stringr[str_split_fixed],
 )
 
+# Unexpected error aware observer
+#' @export
+safe_observe <- function(
+  event_expr = NULL,
+  observer_name = "Unknown Observer",
+  handler_fn,
+  ...
+) {
+  event_quoted <- rlang::enquo(event_expr)
+
+  handle_error <- function(e) {
+    # Check if silent
+    if (inherits(e, "shiny.silent.error")) {
+      return(NULL)
+    }
+
+    # Log errors
+    message("--- KIWIFLOW SYSTEM ERROR ---")
+    message("Location: ", observer_name)
+    err_msg <- conditionMessage(e)
+    message(
+      "Error: ",
+      if (nchar(err_msg) > 0) err_msg else "No message provided by R"
+    )
+
+    shiny::removeModal()
+    shiny::showModal(shiny::modalDialog(
+      title = shiny::span(
+        "⚠️ System Error",
+        style = "color: #d9534f; font-weight: bold;"
+      ),
+      shiny::tags$p(shiny::HTML(paste0(
+        "An unexpected error occurred in <b>",
+        observer_name,
+        "</b>.<br>",
+        "KiwiFlow needs to be restarted to ensure data integrity."
+      ))),
+      shiny::tags$hr(),
+      shiny::tags$b("Error Details:"),
+      shiny::tags$pre(
+        if (nchar(err_msg) > 0) err_msg else "Check R console for traceback.",
+        style = "background-color: #f8f9fa; padding: 10px; border: 1px solid #ddd;"
+      ),
+      easyClose = FALSE,
+      footer = shiny::tagList(
+        shiny::tags$button(
+          "Terminate Session",
+          class = "btn btn-danger",
+          onclick = "
+            document.getElementById('blocking-overlay').style.display = 'block';
+            Shiny.setInputValue('app-quit_kiwiflow', Math.random(), {priority: 'event'}); 
+            setTimeout(function() {
+              window.open('', '_self', ''); 
+              window.close();
+            }, 1000);"
+        )
+      )
+    ))
+  }
+
+  if (rlang::quo_is_null(event_quoted)) {
+    return(shiny::observe(
+      {
+        tryCatch(
+          {
+            handler_fn()
+          },
+          error = handle_error
+        )
+      },
+      ...
+    ))
+  } else {
+    return(shiny::observeEvent(
+      rlang::eval_tidy(event_quoted),
+      {
+        tryCatch(
+          {
+            handler_fn()
+          },
+          error = handle_error
+        )
+      },
+      ignoreInit = TRUE,
+      ...
+    ))
+  }
+}
+
 #' @export
 get_kiwiflow_version <- function() {
   # Get version file from static directory

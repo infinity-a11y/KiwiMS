@@ -192,6 +192,10 @@ server <- function(id) {
       shiny$stopApp()
     })
 
+    shiny::observeEvent(input$quit_kiwiflow, {
+      shiny::stopApp() # This signals the mother process that the app is done
+    })
+
     # Initiate logging
     start_logging()
     write_log("Session started")
