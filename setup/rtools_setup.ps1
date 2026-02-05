@@ -74,3 +74,5 @@ catch {
     Write-Host "Failed to ensure Rtools installation. Error: $($_.Exception.Message)"
     exit 1
 }
+
+if ($LASTEXITCODE -ne 0) { exit 1 }

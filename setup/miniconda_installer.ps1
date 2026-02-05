@@ -64,3 +64,5 @@ catch {
     Write-Host "Miniconda installation failed. Exiting."
     exit 1
 }
+
+if ($LASTEXITCODE -ne 0) { exit 1 }

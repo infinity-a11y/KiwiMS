@@ -6,7 +6,8 @@ param(
     [string]$basePath,
     [string]$userDataPath,
     [string]$envName,
-    [string]$logFile
+    [string]$logFile,
+    [string]$installScope = "currentuser"
 )
 
 $ErrorActionPreference = "Stop"
@@ -16,80 +17,112 @@ $ProgressPreference = "SilentlyContinue"
 Start-Transcript -Path $logFile -Append | Out-Null
 
 Write-Host "### Setting up Conda Environment (conda_env.ps1)"
-Write-Host "basePath: $basePath"
-Write-Host "userDataPath: $userDataPath"
-Write-Host "envName: $envName"
-Write-Host "logFile: $logFile"
+Write-Host "basePath:         $basePath"
+Write-Host "userDataPath:     $userDataPath"
+Write-Host "envName:          $envName"
+Write-Host "logFile:          $logFile"
+Write-Host "installScope:     $installScope"
 
-# Source functions
-. "$basePath\functions.ps1"
+# Determine if running elevated
+$isElevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+# Decide paths based on scope
+if ($installScope -eq "allusers") {
+    Write-Host "System-wide (all users) mode selected"
+
+    if (-not $isElevated) {
+        Write-Host "ERROR: System-wide installation requires administrator rights."
+        Write-Host "Please run the installer as administrator."
+        exit 1
+    }
+
+    # System-wide Miniconda location
+    $condaPrefix = "$env:ProgramData\miniconda3"
+} else {
+    Write-Host "Current-user mode selected (no elevation required)"
+    # User-specific Miniconda location (should already be set by miniconda_installer.ps1)
+    $condaPrefix = "$env:LOCALAPPDATA\miniconda3"
+}
 
 # Path declaration
-$condaCmd = Find-CondaExecutable
-$condaPrefix = [System.IO.Path]::GetDirectoryName([System.IO.Path]::GetDirectoryName($condaCmd))
+$condaCmd = Join-Path $condaPrefix "Scripts\conda.exe"
 $condaEnvPath = Join-Path $condaPrefix "envs\$envName"
 
 # Conda Presence Check
 if (-Not (Test-Path $condaCmd)) {
-    Write-Host "Miniconda not found after installation. Exiting."
+    Write-Host "ERROR: Miniconda not found at expected location: $condaCmd"
+    Write-Host "Make sure the Miniconda installation step completed successfully."
     exit 1
 }
 
-# Accept channel policies
-& $condaCmd tos accept
+Write-Host "Using Conda at: $condaCmd"
+Write-Host "Target env path: $condaEnvPath"
+
+# Accept channel policies (non-interactive)
+& $condaCmd config --set channel_priority strict
+& $condaCmd config --add channels conda-forge
+& $condaCmd config --add channels defaults
+& $condaCmd config --set report_errors false
 
 # Create or Update Conda Env
 Write-Host "Creating or updating conda environment..."
 
 # Check if environment.yml exists
-$environmentYmlPath = Join-Path $basePath "resources\environment.yml" 
+$environmentYmlPath = Join-Path $basePath "resources\environment.yml"
 if (-Not (Test-Path $environmentYmlPath)) {
-    Write-Host "ERROR: environment.yml not found at '$environmentYmlPath'. Cannot create Conda environment. Exiting."
+    Write-Host "ERROR: environment.yml not found at '$environmentYmlPath'. Cannot create Conda environment."
     exit 1
 }
 
-# Creating conda environment
+# Creating conda environment with retries
 $maxRetries = 3
+$success = $false
+
 for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
     Write-Host "Attempt $attempt of $maxRetries to manage conda environment."
     
     try {
-        # Clear conda cache to prevent persistent partial download issues
-        Write-Host  "Clearing conda package cache..."
-        & $condaCmd clean --all -y | Out-String | ForEach-Object { Write-Host "Conda clean: $_" }
-        
+        # Clear conda cache
+        Write-Host "Clearing conda package cache..."
+        & $condaCmd clean --all -y --json | Out-Null
+
+        # Remove existing env if present
         if (Test-Path $condaEnvPath) {
-            Write-Host "Existing environment '$envName' detected at '$condaEnvPath'. Removing for fresh creation."
-            & $condaCmd env remove -n $envName -y
-            Write-Host "kiwiflow conda environment removed."
+            Write-Host "Existing environment '$envName' detected. Removing for fresh creation."
+            & $condaCmd env remove -n $envName -y --json | Out-Null
+            Write-Host "Environment removed."
         }
 
-        # Attempt to create the environment
-        Write-Host "Running: '$condaCmd env create -f "$environmentYmlPath" -n $envName -y'"
-        & $condaCmd env create -f "$environmentYmlPath" -n $envName
+        # Create new environment
+        Write-Host "Creating environment from $environmentYmlPath..."
+        & $condaCmd env create -f "$environmentYmlPath" -n $envName -y --json
 
-        # Check for success within the output or by path
+        # Verify success
         if (Test-Path $condaEnvPath) {
-            Write-Host "Conda environment '$envName' created or updated successfully."
-            break # Exit the retry loop on success
-        }
-        else {
-            throw "Conda environment '$envName' not found after creation command completed."
+            Write-Host "Conda environment '$envName' created successfully."
+            $success = $true
+            break
+        } else {
+            throw "Environment path $condaEnvPath not found after creation."
         }
     }
     catch {
-        Write-Host  "ERROR: Failed to manage conda environment on attempt $attempt. Error: $($_.Exception.Message)"
-        # Log specific error details for debugging
-        if ($_.Exception.InnerException) {
-            Write-Host  "Inner Exception: $($_.Exception.InnerException.Message)"
-        }
-        Write-Host "Error record: $($_.Exception | Format-List -Force)"
+        Write-Host "ERROR on attempt $attempt: $($_.Exception.Message)"
         
         if ($attempt -eq $maxRetries) {
-            Write-Host "All retry attempts failed. Exiting script."
-            exit 1 # Exit if max retries reached
+            Write-Host "All retry attempts failed. Exiting."
+            exit 1
         }
-        Write-Host  "Retrying in 10 seconds..."
+        
+        Write-Host "Retrying in 10 seconds..."
         Start-Sleep -Seconds 10
     }
 }
+
+if (-not $success) {
+    Write-Host "Final failure: Conda environment was not created."
+    exit 1
+}
+
+Write-Host "Conda environment setup complete."
+exit 0
