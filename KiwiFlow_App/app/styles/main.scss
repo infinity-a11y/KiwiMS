@@ -325,6 +325,11 @@ th {
   box-shadow: 0 0 20vh 20px #00000082;
 }
 
+.modal-content .form-control {
+  background-color: unset !important;
+  box-shadow: unset !important;
+}
+
 .modal-header {
   background-color: #ddddde;
 }

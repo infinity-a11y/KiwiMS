@@ -62,7 +62,6 @@ StatusMsg_SetupRtools=Setting up rtools45...
 StatusMsg_InstallRenv=Installing renv package (R environment setup phase 1/2)...
 StatusMsg_RestoreRenv=Restoring R packages (renv environment setup phase 2/2)...
 StatusMsg_InstallQuarto=Installing Quarto...
-StatusMsg_SummarizeSetup=Summarizing setup...
 Icons_Comment=Launch the KiwiFlow Application
 Description_Launch=Launch KiwiFlow
 
@@ -81,39 +80,14 @@ de.Description_Launch=KiwiFlow starten
 [Run]
 #define KiwiFlowLogFile "{localappdata}\KiwiFlow\kiwiflow_setup.log"
 
-; Run config
-;Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\config.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "{cm:StatusMsg_Configuring}"; Flags: runhidden shellexec waituntilterminated; AfterInstall: AfterConfig;
-
-; 1. Install Miniconda
-; Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\miniconda_installer.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "{cm:StatusMsg_InstallMiniconda}"; Flags: runhidden shellexec waituntilterminated; AfterInstall: AfterMiniconda;
-
-; 2. Setup Conda Environment
-;Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\conda_env.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "{cm:StatusMsg_SetupCondaEnv}"; Flags: runhidden shellexec waituntilterminated; AfterInstall: AfterCondaEnv;
-
-; 2. Setup Conda Environment
-;Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\rtools_setup.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "{cm:StatusMsg_SetupRtools}"; Flags: runhidden shellexec waituntilterminated; AfterInstall: AfterRtools;
-
-; 4. Install R Packages
-; 4a. Install renv package
-;Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\renv_install.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "{cm:StatusMsg_InstallRenv}"; Flags: shellexec waituntilterminated runhidden; AfterInstall: AfterRenvInstall;
-
-; 4b. Restore renv environment
-;Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\renv_setup.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "{cm:StatusMsg_RestoreRenv}"; Flags: shellexec waituntilterminated runhidden; AfterInstall: AfterRenvRestore;
-
-; 5. Install Quarto
-;Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\quarto_install.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "{cm:StatusMsg_InstallQuarto}"; Flags: shellexec waituntilterminated runhidden; AfterInstall: AfterQuarto;
-
-; 6. Summarize setup
-;Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\summarize_setup.ps1"" -basePath ""{app}"" -userDataPath ""{localappdata}\KiwiFlow"" -envName ""kiwiflow"" -logFile ""{#KiwiFlowLogFile}"""; WorkingDir: "{app}"; StatusMsg: "{cm:StatusMsg_SummarizeSetup}"; Flags: shellexec waituntilterminated runhidden; AfterInstall: AfterSummarize;
-
-; After all steps, potentially launch the app or show info
+; Post Install
 Filename: "{app}\KiwiFlow.exe"; Description: "{cm:Description_Launch}"; Flags: postinstall skipifsilent shellexec;
 
 [Icons]
-; Creates a shortcut in the Start Menu Programs group
+; Create shortcut in Start Menu Programs group
 Name: "{group}\KiwiFlow"; Filename: "{app}\KiwiFlow.exe"; WorkingDir: "{app}"; IconFilename: "{app}\favicon.ico"; Comment: "{cm:Icons_Comment}";
 
-; Creates a desktop shortcut
+; Create desktop shortcut
 Name: "{userdesktop}\KiwiFlow"; Filename: "{app}\KiwiFlow.exe"; WorkingDir: "{app}"; IconFilename: "{app}\favicon.ico"; Comment: "{cm:Icons_Comment}";
 
 [Code]
@@ -198,10 +172,8 @@ var
   ResultCode: Integer;
   Scope: string;
 begin
-  // 1. Get the value from your custom page
   Scope := GetInstallScope; 
 
-  // 2. Build the string with the Scope included
   Params := '-ExecutionPolicy Bypass -Command "& { ' +
             'param([string]$basePath, [string]$userDataPath, [string]$envName, [string]$logFile, [string]$installScope); ' +
             '& \"' + ExpandConstant('{app}\config.ps1') + '\" ' +
@@ -211,13 +183,12 @@ begin
             '-logFile \"' + ExpandConstant('{#KiwiFlowLogFile}') + '\" ' +
             '-installScope \"' + Scope + '\" }"';
             
-  UpdateProgress(0);
+  UpdateProgress(5);
 
   Log('Full command line: powershell.exe ' + Params);
   
   WizardForm.StatusLabel.Caption := CustomMessage('StatusMsg_Configuring');
   
-  // Exec call remains the same
   if not Exec('powershell.exe', Params,
               ExpandConstant('{app}'),
               SW_HIDE,
@@ -237,7 +208,7 @@ begin
     Abort;
   end;
 
-  UpdateProgress(5);
+  UpdateProgress(10);
 end;
 
 // Miniconda setup
@@ -311,7 +282,7 @@ begin
 
   if not Exec('powershell.exe', Params,
               ExpandConstant('{app}'),
-              SW_HIDE,                     // change to SW_SHOW only for debugging
+              SW_HIDE,                    
               ewWaitUntilTerminated,
               ResultCode) then
   begin
@@ -409,12 +380,11 @@ begin
   Log('Full command for renv_install.ps1: powershell.exe ' + Params);
   Log('Install scope passed: ' + Scope);
 
-  // Optional status message if you have one defined
-  // WizardForm.StatusLabel.Caption := CustomMessage('StatusMsg_InstallRenv');
+  WizardForm.StatusLabel.Caption := CustomMessage('StatusMsg_InstallRenv');
 
   if not Exec('powershell.exe', Params,
               ExpandConstant('{app}'),
-              SW_HIDE,                     // change to SW_SHOW only for debugging
+              SW_HIDE,
               ewWaitUntilTerminated,
               ResultCode) then
   begin
@@ -458,7 +428,6 @@ begin
   Log('Full command for renv_setup.ps1: powershell.exe ' + Params);
   Log('Install scope passed: ' + Scope);
 
-  // Status message if defined
   WizardForm.StatusLabel.Caption := CustomMessage('StatusMsg_RestoreRenv');
 
   if not Exec('powershell.exe', Params,
@@ -539,7 +508,7 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
-    // 5% - Initial configuration (folders, reports, etc.)
+    // 10% - Initial configuration (folders, reports, etc.)
     RunConfigStep;
 
     // 20% - Install Miniconda (Python environment)
@@ -563,53 +532,3 @@ begin
     Sleep(800);
   end;
 end;
-
-procedure AfterConfig;
-begin
-  CheckPowerShellResult;
-  UpdateProgress(5);
-end;
-
-procedure AfterMiniconda;
-begin
-  CheckPowerShellResult;
-  UpdateProgress(20);
-end;
-
-procedure AfterCondaEnv;
-begin
-  CheckPowerShellResult;
-  UpdateProgress(40);
-end;
-
-procedure AfterRtools;
-begin
-  CheckPowerShellResult;
-  UpdateProgress(55);
-end;
-
-procedure AfterRenvInstall;
-begin
-  CheckPowerShellResult;
-  UpdateProgress(60);
-end;
-
-procedure AfterRenvRestore;
-begin
-  CheckPowerShellResult;
-  UpdateProgress(85);
-end;
-
-procedure AfterQuarto;
-begin
-  CheckPowerShellResult;
-  UpdateProgress(95);
-end;
-
-procedure AfterSummarize;
-begin
-  CheckPowerShellResult;
-  UpdateProgress(100);
-end;
-
-

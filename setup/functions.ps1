@@ -213,39 +213,29 @@ function Install-Quarto {
     }
 }
 
-#-----------------------------#
-# FUNCTION to find Quarto installation
-#-----------------------------#
+#-----------------------------------------#
+# FUNCTION: Find Quarto (Version Aware)
+#-----------------------------------------#
 function Find-QuartoInstallation {
     try {
+        # Check if quarto is already in the current session PATH
         $quartoPath = Get-Command quarto -ErrorAction SilentlyContinue
         if ($quartoPath) {
-            $quartoBinDir = Split-Path $quartoPath.Source -Parent
-            $quartoVersion = & quarto --version
-            Write-Host "Quarto CLI version $quartoVersion found at $quartoBinDir"
+            $binDir = Split-Path $quartoPath.Source -Parent
+            # Quarto usually lives in 'bin', we want the parent for the 'Path' property
+            $installRoot = Split-Path $binDir -Parent 
+            $versionString = & quarto --version
+            
             return @{
                 Found   = $true
-                Path    = $quartoBinDir
-                Version = $quartoVersion
+                Path    = $installRoot
+                BinDir  = $binDir
+                Version = $versionString.Trim()
             }
         }
-        else {
-            Write-Host "Quarto CLI is not installed or not found in PATH"
-            return @{
-                Found   = $false
-                Path    = $null
-                Version = $null
-            }
-        }
-    }
-    catch {
-        Write-Host "Error checking Quarto installation: $_"
-        return @{
-            Found   = $false
-            Path    = $null
-            Version = $null
-        }
-    }
+    } catch {}
+
+    return @{ Found = $false; Path = $null; Version = $null }
 }
 
 #-----------------------------#

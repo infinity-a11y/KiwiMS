@@ -1,105 +1,125 @@
 #-----------------------------#
 # Script Initialization
 #-----------------------------#
-
 param(
     [string]$basePath,
     [string]$userDataPath,
     [string]$envName,
     [string]$logFile,
-    [string]$installScope = "currentuser"
+    [string]$installScope
 )
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
-# Start logging
-Start-Transcript -Path $logFile -Append | Out-Null
-
-Write-Host "### Quarto setup (quarto_install.ps1)"
-Write-Host "basePath:         $basePath"
-Write-Host "userDataPath:     $userDataPath"
-Write-Host "envName:          $envName"
-Write-Host "logFile:          $logFile"
-Write-Host "installScope:     $installScope"
-
-# Determine elevation status
-$isElevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-
-# Choose installation path based on scope
-if ($installScope -eq "allusers") {
-    Write-Host "System-wide (all users) mode selected"
-
-    if (-not $isElevated) {
-        Write-Host "ERROR: System-wide Quarto installation requires administrator rights."
-        Write-Host "Please run the installer as administrator."
-        exit 1
-    }
-
-    $QUARTO_INSTALL_DIR = Join-Path $env:ProgramFiles "Quarto"
-    $pathTarget = "Machine"   # system PATH
-} else {
-    Write-Host "Current-user mode selected (no elevation required)"
-    $QUARTO_INSTALL_DIR = Join-Path $env:LOCALAPPDATA "Programs\Quarto"
-    $pathTarget = "User"      # user PATH
-}
-
-# Define version and download URL
-$QUARTO_VERSION = "1.7.32"
-$QUARTO_DOWNLOAD_URL = "https://github.com/quarto-dev/quarto-cli/releases/download/v${QUARTO_VERSION}/quarto-${QUARTO_VERSION}-win.zip"
-$QUARTO_TEMP_ZIP = Join-Path $env:TEMP "quarto.zip"
-
-Write-Host "Target installation directory: $QUARTO_INSTALL_DIR"
-
 # Source functions
 . "$basePath\functions.ps1"
 
-# Check for existing Quarto installation
-Write-Host "Checking for existing Quarto CLI installation..."
-$quartoInfo = Find-QuartoInstallation
+# Start logging
+Start-Transcript -Path $logFile -Append -Force | Out-Null
 
-if ($quartoInfo.Found) {
-    Write-Host "Quarto CLI v$($quartoInfo.Version) found at $($quartoInfo.Path)"
+Write-Host "### Quarto setup (quarto_install.ps1)"
+Write-Host "Target Scope: $installScope"
 
-    # For simplicity, accept any existing version (you can add version comparison later)
-    Write-Host "Using existing Quarto installation."
+#-----------------------------#
+# Constants & Requirements
+#-----------------------------#
+$TARGET_VERSION = "1.7.32"
+$DOWNLOAD_URL = "https://github.com/quarto-dev/quarto-cli/releases/download/v${TARGET_VERSION}/quarto-${TARGET_VERSION}-win.zip"
 
-    # Ensure bin directory is in PATH (system or user depending on scope)
-    $quartoBin = Join-Path $quartoInfo.Path "bin"
-    if (-not (Test-PathInEnvironment -Directory $quartoBin)) {
-        Write-Host "Adding Quarto bin directory to $pathTarget PATH..."
-        [Environment]::SetEnvironmentVariable("PATH", 
-            "$([Environment]::GetEnvironmentVariable('PATH', $pathTarget));$quartoBin", 
-            $pathTarget)
-    }
-
-    Write-Host "Quarto CLI is configured and ready."
-    exit 0
+# Determine target directory and Registry target
+if ($installScope -eq "allusers") {
+    $QUARTO_INSTALL_DIR = Join-Path $env:ProgramFiles "Quarto"
+    $regTarget = [System.EnvironmentVariableTarget]::Machine
+} else {
+    $QUARTO_INSTALL_DIR = Join-Path $env:LOCALAPPDATA "Programs\Quarto"
+    $regTarget = [System.EnvironmentVariableTarget]::User
 }
 
-# Quarto not found → install it
-Write-Host "Quarto CLI not found. Installing to $QUARTO_INSTALL_DIR..."
+#-----------------------------#
+# Discovery & Decision
+#-----------------------------#
+try {
+    $quarto = Find-QuartoInstallation
+    $foundScope = Get-PathScope -FilePath $quarto.Path
+    $needsInstall = $false
 
-# In currentuser mode → no admin required
-# In allusers mode → we already checked elevation above
-
-Install-Quarto -InstallDir $QUARTO_INSTALL_DIR
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "ERROR: Quarto installation failed (exit code $LASTEXITCODE)"
+    if (-not $quarto.Found) {
+        Write-Host "Quarto not detected. Installation required."
+        $needsInstall = $true
+    } else {
+        # Version Check
+        $vComp = Compare-Version -InstalledVersion $quarto.Version -TargetVersion $TARGET_VERSION
+        if ($vComp -lt 0) {
+            Write-Host "Found older Quarto ($($quarto.Version)). Upgrade to $TARGET_VERSION required."
+            $needsInstall = $true
+        }
+        # Scope Check
+        elseif ($installScope -eq "allusers" -and $foundScope -eq "currentuser") {
+            Write-Host "Found Quarto v$($quarto.Version) in User Scope, but System-wide was requested."
+            $needsInstall = $true
+        }
+        else {
+            Write-Host "Compatible Quarto v$($quarto.Version) already exists ($foundScope)."
+            $needsInstall = $false
+        }
+    }
+}
+catch {
+    Write-Host "Error during Quarto detection: $($_.Exception.Message)"
     exit 1
 }
 
-Write-Host "Quarto CLI installed successfully to $QUARTO_INSTALL_DIR"
+#-----------------------------#
+# Installation Block
+#-----------------------------#
+if ($needsInstall) {
+    try {
+        Write-Host "Installing Quarto v$TARGET_VERSION to $QUARTO_INSTALL_DIR..."
+        
+        # Ensure directory exists
+        if (-not (Test-Path $QUARTO_INSTALL_DIR)) {
+            New-Item -ItemType Directory -Path $QUARTO_INSTALL_DIR -Force | Out-Null
+        }
 
-# Add to PATH (system or user)
-$quartoBin = Join-Path $QUARTO_INSTALL_DIR "bin"
-if (-not (Test-PathInEnvironment -Directory $quartoBin)) {
-    Write-Host "Adding Quarto bin directory to $pathTarget PATH..."
-    [Environment]::SetEnvironmentVariable("PATH", 
-        "$([Environment]::GetEnvironmentVariable('PATH', $pathTarget));$quartoBin", 
-        $pathTarget)
+        $tempZip = Join-Path $env:TEMP "quarto.zip"
+        Download-File $DOWNLOAD_URL $tempZip
+        
+        Write-Host "Extracting archive..."
+        Expand-Archive -Path $tempZip -DestinationPath $QUARTO_INSTALL_DIR -Force
+        
+        # Clean up
+        Remove-Item $tempZip -Force
+        
+        $quartoBin = Join-Path $QUARTO_INSTALL_DIR "bin"
+    }
+    catch {
+        Write-Host "Installation failed: $($_.Exception.Message)"
+        exit 1
+    }
+} else {
+    $quartoBin = $quarto.BinDir
 }
 
-Write-Host "Quarto installation and configuration complete."
+#-----------------------------#
+# PATH Configuration
+#-----------------------------#
+try {
+    $currentPath = [Environment]::GetEnvironmentVariable("Path", $regTarget)
+    if ($currentPath -notlike "*$quartoBin*") {
+        $newPath = "$currentPath;$quartoBin"
+        [Environment]::SetEnvironmentVariable("Path", $newPath, $regTarget)
+        Write-Host "Added Quarto bin to $regTarget PATH."
+    }
+    
+    # Update current session path for immediate use
+    $env:Path = "$quartoBin;$env:Path"
+}
+catch {
+    Write-Host "Failed to update PATH: $($_.Exception.Message)"
+    exit 1
+}
+
+Write-Host "Quarto setup complete."
+Stop-Transcript
 exit 0
