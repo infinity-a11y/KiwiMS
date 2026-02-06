@@ -1,132 +1,94 @@
-# KiwiFlow.ps1
-
-# Run to launch KiwiFlow App
-
+# KiwiFlow.ps1 - Launcher
 #-----------------------------#
 # Script Initialization
 #-----------------------------#
 
-$versionFile = Get-Content -Path "resources\version.txt" | Select-Object -First 1
+# Get version info
+$versionFile = if (Test-Path "resources\version.txt") { Get-Content -Path "resources\version.txt" | Select-Object -First 1 } else { "v1.0.0" }
 
 Write-Host ""
-Write-Host "██╗  ██╗ ██╗ ██╗    ██╗ ██╗ ███████╗ ██╗      ██████╗  ██╗    ██╗" -ForegroundColor DarkGreen -BackgroundColor Black
-Write-Host "██║ ██╔╝ ██║ ██║    ██║ ██║ ██╔════╝ ██║     ██║   ██╗ ██║    ██║" -ForegroundColor DarkGreen -BackgroundColor Black
-Write-Host "█████╔╝  ██║ ██║ █╗ ██║ ██║ █████╗   ██║     ██║   ██║ ██║ █╗ ██║" -ForegroundColor DarkGreen -BackgroundColor Black
-Write-Host "██╔═██╗  ██║ ██║███╗██║ ██║ ██╔══╝   ██║     ██║   ██║ ██║███╗██║" -ForegroundColor DarkGreen -BackgroundColor Black
-Write-Host "██║  ██╗ ██║ ╚███╔███╔╝ ██║ ██║      ██████╗  ██████╔╝ ╚███╔███╔╝" -ForegroundColor DarkGreen -BackgroundColor Black
-Write-Host "╚═╝  ╚═╝ ╚═╝  ╚══╝╚══╝  ╚═╝ ╚═╝      ╚═════╝  ╚═════╝   ╚══╝╚══╝ " -ForegroundColor DarkGreen -BackgroundColor Black
+Write-Host "██╗  ██╗ ██╗ ██╗    ██╗ ██╗ ███████╗ ██╗      ██████╗  ██╗    ██╗" -ForegroundColor DarkGreen
+Write-Host "██║ ██╔╝ ██║ ██║    ██║ ██║ ██╔════╝ ██║     ██║   ██╗ ██║    ██║" -ForegroundColor DarkGreen
+Write-Host "█████╔╝  ██║ ██║ █╗ ██║ ██║ █████╗   ██║     ██║   ██║ ██║ █╗ ██║" -ForegroundColor DarkGreen
+Write-Host "██╔═██╗  ██║ ██║███╗██║ ██║ ██╔══╝   ██║     ██║   ██║ ██║███╗██║" -ForegroundColor DarkGreen
+Write-Host "██║  ██╗ ██║ ╚███╔███╔╝ ██║ ██║      ██████╗  ██████╔╝ ╚███╔███╔╝" -ForegroundColor DarkGreen
+Write-Host "╚═╝  ╚═╝ ╚═╝  ╚══╝╚══╝  ╚═╝ ╚═╝      ╚═════╝  ╚═════╝   ╚══╝╚══╝ " -ForegroundColor DarkGreen
 Write-Host ""
-Write-Host "---------------------------------------------------" -ForegroundColor DarkGray  -BackgroundColor Black
-Write-Host "       Welcome to KiwiFlow!         " -ForegroundColor White -BackgroundColor Black
-Write-Host "---------------------------------------------------" -ForegroundColor DarkGray  -BackgroundColor Black
-Write-Host ""  -BackgroundColor Black
-Write-Host "$versionFile"
-Write-Host ""  -BackgroundColor Black 
+Write-Host "---------------------------------------------------" -ForegroundColor DarkGray
+Write-Host "        Welcome to KiwiFlow ($versionFile)         " -ForegroundColor White
+Write-Host "---------------------------------------------------" -ForegroundColor DarkGray
 
-
-# Conda find function
+#-----------------------------#
+# Conda Discovery Function
+#-----------------------------#
 function Find-CondaExecutable {
-    # 1. Check common default system-wide installation path (ProgramData)
-    $defaultProgramDataPath = "$env:ProgramData\miniconda3\Scripts\conda.exe"
-    if (Test-Path $defaultProgramDataPath) {
-        Write-Host "Found conda.exe at default ProgramData path: $defaultProgramDataPath"
-        return $defaultProgramDataPath
-    }
+    # 1. System-wide path (All Users)
+    $allUsersPath = "$env:ProgramData\miniconda3\Scripts\conda.exe"
+    if (Test-Path $allUsersPath) { return $allUsersPath }
 
-    # 2. Check common default user-specific installation path (UserProfile)
-    $defaultUserProfilePath = "$env:UserProfile\miniconda3\Scripts\conda.exe"
-    if (Test-Path $defaultUserProfilePath) {
-        Write-Host "Found conda.exe at default UserProfile path: $defaultUserProfilePath"
-        return $defaultUserProfilePath
-    }
+    # 2. User-specific path (Current User - matching your installer logic)
+    $currentUserPath = "$env:LOCALAPPDATA\miniconda3\Scripts\conda.exe"
+    if (Test-Path $currentUserPath) { return $currentUserPath }
 
-    # 3. Check if conda.exe is in the system's PATH using Get-Command
-    # This is often the most reliable if user installed Conda and added it to PATH.
-    try {
-        $condaCmdInPath = (Get-Command conda.exe -ErrorAction SilentlyContinue).Path
-        if ($condaCmdInPath) {
-            Write-Host "Found conda.exe in system PATH: $condaCmdInPath"
-            return $condaCmdInPath
-        }
-    }
-    catch {
-        Write-Warning "Failed to find conda.exe in system PATH using Get-Command. Error: $($_.Exception.Message)"
-    }
+    # 3. Check system PATH
+    $condaInPath = Get-Command conda.exe -ErrorAction SilentlyContinue
+    if ($condaInPath) { return $condaInPath.Path }
 
-    # 4. Fallback for common Anaconda installation paths (if a user has Anaconda instead of Miniconda)
-    $defaultProgramFilesAnacondaPath = "$env:ProgramFiles\Anaconda3\Scripts\conda.exe"
-    if (Test-Path $defaultProgramFilesAnacondaPath) {
-        Write-Host "Found conda.exe at default ProgramFiles Anaconda path: $defaultProgramFilesAnacondaPath"
-        return $defaultProgramFilesAnacondaPath
-    }
+    # 4. Fallbacks for Anaconda
+    $anacondaPaths = @(
+        "$env:ProgramFiles\Anaconda3\Scripts\conda.exe",
+        "$env:UserProfile\Anaconda3\Scripts\conda.exe"
+    )
+    foreach ($p in $anacondaPaths) { if (Test-Path $p) { return $p } }
 
-    $defaultUserProfileAnacondaPath = "$env:UserProfile\Anaconda3\Scripts\conda.exe"
-    if (Test-Path $defaultUserProfileAnacondaPath) {
-        Write-Host "Found conda.exe at default UserProfile Anaconda path: $defaultUserProfileAnacondaPath"
-        return $defaultUserProfileAnacondaPath
-    }
-
-    Write-Host "ERROR: conda.exe not found in common locations or system PATH." -ForegroundColor Red
-    return $null # Return null if conda.exe is not found anywhere
+    return $null
 }
 
-# Path declaration
+#-----------------------------#
+# Path & Log Configuration
+#-----------------------------#
 $condaCmd = Find-CondaExecutable
-$condaPrefix = [System.IO.Path]::GetDirectoryName([System.IO.Path]::GetDirectoryName($condaCmd))
-$logDirectory = "$env:localappdata\KiwiFlow"
+$logDirectory = "$env:LOCALAPPDATA\KiwiFlow"
 $logFile = Join-Path $logDirectory "launch.log"
 
-# Create the log directory if it doesn't exist
-if (-Not (Test-Path $logDirectory)) {
-    New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
-}
+if (-Not (Test-Path $logDirectory)) { New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null }
 
-Clear-Content -Path $logFile -ErrorAction SilentlyContinue
+# Clear previous logs
+"$(Get-Date) - INFO: Launcher Initialized." | Out-File $logFile
 
-# Conda presence check
-if (-Not (Test-Path $condaCmd)) {
-    Write-Host "Conda not found. Exiting."
-    Write-Host "Check error logfile at: $logFile"
+if (-not $condaCmd) {
+    Write-Host "ERROR: Conda not found! Please reinstall KiwiFlow." -ForegroundColor Red
+    "$(Get-Date) - ERROR: Conda executable not found in system or user paths." | Add-Content $logFile
     pause
     exit 1
 }
 
-Write-Host ""  -BackgroundColor Black
-Write-Host "Starting application... please wait." -ForegroundColor Yellow  -BackgroundColor Black
-Write-Host ""  -BackgroundColor Black
+Write-Host "Using Conda at: $condaCmd" -ForegroundColor Gray
+Write-Host "Starting application... please wait." -ForegroundColor Yellow
 
 try {
-    # Log script start time
-    "$(Get-Date) - INFO: KiwiFlow App Launcher Started." | Add-Content -Path $logFile
+    # Extract the base directory to ensure we can find the 'kiwiflow' environment
+    # Moving up from Scripts/conda.exe to the root prefix
+    $condaPrefix = Split-Path (Split-Path $condaCmd -Parent) -Parent
 
-    # Log Conda and App paths
-    "$(Get-Date) - INFO: Conda Prefix: $condaPrefix" | Add-Content -Path $logFile
-    "$(Get-Date) - INFO: Conda Command: $condaCmd" | Add-Content -Path $logFile
-    "$(Get-Date) - INFO: Application Root: $($PSScriptRoot)" | Add-Content -Path $logFile
+    "$(Get-Date) - INFO: Conda Command: $condaCmd" | Add-Content $logFile
+    "$(Get-Date) - INFO: Conda Prefix: $condaPrefix" | Add-Content $logFile
 
-    # Execute shiny app launch R script
+    # Launch the App
+    # Use --no-capture-output to ensure logs flow into our file correctly
     & $condaCmd run -n kiwiflow Rscript.exe -e "shiny::runApp('app.R', port = 3838, launch.browser = TRUE)" --vanilla *> $logFile 2>&1
 
-    # Check exit code
     if ($LASTEXITCODE -ne 0) {
-        "$(Get-Date) - ERROR: R Shiny app launch failed with exit code $LASTEXITCODE." | Add-Content -Path $logFile
-        "$(Get-Date) - ERROR: Review '$logFile' for details on the error (e.g., 'address already in use')." | Add-Content -Path $logFile
-        Write-Host "Check error logfile at: $logFile"
-        pause
-        exit $LASTEXITCODE
+        throw "R Process exited with code $LASTEXITCODE"
     }
-    else {
-        "$(Get-Date) - INFO: R Shiny app launched successfully." | Add-Content -Path $logFile
-    }
-
 }
 catch {
-    # Catch any unexpected errors during the script execution
-    "$(Get-Date) - CRITICAL ERROR: An unexpected PowerShell error occurred: $($_.Exception.Message)" | Add-Content -Path $logFile
-    "$(Get-Date) - CRITICAL ERROR: Stack Trace: $($_.ScriptStackTrace)" | Add-Content -Path $logFile
-    Write-Host "Check error logfile at: $logFile"
+    $msg = "$(Get-Date) - CRITICAL ERROR: $($_.Exception.Message)"
+    $msg | Add-Content $logFile
+    Write-Host ""
+    Write-Host "FAILED TO START" -ForegroundColor Red
+    Write-Host "Error: $($_.Exception.Message)"
+    Write-Host "Detailed logs: $logFile"
     pause
     exit 1
 }
-
-Write-Host "KiwiFlow is up and running in the default browser (localhost:3838)."

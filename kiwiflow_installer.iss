@@ -77,6 +77,18 @@ de.StatusMsg_SummarizeSetup=Setup wird zusammengefasst...
 de.Icons_Comment=KiwiFlow Anwendung starten
 de.Description_Launch=KiwiFlow starten
 
+; Installation scope
+ScopeTitle=Select Installation Type
+ScopeSub=Who should this application be installed for?
+ScopeDesc=Choose how you want to install KiwiFlow.
+ScopeAllUsers=System-wide for all users (requires administrator rights)
+ScopeCurrUser=Current user only
+de.ScopeTitle=Installationstyp auswählen
+de.ScopeSub=Für wen soll diese Anwendung installiert werden?
+de.ScopeDesc=Wählen Sie aus, wie Sie KiwiFlow installieren möchten.
+de.ScopeAllUsers=Systemweit für alle Benutzer (erfordert Administratorrechte)
+de.ScopeCurrUser=Nur für den aktuellen Benutzer
+
 [Run]
 #define KiwiFlowLogFile "{localappdata}\KiwiFlow\kiwiflow_setup.log"
 
@@ -110,15 +122,18 @@ var
 
 procedure InitializeWizard;
 begin
+  // Create the input option page using the IDs defined in [CustomMessages]
   InstallScopePage := CreateInputOptionPage(wpWelcome,
-    'Select Installation Type', 'Who should this application be installed for?',
-    'Choose how you want to install KiwiFlow.',
+    CustomMessage('ScopeTitle'), 
+    CustomMessage('ScopeSub'),
+    CustomMessage('ScopeDesc'),
     True, False);
 
-  InstallScopePage.Add('System-wide for all users (requires administrator rights)');
-  InstallScopePage.Add('Current user only');
+  // Add the two options (Index 0 and Index 1)
+  InstallScopePage.Add(CustomMessage('ScopeAllUsers'));
+  InstallScopePage.Add(CustomMessage('ScopeCurrUser'));
 
-  // Default to current user
+  // Default the selection to 'Current user only' (Index 1)
   InstallScopePage.Values[1] := True;
 end;
 
