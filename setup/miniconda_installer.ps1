@@ -35,12 +35,14 @@ $foundScope = Get-CondaScope -CondaPath $condaCmd
 
 if (-not $condaCmd) {
     $needsInstall = $true
-} elseif ($installScope -eq "allusers" -and $foundScope -eq "currentuser") {
+}
+elseif ($installScope -eq "allusers" -and $foundScope -eq "currentuser") {
     Write-Host "Found Conda at: $condaCmd"
     Write-Host "Conflict: System-wide install requested, but existing Conda is User-specific."
     Write-Host "A new system-wide Miniconda will be installed."
     $needsInstall = $true
-} else {
+}
+else {
     Write-Host "Compatible Conda found: $condaCmd (Scope: $foundScope)"
     $needsInstall = $false
 }
@@ -51,7 +53,8 @@ try {
         if ($installScope -eq "allusers") {
             Write-Host "System-wide (all users) mode selected"
             $condaPrefix = "$env:ProgramData\miniconda3"
-        } else {
+        }
+        else {
             Write-Host "Current-user mode selected (no elevation required)"
             $condaPrefix = "$env:LOCALAPPDATA\miniconda3"
         }
@@ -65,16 +68,22 @@ try {
                 
         # Install miniconda
         Start-Process -Wait -FilePath $minicondaInstaller -ArgumentList "/S", "/D=$condaPrefix"
-        $env:Path += ";$env:ProgramData\Miniconda3;$env:ProgramData\Miniconda3\Scripts;$env:ProgramData\Miniconda3\Library\bin"
+        
+        # Update condaCmd to conda prefix
+        $condaCmd = Join-Path $condaPrefix "Scripts\conda.exe"
+
+        # Update PATH 
+        $env:Path += ";$condaPrefix;$condaPrefix\Scripts;$condaPrefix\Library\bin"
         [Environment]::SetEnvironmentVariable("Path", $env:Path, [System.EnvironmentVariableTarget]::User)
+        
         Write-Host "Miniconda installation completed."   
 
         # Conda Presence Check
         Write-Host "Checking for Conda executable at $condaCmd..."
-            if (-Not (Test-Path $condaCmd)) {
-                Write-Host "Miniconda not found after installation. Exiting."
-                exit 1
-            }
+        if (-Not (Test-Path $condaCmd)) {
+            Write-Host "Miniconda not found after installation at expected path: $condaCmd. Exiting."
+            exit 1
+        }
 
         Write-Host "Conda executable found."
     }
