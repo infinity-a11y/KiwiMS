@@ -7,7 +7,7 @@ param(
     [string]$userDataPath,
     [string]$envName,
     [string]$logFile,
-    [string]$installScope = "currentuser"
+    [string]$installScope
 )
 
 $ErrorActionPreference = "Stop"
@@ -23,11 +23,11 @@ Write-Host "envName:          $envName"
 Write-Host "logFile:          $logFile"
 Write-Host "installScope:     $installScope"
 
-# Determine if running elevated
-$isElevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-
 # Source functions
 . "$basePath\functions.ps1"
+
+# Determine if running elevated
+$isElevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
 # Decide paths based on scope
 if ($installScope -eq "allusers") {
@@ -38,13 +38,6 @@ if ($installScope -eq "allusers") {
         Write-Host "Please run the installer as administrator."
         exit 1
     }
-
-    # System-wide Miniconda location
-    $condaPrefix = "$env:ProgramData\miniconda3"
-} else {
-    Write-Host "Current-user mode selected (no elevation required)"
-    # User-specific Miniconda location (should already be set by miniconda_installer.ps1)
-    $condaPrefix = "$env:LOCALAPPDATA\miniconda3"
 }
 
 # Path declaration
@@ -64,10 +57,7 @@ Write-Host "Using Conda at: $condaCmd"
 Write-Host "Target env path: $condaEnvPath"
 
 # Accept channel policies (non-interactive)
-& $condaCmd config --set channel_priority strict
-& $condaCmd config --add channels conda-forge
-& $condaCmd config --add channels defaults
-& $condaCmd config --set report_errors false
+& $condaCmd tos accept
 
 # Create or Update Conda Env
 Write-Host "Creating or updating conda environment..."
@@ -89,18 +79,18 @@ for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
     try {
         # Clear conda cache
         Write-Host "Clearing conda package cache..."
-        & $condaCmd clean --all -y --json | Out-Null
+        & $condaCmd clean --all -y | Out-String | ForEach-Object { Write-Host "Conda clean: $_" }
 
         # Remove existing env if present
         if (Test-Path $condaEnvPath) {
-            Write-Host "Existing environment '$envName' detected. Removing for fresh creation."
-            & $condaCmd env remove -n $envName -y --json | Out-Null
-            Write-Host "Environment removed."
+            Write-Host "Existing environment '$envName' detected at '$condaEnvPath'. Removing for fresh creation."
+            & $condaCmd env remove -n $envName -y
+            Write-Host "kiwiflow conda environment removed."
         }
 
         # Create new environment
         Write-Host "Creating environment from $environmentYmlPath..."
-        & $condaCmd env create -f "$environmentYmlPath" -n $envName -y --json
+        & $condaCmd env create -f "$environmentYmlPath" -n $envName -y
 
         # Verify success
         if (Test-Path $condaEnvPath) {
@@ -112,7 +102,7 @@ for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
         }
     }
     catch {
-        Write-Host "ERROR on attempt"
+        Write-Host "ERROR on attempt $attempt."
         
         if ($attempt -eq $maxRetries) {
             Write-Host "All retry attempts failed. Exiting."

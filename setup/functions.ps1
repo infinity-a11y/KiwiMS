@@ -17,7 +17,6 @@ function Find-CondaExecutable {
     }
 
     # 3. Check if conda.exe is in the system's PATH using Get-Command
-    # This is often the most reliable if user installed Conda and added it to PATH.
     try {
         $condaCmdInPath = (Get-Command conda.exe -ErrorAction SilentlyContinue).Path
         if ($condaCmdInPath) {
@@ -80,42 +79,65 @@ function Get-CondaScope {
 #-----------------------------#
 # FUNCTION Find Rtools
 #-----------------------------#
-function Find-RtoolsExecutable {
-    param (
-        [string]$rtoolsPath
+#-----------------------------------------#
+# FUNCTION: Find-Rtools45 (Version Aware)
+#-----------------------------------------#
+function Find-Rtools45Executable {
+    # 1. Check Registry (The most reliable way to find the version)
+    $regPaths = @(
+        "HKLM:\SOFTWARE\R-core\Rtools\4.5",
+        "HKCU:\SOFTWARE\R-core\Rtools\4.5"
+    )
+    
+    foreach ($reg in $regPaths) {
+        if (Test-Path $reg) {
+            $installPath = Get-ItemProperty -Path $reg -Name "InstallPath" -ErrorAction SilentlyContinue
+            if ($installPath) {
+                $exe = Join-Path $installPath.InstallPath "usr\bin\make.exe"
+                if (Test-Path $exe) { return $exe }
+            }
+        }
+    }
+
+    # 2. Hard-coded path checks (fallback)
+    $paths = @(
+        "C:\rtools45\usr\bin\make.exe",
+        (Join-Path $env:LOCALAPPDATA "rtools45\usr\bin\make.exe")
     )
 
-    # Check if the provided path exists
-    if (-Not (Test-Path $rtoolsPath)) {
-        Write-Host "ERROR: Rtools path '$rtoolsPath' does not exist."
-        return $null
+    foreach ($p in $paths) {
+        if (Test-Path $p) { return $p }
     }
 
-    # Check for Rtools executable in the bin directory
-    $rtoolsBinPath = Join-Path $rtoolsPath "usr\bin"
-    $rtoolsExePath = Join-Path $rtoolsBinPath "make.exe"  # Common executable to check
-    if (Test-Path $rtoolsExePath) {
-        Write-Host "Found Rtools executable at: $rtoolsExePath"
-
-        # Add to PATH if not already present
-        $currentPath = [Environment]::GetEnvironmentVariable("Path", "Machine")
-        if ($currentPath -notlike "*$rtoolsBinPath*") {
-            $newPath = "$currentPath;$rtoolsBinPath"
-            [Environment]::SetEnvironmentVariable("Path", $newPath, "Machine")
-            Write-Host "Added Rtools bin directory to system PATH: $rtoolsBinPath"
-            # Update current session PATH
-            $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    # 3. Check PATH but ensure the directory name contains '45'
+    $cmds = Get-Command make.exe -All -ErrorAction SilentlyContinue
+    foreach ($cmd in $cmds) {
+        if ($cmd.Path -like "*rtools45*") {
+            return $cmd.Path
         }
-        else {
-            Write-Host "Rtools bin directory is already in system PATH."
-        }
+    }
 
-        return $rtoolsExePath
+    return $null
+}
+
+#-----------------------------------------#
+# FUNCTION: Get-PathScope
+#-----------------------------------------#
+function Get-PathScope {
+    param([string]$FilePath)
+    if (-not $FilePath) { return $null }
+
+    $systemRoots = @($env:ProgramData, $env:ProgramFiles, ${env:ProgramFiles(x86)}, "C:\rtools45")
+    
+    foreach ($root in $systemRoots) {
+        if ($FilePath.StartsWith($root, "OrdinalIgnoreCase")) { return "allusers" }
     }
-    else {
-        Write-Host "ERROR: Rtools executable not found in expected location: $rtoolsExePath"
-        return $null
+
+    if ($FilePath -like "*\Users\*" -or $FilePath.StartsWith($env:LOCALAPPDATA, "OrdinalIgnoreCase")) {
+        return "currentuser"
     }
+
+    return "currentuser"
 }
 
 #-----------------------------#

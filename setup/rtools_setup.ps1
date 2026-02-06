@@ -1,78 +1,106 @@
 #-----------------------------#
 # Script Initialization
 #-----------------------------#
-
 param(
     [string]$basePath,
     [string]$userDataPath,
     [string]$envName,
-    [string]$logFile
+    [string]$logFile,
+    [string]$installScope
 )
 
 $ErrorActionPreference = "Stop"
-$ProgressPreference = "SilentlyContinue"
-
-# Start logging transcript to the specified log file
-Start-Transcript -Path $logFile -Append | Out-Null
-
-Write-Host "### Rtools setup (rtools_setup.ps1)"
-
-Write-Host "basePath: $basePath"
-Write-Host "userDataPath: $userDataPath"
-Write-Host "envName: $envName"
-Write-Host "logFile: $logFile"
-
-# Source functions
 . "$basePath\functions.ps1"
 
+Start-Transcript -Path $logFile -Append -Force | Out-Null
+Write-Host "### Rtools 4.5 Version-Specific Setup"
+
 #-----------------------------#
-# Ensure Rtools
+# Discovery & Version Check
 #-----------------------------#
-
-$tempPath = Join-Path $env:TEMP "kiwiflow_setup"
-# Ensure temporary directory exists for downloads
-if (-Not (Test-Path $tempPath)) {
-    New-Item -Path $tempPath -ItemType Directory -Force | Out-Null
-    Write-Host "Created temporary directory: $tempPath"
-}
-
-$rtoolsPath = "C:\rtools45"
-
 try {
-    Write-Host "Checking for existing Rtools installation at $rtoolsPath..."
-    if (-Not (Test-Path $rtoolsPath)) {
+    # Specifically look for 4.5
+    $foundRtoolsBin = Find-Rtools45Executable
+    $foundScope = Get-PathScope -FilePath $foundRtoolsBin
+    $needsInstall = $false
 
-        # Download
-        Write-Host "Rtools not found."
-        $tempPath = "$env:TEMP\kiwiflow_setup"
-        $rtoolsInstaller = "$tempPath\rtools.exe"
-        Write-Host "Downloading Rtools..."
-        Download-File "https://cran.r-project.org/bin/windows/Rtools/rtools45/files/rtools45-6691-6492.exe" $rtoolsInstaller
-
-        # Installation
-        Write-Host "Installing Rtools to $rtoolsPath..."
-        $process = Start-Process -Wait -FilePath $rtoolsInstaller -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -PassThru -WindowStyle Hidden
-        if ($process.ExitCode -ne 0) {
-            Write-Host "ERROR: Rtools installation failed with exit code $($process.ExitCode)."
-            exit 1
-        }
-        else {
-            Write-Host "Rtools installation completed."
-        }
-
-        # Path environment check
-        Find-RtoolsExecutable $rtoolsPath
+    if (-not $foundRtoolsBin) {
+        Write-Host "Rtools 4.5 not detected (older versions or no version found)."
+        $needsInstall = $true
+    }
+    elseif ($installScope -eq "allusers" -and $foundScope -eq "currentuser") {
+        Write-Host "Found Rtools 4.5 at $foundRtoolsBin (User Scope)."
+        Write-Host "System-wide install requested. Proceeding with new installation."
+        $needsInstall = $true
     }
     else {
-        Write-Host "Rtools already installed at $rtoolsPath. Skipping installation."
-
-        # Path environment check
-        Find-RtoolsExecutable $rtoolsPath
+        Write-Host "Valid Rtools 4.5 found: $foundRtoolsBin (Scope: $foundScope)"
+        $needsInstall = $false
     }
 }
 catch {
-    Write-Host "Failed to ensure Rtools installation. Error: $($_.Exception.Message)"
+    Write-Host "Detection failed: $($_.Exception.Message)"
     exit 1
 }
 
-if ($LASTEXITCODE -ne 0) { exit 1 }
+#-----------------------------#
+# Installation Block
+#-----------------------------#
+if ($needsInstall) {
+    try {
+        if ($installScope -eq "allusers") {
+            $targetDir = "C:\rtools45"
+            $registryTarget = [System.EnvironmentVariableTarget]::Machine
+        } else {
+            $targetDir = Join-Path $env:LOCALAPPDATA "rtools45"
+            $registryTarget = [System.EnvironmentVariableTarget]::User
+        }
+
+        Write-Host "Installing Rtools 4.5 to $targetDir..."
+        
+        $tempPath = Join-Path $env:TEMP "kiwiflow_setup"
+        if (-not (Test-Path $tempPath)) { New-Item $tempPath -ItemType Directory -Force }
+        $installer = Join-Path $tempPath "rtools45.exe"
+
+        # Download Rtools 4.5 specifically
+        Download-File "https://cran.r-project.org/bin/windows/Rtools/rtools45/files/rtools45-6691-6492.exe" $installer
+
+        # Run Installer with /DIR to ensure it goes to our scope-specific path
+        $proc = Start-Process -FilePath $installer -ArgumentList "/VERYSILENT", "/DIR=$targetDir", "/NORESTART" -Wait -PassThru
+        
+        if ($proc.ExitCode -ne 0) { throw "Rtools 4.5 installer failed with code $($proc.ExitCode)" }
+        
+        $foundRtoolsBin = Join-Path $targetDir "usr\bin\make.exe"
+    }
+    catch {
+        Write-Host "Installation failed: $($_.Exception.Message)"
+        exit 1
+    }
+}
+
+#-----------------------------#
+# PATH Update
+#-----------------------------#
+try {
+    if (Test-Path $foundRtoolsBin) {
+        $binDir = Split-Path $foundRtoolsBin -Parent
+        $registryTarget = if ($installScope -eq "allusers") { [System.EnvironmentVariableTarget]::Machine } else { [System.EnvironmentVariableTarget]::User }
+
+        $currentPath = [Environment]::GetEnvironmentVariable("Path", $registryTarget)
+        if ($currentPath -notlike "*$binDir*") {
+            [Environment]::SetEnvironmentVariable("Path", "$currentPath;$binDir", $registryTarget)
+            Write-Host "Added Rtools 4.5 to $registryTarget PATH."
+        }
+        
+        # Ensure current session sees the NEW path immediately
+        $env:Path = "$binDir;$env:Path" 
+    }
+}
+catch {
+    Write-Host "Path update failed: $($_.Exception.Message)"
+    exit 1
+}
+
+Write-Host "Rtools 4.5 setup complete."
+Stop-Transcript
+exit 0
