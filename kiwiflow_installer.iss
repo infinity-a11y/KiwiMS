@@ -18,6 +18,7 @@ WizardSmallImageFile=setup\kiwiflow_small.bmp
 WizardStyle=modern
 AlwaysShowDirOnReadyPage=yes
 CloseApplications=yes
+SetupLogging=yes
 
 [Languages]
 Name: "en"; MessagesFile: "compiler:Default.isl"
@@ -179,7 +180,7 @@ procedure CheckPowerShellResult;
 var
   ResultCode: Integer;
 begin
-  ResultCode := WizardForm.ProgressGauge.Tag; // you can store it
+  ResultCode := WizardForm.ProgressGauge.Tag; 
   if ResultCode <> 0 then
   begin
     MsgBox('Installation step failed with error code: ' + IntToStr(ResultCode) + #13#10 +
@@ -197,43 +198,44 @@ var
   ResultCode: Integer;
   Scope: string;
 begin
-  Scope := 'currentuser';  // temporary – replace with your real GetInstallScope later
+  // 1. Get the value from your custom page
+  Scope := GetInstallScope; 
 
+  // 2. Build the string with the Scope included
   Params := '-ExecutionPolicy Bypass -Command "& { ' +
-          'param([string]$basePath, [string]$userDataPath, [string]$envName, [string]$logFile, [string]$installScope = \"currentuser\"); ' +
-          '& \"' + ExpandConstant('{app}\config.ps1') + '\" ' +
-          '-basePath \"' + ExpandConstant('{app}') + '\" ' +
-          '-userDataPath \"' + ExpandConstant('{localappdata}\KiwiFlow') + '\" ' +
-          '-envName \"kiwiflow\" ' +
-          '-logFile \"' + ExpandConstant('{#KiwiFlowLogFile}') + '\" ' +
-          '-installScope \"' + Scope + '\" }"';
+            'param([string]$basePath, [string]$userDataPath, [string]$envName, [string]$logFile, [string]$installScope); ' +
+            '& \"' + ExpandConstant('{app}\config.ps1') + '\" ' +
+            '-basePath \"' + ExpandConstant('{app}') + '\" ' +
+            '-userDataPath \"' + ExpandConstant('{localappdata}\KiwiFlow') + '\" ' +
+            '-envName \"kiwiflow\" ' +
+            '-logFile \"' + ExpandConstant('{#KiwiFlowLogFile}') + '\" ' +
+            '-installScope \"' + Scope + '\" }"';
+            
+  UpdateProgress(0);
 
   Log('Full command line: powershell.exe ' + Params);
-  Log('Working dir: ' + ExpandConstant('{app}'));
-  Log('Log file path: ' + ExpandConstant('{#KiwiFlowLogFile}'));
-
+  
   WizardForm.StatusLabel.Caption := CustomMessage('StatusMsg_Configuring');
-
+  
+  // Exec call remains the same
   if not Exec('powershell.exe', Params,
-            ExpandConstant('{app}'),
-            SW_HIDE,   // keep visible for debugging
-            ewWaitUntilTerminated,
-            ResultCode) then
-begin
-  Log('Exec failed to launch PowerShell process');
-  MsgBox('Failed to start PowerShell.exe.'#13#10 +
-         'Check if PowerShell is installed and accessible.', mbError, MB_OK);
-  Abort;
-end;
+              ExpandConstant('{app}'),
+              SW_HIDE,
+              ewWaitUntilTerminated,
+              ResultCode) then
+  begin
+    Log('Exec failed to launch config.ps1');
+    MsgBox('Failed to start PowerShell.exe.', mbError, MB_OK);
+    Abort;
+  end;
 
-Log('PowerShell exited with code: ' + IntToStr(ResultCode));
+  Log('config.ps1 exited with code: ' + IntToStr(ResultCode));
 
-if ResultCode <> 0 then
-begin
-  MsgBox('config.ps1 failed with exit code ' + IntToStr(ResultCode) + #13#10 +
-         'Check the Inno Setup log and the log file (if created).', mbError, MB_OK);
-  Abort;
-end;
+  if ResultCode <> 0 then
+  begin
+    MsgBox('config.ps1 failed with exit code ' + IntToStr(ResultCode), mbError, MB_OK);
+    Abort;
+  end;
 
   UpdateProgress(5);
 end;
@@ -243,20 +245,26 @@ procedure RunMinicondaInstall;
 var
   Params: string;
   ResultCode: Integer;
+  Scope: string;
 begin
+  Scope := GetInstallScope;
+  
   Params := '-ExecutionPolicy Bypass -Command "& { ' +
-            'param([string]$basePath, [string]$userDataPath, [string]$envName, [string]$logFile); ' +
+            'param([string]$basePath, [string]$userDataPath, [string]$envName, [string]$logFile, [string]$installScope); ' +
             '& \"' + ExpandConstant('{app}\miniconda_installer.ps1') + '\" ' +
             '-basePath \"' + ExpandConstant('{app}') + '\" ' +
             '-userDataPath \"' + ExpandConstant('{localappdata}\KiwiFlow') + '\" ' +
             '-envName \"kiwiflow\" ' +
-            '-logFile \"' + ExpandConstant('{#KiwiFlowLogFile}') + '\" }"';
+            '-logFile \"' + ExpandConstant('{#KiwiFlowLogFile}') + '\" ' +
+            '-installScope \"' + Scope + '\" }"';
 
   Log('Full command for miniconda_installer.ps1: powershell.exe ' + Params);
+  
+  WizardForm.StatusLabel.Caption := CustomMessage('StatusMsg_InstallMiniconda');
 
   if not Exec('powershell.exe', Params,
               ExpandConstant('{app}'),
-              SW_HIDE,                   // change to SW_SHOW only if debugging
+              SW_HIDE,
               ewWaitUntilTerminated,
               ResultCode) then
   begin
@@ -286,9 +294,9 @@ var
   Scope: string;
 begin
   Scope := GetInstallScope;
-
+  
   Params := '-ExecutionPolicy Bypass -Command "& { ' +
-            'param([string]$basePath, [string]$userDataPath, [string]$envName, [string]$logFile); ' +
+            'param([string]$basePath, [string]$userDataPath, [string]$envName, [string]$logFile, [string]$installScope); ' +
             '& \"' + ExpandConstant('{app}\conda_env.ps1') + '\" ' +
             '-basePath \"' + ExpandConstant('{app}') + '\" ' +
             '-userDataPath \"' + ExpandConstant('{localappdata}\KiwiFlow') + '\" ' +
@@ -335,22 +343,24 @@ procedure RunRtoolsSetup;
 var
   Params: string;
   ResultCode: Integer;
+  Scope: string;
 begin
+  Scope := GetInstallScope;
+  
   Params := '-ExecutionPolicy Bypass -Command "& { ' +
-            'param([string]$basePath, [string]$userDataPath, [string]$envName, [string]$logFile); ' +
+            'param([string]$basePath, [string]$userDataPath, [string]$envName, [string]$logFile, [string]$installScope); ' +
             '& \"' + ExpandConstant('{app}\rtools_setup.ps1') + '\" ' +
             '-basePath \"' + ExpandConstant('{app}') + '\" ' +
             '-userDataPath \"' + ExpandConstant('{localappdata}\KiwiFlow') + '\" ' +
             '-envName \"kiwiflow\" ' +
-            '-logFile \"' + ExpandConstant('{#KiwiFlowLogFile}') + '\" }"';
-
-  Log('Full command for rtools_setup.ps1: powershell.exe ' + Params);
+            '-logFile \"' + ExpandConstant('{#KiwiFlowLogFile}') + '\" ' +
+            '-installScope \"' + Scope + '\" }"';
 
   WizardForm.StatusLabel.Caption := CustomMessage('StatusMsg_SetupRtools');
 
   if not Exec('powershell.exe', Params,
               ExpandConstant('{app}'),
-              SW_HIDE,                     // change to SW_SHOW only for debugging
+              SW_HIDE,
               ewWaitUntilTerminated,
               ResultCode) then
   begin
@@ -386,9 +396,9 @@ var
   Scope: string;
 begin
   Scope := GetInstallScope;
-
+  
   Params := '-ExecutionPolicy Bypass -Command "& { ' +
-            'param([string]$basePath, [string]$userDataPath, [string]$envName, [string]$logFile, [string]$installScope = \"currentuser\"); ' +
+            'param([string]$basePath, [string]$userDataPath, [string]$envName, [string]$logFile, [string]$installScope); ' +
             '& \"' + ExpandConstant('{app}\renv_install.ps1') + '\" ' +
             '-basePath \"' + ExpandConstant('{app}') + '\" ' +
             '-userDataPath \"' + ExpandConstant('{localappdata}\KiwiFlow') + '\" ' +
@@ -448,12 +458,12 @@ begin
   Log('Full command for renv_setup.ps1: powershell.exe ' + Params);
   Log('Install scope passed: ' + Scope);
 
-  // Optional: set status message if defined
-  // WizardForm.StatusLabel.Caption := CustomMessage('StatusMsg_RestoreRenv');
+  // Status message if defined
+  WizardForm.StatusLabel.Caption := CustomMessage('StatusMsg_RestoreRenv');
 
   if not Exec('powershell.exe', Params,
               ExpandConstant('{app}'),
-              SW_HIDE,                     // change to SW_SHOW only for debugging
+              SW_HIDE,
               ewWaitUntilTerminated,
               ResultCode) then
   begin
@@ -485,9 +495,9 @@ var
   Scope: string;
 begin
   Scope := GetInstallScope;
-
+  
   Params := '-ExecutionPolicy Bypass -Command "& { ' +
-            'param([string]$basePath, [string]$userDataPath, [string]$envName, [string]$logFile, [string]$installScope = \"currentuser\"); ' +
+            'param([string]$basePath, [string]$userDataPath, [string]$envName, [string]$logFile, [string]$installScope); ' +
             '& \"' + ExpandConstant('{app}\quarto_install.ps1') + '\" ' +
             '-basePath \"' + ExpandConstant('{app}') + '\" ' +
             '-userDataPath \"' + ExpandConstant('{localappdata}\KiwiFlow') + '\" ' +
@@ -502,7 +512,7 @@ begin
 
   if not Exec('powershell.exe', Params,
               ExpandConstant('{app}'),
-              SW_HIDE,                     // change to SW_SHOW only for debugging
+              SW_HIDE,                     
               ewWaitUntilTerminated,
               ResultCode) then
   begin
@@ -601,4 +611,5 @@ begin
   CheckPowerShellResult;
   UpdateProgress(100);
 end;
+
 

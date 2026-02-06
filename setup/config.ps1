@@ -1,74 +1,99 @@
 #-----------------------------#
 # Script Initialization
 #-----------------------------#
-
 param(
     [string]$basePath,
     [string]$userDataPath,
     [string]$envName,
     [string]$logFile,
-    [string]$installScope = "currentuser"
+    [string]$installScope
 )
 
-$basePath = "C:\Users\marian\AppData\Local\KiwiFlow"
-$userDataPath = "C:\Users\marian\AppData\Local\KiwiFlow"
-$envName = "kiwiflow"
-$logFile = "$userDataPath\setup1.log"
-$installScope = "currentuser"
+$ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"
 
-
-
-# $ErrorActionPreference = "Stop"
-# $ProgressPreference = "SilentlyContinue"
-
-# Fallback console output always
-Write-Host "=== config.ps1 started ==="
-Write-Host "Parameters received:"
-Write-Host "  basePath:      $basePath"
-Write-Host "  userDataPath:  $userDataPath"
-Write-Host "  envName:       $envName"
-Write-Host "  logFile:       '$logFile'"
-Write-Host "  installScope:  '$installScope'"
-
-# Start logging
-Start-Transcript -Path $logFile -Append | Out-Null
-
-Write-Host "### Configuring setup (config.ps1)"
-Write-Host "basePath:        $basePath"
-Write-Host "userDataPath:    $userDataPath"
-Write-Host "envName:         $envName"
-Write-Host "logFile:         $logFile"
-Write-Host "installScope:    $installScope"
-
-# Determine if running elevated
-$isElevated = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-
-# Only enforce admin check in allusers mode
-if ($installScope -eq "allusers") {
-    if (-not $isElevated) {
-        Write-Host "ERROR: System-wide installation requires administrator rights."
-        Write-Host "Please restart the installer as administrator."
-        exit 1
+#-----------------------------#
+# Start Logging
+#-----------------------------#
+try {
+    if (Test-Path $logFile) { 
+        Remove-Item $logFile -Force -ErrorAction SilentlyContinue 
     }
-    Write-Host "Running elevated → system-wide mode OK"
-} else {
-    Write-Host "Running in current-user mode (elevation not required)"
+    
+    Start-Transcript -Path $logFile -Force | Out-Null
+    Write-Host "### Starting fresh log at $(Get-Date)"
+}
+catch {
+    Write-Error "Failed to initialize logging: "
+    exit 1
 }
 
-# Make userDataPath (always user-local, no elevation needed)
-if (-not (Test-Path $userDataPath)) {
-    New-Item -ItemType Directory -Path $userDataPath -Force | Out-Null
-    Write-Host "Created KiwiFlow directory: $userDataPath"
+try {
+    Write-Host "### Configuring setup (config.ps1)"
+    Write-Host "basePath:     $basePath"
+    Write-Host "userDataPath: $userDataPath"
+    Write-Host "envName:      $envName"
+    Write-Host "logFile:      $logFile"
+    Write-Host "installScope: $installScope"
+}
+catch {
+    Write-Error "Failed to initialize logging: "
+    exit 1
 }
 
-# Temp path (always user TEMP)
-$tempPath = Join-Path $env:TEMP "kiwiflow_setup"
-if (-not (Test-Path $tempPath)) {
-    New-Item -Path $tempPath -ItemType Directory -Force | Out-Null
-    Write-Host "Created temporary directory: $tempPath"
+#-----------------------------#
+# Administrator Rights Check
+#-----------------------------#
+try {
+    $isElevated = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+    if ($installScope -eq "allusers") {
+        if (-not $isElevated) {
+            Write-Host "ERROR: System-wide installation requires administrator rights."
+            exit 1
+        }
+        Write-Host "Running elevated → system-wide mode OK"
+    } else {
+        Write-Host "Running in current-user mode (elevation not required)"
+    }
+}
+catch {
+    Write-Host "Privilege check failed: "
+    exit 1
 }
 
-# Report path – use CommonDocuments for allusers, MyDocuments for currentuser
+#-----------------------------#
+# Create User Data Directory
+#-----------------------------#
+try {
+    if (-not (Test-Path $userDataPath)) {
+        New-Item -ItemType Directory -Path $userDataPath -Force | Out-Null
+        Write-Host "Created KiwiFlow directory: $userDataPath"
+    }
+}
+catch {
+    Write-Host "Creating User Data directory failed: "
+    exit 1
+}
+
+#-----------------------------#
+# Create Temporary Directory
+#-----------------------------#
+try {
+    $tempPath = Join-Path $env:TEMP "kiwiflow_setup"
+    if (-not (Test-Path $tempPath)) {
+        New-Item -Path $tempPath -ItemType Directory -Force | Out-Null
+        Write-Host "Created temporary directory: $tempPath"
+    }
+}
+catch {
+    Write-Host "Creating temporary directory failed: "
+    exit 1
+}
+
+#-----------------------------#
+# Determine Report Path
+#-----------------------------#
 try {
     if ($installScope -eq "allusers") {
         $reportBase = [Environment]::GetFolderPath("CommonDocuments")
@@ -83,24 +108,35 @@ try {
     }
 }
 catch {
-    Write-Host "Creating report directory failed: $($_.Exception.Message)"
+    Write-Host "Defining/Creating report directory failed: "
     exit 1
 }
 
-# Move report files
+#-----------------------------#
+# Move Report Files
+#-----------------------------#
 try {
     $sourcePath = Join-Path $basePath "app\report\*"
     if (Test-Path $sourcePath) {
         Move-Item -Path $sourcePath -Destination $reportPath -Force -ErrorAction Stop
         Write-Host "Moved report files to: $reportPath"
     } else {
-        Write-Host "No report files found at $sourcePath – skipping"
+        Write-Host "No report files found at $sourcePath. Skipping ..."
     }
 }
 catch {
-    Write-Host "Moving report files failed: $($_.Exception.Message)"
+    Write-Host "Moving report files failed: "
     exit 1
 }
 
-Write-Host "Config complete (scope: $installScope)"
-exit 0
+#-----------------------------#
+# Finalize Configuration
+#-----------------------------#
+try {
+    Write-Host "Config complete"
+    Stop-Transcript
+    exit 0
+}
+catch {
+    exit 0
+}

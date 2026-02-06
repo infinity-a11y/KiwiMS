@@ -10,7 +10,7 @@ function Find-CondaExecutable {
     }
 
     # 2. Check common default user-specific installation path (UserProfile)
-    $defaultUserProfilePath = "$env:UserProfile\miniconda3\Scripts\conda.exe"
+    $defaultUserProfilePath = "$env:LOCALAPPDATA\miniconda3\Scripts\conda.exe"
     if (Test-Path $defaultUserProfilePath) {
         Write-Host "Found conda.exe at default UserProfile path: $defaultUserProfilePath"
         return $defaultUserProfilePath
@@ -44,6 +44,37 @@ function Find-CondaExecutable {
 
     Write-Host "ERROR: conda.exe not found in common locations or system PATH." -ForegroundColor Red
     return $null # Return null if conda.exe is not found anywhere
+}
+
+#-----------------------------#
+# FUNCTION Get-CondaScope
+#-----------------------------#
+function Get-CondaScope {
+    param([string]$CondaPath)
+
+    if (-not $CondaPath) { return $null }
+
+    # Define common system-level roots
+    $systemRoots = @(
+        $env:ProgramData,
+        $env:ProgramFiles,
+        "${env:ProgramFiles(x86)}"
+    )
+
+    foreach ($root in $systemRoots) {
+        if ($CondaPath.StartsWith($root, "OrdinalIgnoreCase")) {
+            return "allusers"
+        }
+    }
+
+    # If it's in the Users folder or LocalAppData, it's definitely currentuser
+    if ($CondaPath -like "*\Users\*" -or $CondaPath.StartsWith($env:LOCALAPPDATA, "OrdinalIgnoreCase")) {
+        return "currentuser"
+    }
+
+    # Fallback: if we can't be sure, it's safer to treat as currentuser 
+    # or return 'unknown'
+    return "currentuser"
 }
 
 #-----------------------------#

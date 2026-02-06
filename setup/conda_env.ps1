@@ -26,6 +26,9 @@ Write-Host "installScope:     $installScope"
 # Determine if running elevated
 $isElevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
+# Source functions
+. "$basePath\functions.ps1"
+
 # Decide paths based on scope
 if ($installScope -eq "allusers") {
     Write-Host "System-wide (all users) mode selected"
@@ -45,7 +48,9 @@ if ($installScope -eq "allusers") {
 }
 
 # Path declaration
-$condaCmd = Join-Path $condaPrefix "Scripts\conda.exe"
+# $condaCmd = Join-Path $condaPrefix "Scripts\conda.exe"
+$condaCmd = Find-CondaExecutable
+$condaPrefix = [System.IO.Path]::GetDirectoryName([System.IO.Path]::GetDirectoryName($condaCmd))
 $condaEnvPath = Join-Path $condaPrefix "envs\$envName"
 
 # Conda Presence Check
@@ -107,7 +112,7 @@ for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
         }
     }
     catch {
-        Write-Host "ERROR on attempt $attempt: $($_.Exception.Message)"
+        Write-Host "ERROR on attempt"
         
         if ($attempt -eq $maxRetries) {
             Write-Host "All retry attempts failed. Exiting."
