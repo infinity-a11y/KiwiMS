@@ -63,7 +63,7 @@ if ($needsInstall) {
         $installer = Join-Path $tempPath "rtools45.exe"
 
         # Download Rtools 4.5 specifically
-        Download-File "https://cran.r-project.org/bin/windows/Rtools/rtools45/files/rtools45-6691-6492.exe" $installer
+        Download-File "https://cran.r-project.org/bin/windows/Rtools/rtools45/files/rtools45-6768-6492.exe" $installer
 
         # Run Installer with /DIR to ensure it goes to our scope-specific path
         $proc = Start-Process -FilePath $installer -ArgumentList "/VERYSILENT", "/DIR=$targetDir", "/NORESTART" -Wait -PassThru
