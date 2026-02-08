@@ -55,8 +55,6 @@ if ($needsInstall) {
             $targetDir = Join-Path $env:LOCALAPPDATA "rtools45"
             $registryTarget = [System.EnvironmentVariableTarget]::User
         }
-
-        Write-Host "Installing Rtools 4.5 to $targetDir..."
         
         $tempPath = Join-Path $env:TEMP "kiwiflow_setup"
         if (-not (Test-Path $tempPath)) { New-Item $tempPath -ItemType Directory -Force }
@@ -64,6 +62,13 @@ if ($needsInstall) {
 
         # Download Rtools 4.5 specifically
         Download-File "https://cran.r-project.org/bin/windows/Rtools/rtools45/files/rtools45-6768-6492.exe" $installer
+
+        if (Test-Path $installer) {
+            Write-Host "Download complete. Installing to $targetDir..."
+        }  else {
+            Write-Host "Download failed: $($_.Exception.Message)"
+            exit 1
+        }
 
         # Run Installer with /DIR to ensure it goes to our scope-specific path
         $proc = Start-Process -FilePath $installer -ArgumentList "/VERYSILENT", "/DIR=$targetDir", "/NORESTART" -Wait -PassThru

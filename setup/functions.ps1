@@ -144,24 +144,42 @@ function Get-PathScope {
 # FUNCTION Download with Retry
 #-----------------------------#
 function Download-File($url, $destination) {
-    if (Test-Path $destination) {
-        Remove-Item $destination -Force
+    # Force TLS 1.2
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+    # Use a temporary name for the download itself to avoid locking the main destination
+    $tempDownloadPath = $destination + ".tmp"
+
+    if (Test-Path $tempDownloadPath) {
+        Remove-Item $tempDownloadPath -Force -ErrorAction SilentlyContinue
     }
 
     $success = $false
     for ($i = 0; $i -lt 3; $i++) {
         try {
-            Invoke-WebRequest -Uri $url -OutFile $destination -UseBasicParsing
+            Write-Host "Downloading via BITS to: $tempDownloadPath (Attempt $($i+1))"
+            
+            # Start-BitsTransfer is synchronous by default
+            # It handles the "Complete" call automatically when it finishes
+            Start-BitsTransfer -Source $url -Destination $tempDownloadPath -Priority High -ErrorAction Stop
+            
+            # If successful, move the temp file to the final destination
+            if (Test-Path $destination) { Remove-Item $destination -Force }
+            Move-Item -Path $tempDownloadPath -Destination $destination -Force
+            
             $success = $true
             break
         }
         catch {
+            Write-Warning "Attempt $($i+1) failed: $($_.Exception.Message)"
+            # Clean the temp file on failure to ensure a fresh start for the next retry
+            if (Test-Path $tempDownloadPath) { Remove-Item $tempDownloadPath -Force -ErrorAction SilentlyContinue }
             Start-Sleep -Seconds 3
         }
     }
 
     if (-Not $success) {
-        Write-Host "Failed to download: $url"
+        Write-Error "Failed to download $url after 3 attempts."
         exit 1
     }
 }
