@@ -1,8 +1,8 @@
 # update.ps1
-# Fetch and run KiwiFlow update 
+# Fetch and run KiwiMS update 
 
 # Log update script
-$logFile = "$env:LOCALAPPDATA\KiwiFlow\update.log"
+$logFile = "$env:LOCALAPPDATA\KiwiMS\update.log"
 Start-Transcript -Path $logFile
 
 # Declare download function
@@ -30,15 +30,15 @@ function Download-File($url, $destination) {
 }
 
 # Make temp path
-$tempPath = Join-Path $env:TEMP "kiwiflow_setup"
+$tempPath = Join-Path $env:TEMP "kiwims_setup"
 if (-not (Test-Path $tempPath)) {
     New-Item -Path $tempPath -ItemType Directory -Force | Out-Null
     Write-Host "Created temporary directory: $tempPath"
 }
 
 # Declare url and target path
-$updateURL = "https://github.com/infinity-a11y/KiwiFlow/raw/master/Output/KiwiFlow_2025-07-22_Setup.exe"
-$updateInstaller = "$tempPath\update_kiwiflow.exe"
+$updateURL = "https://github.com/infinity-a11y/KiwiMS/raw/master/Output/KiwiMS_2025-07-22_Setup.exe"
+$updateInstaller = "$tempPath\update_kiwims.exe"
 
 # Download update executable
 try {

@@ -7,8 +7,8 @@ startShiny <- function() {
   options(
     browser = paths[which(file.exists(paths))]
   )
-  if (basename(getwd()) != "KiwiFlow_App") {
-    setwd("KiwiFlow_App")
+  if (basename(getwd()) != "KiwiMS_App") {
+    setwd("KiwiMS_App")
   }
   rhino::build_sass()
 

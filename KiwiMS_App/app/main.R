@@ -20,7 +20,7 @@ box::use(
     logic /
     helper_functions[
       check_github_version,
-      get_kiwiflow_version,
+      get_kiwims_version,
       get_latest_release_url,
     ],
   app / logic / conversion_constants[gpl3_licence, ]
@@ -50,7 +50,7 @@ ui <- function(id) {
             "k; opacity: 0; animation: fadeIn 1s ease-in forwards",
             "; animation-delay: 1s;"
           ),
-          "KiwiFlow"
+          "KiwiMS"
         )
       )
     ),
@@ -64,11 +64,11 @@ ui <- function(id) {
           style = "margin-right: 5px; margin-top: -2px"
         ),
         shiny$tags$span(
-          "KiwiFlow",
+          "KiwiMS",
           style = "font-size: 21px; font-family: monospace;"
         )
       ),
-      window_title = paste("KiwiFlow", get_kiwiflow_version()["version"]),
+      window_title = paste("KiwiMS", get_kiwims_version()["version"]),
       navbar_options = bslib$navbar_options(underline = TRUE),
       bslib$nav_panel(
         title = "Deconvolution",
@@ -144,7 +144,7 @@ ui <- function(id) {
           shiny$tags$a(
             shiny$tags$span(
               shiny$tags$i(class = "fa-brands fa-github me-1"),
-              "KiwiFlow GitHub"
+              "KiwiMS GitHub"
             ),
             href = "https://github.com/infinity-a11y/MSFlow",
             target = "_blank",
@@ -192,7 +192,7 @@ server <- function(id) {
       shiny$stopApp()
     })
 
-    shiny::observeEvent(input$quit_kiwiflow, {
+    shiny::observeEvent(input$quit_kiwims, {
       shiny::stopApp() # This signals the mother process that the app is done
     })
 
@@ -247,12 +247,12 @@ server <- function(id) {
 
     if (identical(local_version, remote_version)) {
       # Variables for modal
-      message <- "KiwiFlow is up-to-date"
+      message <- "KiwiMS is up-to-date"
       hint <- "No action needed. Update anyway?"
       release_url <- get_latest_release_url()
       link <- ifelse(
         is.null(release_url),
-        "https://github.com/infinity-a11y/KiwiFlow/tree/master",
+        "https://github.com/infinity-a11y/KiwiMS/tree/master",
         release_url
       )
 
@@ -272,7 +272,7 @@ server <- function(id) {
       release_url <- get_latest_release_url()
       link <- ifelse(
         is.null(release_url),
-        "https://github.com/infinity-a11y/KiwiFlow/tree/master",
+        "https://github.com/infinity-a11y/KiwiMS/tree/master",
         release_url
       )
 
@@ -329,7 +329,7 @@ server <- function(id) {
             shiny$div(
               style = "font-size: 14px;",
               shiny$tags$p(
-                "KiwiFlow is released under the following license:"
+                "KiwiMS is released under the following license:"
               ),
               shiny$tags$pre(
                 style = "height: 400px; overflow-y: scroll; background-color: #f8f9fa; 

@@ -1,5 +1,5 @@
 find_binary_version_specs <- function(
-  lockfile_path = "KiwiFlow_App/renv.lock"
+  lockfile_path = "KiwiMS_App/renv.lock"
 ) {
   # 1. Load lockfile and CRAN binary metadata
   lock <- renv::lockfile_read(lockfile_path)

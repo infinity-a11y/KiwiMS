@@ -1,5 +1,5 @@
 # Instructions to make Hex logo
-# THIS FILE AND ITS OPEN-SOURCE COMPONENTS ARE NOT A COMPONENT OF THE KIWIFLOW APP
+# THIS FILE AND ITS OPEN-SOURCE COMPONENTS ARE NOT A COMPONENT OF THE KiwiMS APP
 # It requires hexSticker AND showtext packages which are not compatible with GPL-3 license and therefore not part of the application
 
 # # Loading font
@@ -8,7 +8,7 @@
 
 # # Logo with name
 # sticker(
-#   package = "KiwiFlow",
+#   package = "KiwiMS",
 #   subplot = "resources/kiwi.png",
 #   h_fill = "#E8CB98",
 #   h_color = "#36367B",
@@ -24,7 +24,7 @@
 
 # # Logo without name
 # sticker(
-#   package = "KiwiFlow",
+#   package = "KiwiMS",
 #   subplot = "resources/kiwi.png",
 #   h_fill = "#E8CB98",
 #   h_color = "#36367B",

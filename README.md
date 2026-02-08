@@ -1,10 +1,10 @@
-<img src="KiwiFlow_App/resources/KiwiFlow.png" align="right" width="20%"/>
+<img src="KiwiMS_App/resources/KiwiMS.png" align="right" width="20%"/>
 
-KiwiFlow is an interactive pipeline with graphical user interface to perform proteomics mass spectrometry data analysis. It implements UniDec's (https://github.com/michaelmarty/UniDec) bayesian mass spectra deconvolution method and provides downstream analyses for protein binding studies.
+KiwiMS is an interactive pipeline with graphical user interface to perform proteomics mass spectrometry data analysis. It implements UniDec's (https://github.com/michaelmarty/UniDec) bayesian mass spectra deconvolution method and provides downstream analyses for protein binding studies.
 
-![Windows](https://img.shields.io/badge/Windows-339033?style=flat&logo=windows&logoColor=white) [![Version](https://img.shields.io/badge/Version-0.2.0-E8CB98)](https://github.com/infinity-a11y/KiwiFlow/releases/tag/0.2.1) [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-659DA3.svg)](https://www.gnu.org/licenses/gpl-3.0) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.16575977.svg)](https://doi.org/10.5281/zenodo.16575976)
+![Windows](https://img.shields.io/badge/Windows-339033?style=flat&logo=windows&logoColor=white) [![Version](https://img.shields.io/badge/Version-0.2.0-E8CB98)](https://github.com/infinity-a11y/KiwiMS/releases/tag/0.2.1) [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-659DA3.svg)](https://www.gnu.org/licenses/gpl-3.0) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.16575977.svg)](https://doi.org/10.5281/zenodo.16575976)
 
-<sup>*KiwiFlow is supposed to be used for research and academic purposes only.*</sup>
+<sup>*KiwiMS is supposed to be used for research and academic purposes only.*</sup>
 
 <br><br>
 
@@ -12,9 +12,9 @@ KiwiFlow is an interactive pipeline with graphical user interface to perform pro
 
 <br>
 
-### Current Version: KiwiFlow 0.3.0
+### Current Version: KiwiMS 0.3.0
 
-<i> 2026-01-28 </i> <br> <b>KiwiFlow 0.3.0 - Protein Conversion Module </b> <br> <https://github.com/infinity-a11y/KiwiFlow/releases/tag/0.3.0>
+<i> 2026-01-28 </i> <br> <b>KiwiMS 0.3.0 - Protein Conversion Module </b> <br> <https://github.com/infinity-a11y/KiwiMS/releases/tag/0.3.0>
 
 <br>
 
@@ -24,13 +24,13 @@ KiwiFlow is an interactive pipeline with graphical user interface to perform pro
 
 ### Installation
 
-1.  Download the KiwiFlow installer from the latest release: <br>
+1.  Download the KiwiMS installer from the latest release: <br>
 
 | OS | Version | Download | SHA256 checksum |
 |------------------|------------------|------------------|------------------|
-| Windows 10/11 | 0.3.0 | [KiwiFlow_2026-01-28_Setup.exe](https://github.com/infinity-a11y/KiwiFlow/releases/download/0.3.0/KiwiFlow_2026-01-28_Setup.exe) | <sub><sup>DFFE988893E727648F3E670B864B56FA43D1F8B5A56C46967441CE2D0BD6B727</sup></sub> |
+| Windows 10/11 | 0.3.0 | [KiwiMS_2026-01-28_Setup.exe](https://github.com/infinity-a11y/KiwiMS/releases/download/0.3.0/KiwiMS_2026-01-28_Setup.exe) | <sub><sup>DFFE988893E727648F3E670B864B56FA43D1F8B5A56C46967441CE2D0BD6B727</sup></sub> |
 
-2.  Run the installer to set KiwiFlow up.
+2.  Run the installer to set KiwiMS up.
 
 > [!NOTE]
 > <i>You may see a security warning from Windows Defender SmartScreen. This is a standard notification that appears because the installer is new and does not yet have a widely recognized digital signature.</i>
@@ -49,7 +49,7 @@ KiwiFlow is an interactive pipeline with graphical user interface to perform pro
 ### System Requirements
 
 -   **Operating System**: Windows 10/11.
--   **Browser**: KiwiFlow is running in the default browser.
+-   **Browser**: KiwiMS is running in the default browser.
 -   **Administrative Privileges**: Required for setup and updates. A UAC prompt will appear.
 -   **Internet Connection**: Required to download Miniconda, updates, and packages.
 

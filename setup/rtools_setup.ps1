@@ -56,7 +56,7 @@ if ($needsInstall) {
             $registryTarget = [System.EnvironmentVariableTarget]::User
         }
         
-        $tempPath = Join-Path $env:TEMP "kiwiflow_setup"
+        $tempPath = Join-Path $env:TEMP "kiwims_setup"
         if (-not (Test-Path $tempPath)) { New-Item $tempPath -ItemType Directory -Force }
         $installer = Join-Path $tempPath "rtools45.exe"
 

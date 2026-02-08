@@ -184,19 +184,19 @@ deconvolute <- function(
 
     # Validate Conda environment
     library(reticulate)
-    if (!"kiwiflow" %in% conda_list()$name) {
+    if (!"kiwims" %in% conda_list()$name) {
       stop(
-        "Conda environment 'kiwiflow' not found. Create it with conda_create('kiwiflow')."
+        "Conda environment 'kiwims' not found. Create it with conda_create('kiwims')."
       )
     } else {
-      message("Conda environment 'kiwiflow' found.")
+      message("Conda environment 'kiwims' found.")
     }
 
     # Create log directory and define outfile
     outfile <- file.path(
       Sys.getenv("USERPROFILE"),
       "Documents",
-      "KiwiFlow",
+      "KiwiMS",
       "logs",
       "last_cluster_log.txt"
     )
@@ -225,7 +225,7 @@ deconvolute <- function(
 
           tryCatch(
             {
-              use_condaenv("kiwiflow", required = TRUE)
+              use_condaenv("kiwims", required = TRUE)
               NULL
             },
             error = function(e) {
@@ -309,20 +309,20 @@ deconvolute <- function(
 
     # Validate Conda environment
     library(reticulate)
-    if (!"kiwiflow" %in% conda_list()$name) {
+    if (!"kiwims" %in% conda_list()$name) {
       stop(
-        "Conda environment 'kiwiflow' not found. Create it with conda_create('kiwiflow')."
+        "Conda environment 'kiwims' not found. Create it with conda_create('kiwims')."
       )
     } else {
-      message("Conda environment 'kiwiflow' found.")
+      message("Conda environment 'kiwims' found.")
     }
 
     tryCatch(
       {
-        use_condaenv("kiwiflow", required = TRUE)
+        use_condaenv("kiwims", required = TRUE)
       },
       error = function(e) {
-        message("Error activating 'kiwiflow' environment: ", e$message)
+        message("Error activating 'kiwims' environment: ", e$message)
         return(NULL)
       }
     )

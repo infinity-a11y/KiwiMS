@@ -1,6 +1,6 @@
 ---
 title: "`r params$report_title`"
-subtitle: "KiwiFlow `r params$version`  -  Released `r params$date`"
+subtitle: "KiwiMS `r params$version`  -  Released `r params$date`"
 author: "`r params$report_author`"
 date: "`r Sys.Date()`"
 params:
@@ -23,9 +23,9 @@ format:
     smooth-scroll: true
     embed-resources: true
     other-links:
-      - text: KiwiFlow Repository
+      - text: KiwiMS Repository
         icon: github
-        href: https://github.com/infinity-a11y/KiwiFlow
+        href: https://github.com/infinity-a11y/KiwiMS
         target: _blank
       - text: UniDec Repository
         icon: github

@@ -28,7 +28,7 @@ safe_observe <- function(
     }
 
     # Log errors
-    message("--- KIWIFLOW SYSTEM ERROR ---")
+    message("--- KiwiMS SYSTEM ERROR ---")
     message("Location: ", observer_name)
     err_msg <- conditionMessage(e)
     message(
@@ -46,7 +46,7 @@ safe_observe <- function(
         "An unexpected error occurred in <b>",
         observer_name,
         "</b>.<br>",
-        "KiwiFlow needs to be restarted to ensure data integrity."
+        "KiwiMS needs to be restarted to ensure data integrity."
       ))),
       shiny::tags$hr(),
       shiny::tags$b("Error Details:"),
@@ -61,7 +61,7 @@ safe_observe <- function(
           class = "btn btn-danger",
           onclick = "
             document.getElementById('blocking-overlay').style.display = 'block';
-            Shiny.setInputValue('app-quit_kiwiflow', Math.random(), {priority: 'event'}); 
+            Shiny.setInputValue('app-quit_kiwims', Math.random(), {priority: 'event'}); 
             setTimeout(function() {
               window.open('', '_self', ''); 
               window.close();
@@ -101,7 +101,7 @@ safe_observe <- function(
 }
 
 #' @export
-get_kiwiflow_version <- function() {
+get_kiwims_version <- function() {
   # Get version file from static directory
   version_file <- readLines("app/static/version.txt")
 
@@ -173,7 +173,7 @@ fill_empty <- function(string) {
 
 #' @export
 check_github_version <- function(
-  repo_url = "https://raw.githubusercontent.com/infinity-a11y/KiwiFlow/master/KiwiFlow_App/resources/version.txt"
+  repo_url = "https://raw.githubusercontent.com/infinity-a11y/KiwiMS/master/KiwiMS_App/resources/version.txt"
 ) {
   tryCatch(
     {
@@ -208,7 +208,7 @@ check_github_version <- function(
 }
 
 #' @export
-get_latest_release_url <- function(repo = "infinity-a11y/KiwiFlow") {
+get_latest_release_url <- function(repo = "infinity-a11y/KiwiMS") {
   tryCatch(
     {
       # Construct the GitHub URL for the latest release

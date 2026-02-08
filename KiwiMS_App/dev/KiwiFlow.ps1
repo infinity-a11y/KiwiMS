@@ -1,4 +1,4 @@
-# KiwiFlow.ps1 - Launcher
+# KiwiMS.ps1 - Launcher
 #-----------------------------#
 # Script Initialization
 #-----------------------------#
@@ -15,7 +15,7 @@ Write-Host "██║  ██╗ ██║ ╚███╔███╔╝ ██
 Write-Host "╚═╝  ╚═╝ ╚═╝  ╚══╝╚══╝  ╚═╝ ╚═╝      ╚═════╝  ╚═════╝   ╚══╝╚══╝ " -ForegroundColor DarkGreen
 Write-Host ""
 Write-Host "---------------------------------------------------" -ForegroundColor DarkGray
-Write-Host "        Welcome to KiwiFlow ($versionFile)         " -ForegroundColor White
+Write-Host "        Welcome to KiwiMS ($versionFile)         " -ForegroundColor White
 Write-Host "---------------------------------------------------" -ForegroundColor DarkGray
 
 #-----------------------------#
@@ -48,7 +48,7 @@ function Find-CondaExecutable {
 # Path & Log Configuration
 #-----------------------------#
 $condaCmd = Find-CondaExecutable
-$logDirectory = "$env:LOCALAPPDATA\KiwiFlow"
+$logDirectory = "$env:LOCALAPPDATA\KiwiMS"
 $logFile = Join-Path $logDirectory "launch.log"
 
 if (-Not (Test-Path $logDirectory)) { New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null }
@@ -57,7 +57,7 @@ if (-Not (Test-Path $logDirectory)) { New-Item -ItemType Directory -Path $logDir
 "$(Get-Date) - INFO: Launcher Initialized." | Out-File $logFile
 
 if (-not $condaCmd) {
-    Write-Host "ERROR: Conda not found! Please reinstall KiwiFlow." -ForegroundColor Red
+    Write-Host "ERROR: Conda not found! Please reinstall KiwiMS." -ForegroundColor Red
     "$(Get-Date) - ERROR: Conda executable not found in system or user paths." | Add-Content $logFile
     pause
     exit 1
@@ -67,7 +67,7 @@ Write-Host "Using Conda at: $condaCmd" -ForegroundColor Gray
 Write-Host "Starting application... please wait." -ForegroundColor Yellow
 
 try {
-    # Extract the base directory to ensure we can find the 'kiwiflow' environment
+    # Extract the base directory to ensure we can find the 'kiwims' environment
     # Moving up from Scripts/conda.exe to the root prefix
     $condaPrefix = Split-Path (Split-Path $condaCmd -Parent) -Parent
 
@@ -76,7 +76,7 @@ try {
 
     # Launch the App
     # Use --no-capture-output to ensure logs flow into our file correctly
-    & $condaCmd run -n kiwiflow Rscript.exe -e "shiny::runApp('app.R', port = 3838, launch.browser = TRUE)" --vanilla *> $logFile 2>&1
+    & $condaCmd run -n kiwims Rscript.exe -e "shiny::runApp('app.R', port = 3838, launch.browser = TRUE)" --vanilla *> $logFile 2>&1
 
     if ($LASTEXITCODE -ne 0) {
         throw "R Process exited with code $LASTEXITCODE"

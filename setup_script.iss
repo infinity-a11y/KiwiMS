@@ -1,20 +1,20 @@
 [Setup]
-AppName=KiwiFlow
-AppId=KiwiFlow
+AppName=KiwiMS
+AppId=KiwiMS
 AppVersion=0.3.0
 AppPublisher=Marian Freisleben
-DefaultDirName={autopf}\KiwiFlow
+DefaultDirName={autopf}\KiwiMS
 DisableDirPage=yes
-DefaultGroupName=KiwiFlow
+DefaultGroupName=KiwiMS
 Compression=lzma2
 SolidCompression=yes
 OutputDir=.
-OutputBaseFilename=KiwiFlow_2026-01-28_Setup
+OutputBaseFilename=KiwiMS_2026-01-28_Setup
 SetupIconFile=setup\favicon.ico
 PrivilegesRequired=admin
 FlatComponentsList=no
-WizardImageFile=setup\kiwiflow_Banner.bmp
-WizardSmallImageFile=setup\kiwiflow_small.bmp
+WizardImageFile=setup\kiwims_Banner.bmp
+WizardSmallImageFile=setup\kiwims_small.bmp
 WizardStyle=modern
 AlwaysShowDirOnReadyPage=yes
 CloseApplications=yes
@@ -39,16 +39,16 @@ Source: "setup\quarto_install.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\summarize_setup.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 
 ; App files
-Source: "KiwiFlow_App\KiwiFlow.exe"; DestDir: "{app}";
-Source: "KiwiFlow_App\update.exe"; DestDir: "{app}";
-Source: "KiwiFlow_App\app.R"; DestDir: "{app}";
-Source: "KiwiFlow_App\config.yml"; DestDir: "{app}";
-Source: "KiwiFlow_App\renv.lock"; DestDir: "{app}";
-Source: "KiwiFlow_App\renv\activate.R"; DestDir: "{app}\renv";
-Source: "KiwiFlow_App\rhino.yml"; DestDir: "{app}";
-Source: "KiwiFlow_App\app\*"; DestDir: "{app}\app"; Flags: recursesubdirs createallsubdirs;
-Source: "KiwiFlow_App\dev\*"; DestDir: "{app}\dev"; Flags: recursesubdirs createallsubdirs;
-Source: "KiwiFlow_App\resources\*"; DestDir: "{app}\resources"; Flags: recursesubdirs createallsubdirs;
+Source: "KiwiMS_App\KiwiMS.exe"; DestDir: "{app}";
+Source: "KiwiMS_App\update.exe"; DestDir: "{app}";
+Source: "KiwiMS_App\app.R"; DestDir: "{app}";
+Source: "KiwiMS_App\config.yml"; DestDir: "{app}";
+Source: "KiwiMS_App\renv.lock"; DestDir: "{app}";
+Source: "KiwiMS_App\renv\activate.R"; DestDir: "{app}\renv";
+Source: "KiwiMS_App\rhino.yml"; DestDir: "{app}";
+Source: "KiwiMS_App\app\*"; DestDir: "{app}\app"; Flags: recursesubdirs createallsubdirs;
+Source: "KiwiMS_App\dev\*"; DestDir: "{app}\dev"; Flags: recursesubdirs createallsubdirs;
+Source: "KiwiMS_App\resources\*"; DestDir: "{app}\resources"; Flags: recursesubdirs createallsubdirs;
 
 ; Other
 Source: "setup\favicon.ico"; DestDir: "{app}"; Flags: ignoreversion
@@ -62,8 +62,8 @@ StatusMsg_SetupRtools=Setting up rtools45...
 StatusMsg_InstallRenv=Installing renv package (R environment setup phase 1/2)...
 StatusMsg_RestoreRenv=Restoring R packages (renv environment setup phase 2/2)...
 StatusMsg_InstallQuarto=Installing Quarto...
-Icons_Comment=Launch the KiwiFlow Application
-Description_Launch=Launch KiwiFlow
+Icons_Comment=Launch the KiwiMS Application
+Description_Launch=Launch KiwiMS
 
 ; German Messages
 de.StatusMsg_Configuring=Setup wird konfiguriert...
@@ -73,33 +73,33 @@ de.StatusMsg_SetupRtools=Installiere rtools45...
 de.StatusMsg_InstallRenv=renv Paket wird installiert (R Umgebung Einrichtung Phase 1/2)...
 de.StatusMsg_RestoreRenv=R-Pakete werden wiederhergestellt (renv Umgebung Einrichtung Phase 2/2)...
 de.StatusMsg_InstallQuarto=Quarto wird installiert...
-de.Icons_Comment=KiwiFlow Anwendung starten
-de.Description_Launch=KiwiFlow starten
+de.Icons_Comment=KiwiMS Anwendung starten
+de.Description_Launch=KiwiMS starten
 
 ; Installation scope
 ScopeTitle=Select Installation Type
 ScopeSub=Who should this application be installed for?
-ScopeDesc=Choose how you want to install KiwiFlow.
+ScopeDesc=Choose how you want to install KiwiMS.
 ScopeAllUsers=System-wide for all users (requires administrator rights)
 ScopeCurrUser=Current user only
 de.ScopeTitle=Installationstyp auswählen
 de.ScopeSub=Für wen soll diese Anwendung installiert werden?
-de.ScopeDesc=Wählen Sie aus, wie Sie KiwiFlow installieren möchten.
+de.ScopeDesc=Wählen Sie aus, wie Sie KiwiMS installieren möchten.
 de.ScopeAllUsers=Systemweit für alle Benutzer (erfordert Administratorrechte)
 de.ScopeCurrUser=Nur für den aktuellen Benutzer
 
 [Run]
-#define KiwiFlowLogFile "{localappdata}\KiwiFlow\kiwiflow_setup.log"
+#define KiwiMSLogFile "{localappdata}\KiwiMS\kiwims_setup.log"
 
 ; Post Install
-Filename: "{app}\KiwiFlow.exe"; Description: "{cm:Description_Launch}"; Flags: postinstall skipifsilent shellexec;
+Filename: "{app}\KiwiMS.exe"; Description: "{cm:Description_Launch}"; Flags: postinstall skipifsilent shellexec;
 
 [Icons]
 ; Create shortcut in Start Menu Programs group
-Name: "{group}\KiwiFlow"; Filename: "{app}\KiwiFlow.exe"; WorkingDir: "{app}"; IconFilename: "{app}\favicon.ico"; Comment: "{cm:Icons_Comment}";
+Name: "{group}\KiwiMS"; Filename: "{app}\KiwiMS.exe"; WorkingDir: "{app}"; IconFilename: "{app}\favicon.ico"; Comment: "{cm:Icons_Comment}";
 
 ; Create desktop shortcut
-Name: "{userdesktop}\KiwiFlow"; Filename: "{app}\KiwiFlow.exe"; WorkingDir: "{app}"; IconFilename: "{app}\favicon.ico"; Comment: "{cm:Icons_Comment}";
+Name: "{userdesktop}\KiwiMS"; Filename: "{app}\KiwiMS.exe"; WorkingDir: "{app}"; IconFilename: "{app}\favicon.ico"; Comment: "{cm:Icons_Comment}";
 
 [Code]
 
@@ -143,11 +143,11 @@ begin
     if InstallScopePage.Values[0] then
     begin
       // All users → force admin mode
-      WizardForm.DirEdit.Text := ExpandConstant('{pf}\KiwiFlow');
+      WizardForm.DirEdit.Text := ExpandConstant('{pf}\KiwiMS');
       // You can also set registry root later
     end else
     begin
-      WizardForm.DirEdit.Text := ExpandConstant('{localappdata}\KiwiFlow');
+      WizardForm.DirEdit.Text := ExpandConstant('{localappdata}\KiwiMS');
     end;
   end;
   Result := True;
@@ -172,7 +172,7 @@ begin
   if ResultCode <> 0 then
   begin
     MsgBox('Installation step failed with error code: ' + IntToStr(ResultCode) + #13#10 +
-           'Please check the log file: ' + ExpandConstant('{#KiwiFlowLogFile}'),
+           'Please check the log file: ' + ExpandConstant('{#KiwiMSLogFile}'),
            mbError, MB_OK);
     WizardForm.Close;
     // or Abort;
@@ -192,9 +192,9 @@ begin
             'param([string]$basePath, [string]$userDataPath, [string]$envName, [string]$logFile, [string]$installScope); ' +
             '& \"' + ExpandConstant('{app}\config.ps1') + '\" ' +
             '-basePath \"' + ExpandConstant('{app}') + '\" ' +
-            '-userDataPath \"' + ExpandConstant('{localappdata}\KiwiFlow') + '\" ' +
-            '-envName \"kiwiflow\" ' +
-            '-logFile \"' + ExpandConstant('{#KiwiFlowLogFile}') + '\" ' +
+            '-userDataPath \"' + ExpandConstant('{localappdata}\KiwiMS') + '\" ' +
+            '-envName \"kiwims\" ' +
+            '-logFile \"' + ExpandConstant('{#KiwiMSLogFile}') + '\" ' +
             '-installScope \"' + Scope + '\" }"';
             
   UpdateProgress(5);
@@ -238,9 +238,9 @@ begin
             'param([string]$basePath, [string]$userDataPath, [string]$envName, [string]$logFile, [string]$installScope); ' +
             '& \"' + ExpandConstant('{app}\miniconda_installer.ps1') + '\" ' +
             '-basePath \"' + ExpandConstant('{app}') + '\" ' +
-            '-userDataPath \"' + ExpandConstant('{localappdata}\KiwiFlow') + '\" ' +
-            '-envName \"kiwiflow\" ' +
-            '-logFile \"' + ExpandConstant('{#KiwiFlowLogFile}') + '\" ' +
+            '-userDataPath \"' + ExpandConstant('{localappdata}\KiwiMS') + '\" ' +
+            '-envName \"kiwims\" ' +
+            '-logFile \"' + ExpandConstant('{#KiwiMSLogFile}') + '\" ' +
             '-installScope \"' + Scope + '\" }"';
 
   Log('Full command for miniconda_installer.ps1: powershell.exe ' + Params);
@@ -264,7 +264,7 @@ begin
   begin
     MsgBox('miniconda_installer.ps1 failed with exit code ' + IntToStr(ResultCode) + #13#10 +
            'Check the log file:' + #13#10 +
-           ExpandConstant('{#KiwiFlowLogFile}'), mbError, MB_OK);
+           ExpandConstant('{#KiwiMSLogFile}'), mbError, MB_OK);
     Abort;
   end;
 
@@ -284,9 +284,9 @@ begin
             'param([string]$basePath, [string]$userDataPath, [string]$envName, [string]$logFile, [string]$installScope); ' +
             '& \"' + ExpandConstant('{app}\conda_env.ps1') + '\" ' +
             '-basePath \"' + ExpandConstant('{app}') + '\" ' +
-            '-userDataPath \"' + ExpandConstant('{localappdata}\KiwiFlow') + '\" ' +
-            '-envName \"kiwiflow\" ' +
-            '-logFile \"' + ExpandConstant('{#KiwiFlowLogFile}') + '\" ' +
+            '-userDataPath \"' + ExpandConstant('{localappdata}\KiwiMS') + '\" ' +
+            '-envName \"kiwims\" ' +
+            '-logFile \"' + ExpandConstant('{#KiwiMSLogFile}') + '\" ' +
             '-installScope \"' + Scope + '\" }"';
 
   Log('Full command for conda_env.ps1: powershell.exe ' + Params);
@@ -316,7 +316,7 @@ begin
            ' • Network problems during package download' + #13#10 +
            ' • Disk space or permissions issues' + #13#10#13#10 +
            'Please check the log file for details:' + #13#10 +
-           ExpandConstant('{#KiwiFlowLogFile}'), mbError, MB_OK);
+           ExpandConstant('{#KiwiMSLogFile}'), mbError, MB_OK);
     Abort;
   end;
 
@@ -336,9 +336,9 @@ begin
             'param([string]$basePath, [string]$userDataPath, [string]$envName, [string]$logFile, [string]$installScope); ' +
             '& \"' + ExpandConstant('{app}\rtools_setup.ps1') + '\" ' +
             '-basePath \"' + ExpandConstant('{app}') + '\" ' +
-            '-userDataPath \"' + ExpandConstant('{localappdata}\KiwiFlow') + '\" ' +
-            '-envName \"kiwiflow\" ' +
-            '-logFile \"' + ExpandConstant('{#KiwiFlowLogFile}') + '\" ' +
+            '-userDataPath \"' + ExpandConstant('{localappdata}\KiwiMS') + '\" ' +
+            '-envName \"kiwims\" ' +
+            '-logFile \"' + ExpandConstant('{#KiwiMSLogFile}') + '\" ' +
             '-installScope \"' + Scope + '\" }"';
 
   WizardForm.StatusLabel.Caption := CustomMessage('StatusMsg_SetupRtools');
@@ -366,7 +366,7 @@ begin
            ' • Insufficient permissions' + #13#10 +
            ' • Antivirus/software blocked the installer' + #13#10#13#10 +
            'Please check the log file for more details:' + #13#10 +
-           ExpandConstant('{#KiwiFlowLogFile}'), mbError, MB_OK);
+           ExpandConstant('{#KiwiMSLogFile}'), mbError, MB_OK);
     Abort;
   end;
 
@@ -386,9 +386,9 @@ begin
             'param([string]$basePath, [string]$userDataPath, [string]$envName, [string]$logFile, [string]$installScope); ' +
             '& \"' + ExpandConstant('{app}\renv_install.ps1') + '\" ' +
             '-basePath \"' + ExpandConstant('{app}') + '\" ' +
-            '-userDataPath \"' + ExpandConstant('{localappdata}\KiwiFlow') + '\" ' +
-            '-envName \"kiwiflow\" ' +
-            '-logFile \"' + ExpandConstant('{#KiwiFlowLogFile}') + '\" ' +
+            '-userDataPath \"' + ExpandConstant('{localappdata}\KiwiMS') + '\" ' +
+            '-envName \"kiwims\" ' +
+            '-logFile \"' + ExpandConstant('{#KiwiMSLogFile}') + '\" ' +
             '-installScope \"' + Scope + '\" }"';
 
   Log('Full command for renv_install.ps1: powershell.exe ' + Params);
@@ -414,7 +414,7 @@ begin
     MsgBox('renv installation failed (exit code: ' + IntToStr(ResultCode) + ').' + #13#10#13#10 +
            'This step installs the renv package in the Conda environment.' + #13#10 +
            'Please check the log file for details:' + #13#10 +
-           ExpandConstant('{#KiwiFlowLogFile}'), mbError, MB_OK);
+           ExpandConstant('{#KiwiMSLogFile}'), mbError, MB_OK);
     Abort;
   end;
 
@@ -434,9 +434,9 @@ begin
             'param([string]$basePath, [string]$userDataPath, [string]$envName, [string]$logFile, [string]$installScope = \"currentuser\"); ' +
             '& \"' + ExpandConstant('{app}\renv_setup.ps1') + '\" ' +
             '-basePath \"' + ExpandConstant('{app}') + '\" ' +
-            '-userDataPath \"' + ExpandConstant('{localappdata}\KiwiFlow') + '\" ' +
-            '-envName \"kiwiflow\" ' +
-            '-logFile \"' + ExpandConstant('{#KiwiFlowLogFile}') + '\" ' +
+            '-userDataPath \"' + ExpandConstant('{localappdata}\KiwiMS') + '\" ' +
+            '-envName \"kiwims\" ' +
+            '-logFile \"' + ExpandConstant('{#KiwiMSLogFile}') + '\" ' +
             '-installScope \"' + Scope + '\" }"';
 
   Log('Full command for renv_setup.ps1: powershell.exe ' + Params);
@@ -462,7 +462,7 @@ begin
     MsgBox('renv restore failed (exit code: ' + IntToStr(ResultCode) + ').' + #13#10#13#10 +
            'This step restores the R packages using renv::restore.' + #13#10 +
            'Please check the log file for details:' + #13#10 +
-           ExpandConstant('{#KiwiFlowLogFile}'), mbError, MB_OK);
+           ExpandConstant('{#KiwiMSLogFile}'), mbError, MB_OK);
     Abort;
   end;
 
@@ -483,9 +483,9 @@ begin
             'param([string]$basePath, [string]$userDataPath, [string]$envName, [string]$logFile, [string]$installScope); ' +
             '& \"' + ExpandConstant('{app}\quarto_install.ps1') + '\" ' +
             '-basePath \"' + ExpandConstant('{app}') + '\" ' +
-            '-userDataPath \"' + ExpandConstant('{localappdata}\KiwiFlow') + '\" ' +
-            '-envName \"kiwiflow\" ' +
-            '-logFile \"' + ExpandConstant('{#KiwiFlowLogFile}') + '\" ' +
+            '-userDataPath \"' + ExpandConstant('{localappdata}\KiwiMS') + '\" ' +
+            '-envName \"kiwims\" ' +
+            '-logFile \"' + ExpandConstant('{#KiwiMSLogFile}') + '\" ' +
             '-installScope \"' + Scope + '\" }"';
 
   Log('Full command for quarto_install.ps1: powershell.exe ' + Params);
@@ -511,7 +511,7 @@ begin
     MsgBox('Quarto installation failed (exit code: ' + IntToStr(ResultCode) + ').' + #13#10#13#10 +
            'This step installs Quarto CLI.' + #13#10 +
            'Please check the log file for details:' + #13#10 +
-           ExpandConstant('{#KiwiFlowLogFile}'), mbError, MB_OK);
+           ExpandConstant('{#KiwiMSLogFile}'), mbError, MB_OK);
     Abort;
   end;
 

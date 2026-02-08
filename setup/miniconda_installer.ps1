@@ -62,7 +62,7 @@ try {
         Write-Host "Conda executable not found. Installing Miniconda in $condaPrefix ..."
 
         # Download installer
-        $tempPath = "$env:TEMP\kiwiflow_setup"
+        $tempPath = "$env:TEMP\kiwims_setup"
         $minicondaInstaller = "$tempPath\miniconda.exe"
         Download-File "https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe" $minicondaInstaller
                 

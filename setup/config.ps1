@@ -53,7 +53,8 @@ try {
             exit 1
         }
         Write-Host "Running elevated → system-wide mode OK"
-    } else {
+    }
+    else {
         Write-Host "Running in current-user mode (elevation not required)"
     }
 }
@@ -68,7 +69,7 @@ catch {
 try {
     if (-not (Test-Path $userDataPath)) {
         New-Item -ItemType Directory -Path $userDataPath -Force | Out-Null
-        Write-Host "Created KiwiFlow directory: $userDataPath"
+        Write-Host "Created KiwiMS directory: $userDataPath"
     }
 }
 catch {
@@ -80,7 +81,7 @@ catch {
 # Create Temporary Directory
 #-----------------------------#
 try {
-    $tempPath = Join-Path $env:TEMP "kiwiflow_setup"
+    $tempPath = Join-Path $env:TEMP "kiwims_setup"
     if (-not (Test-Path $tempPath)) {
         New-Item -Path $tempPath -ItemType Directory -Force | Out-Null
         Write-Host "Created temporary directory: $tempPath"
@@ -97,14 +98,15 @@ catch {
 try {
     if ($installScope -eq "allusers") {
         $reportBase = [Environment]::GetFolderPath("CommonDocuments")
-    } else {
+    }
+    else {
         $reportBase = [Environment]::GetFolderPath("MyDocuments")
     }
-    $reportPath = Join-Path $reportBase "KiwiFlow\report"
+    $reportPath = Join-Path $reportBase "KiwiMS\report"
     
     if (-not (Test-Path $reportPath)) {
         New-Item -Path $reportPath -ItemType Directory -Force | Out-Null
-        Write-Host "Created KiwiFlow report directory: $reportPath"
+        Write-Host "Created KiwiMS report directory: $reportPath"
     }
 }
 catch {
@@ -120,7 +122,8 @@ try {
     if (Test-Path $sourcePath) {
         Move-Item -Path $sourcePath -Destination $reportPath -Force -ErrorAction Stop
         Write-Host "Moved report files to: $reportPath"
-    } else {
+    }
+    else {
         Write-Host "No report files found at $sourcePath. Skipping ..."
     }
 }

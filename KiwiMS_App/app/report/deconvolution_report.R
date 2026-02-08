@@ -17,8 +17,8 @@ tryCatch(
     filename <- args[4]
     log_path <- args[5]
     results_dir <- args[6]
-    kiwiflow_version <- args[7]
-    kiwiflow_date <- args[8]
+    kiwims_version <- args[7]
+    kiwims_date <- args[8]
     temp_dir <- args[9]
   },
   error = function(e) {
@@ -52,8 +52,8 @@ tryCatch(
         comment = decon_rep_desc,
         result_path = results_dir,
         result_file = result_file,
-        version = kiwiflow_version,
-        date = kiwiflow_date,
+        version = kiwims_version,
+        date = kiwims_date,
         temp_dir = temp_dir
       )
     )

@@ -25,7 +25,7 @@ box::use(
       create_384_plate_heatmap,
       spectrum_plot
     ],
-  app / logic / helper_functions[fill_empty, get_kiwiflow_version],
+  app / logic / helper_functions[fill_empty, get_kiwims_version],
   app / logic / logging[write_log, get_log],
   app /
     view /
@@ -63,10 +63,10 @@ server <- function(
   shiny$moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
-    # Get kiwiflow user settings
+    # Get kiwims user settings
     settings_dir <- file.path(
       Sys.getenv("LOCALAPPDATA"),
-      "KiwiFlow",
+      "KiwiMS",
       "settings"
     )
 
@@ -2102,7 +2102,7 @@ server <- function(
             script_dir <- file.path(
               Sys.getenv("USERPROFILE"),
               "Documents",
-              "KiwiFlow",
+              "KiwiMS",
               "report"
             )
 
@@ -2124,14 +2124,14 @@ server <- function(
               output_file,
               log_path,
               deconvolution_sidebar_vars$targetpath(),
-              get_kiwiflow_version()["version"],
-              get_kiwiflow_version()["date"],
+              get_kiwims_version()["version"],
+              get_kiwims_version()["date"],
               temp
             )
 
             # Construct the system command
             cmd <- paste(
-              "conda activate kiwiflow &&",
+              "conda activate kiwims &&",
               "cd",
               script_dir,
               "&& Rscript",

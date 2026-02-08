@@ -5,7 +5,7 @@ box::use(
 )
 
 documents_path <- Sys.getenv("USERPROFILE")
-log_dir <- file.path(documents_path, "Documents", "KiwiFlow", "logs")
+log_dir <- file.path(documents_path, "Documents", "KiwiMS", "logs")
 log_daily <- file.path(log_dir, Sys.Date())
 
 # Get new session id return log path
@@ -13,7 +13,7 @@ new_session_path <- function() {
   valid_id <- FALSE
   while (!valid_id) {
     session_id <- sample(1000:9999, 1) # Random 4-digit session ID
-    log_filename <- paste0("KiwiFlow_", Sys.Date(), "_id", session_id, ".log")
+    log_filename <- paste0("KiwiMS_", Sys.Date(), "_id", session_id, ".log")
 
     if (!log_filename %in% list.files(log_daily)) {
       valid_id <- TRUE

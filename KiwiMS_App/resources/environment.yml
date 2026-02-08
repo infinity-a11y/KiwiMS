@@ -1,4 +1,4 @@
-name: kiwiflow
+name: kiwims
 channels:
   - conda-forge
   - defaults

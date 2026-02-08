@@ -1,11 +1,11 @@
-# update_kiwiflow.ps1
+# update_kiwims.ps1
 
-$userDataPath = "$env:LOCALAPPDATA\KiwiFlow"
+$userDataPath = "$env:LOCALAPPDATA\KiwiMS"
 if (-not (Test-Path $userDataPath)) {
     New-Item -ItemType Directory -Path $userDataPath -Force
 }
 
-Start-Transcript -Path "$userDataPath\kiwiflow_update.log"
+Start-Transcript -Path "$userDataPath\kiwims_update.log"
 
 # Set base path to the directory of the script or executable
 $basePath = [System.AppContext]::BaseDirectory
@@ -17,7 +17,7 @@ if (-not $basePath) {
 }
 if (-not $basePath) {
     Write-Host "Error: Could not determine the script/executable directory."
-    Write-Host "Please ensure setup_kiwiflow.exe is run from the KiwiFlow directory."
+    Write-Host "Please ensure setup_kiwims.exe is run from the KiwiMS directory."
     pause
     Stop-Transcript -ErrorAction SilentlyContinue
     exit 1
@@ -26,7 +26,7 @@ if (-not $basePath) {
 # Validate $basePath
 if (-not (Test-Path $basePath)) {
     Write-Host "Error: Directory $basePath does not exist."
-    Write-Host "Please ensure setup_kiwiflow.exe is run from the KiwiFlow directory."
+    Write-Host "Please ensure setup_kiwims.exe is run from the KiwiMS directory."
     pause
     Stop-Transcript -ErrorAction SilentlyContinue
     exit 1
@@ -47,7 +47,7 @@ catch {
 # Check version
 Write-Host "Checking for updates..."
 try {
-    $remoteVersionUrl = "https://raw.githubusercontent.com/infinity-a11y/KiwiFlow/master/resources/version.txt"
+    $remoteVersionUrl = "https://raw.githubusercontent.com/infinity-a11y/KiwiMS/master/resources/version.txt"
     $remoteVersionContent = Invoke-WebRequest -Uri $remoteVersionUrl -ErrorAction Stop | Select-Object -ExpandProperty Content
     $remoteVersionInfo = @{}
     $remoteVersionContent -split "`n" | ForEach-Object {
@@ -73,7 +73,7 @@ try {
         try {
             $zipFileName = [System.IO.Path]::GetFileName($zipUrl)
             $zipPath = "$env:USERPROFILE\Downloads\$zipFileName"
-            $tempDir = "$env:USERPROFILE\Downloads\kiwiflow_temp"
+            $tempDir = "$env:USERPROFILE\Downloads\kiwims_temp"
             Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -ErrorAction Stop
             Write-Host "Zip file downloaded successfully."
 
@@ -97,17 +97,17 @@ set "userDataPath=$userDataPath"
 set "tempDir=$tempDir"
 set "zipPath=$zipPath"
 
-echo Waiting for kiwiflow_update.exe to close...
+echo Waiting for kiwims_update.exe to close...
 
 :CHECK_PROCESS
-tasklist | findstr /I "kiwiflow_update.exe" >nul
+tasklist | findstr /I "kiwims_update.exe" >nul
 if %ERRORLEVEL% == 0 (
-    echo Waiting for kiwiflow_update.exe to close...
+    echo Waiting for kiwims_update.exe to close...
     timeout /t 1 /nobreak >nul
     goto CHECK_PROCESS
 )
 
-echo kiwiflow_update.exe has closed.
+echo kiwims_update.exe has closed.
 
 :: Find the extracted folder
 for /d %%D in ("%tempDir%\*") do set "extractedFolder=%%D"
@@ -139,7 +139,7 @@ del "%zipPath%" 2>nul
 echo Cleanup completed.
 
 :: Relaunch the application
-start "" "%basePath%\kiwiflow_update.exe"
+start "" "%basePath%\kiwims_update.exe"
 exit
 "@
 
@@ -181,9 +181,9 @@ Write-Host "Checking for Conda..."
 try {
     $condaPath = (Get-Command conda -ErrorAction SilentlyContinue).Source
     if (-not $condaPath) {
-        Write-Host "Error: Conda not found. Please run setup_kiwiflow.exe first."
+        Write-Host "Error: Conda not found. Please run setup_kiwims.exe first."
         $wShell = New-Object -ComObject WScript.Shell
-        $wShell.Popup("Error: Conda not found. Please run setup_kiwiflow.exe first.", 0, "KiwiFlow Update Error", 16)
+        $wShell.Popup("Error: Conda not found. Please run setup_kiwims.exe first.", 0, "KiwiMS Update Error", 16)
         pause
         Stop-Transcript
         exit 1
@@ -193,7 +193,7 @@ try {
 catch {
     Write-Host "Error: Failed to locate Conda. $_"
     $wShell = New-Object -ComObject WScript.Shell
-    $wShell.Popup("Error: Failed to locate Conda. $_", 0, "KiwiFlow Update Error", 16)
+    $wShell.Popup("Error: Failed to locate Conda. $_", 0, "KiwiMS Update Error", 16)
     pause
     Stop-Transcript
     exit 1
@@ -213,29 +213,29 @@ try {
 catch {
     Write-Host "Error: Failed to initialize Conda. $_"
     $wShell = New-Object -ComObject WScript.Shell
-    $wShell.Popup("Error: Failed to initialize Conda. $_", 0, "KiwiFlow Update Error", 16)
+    $wShell.Popup("Error: Failed to initialize Conda. $_", 0, "KiwiMS Update Error", 16)
     pause
     Stop-Transcript
     exit 1
 }
 
-# Update kiwiflow environment using conda run
-Write-Host "Updating kiwiflow environment..."
+# Update kiwims environment using conda run
+Write-Host "Updating kiwims environment..."
 try {
     $envYmlPath = "$basePath\resources\environment.yml"
     # Use conda run to execute commands in the base environment
     & $condaPath run -n base conda update -n base -c defaults conda
     if ($LASTEXITCODE -ne 0) { throw "Conda base environment update failed with exit code $LASTEXITCODE." }
-    $envExists = & $condaPath run -n base conda env list | Select-String "kiwiflow"
+    $envExists = & $condaPath run -n base conda env list | Select-String "kiwims"
     if ($envExists) {
-        & $condaPath run -n base conda env update -n kiwiflow -f $envYmlPath --prune
+        & $condaPath run -n base conda env update -n kiwims -f $envYmlPath --prune
         if ($LASTEXITCODE -ne 0) { throw "Conda environment update failed with exit code $LASTEXITCODE." }
         Write-Host "Environment updated successfully."
     }
     else {
-        Write-Host "Error: kiwiflow environment not found. Please run setup_kiwiflow.exe first."
+        Write-Host "Error: kiwims environment not found. Please run setup_kiwims.exe first."
         $wShell = New-Object -ComObject WScript.Shell
-        $wShell.Popup("Error: kiwiflow environment not found. Please run setup_kiwiflow.exe first.", 0, "KiwiFlow Update Error", 16)
+        $wShell.Popup("Error: kiwims environment not found. Please run setup_kiwims.exe first.", 0, "KiwiMS Update Error", 16)
         pause
         Stop-Transcript
         exit 1
@@ -246,14 +246,14 @@ catch {
         Write-Host "Conda environment update failed. Retrying."
         Start-Sleep -Seconds 5
         if ($envExists) {
-            & $condaPath run -n base conda env update -n kiwiflow -f $envYmlPath --prune
+            & $condaPath run -n base conda env update -n kiwims -f $envYmlPath --prune
             if ($LASTEXITCODE -ne 0) { throw "Conda environment update failed with exit code $LASTEXITCODE." }
             Write-Host "Environment updated successfully."
         }
         else {
-            Write-Host "Error: kiwiflow environment not found. Please run setup_kiwiflow.exe first."
+            Write-Host "Error: kiwims environment not found. Please run setup_kiwims.exe first."
             $wShell = New-Object -ComObject WScript.Shell
-            $wShell.Popup("Error: kiwiflow environment not found. Please run setup_kiwiflow.exe first.", 0, "KiwiFlow Update Error", 16)
+            $wShell.Popup("Error: kiwims environment not found. Please run setup_kiwims.exe first.", 0, "KiwiMS Update Error", 16)
             pause
             Stop-Transcript
             exit 1
@@ -261,7 +261,7 @@ catch {
     }
     catch {
         Write-Host "Error: Failed to update environment. $_"
-        Write-Host "Run 'conda env update -n kiwiflow -f $envYmlPath --prune' manually to debug."
+        Write-Host "Run 'conda env update -n kiwims -f $envYmlPath --prune' manually to debug."
         pause
         Stop-Transcript
         exit 1
@@ -271,13 +271,13 @@ catch {
 # Updating R packages
 Write-Host "Updating R packages"
 try {
-    & $condaPath run -n kiwiflow R.exe -e "renv::restore()"
+    & $condaPath run -n kiwims R.exe -e "renv::restore()"
 }
 catch {
     try {
         Write-Host "R package update failed. Retrying."
         Start-Sleep -Seconds 5
-        & $condaPath run -n kiwiflow R.exe -e "renv::restore()"
+        & $condaPath run -n kiwims R.exe -e "renv::restore()"
     }
     catch {
         Write-Host "Error: Failed to update R packages. $_"
@@ -304,7 +304,7 @@ Set WShell = CreateObject("WScript.Shell")
 Set WMI = GetObject("winmgmts:{impersonationLevel=impersonate}!\\.\root\cimv2")
 
 ' Configuration
-PopupTitle = "KiwiFlow"
+PopupTitle = "KiwiMS"
 LogFile = "$logPath"
 AppPath = "$appPath"
 IsRunning = False
@@ -343,16 +343,16 @@ Call CheckPort(3838)
 
 ' Logic based on process and port status
 If IsRunning And PortInUse Then
-    PopupMsg = "KiwiFlow is already running on port 3838. Please use the existing browser tab."
+    PopupMsg = "KiwiMS is already running on port 3838. Please use the existing browser tab."
     PopupTimeout = 3
     WShell.Popup PopupMsg, PopupTimeout, PopupTitle, 0
     ' Do not open a new browser tab
 Else
-    PopupMsg = "KiwiFlow will open shortly, please wait..."
+    PopupMsg = "KiwiMS will open shortly, please wait..."
     PopupTimeout = 3
     WShell.Popup PopupMsg, PopupTimeout, PopupTitle, 0
     ' Run the Shiny app with properly escaped path
-    CmdLine = "cmd.exe /c ""$condaExe run -n kiwiflow Rscript -e ""shiny::runApp('" & AppPath & "', port=3838, launch.browser=TRUE)"" > " & LogFile & " 2>&1"""
+    CmdLine = "cmd.exe /c ""$condaExe run -n kiwims Rscript -e ""shiny::runApp('" & AppPath & "', port=3838, launch.browser=TRUE)"" > " & LogFile & " 2>&1"""
     WShell.Run CmdLine, 0
 End If
 
@@ -371,9 +371,9 @@ catch {
 }
 
 # Re-create Desktop Shortcut
-Write-Host "Creating desktop shortcut for KiwiFlow..."
+Write-Host "Creating desktop shortcut for KiwiMS..."
 try {
-    $shortcutPath = "$env:USERPROFILE\Desktop\KiwiFlow.lnk"
+    $shortcutPath = "$env:USERPROFILE\Desktop\KiwiMS.lnk"
     $iconPath = "$basePath\app\static\favicon.ico"
     $appPath = "$basePath\app.R" -replace '\\', '\\'
     $vbsPath = "$basePath\run_app.vbs" -replace '\\', '\\'
@@ -382,7 +382,7 @@ try {
     $shortcut.TargetPath = "C:\Windows\System32\wscript.exe"
     $shortcut.Arguments = """$vbsPath"""
     $shortcut.WorkingDirectory = $basePath
-    $shortcut.Description = "Launch KiwiFlow Shiny App"
+    $shortcut.Description = "Launch KiwiMS Shiny App"
     if (Test-Path $iconPath) {
         $shortcut.IconLocation = $iconPath
         Write-Host "Custom icon applied from $iconPath."
@@ -401,8 +401,8 @@ catch {
     exit 1
 }
 
-Write-Host "Update complete. Check kiwiflow_update.log in $userDataPath for details."
-Write-Host "Press ENTER to finish, then restart the KiwiFlow app with the new version."
+Write-Host "Update complete. Check kiwims_update.log in $userDataPath for details."
+Write-Host "Press ENTER to finish, then restart the KiwiMS app with the new version."
 pause
 Stop-Transcript
 exit 0
