@@ -28,7 +28,7 @@ KiwiMS is an interactive pipeline with graphical user interface to perform prote
 
 | OS | Version | Download | SHA256 checksum |
 |------------------|------------------|------------------|------------------|
-| Windows 10/11 | 0.3.1 | [KiwiMS_0.3.1-Windows-x86_64.exe](https://github.com/infinity-a11y/KiwiMS/releases/download/0.3.1/KiwiMS_0.3.1-Windows-x86_64.exe) | <sub><sup>A6BFAADB7E5CE1AEE72D77B1C49299873A0054FE382754E2E312F267B3EE34EF</sup></sub> |
+| Windows 10/11 | 0.3.1 | [KiwiMS_0.3.1-Windows-x86_64.exe](https://github.com/infinity-a11y/KiwiMS/releases/download/0.3.1/KiwiMS_0.3.1-Windows-x86_64.exe) | <sub><sup>E53055B1D90CA6863D3D7B50E950206A5D03173BF66104614E59EED837674508</sup></sub> |
 
 2.  Run the installer to set KiwiMS up.
 
