@@ -7,12 +7,12 @@
 $versionFile = if (Test-Path "resources\version.txt") { Get-Content -Path "resources\version.txt" | Select-Object -First 1 }
 
 Write-Host ""
-Write-Host "██╗  ██╗ ██╗ ██╗    ██╗ ██╗ ███╗   ███╗  ██████╗ " -ForegroundColor DarkGreen
-Write-Host "██║ ██╔╝ ██║ ██║    ██║ ██║ ████╗ ████║ ██╔════╝ " -ForegroundColor DarkGreen
-Write-Host "█████╔╝  ██║ ██║ █╗ ██║ ██║ ██╔████╔██║ ╚█████╗  " -ForegroundColor DarkGreen
-Write-Host "██╔═██╗  ██║ ██║███╗██║ ██║ ██║╚██╔╝██║  ╚═══██╗ " -ForegroundColor DarkGreen
-Write-Host "██║  ██╗ ██║ ╚███╔███╔╝ ██║ ██║ ╚═╝ ██║ ██████╔╝ " -ForegroundColor DarkGreen
-Write-Host "╚═╝  ╚═╝ ╚═╝  ╚══╝╚══╝  ╚═╝ ╚═╝     ╚═╝ ╚═════╝  " -ForegroundColor DarkGreen
+Write-Host "██╗  ██╗ ██╗            ██╗    ███╗   ███╗  ██████╗ " -ForegroundColor DarkGreen
+Write-Host "██║ ██╔╝ ╚═╝            ╚═╝    ████╗ ████║ ██╔════╝ " -ForegroundColor DarkGreen
+Write-Host "█████╔╝  ██╗ ██╗    ██╗ ██╗    ██╔████╔██║ ╚█████╗  " -ForegroundColor DarkGreen
+Write-Host "██╔═██╗  ██║ ██║ █╗ ██║ ██║    ██║╚██╔╝██║  ╚═══██╗ " -ForegroundColor DarkGreen
+Write-Host "██║  ██╗ ██║ ╚███╔███╔╝ ██║    ██║ ╚═╝ ██║ ██████╔╝ " -ForegroundColor DarkGreen
+Write-Host "╚═╝  ╚═╝ ╚═╝  ╚══╝╚══╝  ╚═╝    ╚═╝     ╚═╝ ╚═════╝  " -ForegroundColor DarkGreen
 Write-Host ""
 Write-Host "---------------------------------------------------" -ForegroundColor DarkGray
 Write-Host "         Welcome to KiwiMS ($versionFile)          " -ForegroundColor White
