@@ -10,14 +10,13 @@ function Find-CondaExecutable {
     }
 
     # 2. Check common default user-specific installation path (UserProfile)
-    $defaultUserProfilePath = "$env:UserProfile\miniconda3\Scripts\conda.exe"
+    $defaultUserProfilePath = "$env:LOCALAPPDATA\miniconda3\Scripts\conda.exe"
     if (Test-Path $defaultUserProfilePath) {
         Write-Host "Found conda.exe at default UserProfile path: $defaultUserProfilePath"
         return $defaultUserProfilePath
     }
 
     # 3. Check if conda.exe is in the system's PATH using Get-Command
-    # This is often the most reliable if user installed Conda and added it to PATH.
     try {
         $condaCmdInPath = (Get-Command conda.exe -ErrorAction SilentlyContinue).Path
         if ($condaCmdInPath) {
@@ -47,68 +46,140 @@ function Find-CondaExecutable {
 }
 
 #-----------------------------#
-# FUNCTION Find Rtools
+# FUNCTION Get-CondaScope
 #-----------------------------#
-function Find-RtoolsExecutable {
-    param (
-        [string]$rtoolsPath
+function Get-CondaScope {
+    param([string]$CondaPath)
+
+    if (-not $CondaPath) { return $null }
+
+    # Define common system-level roots
+    $systemRoots = @(
+        $env:ProgramData,
+        $env:ProgramFiles,
+        "${env:ProgramFiles(x86)}"
     )
 
-    # Check if the provided path exists
-    if (-Not (Test-Path $rtoolsPath)) {
-        Write-Host "ERROR: Rtools path '$rtoolsPath' does not exist."
-        return $null
-    }
-
-    # Check for Rtools executable in the bin directory
-    $rtoolsBinPath = Join-Path $rtoolsPath "usr\bin"
-    $rtoolsExePath = Join-Path $rtoolsBinPath "make.exe"  # Common executable to check
-    if (Test-Path $rtoolsExePath) {
-        Write-Host "Found Rtools executable at: $rtoolsExePath"
-
-        # Add to PATH if not already present
-        $currentPath = [Environment]::GetEnvironmentVariable("Path", "Machine")
-        if ($currentPath -notlike "*$rtoolsBinPath*") {
-            $newPath = "$currentPath;$rtoolsBinPath"
-            [Environment]::SetEnvironmentVariable("Path", $newPath, "Machine")
-            Write-Host "Added Rtools bin directory to system PATH: $rtoolsBinPath"
-            # Update current session PATH
-            $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    foreach ($root in $systemRoots) {
+        if ($CondaPath.StartsWith($root, "OrdinalIgnoreCase")) {
+            return "allusers"
         }
-        else {
-            Write-Host "Rtools bin directory is already in system PATH."
-        }
+    }
 
-        return $rtoolsExePath
+    # If it's in the Users folder or LocalAppData, it's definitely currentuser
+    if ($CondaPath -like "*\Users\*" -or $CondaPath.StartsWith($env:LOCALAPPDATA, "OrdinalIgnoreCase")) {
+        return "currentuser"
     }
-    else {
-        Write-Host "ERROR: Rtools executable not found in expected location: $rtoolsExePath"
-        return $null
+
+    # Fallback: if we can't be sure, it's safer to treat as currentuser 
+    # or return 'unknown'
+    return "currentuser"
+}
+
+#-----------------------------#
+# FUNCTION Find Rtools
+#-----------------------------#
+#-----------------------------------------#
+# FUNCTION: Find-Rtools45 (Version Aware)
+#-----------------------------------------#
+function Find-Rtools45Executable {
+    # 1. Check Registry (The most reliable way to find the version)
+    $regPaths = @(
+        "HKLM:\SOFTWARE\R-core\Rtools\4.5",
+        "HKCU:\SOFTWARE\R-core\Rtools\4.5"
+    )
+    
+    foreach ($reg in $regPaths) {
+        if (Test-Path $reg) {
+            $installPath = Get-ItemProperty -Path $reg -Name "InstallPath" -ErrorAction SilentlyContinue
+            if ($installPath) {
+                $exe = Join-Path $installPath.InstallPath "usr\bin\make.exe"
+                if (Test-Path $exe) { return $exe }
+            }
+        }
     }
+
+    # 2. Hard-coded path checks (fallback)
+    $paths = @(
+        "C:\rtools45\usr\bin\make.exe",
+        (Join-Path $env:LOCALAPPDATA "rtools45\usr\bin\make.exe")
+    )
+
+    foreach ($p in $paths) {
+        if (Test-Path $p) { return $p }
+    }
+
+    # 3. Check PATH but ensure the directory name contains '45'
+    $cmds = Get-Command make.exe -All -ErrorAction SilentlyContinue
+    foreach ($cmd in $cmds) {
+        if ($cmd.Path -like "*rtools45*") {
+            return $cmd.Path
+        }
+    }
+
+    return $null
+}
+
+#-----------------------------------------#
+# FUNCTION: Get-PathScope
+#-----------------------------------------#
+function Get-PathScope {
+    param([string]$FilePath)
+    if (-not $FilePath) { return $null }
+
+    $systemRoots = @($env:ProgramData, $env:ProgramFiles, ${env:ProgramFiles(x86)}, "C:\rtools45")
+    
+    foreach ($root in $systemRoots) {
+        if ($FilePath.StartsWith($root, "OrdinalIgnoreCase")) { return "allusers" }
+    }
+
+    if ($FilePath -like "*\Users\*" -or $FilePath.StartsWith($env:LOCALAPPDATA, "OrdinalIgnoreCase")) {
+        return "currentuser"
+    }
+
+    return "currentuser"
 }
 
 #-----------------------------#
 # FUNCTION Download with Retry
 #-----------------------------#
 function Download-File($url, $destination) {
-    if (Test-Path $destination) {
-        Remove-Item $destination -Force
+    # Force TLS 1.2
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+    # Use a temporary name for the download itself to avoid locking the main destination
+    $tempDownloadPath = $destination + ".tmp"
+
+    if (Test-Path $tempDownloadPath) {
+        Remove-Item $tempDownloadPath -Force -ErrorAction SilentlyContinue
     }
 
     $success = $false
     for ($i = 0; $i -lt 3; $i++) {
         try {
-            Invoke-WebRequest -Uri $url -OutFile $destination -UseBasicParsing
+            Write-Host "Downloading via BITS to: $tempDownloadPath (Attempt $($i+1))"
+            
+            # Start-BitsTransfer is synchronous by default
+            # It handles the "Complete" call automatically when it finishes
+            Start-BitsTransfer -Source $url -Destination $tempDownloadPath -Priority High -ErrorAction Stop
+            
+            # If successful, move the temp file to the final destination
+            if (Test-Path $destination) { Remove-Item $destination -Force }
+            Move-Item -Path $tempDownloadPath -Destination $destination -Force
+            
             $success = $true
             break
         }
         catch {
+            Write-Warning "Attempt $($i+1) failed: $($_.Exception.Message)"
+            # Clean the temp file on failure to ensure a fresh start for the next retry
+            if (Test-Path $tempDownloadPath) { Remove-Item $tempDownloadPath -Force -ErrorAction SilentlyContinue }
             Start-Sleep -Seconds 3
         }
     }
 
     if (-Not $success) {
-        Write-Host "Failed to download: $url"
+        Write-Error "Failed to download $url after 3 attempts."
         exit 1
     }
 }
@@ -160,39 +231,29 @@ function Install-Quarto {
     }
 }
 
-#-----------------------------#
-# FUNCTION to find Quarto installation
-#-----------------------------#
+#-----------------------------------------#
+# FUNCTION: Find Quarto (Version Aware)
+#-----------------------------------------#
 function Find-QuartoInstallation {
     try {
+        # Check if quarto is already in the current session PATH
         $quartoPath = Get-Command quarto -ErrorAction SilentlyContinue
         if ($quartoPath) {
-            $quartoBinDir = Split-Path $quartoPath.Source -Parent
-            $quartoVersion = & quarto --version
-            Write-Host "Quarto CLI version $quartoVersion found at $quartoBinDir"
+            $binDir = Split-Path $quartoPath.Source -Parent
+            # Quarto usually lives in 'bin', we want the parent for the 'Path' property
+            $installRoot = Split-Path $binDir -Parent 
+            $versionString = & quarto --version
+            
             return @{
                 Found   = $true
-                Path    = $quartoBinDir
-                Version = $quartoVersion
+                Path    = $installRoot
+                BinDir  = $binDir
+                Version = $versionString.Trim()
             }
         }
-        else {
-            Write-Host "Quarto CLI is not installed or not found in PATH"
-            return @{
-                Found   = $false
-                Path    = $null
-                Version = $null
-            }
-        }
-    }
-    catch {
-        Write-Host "Error checking Quarto installation: $_"
-        return @{
-            Found   = $false
-            Path    = $null
-            Version = $null
-        }
-    }
+    } catch {}
+
+    return @{ Found = $false; Path = $null; Version = $null }
 }
 
 #-----------------------------#

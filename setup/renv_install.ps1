@@ -6,7 +6,8 @@ param(
     [string]$basePath,
     [string]$userDataPath,
     [string]$envName,
-    [string]$logFile
+    [string]$logFile,
+    [string]$installScope = "currentuser"
 )
 
 $ErrorActionPreference = "Stop"
@@ -16,21 +17,40 @@ $ProgressPreference = "SilentlyContinue"
 Start-Transcript -Path $logFile -Append | Out-Null
 
 Write-Host "### Renv setup (renv_install.ps1)"
+Write-Host "basePath:         $basePath"
+Write-Host "userDataPath:     $userDataPath"
+Write-Host "envName:          $envName"
+Write-Host "logFile:          $logFile"
+Write-Host "installScope:     $installScope"
 
-Write-Host "basePath: $basePath"
-Write-Host "userDataPath: $userDataPath"
-Write-Host "envName: $envName"
-Write-Host "logFile: $logFile"
+# Determine if running elevated (only relevant for allusers mode)
+$isElevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+if ($installScope -eq "allusers") {
+    Write-Host "System-wide mode selected"
+    if (-not $isElevated) {
+        Write-Host "ERROR: System-wide installation requires administrator rights."
+        Write-Host "Please run the installer as administrator."
+        exit 1
+    }
+} else {
+    Write-Host "Current-user mode selected (no elevation required)"
+}
 
 # Source functions
 . "$basePath\functions.ps1"
+
+# Find Conda executable (path depends on scope)
 $condaCmd = Find-CondaExecutable
 
 # Conda Presence Check
 if (-Not (Test-Path $condaCmd)) {
-    Write-Host "Conda not found. Exiting."
+    Write-Host "ERROR: Conda not found at expected location."
+    Write-Host "Make sure the Miniconda installation step completed successfully."
     exit 1
 }
+
+Write-Host "Using Conda at: $condaCmd"
 
 #-----------------------------#
 # R: install.packages("renv")
@@ -39,75 +59,74 @@ $rScriptPath = Join-Path $basePath "install_renv.R"
 $routFile = Join-Path (Split-Path $rScriptPath -Parent) ((Get-Item $rScriptPath).BaseName + ".Rout")
 
 try {
-    # Clean up any previous .Rout file before running
+    # Clean up any previous .Rout file
     if (Test-Path $routFile) {
         Write-Host "Removing existing R output file: $routFile"
         Remove-Item $routFile -Force -ErrorAction SilentlyContinue | Out-Null
     }
 
-    # Execute the R script
-    Write-Host "Running: & '$condaCmd' run -n '$envName' R.exe CMD BATCH --no-save --no-restore --slave '$rScriptPath'"
-    $condaRunWrapperOutput = & $condaCmd run -n $envName R.exe CMD BATCH "--no-save" "--no-restore" "--slave" "$rScriptPath" 2>&1 | Out-String
-    
-    # Log output from conda run wrapper
-    if ($condaRunWrapperOutput.Trim() -ne "") {
-        Write-Host "--- Conda Run Wrapper Output ---"
-        Write-Host "$condaRunWrapperOutput"
-        Write-Host "-----------------------------------------"
+    # Execute the R script via Conda environment
+    Write-Host "Running R script to install renv: $rScriptPath"
+    Write-Host "Command: & '$condaCmd' run -n '$envName' R.exe CMD BATCH --no-save --no-restore --slave '$rScriptPath'"
+
+    $condaRunOutput = & $condaCmd run -n $envName R.exe CMD BATCH "--no-save" "--no-restore" "--slave" "$rScriptPath" 2>&1 | Out-String
+
+    # Log wrapper output
+    if ($condaRunOutput.Trim() -ne "") {
+        Write-Host "--- Conda Run Output ---"
+        Write-Host $condaRunOutput
+        Write-Host "-------------------------"
     }
 
     # Check exit code
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "ERROR: R script '$rScriptPath' failed with exit code $LASTEXITCODE."
+        Write-Host "ERROR: R script failed with exit code $LASTEXITCODE"
+        
         if (Test-Path $routFile) {
-            $rScriptDetailedOutput = Get-Content -Path $routFile | Out-String
-            Write-Host "--- R Script's Detailed Output (.Rout file content) ---"
-            Write-Host "$rScriptDetailedOutput"
-            Write-Host "-----------------------------------------------------"
+            $routContent = Get-Content -Path $routFile -Raw
+            Write-Host "--- R Script Output (.Rout) ---"
+            Write-Host $routContent
+            Write-Host "---------------------------------"
+        } else {
+            Write-Host "No .Rout file generated at $routFile"
         }
-        else {
-            Write-Host "WARNING: R output file (.Rout) was not generated at '$routFile' despite error exit code."
-        }
-        throw "R package installation failed. Check log for details and the .Rout file content."
+        
+        throw "renv package installation failed"
     }
-    
-    # Read and log content of .Rout file
+
+    # Success logging
     if (Test-Path $routFile) {
-        $rScriptDetailedOutput = Get-Content -Path $routFile | Out-String
-        Write-Host "--- R Script's Detailed Output (.Rout file content) ---"
-        Write-Host "$rScriptDetailedOutput"
-        Write-Host "-----------------------------------------------------"
-    }
-    else {
-        Write-Host "WARNING: R output file (.Rout) was not generated at '$routFile', but R script reported success."
+        $routContent = Get-Content -Path $routFile -Raw
+        Write-Host "--- R Script Output (.Rout) ---"
+        Write-Host $routContent
+        Write-Host "---------------------------------"
     }
 
     Write-Host "renv package installation completed successfully."
 }
 catch {
-    Write-Host "ERROR: Failed to execute R installation script."
-    Write-Host "Error details: $($_.Exception.Message)"
+    Write-Host "ERROR: Failed to install renv package."
+    Write-Host "Exception: $($_.Exception.Message)"
     if ($_.Exception.InnerException) {
         Write-Host "Inner Exception: $($_.Exception.InnerException.Message)"
     }
-    Write-Host "Full error record: $($_.Exception | Format-List -Force)"
 
-    # Read and log content of .Rout file
     if (Test-Path $routFile) {
-        $rScriptDetailedOutput = Get-Content -Path $routFile | Out-String
-        Write-Host "--- R Script's Detailed Output (.Rout file content) ---"
-        Write-Host "$rScriptDetailedOutput"
-        Write-Host "-----------------------------------------------------"
+        $routContent = Get-Content -Path $routFile -Raw
+        Write-Host "--- R Script Output (.Rout) ---"
+        Write-Host $routContent
+        Write-Host "---------------------------------"
     }
-    else {
-        Write-Host "WARNING: R output file (.Rout) was not generated at '$routFile'."
-    }
+
     exit 1
 }
 finally {
-    # Clean up .Rout file
+    # Cleanup .Rout file
     if (Test-Path $routFile) {
         Write-Host "Cleaning up R output file: $routFile"
         Remove-Item $routFile -Force -ErrorAction SilentlyContinue | Out-Null
     }
 }
+
+Write-Host "renv installation finished."
+exit 0
