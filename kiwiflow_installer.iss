@@ -12,6 +12,7 @@ OutputDir=.
 OutputBaseFilename=KiwiFlow_2026-01-28_Setup
 SetupIconFile=setup\favicon.ico
 PrivilegesRequired=admin
+PrivilegesRequiredOverridesAllowed=commandline
 FlatComponentsList=no
 WizardImageFile=setup\kiwiflow_Banner.bmp
 WizardSmallImageFile=setup\kiwiflow_small.bmp
