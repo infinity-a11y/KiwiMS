@@ -14,7 +14,7 @@ KiwiMS is an interactive pipeline with graphical user interface to perform prote
 
 ### Current Version: KiwiMS 0.3.1
 
-<i> 2026-02-09 </i> <br> <b>KiwiMS 0.3.1</b> <br> <https://github.com/infinity-a11y/KiwiMS/releases/tag/0.3.1>
+<i> 2026-02-09 </i> <br> <b>KiwiMS 0.3.1</b> <br> <https://github.com/infinity-a11y/KiwiFlow/releases/tag/0.3.1>
 
 <br>
 
