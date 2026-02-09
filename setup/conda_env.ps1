@@ -42,10 +42,11 @@ if (-Not (Test-Path $environmentYmlPath)) {
 $maxRetries = 2
 $success = $false
 
-# Strategy: 
-# 1. Try 'env update --prune'. This uses the cache and doesn't delete the env.
-# 2. If it fails, only THEN delete and 'env create'.
-# 3. This is transactional: it preserves the working env until the update is confirmed broken.
+# Accept channel policies
+& $condaCmd tos accept
+
+# Try 'env update --prune' allowing cache
+# If it fails, delete and 'env create'
 
 for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
     try {

@@ -59,13 +59,21 @@ try {
             $condaPrefix = "$env:LOCALAPPDATA\miniconda3"
         }
 
-        Write-Host "Conda executable not found. Installing Miniconda in $condaPrefix ..."
+        Write-Host "Conda executable not found. Initiating install ..."
 
         # Download installer
         $tempPath = "$env:TEMP\kiwims_setup"
         $minicondaInstaller = "$tempPath\miniconda.exe"
         Download-File "https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe" $minicondaInstaller
-                
+
+        if (Test-Path $minicondaInstaller) {
+            Write-Host "Download complete. Installing to $condaPrefix..."
+        }
+        else {
+            Write-Host "Download failed: $($_.Exception.Message)"
+            exit 1
+        }
+        
         # Install miniconda
         Start-Process -Wait -FilePath $minicondaInstaller -ArgumentList "/S", "/D=$condaPrefix"
         
