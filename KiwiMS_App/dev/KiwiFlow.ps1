@@ -4,37 +4,37 @@
 #-----------------------------#
 
 # Get version info
-$versionFile = if (Test-Path "resources\version.txt") { Get-Content -Path "resources\version.txt" | Select-Object -First 1 } else { "v1.0.0" }
+$versionFile = if (Test-Path "resources\version.txt") { Get-Content -Path "resources\version.txt" | Select-Object -First 1 }
 
 Write-Host ""
-Write-Host "██╗  ██╗ ██╗ ██╗    ██╗ ██╗ ███████╗ ██╗      ██████╗  ██╗    ██╗" -ForegroundColor DarkGreen
-Write-Host "██║ ██╔╝ ██║ ██║    ██║ ██║ ██╔════╝ ██║     ██║   ██╗ ██║    ██║" -ForegroundColor DarkGreen
-Write-Host "█████╔╝  ██║ ██║ █╗ ██║ ██║ █████╗   ██║     ██║   ██║ ██║ █╗ ██║" -ForegroundColor DarkGreen
-Write-Host "██╔═██╗  ██║ ██║███╗██║ ██║ ██╔══╝   ██║     ██║   ██║ ██║███╗██║" -ForegroundColor DarkGreen
-Write-Host "██║  ██╗ ██║ ╚███╔███╔╝ ██║ ██║      ██████╗  ██████╔╝ ╚███╔███╔╝" -ForegroundColor DarkGreen
-Write-Host "╚═╝  ╚═╝ ╚═╝  ╚══╝╚══╝  ╚═╝ ╚═╝      ╚═════╝  ╚═════╝   ╚══╝╚══╝ " -ForegroundColor DarkGreen
+Write-Host "██╗  ██╗ ██╗ ██╗    ██╗ ██╗ ███╗   ███╗  ██████╗ " -ForegroundColor DarkGreen
+Write-Host "██║ ██╔╝ ██║ ██║    ██║ ██║ ████╗ ████║ ██╔════╝ " -ForegroundColor DarkGreen
+Write-Host "█████╔╝  ██║ ██║ █╗ ██║ ██║ ██╔████╔██║ ╚█████╗  " -ForegroundColor DarkGreen
+Write-Host "██╔═██╗  ██║ ██║███╗██║ ██║ ██║╚██╔╝██║  ╚═══██╗ " -ForegroundColor DarkGreen
+Write-Host "██║  ██╗ ██║ ╚███╔███╔╝ ██║ ██║ ╚═╝ ██║ ██████╔╝ " -ForegroundColor DarkGreen
+Write-Host "╚═╝  ╚═╝ ╚═╝  ╚══╝╚══╝  ╚═╝ ╚═╝     ╚═╝ ╚═════╝  " -ForegroundColor DarkGreen
 Write-Host ""
 Write-Host "---------------------------------------------------" -ForegroundColor DarkGray
-Write-Host "        Welcome to KiwiMS ($versionFile)         " -ForegroundColor White
+Write-Host "         Welcome to KiwiMS ($versionFile)          " -ForegroundColor White
 Write-Host "---------------------------------------------------" -ForegroundColor DarkGray
 
 #-----------------------------#
 # Conda Discovery Function
 #-----------------------------#
 function Find-CondaExecutable {
-    # 1. System-wide path (All Users)
+    # System-wide path (All Users)
     $allUsersPath = "$env:ProgramData\miniconda3\Scripts\conda.exe"
     if (Test-Path $allUsersPath) { return $allUsersPath }
 
-    # 2. User-specific path (Current User - matching your installer logic)
+    # User-specific path (Current User - matching your installer logic)
     $currentUserPath = "$env:LOCALAPPDATA\miniconda3\Scripts\conda.exe"
     if (Test-Path $currentUserPath) { return $currentUserPath }
 
-    # 3. Check system PATH
+    # Check system PATH
     $condaInPath = Get-Command conda.exe -ErrorAction SilentlyContinue
     if ($condaInPath) { return $condaInPath.Path }
 
-    # 4. Fallbacks for Anaconda
+    # Fallbacks for Anaconda
     $anacondaPaths = @(
         "$env:ProgramFiles\Anaconda3\Scripts\conda.exe",
         "$env:UserProfile\Anaconda3\Scripts\conda.exe"
