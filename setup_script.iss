@@ -1,7 +1,7 @@
 [Setup]
 AppName=KiwiMS
 AppId=KiwiMS
-AppVersion=0.3.0
+AppVersion=0.3.1
 AppPublisher=Marian Freisleben
 DefaultDirName={autopf}\KiwiMS
 DisableDirPage=yes
@@ -9,7 +9,7 @@ DefaultGroupName=KiwiMS
 Compression=lzma2
 SolidCompression=yes
 OutputDir=.
-OutputBaseFilename=KiwiMS_0.3.0-Windows-x86_64
+OutputBaseFilename=KiwiMS_0.3.1-Windows-x86_64
 SetupIconFile=setup\favicon.ico
 PrivilegesRequired=admin
 FlatComponentsList=no
