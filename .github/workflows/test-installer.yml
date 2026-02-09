@@ -1,0 +1,37 @@
+name: Test Windows Installer
+
+on: workflow_dispatch
+
+jobs:
+  test-installer:
+    runs-on: windows-2022
+    
+    strategy:
+      matrix:
+        install-mode: [ALLUSERS, CURRENTUSER]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Compile Inno Setup to EXE
+        run: iscc kiwiflow_installer.iss
+  
+      - name: Run Installer Silently (${{ matrix.install-mode }})
+        run: |
+          $mode = if ("${{ matrix.install-mode }}" -eq "ALLUSERS") { "/ALLUSERS" } else { "/CURRENTUSER" }
+          .\KiwiFlow_2026-01-28_Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART $mode /LOG="innosetup.log"
+          if ($LASTEXITCODE -ne 0) { throw "Installer failed with exit code $LASTEXITCODE" }
+
+      - name: Check Built-in Inno Setup Log for Errors
+        run: |
+          Get-Content innosetup.log | Select-String -Pattern "error|failed|exception" -Context 5
+
+      - name: Upload Logs (Always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: install-logs-${{ matrix.install-mode }}
+          path: |
+            innosetup.log
+            C:\Users\runneradmin\AppData\Local\KiwiFlow\kiwiflow_setup.log
