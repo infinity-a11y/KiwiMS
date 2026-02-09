@@ -2,7 +2,7 @@
 
 KiwiMS is an interactive pipeline with graphical user interface to perform proteomics mass spectrometry data analysis. It implements UniDec's (https://github.com/michaelmarty/UniDec) bayesian mass spectra deconvolution method and provides downstream analyses for protein binding studies.
 
-![Windows](https://img.shields.io/badge/Windows-339033?style=flat&logo=windows&logoColor=white) [![Version](https://img.shields.io/badge/Version-0.2.0-E8CB98)](https://github.com/infinity-a11y/KiwiMS/releases/tag/0.2.1) [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-659DA3.svg)](https://www.gnu.org/licenses/gpl-3.0) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.16575977.svg)](https://doi.org/10.5281/zenodo.16575976)
+![Windows](https://img.shields.io/badge/Windows-339033?style=flat&logo=windows&logoColor=white) [![Version](https://img.shields.io/badge/Version-0.3.1-E8CB98)](https://github.com/infinity-a11y/KiwiMS/releases/tag/0.3.1) [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-659DA3.svg)](https://www.gnu.org/licenses/gpl-3.0) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.16575977.svg)](https://doi.org/10.5281/zenodo.16575976)
 
 <sup>*KiwiMS is supposed to be used for research and academic purposes only.*</sup>
 
@@ -12,9 +12,9 @@ KiwiMS is an interactive pipeline with graphical user interface to perform prote
 
 <br>
 
-### Current Version: KiwiMS 0.3.0
+### Current Version: KiwiMS 0.3.1
 
-<i> 2026-01-28 </i> <br> <b>KiwiMS 0.3.0 - Protein Conversion Module </b> <br> <https://github.com/infinity-a11y/KiwiMS/releases/tag/0.3.0>
+<i> 2026-02-09 </i> <br> <b>KiwiMS 0.3.1</b> <br> <https://github.com/infinity-a11y/KiwiMS/releases/tag/0.3.1>
 
 <br>
 
@@ -28,7 +28,7 @@ KiwiMS is an interactive pipeline with graphical user interface to perform prote
 
 | OS | Version | Download | SHA256 checksum |
 |------------------|------------------|------------------|------------------|
-| Windows 10/11 | 0.3.0 | [KiwiMS_2026-01-28_Setup.exe](https://github.com/infinity-a11y/KiwiMS/releases/download/0.3.0/KiwiMS_2026-01-28_Setup.exe) | <sub><sup>DFFE988893E727648F3E670B864B56FA43D1F8B5A56C46967441CE2D0BD6B727</sup></sub> |
+| Windows 10/11 | 0.3.1 | [KiwiMS_2026-01-28_Setup.exe](https://github.com/infinity-a11y/KiwiMS/releases/download/0.3.1/KiwiMS_0.3.0-Windows-x86_64.exe) | <sub><sup>A6BFAADB7E5CE1AEE72D77B1C49299873A0054FE382754E2E312F267B3EE34EF</sup></sub> |
 
 2.  Run the installer to set KiwiMS up.
 
