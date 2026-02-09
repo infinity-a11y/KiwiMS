@@ -2,7 +2,7 @@
 
 KiwiMS is an interactive pipeline with graphical user interface to perform proteomics mass spectrometry data analysis. It implements UniDec's (https://github.com/michaelmarty/UniDec) bayesian mass spectra deconvolution method and provides downstream analyses for protein binding studies.
 
-![Windows](https://img.shields.io/badge/Windows-339033?style=flat&logo=windows&logoColor=white) [![Version](https://img.shields.io/badge/Version-0.3.1-E8CB98)](https://github.com/infinity-a11y/KiwiMS/releases/tag/0.3.1) [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-659DA3.svg)](https://www.gnu.org/licenses/gpl-3.0) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.16575977.svg)](https://doi.org/10.5281/zenodo.16575976)
+![Windows](https://img.shields.io/badge/Windows-339033?style=flat&logo=windows&logoColor=white) [![Version](https://img.shields.io/badge/Version-0.3.1-E8CB98)](https://github.com/infinity-a11y/KiwiFlow/releases/tag/0.3.1) [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-659DA3.svg)](https://www.gnu.org/licenses/gpl-3.0) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.16575977.svg)](https://doi.org/10.5281/zenodo.16575976)
 
 <sup>*KiwiMS is supposed to be used for research and academic purposes only.*</sup>
 
@@ -28,7 +28,7 @@ KiwiMS is an interactive pipeline with graphical user interface to perform prote
 
 | OS | Version | Download | SHA256 checksum |
 |------------------|------------------|------------------|------------------|
-| Windows 10/11 | 0.3.1 | [KiwiMS_0.3.1-Windows-x86_64.exe](https://github.com/infinity-a11y/KiwiMS/releases/download/0.3.1/KiwiMS_0.3.1-Windows-x86_64.exe) | <sub><sup>E53055B1D90CA6863D3D7B50E950206A5D03173BF66104614E59EED837674508</sup></sub> |
+| Windows 10/11 | 0.3.1 | [KiwiMS_0.3.1-Windows-x86_64.exe](https://github.com/infinity-a11y/KiwiFlow/releases/download/0.3.1/KiwiMS_0.3.1-Windows-x86_64.exe) | <sub><sup>E53055B1D90CA6863D3D7B50E950206A5D03173BF66104614E59EED837674508</sup></sub> |
 
 2.  Run the installer to set KiwiMS up.
 
