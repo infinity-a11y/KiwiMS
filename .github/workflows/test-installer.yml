@@ -45,6 +45,41 @@ jobs:
         run: |
           Get-Content innosetup.log | Select-String -Pattern "error|failed|exception" -Context 5
 
+      - name: Launch test KiwiMS
+        run: |
+          $appDir = if ("${{ matrix.install-mode }}" -eq "ALLUSERS") { "C:\Program Files\KiwiMS" } else { "$env:LOCALAPPDATA\KiwiMS" }
+          $exePath = Join-Path $appDir "KiwiMS.exe"
+      
+          Write-Host "Searching for executable at: $exePath"
+          if (-not (Test-Path $exePath)) { Write-Error "Executable not found!"; exit 1 }
+      
+          # Start the app
+          $process = Start-Process -FilePath $exePath -WorkingDirectory $appDir -PassThru
+      
+          Write-Host "App launched. Waiting 30 seconds for Conda and Shiny to initialize..."
+          Start-Sleep -Seconds 30
+      
+          # Check if the process died 
+          if ($process.HasExited) {
+              Write-Host "App exited prematurely with code $($process.ExitCode)"
+              Get-Content "$env:LOCALAPPDATA\KiwiMS\launch.log" -ErrorAction SilentlyContinue
+              exit 1
+          }
+      
+          # Verify the Shiny Port is active
+          Write-Host "Checking for Shiny server on port 3838..."
+          $portCheck = Test-NetConnection -ComputerName localhost -Port 3838 -WarningAction SilentlyContinue
+          
+          if ($portCheck.TcpTestSucceeded) {
+              Write-Host "SUCCESS: Shiny server is responding on port 3838!"
+              Stop-Process -Id $process.Id -Force
+          } else {
+              Write-Host "FAILURE: Port 3838 not responding. Checking launch.log..."
+              Get-Content "$env:LOCALAPPDATA\KiwiMS\launch.log" -ErrorAction SilentlyContinue
+              Stop-Process -Id $process.Id -Force
+              exit 1
+          }
+
       - name: Upload Logs (Always)
         if: always()
         uses: actions/upload-artifact@v4
