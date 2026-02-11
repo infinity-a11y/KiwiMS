@@ -62,7 +62,6 @@ KiwiMS is an interactive pipeline with graphical user interface to perform prote
       <img alt="Liora Bioinformatics" src="media/Liora_Rect.png" height="130px">
     </picture>
   </a>
-  <img src="https://raw.githubusercontent.com/andreasonny83/social-icons/master/assets/transparent.png" width="40" height="1">
   <a href="https://www.hs-furtwangen.de/en/">
     <img alt="HFU Logo" src="media/hfu_logo.png" height="130px">
   </a>
