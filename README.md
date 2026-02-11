@@ -53,34 +53,20 @@ KiwiMS is an interactive pipeline with graphical user interface to perform prote
 -   **Administrative Privileges**: Required for setup and updates. A UAC prompt will appear.
 -   **Internet Connection**: Required to download Miniconda, updates, and packages.
 
-<br>
+<br><hr><br>
 
-<hr>
-
-<br>
-
-<div align="center">
-  <table>
-    <tr>
-      <td align="center" width="33%">
-        <a href="https://liora-bioinformatics.com/">
-          <picture>
-            <source media="(prefers-color-scheme: dark)" srcset="media/Liora_rect_white.png">
-            <img alt="Liora Bioinformatics" src="media/Liora_Rect.png" height="130px">
-          </picture>
-        </a>
-      </td>
-
-      <td width="10%"></td>
-
-      <td align="center" width="33%">
-        <a href="https://www.hs-furtwangen.de/en/">
-          <img alt="HFU Logo" src="media/hfu_logo.png" height="130px">
-        </a>
-      </td>
-    </tr>
-  </table>
-</div>
+<p align="center">
+  <a href="https://liora-bioinformatics.com/">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="media/Liora_rect_white.png">
+      <img alt="Liora Bioinformatics" src="media/Liora_Rect.png" height="130px">
+    </picture>
+  </a>
+  <img src="https://raw.githubusercontent.com/andreasonny83/social-icons/master/assets/transparent.png" width="40" height="1">
+  <a href="https://www.hs-furtwangen.de/en/">
+    <img alt="HFU Logo" src="media/hfu_logo.png" height="130px">
+  </a>
+</p>
 
 <br><hr>
 
