@@ -16,17 +16,21 @@ jobs:
 
       - name: Compile Inno Setup to EXE
         run: iscc setup_script.iss
-  
-      - name: Run Installer Silently (${{ matrix.install-mode }})
+        
+      - name: Run Installer Silently
         run: |
-          $mode = if ("${{ matrix.install-mode }}" -eq "ALLUSERS") { "/ALLUSERS" } else { "/CURRENTUSER" }
-          .\KiwiMS_0.3.1-Windows-x86_64.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART $mode /LOG="innosetup.log"
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "Installer failed with exit code $LASTEXITCODE"
-            Get-Content innosetup.log | Select-String -Pattern "error|failed|exception"
-            exit $LASTEXITCODE
+          $modeFlag = if ("${{ matrix.install-mode }}" -eq "ALLUSERS") { "/ALLUSERS" } else { "/CURRENTUSER" }
+          $proc = Start-Process -FilePath ".\KiwiMS_0.3.1-Windows-x86_64.exe" `
+              -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "$modeFlag", "/LOG=innosetup.log" `
+              -PassThru -Wait
+          
+          Write-Host "Installer finished with Exit Code: $($proc.ExitCode)"
+          
+          if ($proc.ExitCode -ne 0) {
+            Get-Content innosetup.log
+            exit $proc.ExitCode
           }
-
+          
       - name: Print Installation Logs on Failure
         if: always()
         run: |
@@ -48,4 +52,4 @@ jobs:
           name: install-logs-${{ matrix.install-mode }}
           path: |
             innosetup.log
-            C:\Users\runneradmin\AppData\Local\KiwiFlow\kiwiflow_setup.log
+            C:\Users\runneradmin\AppData\Local\KiwiFlow\kiwims_setup.log
