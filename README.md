@@ -59,10 +59,29 @@ KiwiMS is an interactive pipeline with graphical user interface to perform prote
 
 <br>
 
-<img src="media/hfu_logo.png" align="right" width="33%"/>
+<div align="center">
+  <table>
+    <tr>
+      <td align="center" width="33%">
+        <a href="https://liora-bioinformatics.com/">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="media/Liora_rect_white.png">
+            <img alt="Liora Bioinformatics" src="media/Liora_Rect.png" height="130px">
+          </picture>
+        </a>
+      </td>
 
-Developed by Marian Freisleben from research group Data Science for Life Science at the Institute of Precision Medicine of Hochschule Furtwangen University (HFU). <br>
+      <td width="10%"></td>
 
-<https://life-data-science.org/> <br> <https://institute-precision-medicine.org/working-groups_new/kohl-group/> <br> <https://www.hs-furtwangen.de/en/>
+      <td align="center" width="33%">
+        <a href="https://www.hs-furtwangen.de/en/">
+          <img alt="HFU Logo" src="media/hfu_logo.png" height="130px">
+        </a>
+      </td>
+    </tr>
+  </table>
+</div>
 
-<br><br>
+<br><hr>
+
+Developed by Marian Freisleben. <br>
