@@ -1,14 +1,19 @@
-name: Test Windows Installer
+name: KiwiMS Weekly Validation
 
-on: workflow_dispatch
+on:
+  workflow_dispatch: # Allows manual trigger
+  schedule:
+    - cron: '0 8 * * 1' # Every Monday at 08:00 UTC
 
 jobs:
   test-installer:
-    runs-on: windows-2022
-    
     strategy:
+      fail-fast: false # Run all tests even if one fails
       matrix:
+        os: [windows-2019, windows-latest]
         install-mode: [ALLUSERS, CURRENTUSER]
+
+    runs-on: ${{ matrix.os }}
     
     steps:
       - name: Checkout code
@@ -24,67 +29,44 @@ jobs:
               -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "$modeFlag", "/LOG=innosetup.log" `
               -PassThru -Wait
           
-          Write-Host "Installer finished with Exit Code: $($proc.ExitCode)"
-          
           if ($proc.ExitCode -ne 0) {
-            Get-Content innosetup.log
+            Write-Host "Installer failed with code: $($proc.ExitCode)"
+            Get-Content innosetup.log | Select-String -Pattern "error|failed|exception"
             exit $proc.ExitCode
           }
           
-      - name: Print Installation Logs on Failure
-        if: always()
+      - name: Launch Smoke Test
         run: |
-          $logPath = "$env:LOCALAPPDATA\KiwiMS\kiwims_setup.log"
-          if (Test-Path $logPath) {
-              Get-Content $logPath
-          } else {
-              Write-Host "Internal log not found at $logPath"
-          }
-
-      - name: Check Built-in Inno Setup Log for Errors
-        run: |
-          Get-Content innosetup.log | Select-String -Pattern "error|failed|exception" -Context 5
-
-      - name: Launch test KiwiMS
-        run: |
-          $appDir = if ("${{ matrix.install-mode }}" -eq "ALLUSERS") { "C:\Program Files\KiwiMS" } else { "$env:LOCALAPPDATA\KiwiMS" }
+          # Determine path based on matrix mode
+          $appDir = if ("${{ matrix.install-mode }}" -eq "ALLUSERS") { "${{ env.ProgramFiles }}\KiwiMS" } else { "$env:LOCALAPPDATA\KiwiMS" }
           $exePath = Join-Path $appDir "KiwiMS.exe"
       
-          Write-Host "Searching for executable at: $exePath"
-          if (-not (Test-Path $exePath)) { Write-Error "Executable not found!"; exit 1 }
-      
-          # Start the app
+          Write-Host "Testing app on ${{ matrix.os }} at $exePath"
           $process = Start-Process -FilePath $exePath -WorkingDirectory $appDir -PassThru
       
-          Write-Host "App launched. Waiting 30 seconds for Conda and Shiny to initialize..."
-          Start-Sleep -Seconds 30
+          Start-Sleep -Seconds 30 # Wait for Conda & Shiny
       
-          # Check if the process died 
           if ($process.HasExited) {
-              Write-Host "App exited prematurely with code $($process.ExitCode)"
+              Write-Error "App crashed on ${{ matrix.os }}!"
               Get-Content "$env:LOCALAPPDATA\KiwiMS\launch.log" -ErrorAction SilentlyContinue
               exit 1
           }
       
-          # Verify the Shiny Port is active
-          Write-Host "Checking for Shiny server on port 3838..."
+          # Port check (Ensures the R backend actually started)
           $portCheck = Test-NetConnection -ComputerName localhost -Port 3838 -WarningAction SilentlyContinue
+          Stop-Process -Id $process.Id -Force
           
-          if ($portCheck.TcpTestSucceeded) {
-              Write-Host "SUCCESS: Shiny server is responding on port 3838!"
-              Stop-Process -Id $process.Id -Force
-          } else {
-              Write-Host "FAILURE: Port 3838 not responding. Checking launch.log..."
-              Get-Content "$env:LOCALAPPDATA\KiwiMS\launch.log" -ErrorAction SilentlyContinue
-              Stop-Process -Id $process.Id -Force
+          if (-not $portCheck.TcpTestSucceeded) {
+              Write-Error "Shiny port 3838 not responding!"
               exit 1
           }
 
-      - name: Upload Logs (Always)
+      - name: Upload Artifacts (Logs)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: install-logs-${{ matrix.install-mode }}
+          name: logs-${{ matrix.os }}-${{ matrix.install-mode }}
           path: |
             innosetup.log
-            C:\Users\runneradmin\AppData\Local\KiwiFlow\kiwims_setup.log
+            $env:LOCALAPPDATA\KiwiMS\kiwims_setup.log
+            $env:LOCALAPPDATA\KiwiMS\launch.log
