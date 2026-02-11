@@ -20,7 +20,7 @@ jobs:
       - name: Run Installer Silently (${{ matrix.install-mode }})
         run: |
           $mode = if ("${{ matrix.install-mode }}" -eq "ALLUSERS") { "/ALLUSERS" } else { "/CURRENTUSER" }
-          .\KiwiFlow_2026-01-28_Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART $mode /LOG="innosetup.log"
+          .\KiwiMS_0.3.1-Windows-x86_64.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART $mode /LOG="innosetup.log"
           if ($LASTEXITCODE -ne 0) { throw "Installer failed with exit code $LASTEXITCODE" }
 
       - name: Check Built-in Inno Setup Log for Errors
