@@ -27,6 +27,16 @@ jobs:
             exit $LASTEXITCODE
           }
 
+      - name: Print Installation Logs on Failure
+        if: always()
+        run: |
+          $logPath = "$env:LOCALAPPDATA\KiwiMS\kiwims_setup.log"
+          if (Test-Path $logPath) {
+              Get-Content $logPath
+          } else {
+              Write-Host "Internal log not found at $logPath"
+          }
+
       - name: Check Built-in Inno Setup Log for Errors
         run: |
           Get-Content innosetup.log | Select-String -Pattern "error|failed|exception" -Context 5
