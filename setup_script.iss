@@ -12,6 +12,7 @@ OutputDir=.
 OutputBaseFilename=KiwiMS_0.3.1-Windows-x86_64
 SetupIconFile=setup\favicon.ico
 PrivilegesRequired=admin
+PrivilegesRequiredOverridesAllowed=commandline
 FlatComponentsList=no
 WizardImageFile=setup\kiwims_Banner.bmp
 WizardSmallImageFile=setup\kiwims_small.bmp
