@@ -2,47 +2,41 @@
 # FUNCTION Find Conda
 #-----------------------------#
 function Find-CondaExecutable {
-    # 1. Check common default system-wide installation path (ProgramData)
-    $defaultProgramDataPath = "$env:ProgramData\miniconda3\Scripts\conda.exe"
-    if (Test-Path $defaultProgramDataPath) {
-        Write-Host "Found conda.exe at default ProgramData path: $defaultProgramDataPath"
-        return $defaultProgramDataPath
-    }
+    $searchPaths = @(
+        # Miniconda - System Wide
+        "$env:ProgramData\miniconda3\Scripts\conda.exe",
+        "$env:ProgramData\miniconda3\Library\bin\conda.exe",
+        "$env:ProgramData\miniconda3\condabin\conda.bat",
 
-    # 2. Check common default user-specific installation path (UserProfile)
-    $defaultUserProfilePath = "$env:LOCALAPPDATA\miniconda3\Scripts\conda.exe"
-    if (Test-Path $defaultUserProfilePath) {
-        Write-Host "Found conda.exe at default UserProfile path: $defaultUserProfilePath"
-        return $defaultUserProfilePath
-    }
+        # Miniconda - User Specific
+        "$env:LOCALAPPDATA\miniconda3\Scripts\conda.exe",
+        "$env:LOCALAPPDATA\miniconda3\Library\bin\conda.exe",
+        "$env:LOCALAPPDATA\miniconda3\condabin\conda.bat",
+    )
 
-    # 3. Check if conda.exe is in the system's PATH using Get-Command
-    try {
-        $condaCmdInPath = (Get-Command conda.exe -ErrorAction SilentlyContinue).Path
-        if ($condaCmdInPath) {
-            Write-Host "Found conda.exe in system PATH: $condaCmdInPath"
-            return $condaCmdInPath
+    # Search through hardcoded common paths
+    foreach ($path in $searchPaths) {
+        if (Test-Path $path) {
+            Write-Host "Found conda at: $path" -ForegroundColor Cyan
+            return $path
         }
     }
-    catch {
-        Write-Warning "Failed to find conda.exe in system PATH using Get-Command. Error: $($_.Exception.Message)"
+
+    # Check if conda.exe is in the system PATH
+    $condaInPath = Get-Command conda.exe, conda.bat -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($condaInPath) {
+        Write-Host "Found conda in system PATH: $($condaInPath.Path)" -ForegroundColor Cyan
+        return $condaInPath.Path
     }
 
-    # 4. Fallback for common Anaconda installation paths (if a user has Anaconda instead of Miniconda)
-    $defaultProgramFilesAnacondaPath = "$env:ProgramFiles\Anaconda3\Scripts\conda.exe"
-    if (Test-Path $defaultProgramFilesAnacondaPath) {
-        Write-Host "Found conda.exe at default ProgramFiles Anaconda path: $defaultProgramFilesAnacondaPath"
-        return $defaultProgramFilesAnacondaPath
+    # Check Environment Variables
+    if ($env:CONDA_EXE -and (Test-Path $env:CONDA_EXE)) {
+        Write-Host "Found conda via CONDA_EXE: $env:CONDA_EXE" -ForegroundColor Cyan
+        return $env:CONDA_EXE
     }
 
-    $defaultUserProfileAnacondaPath = "$env:UserProfile\Anaconda3\Scripts\conda.exe"
-    if (Test-Path $defaultUserProfileAnacondaPath) {
-        Write-Host "Found conda.exe at default UserProfile Anaconda path: $defaultUserProfileAnacondaPath"
-        return $defaultUserProfileAnacondaPath
-    }
-
-    Write-Host "ERROR: conda.exe not found in common locations or system PATH." -ForegroundColor Red
-    return $null # Return null if conda.exe is not found anywhere
+    Write-Host "ERROR: conda.exe not found." -ForegroundColor Red
+    return $null
 }
 
 #-----------------------------#
@@ -66,24 +60,18 @@ function Get-CondaScope {
         }
     }
 
-    # If it's in the Users folder or LocalAppData, it's definitely currentuser
     if ($CondaPath -like "*\Users\*" -or $CondaPath.StartsWith($env:LOCALAPPDATA, "OrdinalIgnoreCase")) {
         return "currentuser"
     }
 
-    # Fallback: if we can't be sure, it's safer to treat as currentuser 
-    # or return 'unknown'
     return "currentuser"
 }
 
 #-----------------------------#
 # FUNCTION Find Rtools
 #-----------------------------#
-#-----------------------------------------#
-# FUNCTION: Find-Rtools45 (Version Aware)
-#-----------------------------------------#
 function Find-Rtools45Executable {
-    # 1. Check Registry (The most reliable way to find the version)
+    # Check Registry
     $regPaths = @(
         "HKLM:\SOFTWARE\R-core\Rtools\4.5",
         "HKCU:\SOFTWARE\R-core\Rtools\4.5"
@@ -99,7 +87,7 @@ function Find-Rtools45Executable {
         }
     }
 
-    # 2. Hard-coded path checks (fallback)
+    # Hard-coded path checks (fallback)
     $paths = @(
         "C:\rtools45\usr\bin\make.exe",
         (Join-Path $env:LOCALAPPDATA "rtools45\usr\bin\make.exe")
@@ -109,7 +97,7 @@ function Find-Rtools45Executable {
         if (Test-Path $p) { return $p }
     }
 
-    # 3. Check PATH but ensure the directory name contains '45'
+    # Check PATH but ensure the directory name contains '45'
     $cmds = Get-Command make.exe -All -ErrorAction SilentlyContinue
     foreach ($cmd in $cmds) {
         if ($cmd.Path -like "*rtools45*") {
@@ -160,10 +148,9 @@ function Download-File($url, $destination) {
             Write-Host "Downloading via BITS to: $tempDownloadPath (Attempt $($i+1))"
             
             # Start-BitsTransfer is synchronous by default
-            # It handles the "Complete" call automatically when it finishes
             Start-BitsTransfer -Source $url -Destination $tempDownloadPath -Priority High -ErrorAction Stop
             
-            # If successful, move the temp file to the final destination
+            # Move the temp file to the final destination
             if (Test-Path $destination) { Remove-Item $destination -Force }
             Move-Item -Path $tempDownloadPath -Destination $destination -Force
             
@@ -232,7 +219,7 @@ function Install-Quarto {
 }
 
 #-----------------------------------------#
-# FUNCTION: Find Quarto (Version Aware)
+# FUNCTION: Find Quarto
 #-----------------------------------------#
 function Find-QuartoInstallation {
     try {
@@ -240,7 +227,6 @@ function Find-QuartoInstallation {
         $quartoPath = Get-Command quarto -ErrorAction SilentlyContinue
         if ($quartoPath) {
             $binDir = Split-Path $quartoPath.Source -Parent
-            # Quarto usually lives in 'bin', we want the parent for the 'Path' property
             $installRoot = Split-Path $binDir -Parent 
             $versionString = & quarto --version
             
@@ -251,7 +237,10 @@ function Find-QuartoInstallation {
                 Version = $versionString.Trim()
             }
         }
-    } catch {}
+    } catch {
+        Write-Host "Error: Quarto executable not found. $_"
+        exit 1
+    }
 
     return @{ Found = $false; Path = $null; Version = $null }
 }

@@ -6,6 +6,9 @@
 # Get version info
 $versionFile = if (Test-Path "resources\version.txt") { Get-Content -Path "resources\version.txt" | Select-Object -First 1 }
 
+# Headless check
+$Headless = $args -contains "--headless"
+
 Write-Host ""
 Write-Host "██╗  ██╗ ██╗            ██╗    ███╗   ███╗  ██████╗ " -ForegroundColor DarkGreen
 Write-Host "██║ ██╔╝ ╚═╝            ╚═╝    ████╗ ████║ ██╔════╝ " -ForegroundColor DarkGreen
@@ -22,25 +25,40 @@ Write-Host "---------------------------------------------------" -ForegroundColo
 # Conda Discovery Function
 #-----------------------------#
 function Find-CondaExecutable {
-    # System-wide path (All Users)
-    $allUsersPath = "$env:ProgramData\miniconda3\Scripts\conda.exe"
-    if (Test-Path $allUsersPath) { return $allUsersPath }
+    $searchPaths = @(
+        # Miniconda - System Wide
+        "$env:ProgramData\miniconda3\Scripts\conda.exe",
+        "$env:ProgramData\miniconda3\Library\bin\conda.exe",
+        "$env:ProgramData\miniconda3\condabin\conda.bat",
 
-    # User-specific path (Current User - matching your installer logic)
-    $currentUserPath = "$env:LOCALAPPDATA\miniconda3\Scripts\conda.exe"
-    if (Test-Path $currentUserPath) { return $currentUserPath }
-
-    # Check system PATH
-    $condaInPath = Get-Command conda.exe -ErrorAction SilentlyContinue
-    if ($condaInPath) { return $condaInPath.Path }
-
-    # Fallbacks for Anaconda
-    $anacondaPaths = @(
-        "$env:ProgramFiles\Anaconda3\Scripts\conda.exe",
-        "$env:UserProfile\Anaconda3\Scripts\conda.exe"
+        # Miniconda - User Specific
+        "$env:LOCALAPPDATA\miniconda3\Scripts\conda.exe",
+        "$env:LOCALAPPDATA\miniconda3\Library\bin\conda.exe",
+        "$env:LOCALAPPDATA\miniconda3\condabin\conda.bat",
     )
-    foreach ($p in $anacondaPaths) { if (Test-Path $p) { return $p } }
 
+    # Search through hardcoded common paths
+    foreach ($path in $searchPaths) {
+        if (Test-Path $path) {
+            Write-Host "Found conda at: $path" -ForegroundColor Cyan
+            return $path
+        }
+    }
+
+    # Check if conda.exe is in the system PATH
+    $condaInPath = Get-Command conda.exe, conda.bat -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($condaInPath) {
+        Write-Host "Found conda in system PATH: $($condaInPath.Path)" -ForegroundColor Cyan
+        return $condaInPath.Path
+    }
+
+    # Check Environment Variables
+    if ($env:CONDA_EXE -and (Test-Path $env:CONDA_EXE)) {
+        Write-Host "Found conda via CONDA_EXE: $env:CONDA_EXE" -ForegroundColor Cyan
+        return $env:CONDA_EXE
+    }
+
+    Write-Host "ERROR: conda.exe not found." -ForegroundColor Red
     return $null
 }
 
@@ -59,15 +77,15 @@ if (-Not (Test-Path $logDirectory)) { New-Item -ItemType Directory -Path $logDir
 if (-not $condaCmd) {
     Write-Host "ERROR: Conda not found! Please reinstall KiwiMS." -ForegroundColor Red
     "$(Get-Date) - ERROR: Conda executable not found in system or user paths." | Add-Content $logFile
-    pause
+    if (-not $Headless) { pause }
     exit 1
 }
 
 Write-Host "Using Conda at: $condaCmd" -ForegroundColor Gray
-Write-Host "Starting application... please wait." -ForegroundColor Yellow
+Write-Host "Starting application in default browser..." -ForegroundColor Yellow
 
 try {
-    # Extract the base directory to ensure we can find the 'kiwims' environment
+    # Extract the base directory to find the 'kiwims' environment
     # Moving up from Scripts/conda.exe to the root prefix
     $condaPrefix = Split-Path (Split-Path $condaCmd -Parent) -Parent
 
@@ -76,7 +94,8 @@ try {
 
     # Launch the App
     # Use --no-capture-output to ensure logs flow into our file correctly
-    & $condaCmd run -n kiwims Rscript.exe -e "shiny::runApp('app.R', port = 3838, launch.browser = TRUE)" --vanilla *> $logFile 2>&1
+    $shinyCmd = "shiny::runApp('app.R', port = 3838, launch.browser = $(if ($Headless) { 'FALSE' } else { 'TRUE' }))"
+    & $condaCmd run -n kiwims Rscript.exe -e "$shinyCmd" --vanilla *> $logFile 2>&1
 
     if ($LASTEXITCODE -ne 0) {
         throw "R Process exited with code $LASTEXITCODE"
@@ -89,6 +108,6 @@ catch {
     Write-Host "FAILED TO START" -ForegroundColor Red
     Write-Host "Error: $($_.Exception.Message)"
     Write-Host "Detailed logs: $logFile"
-    pause
+    if (-not $Headless) { pause }
     exit 1
 }
