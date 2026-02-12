@@ -91,11 +91,11 @@ Marty, M. T.; Baldwin, A. J.; Marklund, E. G.; Hochberg, G. K.; Benesch, J. L.; 
       <img alt="Liora Bioinformatics" src="media/Liora_Rect.png" height="130px">
     </picture>
   </a>
-  &nbsp&nbsp&nbsp&nbsp&nbsp
+  &nbsp&nbsp&nbsp
   <a href="https://github.com/michaelmarty/UniDec">
     <img alt="UniDec Logo" src="media/unidec.png" height="130px">
   </a>
-  &nbsp&nbsp&nbsp&nbsp&nbsp
+  &nbsp&nbsp&nbsp
   <a href="https://www.hs-furtwangen.de/en/">
     <img alt="HFU Logo" src="media/hfu_logo.png" height="130px">
   </a>
