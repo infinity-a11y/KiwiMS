@@ -6,21 +6,13 @@ KiwiMS is an interactive pipeline with graphical user interface to perform prote
 
 <sup>*KiwiMS is supposed to be used for research and academic purposes only.*</sup>
 
-<br><br>
-
-<hr>
-
-<br>
+<br><br><hr><br>
 
 ### Current Version: KiwiMS 0.3.1
 
 <i> 2026-02-09 </i> <br> <b>KiwiMS 0.3.1</b> <br> <https://github.com/infinity-a11y/KiwiFlow/releases/tag/0.3.1>
 
-<br>
-
-<hr>
-
-<br>
+<br><hr><br>
 
 ### Installation
 
@@ -40,11 +32,7 @@ KiwiMS is an interactive pipeline with graphical user interface to perform prote
 5.  The window will expand to show more details. You will see that the "Publisher" is listed as "Unknown publisher."
 6.  Below this information, a new button will appear. Click the "Run anyway" button to start the installation.
 
-<br>
-
-<hr>
-
-<br>
+<br><hr><br>
 
 ### System Requirements
 
@@ -55,6 +43,47 @@ KiwiMS is an interactive pipeline with graphical user interface to perform prote
 
 <br><hr><br>
 
+### Citation
+
+>Please cite both **KiwiMS** and **UniDec** if you used this software in your work.
+
+Marian Freisleben. (2026). infinity-a11y/KiwiFlow: KiwiMS 0.3.1 (0.3.1). Zenodo. https://doi.org/10.5281/zenodo.18552188
+```      
+@software{marian_freisleben_2026_18552188,
+  author       = {Marian Freisleben},
+  title        = {infinity-a11y/KiwiFlow: KiwiMS 0.3.1},
+  month        = feb,
+  year         = 2026,
+  publisher    = {Zenodo},
+  version      = {0.3.1},
+  doi          = {10.5281/zenodo.18552188},
+  url          = {https://doi.org/10.5281/zenodo.18552188},
+}
+```
+
+Marty, M. T.; Baldwin, A. J.; Marklund, E. G.; Hochberg, G. K.; Benesch, J. L.; Robinson, C. V. Bayesian deconvolution of mass and ion mobility spectra: from binary interactions to polydisperse ensembles. Analytical chemistry 2015, 87 (8), 4370– 6,  DOI: https://doi.org/10.1021/acs.analchem.5b00140
+```
+@article{marty_bayesian_2015,
+	title = {Bayesian {Deconvolution} of {Mass} and {Ion} {Mobility} {Spectra}: {From} {Binary} {Interactions} to {Polydisperse} {Ensembles}},
+	volume = {87},
+	issn = {0003-2700},
+	shorttitle = {Bayesian {Deconvolution} of {Mass} and {Ion} {Mobility} {Spectra}},
+	url = {https://doi.org/10.1021/acs.analchem.5b00140},
+	doi = {10.1021/acs.analchem.5b00140},
+	abstract = {Interpretation of mass spectra is challenging because they report a ratio of two physical quantities, mass and charge, which may each have multiple components that overlap in m/z. Previous approaches to disentangling the two have focused on peak assignment or fitting. However, the former struggle with complex spectra, and the latter are generally computationally intensive and may require substantial manual intervention. We propose a new data analysis approach that employs a Bayesian framework to separate the mass and charge dimensions. On the basis of this approach, we developed UniDec (Universal Deconvolution), software that provides a rapid, robust, and flexible deconvolution of mass spectra and ion mobility-mass spectra with minimal user intervention. Incorporation of the charge-state distribution in the Bayesian prior probabilities provides separation of the m/z spectrum into its physical mass and charge components. We have evaluated our approach using systems of increasing complexity, enabling us to deduce lipid binding to membrane proteins, to probe the dynamics of subunit exchange reactions, and to characterize polydispersity in both protein assemblies and lipoprotein Nanodiscs. The general utility of our approach will greatly facilitate analysis of ion mobility and mass spectra.},
+	number = {8},
+	urldate = {2026-02-12},
+	journal = {Analytical Chemistry},
+	publisher = {American Chemical Society},
+	author = {Marty, Michael T. and Baldwin, Andrew J. and Marklund, Erik G. and Hochberg, Georg K. A. and Benesch, Justin L. P. and Robinson, Carol V.},
+	month = apr,
+	year = {2015},
+	pages = {4370--4376}
+}
+```
+
+<br><hr><br>
+
 <p align="center">
   <a href="https://liora-bioinformatics.com/">
     <picture>
@@ -62,6 +91,11 @@ KiwiMS is an interactive pipeline with graphical user interface to perform prote
       <img alt="Liora Bioinformatics" src="media/Liora_Rect.png" height="130px">
     </picture>
   </a>
+  &nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp
+  <a href="https://github.com/michaelmarty/UniDec">
+    <img alt="UniDec Logo" src="media/unidec.png" height="130px">
+  </a>
+  &nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp
   <a href="https://www.hs-furtwangen.de/en/">
     <img alt="HFU Logo" src="media/hfu_logo.png" height="130px">
   </a>
