@@ -1,3 +1,5 @@
+#define KiwiMSLogFile "{localappdata}\KiwiMS\kiwims_setup.log"
+
 [Setup]
 AppName=KiwiMS
 AppId=KiwiMS
@@ -22,7 +24,6 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 Name: "de"; MessagesFile: "compiler:Languages\German.isl"
 
 [Files]
-; Setup scripts
 Source: "setup\config.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\functions.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\miniconda_installer.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
@@ -34,8 +35,6 @@ Source: "setup\setup_renv.R"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\renv_setup.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\quarto_install.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\summarize_setup.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
-
-; App files
 Source: "KiwiMS_App\KiwiMS.exe"; DestDir: "{app}";
 Source: "KiwiMS_App\update.exe"; DestDir: "{app}";
 Source: "KiwiMS_App\app.R"; DestDir: "{app}";
@@ -46,116 +45,77 @@ Source: "KiwiMS_App\rhino.yml"; DestDir: "{app}";
 Source: "KiwiMS_App\app\*"; DestDir: "{app}\app"; Flags: recursesubdirs createallsubdirs;
 Source: "KiwiMS_App\dev\*"; DestDir: "{app}\dev"; Flags: recursesubdirs createallsubdirs;
 Source: "KiwiMS_App\resources\*"; DestDir: "{app}\resources"; Flags: recursesubdirs createallsubdirs;
-
-; Other
 Source: "setup\favicon.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [CustomMessages]
-; English Messages (default)
 StatusMsg_Configuring=Configuring setup...
 StatusMsg_InstallMiniconda=Installing Miniconda...
 StatusMsg_SetupCondaEnv=Setting up Conda Environment...
 StatusMsg_SetupRtools=Setting up rtools45...
-StatusMsg_InstallRenv=Installing renv package (R environment setup phase 1/2)...
-StatusMsg_RestoreRenv=Restoring R packages (renv environment setup phase 2/2)...
+StatusMsg_InstallRenv=Installing renv (1/2)...
+StatusMsg_RestoreRenv=Restoring R packages (2/2)...
 StatusMsg_InstallQuarto=Installing Quarto...
-Icons_Comment=Launch the KiwiMS Application
 Description_Launch=Launch KiwiMS
-
-; German Messages
-de.StatusMsg_Configuring=Setup wird konfiguriert...
-de.StatusMsg_InstallMiniconda=Miniconda wird installiert ...
-de.StatusMsg_SetupCondaEnv=Conda Umgebung wird eingerichtet...
-de.StatusMsg_SetupRtools=Installiere rtools45...
-de.StatusMsg_InstallRenv=renv Paket wird installiert (R Umgebung Einrichtung Phase 1/2)...
-de.StatusMsg_RestoreRenv=R-Pakete werden wiederhergestellt (renv Umgebung Einrichtung Phase 2/2)...
-de.StatusMsg_InstallQuarto=Quarto wird installiert...
-de.Icons_Comment=KiwiMS Anwendung starten
-de.Description_Launch=KiwiMS starten
-
-; Installation scope
 ScopeTitle=Select Installation Type
 ScopeSub=Who should this application be installed for?
 ScopeDesc=Choose how you want to install KiwiMS.
-ScopeAllUsers=System-wide for all users (requires administrator rights)
+ScopeAllUsers=System-wide for all users (requires admin)
 ScopeCurrUser=Current user only
+de.StatusMsg_Configuring=Setup wird konfiguriert...
+de.StatusMsg_InstallMiniconda=Miniconda wird installiert...
+de.StatusMsg_SetupCondaEnv=Conda Umgebung wird eingerichtet...
+de.StatusMsg_SetupRtools=Installiere rtools45...
+de.StatusMsg_InstallRenv=renv wird installiert (1/2)...
+de.StatusMsg_RestoreRenv=R-Pakete werden wiederhergestellt (2/2)...
+de.StatusMsg_InstallQuarto=Quarto wird installiert...
+de.Description_Launch=KiwiMS starten
 de.ScopeTitle=Installationstyp auswählen
 de.ScopeSub=Für wen soll diese Anwendung installiert werden?
 de.ScopeDesc=Wählen Sie aus, wie Sie KiwiMS installieren möchten.
-de.ScopeAllUsers=Systemweit für alle Benutzer (erfordert Administratorrechte)
+de.ScopeAllUsers=Systemweit für alle Benutzer (erfordert Admin)
 de.ScopeCurrUser=Nur für den aktuellen Benutzer
 
 [Run]
-#define KiwiMSLogFile "{localappdata}\KiwiMS\kiwims_setup.log"
-
-; Post Install
 Filename: "{app}\KiwiMS.exe"; Description: "{cm:Description_Launch}"; Flags: postinstall skipifsilent shellexec;
 
 [Icons]
-; Create shortcut in Start Menu Programs group
-Name: "{group}\KiwiMS"; Filename: "{app}\KiwiMS.exe"; WorkingDir: "{app}"; IconFilename: "{app}\favicon.ico"; Comment: "{cm:Icons_Comment}";
-
-; Create desktop shortcut
-Name: "{userdesktop}\KiwiMS"; Filename: "{app}\KiwiMS.exe"; WorkingDir: "{app}"; IconFilename: "{app}\favicon.ico"; Comment: "{cm:Icons_Comment}";
-
-[Code]
+Name: "{group}\KiwiMS"; Filename: "{app}\KiwiMS.exe"; WorkingDir: "{app}"; IconFilename: "{app}\favicon.ico"
+Name: "{userdesktop}\KiwiMS"; Filename: "{app}\KiwiMS.exe"; WorkingDir: "{app}"; IconFilename: "{app}\favicon.ico"
 
 [Code]
 var
   InstallScopePage: TInputOptionWizardPage;
-  // Global variable to store the choice so we don't have to touch the UI later
   SelectedScope: string; 
 
-// --- Helper: Safely update the Progress Bar ---
 procedure UpdateProgress(Position: Integer);
 begin
-  if (not WizardSilent) and (WizardForm <> nil) and (WizardForm.ProgressGauge <> nil) then
-  begin
+  if (not WizardSilent) and (WizardForm <> nil) then
     WizardForm.ProgressGauge.Position := Position * WizardForm.ProgressGauge.Max div 100;
-  end;
 end;
 
-// --- Helper: Safely update the Status Label ---
 procedure UpdateStatus(Msg: string);
 begin
-  if (not WizardSilent) and (WizardForm <> nil) and (WizardForm.StatusLabel <> nil) then
-  begin
+  if (not WizardSilent) and (WizardForm <> nil) then
     WizardForm.StatusLabel.Caption := Msg;
-  end;
 end;
 
-// --- Helper: Determine Scope (Silent or UI) ---
-function GetInstallScope: string;
+function GetInstallScope(Param: string): string;
 begin
   if WizardSilent then
   begin
-    if IsAdminInstallMode then Result := 'allusers'
-    else Result := 'currentuser';
+    if IsAdminInstallMode then Result := 'allusers' else Result := 'currentuser';
   end
-  else
-  begin
-    Result := SelectedScope;
-  end;
+  else Result := SelectedScope;
 end;
 
 procedure InitializeWizard;
 begin
-  // Set a sensible default for the global variable
   SelectedScope := 'currentuser';
-
-  // Only create the UI if NOT in silent mode
   if not WizardSilent then
   begin
-    InstallScopePage := CreateInputOptionPage(wpWelcome,
-      CustomMessage('ScopeTitle'), 
-      CustomMessage('ScopeSub'),
-      CustomMessage('ScopeDesc'),
-      True, False);
-
+    InstallScopePage := CreateInputOptionPage(wpWelcome, CustomMessage('ScopeTitle'), CustomMessage('ScopeSub'), CustomMessage('ScopeDesc'), True, False);
     InstallScopePage.Add(CustomMessage('ScopeAllUsers'));
     InstallScopePage.Add(CustomMessage('ScopeCurrUser'));
-
-    // Default the selection to 'Current user only' (Index 1)
     InstallScopePage.Values[1] := True;
   end;
 end;
@@ -163,7 +123,6 @@ end;
 function NextButtonClick(CurPageID: Integer): Boolean;
 begin
   Result := True;
-  // If we just left our custom page, save the choice to our global variable
   if (not WizardSilent) and (InstallScopePage <> nil) and (CurPageID = InstallScopePage.ID) then
   begin
     if InstallScopePage.Values[0] then
@@ -178,56 +137,39 @@ begin
   end;
 end;
 
-// --- Installation Steps ---
-
 procedure RunStep(CaptionMsg: string; ScriptName: string; ProgressPos: Integer);
 var
-  Params: string;
   ResultCode: Integer;
-  Scope: string;
+  PSArgs: string;
 begin
-  Scope := GetInstallScope;
   UpdateStatus(CaptionMsg);
-  
-  Params := '-ExecutionPolicy Bypass -Command "& { ' +
-            'param([string]$basePath, [string]$userDataPath, [string]$envName, [string]$logFile, [string]$installScope); ' +
-            '& \"' + ExpandConstant('{app}\' + ScriptName) + '\" ' +
-            '-basePath \"' + ExpandConstant('{app}') + '\" ' +
-            '-userDataPath \"' + ExpandConstant('{localappdata}\KiwiMS') + '\" ' +
-            '-envName \"kiwims\" ' + 
-            '-logFile \"' + ExpandConstant('{#KiwiMSLogFile}') + '\" ' +
-            '-installScope \"' + Scope + '\" }"';
-
-  Log('Executing: ' + ScriptName + ' with scope: ' + Scope);
-
-  if not Exec('powershell.exe', Params, ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-  begin
-    MsgBox('Failed to launch ' + ScriptName, mbError, MB_OK);
-    Abort;
-  end;
-
-  if ResultCode <> 0 then
-  begin
-    MsgBox(ScriptName + ' failed with exit code: ' + IntToStr(ResultCode) + #13#10 +
-           'See log: ' + ExpandConstant('{#KiwiMSLogFile}'), mbError, MB_OK);
-    Abort;
-  end;
-
   UpdateProgress(ProgressPos);
+  
+  // FIXED: No square bracket at the start of a line to avoid "Invalid Section Tag" error.
+  PSArgs := Format('-ExecutionPolicy Bypass -File "%s" -basePath "%s" -userDataPath "%s" -envName "kiwims" -logFile "%s" -installScope "%s"', [ExpandConstant('{app}\') + ScriptName, ExpandConstant('{app}'), ExpandConstant('{localappdata}\KiwiMS'), ExpandConstant('{#KiwiMSLogFile}'), GetInstallScope('')]);
+
+  if Exec('powershell.exe', PSArgs, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    if ResultCode <> 0 then
+    begin
+      Log('FATAL: ' + ScriptName + ' failed with code ' + IntToStr(ResultCode));
+      if not WizardSilent then
+        MsgBox(ScriptName + ' failed. See log: ' + ExpandConstant('{#KiwiMSLogFile}'), mbError, MB_OK);
+      Abort;
+    end;
+  end;
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
-    RunStep(CustomMessage('StatusMsg_Configuring'),      'config.ps1',              10);
+    RunStep(CustomMessage('StatusMsg_Configuring'),     'config.ps1', 10);
     RunStep(CustomMessage('StatusMsg_InstallMiniconda'), 'miniconda_installer.ps1', 20);
-    RunStep(CustomMessage('StatusMsg_SetupCondaEnv'),    'conda_env.ps1',           40);
-    RunStep(CustomMessage('StatusMsg_SetupRtools'),      'rtools_setup.ps1',        55);
-    RunStep(CustomMessage('StatusMsg_InstallRenv'),      'renv_install.ps1',        60);
-    RunStep(CustomMessage('StatusMsg_RestoreRenv'),      'renv_setup.ps1',          85);
-    RunStep(CustomMessage('StatusMsg_InstallQuarto'),    'quarto_install.ps1',      100);
-    
-    if not WizardSilent then Sleep(500);
+    RunStep(CustomMessage('StatusMsg_SetupCondaEnv'),    'conda_env.ps1', 40);
+    RunStep(CustomMessage('StatusMsg_SetupRtools'),      'rtools_setup.ps1', 55);
+    RunStep(CustomMessage('StatusMsg_InstallRenv'),      'renv_install.ps1', 60);
+    RunStep(CustomMessage('StatusMsg_RestoreRenv'),      'renv_setup.ps1', 85);
+    RunStep(CustomMessage('StatusMsg_InstallQuarto'),    'quarto_install.ps1', 100);
   end;
 end;

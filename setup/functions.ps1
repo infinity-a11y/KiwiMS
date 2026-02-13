@@ -11,7 +11,7 @@ function Find-CondaExecutable {
         # Miniconda - User Specific
         "$env:LOCALAPPDATA\miniconda3\Scripts\conda.exe",
         "$env:LOCALAPPDATA\miniconda3\Library\bin\conda.exe",
-        "$env:LOCALAPPDATA\miniconda3\condabin\conda.bat",
+        "$env:LOCALAPPDATA\miniconda3\condabin\conda.bat"
     )
 
     # Search through hardcoded common paths
