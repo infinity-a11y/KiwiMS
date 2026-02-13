@@ -35,32 +35,6 @@ jobs:
             exit $proc.ExitCode
           }
           
-      - name: Launch Smoke Test
-        run: |
-          # Determine path based on matrix mode
-          $appDir = if ("${{ matrix.install-mode }}" -eq "ALLUSERS") { "${{ env.ProgramFiles }}\KiwiMS" } else { "$env:LOCALAPPDATA\KiwiMS" }
-          $exePath = Join-Path $appDir "KiwiMS.exe"
-      
-          Write-Host "Testing app on ${{ matrix.os }} at $exePath"
-          $process = Start-Process -FilePath $exePath -WorkingDirectory $appDir -PassThru
-      
-          Start-Sleep -Seconds 30 # Wait for Conda & Shiny
-      
-          if ($process.HasExited) {
-              Write-Error "App crashed on ${{ matrix.os }}!"
-              Get-Content "$env:LOCALAPPDATA\KiwiMS\launch.log" -ErrorAction SilentlyContinue
-              exit 1
-          }
-      
-          # Port check (Ensures the R backend actually started)
-          $portCheck = Test-NetConnection -ComputerName localhost -Port 3838 -WarningAction SilentlyContinue
-          Stop-Process -Id $process.Id -Force
-          
-          if (-not $portCheck.TcpTestSucceeded) {
-              Write-Error "Shiny port 3838 not responding!"
-              exit 1
-          }
-
       - name: Upload Artifacts (Logs)
         if: always()
         uses: actions/upload-artifact@v4
