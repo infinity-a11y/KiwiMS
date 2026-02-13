@@ -60,8 +60,10 @@ Marian Freisleben. (2026). infinity-a11y/KiwiMS: KiwiMS 0.3.1. Zenodo. DOI: http
   url          = {https://doi.org/10.5281/zenodo.18552188},
 }
 ```
+
 <br>
 Marty, M. T.; Baldwin, A. J.; Marklund, E. G.; Hochberg, G. K.; Benesch, J. L.; Robinson, C. V. Bayesian deconvolution of mass and ion mobility spectra: from binary interactions to polydisperse ensembles. Analytical chemistry 2015, 87 (8), 4370– 6,  DOI: https://doi.org/10.1021/acs.analchem.5b00140
+
 ```
 @article{marty_bayesian_2015,
 	title = {Bayesian {Deconvolution} of {Mass} and {Ion} {Mobility} {Spectra}: {From} {Binary} {Interactions} to {Polydisperse} {Ensembles}},
