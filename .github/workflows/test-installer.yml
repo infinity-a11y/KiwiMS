@@ -42,5 +42,5 @@ jobs:
           name: logs-${{ matrix.os }}-${{ matrix.install-mode }}
           path: |
             innosetup.log
-            $env:LOCALAPPDATA\KiwiMS\kiwims_setup.log
-            $env:LOCALAPPDATA\KiwiMS\launch.log
+            **/kiwims_setup.log
+            **/launch.log
