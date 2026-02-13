@@ -47,18 +47,23 @@ $success = $false
 # Accept channel policies
 & $condaCmd tos accept
 
+# Set the libmamba solver
+& $condaCmd config --set solver libmamba
+
 # Try 'env update --prune' allowing cache
 # If it fails, delete and 'env create'
 
 for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
     try {
         if (Test-Path $condaEnvPath) {
-            Write-Host "Existing environment found. Attempting incremental update (cache-aware)..."
-            # --prune removes packages no longer in your .yml
+            Write-Host "Updating '$envName' and pruning old packages..."
             & $condaCmd env update -n $envName -f "$environmentYmlPath" --prune
+            
+            Write-Host "Checking for newer versions of existing packages..."
+            & $condaCmd update -n $envName --all -y
         }
         else {
-            Write-Host "Environment not found. Creating new environment from cache/source..."
+            Write-Host "Creating new environment..."
             & $condaCmd env create -n $envName -f "$environmentYmlPath"
         }
 
@@ -73,9 +78,8 @@ for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
         Write-Warning "Attempt $attempt failed: $($_.Exception.Message)"
         
         if ($attempt -lt $maxRetries) {
-            Write-Host "Attempting 'Nuclear Option': Removing corrupted environment for a fresh rebuild..."
+            Write-Host "Attempting to remove corrupted environment for a fresh rebuild..."
             & $condaCmd env remove -n $envName -y --all
-            # Note: We do NOT 'conda clean' here because we want to keep the cached .tar.bz2 files!
         }
     }
 }
