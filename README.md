@@ -2,7 +2,7 @@
 
 KiwiMS is an interactive pipeline with graphical user interface to perform proteomics mass spectrometry data analysis. It implements UniDec's (https://github.com/michaelmarty/UniDec) bayesian mass spectra deconvolution method and provides downstream analyses for protein binding studies.
 
-![Windows](https://img.shields.io/badge/Windows-339033?style=flat&logo=windows&logoColor=white) [![Version](https://img.shields.io/badge/Version-0.3.1-E8CB98)](https://github.com/infinity-a11y/KiwiFlow/releases/tag/0.3.1) [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-659DA3.svg)](https://www.gnu.org/licenses/gpl-3.0) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.16575977.svg)](https://doi.org/10.5281/zenodo.16575976) [![KiwiMS Installation Validation](https://github.com/infinity-a11y/KiwiFlow/actions/workflows/test-installer.yml/badge.svg)](https://github.com/infinity-a11y/KiwiFlow/actions/workflows/test-installer.yml)
+![Windows](https://img.shields.io/badge/Windows-339033?style=flat&logo=windows&logoColor=white) [![Version](https://img.shields.io/badge/Version-0.3.1-E8CB98)](https://github.com/infinity-a11y/KiwiMS/releases/tag/0.3.1) [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-659DA3.svg)](https://www.gnu.org/licenses/gpl-3.0) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.16575977.svg)](https://doi.org/10.5281/zenodo.16575976) [![KiwiMS Installation Validation](https://github.com/infinity-a11y/KiwiMS/actions/workflows/test-installer.yml/badge.svg)](https://github.com/infinity-a11y/KiwiMS/actions/workflows/test-installer.yml)
 
 <sup>*KiwiMS is supposed to be used for research and academic purposes only.*</sup>
 
@@ -10,7 +10,7 @@ KiwiMS is an interactive pipeline with graphical user interface to perform prote
 
 ### Current Version: KiwiMS 0.3.1
 
-<i> 2026-02-09 </i> <br> <b>KiwiMS 0.3.1</b> <br> <https://github.com/infinity-a11y/KiwiFlow/releases/tag/0.3.1>
+<i> 2026-02-09 </i> <br> <b>KiwiMS 0.3.1</b> <br> <https://github.com/infinity-a11y/KiwiMS/releases/tag/0.3.1>
 
 <br><hr><br>
 
@@ -20,7 +20,7 @@ KiwiMS is an interactive pipeline with graphical user interface to perform prote
 
 | OS | Version | Download | SHA256 checksum |
 |------------------|------------------|------------------|------------------|
-| Windows 10/11 | 0.3.1 | [KiwiMS_0.3.1-Windows-x86_64.exe](https://github.com/infinity-a11y/KiwiFlow/releases/download/0.3.1/KiwiMS_0.3.1-Windows-x86_64.exe) | <sub><sup>E53055B1D90CA6863D3D7B50E950206A5D03173BF66104614E59EED837674508</sup></sub> |
+| Windows 10/11 | 0.3.1 | [KiwiMS_0.3.1-Windows-x86_64.exe](https://github.com/infinity-a11y/KiwiMS/releases/download/0.3.1/KiwiMS_0.3.1-Windows-x86_64.exe) | <sub><sup>E53055B1D90CA6863D3D7B50E950206A5D03173BF66104614E59EED837674508</sup></sub> |
 
 2.  Run the installer to set KiwiMS up.
 
@@ -47,11 +47,11 @@ KiwiMS is an interactive pipeline with graphical user interface to perform prote
 
 >Please cite both **KiwiMS** and **UniDec** if you used this software in your work.
 
-Marian Freisleben. (2026). infinity-a11y/KiwiFlow: KiwiMS 0.3.1 (0.3.1). Zenodo. https://doi.org/10.5281/zenodo.18552188
+Marian Freisleben. (2026). infinity-a11y/KiwiMS: KiwiMS 0.3.1 (0.3.1). Zenodo. https://doi.org/10.5281/zenodo.18552188
 ```      
 @software{marian_freisleben_2026_18552188,
   author       = {Marian Freisleben},
-  title        = {infinity-a11y/KiwiFlow: KiwiMS 0.3.1},
+  title        = {infinity-a11y/KiwiMS: KiwiMS 0.3.1},
   month        = feb,
   year         = 2026,
   publisher    = {Zenodo},
