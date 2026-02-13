@@ -59,14 +59,26 @@ Write-Host "Using Conda at: $condaCmd"
 #-----------------------------#
 Write-Host "Checking if renv is already installed in environment '$envName'..."
 
-$checkRenv = & $condaCmd run -n $envName Rscript -e "if(!requireNamespace('renv', quietly=TRUE)) quit(status=1)" 2>&1
+$oldPreference = $ErrorActionPreference
+$ErrorActionPreference = "Continue" 
 
-if ($LASTEXITCODE -eq 0) {
+try {
+    $checkRenv = & $condaCmd run -n $envName Rscript -e "if(!requireNamespace('renv', quietly=TRUE)) quit(status=1)" 2>&1
+    $exitCode = $LASTEXITCODE
+}
+finally {
+    # Restore the global 'Stop' preference
+    $ErrorActionPreference = $oldPreference
+}
+
+if ($exitCode -eq 0) {
     Write-Host "renv is already installed. Skipping installation step."
     Stop-Transcript
     exit 0
 }
 
+# Reset LASTEXITCODE manually so it doesn't haunt the end of the script
+$global:LASTEXITCODE = 0
 Write-Host "renv not found. Proceeding with installation..."
 
 #-----------------------------#
