@@ -31,6 +31,7 @@ if ($installScope -eq "allusers") {
     if (-not $isElevated) {
         Write-Host "ERROR: System-wide installation requires administrator rights."
         Write-Host "Please run the installer as administrator."
+        Stop-Transcript
         exit 1
     }
 } else {
@@ -47,10 +48,26 @@ $condaCmd = Find-CondaExecutable
 if (-Not (Test-Path $condaCmd)) {
     Write-Host "ERROR: Conda not found at expected location."
     Write-Host "Make sure the Miniconda installation step completed successfully."
+    Stop-Transcript
     exit 1
 }
 
 Write-Host "Using Conda at: $condaCmd"
+
+#-----------------------------#
+# Check if renv is present
+#-----------------------------#
+Write-Host "Checking if renv is already installed in environment '$envName'..."
+
+$checkRenv = & $condaCmd run -n $envName Rscript -e "if(!requireNamespace('renv', quietly=TRUE)) quit(status=1)" 2>&1
+
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "renv is already installed. Skipping installation step."
+    Stop-Transcript
+    exit 0
+}
+
+Write-Host "renv not found. Proceeding with installation..."
 
 #-----------------------------#
 # R: install.packages("renv")
@@ -118,6 +135,7 @@ catch {
         Write-Host "---------------------------------"
     }
 
+    Stop-Transcript
     exit 1
 }
 finally {

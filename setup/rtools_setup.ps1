@@ -40,6 +40,7 @@ try {
 }
 catch {
     Write-Host "Detection failed: $($_.Exception.Message)"
+    Stop-Transcript
     exit 1
 }
 
@@ -67,6 +68,7 @@ if ($needsInstall) {
             Write-Host "Download complete. Installing to $targetDir..."
         }  else {
             Write-Host "Download failed: $($_.Exception.Message)"
+            Stop-Transcript
             exit 1
         }
 
@@ -79,6 +81,7 @@ if ($needsInstall) {
     }
     catch {
         Write-Host "Installation failed: $($_.Exception.Message)"
+        Stop-Transcript
         exit 1
     }
 }
@@ -103,9 +106,9 @@ try {
 }
 catch {
     Write-Host "Path update failed: $($_.Exception.Message)"
+    Stop-Transcript
     exit 1
 }
 
 Write-Host "Rtools 4.5 setup complete."
-Stop-Transcript
 exit 0

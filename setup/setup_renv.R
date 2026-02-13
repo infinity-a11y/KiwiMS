@@ -1,23 +1,27 @@
 # setup_renv.R
 
-# This script is executed by the PowerShell installer to
-# setup the R package environment.
+script_path <- getwd()
+message(paste("Current Working Directory:", getwd()))
 
-message("Restoring R package environment with renv::restore().")
-
-# --- Installation logic ---
-
-overall_success <- FALSE
+# Check for lockfile in the current directory
+if (!file.exists("renv.lock")) {
+    message(
+        "renv.lock not found in getwd(). Attempting to set WD to script location..."
+    )
+}
 
 tryCatch(
     {
         if (!requireNamespace("renv", quietly = TRUE)) {
-            stop(
-                "ERROR: 'renv' package not available for restore operation. Please ensure it was installed."
-            )
+            stop("ERROR: 'renv' package not available.")
         }
 
-        renv::restore(rebuild = TRUE)
+        renv::restore(
+            project = getwd(),
+            lockfile = "renv.lock",
+            rebuild = TRUE,
+            prompt = FALSE
+        )
         message("renv::restore() completed.")
         overall_success <- TRUE
     },
@@ -26,15 +30,3 @@ tryCatch(
         overall_success <- FALSE
     }
 )
-
-
-# --- Exit with status code ---
-if (!overall_success) {
-    message("R script 'setup_renv.R' failed. Exiting R with error status (1).")
-    q(save = "no", status = 1)
-} else {
-    message(
-        "R script 'setup_renv.R' completed successfully. Exiting R with success status (0)."
-    )
-    q(save = "no", status = 0)
-}

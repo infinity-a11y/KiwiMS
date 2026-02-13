@@ -67,6 +67,7 @@ try {
 }
 catch {
     Write-Host "Error during Quarto detection: $($_.Exception.Message)"
+    Stop-Transcript
     exit 1
 }
 
@@ -95,6 +96,7 @@ if ($needsInstall) {
     }
     catch {
         Write-Host "Installation failed: $($_.Exception.Message)"
+        Stop-Transcript
         exit 1
     }
 } else {
@@ -117,6 +119,7 @@ try {
 }
 catch {
     Write-Host "Failed to update PATH: $($_.Exception.Message)"
+    Stop-Transcript
     exit 1
 }
 

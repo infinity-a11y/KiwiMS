@@ -167,6 +167,7 @@ function Download-File($url, $destination) {
 
     if (-Not $success) {
         Write-Error "Failed to download $url after 3 attempts."
+        Stop-Transcript
         exit 1
     }
 }
@@ -209,11 +210,13 @@ function Install-Quarto {
         }
         else {
             Write-Host "Quarto installation completed but verification failed"
+            Stop-Transcript
             exit 1
         }
     }
     catch {
         Write-Host "Error installing Quarto: $_"
+        Stop-Transcript
         exit 1
     }
 }
@@ -239,6 +242,7 @@ function Find-QuartoInstallation {
         }
     } catch {
         Write-Host "Error: Quarto executable not found. $_"
+        Stop-Transcript
         exit 1
     }
 
@@ -282,6 +286,7 @@ function Add-ToSystemPath {
     }
     catch {
         Write-Host "Error adding $Directory to PATH: $_"
+        Stop-Transcript
         exit 1
     }
 }

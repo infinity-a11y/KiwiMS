@@ -34,7 +34,6 @@ Source: "setup\renv_install.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\setup_renv.R"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\renv_setup.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\quarto_install.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "setup\summarize_setup.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "KiwiMS_App\KiwiMS.exe"; DestDir: "{app}";
 Source: "KiwiMS_App\update.exe"; DestDir: "{app}";
 Source: "KiwiMS_App\app.R"; DestDir: "{app}";
@@ -86,6 +85,7 @@ Name: "{userdesktop}\KiwiMS"; Filename: "{app}\KiwiMS.exe"; WorkingDir: "{app}";
 var
   InstallScopePage: TInputOptionWizardPage;
   SelectedScope: string; 
+  InstallationFailed: Boolean;
 
 procedure UpdateProgress(Position: Integer);
 begin
@@ -111,6 +111,7 @@ end;
 procedure InitializeWizard;
 begin
   SelectedScope := 'currentuser';
+  InstallationFailed := False;
   if not WizardSilent then
   begin
     InstallScopePage := CreateInputOptionPage(wpWelcome, CustomMessage('ScopeTitle'), CustomMessage('ScopeSub'), CustomMessage('ScopeDesc'), True, False);
@@ -142,10 +143,11 @@ var
   ResultCode: Integer;
   PSArgs: string;
 begin
+  if InstallationFailed then Exit;
+
   UpdateStatus(CaptionMsg);
   UpdateProgress(ProgressPos);
   
-  // FIXED: No square bracket at the start of a line to avoid "Invalid Section Tag" error.
   PSArgs := Format('-ExecutionPolicy Bypass -File "%s" -basePath "%s" -userDataPath "%s" -envName "kiwims" -logFile "%s" -installScope "%s"', [ExpandConstant('{app}\') + ScriptName, ExpandConstant('{app}'), ExpandConstant('{localappdata}\KiwiMS'), ExpandConstant('{#KiwiMSLogFile}'), GetInstallScope('')]);
 
   if Exec('powershell.exe', PSArgs, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
@@ -153,9 +155,9 @@ begin
     if ResultCode <> 0 then
     begin
       Log('FATAL: ' + ScriptName + ' failed with code ' + IntToStr(ResultCode));
+      InstallationFailed := True;
       if not WizardSilent then
         MsgBox(ScriptName + ' failed. See log: ' + ExpandConstant('{#KiwiMSLogFile}'), mbError, MB_OK);
-      Abort;
     end;
   end;
 end;
@@ -164,12 +166,14 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
-    RunStep(CustomMessage('StatusMsg_Configuring'),     'config.ps1', 10);
+    RunStep(CustomMessage('StatusMsg_Configuring'),      'config.ps1', 10);
     RunStep(CustomMessage('StatusMsg_InstallMiniconda'), 'miniconda_installer.ps1', 20);
     RunStep(CustomMessage('StatusMsg_SetupCondaEnv'),    'conda_env.ps1', 40);
     RunStep(CustomMessage('StatusMsg_SetupRtools'),      'rtools_setup.ps1', 55);
     RunStep(CustomMessage('StatusMsg_InstallRenv'),      'renv_install.ps1', 60);
     RunStep(CustomMessage('StatusMsg_RestoreRenv'),      'renv_setup.ps1', 85);
     RunStep(CustomMessage('StatusMsg_InstallQuarto'),    'quarto_install.ps1', 100);
+
+    if InstallationFailed then Abort;
   end;
 end;

@@ -31,6 +31,7 @@ if ($installScope -eq "allusers") {
     if (-not $isElevated) {
         Write-Host "ERROR: System-wide installation requires administrator rights."
         Write-Host "Please run the installer as administrator."
+        Stop-Transcript
         exit 1
     }
 } else {
@@ -47,6 +48,7 @@ $condaCmd = Find-CondaExecutable
 if (-Not (Test-Path $condaCmd)) {
     Write-Host "ERROR: Conda executable not found."
     Write-Host "Make sure the Miniconda installation completed successfully."
+    Stop-Transcript
     exit 1
 }
 
@@ -69,7 +71,17 @@ try {
     Write-Host "Running renv::restore via: $rScriptPath"
     Write-Host "Command: & '$condaCmd' run -n '$envName' R.exe CMD BATCH --no-save --no-restore --slave '$rScriptPath'"
 
-    $condaRunOutput = & $condaCmd run -n $envName R.exe CMD BATCH "--no-save" "--no-restore" "--slave" "$rScriptPath" 2>&1 | Out-String
+    # Get the folder where setup_renv.R is located
+    $workDir = Split-Path -Path $rScriptPath -Parent
+
+        # Use Set-Location to ensure 'conda run' inherits the correct path
+    Push-Location $workDir
+    try {
+        $condaRunOutput = & $condaCmd run -n $envName R.exe CMD BATCH "--no-save" "--no-restore" "--slave" "$rScriptPath" 2>&1 | Out-String
+    }
+    finally {
+        Pop-Location
+    }
 
     # Log wrapper output if any
     if ($condaRunOutput.Trim() -ne "") {
@@ -120,6 +132,7 @@ catch {
         Write-Host "---------------------------------"
     }
 
+    Stop-Transcript
     exit 1
 }
 finally {

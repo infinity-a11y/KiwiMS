@@ -25,6 +25,7 @@ try {
 }
 catch {
     Write-Error "Failed to initialize logging: "
+    Stop-Transcript
     exit 1
 }
 
@@ -38,6 +39,7 @@ try {
 }
 catch {
     Write-Error "Failed to initialize logging: "
+    Stop-Transcript
     exit 1
 }
 
@@ -50,6 +52,7 @@ try {
     if ($installScope -eq "allusers") {
         if (-not $isElevated) {
             Write-Host "ERROR: System-wide installation requires administrator rights."
+            Stop-Transcript
             exit 1
         }
         Write-Host "Running elevated → system-wide mode OK"
@@ -60,6 +63,7 @@ try {
 }
 catch {
     Write-Host "Privilege check failed: "
+    Stop-Transcript
     exit 1
 }
 
@@ -74,6 +78,7 @@ try {
 }
 catch {
     Write-Host "Creating User Data directory failed: "
+    Stop-Transcript
     exit 1
 }
 
@@ -89,6 +94,7 @@ try {
 }
 catch {
     Write-Host "Creating temporary directory failed: "
+    Stop-Transcript
     exit 1
 }
 
@@ -111,6 +117,7 @@ try {
 }
 catch {
     Write-Host "Defining/Creating report directory failed: "
+    Stop-Transcript
     exit 1
 }
 
@@ -129,6 +136,7 @@ try {
 }
 catch {
     Write-Host "Moving report files failed: "
+    Stop-Transcript
     exit 1
 }
 
@@ -137,7 +145,6 @@ catch {
 #-----------------------------#
 try {
     Write-Host "Config complete"
-    Stop-Transcript
     exit 0
 }
 catch {

@@ -71,6 +71,7 @@ try {
         }
         else {
             Write-Host "Download failed: $($_.Exception.Message)"
+            Stop-Transcript
             exit 1
         }
         
@@ -90,6 +91,7 @@ try {
         Write-Host "Checking for Conda executable at $condaCmd..."
         if (-Not (Test-Path $condaCmd)) {
             Write-Host "Miniconda not found after installation at expected path: $condaCmd. Exiting."
+            Stop-Transcript
             exit 1
         }
 
@@ -98,7 +100,13 @@ try {
 }
 catch {
     Write-Host "Miniconda installation failed. Exiting."
+    Stop-Transcript
     exit 1
 }
 
-if ($LASTEXITCODE -ne 0) { exit 1 }
+if ($LASTEXITCODE -ne 0) { 
+    Stop-Transcript
+    exit 1 
+}
+
+exit 0

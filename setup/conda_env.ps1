@@ -28,11 +28,13 @@ $environmentYmlPath = Join-Path $basePath "resources\environment.yml"
 
 if (-Not (Test-Path $condaCmd)) {
     Write-Host "ERROR: Conda not found at $condaCmd"
+    Stop-Transcript
     exit 1
 }
 
 if (-Not (Test-Path $environmentYmlPath)) {
     Write-Host "ERROR: environment.yml missing at $environmentYmlPath"
+    Stop-Transcript
     exit 1
 }
 
@@ -80,9 +82,9 @@ for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
 
 if (-not $success) {
     Write-Host "CRITICAL ERROR: Failed to synchronize Conda environment."
+    Stop-Transcript
     exit 1
 }
 
 Write-Host "Conda environment setup complete."
-Stop-Transcript
 exit 0
