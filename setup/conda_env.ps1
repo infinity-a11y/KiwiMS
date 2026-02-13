@@ -50,20 +50,14 @@ $success = $false
 # Set the libmamba solver
 & $condaCmd config --set solver libmamba
 
-# Try 'env update --prune' allowing cache
-# If it fails, delete and 'env create'
-
 for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
     try {
         if (Test-Path $condaEnvPath) {
-            Write-Host "Updating '$envName' and pruning old packages..."
+            Write-Host "Existing environment found. Attempting incremental update (cache-aware)..."
             & $condaCmd env update -n $envName -f "$environmentYmlPath" --prune
-            
-            Write-Host "Checking for newer versions of existing packages..."
-            & $condaCmd update -n $envName --all -y
         }
         else {
-            Write-Host "Creating new environment..."
+            Write-Host "Environment not found. Creating new environment from cache/source..."
             & $condaCmd env create -n $envName -f "$environmentYmlPath"
         }
 
@@ -86,9 +80,9 @@ for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
 
 if (-not $success) {
     Write-Host "CRITICAL ERROR: Failed to synchronize Conda environment."
-    Stop-Transcript
     exit 1
 }
 
 Write-Host "Conda environment setup complete."
+Stop-Transcript
 exit 0
