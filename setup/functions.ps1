@@ -129,13 +129,12 @@ function Get-PathScope {
 }
 
 #-----------------------------#
-# FUNCTION Download with Retry
+# FUNCTION Download with Retry and Fallback
 #-----------------------------#
 function Download-File($url, $destination) {
     # Force TLS 1.2
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-    # Use a temporary name for the download itself to avoid locking the main destination
     $tempDownloadPath = $destination + ".tmp"
 
     if (Test-Path $tempDownloadPath) {
@@ -145,77 +144,42 @@ function Download-File($url, $destination) {
     $success = $false
     for ($i = 0; $i -lt 3; $i++) {
         try {
-            Write-Host "Downloading via BITS to: $tempDownloadPath (Attempt $($i+1))"
-            
-            # Start-BitsTransfer is synchronous by default
+            Write-Host "Attempt $($i+1): Downloading via BITS..."
+            # Try BITS first
             Start-BitsTransfer -Source $url -Destination $tempDownloadPath -Priority High -ErrorAction Stop
             
+            $success = $true
+        }
+        catch {
+            Write-Warning "BITS failed: $($_.Exception.Message)"
+            
+            # If BITS fails (e.g., Battery Mode), try Invoke-WebRequest as a fallback within the same attempt
+            try {
+                Write-Host "BITS failed or suspended. Falling back to Invoke-WebRequest..."
+                Invoke-WebRequest -Uri $url -OutFile $tempDownloadPath -UseBasicParsing -ErrorAction Stop
+                $success = $true
+            }
+            catch {
+                Write-Warning "Fallback (Invoke-WebRequest) also failed: $($_.Exception.Message)"
+                if (Test-Path $tempDownloadPath) { Remove-Item $tempDownloadPath -Force -ErrorAction SilentlyContinue }
+            }
+        }
+
+        if ($success) {
             # Move the temp file to the final destination
             if (Test-Path $destination) { Remove-Item $destination -Force }
             Move-Item -Path $tempDownloadPath -Destination $destination -Force
-            
-            $success = $true
+            Write-Host "Download successful."
             break
         }
-        catch {
-            Write-Warning "Attempt $($i+1) failed: $($_.Exception.Message)"
-            # Clean the temp file on failure to ensure a fresh start for the next retry
-            if (Test-Path $tempDownloadPath) { Remove-Item $tempDownloadPath -Force -ErrorAction SilentlyContinue }
+        else {
+            Write-Host "Retrying in 3 seconds..."
             Start-Sleep -Seconds 3
         }
     }
 
     if (-Not $success) {
-        Write-Error "Failed to download $url after 3 attempts."
-        Stop-Transcript
-        exit 1
-    }
-}
-
-#-----------------------------#
-# FUNCTION to install Quarto
-#-----------------------------#
-function Install-Quarto {
-    param (
-        [string]$InstallDir = $DEFAULT_QUARTO_INSTALL_DIR
-    )
-    try {
-        $quartoBinDir = Join-Path $InstallDir "bin"
-        
-        Write-Host "Downloading Quarto v$QUARTO_VERSION..."
-        Invoke-WebRequest -Uri $QUARTO_DOWNLOAD_URL -OutFile $QUARTO_TEMP_ZIP -ErrorAction Stop
-        
-        # Create installation directory if it doesn't exist
-        if (-not (Test-Path $InstallDir)) {
-            New-Item -ItemType Directory -Path $InstallDir -Force -ErrorAction Stop
-        }
-        
-        Write-Host "Extracting Quarto to $InstallDir..."
-        Expand-Archive -Path $QUARTO_TEMP_ZIP -DestinationPath $InstallDir -Force -ErrorAction Stop
-        
-        # Clean up
-        Remove-Item -Path $QUARTO_TEMP_ZIP -Force -ErrorAction Stop
-        
-        Write-Host "Quarto v$QUARTO_VERSION installed successfully to $InstallDir"
-        
-        # Add bin directory to PATH if not already present
-        if (-not (Test-PathInEnvironment -Directory $quartoBinDir)) {
-            Add-ToSystemPath -Directory $quartoBinDir
-        }
-        
-        # Verify installation
-        $quartoInfo = Find-QuartoInstallation
-        if ($quartoInfo.Found) {
-            Write-Host "Quarto installation verified successfully at $($quartoInfo.Path)"
-        }
-        else {
-            Write-Host "Quarto installation completed but verification failed"
-            Stop-Transcript
-            exit 1
-        }
-    }
-    catch {
-        Write-Host "Error installing Quarto: $_"
+        Write-Error "Failed to download $url after 3 attempts (both BITS and Invoke-WebRequest failed)."
         Stop-Transcript
         exit 1
     }
