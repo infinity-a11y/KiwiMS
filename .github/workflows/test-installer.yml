@@ -1,14 +1,14 @@
 name: KiwiMS Weekly Validation
 
 on:
-  workflow_dispatch: # Allows manual trigger
+  workflow_dispatch:
   schedule:
     - cron: '0 8 * * 1' # Every Monday at 08:00 UTC
 
 jobs:
   test-installer:
     strategy:
-      fail-fast: false # Run all tests even if one fails
+      fail-fast: false
       matrix:
         os: [windows-2022] # os: [windows-2019, windows-latest]
         install-mode: [ALLUSERS, CURRENTUSER]
@@ -23,18 +23,26 @@ jobs:
         run: iscc setup_script.iss
         
       - name: Run Installer Silently
+        shell: pwsh
         run: |
+          # Run installer
           $modeFlag = if ("${{ matrix.install-mode }}" -eq "ALLUSERS") { "/ALLUSERS" } else { "/CURRENTUSER" }
           $proc = Start-Process -FilePath ".\KiwiMS_0.3.1-Windows-x86_64.exe" `
               -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "$modeFlag", "/LOG=innosetup.log" `
               -PassThru -Wait
           
-          if ($proc.ExitCode -ne 0) {
-            Write-Host "Installer failed with code: $($proc.ExitCode)"
-            Get-Content innosetup.log | Select-String -Pattern "error|failed|exception"
-            exit $proc.ExitCode
+          # Check C: drive and copy it to the current folder (D: drive)
+          $cDriveLog = "C:\Users\runneradmin\AppData\Local\KiwiMS\kiwims_setup.log"
+          if (Test-Path $cDriveLog) {
+              Copy-Item -Path $cDriveLog -Destination ".\kiwims_setup.log" -Force
+              Write-Host "Log harvested from C: drive and moved to workspace."
+          } else {
+              Write-Warning "Could not find log at $cDriveLog"
           }
-          
+
+          # Handle exit codes 
+          if ($proc.ExitCode -ne 0) { exit $proc.ExitCode }
+
       - name: Upload Artifacts (Logs)
         if: always()
         uses: actions/upload-artifact@v4
@@ -42,4 +50,4 @@ jobs:
           name: logs-${{ matrix.os }}-${{ matrix.install-mode }}
           path: |
             innosetup.log
-            C:/Users/runneradmin/AppData/Local/KiwiMS/kiwims_setup.log
+            kiwims_setup.log
