@@ -27,7 +27,7 @@ jobs:
         run: |
           # Run installer
           $modeFlag = if ("${{ matrix.install-mode }}" -eq "ALLUSERS") { "/ALLUSERS" } else { "/CURRENTUSER" }
-          $proc = Start-Process -FilePath ".\KiwiMS_0.3.1-Windows-x86_64.exe" `
+          $proc = Start-Process -FilePath ".\KiwiMS-Windows-x86_64.exe" `
               -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "$modeFlag", "/LOG=innosetup.log" `
               -PassThru -Wait
           
