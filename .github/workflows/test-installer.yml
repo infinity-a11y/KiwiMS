@@ -10,8 +10,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2022] # os: [windows-2019, windows-latest]
-        install-mode: [ALLUSERS, CURRENTUSER]
+        os: [windows-2019] # os: [windows-2022, windows-2019, windows-latest]
+        install-mode: [ALLUSERS] # [ALLUSERS, CURRENTUSER]
 
     runs-on: ${{ matrix.os }}
     
