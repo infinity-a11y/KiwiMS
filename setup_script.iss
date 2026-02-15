@@ -166,13 +166,14 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
+  
     RunStep(CustomMessage('StatusMsg_Configuring'),      'config.ps1', 10);
     RunStep(CustomMessage('StatusMsg_InstallMiniconda'), 'miniconda_installer.ps1', 20);
     RunStep(CustomMessage('StatusMsg_SetupCondaEnv'),    'conda_env.ps1', 40);
     RunStep(CustomMessage('StatusMsg_SetupRtools'),      'rtools_setup.ps1', 55);
     RunStep(CustomMessage('StatusMsg_InstallRenv'),      'renv_install.ps1', 60);
     RunStep(CustomMessage('StatusMsg_RestoreRenv'),      'renv_setup.ps1', 85);
-    RunStep(CustomMessage('StatusMsg_InstallQuarto'),    'quarto_install.ps1', 100);
+    RunStep(CustomMessage('StatusMsg_InstallQuarto'),    'quarto_install.ps1', 95);
 
     if InstallationFailed then Abort;
   end;
