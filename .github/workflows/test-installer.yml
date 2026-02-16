@@ -1,9 +1,8 @@
 name: KiwiMS Weekly Validation
 
 on:
-  workflow_dispatch:
   schedule:
-    - cron: '0 8 * * 1' # Every Monday at 08:00 UTC
+    - cron: '0 5 * * 1' # Monday at 05:00 UTC
 
 jobs:
   test-installer:
