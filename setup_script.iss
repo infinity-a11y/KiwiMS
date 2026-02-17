@@ -26,7 +26,7 @@ Name: "de"; MessagesFile: "compiler:Languages\German.isl"
 [Files]
 Source: "setup\config.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\functions.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "setup\miniconda_installer.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
+Source: "setup\miniforge_installer.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\conda_env.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\rtools_setup.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\install_renv.R"; DestDir: "{app}"; Flags: deleteafterinstall
@@ -34,6 +34,7 @@ Source: "setup\renv_install.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\setup_renv.R"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\renv_setup.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\quarto_install.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
+Source: "setup\diagnosis.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "KiwiMS_App\KiwiMS.exe"; DestDir: "{app}";
 Source: "KiwiMS_App\update.exe"; DestDir: "{app}";
 Source: "KiwiMS_App\app.R"; DestDir: "{app}";
@@ -54,6 +55,7 @@ StatusMsg_SetupRtools=Setting up rtools45...
 StatusMsg_InstallRenv=Installing renv (1/2)...
 StatusMsg_RestoreRenv=Restoring R packages (2/2)...
 StatusMsg_InstallQuarto=Installing Quarto...
+StatusMsg_Diagnosis=Concluding...
 Description_Launch=Launch KiwiMS
 ScopeTitle=Select Installation Type
 ScopeSub=Who should this application be installed for?
@@ -67,6 +69,7 @@ de.StatusMsg_SetupRtools=Installiere rtools45...
 de.StatusMsg_InstallRenv=renv wird installiert (1/2)...
 de.StatusMsg_RestoreRenv=R-Pakete werden wiederhergestellt (2/2)...
 de.StatusMsg_InstallQuarto=Quarto wird installiert...
+de.StatusMsg_Diagnosis=Fertigstellen...
 de.Description_Launch=KiwiMS starten
 de.ScopeTitle=Installationstyp auswählen
 de.ScopeSub=Für wen soll diese Anwendung installiert werden?
@@ -167,13 +170,14 @@ begin
   if CurStep = ssPostInstall then
   begin
   
-    RunStep(CustomMessage('StatusMsg_Configuring'),      'config.ps1', 10);
-    RunStep(CustomMessage('StatusMsg_InstallMiniconda'), 'miniconda_installer.ps1', 20);
-    RunStep(CustomMessage('StatusMsg_SetupCondaEnv'),    'conda_env.ps1', 40);
-    RunStep(CustomMessage('StatusMsg_SetupRtools'),      'rtools_setup.ps1', 55);
-    RunStep(CustomMessage('StatusMsg_InstallRenv'),      'renv_install.ps1', 60);
-    RunStep(CustomMessage('StatusMsg_RestoreRenv'),      'renv_setup.ps1', 85);
-    RunStep(CustomMessage('StatusMsg_InstallQuarto'),    'quarto_install.ps1', 95);
+    RunStep(CustomMessage('StatusMsg_Configuring'),       'config.ps1', 10);
+    RunStep(CustomMessage('StatusMsg_InstallMiniconda'),  'miniforge_installer.ps1', 20);
+    RunStep(CustomMessage('StatusMsg_SetupCondaEnv'),     'conda_env.ps1', 40);
+    RunStep(CustomMessage('StatusMsg_SetupRtools'),       'rtools_setup.ps1', 55);
+    RunStep(CustomMessage('StatusMsg_InstallRenv'),       'renv_install.ps1', 60);
+    RunStep(CustomMessage('StatusMsg_RestoreRenv'),       'renv_setup.ps1', 80);
+    RunStep(CustomMessage('StatusMsg_InstallQuarto'),     'quarto_install.ps1', 90);
+    RunStep(CustomMessage('StatusMsg_Diagnosis'),         'diagnosis.ps1', 95);
 
     if InstallationFailed then Abort;
   end;

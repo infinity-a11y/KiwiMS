@@ -16,7 +16,7 @@ $ProgressPreference = "SilentlyContinue"
 # Start logging
 Start-Transcript -Path $logFile -Append | Out-Null
 
-Write-Host "### Miniconda setup (miniconda_installer.ps1)"
+Write-Host "### Miniconda setup (miniforge_installer.ps1)"
 Write-Host "basePath:         $basePath"
 Write-Host "userDataPath:     $userDataPath"
 Write-Host "envName:          $envName"
@@ -126,7 +126,8 @@ try {
             if ($currentPath -notlike "*$condaPrefix*") {
                 [Environment]::SetEnvironmentVariable("Path", $currentPath + ";" + $newPaths, $target)
             }
-        } catch {
+        }
+        catch {
             Write-Host "Warning: Could not update persistent PATH variable. Continuing..."
         }
 
@@ -143,6 +144,6 @@ catch {
 }
 
 # Final Exit
-Write-Host "miniconda_installer.ps1 finished."
+Write-Host "miniforge_installer.ps1 finished."
 Stop-Transcript
 exit 0
