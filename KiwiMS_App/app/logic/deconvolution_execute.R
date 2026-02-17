@@ -54,8 +54,15 @@ tryCatch(
     )
   },
   error = function(e) {
+    py_err <- reticulate::py_last_error()
+
+    # Print the main error and the Python stack trace if it exists
     message("Error in deconvolution processing: ", e$message)
-    stop("Error in deconvolution processing")
+    if (!is.null(py_err)) {
+      message(py_err)
+    }
+
+    stop("Deconvolution failed.")
   }
 )
 

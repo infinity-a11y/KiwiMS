@@ -151,7 +151,23 @@ engine.pick_peaks()
       }
     },
     error = function(e) {
-      cat("Error in process_single_dir for", waters_dir, ":", e$message, "\n")
+      py_err <- reticulate::py_last_error()
+
+      # Print the main error and the Python stack trace if it exists
+      message("Error in deconvolution processing: ", e$message)
+
+      cat(
+        "Error in process_single_dir for",
+        waters_dir,
+        ":",
+        "\n",
+        e$message,
+        "\n",
+        if (!is.null(py_err)) {
+          message(py_err)
+        },
+        "\n"
+      )
     }
   )
 }
