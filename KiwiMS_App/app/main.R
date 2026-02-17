@@ -184,6 +184,7 @@ ui <- function(id) {
 #' @export
 server <- function(id) {
   shiny$moduleServer(id, function(input, output, session) {
+    Sys.setenv(CONDA_DLL_SEARCH_MODIFICATION_ENABLE = "1")
     ns <- session$ns
 
     # Kill server on session end

@@ -1,5 +1,7 @@
 # app/logic/deconvolution_execute.R
 
+Sys.setenv(CONDA_DLL_SEARCH_MODIFICATION_ENABLE = "1")
+
 # Sourcing deconvolution functions
 source_file <- file.path(
   commandArgs(trailingOnly = TRUE)[3],

@@ -61,6 +61,8 @@ server <- function(
   reset_button
 ) {
   shiny$moduleServer(id, function(input, output, session) {
+    Sys.setenv(CONDA_DLL_SEARCH_MODIFICATION_ENABLE = "1")
+
     ns <- session$ns
 
     # Get kiwims user settings

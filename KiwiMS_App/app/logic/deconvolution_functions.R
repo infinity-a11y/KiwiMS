@@ -214,6 +214,9 @@ deconvolute <- function(
         clusterEvalQ(cl, {
           library(reticulate)
 
+          # Set the key env var for conda DLL resolution
+          Sys.setenv(CONDA_DLL_SEARCH_MODIFICATION_ENABLE = "1")
+
           # Create and set a unique temp dir for this worker to avoid Conda file conflicts
           unique_temp_dir <- file.path(
             tempdir(),

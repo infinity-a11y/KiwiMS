@@ -54,11 +54,11 @@ for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
     try {
         if (Test-Path $condaEnvPath) {
             Write-Host "Existing environment found. Attempting incremental update (cache-aware)..."
-            & $condaCmd env update -n $envName -f "$environmentYmlPath" --prune
+            & $condaCmd env update -n $envName -f "$environmentYmlPath" --prune --verbos
         }
         else {
             Write-Host "Environment not found. Creating new environment from cache/source..."
-            & $condaCmd env create -n $envName -f "$environmentYmlPath"
+            & $condaCmd env create -n $envName -f "$environmentYmlPath" --verbose
         }
 
         # Verify the python/R executables exist in the new env to confirm success
