@@ -2,9 +2,8 @@ name: KiwiMS Package Update Check
 
 on:
   schedule:
-    # Runs every day at midnight (00:00)
     - cron: '0 0 * * *' 
-  workflow_dispatch:      
+  workflow_dispatch:
 
 jobs:
   check-renv:
@@ -24,24 +23,21 @@ jobs:
       - name: Run renv Check Script
         id: check_step
         shell: pwsh
-        # Updated to the path seen in your logs
         run: ./KiwiMS_App/dev/renv-check.ps1
 
       - name: Send Notification Email
-        # Removed the 'if' condition so you get an email every time for testing
+        if: always() 
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
           server_port: 465
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
-          subject: "KiwiMS Update Check Result"
-          to: marian-freisleben@outlook.com
+          subject: "KiwiMS Update Check - Status Report"
+          to: marian.freisleben@liora-bioinformatics.com
           from: GitHub Actions
           body: |
-            The daily update check has finished.
+            The Daily Renv Update Check for KiwiMS has finished.
             
-            Status: ${{ steps.check_step.outputs.updates_found == 'true' && 'Updates Found' || 'No Updates or Error' }}
-            
-            Review the detailed logs here: 
-            https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            Automation Status: ${{ job.status }}
+            Updates Found: ${{ steps.check_step.outputs.updates_found == 'true' && 'YES' || 'NO' }}
