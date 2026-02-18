@@ -1,9 +1,10 @@
-name: Check for R Package Updates
+name: KiwiMS Package Update Check
 
 on:
   schedule:
-    - cron: '0 0 * * 1'
-  workflow_dispatch:
+    # Runs every day at midnight (00:00)
+    - cron: '0 0 * * *' 
+  workflow_dispatch:      
 
 jobs:
   check-renv:
@@ -16,26 +17,31 @@ jobs:
         uses: r-lib/actions/setup-r@v2
         with:
           r-version: '4.5.2'
-      
+
       - name: Install renv
         run: Rscript -e "install.packages('renv', repos='https://cran.rstudio.com')"
 
       - name: Run renv Check Script
         id: check_step
         shell: pwsh
+        # Updated to the path seen in your logs
         run: ./KiwiMS_App/dev/renv-check.ps1
 
       - name: Send Notification Email
-        if: steps.check_step.outputs.updates_found == 'true'
+        # Removed the 'if' condition so you get an email every time for testing
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
           server_port: 465
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
-          subject: "Action Required: R Package Updates Found"
+          subject: "KiwiMS Update Check Result"
           to: marian-freisleben@outlook.com
           from: GitHub Actions
           body: |
-            New package updates were detected in your repository.
-            Please review the logs: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            The daily update check has finished.
+            
+            Status: ${{ steps.check_step.outputs.updates_found == 'true' && 'Updates Found' || 'No Updates or Error' }}
+            
+            Review the detailed logs here: 
+            https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
