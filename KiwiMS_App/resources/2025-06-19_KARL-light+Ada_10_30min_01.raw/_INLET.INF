@@ -1,0 +1,219 @@
+
+ACE Experimental Record
+
+
+Inlet Method File: d:\01_intact_mass_projects_xevo\2025_protec_nuvisan_xevo_graham.pro\acqudb\dual-col_1o4min_300
+
+---------------------   Run method parameters   ----------------
+
+-- PUMP --
+
+Waters GI Pump
+1 -------------------------------------------- 
+Chromatographic Pump 
+ Run Time: 1.40 min
+ Comment:  
+ Solvent Selection A: A1 
+ Solvent Selection B: B1 
+ Low Pressure Limit: 0.000 psi
+ High Pressure Limit: 15000.000 psi
+ Solvent Name A: Water 
+ Solvent Name B: Acetonitrile 
+ Switch 1: No Change 
+ Switch 2: No Change 
+ Switch 3: No Change 
+ Seal Wash: 5.0 min
+ Chart Out 1: System Pressure 
+ Chart Out 2: %B 
+ System Pressure Data Channel: No 
+ Flow Rate Data Channel: No 
+ %A Data Channel: No 
+ %B Data Channel: No 
+ Primary A Pressure Data Channel: No 
+ Accumulator A Pressure Data Channel: No 
+ Primary B Pressure Data Channel: No 
+ Accumulator B Pressure Data Channel: No 
+ Degasser Pressure Data Channel: No 
+ [Gradient Table]
+  Time(min) Flow Rate(mL/min) %A %B Curve 
+ 1. Initial 0.300 95.0 5.0 Initial 
+ 2. 0.30 0.300 95.0 5.0 6 
+ 3. 0.85 0.300 5.0 95.0 5 
+ 4. 0.95 0.300 5.0 95.0 5 
+ 5. 0.96 0.300 95.0 5.0 6 
+ 6. 1.40 0.300 95.0 5.0 6 
+ Run Events: Yes 
+ Gradient Start (Relative to Injection): 0 uL
+ 2D Repeat: No 
+2 -------------------------------------------- 
+Regeneration Pump 
+ Run Time: 1.40 min
+ Comment:  
+ Solvent Selection A: A1 
+ Solvent Selection B: B1 
+ Low Pressure Limit: 0.000 psi
+ High Pressure Limit: 15000.000 psi
+ Solvent Name A: Water 
+ Solvent Name B: Acetonitrile 
+ Switch 1: No Change 
+ Switch 2: No Change 
+ Switch 3: No Change 
+ Seal Wash: 5.0 min
+ Chart Out 1: System Pressure 
+ Chart Out 2: %B 
+ System Pressure Data Channel: No 
+ Flow Rate Data Channel: No 
+ %A Data Channel: No 
+ %B Data Channel: No 
+ Primary A Pressure Data Channel: No 
+ Accumulator A Pressure Data Channel: No 
+ Primary B Pressure Data Channel: No 
+ Accumulator B Pressure Data Channel: No 
+ Degasser Pressure Data Channel: No 
+ [Gradient Table]
+  Time(min) Flow Rate(mL/min) %A %B Curve 
+ 1. Initial 0.300 95.0 5.0 Initial 
+ 2. 0.10 0.300 95.0 5.0 6 
+ 3. 0.25 0.300 5.0 95.0 6 
+ 4. 0.80 0.300 5.0 95.0 6 
+ 5. 0.85 0.300 95.0 5.0 6 
+ 6. 1.20 0.300 95.0 5.0 6 
+ Run Events: Yes 
+ Gradient Start (Relative to Injection): 0 uL
+ 2D Repeat: No 
+
+-- END PUMP --
+
+-- DETECTOR -- 
+
+Waters Acquity CM
+
+ Left Valve: No Change 
+ Right Valve: No Change 
+ External Valve 1: No Change 
+ External Valve 2: No Change 
+ External Valve 3: No Change 
+ Temperature 1: 40.0 °C
+ Temperature 2: 40.0 °C
+ Temperature 3: Off °C
+ Temperature 4: Off °C
+ Temperature 5: Off °C
+ Temperature 6: Off °C
+ Temperature Alarm Band: 5.0 °C
+ Shutdown all columns: No 
+ Comment:  
+ Preheater Temperature Data Channel: No 
+ Temperature 1 Data Channel: No 
+ Temperature 2 Data Channel: No 
+ Temperature 3 Data Channel: No 
+ Temperature 4 Data Channel: No 
+ Temperature 5 Data Channel: No 
+ Temperature 6 Data Channel: No 
+ Run Events: true 
+ []
+  Run Time(min) Event Parameter1 
+ 1. 1.39 Left Valve Toggle 
+ 2. 1.39 Right Valve Toggle 
+ 2D Repeat: false 
+
+
+-- END DETECTOR -- 
+
+-- AUTOSAMPLER --
+
+Waters ACQUITY FTN AutoSampler 
+ Run Time: 1.40 min
+ Comment:  
+ Load Ahead: Enabled 
+ Loop Offline: Automatic 
+ Wash Solvent Name: Water 
+ Pre-Inject Wash Time: 0.0 sec
+ Post-Inject Wash Time: 3.0 sec
+ Purge Solvent Name: Water 
+ Dilution: Disabled 
+ Dilution Volume: 0 uL
+ Delay Time: 0 min
+ Dilution Needle Placement: Automatic mm
+ Target Column Temperature: Off °C
+ Target Sample Temperature: 15.0 °C
+ Sample Temperature Alarm Band: Disabled 
+ Syringe Draw Rate: Automatic 
+ Needle Placement: Automatic 
+ Pre-Aspirate Air Gap: Automatic 
+ Post-Aspirate Air Gap: Automatic 
+ Column Temperature Data Channel: No 
+ Room Temperature Data Channel: No 
+ Sample Temperature Data Channel: No 
+ Sample Organizer Temperature Data Channel: No 
+ Sample Pressure Data Channel: No 
+ Preheater Temperature Data Channel: No 
+ Seal Force Data Channel: No 
+ No Injection Mode Enabled: No 
+ Autoaddition Mix Stroke Cycles: Automatic 
+ Autoaddition Mix Stroke Volume: Automatic uL
+ Active Preheater: Use Console Configuration 
+ Run Events: No 
+
+
+Sample Run Injection Parameter
+
+Injection Volume (ul)   -   2.00
+-- END AUTOSAMPLER --
+
+----------------------------  oOo  -----------------------------
+
+
+End of experimental record.
+
+
+
+------------------- Waters GI Pump Postrun Report  ---------------
+
+
+
+----------------------------  oOo  -----------------------------
+
+
+
+------------------- Waters ACQUITY FTN Postrun Report  ---------------
+
+
+
+ Software Version: 1.74.2662 
+ Firmware Version: 1.71.395 (Feb 14 2018) 
+ Checksum: 0x285858d7 
+ Serial Number: J14USM772G 
+ Sample Syringe Size: 100.0 
+ Extension Loop Size: 0.0 
+ Needle Size: 15.0 
+ Minimum Sample Temperature: 14.9 °C
+ Maximum Sample Temperature: 15.5 °C
+ Average Sample Temperature: 15.2 °C
+ Minimum Column Temperature: 0.0 °C
+ Maximum Column Temperature: 0.0 °C
+ Average Column Temperature: 0.0 °C
+
+----------------------------  oOo  -----------------------------
+
+
+
+------------------- Waters Acquity CM Postrun Report  ---------------
+
+
+
+ Software Version: 1.73.3359 
+ Firmware Version: 1.69.154 (Feb 17 2017) 
+ Checksum: 0x17ac4a76 
+ Serial Number: J14CMP920G 
+ Total Injections on Column: 0 
+
+----------------------------  oOo  -----------------------------
+
+------------------- Active eCord Data ---------------
+
+
+Valve Current Position: 2
+Failed to retrive Active eCord ColumnData Data 
+
+----------------------------  oOo  -----------------------------
+

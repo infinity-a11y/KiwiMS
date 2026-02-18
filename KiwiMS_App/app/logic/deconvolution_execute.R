@@ -66,48 +66,51 @@ tryCatch(
   }
 )
 
-# Read log and output
-tryCatch(
-  {
-    log <- if (file.exists(logfile)) {
-      readLines(logfile, warn = FALSE)
-    } else {
-      "No log"
+testing <- commandArgs(trailingOnly = TRUE)[5]
+if (is.null(testing)) {
+  # Read log and output
+  tryCatch(
+    {
+      log <- if (file.exists(logfile)) {
+        readLines(logfile, warn = FALSE)
+      } else {
+        "No log"
+      }
+
+      output <- if (file.exists(file.path(temp, "output.txt"))) {
+        readLines(file.path(temp, "output.txt"), warn = FALSE)
+      } else {
+        "No output"
+      }
+    },
+    error = function(e) {
+      message("Error reading log and output: ", e$message)
+      stop("Error reading log and output")
     }
+  )
 
-    output <- if (file.exists(file.path(temp, "output.txt"))) {
-      readLines(file.path(temp, "output.txt"), warn = FALSE)
-    } else {
-      "No output"
+  # Summarizing results in rds file
+  tryCatch(
+    {
+      result <- generate_decon_rslt(
+        paths = conf$dirs,
+        log = log,
+        output = output,
+        result_dir = result_dir,
+        temp_dir = temp
+      )
+
+      result_id <- gsub(
+        ".log",
+        "_RESULT.rds",
+        basename(logfile)
+      )
+
+      saveRDS(result, file.path(result_dir, result_id), compress = FALSE)
+    },
+    error = function(e) {
+      message("Error in result file generation: ", e$message)
+      stop("Error in result file generation.")
     }
-  },
-  error = function(e) {
-    message("Error reading log and output: ", e$message)
-    stop("Error reading log and output")
-  }
-)
-
-# Summarizing results in rds file
-tryCatch(
-  {
-    result <- generate_decon_rslt(
-      paths = conf$dirs,
-      log = log,
-      output = output,
-      result_dir = result_dir,
-      temp_dir = temp
-    )
-
-    result_id <- gsub(
-      ".log",
-      "_RESULT.rds",
-      basename(logfile)
-    )
-
-    saveRDS(result, file.path(result_dir, result_id), compress = FALSE)
-  },
-  error = function(e) {
-    message("Error in result file generation: ", e$message)
-    stop("Error in result file generation.")
-  }
-)
+  )
+}

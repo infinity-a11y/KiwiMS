@@ -36,6 +36,8 @@ Source: "setup\renv_setup.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\quarto_install.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\diagnosis.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\functional_test.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
+Source: "setup\deconvolution_test.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
+Source: "setup\make_config.R"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "KiwiMS_App\KiwiMS.exe"; DestDir: "{app}";
 Source: "KiwiMS_App\update.exe"; DestDir: "{app}";
 Source: "KiwiMS_App\app.R"; DestDir: "{app}";
@@ -171,15 +173,16 @@ begin
   if CurStep = ssPostInstall then
   begin
   
-    RunStep(CustomMessage('StatusMsg_Configuring'),       'config.ps1', 10);
-    RunStep(CustomMessage('StatusMsg_InstallMiniconda'),  'miniforge_installer.ps1', 20);
-    RunStep(CustomMessage('StatusMsg_SetupCondaEnv'),     'conda_env.ps1', 40);
-    RunStep(CustomMessage('StatusMsg_SetupRtools'),       'rtools_setup.ps1', 55);
-    RunStep(CustomMessage('StatusMsg_InstallRenv'),       'renv_install.ps1', 60);
-    RunStep(CustomMessage('StatusMsg_RestoreRenv'),       'renv_setup.ps1', 75);
-    RunStep(CustomMessage('StatusMsg_InstallQuarto'),     'quarto_install.ps1', 85);
-    RunStep(CustomMessage('StatusMsg_Diagnosis'),         'diagnosis.ps1', 90);
-    RunStep(CustomMessage('StatusMsg_Diagnosis'),         'functional_test.ps1', 95);
+    RunStep(CustomMessage('StatusMsg_Configuring'),       'config.ps1', 5);
+    RunStep(CustomMessage('StatusMsg_InstallMiniconda'),  'miniforge_installer.ps1', 15);
+    RunStep(CustomMessage('StatusMsg_SetupCondaEnv'),     'conda_env.ps1', 35);
+    RunStep(CustomMessage('StatusMsg_SetupRtools'),       'rtools_setup.ps1', 50);
+    RunStep(CustomMessage('StatusMsg_InstallRenv'),       'renv_install.ps1', 55);
+    RunStep(CustomMessage('StatusMsg_RestoreRenv'),       'renv_setup.ps1', 70);
+    RunStep(CustomMessage('StatusMsg_InstallQuarto'),     'quarto_install.ps1', 80);
+    RunStep(CustomMessage('StatusMsg_Diagnosis'),         'diagnosis.ps1', 85);
+    RunStep(CustomMessage('StatusMsg_Diagnosis'),         'functional_test.ps1', 90);
+    RunStep(CustomMessage('StatusMsg_Diagnosis'),         'deconvolution_test.ps1', 95);
 
     if InstallationFailed then Abort;
   end;

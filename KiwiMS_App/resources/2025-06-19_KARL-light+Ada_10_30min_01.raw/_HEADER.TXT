@@ -1,0 +1,57 @@
+$$ Version: 01.00
+$$ Acquired Name: 2025-06-19_KARL-light+Ada_10_30min_01
+$$ Acquired Date: 19-Jun-2025
+$$ Acquired Time: 13:23:59
+$$ Job Code: 2025_intact-mass
+$$ Task Code: 
+$$ User Name: 
+$$ Instrument: XEVO-G2XSTOF#NotSet
+$$ Conditions: 
+$$ Laboratory Name: 
+$$ Sample Description: 1 uM
+$$ Solvent Delay: 0.0000
+$$ Submitter: 
+$$ SampleID: 
+$$ Bottle Number: 1:D,4
+$$ Plate Desc: 01TL,YX,LN,1: 6,2: 8,3:140.0,4:140.0,5:  0.0,6:  0.0,7:O,8:O,9:1280.0,10:860.0,11:353.0,12:120.0,13:150.0,14: 83.0
+$$ Cal MS1 Static: ,T0
+$$ Cal MS2 Static: ,T0
+$$ Associated Datafile: 
+$$ Cal MS1 Static Params: 0,0,0.00,0.00,0.0,0.0,0.0,,
+$$ Cal MS1 Dynamic Params: 50,2500,0.0000,0.00,0.0,0.0,0.0,ESI_Sodium Iodide_MS_Positive,Sodium Iodide positive-2025-06-1ŒV+	
+$$ Cal MS1 Fast Params: 0,0,0.0000,0.00,0.0,0.0,0.0,,
+$$ Cal MS2 Static Params: 0,0,0.00,0.00,0.0,0.0,0.0,,
+$$ Cal MS2 Dynamic Params: 0,0,0.0000,0.00,0.0,0.0,0.0,,
+$$ Cal MS2 Fast Params: 0,0,0.0000,0.00,0.0,0.0,0.0,,
+$$ Cal Time: 09:14
+$$ Cal Date: 06/13/25
+$$ Analog Channel 1 Offset: 0.000
+$$ Analog Channel 2 Offset: 0.000
+$$ Analog Channel 3 Offset: 0.000
+$$ Analog Channel 4 Offset: 0.000
+$$ Mux Stream: 0
+$$ Cal Temperature: 0.0000000
+$$ Inlet Method: D:\01_Intact_Mass_Projects_Xevo\2025_ProTec_Nuvisan_Xevo_Graham.pro\ACQUDB\Dual-col_1o4min_300
+$$ Inlet Prerun Method: 
+$$ Inlet Postrun Method: 
+$$ Inlet Switch Method: 
+$$ HPLC Method: 
+$$ MS Method: D:\01_Intact_Mass_Projects_Xevo\2025_ProTec_Nuvisan_Xevo_Graham.pro\ACQUDB\Dual-col_Intact_protein_1o4min_500-1600.EXP
+$$ Tune Method: D:\01_Intact_Mass_Projects_Xevo\Intact_Protein_Xevo_PM25.IPR
+$$ FractionLynx Method: 
+$$ Spare1: 
+$$ Spare2: 
+$$ Spare3: 
+$$ Spare4: 
+$$ Spare5: 
+$$ Reinjections: 0
+$$ PIC MRM Function:  
+$$ PIC Scan Function: 0,0
+$$ ScanWave Func List: 
+$$ Calibration File: 
+$$ Cal Function 1: -4.527025345396982e-3,9.999590029574801e-1,9.558117642973727e-6,-2.601167306563434e-7,3.420070090253805e-9,-1.731463457034986e-11,T1
+$$ Cal Function 2: -4.527025345396982e-3,9.999590029574801e-1,9.558117642973727e-6,-2.601167306563434e-7,3.420070090253805e-9,-1.731463457034986e-11,T1
+$$ Cal StdDev Function 1: 0.000000000000000e0
+$$ Cal StdDev Function 2: 0.000000000000000e0
+$$ Cal CoVar 1: 1.946782763722630e-7,-3.814185085684449e-8,7.493064267505740e-9,2.795090918373334e-9,-5.507087503663037e-10,4.060671362364147e-11,-9.676796221244537e-11,1.912060151961626e-11,-1.414464004735650e-12,4.943455908569497e-14,1.596208562490266e-12,-3.162444864141536e-13,2.346685850843307e-14,-8.227861795418404e-16,1.373748753086950e-17,-1.010599648905141e-14,2.007126732053398e-15,-1.493635006722296e-16,5.252655836734080e-18,-8.796112442204228e-20,5.648214992310144e-22
+$$ Cal CoVar 2: 1.946782763722630e-7,-3.814185085684449e-8,7.493064267505740e-9,2.795090918373334e-9,-5.507087503663037e-10,4.060671362364147e-11,-9.676796221244537e-11,1.912060151961626e-11,-1.414464004735650e-12,4.943455908569497e-14,1.596208562490266e-12,-3.162444864141536e-13,2.346685850843307e-14,-8.227861795418404e-16,1.373748753086950e-17,-1.010599648905141e-14,2.007126732053398e-15,-1.493635006722296e-16,5.252655836734080e-18,-8.796112442204228e-20,5.648214992310144e-22

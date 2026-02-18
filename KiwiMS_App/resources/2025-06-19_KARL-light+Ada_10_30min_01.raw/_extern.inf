@@ -1,0 +1,213 @@
+Parameters for D:\01_Intact_Mass_Projects_Xevo\2025_ProTec_Nuvisan_Xevo_Graham.pro\ACQUDB\Dual-col_Intact_protein_1o4min_500-1600.EXP
+Created by MassLynx v4.2 SCN1027
+ 
+Lock Spray Configuration:
+Reference Scan Frequency(sec)			20.000
+Reference Cone Voltage(V)			30.000
+Reference Collision Energy			6.000
+Reference DRE Setting				73.200
+ 
+Temperature Correction:
+Temperature Correction				Disabled
+ 
+Instrument Configuration:
+Lteff						1800.0
+Veff						6333.60
+Resolution					10000
+Min Points in Peak				2
+Acquisition Device				WatersADC
+ADC Trigger Threshold (V)			1.00
+ADC Input Offset (V)				-1.67
+Average Single Ion Intensity			32
+ADC Amplitude Threshold				3
+ADC Centroid Threshold				-1
+ADC Ion Area Threshold				3
+ADC Ion Area Offset				15
+ADC Pushes Per IMS Increment			1
+TargetEnhancement Delay Coefficient		2.1200
+TargetEnhancement Delay Offset			0.0000
+ 
+Experimental Instrument Parameters
+Instrument Parameter Filename			D:\01_Intact_Mass_Projects_Xevo\Intact_Protein_Xevo_PM25.IPR (MODIFIED)
+Polarity					ES+
+Analyser					Resolution Mode
+Capillary (kV)					3.0000
+Sampling Cone					40.0000
+Source Temperature (캜)				100
+Source Offset					80
+Desolvation Temperature (캜)			250
+Cone Gas Flow (L/Hr)				50.0
+Desolvation Gas Flow (L/Hr)			600.0
+Aperture 1					0.0
+Pre-filter					2.0
+Ion Energy					0.2
+Manual Collision Energy				FALSE
+Collision Energy				6.0
+Detector					3125
+DetectorCache					0
+Sample Infusion Flow Rate (킠/min)		20
+Sample Flow State				Waste
+Sample Fill Volume (킠)				250
+Sample Reservoir				A
+LockSpray Infusion Flow Rate (킠/min)		10
+LockSpray Flow State				Infusion
+LockSpray Reservoir				B
+LockSpray Capillary (kV)			3.00
+Use Manual LockSpray Collision Energy		FALSE
+Collision Energy				6.0
+Focus2						41.0
+Acceleration1					5.0
+Acceleration2					20.0
+Aperture2					3.0
+Transport1					50.0
+Transport2					80.0
+Steering					-0.20
+Tube Lens					25
+Pusher						1900.0
+Pusher Offset					-0.30
+Puller						1400.0
+Pusher Cycle Time (탎)				Automatic
+Pusher Width (탎)				Automatic
+Collector					60
+Collector Pulse					10.0
+Stopper						10
+Stopper Pulse					20.0
+Entrance					17
+Static Offset					120
+Puller Offset					0.00
+Reflectron Grid (kV)				1.693
+Flight Tube (kV)				9.00
+Reflectron (kV)					1.602
+TWave Entrance					2.00
+Static Offset					120.00
+TWave Exit					5.00
+TWave Trap Height				4.00
+TWave Extract Height				5.00
+Trap Wave Velocity (m/s)			260
+Trap Wave Height (V)				0.2
+Cell 2 Gradient					1
+Cell2 Offset B					0
+Cell2 Offset C					1
+Step Wave 1 In Manual Control			OFF
+Enable Reverse Operation			OFF
+Step Wave 1 In Velocity (m/s)			300.0
+Step Wave 1 In Height				15.0
+Step Wave 1 Out Manual Control			OFF
+Step Wave 1 Out Velocity (m/s)			300.0
+Step Wave 1 Out Height				15.0
+Step Wave 2 Manual Control			OFF
+Step Wave 2 Velocity (m/s)			300.0
+Step Wave 2 Height				1.0
+Use Manual Step Wave DC				OFF
+Step Wave TransferOffset			25.0
+Step Wave DiffAperture1				3.0
+Step Wave DiffAperture2				0.0
+Use Automatic RF Settings			TRUE
+StepWave1RFOffset				300.0
+StepWave2RFOffset				350.0
+Backing						5.66e0
+Collision					7.69e-2
+TOF						3.79e-7
+Collision RF Offset				150
+Collision RF Initial				50
+Collision RF Final				150
+MS Profile Type					Auto P
+MSProfileMass1					100
+MSProfileDwellTime1				10
+MSProfileRampTime1				20
+MSProfileMass2					1000
+MSProfileDwellTime2				40
+MSProfileRampTime2				30
+MSProfileMass3					1800
+Use Automatic RF Settings			TRUE
+AutoStepWave1RFOffset				300
+AutoStepWave2RFOffset				350
+PusherInterval					76.250000
+PusherOffset					0.000000
+LockMassValidSigma				5
+IntelligentDataCapture				OFF
+ 
+Acquisition mass range
+Start mass					500.000
+End mass					1600.000
+Calibration mass range
+Start mass					172.987
+End mass					2421.233
+ 
+Experiment Reference Compound Name: Nuvisan_LeuEnk_pos
+ 
+Function Parameters - Function 1 - TOF MS FUNCTION
+Scan Time (sec)					1.000
+Interscan Time (sec)				0.014
+Start Mass					500.0
+End Mass					1600.0
+Start Time (mins)				0.30
+End Time (mins)					1.40
+Data Format					Continuum
+ADC Sample Frequency (GHz)			6.0
+ADC Pusher Frequency (탎)			76.3
+ADC Pusher Width (탎)				1.75
+Use Tune Page Cone Voltage			YES
+Using Auto Transfer Collision Energy (eV)	6.000000
+Sensitivity					Normal
+Dynamic Range					Normal
+Save Collapsed Retention Time Data		No
+Use Rule File Filtering				No
+Lock Mass					556.277100
+Mass Window +/-					0.5
+Scans to Average				3.0
+UseSONARMode					FALSE
+SONARQuadrupoleStartMass			100.0
+SONARQuadrupoleStopMass				1000.0
+SONARQuadrupolePeakWidth			20
+Calibration					Dynamic 2
+ 
+Function Parameters - Function 2 - REFERENCE
+Scan Time (sec)					0.300
+Interscan Time (sec)				0.100
+Start Mass					500.0
+End Mass					1600.0
+Start Time (mins)				0.30
+End Time (mins)					1.40
+Data Format					Continuum
+ADC Sample Frequency (GHz)			6.0
+ADC Pusher Frequency (탎)			76.3
+ADC Pusher Width (탎)				1.75
+Use Tune Page Cone Voltage			YES
+Using Auto Transfer Collision Energy (eV)	6.000000
+Sensitivity					Normal
+Dynamic Range					Normal
+Save Collapsed Retention Time Data		No
+Use Rule File Filtering				No
+[LOCK SPRAY]
+LockSprayType:					Apply Correction 
+LockSpray Reference Compound Name:		Nuvisan_LeuEnk_pos
+Scan Time (sec)					0.30
+Interval					20
+TargetEnhancement Mass				0.0000
+Mass Window +/-					0.5
+Scans to Average				3.0
+Reference Cone Voltage				30.0
+Collision Energy (eV)				6.0
+LocksprayDRESetting				73.2000
+Lock Mass					556.277100
+Mass Window +/-					0.5
+Scans to Average				3.0
+[METHOD EVENTS:]
+Timed Events Enabled:				YES
+API Probe Delay Temp:				20.0
+Num of Timed Events:				6.0
+Event	Time	Name	Action				System
+1	0.00	Flow State	Waste				Sample
+2	0.00	Reservoir	B				LockSpray
+3	0.00	Refill	Auto-Refill			LockSpray
+4	0.00	Infusion	Start				LockSpray
+5	24.00	Flow State	LC				Sample
+6	66.00	Flow State	Waste			Sample
+
+
+UseSONARMode					FALSE
+SONARQuadrupoleStartMass			100.0
+SONARQuadrupoleStopMass				1000.0
+SONARQuadrupolePeakWidth			20
+Calibration					Dynamic 2
