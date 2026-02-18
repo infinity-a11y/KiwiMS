@@ -3,7 +3,7 @@
 Write-Host "Starting renv binary update check..." -ForegroundColor Cyan
 
 # Execute the R script and capture its exit status
-& Rscript ./check_renv_updates.R
+& Rscript .KiwiMS_App/dev/check_renv_updates.R
 $exitCode = $LASTEXITCODE
 
 Write-Host "`nCheck completed." -ForegroundColor Green
