@@ -20,7 +20,7 @@ jobs:
       - name: Run renv Check Script
         id: check_step
         shell: pwsh
-        run: .KiwiMS_App/dev/renv-check.ps1
+        run: ./KiwiMS_App/dev/renv-check.ps1
 
       - name: Send Notification Email
         if: steps.check_step.outputs.updates_found == 'true'
