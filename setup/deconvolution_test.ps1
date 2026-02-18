@@ -35,11 +35,11 @@ New-Item -ItemType Directory -Path $testTempDir -Force | Out-Null
 try {
     # Generate config 
     Write-Host "Writing configuration file ..."
-    & $condaCmd run -n $envName Rscript.exe "make_config.R" $basePath
+    & $condaCmd run -n $envName Rscript.exe "$basePath\make_config.R" $basePath
 
     # Copy configuration to the specific test directory
-    if (Test-Path "resources\config.rds") {
-        Copy-Item -Path "resources\config.rds" -Destination (Join-Path $testTempDir "config.rds")
+    if (Test-Path "$basePath\resources\config.rds") {
+        Copy-Item -Path "$basePath\resources\config.rds" -Destination (Join-Path $testTempDir "config.rds")
     } else {
         Write-Host "Warning: config.rds not found in current directory." -ForegroundColor Yellow
     }
@@ -50,7 +50,7 @@ try {
     Write-Host "Executing R deconvolution logic..." -ForegroundColor Yellow
     
     # We pass the specific $testTempDir to the R script
-    & $condaCmd run -n $envName --no-capture-output Rscript.exe "app\logic\deconvolution_execute.R" $testTempDir $testTempDir $pwd.Path $testTempDir "testing"
+    & $condaCmd run -n $envName --no-capture-output Rscript.exe "$basePath\app\logic\deconvolution_execute.R" $testTempDir $testTempDir $basePath $testTempDir "testing"
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host "R script failed with exit code $LASTEXITCODE" -ForegroundColor Red
