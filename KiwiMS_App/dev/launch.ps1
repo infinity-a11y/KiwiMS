@@ -63,6 +63,28 @@ function Find-CondaExecutable {
 }
 
 #-----------------------------#
+# Port Check
+#-----------------------------#
+$port = 3838
+Write-Host "Checking if port $port is available..." -ForegroundColor Yellow
+
+$portProcess = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
+
+if ($portProcess) {
+    $pidToKill = $portProcess.OwningProcess
+    Write-Host "Port $port is occupied by PID $pidToKill. Clearing it now..." -ForegroundColor Yellow
+    try {
+        Stop-Process -Id $pidToKill -Force -ErrorAction Stop
+        Write-Host "Existing process terminated." -ForegroundColor Gray
+        Start-Sleep -Seconds 2 # Time to release the socket
+    } catch {
+        Write-Host "Warning: Could not stop process $pidToKill." -ForegroundColor Red
+    }
+} else {
+    Write-Host "Port $port is free." -ForegroundColor Gray
+}
+
+#-----------------------------#
 # Path & Log Configuration
 #-----------------------------#
 $condaCmd = Find-CondaExecutable
@@ -81,7 +103,6 @@ if (-not $condaCmd) {
     exit 1
 }
 
-Write-Host "Using Conda at: $condaCmd" -ForegroundColor Gray
 Write-Host "Starting application in default browser..." -ForegroundColor Yellow
 
 try {

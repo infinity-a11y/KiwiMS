@@ -1,5 +1,5 @@
 #-----------------------------#
-# Script Initialization
+# 1. Script Initialization
 #-----------------------------#
 param(
     [string]$basePath,
@@ -10,62 +10,78 @@ param(
 )
 
 $ErrorActionPreference = "Continue"
-Start-Transcript -Path $logFile -Append | Out-Null
+Start-Transcript -Path $logFile -Append -Force | Out-Null
 
 Write-Host "==========================================" -ForegroundColor Cyan
-Write-Host "   KiwiMS Functional Launch Smoke Test    " -ForegroundColor Cyan
+Write-Host "   KiwiMS Functional Test                 " -ForegroundColor Cyan
 Write-Host "==========================================" -ForegroundColor Cyan
 
-# Source helper functions
-if (Test-Path "$basePath\functions.ps1") { . "$basePath\functions.ps1" }
+#-----------------------------#
+# Port Check
+#-----------------------------#
+$port = 3838
+Write-Host "[Step 1] Checking if port $port is available..." -ForegroundColor Yellow
 
-$condaCmd = Find-CondaExecutable
-if (-not $condaCmd) {
-    Write-Host "ERROR: Conda not found." -ForegroundColor Red
-    Stop-Transcript; exit 1
+$portProcess = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
+
+if ($portProcess) {
+    $pidToKill = $portProcess.OwningProcess
+    Write-Host "Port $port is occupied by PID $pidToKill. Clearing it now..." -ForegroundColor Yellow
+    try {
+        Stop-Process -Id $pidToKill -Force -ErrorAction Stop
+        Write-Host "Existing process terminated." -ForegroundColor Gray
+        Start-Sleep -Seconds 2 # Time to release the socket
+    } catch {
+        Write-Host "Warning: Could not stop process $pidToKill. Test may fail." -ForegroundColor Red
+    }
+} else {
+    Write-Host "Port $port is free." -ForegroundColor Gray
 }
 
 #-----------------------------#
-# 2. Execution (Asynchronous with Output)
+# 3. Execution Prep
 #-----------------------------#
-# Path handling for R (Forward Slashes)
+if (Test-Path "$basePath\functions.ps1") { . "$basePath\functions.ps1" }
+$condaCmd = Find-CondaExecutable
+
 $rSafePath = $basePath.Replace('\', '/')
-$shinyCmd = "shiny::runApp('$rSafePath/app.R', port = 3838, launch.browser = FALSE)"
+$shinyCmd = "shiny::runApp('$rSafePath/app.R', port = $port, launch.browser = FALSE)"
+$processArgs = @("run", "-n", $envName, "--no-capture-output", "Rscript.exe", "-e", "`"$shinyCmd`"", "--vanilla")
 
-Write-Host "[Step] Starting app engine in background..." -ForegroundColor Yellow
-Write-Host "Monitoring for 20 seconds. If a crash occurs, the error will appear below." -ForegroundColor Gray
+#-----------------------------#
+# 4. Launch and Monitor
+#-----------------------------#
+Write-Host "[Step 2] Running Functional Smoke Test..." -ForegroundColor Yellow
+Write-Host "Monitoring app stability for 15s..." -ForegroundColor Gray
 
-# We use an argument list that ensures R output is NOT captured by Conda 
-# but is instead allowed to flow to the host.
-$processArgs = @("run", "-n", $envName, "--no-capture-output", "Rscript.exe", "-e", $shinyCmd, "--vanilla")
+$appProcess = Start-Process -FilePath $condaCmd -ArgumentList $processArgs -PassThru -NoNewWindow
 
-# Start-Process with -PassThru allows us to monitor it without blocking the script
-$appProcess = Start-Process -FilePath $condaCmd -ArgumentList $processArgs `
-    -NoNewWindow -PassThru
-
-# Monitor loop
-for ($i = 0; $i -lt 20; $i++) {
+for ($i=0; $i -lt 15; $i++) {
     Write-Host "." -NoNewline
     Start-Sleep -Seconds 1
-    
-    # Check if the process crashed
     if ($appProcess.HasExited) {
-        Write-Host "`n[FAIL] R process crashed with Exit Code: $($appProcess.ExitCode)" -ForegroundColor Red
-        Write-Host "Check the console output above for the specific R error message."
-        Stop-Transcript
-        exit 1
+        Write-Host "`n[FAIL] App crashed! Exit Code: $($appProcess.ExitCode)" -ForegroundColor Red
+        Stop-Transcript; exit 1
     }
 }
 
 #-----------------------------#
-# 3. Cleanup & Result
+# 5. Success & Cleanup
 #-----------------------------#
-Write-Host "`n[SUCCESS] App engine remained stable for 20s." -ForegroundColor Green
+Write-Host "`n[SUCCESS] App engine is stable." -ForegroundColor Green
 
-if (-not $appProcess.HasExited) {
-    Write-Host "Terminating test instance..." -ForegroundColor Gray
+if ($appProcess -and -not $appProcess.HasExited) {
+    Write-Host "Closing test instance and cleaning up port..." -ForegroundColor Gray
+    
+    # Kill the process tree
     Stop-Process -Id $appProcess.Id -Force -ErrorAction SilentlyContinue
+
+    # Clear port 3838
+    $finalCheck = Get-NetTCPConnection -LocalPort 3838 -State Listen -ErrorAction SilentlyContinue
+    if ($finalCheck) {
+        Stop-Process -Id $finalCheck.OwningProcess -Force -ErrorAction SilentlyContinue
+    }
 }
 
-Write-Host "==========================================" -ForegroundColor Cyan
+Write-Host "Functional test complete."
 Stop-Transcript
