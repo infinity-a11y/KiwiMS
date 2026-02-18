@@ -31,7 +31,8 @@ $DOWNLOAD_URL = "https://github.com/quarto-dev/quarto-cli/releases/download/v${T
 if ($installScope -eq "allusers") {
     $QUARTO_INSTALL_DIR = Join-Path $env:ProgramFiles "Quarto"
     $regTarget = [System.EnvironmentVariableTarget]::Machine
-} else {
+}
+else {
     $QUARTO_INSTALL_DIR = Join-Path $env:LOCALAPPDATA "Programs\Quarto"
     $regTarget = [System.EnvironmentVariableTarget]::User
 }
@@ -47,7 +48,8 @@ try {
     if (-not $quarto.Found) {
         Write-Host "Quarto not detected. Installation required."
         $needsInstall = $true
-    } else {
+    }
+    else {
         # Version Check
         $vComp = Compare-Version -InstalledVersion $quarto.Version -TargetVersion $TARGET_VERSION
         if ($vComp -lt 0) {
@@ -99,7 +101,8 @@ if ($needsInstall) {
         Stop-Transcript
         exit 1
     }
-} else {
+}
+else {
     $quartoBin = $quarto.BinDir
 }
 
@@ -112,15 +115,17 @@ try {
         $newPath = "$currentPath;$quartoBin"
         [Environment]::SetEnvironmentVariable("Path", $newPath, $regTarget)
         Write-Host "Added Quarto bin to $regTarget PATH."
+        
+        # Update current session PATH
+        $env:Path = "$quartoBin;$env:Path"
+        Write-Host "Updated current session PATH with Quarto." -ForegroundColor Gray
     }
-    
-    # Update current session path for immediate use
-    $env:Path = "$quartoBin;$env:Path"
+    else {
+        Write-Host "Quarto bin already in $regTarget PATH."
+    }
 }
 catch {
-    Write-Host "Failed to update PATH: $($_.Exception.Message)"
-    Stop-Transcript
-    exit 1
+    Write-Host "Warning: Could not update PATH. You may need to add $quartoBin manually." -ForegroundColor Yellow
 }
 
 Write-Host "Quarto setup complete."

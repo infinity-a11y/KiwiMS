@@ -204,7 +204,8 @@ function Find-QuartoInstallation {
                 Version = $versionString.Trim()
             }
         }
-    } catch {
+    }
+    catch {
         Write-Host "Error: Quarto executable not found. $_"
         Stop-Transcript
         exit 1
