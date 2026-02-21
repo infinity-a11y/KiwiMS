@@ -3,7 +3,7 @@ name: KiwiMS Package Update Check
 on:
   schedule:
     - cron: '0 0 * * *' 
-  workflow_dispatch:
+  workflow_dispatch:      
 
 jobs:
   check-renv:
@@ -22,6 +22,8 @@ jobs:
 
       - name: Run renv Check Script
         id: check_step
+        # This is the fix: it allows the job to stay green even if exit code is 10
+        continue-on-error: true 
         shell: pwsh
         run: ./KiwiMS_App/dev/renv-check.ps1
 
@@ -39,5 +41,7 @@ jobs:
           body: |
             The Daily Renv Update Check for KiwiMS has finished.
             
-            Automation Status: ${{ job.status }}
             Updates Found: ${{ steps.check_step.outputs.updates_found == 'true' && 'YES' || 'NO' }}
+            
+            View detailed logs: 
+            https://github.com/infinity-a11y/KiwiMS/actions/runs/${{ github.run_id }}
