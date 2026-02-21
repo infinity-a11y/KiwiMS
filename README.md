@@ -8,9 +8,9 @@ KiwiMS is an interactive pipeline with graphical user interface to perform prote
 
 <br><br><hr><br>
 
-### Current Version: KiwiMS 0.3.1
+### Current Version: KiwiMS 0.3.2
 
-<i> 2026-02-09 </i> <br> <b>KiwiMS 0.3.1</b> <br> <https://github.com/infinity-a11y/KiwiMS/releases/tag/0.3.1>
+<i> 2026-02-09 </i> <br> <b>KiwiMS 0.3.2</b> <br> <https://github.com/infinity-a11y/KiwiMS/releases/tag/0.3.2>
 
 <br><hr><br>
 
@@ -18,9 +18,9 @@ KiwiMS is an interactive pipeline with graphical user interface to perform prote
 
 1.  Download the KiwiMS installer from the latest release: <br>
 
-| OS | Version | Download | SHA256 checksum |
-|------------------|------------------|------------------|------------------|
-| Windows 10/11 | 0.3.1 | [KiwiMS-Windows-x86_64.exe](https://github.com/infinity-a11y/KiwiMS/releases/download/0.3.1/KiwiMS-Windows-x86_64.exe) | <sub><sup>5BEF3A88B12E12E02AC6177B140104E10740769741F19B94450C78BDD1539E42</sup></sub> |
+| OS | Version | Download |
+|------------------|------------------|------------------|
+| Windows 10/11 | 0.3.2 | [KiwiMS-Windows-x86_64.exe](https://github.com/infinity-a11y/KiwiMS/releases/download/0.3.2/KiwiMS-Windows-x86_64.exe) |
 
 2.  Run the installer to set KiwiMS up.
 
