@@ -1,0 +1,24 @@
+      - name: Check Installer Links
+        id: link_check
+        shell: pwsh
+        run: ./KiwiMS_App/dev/check-links.ps1
+
+      - name: Send Alert Email on Failure
+        if: failure() 
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "CRITICAL: KiwiMS Installer Link Failure"
+          to: marian.freisleben@liora-bioinformatics.com
+          from: GitHub Actions
+          body: |
+            The following third-party installer links are BROKEN:
+            
+            ${{ steps.link_check.outputs.failed_installers }}
+            
+            Please update the URLs in your setup scripts.
+            View the full log here:
+            https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
