@@ -22,12 +22,11 @@ jobs:
 
       - name: Run renv Check Script
         id: check_step
-        # REMOVED continue-on-error: true
         shell: pwsh
         run: ./KiwiMS_App/dev/renv-check.ps1
 
       - name: Send Notification Email
-        if: always() # Still use always() so you get an email even if the code crashes
+        if: always()
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
