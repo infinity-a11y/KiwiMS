@@ -1,0 +1,93 @@
+name: Setup compilation and attestion on release
+
+on:
+  push:
+    tags:
+      - '**'
+
+jobs:
+  create-release:
+    runs-on: windows-latest
+    permissions:
+      id-token: write
+      contents: write
+      attestations: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Update Inno Setup Version
+        shell: pwsh
+        run: |
+          # Takes the tag exactly as it was typed on GitHub
+          $version = "${{ github.ref_name }}"
+          Write-Host "Updating .iss AppVersion to: $version"
+          (Get-Content kiwims_setup.iss) -replace 'AppVersion=.*', "AppVersion=$version" | Set-Content kiwims_setup.iss
+
+      - name: Compile Inno Setup
+        uses: lowleveldesign/setup-innosetup@v2
+        with:
+          innosetup-file: 'kiwims_setup.iss'
+
+      - name: Generate Build Provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'KiwiMS-Windows-x86_64.exe'
+
+      - name: Calculate SHA256
+        id: calc_hash
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash "KiwiMS-Windows-x86_64.exe" -Algorithm SHA256).Hash.ToLower()
+          echo "hash=$hash" >> $env:GITHUB_OUTPUT
+          $hashNote = "`n`n### Security Checksum`n| File | SHA-256 Hash |`n| :--- | :--- |`n| KiwiMS-Windows-x86_64.exe | ``$hash`` |"
+          echo "hash_note<<EOF" >> $env:GITHUB_OUTPUT
+          echo "$hashNote" >> $env:GITHUB_OUTPUT
+          echo "EOF" >> $env:GITHUB_OUTPUT
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: 'KiwiMS-Windows-x86_64.exe'
+          generate_release_notes: true
+          body: ${{ steps.calc_hash.outputs.hash_note }}
+          append_body: true 
+          draft: false
+          prerelease: false
+
+      - name: Email Success Notification
+        if: success()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "🚀 KiwiMS Release Successful: ${{ github.ref_name }}"
+          to: marian.freisleben@liora-bioinformatics.com
+          from: GitHub Actions
+          body: |
+            KiwiMS version ${{ github.ref_name }} has been built and released.
+            
+            SHA256 Fingerprint: ${{ steps.calc_hash.outputs.hash }}
+            
+            Link to Release:
+            https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}
+
+      - name: Email Failure Notification
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "❌ FAILED: KiwiMS Release Build (${{ github.ref_name }})"
+          to: marian.freisleben@liora-bioinformatics.com
+          from: GitHub Actions
+          body: |
+            The build for tag '${{ github.ref_name }}' failed. 
+            
+            Check the logs:
+            https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
