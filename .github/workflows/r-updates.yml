@@ -22,26 +22,27 @@ jobs:
 
       - name: Run renv Check Script
         id: check_step
-        # This is the fix: it allows the job to stay green even if exit code is 10
-        continue-on-error: true 
+        # REMOVED continue-on-error: true
         shell: pwsh
         run: ./KiwiMS_App/dev/renv-check.ps1
 
       - name: Send Notification Email
-        if: always() 
+        if: always() # Still use always() so you get an email even if the code crashes
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
           server_port: 465
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
-          subject: "KiwiMS Update Check - Status Report"
+          subject: "KiwiMS Update Check - Status: ${{ job.status }}"
           to: marian.freisleben@liora-bioinformatics.com
           from: GitHub Actions
           body: |
             The Daily Renv Update Check for KiwiMS has finished.
             
+            Automation Outcome: ${{ job.status }} 
+            (If this says 'failure', your code might be broken!)
+            
             Updates Found: ${{ steps.check_step.outputs.updates_found == 'true' && 'YES' || 'NO' }}
             
-            View detailed logs: 
-            https://github.com/infinity-a11y/KiwiMS/actions/runs/${{ github.run_id }}
+            View detailed logs: https://github.com/infinity-a11y/KiwiMS/actions/runs/${{ github.run_id }}
