@@ -49,11 +49,17 @@ jobs:
 
       - name: Sanitize SARIF file
         run: |
-          jq 'walk(if type == "object" then 
-                with_entries(if .key == "text" or .key == "snippet" or .key == "message" then 
-                  if .value == null then .value = "" else . end 
-                else . end) 
-              else . end)' lintr-results.sarif > lintr-fixed.sarif
+          # Use jq to fix missing/null message text and snippets
+          jq '
+            .runs[].results[] |= (
+              if (.message.text == null or .message.text == "") then 
+                .message.text = "Lint violation found by linter." 
+              else . end
+            ) |
+            walk(if type == "object" and has("text") and .text == null then .text = "" else . end) |
+            walk(if type == "object" and has("snippet") and .snippet == null then .snippet = "" else . end)
+          ' lintr-results.sarif > lintr-fixed.sarif
+          
           mv lintr-fixed.sarif lintr-results.sarif
 
       - name: Upload analysis results to GitHub
