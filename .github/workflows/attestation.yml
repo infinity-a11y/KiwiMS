@@ -1,9 +1,9 @@
-name: Release Attestation
+name: Release KiwiMS
 
 on:
   push:
     tags:
-      - '**'
+      - '**' 
 
 jobs:
   create-release:
@@ -20,15 +20,15 @@ jobs:
       - name: Update Inno Setup Version
         shell: pwsh
         run: |
-          # Takes the tag exactly as it was typed on GitHub
           $version = "${{ github.ref_name }}"
-          Write-Output "Updating .iss AppVersion to: $version"
+          Write-Host "Updating .iss AppVersion to: $version"
           (Get-Content kiwims_setup.iss) -replace 'AppVersion=.*', "AppVersion=$version" | Set-Content kiwims_setup.iss
 
+      # FIXED STEP: Using the built-in ISCC compiler
       - name: Compile Inno Setup
-        uses: lowleveldesign/setup-innosetup@v2
-        with:
-          innosetup-file: 'kiwims_setup.iss'
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" kiwims_setup.iss
 
       - name: Generate Build Provenance
         uses: actions/attest-build-provenance@v2
