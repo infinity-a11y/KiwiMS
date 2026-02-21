@@ -22,9 +22,9 @@ jobs:
       #   run: |
       #     $version = "${{ github.ref_name }}"
       #     Write-Host "Updating .iss AppVersion to: $version"
-      #     (Get-Content kiwims_setup.iss) -replace 'AppVersion=.*', "AppVersion=$version" | Set-Content kiwims_setup.iss
+      #     (Get-Content setup_script.iss) -replace 'AppVersion=.*', "AppVersion=$version" | Set-Content setup_script.iss
 
-      # FIXED STEP: Using the built-in ISCC compiler
+      # Using built-in ISCC compiler
       - name: Compile Inno Setup
         shell: pwsh
         run: |
@@ -35,22 +35,10 @@ jobs:
         with:
           subject-path: 'KiwiMS-Windows-x86_64.exe'
 
-      - name: Calculate SHA256
-        id: calc_hash
-        shell: pwsh
-        run: |
-          $hash = (Get-FileHash "KiwiMS-Windows-x86_64.exe" -Algorithm SHA256).Hash.ToLower()
-          echo "hash=$hash" >> $env:GITHUB_OUTPUT
-          $hashNote = "`n`n### Security Checksum`n| File | SHA-256 Hash |`n| :--- | :--- |`n| KiwiMS-Windows-x86_64.exe | ``$hash`` |"
-          echo "hash_note<<EOF" >> $env:GITHUB_OUTPUT
-          echo "$hashNote" >> $env:GITHUB_OUTPUT
-          echo "EOF" >> $env:GITHUB_OUTPUT
-
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: 'KiwiMS-Windows-x86_64.exe'
-          generate_release_notes: true
           body: ${{ steps.calc_hash.outputs.hash_note }}
           append_body: true 
           draft: false
@@ -69,8 +57,6 @@ jobs:
           from: GitHub Actions
           body: |
             KiwiMS version ${{ github.ref_name }} has been built and released.
-            
-            SHA256 Fingerprint: ${{ steps.calc_hash.outputs.hash }}
             
             Link to Release:
             https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}
