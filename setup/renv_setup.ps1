@@ -16,26 +16,26 @@ $ProgressPreference = "SilentlyContinue"
 # Start logging
 Start-Transcript -Path $logFile -Append | Out-Null
 
-Write-Host "### Renv environment restore (renv_setup.ps1)"
-Write-Host "basePath:         $basePath"
-Write-Host "userDataPath:     $userDataPath"
-Write-Host "envName:          $envName"
-Write-Host "logFile:          $logFile"
-Write-Host "installScope:     $installScope"
+Write-Output "### Renv environment restore (renv_setup.ps1)"
+Write-Output "basePath:         $basePath"
+Write-Output "userDataPath:     $userDataPath"
+Write-Output "envName:          $envName"
+Write-Output "logFile:          $logFile"
+Write-Output "installScope:     $installScope"
 
 # Check elevation only in allusers mode
 $isElevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
 if ($installScope -eq "allusers") {
-    Write-Host "System-wide mode selected"
+    Write-Output "System-wide mode selected"
     if (-not $isElevated) {
-        Write-Host "ERROR: System-wide installation requires administrator rights."
-        Write-Host "Please run the installer as administrator."
+        Write-Output "ERROR: System-wide installation requires administrator rights."
+        Write-Output "Please run the installer as administrator."
         Stop-Transcript
         exit 1
     }
 } else {
-    Write-Host "Current-user mode selected (no elevation required)"
+    Write-Output "Current-user mode selected (no elevation required)"
 }
 
 # Source functions
@@ -46,13 +46,13 @@ $condaCmd = Find-CondaExecutable
 
 # Conda Presence Check
 if (-Not (Test-Path $condaCmd)) {
-    Write-Host "ERROR: Conda executable not found."
-    Write-Host "Make sure the Miniconda installation completed successfully."
+    Write-Output "ERROR: Conda executable not found."
+    Write-Output "Make sure the Miniconda installation completed successfully."
     Stop-Transcript
     exit 1
 }
 
-Write-Host "Using Conda at: $condaCmd"
+Write-Output "Using Conda at: $condaCmd"
 
 #-----------------------------#
 # R: renv::restore
@@ -63,13 +63,13 @@ $routFile = Join-Path (Split-Path $rScriptPath -Parent) ((Get-Item $rScriptPath)
 try {
     # Clean up previous .Rout file
     if (Test-Path $routFile) {
-        Write-Host "Removing existing R output file: $routFile"
+        Write-Output "Removing existing R output file: $routFile"
         Remove-Item $routFile -Force -ErrorAction SilentlyContinue | Out-Null
     }
 
     # Execute renv::restore via Conda environment
-    Write-Host "Running renv::restore via: $rScriptPath"
-    Write-Host "Command: & '$condaCmd' run -n '$envName' R.exe CMD BATCH --no-save --no-restore --slave '$rScriptPath'"
+    Write-Output "Running renv::restore via: $rScriptPath"
+    Write-Output "Command: & '$condaCmd' run -n '$envName' R.exe CMD BATCH --no-save --no-restore --slave '$rScriptPath'"
 
     # Get the folder where setup_renv.R is located
     $workDir = Split-Path -Path $rScriptPath -Parent
@@ -85,22 +85,22 @@ try {
 
     # Log wrapper output if any
     if ($condaRunOutput.Trim() -ne "") {
-        Write-Host "--- Conda Run Wrapper Output ---"
-        Write-Host $condaRunOutput
-        Write-Host "---------------------------------"
+        Write-Output "--- Conda Run Wrapper Output ---"
+        Write-Output $condaRunOutput
+        Write-Output "---------------------------------"
     }
 
     # Check exit code
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "ERROR: renv::restore failed with exit code $LASTEXITCODE"
+        Write-Output "ERROR: renv::restore failed with exit code $LASTEXITCODE"
 
         if (Test-Path $routFile) {
             $routContent = Get-Content -Path $routFile -Raw
-            Write-Host "--- R Script Output (.Rout) ---"
-            Write-Host $routContent
-            Write-Host "---------------------------------"
+            Write-Output "--- R Script Output (.Rout) ---"
+            Write-Output $routContent
+            Write-Output "---------------------------------"
         } else {
-            Write-Host "No .Rout file generated at $routFile"
+            Write-Output "No .Rout file generated at $routFile"
         }
 
         throw "renv environment restoration failed"
@@ -109,27 +109,27 @@ try {
     # Success logging
     if (Test-Path $routFile) {
         $routContent = Get-Content -Path $routFile -Raw
-        Write-Host "--- R Script Output (.Rout) ---"
-        Write-Host $routContent
-        Write-Host "---------------------------------"
+        Write-Output "--- R Script Output (.Rout) ---"
+        Write-Output $routContent
+        Write-Output "---------------------------------"
     } else {
-        Write-Host "Note: No .Rout file generated, but command reported success."
+        Write-Output "Note: No .Rout file generated, but command reported success."
     }
 
-    Write-Host "renv::restore completed successfully."
+    Write-Output "renv::restore completed successfully."
 }
 catch {
-    Write-Host "FATAL ERROR during renv::restore."
-    Write-Host "Exception: $($_.Exception.Message)"
+    Write-Output "FATAL ERROR during renv::restore."
+    Write-Output "Exception: $($_.Exception.Message)"
     if ($_.Exception.InnerException) {
-        Write-Host "Inner Exception: $($_.Exception.InnerException.Message)"
+        Write-Output "Inner Exception: $($_.Exception.InnerException.Message)"
     }
 
     if (Test-Path $routFile) {
         $routContent = Get-Content -Path $routFile -Raw
-        Write-Host "--- R Script Output (.Rout) ---"
-        Write-Host $routContent
-        Write-Host "---------------------------------"
+        Write-Output "--- R Script Output (.Rout) ---"
+        Write-Output $routContent
+        Write-Output "---------------------------------"
     }
 
     Stop-Transcript
@@ -138,10 +138,10 @@ catch {
 finally {
     # Clean up .Rout file
     if (Test-Path $routFile) {
-        Write-Host "Cleaning up R output file: $routFile"
+        Write-Output "Cleaning up R output file: $routFile"
         Remove-Item $routFile -Force -ErrorAction SilentlyContinue | Out-Null
     }
 }
 
-Write-Host "renv environment setup finished."
+Write-Output "renv environment setup finished."
 exit 0

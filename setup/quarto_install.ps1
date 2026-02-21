@@ -18,8 +18,8 @@ $ProgressPreference = "SilentlyContinue"
 # Start logging
 Start-Transcript -Path $logFile -Append -Force | Out-Null
 
-Write-Host "### Quarto setup (quarto_install.ps1)"
-Write-Host "Target Scope: $installScope"
+Write-Output "### Quarto setup (quarto_install.ps1)"
+Write-Output "Target Scope: $installScope"
 
 #-----------------------------#
 # Constants & Requirements
@@ -46,29 +46,29 @@ try {
     $needsInstall = $false
 
     if (-not $quarto.Found) {
-        Write-Host "Quarto not detected. Installation required."
+        Write-Output "Quarto not detected. Installation required."
         $needsInstall = $true
     }
     else {
         # Version Check
         $vComp = Compare-Version -InstalledVersion $quarto.Version -TargetVersion $TARGET_VERSION
         if ($vComp -lt 0) {
-            Write-Host "Found older Quarto ($($quarto.Version)). Upgrade to $TARGET_VERSION required."
+            Write-Output "Found older Quarto ($($quarto.Version)). Upgrade to $TARGET_VERSION required."
             $needsInstall = $true
         }
         # Scope Check
         elseif ($installScope -eq "allusers" -and $foundScope -eq "currentuser") {
-            Write-Host "Found Quarto v$($quarto.Version) in User Scope, but System-wide was requested."
+            Write-Output "Found Quarto v$($quarto.Version) in User Scope, but System-wide was requested."
             $needsInstall = $true
         }
         else {
-            Write-Host "Compatible Quarto v$($quarto.Version) already exists ($foundScope)."
+            Write-Output "Compatible Quarto v$($quarto.Version) already exists ($foundScope)."
             $needsInstall = $false
         }
     }
 }
 catch {
-    Write-Host "Error during Quarto detection: $($_.Exception.Message)"
+    Write-Output "Error during Quarto detection: $($_.Exception.Message)"
     Stop-Transcript
     exit 1
 }
@@ -78,7 +78,7 @@ catch {
 #-----------------------------#
 if ($needsInstall) {
     try {
-        Write-Host "Installing Quarto v$TARGET_VERSION to $QUARTO_INSTALL_DIR..."
+        Write-Output "Installing Quarto v$TARGET_VERSION to $QUARTO_INSTALL_DIR..."
         
         # Ensure directory exists
         if (-not (Test-Path $QUARTO_INSTALL_DIR)) {
@@ -88,7 +88,7 @@ if ($needsInstall) {
         $tempZip = Join-Path $env:TEMP "quarto.zip"
         Download-File $DOWNLOAD_URL $tempZip
         
-        Write-Host "Extracting archive..."
+        Write-Output "Extracting archive..."
         Expand-Archive -Path $tempZip -DestinationPath $QUARTO_INSTALL_DIR -Force
         
         # Clean up
@@ -97,7 +97,7 @@ if ($needsInstall) {
         $quartoBin = Join-Path $QUARTO_INSTALL_DIR "bin"
     }
     catch {
-        Write-Host "Installation failed: $($_.Exception.Message)"
+        Write-Output "Installation failed: $($_.Exception.Message)"
         Stop-Transcript
         exit 1
     }
@@ -114,20 +114,20 @@ try {
     if ($currentPath -notlike "*$quartoBin*") {
         $newPath = "$currentPath;$quartoBin"
         [Environment]::SetEnvironmentVariable("Path", $newPath, $regTarget)
-        Write-Host "Added Quarto bin to $regTarget PATH."
+        Write-Output "Added Quarto bin to $regTarget PATH."
         
         # Update current session PATH
         $env:Path = "$quartoBin;$env:Path"
-        Write-Host "Updated current session PATH with Quarto." -ForegroundColor Gray
+        Write-Output "Updated current session PATH with Quarto." -ForegroundColor Gray
     }
     else {
-        Write-Host "Quarto bin already in $regTarget PATH."
+        Write-Output "Quarto bin already in $regTarget PATH."
     }
 }
 catch {
-    Write-Host "Warning: Could not update PATH. You may need to add $quartoBin manually." -ForegroundColor Yellow
+    Write-Output "Warning: Could not update PATH. You may need to add $quartoBin manually." -ForegroundColor Yellow
 }
 
-Write-Host "Quarto setup complete."
+Write-Output "Quarto setup complete."
 Stop-Transcript
 exit 0

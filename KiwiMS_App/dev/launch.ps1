@@ -9,17 +9,17 @@ $versionFile = if (Test-Path "resources\version.txt") { Get-Content -Path "resou
 # Headless check
 $Headless = $args -contains "--headless"
 
-Write-Host ""
-Write-Host "██╗  ██╗ ██╗            ██╗    ███╗   ███╗  ██████╗ " -ForegroundColor DarkGreen
-Write-Host "██║ ██╔╝ ╚═╝            ╚═╝    ████╗ ████║ ██╔════╝ " -ForegroundColor DarkGreen
-Write-Host "█████╔╝  ██╗ ██╗    ██╗ ██╗    ██╔████╔██║ ╚█████╗  " -ForegroundColor DarkGreen
-Write-Host "██╔═██╗  ██║ ██║ █╗ ██║ ██║    ██║╚██╔╝██║  ╚═══██╗ " -ForegroundColor DarkGreen
-Write-Host "██║  ██╗ ██║ ╚███╔███╔╝ ██║    ██║ ╚═╝ ██║ ██████╔╝ " -ForegroundColor DarkGreen
-Write-Host "╚═╝  ╚═╝ ╚═╝  ╚══╝╚══╝  ╚═╝    ╚═╝     ╚═╝ ╚═════╝  " -ForegroundColor DarkGreen
-Write-Host ""
-Write-Host "---------------------------------------------------" -ForegroundColor DarkGray
-Write-Host "         Welcome to KiwiMS ($versionFile)          " -ForegroundColor White
-Write-Host "---------------------------------------------------" -ForegroundColor DarkGray
+Write-Output ""
+Write-Output "██╗  ██╗ ██╗            ██╗    ███╗   ███╗  ██████╗ " -ForegroundColor DarkGreen
+Write-Output "██║ ██╔╝ ╚═╝            ╚═╝    ████╗ ████║ ██╔════╝ " -ForegroundColor DarkGreen
+Write-Output "█████╔╝  ██╗ ██╗    ██╗ ██╗    ██╔████╔██║ ╚█████╗  " -ForegroundColor DarkGreen
+Write-Output "██╔═██╗  ██║ ██║ █╗ ██║ ██║    ██║╚██╔╝██║  ╚═══██╗ " -ForegroundColor DarkGreen
+Write-Output "██║  ██╗ ██║ ╚███╔███╔╝ ██║    ██║ ╚═╝ ██║ ██████╔╝ " -ForegroundColor DarkGreen
+Write-Output "╚═╝  ╚═╝ ╚═╝  ╚══╝╚══╝  ╚═╝    ╚═╝     ╚═╝ ╚═════╝  " -ForegroundColor DarkGreen
+Write-Output ""
+Write-Output "---------------------------------------------------" -ForegroundColor DarkGray
+Write-Output "         Welcome to KiwiMS ($versionFile)          " -ForegroundColor White
+Write-Output "---------------------------------------------------" -ForegroundColor DarkGray
 
 #-----------------------------#
 # Conda Discovery Function
@@ -40,7 +40,7 @@ function Find-CondaExecutable {
     # Search through hardcoded common paths
     foreach ($path in $searchPaths) {
         if (Test-Path $path) {
-            Write-Host "Found conda at: $path" -ForegroundColor Cyan
+            Write-Output "Found conda at: $path" -ForegroundColor Cyan
             return $path
         }
     }
@@ -48,17 +48,17 @@ function Find-CondaExecutable {
     # Check if conda.exe is in the system PATH
     $condaInPath = Get-Command conda.exe, conda.bat -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($condaInPath) {
-        Write-Host "Found conda in system PATH: $($condaInPath.Path)" -ForegroundColor Cyan
+        Write-Output "Found conda in system PATH: $($condaInPath.Path)" -ForegroundColor Cyan
         return $condaInPath.Path
     }
 
     # Check Environment Variables
     if ($env:CONDA_EXE -and (Test-Path $env:CONDA_EXE)) {
-        Write-Host "Found conda via CONDA_EXE: $env:CONDA_EXE" -ForegroundColor Cyan
+        Write-Output "Found conda via CONDA_EXE: $env:CONDA_EXE" -ForegroundColor Cyan
         return $env:CONDA_EXE
     }
 
-    Write-Host "ERROR: conda.exe not found." -ForegroundColor Red
+    Write-Output "ERROR: conda.exe not found." -ForegroundColor Red
     return $null
 }
 
@@ -66,22 +66,22 @@ function Find-CondaExecutable {
 # Port Check
 #-----------------------------#
 $port = 3838
-Write-Host "Checking if port $port is available..." -ForegroundColor Yellow
+Write-Output "Checking if port $port is available..." -ForegroundColor Yellow
 
 $portProcess = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
 
 if ($portProcess) {
     $pidToKill = $portProcess.OwningProcess
-    Write-Host "Port $port is occupied by PID $pidToKill. Clearing it now..." -ForegroundColor Yellow
+    Write-Output "Port $port is occupied by PID $pidToKill. Clearing it now..." -ForegroundColor Yellow
     try {
         Stop-Process -Id $pidToKill -Force -ErrorAction Stop
-        Write-Host "Existing process terminated." -ForegroundColor Gray
+        Write-Output "Existing process terminated." -ForegroundColor Gray
         Start-Sleep -Seconds 2 # Time to release the socket
     } catch {
-        Write-Host "Warning: Could not stop process $pidToKill." -ForegroundColor Red
+        Write-Output "Warning: Could not stop process $pidToKill." -ForegroundColor Red
     }
 } else {
-    Write-Host "Port $port is free." -ForegroundColor Gray
+    Write-Output "Port $port is free." -ForegroundColor Gray
 }
 
 #-----------------------------#
@@ -97,13 +97,13 @@ if (-Not (Test-Path $logDirectory)) { New-Item -ItemType Directory -Path $logDir
 "$(Get-Date) - INFO: Launcher Initialized." | Out-File $logFile
 
 if (-not $condaCmd) {
-    Write-Host "ERROR: Conda not found! Please reinstall KiwiMS." -ForegroundColor Red
+    Write-Output "ERROR: Conda not found! Please reinstall KiwiMS." -ForegroundColor Red
     "$(Get-Date) - ERROR: Conda executable not found in system or user paths." | Add-Content $logFile
     if (-not $Headless) { pause }
     exit 1
 }
 
-Write-Host "Starting application in default browser..." -ForegroundColor Yellow
+Write-Output "Starting application in default browser..." -ForegroundColor Yellow
 
 try {
     # Extract the base directory to find the 'kiwims' environment
@@ -125,10 +125,10 @@ try {
 catch {
     $msg = "$(Get-Date) - CRITICAL ERROR: $($_.Exception.Message)"
     $msg | Add-Content $logFile
-    Write-Host ""
-    Write-Host "FAILED TO START" -ForegroundColor Red
-    Write-Host "Error: $($_.Exception.Message)"
-    Write-Host "Detailed logs: $logFile"
+    Write-Output ""
+    Write-Output "FAILED TO START" -ForegroundColor Red
+    Write-Output "Error: $($_.Exception.Message)"
+    Write-Output "Detailed logs: $logFile"
     if (-not $Headless) { pause }
     exit 1
 }

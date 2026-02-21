@@ -17,7 +17,7 @@ function Find-CondaExecutable {
     # Search through hardcoded common paths
     foreach ($path in $searchPaths) {
         if (Test-Path $path) {
-            Write-Host "Found conda at: $path" -ForegroundColor Cyan
+            Write-Output "Found conda at: $path" -ForegroundColor Cyan
             return $path
         }
     }
@@ -25,17 +25,17 @@ function Find-CondaExecutable {
     # Check if conda.exe is in the system PATH
     $condaInPath = Get-Command conda.exe, conda.bat -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($condaInPath) {
-        Write-Host "Found conda in system PATH: $($condaInPath.Path)" -ForegroundColor Cyan
+        Write-Output "Found conda in system PATH: $($condaInPath.Path)" -ForegroundColor Cyan
         return $condaInPath.Path
     }
 
     # Check Environment Variables
     if ($env:CONDA_EXE -and (Test-Path $env:CONDA_EXE)) {
-        Write-Host "Found conda via CONDA_EXE: $env:CONDA_EXE" -ForegroundColor Cyan
+        Write-Output "Found conda via CONDA_EXE: $env:CONDA_EXE" -ForegroundColor Cyan
         return $env:CONDA_EXE
     }
 
-    Write-Host "ERROR: conda.exe not found." -ForegroundColor Red
+    Write-Output "ERROR: conda.exe not found." -ForegroundColor Red
     return $null
 }
 
@@ -144,7 +144,7 @@ function Download-File($url, $destination) {
     $success = $false
     for ($i = 0; $i -lt 3; $i++) {
         try {
-            Write-Host "Attempt $($i+1): Downloading via BITS..."
+            Write-Output "Attempt $($i+1): Downloading via BITS..."
             # Try BITS first
             Start-BitsTransfer -Source $url -Destination $tempDownloadPath -Priority High -ErrorAction Stop
             
@@ -155,7 +155,7 @@ function Download-File($url, $destination) {
             
             # If BITS fails (e.g., Battery Mode), try Invoke-WebRequest as a fallback within the same attempt
             try {
-                Write-Host "BITS failed or suspended. Falling back to Invoke-WebRequest..."
+                Write-Output "BITS failed or suspended. Falling back to Invoke-WebRequest..."
                 Invoke-WebRequest -Uri $url -OutFile $tempDownloadPath -UseBasicParsing -ErrorAction Stop
                 $success = $true
             }
@@ -169,11 +169,11 @@ function Download-File($url, $destination) {
             # Move the temp file to the final destination
             if (Test-Path $destination) { Remove-Item $destination -Force }
             Move-Item -Path $tempDownloadPath -Destination $destination -Force
-            Write-Host "Download successful."
+            Write-Output "Download successful."
             break
         }
         else {
-            Write-Host "Retrying in 3 seconds..."
+            Write-Output "Retrying in 3 seconds..."
             Start-Sleep -Seconds 3
         }
     }
@@ -206,7 +206,7 @@ function Find-QuartoInstallation {
         }
     }
     catch {
-        Write-Host "Error: Quarto executable not found. $_"
+        Write-Output "Error: Quarto executable not found. $_"
         Stop-Transcript
         exit 1
     }
@@ -223,11 +223,11 @@ function Test-PathInEnvironment {
     )
     $currentPath = [Environment]::GetEnvironmentVariable("Path", "Machine")
     if ($currentPath -like "*$Directory*") {
-        Write-Host "Directory $Directory is already in system PATH"
+        Write-Output "Directory $Directory is already in system PATH"
         return $true
     }
     else {
-        Write-Host "Directory $Directory is not in system PATH"
+        Write-Output "Directory $Directory is not in system PATH"
         return $false
     }
 }
@@ -244,13 +244,13 @@ function Add-ToSystemPath {
         if (-not ($currentPath -like "*$Directory*")) {
             $newPath = "$currentPath;$Directory"
             [Environment]::SetEnvironmentVariable("Path", $newPath, "Machine")
-            Write-Host "Added $Directory to system PATH"
+            Write-Output "Added $Directory to system PATH"
             # Update current session PATH
             $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine")
         }
     }
     catch {
-        Write-Host "Error adding $Directory to PATH: $_"
+        Write-Output "Error adding $Directory to PATH: $_"
         Stop-Transcript
         exit 1
     }
@@ -272,7 +272,7 @@ function Compare-Version {
         else { return -1 }  # Installed is older
     }
     catch {
-        Write-Host "Error comparing versions: $_"
+        Write-Output "Error comparing versions: $_"
         return $null
     }
 }

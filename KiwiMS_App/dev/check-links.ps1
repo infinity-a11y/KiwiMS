@@ -10,17 +10,17 @@ $URLs = @{
 }
 
 $brokenLinks = @()
-Write-Host "Checking third-party installer links..." -ForegroundColor Cyan
+Write-Output "Checking third-party installer links..." -ForegroundColor Cyan
 
 foreach ($name in $URLs.Keys) {
     $url = $URLs[$name]
     try {
         $response = Invoke-WebRequest -Uri $url -Method Head -TimeoutSec 15 -ErrorAction Stop
         if ($response.StatusCode -eq 200) {
-            Write-Host "[OK] $name" -ForegroundColor Green
+            Write-Output "[OK] $name" -ForegroundColor Green
         } else { throw "Status $($response.StatusCode)" }
     } catch {
-        Write-Host "[FAIL] $name" -ForegroundColor Red
+        Write-Output "[FAIL] $name" -ForegroundColor Red
         $brokenLinks += "- $name"
     }
 }

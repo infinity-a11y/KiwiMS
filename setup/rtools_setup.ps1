@@ -13,7 +13,7 @@ $ErrorActionPreference = "Stop"
 . "$basePath\functions.ps1"
 
 Start-Transcript -Path $logFile -Append -Force | Out-Null
-Write-Host "### Rtools 4.5 Version-Specific Setup"
+Write-Output "### Rtools 4.5 Version-Specific Setup"
 
 #-----------------------------#
 # Discovery & Version Check
@@ -25,21 +25,21 @@ try {
     $needsInstall = $false
 
     if (-not $foundRtoolsBin) {
-        Write-Host "Rtools 4.5 not detected (older versions or no version found)."
+        Write-Output "Rtools 4.5 not detected (older versions or no version found)."
         $needsInstall = $true
     }
     elseif ($installScope -eq "allusers" -and $foundScope -eq "currentuser") {
-        Write-Host "Found Rtools 4.5 at $foundRtoolsBin (User Scope)."
-        Write-Host "System-wide install requested. Proceeding with new installation."
+        Write-Output "Found Rtools 4.5 at $foundRtoolsBin (User Scope)."
+        Write-Output "System-wide install requested. Proceeding with new installation."
         $needsInstall = $true
     }
     else {
-        Write-Host "Valid Rtools 4.5 found: $foundRtoolsBin (Scope: $foundScope)"
+        Write-Output "Valid Rtools 4.5 found: $foundRtoolsBin (Scope: $foundScope)"
         $needsInstall = $false
     }
 }
 catch {
-    Write-Host "Detection failed: $($_.Exception.Message)"
+    Write-Output "Detection failed: $($_.Exception.Message)"
     Stop-Transcript
     exit 1
 }
@@ -65,9 +65,9 @@ if ($needsInstall) {
         Download-File "https://cran.r-project.org/bin/windows/Rtools/rtools45/files/rtools45-6768-6492.exe" $installer
 
         if (Test-Path $installer) {
-            Write-Host "Download complete. Installing to $targetDir..."
+            Write-Output "Download complete. Installing to $targetDir..."
         }  else {
-            Write-Host "Download failed: $($_.Exception.Message)"
+            Write-Output "Download failed: $($_.Exception.Message)"
             Stop-Transcript
             exit 1
         }
@@ -80,7 +80,7 @@ if ($needsInstall) {
         $foundRtoolsBin = Join-Path $targetDir "usr\bin\make.exe"
     }
     catch {
-        Write-Host "Installation failed: $($_.Exception.Message)"
+        Write-Output "Installation failed: $($_.Exception.Message)"
         Stop-Transcript
         exit 1
     }
@@ -97,7 +97,7 @@ try {
         $currentPath = [Environment]::GetEnvironmentVariable("Path", $registryTarget)
         if ($currentPath -notlike "*$binDir*") {
             [Environment]::SetEnvironmentVariable("Path", "$currentPath;$binDir", $registryTarget)
-            Write-Host "Added Rtools 4.5 to $registryTarget PATH."
+            Write-Output "Added Rtools 4.5 to $registryTarget PATH."
         }
         
         # Ensure current session sees the NEW path immediately
@@ -105,10 +105,10 @@ try {
     }
 }
 catch {
-    Write-Host "Path update failed: $($_.Exception.Message)"
+    Write-Output "Path update failed: $($_.Exception.Message)"
     Stop-Transcript
     exit 1
 }
 
-Write-Host "Rtools 4.5 setup complete."
+Write-Output "Rtools 4.5 setup complete."
 exit 0

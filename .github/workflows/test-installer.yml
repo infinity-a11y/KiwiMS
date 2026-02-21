@@ -35,7 +35,7 @@ jobs:
           $cDriveLog = "C:\Users\runneradmin\AppData\Local\KiwiMS\kiwims_setup.log"
           if (Test-Path $cDriveLog) {
               Copy-Item -Path $cDriveLog -Destination ".\kiwims_setup.log" -Force
-              Write-Host "Log harvested from C: drive and moved to workspace."
+              Write-Output "Log harvested from C: drive and moved to workspace."
           } else {
               Write-Warning "Could not find log at $cDriveLog"
           }

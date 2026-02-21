@@ -24,7 +24,7 @@ function Download-File($url, $destination) {
     }
 
     if (-Not $success) {
-        Write-Host "Failed to download: $url"
+        Write-Output "Failed to download: $url"
         exit 1
     }
 }
@@ -33,7 +33,7 @@ function Download-File($url, $destination) {
 $tempPath = Join-Path $env:TEMP "kiwims_setup"
 if (-not (Test-Path $tempPath)) {
     New-Item -Path $tempPath -ItemType Directory -Force | Out-Null
-    Write-Host "Created temporary directory: $tempPath"
+    Write-Output "Created temporary directory: $tempPath"
 }
 
 # Declare url and target path
@@ -42,22 +42,22 @@ $updateInstaller = "$tempPath\update_kiwims.exe"
 
 # Download update executable
 try {
-    Write-Host "Downloading update ..."
+    Write-Output "Downloading update ..."
     Download-File $updateURL $updateInstaller
-    Write-Host "Update download successful."
+    Write-Output "Update download successful."
 }
 catch {
-    Write-Host "Failed to download update. Error: $($_.Exception.Message)"
+    Write-Output "Failed to download update. Error: $($_.Exception.Message)"
     exit 1
 }
 
 # Starting update wizard
 try {
-    Write-Host "Starting update wizard ..."
+    Write-Output "Starting update wizard ..."
     Start-Process -Wait -FilePath $updateInstaller
-    Write-Host "Update done."
+    Write-Output "Update done."
 }
 catch {
-    Write-Host "Failed to launch update wizard. Error: $($_.Exception.Message)"
+    Write-Output "Failed to launch update wizard. Error: $($_.Exception.Message)"
     exit 1
 }

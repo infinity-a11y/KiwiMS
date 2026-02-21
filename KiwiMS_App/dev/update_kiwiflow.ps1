@@ -16,8 +16,8 @@ if (-not $basePath) {
     $basePath = Split-Path -Path $PSCommandPath -Parent -ErrorAction SilentlyContinue
 }
 if (-not $basePath) {
-    Write-Host "Error: Could not determine the script/executable directory."
-    Write-Host "Please ensure setup_kiwims.exe is run from the KiwiMS directory."
+    Write-Output "Error: Could not determine the script/executable directory."
+    Write-Output "Please ensure setup_kiwims.exe is run from the KiwiMS directory."
     pause
     Stop-Transcript -ErrorAction SilentlyContinue
     exit 1
@@ -25,8 +25,8 @@ if (-not $basePath) {
 
 # Validate $basePath
 if (-not (Test-Path $basePath)) {
-    Write-Host "Error: Directory $basePath does not exist."
-    Write-Host "Please ensure setup_kiwims.exe is run from the KiwiMS directory."
+    Write-Output "Error: Directory $basePath does not exist."
+    Write-Output "Please ensure setup_kiwims.exe is run from the KiwiMS directory."
     pause
     Stop-Transcript -ErrorAction SilentlyContinue
     exit 1
@@ -34,18 +34,18 @@ if (-not (Test-Path $basePath)) {
 
 # Ensure the working directory is set to $basePath
 try {
-    Write-Host "Setting working directory to $basePath"
+    Write-Output "Setting working directory to $basePath"
     Set-Location -Path $basePath -ErrorAction Stop
 }
 catch {
-    Write-Host "Error: Failed to set working directory to $basePath. $_"
+    Write-Output "Error: Failed to set working directory to $basePath. $_"
     pause
     Stop-Transcript -ErrorAction SilentlyContinue
     exit 1
 }
 
 # Check version
-Write-Host "Checking for updates..."
+Write-Output "Checking for updates..."
 try {
     $remoteVersionUrl = "https://raw.githubusercontent.com/infinity-a11y/KiwiMS/master/resources/version.txt"
     $remoteVersionContent = Invoke-WebRequest -Uri $remoteVersionUrl -ErrorAction Stop | Select-Object -ExpandProperty Content
@@ -61,28 +61,28 @@ try {
     $localVersionFile = "$basePath\resources\version.txt"
     $localVersion = if (Test-Path $localVersionFile) { (Get-Content $localVersionFile | Where-Object { $_ -match "^version=(.+)$" } | ForEach-Object { $matches[1] }) } else { "0.0.0" }
 
-    Write-Host "Local version: $localVersion, Remote version: $remoteVersion"
+    Write-Output "Local version: $localVersion, Remote version: $remoteVersion"
 
     # Skip update if versions are the same
     if ($localVersion -eq $remoteVersion) {
-        Write-Host "No update needed. Local version matches remote version."
+        Write-Output "No update needed. Local version matches remote version."
     }
     else {
         # Download and extract the latest version
-        Write-Host "Downloading latest version..."
+        Write-Output "Downloading latest version..."
         try {
             $zipFileName = [System.IO.Path]::GetFileName($zipUrl)
             $zipPath = "$env:USERPROFILE\Downloads\$zipFileName"
             $tempDir = "$env:USERPROFILE\Downloads\kiwims_temp"
             Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -ErrorAction Stop
-            Write-Host "Zip file downloaded successfully."
+            Write-Output "Zip file downloaded successfully."
 
             # Extract to temporary directory
             Expand-Archive -Path $zipPath -DestinationPath $tempDir -Force
-            Write-Host "Zip file extracted to $tempDir."
+            Write-Output "Zip file extracted to $tempDir."
         }
         catch {
-            Write-Host "Error: Failed to download or extract zip file. $_"
+            Write-Output "Error: Failed to download or extract zip file. $_"
             pause
             Stop-Transcript
             exit 1
@@ -145,10 +145,10 @@ exit
 
         try {
             Set-Content -Path $updaterBatPath -Value $updaterBatContent -ErrorAction Stop
-            Write-Host "Secondary updater batch file created at $updaterBatPath."
+            Write-Output "Secondary updater batch file created at $updaterBatPath."
         }
         catch {
-            Write-Host "Error: Failed to create secondary updater batch file. $_"
+            Write-Output "Error: Failed to create secondary updater batch file. $_"
             pause
             Stop-Transcript
             exit 1
@@ -157,12 +157,12 @@ exit
         # Launch the batch file and exit
         try {
             Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$updaterBatPath`"" -ErrorAction Stop
-            Write-Host "Launched secondary updater batch file. This process will now exit."
+            Write-Output "Launched secondary updater batch file. This process will now exit."
             Stop-Transcript
             exit 0
         }
         catch {
-            Write-Host "Error: Failed to launch secondary updater batch file. $_"
+            Write-Output "Error: Failed to launch secondary updater batch file. $_"
             pause
             Stop-Transcript
             exit 1
@@ -170,28 +170,28 @@ exit
     }
 }
 catch {
-    Write-Host "Error: Failed to check version. $_"
+    Write-Output "Error: Failed to check version. $_"
     pause
     Stop-Transcript
     exit 1
 }
 
 # Check if Conda is installed
-Write-Host "Checking for Conda..."
+Write-Output "Checking for Conda..."
 try {
     $condaPath = (Get-Command conda -ErrorAction SilentlyContinue).Source
     if (-not $condaPath) {
-        Write-Host "Error: Conda not found. Please run setup_kiwims.exe first."
+        Write-Output "Error: Conda not found. Please run setup_kiwims.exe first."
         $wShell = New-Object -ComObject WScript.Shell
         $wShell.Popup("Error: Conda not found. Please run setup_kiwims.exe first.", 0, "KiwiMS Update Error", 16)
         pause
         Stop-Transcript
         exit 1
     }
-    Write-Host "Conda found at $condaPath"
+    Write-Output "Conda found at $condaPath"
 }
 catch {
-    Write-Host "Error: Failed to locate Conda. $_"
+    Write-Output "Error: Failed to locate Conda. $_"
     $wShell = New-Object -ComObject WScript.Shell
     $wShell.Popup("Error: Failed to locate Conda. $_", 0, "KiwiMS Update Error", 16)
     pause
@@ -200,7 +200,7 @@ catch {
 }
 
 # Initialize Conda environment manually
-Write-Host "Initializing Conda environment..."
+Write-Output "Initializing Conda environment..."
 try {
     # Set PATH to include Conda
     $env:Path = "$condaPath\..\..;$condaPath\..\Scripts;$condaPath\..\Library\bin;" + $env:Path
@@ -208,10 +208,10 @@ try {
     if (-not (Test-Path $condaPath)) {
         throw "Conda executable not found at $condaPath."
     }
-    Write-Host "Conda environment initialized."
+    Write-Output "Conda environment initialized."
 }
 catch {
-    Write-Host "Error: Failed to initialize Conda. $_"
+    Write-Output "Error: Failed to initialize Conda. $_"
     $wShell = New-Object -ComObject WScript.Shell
     $wShell.Popup("Error: Failed to initialize Conda. $_", 0, "KiwiMS Update Error", 16)
     pause
@@ -220,7 +220,7 @@ catch {
 }
 
 # Update kiwims environment using conda run
-Write-Host "Updating kiwims environment..."
+Write-Output "Updating kiwims environment..."
 try {
     $envYmlPath = "$basePath\resources\environment.yml"
     # Use conda run to execute commands in the base environment
@@ -230,10 +230,10 @@ try {
     if ($envExists) {
         & $condaPath run -n base conda env update -n kiwims -f $envYmlPath --prune
         if ($LASTEXITCODE -ne 0) { throw "Conda environment update failed with exit code $LASTEXITCODE." }
-        Write-Host "Environment updated successfully."
+        Write-Output "Environment updated successfully."
     }
     else {
-        Write-Host "Error: kiwims environment not found. Please run setup_kiwims.exe first."
+        Write-Output "Error: kiwims environment not found. Please run setup_kiwims.exe first."
         $wShell = New-Object -ComObject WScript.Shell
         $wShell.Popup("Error: kiwims environment not found. Please run setup_kiwims.exe first.", 0, "KiwiMS Update Error", 16)
         pause
@@ -243,15 +243,15 @@ try {
 }
 catch {
     try {
-        Write-Host "Conda environment update failed. Retrying."
+        Write-Output "Conda environment update failed. Retrying."
         Start-Sleep -Seconds 5
         if ($envExists) {
             & $condaPath run -n base conda env update -n kiwims -f $envYmlPath --prune
             if ($LASTEXITCODE -ne 0) { throw "Conda environment update failed with exit code $LASTEXITCODE." }
-            Write-Host "Environment updated successfully."
+            Write-Output "Environment updated successfully."
         }
         else {
-            Write-Host "Error: kiwims environment not found. Please run setup_kiwims.exe first."
+            Write-Output "Error: kiwims environment not found. Please run setup_kiwims.exe first."
             $wShell = New-Object -ComObject WScript.Shell
             $wShell.Popup("Error: kiwims environment not found. Please run setup_kiwims.exe first.", 0, "KiwiMS Update Error", 16)
             pause
@@ -260,8 +260,8 @@ catch {
         }
     }
     catch {
-        Write-Host "Error: Failed to update environment. $_"
-        Write-Host "Run 'conda env update -n kiwims -f $envYmlPath --prune' manually to debug."
+        Write-Output "Error: Failed to update environment. $_"
+        Write-Output "Run 'conda env update -n kiwims -f $envYmlPath --prune' manually to debug."
         pause
         Stop-Transcript
         exit 1
@@ -269,18 +269,18 @@ catch {
 }
 
 # Updating R packages
-Write-Host "Updating R packages"
+Write-Output "Updating R packages"
 try {
     & $condaPath run -n kiwims R.exe -e "renv::restore()"
 }
 catch {
     try {
-        Write-Host "R package update failed. Retrying."
+        Write-Output "R package update failed. Retrying."
         Start-Sleep -Seconds 5
         & $condaPath run -n kiwims R.exe -e "renv::restore()"
     }
     catch {
-        Write-Host "Error: Failed to update R packages. $_"
+        Write-Output "Error: Failed to update R packages. $_"
         pause
         Stop-Transcript
         exit 1
@@ -288,7 +288,7 @@ catch {
 }
 
 # Create run_app.vbs for launch
-Write-Host "Creating run_app.vbs script..."
+Write-Output "Creating run_app.vbs script..."
 try {
     $vbsPath = "$basePath\run_app.vbs"
     $appPath = "$basePath\app.R" -replace '\\', '\\'  # Single to double backslashes
@@ -361,17 +361,17 @@ Set WShell = Nothing
 Set WMI = Nothing
 "@
     Set-Content -Path $vbsPath -Value $vbsContent -ErrorAction Stop
-    Write-Host "run_app.vbs created at $vbsPath."
+    Write-Output "run_app.vbs created at $vbsPath."
 }
 catch {
-    Write-Host "Error: Failed to create run_app.vbs. $_"
+    Write-Output "Error: Failed to create run_app.vbs. $_"
     pause
     Stop-Transcript
     exit 1
 }
 
 # Re-create Desktop Shortcut
-Write-Host "Creating desktop shortcut for KiwiMS..."
+Write-Output "Creating desktop shortcut for KiwiMS..."
 try {
     $shortcutPath = "$env:USERPROFILE\Desktop\KiwiMS.lnk"
     $iconPath = "$basePath\app\static\favicon.ico"
@@ -385,24 +385,24 @@ try {
     $shortcut.Description = "Launch KiwiMS Shiny App"
     if (Test-Path $iconPath) {
         $shortcut.IconLocation = $iconPath
-        Write-Host "Custom icon applied from $iconPath."
+        Write-Output "Custom icon applied from $iconPath."
     }
     else {
-        Write-Host "Warning: Custom icon not found at $iconPath. Using default icon."
+        Write-Output "Warning: Custom icon not found at $iconPath. Using default icon."
         $shortcut.IconLocation = "C:\Windows\System32\shell32.dll,23"
     }
     $shortcut.Save()
-    Write-Host "Desktop shortcut created at $shortcutPath."
+    Write-Output "Desktop shortcut created at $shortcutPath."
 }
 catch {
-    Write-Host "Error: Failed to create desktop shortcut. $_"
+    Write-Output "Error: Failed to create desktop shortcut. $_"
     pause
     Stop-Transcript
     exit 1
 }
 
-Write-Host "Update complete. Check kiwims_update.log in $userDataPath for details."
-Write-Host "Press ENTER to finish, then restart the KiwiMS app with the new version."
+Write-Output "Update complete. Check kiwims_update.log in $userDataPath for details."
+Write-Output "Press ENTER to finish, then restart the KiwiMS app with the new version."
 pause
 Stop-Transcript
 exit 0

@@ -22,7 +22,7 @@ jobs:
         run: |
           # Takes the tag exactly as it was typed on GitHub
           $version = "${{ github.ref_name }}"
-          Write-Host "Updating .iss AppVersion to: $version"
+          Write-Output "Updating .iss AppVersion to: $version"
           (Get-Content kiwims_setup.iss) -replace 'AppVersion=.*', "AppVersion=$version" | Set-Content kiwims_setup.iss
 
       - name: Compile Inno Setup

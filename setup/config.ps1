@@ -21,7 +21,7 @@ try {
     }
     
     Start-Transcript -Path $logFile -Force | Out-Null
-    Write-Host "### Starting fresh log at $(Get-Date)"
+    Write-Output "### Starting fresh log at $(Get-Date)"
 }
 catch {
     Write-Error "Failed to initialize logging: "
@@ -30,12 +30,12 @@ catch {
 }
 
 try {
-    Write-Host "### Configuring setup (config.ps1)"
-    Write-Host "basePath:     $basePath"
-    Write-Host "userDataPath: $userDataPath"
-    Write-Host "envName:      $envName"
-    Write-Host "logFile:      $logFile"
-    Write-Host "installScope: $installScope"
+    Write-Output "### Configuring setup (config.ps1)"
+    Write-Output "basePath:     $basePath"
+    Write-Output "userDataPath: $userDataPath"
+    Write-Output "envName:      $envName"
+    Write-Output "logFile:      $logFile"
+    Write-Output "installScope: $installScope"
 }
 catch {
     Write-Error "Failed to initialize logging: "
@@ -51,18 +51,18 @@ try {
 
     if ($installScope -eq "allusers") {
         if (-not $isElevated) {
-            Write-Host "ERROR: System-wide installation requires administrator rights."
+            Write-Output "ERROR: System-wide installation requires administrator rights."
             Stop-Transcript
             exit 1
         }
-        Write-Host "Running elevated → system-wide mode OK"
+        Write-Output "Running elevated → system-wide mode OK"
     }
     else {
-        Write-Host "Running in current-user mode (elevation not required)"
+        Write-Output "Running in current-user mode (elevation not required)"
     }
 }
 catch {
-    Write-Host "Privilege check failed: "
+    Write-Output "Privilege check failed: "
     Stop-Transcript
     exit 1
 }
@@ -73,11 +73,11 @@ catch {
 try {
     if (-not (Test-Path $userDataPath)) {
         New-Item -ItemType Directory -Path $userDataPath -Force | Out-Null
-        Write-Host "Created KiwiMS directory: $userDataPath"
+        Write-Output "Created KiwiMS directory: $userDataPath"
     }
 }
 catch {
-    Write-Host "Creating User Data directory failed: "
+    Write-Output "Creating User Data directory failed: "
     Stop-Transcript
     exit 1
 }
@@ -89,11 +89,11 @@ try {
     $tempPath = Join-Path $env:TEMP "kiwims_setup"
     if (-not (Test-Path $tempPath)) {
         New-Item -Path $tempPath -ItemType Directory -Force | Out-Null
-        Write-Host "Created temporary directory: $tempPath"
+        Write-Output "Created temporary directory: $tempPath"
     }
 }
 catch {
-    Write-Host "Creating temporary directory failed: "
+    Write-Output "Creating temporary directory failed: "
     Stop-Transcript
     exit 1
 }
@@ -112,11 +112,11 @@ try {
     
     if (-not (Test-Path $reportPath)) {
         New-Item -Path $reportPath -ItemType Directory -Force | Out-Null
-        Write-Host "Created KiwiMS report directory: $reportPath"
+        Write-Output "Created KiwiMS report directory: $reportPath"
     }
 }
 catch {
-    Write-Host "Defining/Creating report directory failed: "
+    Write-Output "Defining/Creating report directory failed: "
     Stop-Transcript
     exit 1
 }
@@ -128,14 +128,14 @@ try {
     $sourcePath = Join-Path $basePath "app\report\*"
     if (Test-Path $sourcePath) {
         Move-Item -Path $sourcePath -Destination $reportPath -Force -ErrorAction Stop
-        Write-Host "Moved report files to: $reportPath"
+        Write-Output "Moved report files to: $reportPath"
     }
     else {
-        Write-Host "No report files found at $sourcePath. Skipping ..."
+        Write-Output "No report files found at $sourcePath. Skipping ..."
     }
 }
 catch {
-    Write-Host "Moving report files failed: "
+    Write-Output "Moving report files failed: "
     Stop-Transcript
     exit 1
 }
@@ -144,7 +144,7 @@ catch {
 # Finalize Configuration
 #-----------------------------#
 try {
-    Write-Host "Config complete"
+    Write-Output "Config complete"
     exit 0
 }
 catch {
