@@ -1,4 +1,4 @@
-name: KiwiMS Package Update Check
+name: R Package Update Check (renv)
 
 on:
   schedule:
