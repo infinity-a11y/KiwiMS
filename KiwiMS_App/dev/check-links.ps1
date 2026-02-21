@@ -4,7 +4,7 @@
 $TARGET_VERSION = "1.7.32" 
 
 $URLs = @{
-    "RTools 4.5" = "https://cran.r-project.org/bin/windows1/Rtools/rtools45/files/rtools45-6768-6492.exe"
+    "RTools 4.5" = "https://cran.r-project.org/bin/windows/Rtools/rtools45/files/rtools45-6768-6492.exe"
     "Quarto CLI" = "https://github.com/quarto-dev/quarto-cli/releases/download/v${TARGET_VERSION}/quarto-${TARGET_VERSION}-win.zip"
     "Miniconda"  = "https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe"
 }
