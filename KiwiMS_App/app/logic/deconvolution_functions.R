@@ -72,6 +72,21 @@ process_single_dir <- function(
   # Set up Conda environment
   tryCatch(
     {
+      # 1. Making sure the env bin is in PATH
+      envBin <- "C:/ProgramData/miniconda3/envs/kiwims/Library/bin"
+      Sys.setenv(PATH = paste(Sys.getenv("PATH"), envBin, sep = ";"))
+
+      # 2. Telling Python explicitly where to look for DLLs
+      reticulate::py_run_string(
+        "
+import os
+os.add_dll_directory(r'C:\\ProgramData\\miniconda3\\envs\\kiwims\\Library\\bin')
+"
+      )
+
+      # 3. Optional DLL search env variable
+      Sys.setenv(CONDA_DLL_SEARCH_MODIFICATION_ENABLE = "1")
+
       # Run unidec with python
       reticulate::py_run_string(sprintf(
         '
