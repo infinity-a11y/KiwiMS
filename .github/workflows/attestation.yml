@@ -17,12 +17,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Update Inno Setup Version
-        shell: pwsh
-        run: |
-          $version = "${{ github.ref_name }}"
-          Write-Host "Updating .iss AppVersion to: $version"
-          (Get-Content kiwims_setup.iss) -replace 'AppVersion=.*', "AppVersion=$version" | Set-Content kiwims_setup.iss
+      # - name: Update Inno Setup Version
+      #   shell: pwsh
+      #   run: |
+      #     $version = "${{ github.ref_name }}"
+      #     Write-Host "Updating .iss AppVersion to: $version"
+      #     (Get-Content kiwims_setup.iss) -replace 'AppVersion=.*', "AppVersion=$version" | Set-Content kiwims_setup.iss
 
       # FIXED STEP: Using the built-in ISCC compiler
       - name: Compile Inno Setup
