@@ -9,7 +9,7 @@ $exitCode = $LASTEXITCODE
 Write-Host "`nCheck completed." -ForegroundColor Green
 
 if ($exitCode -eq 10) {
-    Write-Host "Updates detected! Telling GitHub this is a success." -ForegroundColor Yellow
+    Write-Host "Updates detected!" -ForegroundColor Yellow
     if ($env:GITHUB_OUTPUT) {
         "updates_found=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
     }
