@@ -1,4 +1,4 @@
-name: Release KiwiMS
+name: Release & Attestation
 
 on:
   push:
@@ -28,7 +28,7 @@ jobs:
       - name: Compile Inno Setup
         shell: pwsh
         run: |
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" kiwims_setup.iss
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" setup_script.iss
 
       - name: Generate Build Provenance
         uses: actions/attest-build-provenance@v2
