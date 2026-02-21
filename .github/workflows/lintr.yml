@@ -19,6 +19,7 @@ jobs:
   lintr:
     name: Run lintr scanning
     runs-on: ubuntu-latest
+    container: rocker/tidyverse:latest
     permissions:
       contents: read # for checkout to fetch code
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
@@ -46,8 +47,13 @@ jobs:
         shell: Rscript {0}
         continue-on-error: true
 
+      - name: Sanitize SARIF file
+        run: |
+          sed -i 's/: null/: ""/g' lintr-results.sarif
+
       - name: Upload analysis results to GitHub
-        uses: github/codeql-action/upload-sarif@v3
+        # Updated to v4 to resolve the deprecation warning
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: lintr-results.sarif
           wait-for-processing: true
