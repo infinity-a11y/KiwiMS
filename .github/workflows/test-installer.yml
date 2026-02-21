@@ -4,6 +4,9 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '0 5 * * 1'
+  push:
+    tags:
+      - '**' 
 
 jobs:
   test-installer:
