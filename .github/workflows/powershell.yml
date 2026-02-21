@@ -31,7 +31,7 @@ jobs:
           path: .\
           recurse: true
           output: results.sarif
-          settings: ./KiwiMS_App/PSScriptAnalyzerSettings.psd1
+          settings: ./KiwiMS_App/dev/PSScriptAnalyzerSettings.psd1
 
       # Upload the SARIF file generated in the previous step
       - name: Upload SARIF results file
