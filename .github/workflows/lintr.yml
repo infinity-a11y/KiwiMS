@@ -35,15 +35,13 @@ jobs:
           use-public-rspm: true
 
       - name: Setup lintr
-        # Updated from commit hash to @v2
         uses: r-lib/actions/setup-r-dependencies@v2
         with:
           extra-packages: |
-            lintr
-            any::sarif
+            any::lintr
+            any::jsonlite
 
       - name: Run lintr
-        # We ensure lintr-results.sarif is generated for the upload step
         run: lintr::sarif_output(lintr::lint_dir("."), "lintr-results.sarif")
         shell: Rscript {0}
         continue-on-error: true
