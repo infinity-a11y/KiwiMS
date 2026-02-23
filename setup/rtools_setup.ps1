@@ -52,7 +52,8 @@ if ($needsInstall) {
         if ($installScope -eq "allusers") {
             $targetDir = "C:\rtools45"
             $registryTarget = [System.EnvironmentVariableTarget]::Machine
-        } else {
+        }
+        else {
             $targetDir = Join-Path $env:LOCALAPPDATA "rtools45"
             $registryTarget = [System.EnvironmentVariableTarget]::User
         }
@@ -62,19 +63,19 @@ if ($needsInstall) {
         $installer = Join-Path $tempPath "rtools45.exe"
 
         # Download Rtools 4.5 specifically
-        Download-File "https://cran.r-project.org/bin/windows/Rtools/rtools45/files/rtools45-6768-6492.exe" $installer
+        Invoke-FileDownload "https://cran.r-project.org/bin/windows/Rtools/rtools45/files/rtools45-6768-6492.exe" $installer
 
         if (Test-Path $installer) {
             Write-Output "Download complete. Installing to $targetDir..."
-        }  else {
+        }
+        else {
             Write-Output "Download failed: $($_.Exception.Message)"
             Stop-Transcript
             exit 1
         }
 
         # Run Installer with /DIR to ensure it goes to our scope-specific path
-        $proc = Start-Process -FilePath $installer -ArgumentList "/VERYSILENT", "/DIR=$targetDir", "/NORESTART" -Wait -PassThru
-        
+        $proc = Start-Process -FilePath $installer -ArgumentList "/VERYSILENT", "/DIR=$targetDir", "/NORESTART" -Wait -PassThru  
         if ($proc.ExitCode -ne 0) { throw "Rtools 4.5 installer failed with code $($proc.ExitCode)" }
         
         $foundRtoolsBin = Join-Path $targetDir "usr\bin\make.exe"
@@ -101,7 +102,7 @@ try {
         }
         
         # Ensure current session sees the NEW path immediately
-        $env:Path = "$binDir;$env:Path" 
+        $env:Path = "$binDir;$env:Path"
     }
 }
 catch {

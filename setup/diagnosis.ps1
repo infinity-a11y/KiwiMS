@@ -2,14 +2,14 @@
 # Script Initialization
 #-----------------------------#
 param(
-    [string]$basePath,         # Directory containing diagnosis.ps1 and renv.lock
+    [string]$basePath,
     [string]$userDataPath,
     [string]$envName,
     [string]$logFile,
     [string]$installScope
 )
 
-$ErrorActionPreference = "Continue" 
+$ErrorActionPreference = "Continue"
 
 # Start logging
 Start-Transcript -Path $logFile -Append | Out-Null
@@ -33,7 +33,7 @@ Write-Output "Run as Admin:  $isElevated"
 Write-Output "OS Version:    $((Get-CimInstance Win32_OperatingSystem).Caption)"
 
 Write-Output "`n--- Environment PATH ---"
-$env:Path -split ";" | ForEach-Object { 
+$env:Path -split ";" | ForEach-Object {
     if ($_) {
         $color = if (Test-Path $_) { "Gray" } else { "Red" }
         Write-Output " - $_"
@@ -79,7 +79,7 @@ if ($condaCmd -and (Test-Path (Join-Path $basePath "renv.lock"))) {
 
         Write-Output "`n--- renv::diagnostics() ---"
         & $condaCmd run -n $envName Rscript -e "setwd('$rRootPath'); renv::diagnostics(project = '.')" 2>&1 | Out-String | Write-Output
-    } 
+    }
     catch {
         Write-Output "Failed to execute renv diagnosis: $($_.Exception.Message)"
     }

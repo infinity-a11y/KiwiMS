@@ -1,4 +1,4 @@
-#-----------------------------#
+﻿#-----------------------------#
 # Script Initialization
 #-----------------------------#
 param(
@@ -17,7 +17,7 @@ $ProgressPreference = "SilentlyContinue"
 #-----------------------------#
 try {
     if (Test-Path $logFile) { 
-        Remove-Item $logFile -Force -ErrorAction SilentlyContinue 
+        Remove-Item $logFile -Force -ErrorAction SilentlyContinue
     }
     
     Start-Transcript -Path $logFile -Force | Out-Null

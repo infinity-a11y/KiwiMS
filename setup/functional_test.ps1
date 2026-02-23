@@ -31,10 +31,12 @@ if ($portProcess) {
         Stop-Process -Id $pidToKill -Force -ErrorAction Stop
         Write-Output "Existing process terminated."
         Start-Sleep -Seconds 2 # Time to release the socket
-    } catch {
+    }
+    catch {
         Write-Output "Warning: Could not stop process $pidToKill. Test may fail."
     }
-} else {
+}
+else {
     Write-Output "Port $port is free."
 }
 
@@ -56,7 +58,7 @@ Write-Output "Monitoring app stability for 15s..."
 
 $appProcess = Start-Process -FilePath $condaCmd -ArgumentList $processArgs -PassThru -NoNewWindow
 
-for ($i=0; $i -lt 15; $i++) {
+for ($i = 0; $i -lt 15; $i++) {
     Write-Output "." -NoNewline
     Start-Sleep -Seconds 1
     if ($appProcess.HasExited) {
@@ -72,7 +74,7 @@ Write-Output "`n[SUCCESS] App engine is stable."
 
 if ($appProcess -and -not $appProcess.HasExited) {
     Write-Output "Closing test instance and cleaning up port..."
-    
+
     # Kill the process tree
     Stop-Process -Id $appProcess.Id -Force -ErrorAction SilentlyContinue
 

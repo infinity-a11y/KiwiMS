@@ -1,7 +1,7 @@
 # check-links.ps1
 
-# Quarto version 
-$TARGET_VERSION = "1.7.32" 
+# Quarto version
+$TARGET_VERSION = "1.7.32"
 
 $URLs = @{
     "RTools 4.5" = "https://cran.r-project.org/bin/windows/Rtools/rtools45/files/rtools45-6768-6492.exe"
@@ -18,8 +18,10 @@ foreach ($name in $URLs.Keys) {
         $response = Invoke-WebRequest -Uri $url -Method Head -TimeoutSec 15 -ErrorAction Stop
         if ($response.StatusCode -eq 200) {
             Write-Output "[OK] $name"
-        } else { throw "Status $($response.StatusCode)" }
-    } catch {
+        }
+        else { throw "Status $($response.StatusCode)" }
+    }
+    catch {
         Write-Output "[FAIL] $name"
         $brokenLinks += "- $name"
     }
@@ -37,7 +39,7 @@ if ($brokenLinks.Count -gt 0) {
     }
     
     Write-Error "Installer check failed."
-    exit 1 
+    exit 1
 }
 
 exit 0

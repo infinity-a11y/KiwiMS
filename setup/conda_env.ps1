@@ -73,7 +73,6 @@ for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
     }
     catch {
         Write-Warning "Attempt $attempt failed: $($_.Exception.Message)"
-        
         if ($attempt -lt $maxRetries) {
             Write-Output "Attempting to remove corrupted environment for a fresh rebuild..."
             & $condaCmd env remove -n $envName -y --all

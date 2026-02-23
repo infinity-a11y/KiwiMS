@@ -74,18 +74,17 @@ try {
 
         # Download Miniconda
         Write-Output "Downloading Miniconda installer..."
-        Download-File "https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe" $minicondaInstaller
+        Invoke-FileDownload "https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe" $minicondaInstaller
 
         if (-not (Test-Path $minicondaInstaller)) {
             throw "Miniconda installer download failed."
         }
 
         # Execute Installation
-        # We use /InstallationType to be explicit and avoid UI hangs
         Write-Output "Starting silent installation to: $condaPrefix"
-        $args = @("/S", "/InstallationType=$installType", "/RegisterPython=0", "/D=$condaPrefix")
+        $procArgs = @("/S", "/InstallationType=$installType", "/RegisterPython=0", "/D=$condaPrefix")
         
-        $process = Start-Process -FilePath $minicondaInstaller -ArgumentList $args -Wait -PassThru
+        $process = Start-Process -FilePath $minicondaInstaller -ArgumentList $procArgs -Wait -PassThru
 
         # IMMEDIATE CHECK of the installer result
         if ($process.ExitCode -ne 0) {
@@ -102,7 +101,6 @@ try {
         Remove-Item $minicondaInstaller -Force -ErrorAction SilentlyContinue
 
         # Verify Installation Path
-        # Miniconda structure: Conda is usually in Scripts\conda.exe
         $condaCmd = Join-Path $condaPrefix "Scripts\conda.exe"
         
         if (-not (Test-Path $condaCmd)) {
@@ -114,7 +112,7 @@ try {
             throw "Miniconda installed but executable not found at $condaCmd"
         }
 
-        # Update Path for the current process (so next scripts can find it)
+        # Update Path for the current process
         $newPaths = "$condaPrefix;$condaPrefix\Scripts;$condaPrefix\Library\bin"
         $env:Path = $newPaths + ";" + $env:Path
         

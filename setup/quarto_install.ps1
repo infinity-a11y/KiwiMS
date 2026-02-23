@@ -86,7 +86,7 @@ if ($needsInstall) {
         }
 
         $tempZip = Join-Path $env:TEMP "quarto.zip"
-        Download-File $DOWNLOAD_URL $tempZip
+        Invoke-FileDownload $DOWNLOAD_URL $tempZip
         
         Write-Output "Extracting archive..."
         Expand-Archive -Path $tempZip -DestinationPath $QUARTO_INSTALL_DIR -Force
@@ -115,7 +115,6 @@ try {
         $newPath = "$currentPath;$quartoBin"
         [Environment]::SetEnvironmentVariable("Path", $newPath, $regTarget)
         Write-Output "Added Quarto bin to $regTarget PATH."
-        
         # Update current session PATH
         $env:Path = "$quartoBin;$env:Path"
         Write-Output "Updated current session PATH with Quarto."

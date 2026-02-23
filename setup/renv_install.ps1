@@ -34,7 +34,8 @@ if ($installScope -eq "allusers") {
         Stop-Transcript
         exit 1
     }
-} else {
+}
+else {
     Write-Output "Current-user mode selected (no elevation required)"
 }
 
@@ -60,10 +61,10 @@ Write-Output "Using Conda at: $condaCmd"
 Write-Output "Checking if renv is already installed in environment '$envName'..."
 
 $oldPreference = $ErrorActionPreference
-$ErrorActionPreference = "Continue" 
+$ErrorActionPreference = "Continue"
 
 try {
-    $checkRenv = & $condaCmd run -n $envName Rscript -e "if(!requireNamespace('renv', quietly=TRUE)) quit(status=1)" 2>&1
+    & $condaCmd run -n $envName Rscript -e "if(!requireNamespace('renv', quietly=TRUE)) quit(status=1)" 2>&1
     $exitCode = $LASTEXITCODE
 }
 finally {
@@ -110,13 +111,13 @@ try {
     # Check exit code
     if ($LASTEXITCODE -ne 0) {
         Write-Output "ERROR: R script failed with exit code $LASTEXITCODE"
-        
         if (Test-Path $routFile) {
             $routContent = Get-Content -Path $routFile -Raw
             Write-Output "--- R Script Output (.Rout) ---"
             Write-Output $routContent
             Write-Output "---------------------------------"
-        } else {
+        }
+        else {
             Write-Output "No .Rout file generated at $routFile"
         }
         

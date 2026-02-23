@@ -1,4 +1,4 @@
-# KiwiMS.ps1 - Launcher
+﻿# KiwiMS.ps1 - Launcher
 #-----------------------------#
 # Script Initialization
 #-----------------------------#

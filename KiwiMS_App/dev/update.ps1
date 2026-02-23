@@ -1,12 +1,12 @@
 # update.ps1
-# Fetch and run KiwiMS update 
+# Fetch and run KiwiMS update
 
 # Log update script
 $logFile = "$env:LOCALAPPDATA\KiwiMS\update.log"
 Start-Transcript -Path $logFile
 
 # Declare download function
-function Download-File($url, $destination) {
+function Invoke-FileDownload($url, $destination) {
     if (Test-Path $destination) {
         Remove-Item $destination -Force
     }
@@ -43,7 +43,7 @@ $updateInstaller = "$tempPath\update_kiwims.exe"
 # Download update executable
 try {
     Write-Output "Downloading update ..."
-    Download-File $updateURL $updateInstaller
+    Invoke-FileDownload $updateURL $updateInstaller
     Write-Output "Update download successful."
 }
 catch {

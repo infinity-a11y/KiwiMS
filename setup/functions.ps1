@@ -127,7 +127,7 @@ function Get-PathScope {
 #-----------------------------#
 # FUNCTION Download with Retry and Fallback
 #-----------------------------#
-function Download-File($url, $destination) {
+function Invoke-FileDownload($url, $destination) {
     # Force TLS 1.2
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
@@ -149,7 +149,7 @@ function Download-File($url, $destination) {
         catch {
             Write-Warning "BITS failed: $($_.Exception.Message)"
             
-            # If BITS fails (e.g., Battery Mode), try Invoke-WebRequest as a fallback within the same attempt
+            # If BITS fails try Invoke-WebRequest as a fallback within the same attempt
             try {
                 Write-Output "BITS failed or suspended. Falling back to Invoke-WebRequest..."
                 Invoke-WebRequest -Uri $url -OutFile $tempDownloadPath -UseBasicParsing -ErrorAction Stop
@@ -190,9 +190,8 @@ function Find-QuartoInstallation {
         $quartoPath = Get-Command quarto -ErrorAction SilentlyContinue
         if ($quartoPath) {
             $binDir = Split-Path $quartoPath.Source -Parent
-            $installRoot = Split-Path $binDir -Parent 
+            $installRoot = Split-Path $binDir -Parent
             $versionString = & quarto --version
-            
             return @{
                 Found   = $true
                 Path    = $installRoot

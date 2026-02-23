@@ -26,21 +26,22 @@ $condaCmd = Find-CondaExecutable
 # 2. Setup Test Environment
 #-----------------------------#
 # Create a unique directory inside the system temp folder
-$guid = [guid]::NewGuid().ToString().Substring(0,8)
+$guid = [guid]::NewGuid().ToString().Substring(0, 8)
 $testTempDir = Join-Path ([System.IO.Path]::GetTempPath()) "KiwiMS_Test_$guid"
 
 Write-Output "Creating temporary test directory: $testTempDir"
 New-Item -ItemType Directory -Path $testTempDir -Force | Out-Null
 
 try {
-    # Generate config 
+    # Generate config
     Write-Output "Writing configuration file ..."
     & $condaCmd run -n $envName Rscript.exe "$basePath\make_config.R" $basePath
 
     # Copy configuration to the specific test directory
     if (Test-Path "$basePath\resources\config.rds") {
         Copy-Item -Path "$basePath\resources\config.rds" -Destination (Join-Path $testTempDir "config.rds")
-    } else {
+    }
+    else {
         Write-Output "Warning: config.rds not found in current directory."
     }
 
