@@ -22,15 +22,18 @@ Write-Output "### Setting up Conda Environment (conda_env.ps1)"
 
 # Discovery
 $condaCmd = Find-CondaExecutable
-$condaPrefix = Split-Path (Split-Path $condaCmd -Parent) -Parent
-$condaEnvPath = Join-Path $condaPrefix "envs\$envName"
-$environmentYmlPath = Join-Path $basePath "resources\environment.yml"
 
 if (-Not (Test-Path $condaCmd)) {
     Write-Output "ERROR: Conda not found at $condaCmd"
     Stop-Transcript
     exit 1
 }
+
+Write-Output $condaCmd
+
+$condaPrefix = Split-Path (Split-Path $condaCmd -Parent) -Parent
+$condaEnvPath = Join-Path $condaPrefix "envs\$envName"
+$environmentYmlPath = Join-Path $basePath "resources\environment.yml"
 
 if (-Not (Test-Path $environmentYmlPath)) {
     Write-Output "ERROR: environment.yml missing at $environmentYmlPath"
@@ -54,7 +57,7 @@ for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
     try {
         if (Test-Path $condaEnvPath) {
             Write-Output "Existing environment found. Attempting incremental update (cache-aware)..."
-            & $condaCmd env update -n $envName -f "$environmentYmlPath" --prune --verbos
+            & $condaCmd env update -n $envName -f "$environmentYmlPath" --prune --verbose
         }
         else {
             Write-Output "Environment not found. Creating new environment from cache/source..."

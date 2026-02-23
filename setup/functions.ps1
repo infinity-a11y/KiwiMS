@@ -17,7 +17,6 @@ function Find-CondaExecutable {
     # Search through hardcoded common paths
     foreach ($path in $searchPaths) {
         if (Test-Path $path) {
-            Write-Output "Found conda at: $path" -ForegroundColor Cyan
             return $path
         }
     }
@@ -25,17 +24,14 @@ function Find-CondaExecutable {
     # Check if conda.exe is in the system PATH
     $condaInPath = Get-Command conda.exe, conda.bat -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($condaInPath) {
-        Write-Output "Found conda in system PATH: $($condaInPath.Path)" -ForegroundColor Cyan
         return $condaInPath.Path
     }
 
     # Check Environment Variables
     if ($env:CONDA_EXE -and (Test-Path $env:CONDA_EXE)) {
-        Write-Output "Found conda via CONDA_EXE: $env:CONDA_EXE" -ForegroundColor Cyan
         return $env:CONDA_EXE
     }
 
-    Write-Output "ERROR: conda.exe not found." -ForegroundColor Red
     return $null
 }
 
@@ -206,7 +202,6 @@ function Find-QuartoInstallation {
         }
     }
     catch {
-        Write-Output "Error: Quarto executable not found. $_"
         Stop-Transcript
         exit 1
     }
@@ -223,11 +218,9 @@ function Test-PathInEnvironment {
     )
     $currentPath = [Environment]::GetEnvironmentVariable("Path", "Machine")
     if ($currentPath -like "*$Directory*") {
-        Write-Output "Directory $Directory is already in system PATH"
         return $true
     }
     else {
-        Write-Output "Directory $Directory is not in system PATH"
         return $false
     }
 }
@@ -272,7 +265,6 @@ function Compare-Version {
         else { return -1 }  # Installed is older
     }
     catch {
-        Write-Output "Error comparing versions: $_"
         return $null
     }
 }

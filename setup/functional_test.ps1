@@ -12,30 +12,30 @@ param(
 $ErrorActionPreference = "Continue"
 Start-Transcript -Path $logFile -Append -Force | Out-Null
 
-Write-Output "==========================================" -ForegroundColor Cyan
-Write-Output "   KiwiMS Functional Test                 " -ForegroundColor Cyan
-Write-Output "==========================================" -ForegroundColor Cyan
+Write-Output "=========================================="
+Write-Output "   KiwiMS Functional Test                 "
+Write-Output "=========================================="
 
 #-----------------------------#
 # Port Check
 #-----------------------------#
 $port = 3838
-Write-Output "[Step 1] Checking if port $port is available..." -ForegroundColor Yellow
+Write-Output "[Step 1] Checking if port $port is available..."
 
 $portProcess = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
 
 if ($portProcess) {
     $pidToKill = $portProcess.OwningProcess
-    Write-Output "Port $port is occupied by PID $pidToKill. Clearing it now..." -ForegroundColor Yellow
+    Write-Output "Port $port is occupied by PID $pidToKill. Clearing it now..."
     try {
         Stop-Process -Id $pidToKill -Force -ErrorAction Stop
-        Write-Output "Existing process terminated." -ForegroundColor Gray
+        Write-Output "Existing process terminated."
         Start-Sleep -Seconds 2 # Time to release the socket
     } catch {
-        Write-Output "Warning: Could not stop process $pidToKill. Test may fail." -ForegroundColor Red
+        Write-Output "Warning: Could not stop process $pidToKill. Test may fail."
     }
 } else {
-    Write-Output "Port $port is free." -ForegroundColor Gray
+    Write-Output "Port $port is free."
 }
 
 #-----------------------------#
@@ -51,8 +51,8 @@ $processArgs = @("run", "-n", $envName, "--no-capture-output", "Rscript.exe", "-
 #-----------------------------#
 # 4. Launch and Monitor
 #-----------------------------#
-Write-Output "[Step 2] Running Functional Smoke Test..." -ForegroundColor Yellow
-Write-Output "Monitoring app stability for 15s..." -ForegroundColor Gray
+Write-Output "[Step 2] Running Functional Smoke Test..."
+Write-Output "Monitoring app stability for 15s..."
 
 $appProcess = Start-Process -FilePath $condaCmd -ArgumentList $processArgs -PassThru -NoNewWindow
 
@@ -60,7 +60,7 @@ for ($i=0; $i -lt 15; $i++) {
     Write-Output "." -NoNewline
     Start-Sleep -Seconds 1
     if ($appProcess.HasExited) {
-        Write-Output "`n[FAIL] App crashed! Exit Code: $($appProcess.ExitCode)" -ForegroundColor Red
+        Write-Output "`n[FAIL] App crashed! Exit Code: $($appProcess.ExitCode)"
         Stop-Transcript; exit 1
     }
 }
@@ -68,10 +68,10 @@ for ($i=0; $i -lt 15; $i++) {
 #-----------------------------#
 # 5. Success & Cleanup
 #-----------------------------#
-Write-Output "`n[SUCCESS] App engine is stable." -ForegroundColor Green
+Write-Output "`n[SUCCESS] App engine is stable."
 
 if ($appProcess -and -not $appProcess.HasExited) {
-    Write-Output "Closing test instance and cleaning up port..." -ForegroundColor Gray
+    Write-Output "Closing test instance and cleaning up port..."
     
     # Kill the process tree
     Stop-Process -Id $appProcess.Id -Force -ErrorAction SilentlyContinue

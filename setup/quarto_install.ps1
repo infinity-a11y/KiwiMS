@@ -118,14 +118,14 @@ try {
         
         # Update current session PATH
         $env:Path = "$quartoBin;$env:Path"
-        Write-Output "Updated current session PATH with Quarto." -ForegroundColor Gray
+        Write-Output "Updated current session PATH with Quarto."
     }
     else {
         Write-Output "Quarto bin already in $regTarget PATH."
     }
 }
 catch {
-    Write-Output "Warning: Could not update PATH. You may need to add $quartoBin manually." -ForegroundColor Yellow
+    Write-Output "Warning: Could not update PATH. You may need to add $quartoBin manually."
 }
 
 Write-Output "Quarto setup complete."

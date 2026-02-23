@@ -12,9 +12,9 @@ param(
 $ErrorActionPreference = "Continue"
 Start-Transcript -Path $logFile -Append -Force | Out-Null
 
-Write-Output "==========================================" -ForegroundColor Cyan
-Write-Output "   Deconvolution Functional Test          " -ForegroundColor Cyan
-Write-Output "==========================================" -ForegroundColor Cyan
+Write-Output "=========================================="
+Write-Output "   Deconvolution Functional Test          "
+Write-Output "=========================================="
 
 # Source functions
 . "$basePath\functions.ps1"
@@ -29,7 +29,7 @@ $condaCmd = Find-CondaExecutable
 $guid = [guid]::NewGuid().ToString().Substring(0,8)
 $testTempDir = Join-Path ([System.IO.Path]::GetTempPath()) "KiwiMS_Test_$guid"
 
-Write-Output "Creating temporary test directory: $testTempDir" -ForegroundColor Gray
+Write-Output "Creating temporary test directory: $testTempDir"
 New-Item -ItemType Directory -Path $testTempDir -Force | Out-Null
 
 try {
@@ -41,30 +41,30 @@ try {
     if (Test-Path "$basePath\resources\config.rds") {
         Copy-Item -Path "$basePath\resources\config.rds" -Destination (Join-Path $testTempDir "config.rds")
     } else {
-        Write-Output "Warning: config.rds not found in current directory." -ForegroundColor Yellow
+        Write-Output "Warning: config.rds not found in current directory."
     }
 
     #-----------------------------#
     # 3. Execution
     #-----------------------------#
-    Write-Output "Executing R deconvolution logic..." -ForegroundColor Yellow
+    Write-Output "Executing R deconvolution logic..."
     
     # We pass the specific $testTempDir to the R script
     & $condaCmd run -n $envName --no-capture-output Rscript.exe "$basePath\app\logic\deconvolution_execute.R" $testTempDir $testTempDir $basePath $testTempDir "testing"
 
     if ($LASTEXITCODE -ne 0) {
-        Write-Output "R script failed with exit code $LASTEXITCODE" -ForegroundColor Red
+        Write-Output "R script failed with exit code $LASTEXITCODE"
     }
 }
 catch {
-    Write-Output "An error occurred during the test: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Output "An error occurred during the test: $($_.Exception.Message)"
 }
 finally {
     #-----------------------------#
     # 4. Cleanup
     #-----------------------------#
     if (Test-Path $testTempDir) {
-        Write-Output "Cleaning up test directory..." -ForegroundColor Gray
+        Write-Output "Cleaning up test directory..."
         # Sleep briefly to ensure R has released file handles
         Start-Sleep -Seconds 1 
         Remove-Item -Path $testTempDir -Recurse -Force -ErrorAction SilentlyContinue
