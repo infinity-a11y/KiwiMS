@@ -72,17 +72,37 @@ process_single_dir <- function(
   # Set up Conda environment
   tryCatch(
     {
-      # 1. Making sure the env bin is in PATH
-      envBin <- "C:/ProgramData/miniconda3/envs/kiwims/Library/bin"
+      # 1. Dynamically locate the environment path
+      base_system <- "C:/ProgramData/miniconda3/envs/kiwims"
+      base_user <- file.path(
+        Sys.getenv("LOCALAPPDATA"),
+        "miniconda3/envs/kiwims"
+      )
+
+      # Choose the one that actually exists
+      if (dir.exists(base_system)) {
+        env_base <- base_system
+      } else if (dir.exists(base_user)) {
+        env_base <- base_user
+      } else {
+        stop("Kiwims environment not found in ProgramData or Local AppData.")
+      }
+
+      # Construct the bin path
+      envBin <- file.path(env_base, "Library/bin")
+
+      # 2. Update PATH
       Sys.setenv(PATH = paste(Sys.getenv("PATH"), envBin, sep = ";"))
 
-      # 2. Telling Python explicitly where to look for DLLs
-      reticulate::py_run_string(
+      # 3. Tell Python where to look for DLLs
+      # We use shQuote to handle spaces in folder names safely
+      reticulate::py_run_string(sprintf(
         "
 import os
-os.add_dll_directory(r'C:\\ProgramData\\miniconda3\\envs\\kiwims\\Library\\bin')
-"
-      )
+os.add_dll_directory(r'%s')
+",
+        envBin
+      ))
 
       # 3. Optional DLL search env variable
       Sys.setenv(CONDA_DLL_SEARCH_MODIFICATION_ENABLE = "1")
