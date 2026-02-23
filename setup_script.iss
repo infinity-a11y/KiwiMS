@@ -49,6 +49,7 @@ Source: "KiwiMS_App\app\*"; DestDir: "{app}\app"; Flags: recursesubdirs createal
 Source: "KiwiMS_App\dev\*"; DestDir: "{app}\dev"; Flags: recursesubdirs createallsubdirs;
 Source: "KiwiMS_App\resources\*"; DestDir: "{app}\resources"; Flags: recursesubdirs createallsubdirs;
 Source: "setup\favicon.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "LICENSE"; DestDir: "{app}";
 
 [CustomMessages]
 StatusMsg_Configuring=Configuring setup...
