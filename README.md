@@ -8,12 +8,6 @@ KiwiMS is an interactive pipeline with graphical user interface to perform prote
 
 <br><br><hr><br>
 
-### Current Version: KiwiMS 0.3.2
-
-<i> 2026-02-09 </i> <br> <b>KiwiMS 0.3.2</b> <br> <https://github.com/infinity-a11y/KiwiMS/releases/tag/0.3.2>
-
-<br><hr><br>
-
 ### Installation
 
 1.  Download the KiwiMS installer from the latest release: <br>
@@ -33,6 +27,12 @@ KiwiMS is an interactive pipeline with graphical user interface to perform prote
 6.  Below this information, a new button will appear. Click the "Run anyway" button to start the installation.
 
 <br><hr><br>
+
+### Current Version: KiwiMS 0.3.2
+
+<i> 2026-02-09 </i> <br> <b>KiwiMS 0.3.2</b> <br> <https://github.com/infinity-a11y/KiwiMS/releases/tag/0.3.2>
+
+<hr><br>
 
 ### System Requirements
 
