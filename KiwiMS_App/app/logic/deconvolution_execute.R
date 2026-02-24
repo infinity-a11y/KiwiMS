@@ -66,8 +66,9 @@ tryCatch(
   }
 )
 
+# If test run dont write result file
 testing <- commandArgs(trailingOnly = TRUE)[5]
-if (is.null(testing)) {
+if (is.na(testing)) {
   # Read log and output
   tryCatch(
     {

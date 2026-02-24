@@ -53,6 +53,9 @@ try {
     # We pass the specific $testTempDir to the R script
     & $condaCmd run -n $envName --no-capture-output Rscript.exe "$basePath\app\logic\deconvolution_execute.R" $testTempDir $testTempDir $basePath $testTempDir "testing"
 
+    # Remove config file
+    Remove-Item -Path "$basePath\resources\config.rds", (Join-Path $testTempDir "config.rds") -Force -ErrorAction SilentlyContinue
+
     if ($LASTEXITCODE -ne 0) {
         Write-Output "R script failed with exit code $LASTEXITCODE"
     }
