@@ -1,39 +1,34 @@
-Please cite both KiwiMS and UniDec if you used this software in your work.
-
-Marian Freisleben. (2026). infinity-a11y/KiwiMS: KiwiMS 0.3.3. Zenodo. 
-DOI: https://doi.org/10.5281/zenodo.18552188
-
-Marty, M. T.; Baldwin, A. J.; Marklund, E. G.; Hochberg, G. K.; Benesch, J. L.; Robinson, C. V. Bayesian deconvolution of mass and ion mobility spectra: from binary interactions to polydisperse ensembles. Analytical chemistry 2015, 87 (8), 4370– 6.  
-DOI: https://doi.org/10.1021/acs.analchem.5b00140
-
-
-### BibTeX ###
-
-@software{marian_freisleben_2026_18552188,
-  author       = {Marian Freisleben},
-  title        = {infinity-a11y/KiwiMS: KiwiMS 0.3.3},
-  month        = feb,
-  year         = 2026,
-  publisher    = {Zenodo},
-  version      = {0.3.3},
-  doi          = {10.5281/zenodo.18552188},
-  url          = {https://doi.org/10.5281/zenodo.18552188},
-}
-
-@article{marty_bayesian_2015,
-	title = {Bayesian {Deconvolution} of {Mass} and {Ion} {Mobility} {Spectra}: {From} {Binary} {Interactions} to {Polydisperse} {Ensembles}},
-	volume = {87},
-	issn = {0003-2700},
-	shorttitle = {Bayesian {Deconvolution} of {Mass} and {Ion} {Mobility} {Spectra}},
-	url = {https://doi.org/10.1021/acs.analchem.5b00140},
-	doi = {10.1021/acs.analchem.5b00140},
-	abstract = {Interpretation of mass spectra is challenging because they report a ratio of two physical quantities, mass and charge, which may each have multiple components that overlap in m/z. Previous approaches to disentangling the two have focused on peak assignment or fitting. However, the former struggle with complex spectra, and the latter are generally computationally intensive and may require substantial manual intervention. We propose a new data analysis approach that employs a Bayesian framework to separate the mass and charge dimensions. On the basis of this approach, we developed UniDec (Universal Deconvolution), software that provides a rapid, robust, and flexible deconvolution of mass spectra and ion mobility-mass spectra with minimal user intervention. Incorporation of the charge-state distribution in the Bayesian prior probabilities provides separation of the m/z spectrum into its physical mass and charge components. We have evaluated our approach using systems of increasing complexity, enabling us to deduce lipid binding to membrane proteins, to probe the dynamics of subunit exchange reactions, and to characterize polydispersity in both protein assemblies and lipoprotein Nanodiscs. The general utility of our approach will greatly facilitate analysis of ion mobility and mass spectra.},
-	number = {8},
-	urldate = {2026-02-12},
-	journal = {Analytical Chemistry},
-	publisher = {American Chemical Society},
-	author = {Marty, Michael T. and Baldwin, Andrew J. and Marklund, Erik G. and Hochberg, Georg K. A. and Benesch, Justin L. P. and Robinson, Carol V.},
-	month = apr,
-	year = {2015},
-	pages = {4370--4376}
-}
+cff-version: 1.2.0
+message: "If you use this software, please cite both KiwiMS and UniDec using the metadata from this file."
+authors:
+  - family-names: "Freisleben"
+    given-names: "Marian"
+title: "KiwiMS"
+version: 0.3.3
+doi: 10.5281/zenodo.18552188
+date-released: 2026-02-25
+url: "https://github.com/infinity-a11y/KiwiMS"
+preferred-citation:
+  type: article
+  authors:
+    - family-names: "Marty"
+      given-names: "Michael T."
+    - family-names: "Baldwin"
+      given-names: "Andrew J."
+    - family-names: "Marklund"
+      given-names: "Erik G."
+    - family-names: "Hochberg"
+      given-names: "Georg K. A."
+    - family-names: "Benesch"
+      given-names: "Justin L. P."
+    - family-names: "Robinson"
+      given-names: "Carol V."
+  doi: "10.1021/acs.analchem.5b00140"
+  journal: "Analytical Chemistry"
+  month: 4
+  start: 4370
+  end: 4376
+  title: "Bayesian deconvolution of mass and ion mobility spectra: from binary interactions to polydisperse ensembles"
+  issue: 8
+  volume: 87
+  year: 2015
