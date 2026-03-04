@@ -23,7 +23,6 @@ box::use(
       get_kiwims_version,
       get_latest_release_url,
     ],
-  app / logic / conversion_constants[gpl3_licence, ]
 )
 
 suppressWarnings(library(logr))
@@ -335,7 +334,9 @@ server <- function(id) {
               shiny$tags$pre(
                 style = "height: 400px; overflow-y: scroll; background-color: #f8f9fa; 
                  font-size: 11px; padding: 30px; border: 1px solid #ddd; width: fit-content; margin: 0; justify-self: center;",
-                shiny::HTML(gpl3_licence)
+                if (Sys.getenv("KIWIMS_DEV_MODE") != "TRUE") {
+                  readLines("LICENSE")
+                }
               )
             ),
             footer = shiny$tagList(

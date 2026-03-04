@@ -75,7 +75,7 @@ ui <- function(id) {
         class = "comp-prot-controls",
         shiny::fluidRow(
           shiny::column(
-            width = 3,
+            width = 4,
             shiny::div(
               class = "table-input",
               shiny::fileInput(
@@ -87,13 +87,13 @@ ui <- function(id) {
             )
           ),
           shiny::column(
-            width = 2,
+            width = 1,
             shiny::div(
-              class = "conversion-checkbox",
-              shiny::checkboxInput(
-                ns("proteins_header_checkbox"),
-                "Has header",
-                value = FALSE
+              class = "tooltip-bttn",
+              shiny::actionButton(
+                ns("fileinput_tooltip_bttn"),
+                label = "",
+                icon = shiny::icon("circle-question")
               )
             )
           ),
@@ -149,7 +149,7 @@ ui <- function(id) {
         class = "comp-prot-controls",
         shiny::fluidRow(
           shiny::column(
-            width = 3,
+            width = 4,
             shiny::div(
               class = "table-input",
               shiny::fileInput(
@@ -161,13 +161,13 @@ ui <- function(id) {
             )
           ),
           shiny::column(
-            width = 2,
+            width = 1,
             shiny::div(
-              class = "conversion-checkbox",
-              shiny::checkboxInput(
-                ns("compounds_header_checkbox"),
-                "Has header",
-                value = FALSE
+              class = "tooltip-bttn",
+              shiny::actionButton(
+                ns("fileinput_tooltip_bttn"),
+                label = "",
+                icon = shiny::icon("circle-question")
               )
             )
           ),
@@ -234,7 +234,18 @@ ui <- function(id) {
           ),
           shiny::column(
             width = 2,
-            shiny::textOutput(ns("sample_number_info"))
+            shiny::div(
+              class = "sample-declaration-info-ui",
+              shiny::div(
+                class = "tooltip-bttn",
+                shiny::actionButton(
+                  ns("fileinput_tooltip_bttn"),
+                  label = "",
+                  icon = shiny::icon("circle-question")
+                )
+              ),
+              shiny::textOutput(ns("sample_number_info"))
+            )
           ),
           shiny::column(
             width = 3,
@@ -301,6 +312,11 @@ ui <- function(id) {
       shiny::tags$script(
         popover_autoclose
       )
+    ),
+    bslib::nav_item(
+      id = ns("declaration_info"),
+      class = "conversion-tab-item-wrapper",
+      shiny::uiOutput(ns("declaration_info_ui"))
     )
   )
 }
@@ -417,10 +433,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     safe_observe(
       observer_name = "Conditional Adaption of Concentration/Time Input UI",
       handler_fn = function() {
-        if (
-          isTRUE(conversion_sidebar_vars$run_ki_kinact()) &&
-            isFALSE(declaration_vars$samples_confirmed)
-        ) {
+        if (isTRUE(conversion_sidebar_vars$run_ki_kinact())) {
           shinyjs::removeClass(
             selector = ".unit-selectors .form-group .bootstrap-select",
             class = "custom-disable"
@@ -536,7 +549,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     }) |>
       shiny::bindEvent(
         list(sample_table_trigger()),
-        # conversion_sidebar_vars$run_ki_kinact(),
         ignoreInit = FALSE
       )
 
@@ -552,7 +564,67 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       )
     })
 
+    ### Tab info text ----
+    output$declaration_info_ui <- shiny::renderUI({
+      shiny::req(input$tabs)
+
+      if (input$tabs == "Proteins") {
+        hints <- "Upload a CSV|TSV|TXT|Excel file or manually enter names and mass values of the <strong>proteins</strong> into the table."
+      } else if (input$tabs == "Compounds") {
+        hints <- "Upload a CSV|TSV|TXT|Excel file or manually enter names and mass values of the <strong>compounds</strong> into the table."
+      } else if (input$tabs == "Samples") {
+        hints <- "Assign <strong>protein-compound complexes</strong> to deconvoluted samples."
+      }
+      # TODO
+      # Add hints to result interface
+      # else if (input$tabs == "Binding") {
+      #   hints <- shiny::HTML(
+      #     "Global fit of a concentration series of binding curves determining binding parameters for the selected complex."
+      #   )
+      # } else if (input$tabs == "Hits") {
+      #   hints <- shiny::HTML(
+      #     "The 'Hits' tab shows all signals assigned to the currently selected complex and respectively inferred parameters."
+      #   )
+      # } else {
+      #   hints <- "%-Binding inferred from time series measurements of a single concentration."
+      # }
+
+      shiny::HTML(paste(
+        '<i class="fa-solid fa-circle-info"></i> &nbsp;&nbsp;',
+        hints
+      ))
+    })
+
     ## Table loading special events ----
+
+    ### Unconfirm sample table on ki/kinact activation ----
+    safe_observe(
+      event_expr = conversion_sidebar_vars$run_ki_kinact(),
+      observer_name = "Unconfirm Sample Table on Ki/Kinact Activation",
+      handler_fn = function() {
+        declaration_vars$samples_confirmed <- FALSE
+
+        # Update info text
+        # output$samples_table_info <- shiny::renderText(
+        #   "Ki/Kinact activated - please confirm sample table again"
+        # )
+
+        shinyjs::removeClass(
+          "samples_table_info",
+          "table-info-green"
+        )
+        shinyjs::addClass(
+          "samples_table_info",
+          "table-info-red"
+        )
+
+        # Mark tab as undone
+        shinyjs::runjs(
+          'document.querySelector(".nav-link[data-value=\'Samples\']").classList.remove("done");'
+        )
+      }
+    )
+
     ### Result file input loading feedback ----
     shinyjs::onevent(
       "change",
@@ -625,15 +697,25 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       event_expr = input$proteins_fileinput,
       observer_name = "Protein Table File Upload",
       handler_fn = function() {
-        protein_table_data(handle_file_upload(
+        protein_table_input <- handle_file_upload(
           file_input = input$proteins_fileinput,
-          header_checkbox = input$proteins_header_checkbox,
-          type = "protein",
+          type = "Protein",
           output = output,
           declaration_vars = declaration_vars
-        ))
-        declaration_vars$protein_table_disabled <- FALSE
-        protein_table_trigger(protein_table_trigger() + 1)
+        )
+
+        if (!is.null(protein_table_input)) {
+          # Assign new table data to reactive variable and mark table status as TRUE to trigger table observer
+          protein_table_data(protein_table_input)
+          declaration_vars$protein_table_status <- TRUE
+
+          # Set disable status to FALSE to allow confirm button activation
+          # and table observer activation
+          declaration_vars$protein_table_disabled <- FALSE
+
+          # Trigger table render
+          protein_table_trigger(protein_table_trigger() + 1)
+        }
       }
     )
 
@@ -644,7 +726,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       handler_fn = function() {
         compound_table_data(handle_file_upload(
           file_input = input$compounds_fileinput,
-          header_checkbox = input$compounds_header_checkbox,
           type = "compound",
           output = output,
           declaration_vars = declaration_vars
@@ -5712,6 +5793,212 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     )
 
     # Tooltips ----
+
+    ## Fileinput tooltips ----
+    safe_observe(
+      event_expr = input$fileinput_tooltip_bttn,
+      observer_name = "Tooltips Displayer",
+      handler_fn = function() {
+        shiny::req(input$tabs)
+
+        if (input$tabs == "Proteins") {
+          ## Protein declaration ----
+          title <- "Protein Declaration"
+          hints <- shiny::column(
+            width = 12,
+            shiny::div(
+              class = "tooltip-text",
+              "One or more proteins can be screened for. The protein names/IDs together with their Mw values [Da] can be defined either via file upload or by entering the values into the table. The table also supports copy/paste for efficient filling."
+            ),
+            shiny::br(),
+            shiny::div(
+              class = "tooltip-img-text",
+              "The format requires the name/ID as first column and up to nine columns the theoretical mass as well as any mass shifts per protein. Headers are optional."
+            ),
+            shiny::br(),
+            shiny::tags$img(src = "static/protein_table.png"),
+            shiny::br()
+          )
+        } else if (input$tabs == "Compounds") {
+          ## Compound declaration ----
+          title <- "Compound Declaration"
+          hints <- shiny::column(
+            width = 12,
+            shiny::div(
+              class = "tooltip-text",
+              "One or more compounds can be screened for. The compound names/IDs together with their mass values [Da] can be defined either via file upload or by entering the values into the table. The table also supports copy/paste for efficient filling."
+            ),
+            shiny::br(),
+            shiny::div(
+              class = "tooltip-img-text",
+              "The format requires the name/ID as first column and up to nine columns the theoretical mass as well as any mass shifts per compound. Headers are optional."
+            ),
+            shiny::br(),
+            shiny::tags$img(
+              src = "static/compound_table.png"
+            ),
+            shiny::br()
+          )
+        } else if (input$tabs == "Samples") {
+          ## Sample declaration ----
+          title <- "Samples Declaration"
+          hints <- shiny::column(
+            width = 12,
+            shiny::div(
+              class = "tooltip-text",
+              "One or more compounds can be screened for. The compound names/IDs together with their mass values [Da] can be defined either via file upload or by entering the values into the table. The table also supports copy/paste for efficient filling."
+            ),
+            shiny::br(),
+            shiny::div(
+              class = "tooltip-img-text",
+              "The format requires the name/ID as first column and up to nine columns the theoretical mass as well as any mass shifts per compound. Headers are optional."
+            ),
+            shiny::br(),
+            shiny::tags$img(
+              src = "static/compound_table.png"
+            ),
+            shiny::br()
+          )
+        }
+        # TODO
+        # Add tooltips for result interface
+        # else if (input$tabs == "Binding") {
+        #   ## Binding analysis ----
+        #   title <- "Binding Analysis"
+        #   hints <- shiny::column(
+        #     width = 12,
+        #     shiny::withMathJax(),
+        #     shiny::div(
+        #       class = "tooltip-text",
+        #       shiny::p(
+        #         "This tab displays the complete concentration series for a single compound, enabling global determination of the two fundamental covalent binding parameters: ",
+        #         shiny::strong("k", htmltools::tags$sub("inact")),
+        #         " (maximum inactivation rate at saturation) and ",
+        #         shiny::strong("K", htmltools::tags$sub("i")),
+        #         " (apparent dissociation constant of the initial reversible complex)."
+        #       ),
+        #       shiny::p(
+        #         "Individual time-courses are fitted to extract k",
+        #         htmltools::tags$sub("obs"),
+        #         " values, which are then globally fitted to the hyperbolic two-step model to yield the second-order rate constant ",
+        #         shiny::strong(
+        #           "k",
+        #           htmltools::tags$sub("inact"),
+        #           " / K",
+        #           htmltools::tags$sub("i")
+        #         ),
+        #         " — the gold-standard metric of covalent binder efficiency at low occupancy."
+        #       )
+        #     )
+        #   )
+        # } else if (conversion_main_vars$selected_tab() == "Hits") {
+        #   ## Hits table ----
+        #   title <- "Hits Table"
+        #   hints <- shiny::fluidRow(
+        #     shiny::br(),
+        #     shiny::column(
+        #       width = 11,
+        #       shiny::div(
+        #         class = "tooltip-text",
+        #         shiny::p(
+        #           "The hits table lists all peak signals that correspond to the declared proteins and compounds with respect to their molecular weights including mass shifts and multiple binding (stoichiometry). Signals that fall within the user-determined peak tolerance values are considered."
+        #         ),
+        #         htmltools::tags$ul(
+        #           htmltools::tags$li(
+        #             shiny::strong("Well / Sample ID"),
+        #             " – plate well and sample name or ID"
+        #           ),
+        #           htmltools::tags$li(
+        #             shiny::strong("Conc."),
+        #             " – compound concentration"
+        #           ),
+        #           htmltools::tags$li(
+        #             shiny::strong("Time"),
+        #             " – incubation time point"
+        #           ),
+        #           htmltools::tags$li(
+        #             shiny::strong("Theor. Prot."),
+        #             " – theoretical mass of the unmodified protein"
+        #           ),
+        #           htmltools::tags$li(
+        #             shiny::strong("Meas. Prot."),
+        #             " – measured deconvolved mass of the protein species"
+        #           ),
+        #           htmltools::tags$li(
+        #             shiny::strong("Δ Prot."),
+        #             " – difference between theoretical and measured deconvolved protein mass"
+        #           ),
+        #           htmltools::tags$li(
+        #             shiny::strong("Ⅰ Prot."),
+        #             " – relative intensity of the unmodified protein peak [%]"
+        #           ),
+        #           htmltools::tags$li(
+        #             shiny::strong("Peak Signal"),
+        #             " – raw signal intensity for present peak"
+        #           ),
+        #           htmltools::tags$li(
+        #             shiny::strong("Ⅰ Cmp"),
+        #             " – intensity of the peak representing the protein together with a compound adduct [%]"
+        #           ),
+        #           htmltools::tags$li(
+        #             shiny::strong("Cmp Name"),
+        #             " – compound name or ID of the bound compound"
+        #           ),
+        #           htmltools::tags$li(
+        #             shiny::strong("Theor. Cmp"),
+        #             " – theoretical mass of the bound compound"
+        #           ),
+        #           htmltools::tags$li(
+        #             shiny::strong("Δ Cmp"),
+        #             " – difference between theoretical complex and the obtained deconvolved mass [Da]"
+        #           ),
+        #           htmltools::tags$li(
+        #             shiny::strong("Bind. Stoich."),
+        #             " – detected binding stoichiometry (no. of bound compounds)"
+        #           ),
+        #           htmltools::tags$li(
+        #             shiny::strong("%-Binding"),
+        #             " – percentage of protein that has formed the covalent adduct at this time point"
+        #           ),
+        #           htmltools::tags$li(
+        #             shiny::strong("Total %-Binding"),
+        #             " – cumulative %-binding (identical to %-Binding when only one adduct is present)"
+        #           )
+        #         ),
+        #         shiny::p(
+        #           "The ",
+        #           shiny::strong("%-Binding"),
+        #           " (or ",
+        #           shiny::strong("Total %-Binding"),
+        #           ") values are used to construct the binding curve and to derive ",
+        #           shiny::strong("k", htmltools::tags$sub("obs")),
+        #           ", plateau, and initial velocity (v)."
+        #         )
+        #       )
+        #     )
+        #   )
+        # } else {
+        #   ## Concentration time series ----
+        #   title <- "Single Concentration Time Series"
+        #   hints <- "Binding parameters derived from mass spectra of time series measurements of a single concentration."
+        # }
+
+        shiny::showModal(
+          shiny::div(
+            class = "tip-modal",
+            shiny::modalDialog(
+              hints,
+              title = title,
+              easyClose = TRUE,
+              footer = shiny::tagList(
+                shiny::modalButton("Dismiss")
+              )
+            )
+          )
+        )
+      }
+    )
+
     ## Binding curve ----
     shiny::observeEvent(input$binding_curve_tooltip_bttn, {
       shiny::showModal(
@@ -6285,7 +6572,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
     # Return server values ----
     list(
-      selected_tab = shiny::reactive(input$tabs),
       conversion_ready = shiny::reactive(declaration_vars$conversion_ready),
       input_list = shiny::reactive(list(
         Protein_Table = protein_table_data(),

@@ -18,15 +18,29 @@ box::use(
 # Helper function to process uploaded table
 #' @export
 process_uploaded_table <- function(df, type) {
-  if (is.null(df) || nrow(df) == 0) {
-    return(NULL)
+  # Check if first column contains values
+  if (anyNA(df[, 1])) {
+    return("First column (name) must contain values.")
   }
 
-  expected_cols <- if (type == "protein") {
-    c("Protein", paste("Mass", 1:9))
-  } else {
-    c("Compound", paste("Mass", 1:9))
+  # Skip header row if first row is non-numeric
+  if (all(is.na(suppressWarnings(as.numeric(as.character(df[1, ])))))) {
+    message(
+      "Table appears to contain header text. Skipping first row conversion."
+    )
+    df <- df[-1, , drop = FALSE]
   }
+
+  # Check if table has at least two columns (name and mass)
+  if (is.null(df) || nrow(df) == 0 || ncol(df) < 2) {
+    return("Table must contain at least two columns: name and mass.")
+  }
+
+  # Define expected column names based on type
+  expected_cols <- c(
+    ifelse(type == "Protein", "Protein", "Compound"),
+    paste("Mass", 1:9)
+  )
 
   # Take first up to 10 columns
   num_cols <- min(ncol(df), 10)
@@ -43,26 +57,16 @@ process_uploaded_table <- function(df, type) {
   }
 
   # Convert mass columns to numeric
-  mass_cols <- paste("Mass", 1:9)
-  for (col in mass_cols) {
-    if (col %in% colnames(df)) {
-      original <- df[[col]]
-      numeric_vals <- suppressWarnings(as.numeric(original))
-      if (any(is.na(numeric_vals) & !is.na(original))) {
-        shinyWidgets::show_toast(
-          "Conversion error",
-          text = paste(
-            "Column",
-            col,
-            "contains non-numeric values that cannot be converted."
-          ),
-          type = "error",
-          timer = 5000
-        )
-        return(NULL)
-      }
-      df[[col]] <- numeric_vals
-    }
+  converted_df <- suppressWarnings(dplyr::mutate_all(df[, -1], function(x) {
+    as.numeric(as.character(x))
+  }))
+
+  # Check if conversion resulted in NAs only where original had NAs
+  if (identical(which(is.na(df[, -1])), which(is.na(converted_df)))) {
+    df[, -1] <- converted_df
+  } else {
+    # If there are NAs in converted_df that were not NAs in original df, return error
+    return("Mass fields require numeric values.")
   }
 
   return(df)
@@ -70,32 +74,41 @@ process_uploaded_table <- function(df, type) {
 
 # Helper function to read uploaded files
 #' @export
-read_uploaded_file <- function(file_path, ext, has_header) {
-  if (ext %in% c("csv", "txt")) {
+read_uploaded_file <- function(file_path, ext) {
+  if (ext %in% c("csv")) {
     df <- utils::read.csv(
       file_path,
       stringsAsFactors = FALSE,
-      header = has_header
+      sep = ","
     )
+
+    # If only one column read, try semicolon separator
+    if (ncol(df) == 1) {
+      df <- utils::read.csv(
+        file_path,
+        stringsAsFactors = FALSE,
+        sep = ";"
+      )
+    }
   } else if (ext == "tsv") {
     df <- readr::read_tsv(
       file_path,
-      col_names = has_header,
       show_col_types = FALSE
     )
-  } else if (ext == "tsv") {
+  } else if (ext == "txt") {
     df <- utils::read.delim(
       file_path,
-      stringsAsFactors = FALSE,
-      header = has_header
+      stringsAsFactors = FALSE
     )
   } else if (ext %in% c("xlsx", "xls")) {
-    df <- readxl::read_excel(file_path, col_names = has_header)
+    df <- readxl::read_excel(file_path)
   } else {
     stop("Unsupported file format")
   }
-  # Ensure column names are standardized
+
+  # Ensure column names are trimmed of whitespace
   colnames(df) <- trimws(colnames(df))
+
   return(df)
 }
 
@@ -3817,9 +3830,6 @@ confirm_ui_changes <- function(
     class = "custom-disable"
   )
 
-  # Disable header checkbox
-  shinyjs::disable(paste0(tab_low, "_header_checkbox"))
-
   # Show table message
   output[[paste0(tab_low, "_table_info")]] <- shiny::renderText("Table saved!")
 
@@ -3872,9 +3882,6 @@ edit_ui_changes <- function(
     ),
     class = "custom-disable"
   )
-
-  # Enable header checkbox
-  shinyjs::enable(paste0(tab_low, "_header_checkbox"))
 
   # Mark tab as undone
   shinyjs::runjs(paste0(
@@ -3989,38 +3996,36 @@ table_observe <- function(
 #' @export
 handle_file_upload <- function(
   file_input,
-  header_checkbox,
   type,
   output,
   declaration_vars
 ) {
-  shiny::req(file_input)
-
+  # Read in file
   table_upload <- read_uploaded_file(
     file_input$datapath,
-    tolower(tools::file_ext(file_input$name)),
-    header_checkbox
+    tolower(tools::file_ext(file_input$name))
   )
 
+  # Process table and check for errors
   table_upload_processed <- process_uploaded_table(table_upload, type)
 
-  if (!is.null(table_upload_processed)) {
-    declaration_vars[[paste0(type, "_table_status")]] <- TRUE
-
+  # Update UI and status variable based on processing result
+  if (is.data.frame(table_upload_processed)) {
     shinyWidgets::show_toast(
       paste0(tools::toTitleCase(type), " table loaded!"),
       type = "success",
       timer = 3000
     )
+    return(table_upload_processed)
   } else {
     shinyWidgets::show_toast(
-      paste0("Loading ", tolower(tools::toTitleCase(type)), " table failed!"),
+      table_upload_processed,
       type = "error",
       timer = 3000
     )
-  }
 
-  table_upload_processed
+    return(NULL)
+  }
 }
 
 # Transform summarized hits into readable table

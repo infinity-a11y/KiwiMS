@@ -226,9 +226,6 @@ deconvolute <- function(
   time_start = "",
   time_end = ""
 ) {
-  raw_dirs1 <<- raw_dirs
-  result_dir1 <<- result_dir
-
   # Evaluate processing mode: parallel or sequential
   if (length(raw_dirs) > 20 && num_cores > 1) {
     message("Initiating ", num_cores, " cores for parallel processing ...")
