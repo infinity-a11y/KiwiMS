@@ -3101,8 +3101,14 @@ multiple_spectra <- function(
             tickvals = levels(spectrum_data$z)
           ),
           camera = list(
-            center = list(x = 0.33, y = -0.05, z = 0.05),
-            eye = if (length(unique(peaks_data$z)) <= 8) {
+            # center = list(x = 0.33, y = -0.05, z = 0.05),
+            center = list(
+              x = 0.33,
+              y = ifelse(length(unique(peaks_data$z)) < 4, 0.075, -0.05),
+              z = 0.05
+            ),
+            # eye = if (length(unique(peaks_data$z)) <= 8) {
+            eye = if (length(unique(peaks_data$z)) <= 3) {
               list(
                 x = 1 +
                   length(unique(peaks_data$z)) / 20 +
@@ -3176,18 +3182,7 @@ multiple_spectra <- function(
           size = 10,
           zindex = 100,
           color = "white"
-          # ,
-          # line = list(color = "white", width = 2)
         ),
-        # marker = list(
-        #   # color = marker_color,
-        #   color = "white",
-        #   symbol = ~ I(symbol),
-        #   size = 10,
-        #   zindex = 100,
-        #   # line = list(color = ~ I(linecolor), width = 1)
-        #   line = list(color = "white", width = 1)
-        # ),
         hoverinfo = "text",
         text = ~ paste0(
           "Name: ",
