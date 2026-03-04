@@ -22,12 +22,10 @@ safe_observe <- function(
   event_quoted <- rlang::enquo(event_expr)
 
   handle_error <- function(e) {
-    # Check if silent
     if (inherits(e, "shiny.silent.error")) {
       return(NULL)
     }
 
-    # Log errors
     message("--- KiwiMS SYSTEM ERROR ---")
     message("Location: ", observer_name)
     err_msg <- conditionMessage(e)
@@ -36,6 +34,9 @@ safe_observe <- function(
       if (nchar(err_msg) > 0) err_msg else "No message provided by R"
     )
 
+    shinyjs::runjs(
+      'document.getElementById("blocking-overlay").style.display = "none";'
+    )
     shiny::removeModal()
     shiny::showModal(shiny::modalDialog(
       title = shiny::span(
@@ -61,25 +62,32 @@ safe_observe <- function(
           class = "btn btn-danger",
           onclick = "
             document.getElementById('blocking-overlay').style.display = 'block';
-            Shiny.setInputValue('app-quit_kiwims', Math.random(), {priority: 'event'}); 
-            setTimeout(function() {
-              window.open('', '_self', ''); 
-              window.close();
-            }, 1000);"
+            Shiny.setInputValue('app-quit_kiwims', Math.random(), {priority: 'event'});
+            setTimeout(function() { window.open('', '_self', ''); window.close(); }, 1000);"
         )
       )
     ))
   }
 
+  # Logic to wrap the handler
+  wrapped_handler <- function() {
+    if (Sys.getenv("KIWIMS_DEV_MODE") == "TRUE") {
+      handler_fn()
+    } else {
+      tryCatch(
+        {
+          handler_fn()
+        },
+        error = handle_error
+      )
+    }
+  }
+
+  # Execution
   if (rlang::quo_is_null(event_quoted)) {
     return(shiny::observe(
       {
-        tryCatch(
-          {
-            handler_fn()
-          },
-          error = handle_error
-        )
+        wrapped_handler()
       },
       ...
     ))
@@ -87,12 +95,7 @@ safe_observe <- function(
     return(shiny::observeEvent(
       rlang::eval_tidy(event_quoted),
       {
-        tryCatch(
-          {
-            handler_fn()
-          },
-          error = handle_error
-        )
+        wrapped_handler()
       },
       ignoreInit = TRUE,
       ...

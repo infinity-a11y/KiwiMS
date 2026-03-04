@@ -1390,7 +1390,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
     # Observer rendering UI on conditions
     results_observer <- safe_observe(
-      observer_name = "Results Observer Activation",
+      observer_name = "Conditional Results Rendering",
       handler_fn = function() {
         # Block UI
         shinyjs::runjs(paste0(

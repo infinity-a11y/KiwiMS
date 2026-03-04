@@ -3248,12 +3248,6 @@ multiple_spectra <- function(
 # Rendering function for relative binding table view
 #' @export
 render_table_view <- function(table, colors, tab, inputs, units) {
-  table1 <<- table
-  colors1 <<- colors
-  tab1 <<- tab
-  inputs1 <<- inputs
-  units1 <<- units
-
   # If table empty
   if (!nrow(table)) {
     return(DT::datatable(
@@ -3378,19 +3372,11 @@ render_table_view <- function(table, colors, tab, inputs, units) {
   if (tab == "Compounds") {
     group_variable <- "Sample ID"
     if (length(unique(tbl[[group_variable]])) != nrow(tbl)) {
-      if (all(tbl$`Sample ID` %in% names(colors))) {
-        names(colors) <- paste("Sample ID:", names(colors))
-      }
-
       tbl$`Sample ID` <- paste("Sample ID:", tbl$`Sample ID`)
     }
   } else if (any(tab %in% c("Samples", "Proteins"))) {
     group_variable <- "Cmp Name"
     if (length(unique(tbl[[group_variable]])) != nrow(tbl)) {
-      if (all(tbl$`Cmp Name` %in% names(colors))) {
-        names(colors) <- paste("Compound:", names(colors))
-      }
-
       tbl$`Cmp Name` <- paste("Compound:", tbl$`Cmp Name`)
     }
   } else {
@@ -3405,30 +3391,6 @@ render_table_view <- function(table, colors, tab, inputs, units) {
   } else {
     row_group <- list(dataSrc = which(names(tbl) == group_variable) - 1)
   }
-
-  # Add color adaptive font color to table
-  tbl <- dplyr::mutate(
-    tbl,
-    dplyr::across(
-      -dplyr::any_of(c(
-        group_variable,
-        "col_var",
-        if (is.null(inputs$binding_bar) || isTRUE(inputs$binding_bar)) {
-          "%-Binding"
-        },
-        if (is.null(inputs$tot_binding_bar) || isTRUE(inputs$tot_binding_bar)) {
-          "Total %"
-        }
-      )),
-      ~ paste0(
-        "<span style='color:",
-        label_color,
-        "'>",
-        .x,
-        "</span>"
-      )
-    )
-  )
 
   DT::datatable(
     data = tbl,

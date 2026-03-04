@@ -72,40 +72,40 @@ process_single_dir <- function(
   # Set up Conda environment
   tryCatch(
     {
-      # 1. Dynamically locate the environment path
-      base_system <- "C:/ProgramData/miniconda3/envs/kiwims"
-      base_user <- file.path(
-        Sys.getenv("LOCALAPPDATA"),
-        "miniconda3/envs/kiwims"
-      )
+      #       # 1. Dynamically locate the environment path
+      #       base_system <- "C:/ProgramData/miniconda3/envs/kiwims"
+      #       base_user <- file.path(
+      #         Sys.getenv("LOCALAPPDATA"),
+      #         "miniconda3/envs/kiwims"
+      #       )
 
-      # Choose the one that actually exists
-      if (dir.exists(base_system)) {
-        env_base <- base_system
-      } else if (dir.exists(base_user)) {
-        env_base <- base_user
-      } else {
-        stop("Kiwims environment not found in ProgramData or Local AppData.")
-      }
+      #       # Choose the one that actually exists
+      #       if (dir.exists(base_system)) {
+      #         env_base <- base_system
+      #       } else if (dir.exists(base_user)) {
+      #         env_base <- base_user
+      #       } else {
+      #         stop("Kiwims environment not found in ProgramData or Local AppData.")
+      #       }
 
-      # Construct the bin path
-      envBin <- file.path(env_base, "Library/bin")
+      #       # Construct the bin path
+      #       envBin <- file.path(env_base, "Library/bin")
 
-      # 2. Update PATH
-      Sys.setenv(PATH = paste(Sys.getenv("PATH"), envBin, sep = ";"))
+      #       # 2. Update PATH
+      #       Sys.setenv(PATH = paste(Sys.getenv("PATH"), envBin, sep = ";"))
 
-      # 3. Tell Python where to look for DLLs
-      # We use shQuote to handle spaces in folder names safely
-      reticulate::py_run_string(sprintf(
-        "
-import os
-os.add_dll_directory(r'%s')
-",
-        envBin
-      ))
+      #       # 3. Tell Python where to look for DLLs
+      #       # We use shQuote to handle spaces in folder names safely
+      #       reticulate::py_run_string(sprintf(
+      #         "
+      # import os
+      # os.add_dll_directory(r'%s')
+      # ",
+      #         envBin
+      #       ))
 
-      # 3. Optional DLL search env variable
-      Sys.setenv(CONDA_DLL_SEARCH_MODIFICATION_ENABLE = "1")
+      #       # 3. Optional DLL search env variable
+      #       Sys.setenv(CONDA_DLL_SEARCH_MODIFICATION_ENABLE = "1")
 
       # Run unidec with python
       reticulate::py_run_string(sprintf(
@@ -189,7 +189,7 @@ engine.pick_peaks()
       py_err <- reticulate::py_last_error()
 
       # Print the main error and the Python stack trace if it exists
-      message("Error in deconvolution processing: ", e$message)
+      message("Error in single deconvolution processing: ", e$message)
 
       cat(
         "Error in process_single_dir for",
@@ -226,12 +226,12 @@ deconvolute <- function(
   time_start = "",
   time_end = ""
 ) {
+  raw_dirs1 <<- raw_dirs
+  result_dir1 <<- result_dir
+
   # Evaluate processing mode: parallel or sequential
   if (length(raw_dirs) > 20 && num_cores > 1) {
     message("Initiating ", num_cores, " cores for parallel processing ...")
-
-    Sys.setenv(RENV_CONFIG_SYNCHRONIZED_CHECK = "FALSE")
-    on.exit(Sys.unsetenv("RENV_CONFIG_SYNCHRONIZED_CHECK"), add = TRUE)
 
     # Validate Conda environment
     library(reticulate)
@@ -358,9 +358,6 @@ deconvolute <- function(
       )
     }
   } else {
-    Sys.setenv(RENV_CONFIG_SYNCHRONIZED_CHECK = "FALSE")
-    on.exit(Sys.unsetenv("RENV_CONFIG_SYNCHRONIZED_CHECK"), add = TRUE)
-
     # Validate Conda environment
     library(reticulate)
     if (!"kiwims" %in% conda_list()$name) {

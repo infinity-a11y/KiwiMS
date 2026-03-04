@@ -129,14 +129,14 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
                 value = FALSE
               )
             ),
-            shinyjs::disabled(
-              shiny::actionButton(
-                ns("run_binding_analysis"),
-                "Run",
-                icon = shiny::icon("play"),
-                width = "100%"
-              )
+            # shinyjs::disabled(
+            shiny::actionButton(
+              ns("run_binding_analysis"),
+              "Run",
+              icon = shiny::icon("play"),
+              width = "100%"
             )
+            # )
           )
         )
       )
@@ -313,91 +313,176 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
       observer_name = "Conversion Processing",
       handler_fn = function() {
         if (analysis_status() == "pending") {
-          # Delay conversion start
-          Sys.sleep(1)
+          # # Delay conversion start
+          # Sys.sleep(1)
 
-          # Activate JS function for conversion process tracking
-          shinyjs::runjs(sprintf(
-            conversion_tracking_js,
-            ns("console_log"),
-            ns("scroll_btn")
-          ))
+          # # Activate JS function for conversion process tracking
+          # shinyjs::runjs(sprintf(
+          #   conversion_tracking_js,
+          #   ns("console_log"),
+          #   ns("scroll_btn")
+          # ))
 
-          # Add hits
-          withCallingHandlers(
-            expr = {
-              result_with_hits <- add_hits(
-                conversion_main_vars$input_list()$result,
-                sample_table = conversion_main_vars$input_list()$Samples_Table,
-                protein_table = conversion_main_vars$input_list()$Protein_Table,
-                compound_table = conversion_main_vars$input_list()$Compound_Table,
-                peak_tolerance = input$peak_tolerance,
-                max_multiples = input$max_multiples,
-                session = session,
-                ns = ns
-              )
+          # # Add hits
+          # withCallingHandlers(
+          #   expr = {
+          #     result_with_hits <- add_hits(
+          #       conversion_main_vars$input_list()$result,
+          #       sample_table = conversion_main_vars$input_list()$Samples_Table,
+          #       protein_table = conversion_main_vars$input_list()$Protein_Table,
+          #       compound_table = conversion_main_vars$input_list()$Compound_Table,
+          #       peak_tolerance = input$peak_tolerance,
+          #       max_multiples = input$max_multiples,
+          #       session = session,
+          #       ns = ns
+          #     )
 
-              result_with_hits$hits_summary <- summarize_hits(
-                result_with_hits,
-                sample_table = conversion_main_vars$input_list()$Samples_Table
-              )
+          #     result_with_hits$hits_summary <- summarize_hits(
+          #       result_with_hits,
+          #       sample_table = conversion_main_vars$input_list()$Samples_Table
+          #     )
 
-              # If Ki/kinact analysis is set to be performed
-              if (input$run_ki_kinact) {
-                # Get concentration and time units
-                conc_time <- names(result_with_hits$hits_summary)[unlist(sapply(
-                  c("Concentration", "Time"),
-                  grep,
-                  names(result_with_hits$hits_summary)
-                ))]
-                units <- gsub("Concentration |Time |\\[|\\]", "", conc_time)
-                names(units) <- c("Concentration", "Time")
+          #     # If Ki/kinact analysis is set to be performed
+          #     if (input$run_ki_kinact) {
+          #       # Get concentration and time units
+          #       conc_time <- names(result_with_hits$hits_summary)[unlist(sapply(
+          #         c("Concentration", "Time"),
+          #         grep,
+          #         names(result_with_hits$hits_summary)
+          #       ))]
+          #       units <- gsub("Concentration |Time |\\[|\\]", "", conc_time)
+          #       names(units) <- c("Concentration", "Time")
 
-                # Log initiation of binding kinetics analysis
-                log_binding_kinetics(
-                  concentrations = result_with_hits$hits_summary[[conc_time[
-                    1
-                  ]]],
-                  times = result_with_hits$hits_summary[[conc_time[2]]],
-                  units = units
-                )
+          #       # Log initiation of binding kinetics analysis
+          #       log_binding_kinetics(
+          #         concentrations = result_with_hits$hits_summary[[conc_time[
+          #           1
+          #         ]]],
+          #         times = result_with_hits$hits_summary[[conc_time[2]]],
+          #         units = units
+          #       )
 
-                # Add binding/kobs results to result list
-                result_with_hits$binding_kobs_result <- add_kobs_binding_result(
-                  result_with_hits,
-                  conc_time = conc_time,
-                  units = units
-                )
+          #       # Add binding/kobs results to result list
+          #       result_with_hits$binding_kobs_result <- add_kobs_binding_result(
+          #         result_with_hits,
+          #         conc_time = conc_time,
+          #         units = units
+          #       )
 
-                # Add Ki/kinact results to result list
-                result_with_hits$ki_kinact_result <- add_ki_kinact_result(
-                  result_with_hits,
-                  units = units
-                )
-              }
-            },
-            message = function(m) {
-              clean_msg <- gsub("\\", "\\\\", m$message, fixed = TRUE)
-              clean_msg <- gsub("'", "\\'", clean_msg, fixed = TRUE)
-              clean_msg <- gsub("\n", "<br>", clean_msg, fixed = TRUE)
+          #       # Add Ki/kinact results to result list
+          #       result_with_hits$ki_kinact_result <- add_ki_kinact_result(
+          #         result_with_hits,
+          #         units = units
+          #       )
+          #     }
+          #   },
+          #   message = function(m) {
+          #     clean_msg <- gsub("\\", "\\\\", m$message, fixed = TRUE)
+          #     clean_msg <- gsub("'", "\\'", clean_msg, fixed = TRUE)
+          #     clean_msg <- gsub("\n", "<br>", clean_msg, fixed = TRUE)
 
-              js_cmd <- sprintf(
-                "
-            var el = document.getElementById('%s');
-            if (el) {
-              el.innerHTML += '%s';
-              el.doAutoScroll();
-            }
-              ",
-                ns("console_log"),
-                clean_msg
-              )
+          #     js_cmd <- sprintf(
+          #       "
+          #   var el = document.getElementById('%s');
+          #   if (el) {
+          #     el.innerHTML += '%s';
+          #     el.doAutoScroll();
+          #   }
+          #     ",
+          #       ns("console_log"),
+          #       clean_msg
+          #     )
 
-              shinyjs::runjs(js_cmd)
-            }
-          )
+          #     shinyjs::runjs(js_cmd)
+          #   }
+          # )
 
-          # Assign result list and hits table to reactive vars
+          # # TODO
+          # # Dev Mode
+          # result_with_hits <- readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_TEST.rds"
+          # )
+          # result_with_hits <- readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits1.rds"
+          # )
+          # result_with_hits <- readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_7.rds"
+          # )
+          # result_with_hits <- readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_13.rds"
+          # )
+          # result_with_hits <- readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_19.rds"
+          # )
+          # result_with_hits <- readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_25.rds"
+          # )
+          # result_with_hits <- readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_33.rds"
+          # )
+          # result_with_hits <- readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_42.rds"
+          # )
+          # result_with_hits <- readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_55.rds"
+          # )
+          # result_with_hits <- readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_61.rds"
+          # )
+
+          ## TESTING
+
+          # # Single entry
+          # result_with_hits <- readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\one_entry.rds"
+          # )
+
+          # # NA entry
+          # result_with_hits <- readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\one_entryNA.rds"
+          # )
+
+          # # Two NA entries
+          # result_with_hits <- readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\two_entryNA.rds"
+          # )
+
+          # # NA diff
+          # result_with_hits <- readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\NA_diff.rds"
+          # )
+
+          # # NA diff2
+          # result_with_hits <- readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\NA_diff2.rds"
+          # )
+
+          # # HiDrive-kinact-K
+          # result_with_hits <- readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\HiDrive-kinact-K.rds"
+          # )
+
+          # # 2025-12-10_MS_in-house_protein
+          # result_with_hits <- readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\2025-12-10_MS_in-house_protein.rds"
+          # )
+
+          # # HiDrive-kinact-KI Testdaten
+          # result_with_hits <- readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results.rds"
+          # )
+
+          # # HiDrive-2025-09-04_New-Test-data
+          # result_with_hits <- readRDS(
+          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results_conversion.rds"
+          # )
+
+          # # Test
+          # result_with_hits <- readRDS(
+          #   "C:\\Users\\marian\\Desktop\\KF_Testing\\test.rds"
+          # )
+
+          # # Assign result list and hits table to reactive vars
           result_list(result_with_hits)
 
           # Save distinct protein - compound combinations/complexes
@@ -414,88 +499,6 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
           complexes <- split(choice_values, complex_df$Protein)
 
           complexes(complexes)
-
-          # TODO
-          # Dev Mode
-
-          # result_list(readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_TEST.rds"
-          # ))
-
-          # result_list(readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits1.rds"
-          # ))
-          # result_list(readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_7.rds"
-          # ))
-          # result_list(readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_13.rds"
-          # ))
-          # result_list(readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_19.rds"
-          # ))
-          # result_list(readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_25.rds"
-          # ))
-          # result_list(readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_33.rds"
-          # ))
-          # result_list(readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_42.rds"
-          # ))
-          # result_list(readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_55.rds"
-          # ))
-          # result_list(readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_61.rds"
-          # ))
-
-          ### TESTING
-
-          # Single entry
-          # result_list(readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\one_entry.rds"
-          # ))
-
-          # NA entry
-          # result_list(readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\one_entryNA.rds"
-          # ))
-
-          # Two NA entries
-          # result_list(readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\two_entryNA.rds"
-          # ))
-
-          # NA diff
-          # result_list(readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\NA_diff.rds"
-          # ))
-
-          # NA diff2
-          # result_list(readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\NA_diff2.rds"
-          # ))
-
-          # HiDrive-kinact-K
-          # result_list(readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\HiDrive-kinact-K.rds"
-          # ))
-
-          # 2025-12-10_MS_in-house_protein
-          # result_list(readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\2025-12-10_MS_in-house_protein.rds"
-          # ))
-
-          # HiDrive-kinact-KI Testdaten
-          # result_list(readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results.rds"
-          # ))
-
-          # HiDrive-2025-09-04_New-Test-data
-          # result_list(readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results_conversion.rds"
-          # ))
 
           # Update sidebar control inputs
           shiny::updateActionButton(
