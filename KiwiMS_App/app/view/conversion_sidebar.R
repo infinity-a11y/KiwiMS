@@ -128,14 +128,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
                 value = FALSE
               )
             ),
-            shinyjs::disabled(
-              shiny::actionButton(
-                ns("run_binding_analysis"),
-                "Run",
-                icon = shiny::icon("play"),
-                width = "100%"
-              )
-            )
+            shiny::uiOutput(ns("run_button_wrapper"))
           )
         )
       )
@@ -192,25 +185,34 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
     #   }
     # )
 
-    ## Toggle button ----
-    safe_observe(
-      observer_name = "Button Toggle",
-      handler_fn = function() {
-        if (isTRUE(conversion_main_vars$conversion_ready())) {
-          shinyjs::enable("run_binding_analysis")
-          shinyjs::addClass(
-            id = "run_binding_analysis",
-            class = "btn-highlight"
+    ## Conditional tooltip for launch button ----
+    output$run_button_wrapper <- shiny::renderUI({
+      if (isTRUE(conversion_main_vars$conversion_ready())) {
+        return(shiny::actionButton(
+          ns("run_binding_analysis"),
+          "Start",
+          icon = shiny::icon("play"),
+          width = "100%",
+          class = "btn-highlight"
+        ))
+      } else {
+        return(
+          bslib::tooltip(
+            shiny::div(
+              style = "width: 100%;",
+              shinyjs::disabled(shiny::actionButton(
+                ns("run_binding_analysis"),
+                "Start",
+                icon = shiny::icon("play"),
+                width = "100%"
+              ))
+            ),
+            "Confirm all tables first",
+            placement = "bottom"
           )
-        } else {
-          shinyjs::disable("run_binding_analysis")
-          shinyjs::removeClass(
-            id = "run_binding_analysis",
-            class = "btn-highlight"
-          )
-        }
+        )
       }
-    )
+    })
 
     # Update UI on reset results event ----
     safe_observe(

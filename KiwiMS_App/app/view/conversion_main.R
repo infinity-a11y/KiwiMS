@@ -639,26 +639,24 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       event_expr = conversion_sidebar_vars$run_ki_kinact(),
       observer_name = "Unconfirm Sample Table on Ki/Kinact Activation",
       handler_fn = function() {
+        shiny::req(
+          input$samples_table,
+          isTRUE(declaration_vars$samples_confirmed),
+          isTRUE(conversion_sidebar_vars$run_ki_kinact())
+        )
+
+        # Make UI changes
+        edit_ui_changes(
+          tab = "Samples",
+          session = session,
+          output = output
+        )
+
+        # New editable full sample table data
         declaration_vars$samples_confirmed <- FALSE
 
-        # Update info text
-        # output$samples_table_info <- shiny::renderText(
-        #   "Ki/Kinact activated - please confirm sample table again"
-        # )
-
-        shinyjs::removeClass(
-          "samples_table_info",
-          "table-info-green"
-        )
-        shinyjs::addClass(
-          "samples_table_info",
-          "table-info-red"
-        )
-
-        # Mark tab as undone
-        shinyjs::runjs(
-          'document.querySelector(".nav-link[data-value=\'Samples\']").classList.remove("done");'
-        )
+        # Activate table observer
+        declaration_vars$sample_table_active <- TRUE
       }
     )
 

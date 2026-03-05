@@ -4031,6 +4031,7 @@ handle_file_upload <- function(
 # Transform summarized hits into readable table
 #' @export
 transform_hits <- function(hits_summary) {
+  hits_summary1 <<- hits_summary
   # Shared transformations
   summary_table <- hits_summary |>
     dplyr::mutate(
