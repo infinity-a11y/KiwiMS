@@ -35,6 +35,7 @@ box::use(
       filter_color_list,
       render_table_view,
       make_kobs_plot,
+      empty_prot_comp_tbl,
     ],
   app /
     logic /
@@ -121,13 +122,11 @@ ui <- function(id) {
                   width = "100%"
                 )
               ),
-              shinyjs::disabled(
-                shiny::actionButton(
-                  ns("erase_proteins"),
-                  label = "Clear",
-                  icon = shiny::icon("eraser"),
-                  width = "100%"
-                )
+              shiny::actionButton(
+                ns("clear_proteins"),
+                label = "Clear",
+                icon = shiny::icon("eraser"),
+                width = "100%"
               )
             )
           )
@@ -199,13 +198,11 @@ ui <- function(id) {
                   width = "100%"
                 )
               ),
-              shinyjs::disabled(
-                shiny::actionButton(
-                  ns("erase_compounds"),
-                  label = "Clear",
-                  icon = shiny::icon("eraser"),
-                  width = "100%"
-                )
+              shiny::actionButton(
+                ns("clear_compounds"),
+                label = "Clear",
+                icon = shiny::icon("eraser"),
+                width = "100%"
               )
             )
           )
@@ -293,28 +290,14 @@ ui <- function(id) {
                 "Edit Sample Table",
                 placement = "top"
               ),
-              # bslib::tooltip(
-              #   shinyjs::disabled(
-              #     shiny::actionButton(
-              #       ns("erase_samples"),
-              #       label = NULL,
-              #       icon = shiny::icon("eraser"),
-              #       width = "100%"
-              #     )
-              #   ),
-              #   "Clear Sample Table",
-              #   placement = "top"
-              # )
               bslib::tooltip(
                 shiny::div(
                   style = "width: 100%;",
-                  shinyjs::disabled(
-                    shiny::actionButton(
-                      ns("erase_samples"),
-                      label = NULL,
-                      icon = shiny::icon("eraser"),
-                      width = "100%"
-                    )
+                  shiny::actionButton(
+                    ns("clear_samples"),
+                    label = NULL,
+                    icon = shiny::icon("eraser"),
+                    width = "100%"
                   )
                 ),
                 "Clear Sample Table",
@@ -450,18 +433,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
     ## Empty default tables ----
     protein_table_data <- shiny::reactiveVal({
-      na_num <- matrix(NA_real_, nrow = 9, ncol = 9) |>
-        as.data.frame() |>
-        stats::setNames(paste("Mass", 1:9))
-
-      cbind(Protein = as.character(rep(NA, 9)), na_num)
+      empty_prot_comp_tbl(type = "Protein")
     })
     compound_table_data <- shiny::reactiveVal({
-      na_num <- matrix(NA_real_, nrow = 9, ncol = 9) |>
-        as.data.frame() |>
-        stats::setNames(paste("Mass", 1:9))
-
-      cbind(Compound = as.character(rep(NA, 9)), na_num)
+      empty_prot_comp_tbl(type = "Compound")
     })
     sample_table_data <- shiny::reactiveVal()
 
@@ -603,7 +578,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
     ### Tab info text ----
     output$declaration_info_ui <- shiny::renderUI({
-      shiny::req(input$tabs)
+      shiny::req(input$tabs %in% c("Proteins", "Compounds", "Samples"))
 
       if (input$tabs == "Proteins") {
         hints <- "Upload a CSV|TSV|TXT|Excel file or manually enter names and mass values of the <strong>proteins</strong> into the table."
@@ -633,32 +608,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     })
 
     ## Table loading special events ----
-
-    ### Unconfirm sample table on ki/kinact activation ----
-    safe_observe(
-      event_expr = conversion_sidebar_vars$run_ki_kinact(),
-      observer_name = "Unconfirm Sample Table on Ki/Kinact Activation",
-      handler_fn = function() {
-        shiny::req(
-          input$samples_table,
-          isTRUE(declaration_vars$samples_confirmed),
-          isTRUE(conversion_sidebar_vars$run_ki_kinact())
-        )
-
-        # Make UI changes
-        edit_ui_changes(
-          tab = "Samples",
-          session = session,
-          output = output
-        )
-
-        # New editable full sample table data
-        declaration_vars$samples_confirmed <- FALSE
-
-        # Activate table observer
-        declaration_vars$sample_table_active <- TRUE
-      }
-    )
 
     ### Result file input loading feedback ----
     shinyjs::onevent(
@@ -723,6 +672,67 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         )]] <- shiny::renderText(
           "Loading ..."
         )
+      }
+    )
+
+    ## Unconfirm sample table on ki/kinact activation ----
+    safe_observe(
+      event_expr = conversion_sidebar_vars$run_ki_kinact(),
+      observer_name = "Unconfirm Sample Table on Ki/Kinact Activation",
+      handler_fn = function() {
+        shiny::req(
+          input$samples_table,
+          isTRUE(declaration_vars$samples_confirmed),
+          isTRUE(conversion_sidebar_vars$run_ki_kinact())
+        )
+
+        # Make UI changes
+        edit_ui_changes(
+          tab = "Samples",
+          session = session,
+          output = output
+        )
+
+        # New editable full sample table data
+        declaration_vars$samples_confirmed <- FALSE
+
+        # Activate table observer
+        declaration_vars$sample_table_active <- TRUE
+      }
+    )
+
+    ## Clear tables ----
+    safe_observe(
+      event_expr = input$clear_proteins,
+      observer_name = "Clear Protein Table",
+      handler_fn = function() {
+        protein_table_data(empty_prot_comp_tbl(type = "Protein"))
+
+        protein_table_trigger(protein_table_trigger() + 1)
+      }
+    )
+
+    safe_observe(
+      event_expr = input$clear_compounds,
+      observer_name = "Clear Compound Table",
+      handler_fn = function() {
+        compound_table_data(empty_prot_comp_tbl(type = "Compound"))
+
+        compound_table_trigger(compound_table_trigger() + 1)
+      }
+    )
+
+    safe_observe(
+      event_expr = input$clear_samples,
+      observer_name = "Clear Sample Table",
+      handler_fn = function() {
+        sample_table_data(new_sample_table(
+          result = declaration_vars$result,
+          protein_table = declaration_vars$protein_table,
+          compound_table = declaration_vars$compound_table,
+          ki_kinact = conversion_sidebar_vars$run_ki_kinact()
+        ))
+        sample_table_trigger(sample_table_trigger() + 1)
       }
     )
 
@@ -1702,28 +1712,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             "tabs",
             "Samples"
           )
-
-          #### Remove Ki/kinact interface elements ----
-          # output$binding_tab <- NULL
-          # output$kinact <- NULL
-          # output$Ki <- NULL
-          # output$Ki_kinact <- NULL
-          # output$kobs_result <- NULL
-          # output$binding_plot <- NULL
-          # output$kobs_plot <- NULL
-          # output$hits_tab <- NULL
-          # if (!is.null(conversion_vars$select_concentration)) {
-          #   lapply(names(conversion_vars$select_concentration), function(id) {
-          #     output[[paste0("concentration_tab", id)]] <- NULL
-          #     output[[paste0("concentration_tab_", id, "_hits")]] <- NULL
-          #     output[[paste0(
-          #       "concentration_tab_",
-          #       id,
-          #       "_binding_plot"
-          #     )]] <- NULL
-          #     output[[paste0("concentration_tab_", id, "_spectra")]] <- NULL
-          #   })
-          # }
 
           #### Remove tabs from Ki/kinact interface ----
           bslib::nav_remove("tabs", "Binding")

@@ -15,6 +15,20 @@ box::use(
     ],
 )
 
+# Empty default tables
+#' @export
+empty_prot_comp_tbl <- function(type) {
+  na_num <- matrix(NA_real_, nrow = 9, ncol = 9) |>
+    as.data.frame() |>
+    stats::setNames(paste("Mass", 1:9))
+
+  if (type == "Protein") {
+    cbind(Protein = as.character(rep(NA, 9)), na_num)
+  } else {
+    cbind(Compound = as.character(rep(NA, 9)), na_num)
+  }
+}
+
 # Helper function to process uploaded table
 #' @export
 process_uploaded_table <- function(df, type) {
@@ -3811,6 +3825,9 @@ confirm_ui_changes <- function(
   # Enable edit button
   shinyjs::enable(paste0("edit_", tab_low))
 
+  # Disable clear button
+  shinyjs::disable(paste0("clear_", tab_low))
+
   # Disable file upload
   shinyjs::disable(paste0(tab_low, "_fileinput"))
   shinyjs::addClass(
@@ -3863,6 +3880,9 @@ edit_ui_changes <- function(
 
   # Disable edit button
   shinyjs::disable(paste0("edit_", tab_low))
+
+  # Enable clear button
+  shinyjs::enable(paste0("clear_", tab_low))
 
   # Enable file upload
   shinyjs::enable(paste0(tab_low, "_fileinput"))
@@ -4031,42 +4051,35 @@ handle_file_upload <- function(
 # Transform summarized hits into readable table
 #' @export
 transform_hits <- function(hits_summary) {
-  hits_summary1 <<- hits_summary
   # Shared transformations
   summary_table <- hits_summary |>
     dplyr::mutate(
-      # Format all percentages
+      # Format percentages
       dplyr::across(
-        c(`% Binding`, `Total % Binding`),
+        dplyr::any_of(c("% Binding", "Total % Binding")) & where(is.numeric),
         ~ scales::percent(.x, accuracy = 0.1)
       ),
+      # Format Intensity columns only if numeric
       dplyr::across(
-        c(Intensity, `Protein Intensity`),
+        dplyr::any_of(c("Intensity", "Protein Intensity")) & where(is.numeric),
         ~ scales::percent(.x / 100, accuracy = 0.1)
       ),
-      # Format all [Da] columns
+      # Format [Da] columns only if numeric
       dplyr::across(
-        dplyr::ends_with("[Da]"),
+        dplyr::ends_with("[Da]") & where(is.numeric),
         ~ dplyr::if_else(
           is.na(.x),
           "N/A",
           paste(format(.x, nsmall = 1, trim = TRUE), "Da")
         )
       ),
+      # Global NA cleanup (convert to character)
       dplyr::across(
-        !Compound,
+        !dplyr::any_of("Compound"),
         ~ tidyr::replace_na(as.character(.x), "N/A")
       )
     ) |>
-    dplyr::relocate(`Total % Binding`, .after = "% Binding") |>
-    dplyr::mutate(
-      `Total % Binding` = as.numeric(gsub(
-        "%",
-        "",
-        gsub("N/A", "0", `Total % Binding`)
-      )),
-      `% Binding` = as.numeric(gsub("%", "", gsub("N/A", "0", `% Binding`)))
-    )
+    dplyr::relocate(dplyr::any_of("Total % Binding"), .after = "% Binding")
 
   # Define column names
   col_names <- c(
