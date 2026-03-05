@@ -80,7 +80,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
                   class = "tooltip-bttn",
                   shiny::actionButton(
                     ns("peak_tol_tooltip_bttn"),
-                    label = "",
+                    label = NULL,
                     icon = shiny::icon("circle-question")
                   )
                 )
@@ -99,7 +99,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
                   class = "tooltip-bttn",
                   shiny::actionButton(
                     ns("max_mult_tooltip_bttn"),
-                    label = "",
+                    label = NULL,
                     icon = shiny::icon("circle-question")
                   )
                 )

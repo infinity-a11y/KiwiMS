@@ -77,7 +77,7 @@ deconvolution_init_ui <- function(ns) {
                       class = "tooltip-bttn",
                       shiny$actionButton(
                         ns("charge_range_tooltip_bttn"),
-                        label = "",
+                        label = NULL,
                         icon = shiny$icon("circle-question")
                       )
                     )
@@ -194,7 +194,7 @@ deconvolution_init_ui <- function(ns) {
                       class = "tooltip-bttn",
                       shiny$actionButton(
                         ns("mass_range_tooltip_bttn"),
-                        label = "",
+                        label = NULL,
                         icon = shiny$icon("circle-question")
                       )
                     )
@@ -340,7 +340,7 @@ deconvolution_init_ui <- function(ns) {
                           class = "tooltip-bttn",
                           shiny$actionButton(
                             ns("detection_window_tooltip_bttn"),
-                            label = "",
+                            label = NULL,
                             icon = shiny$icon("circle-question")
                           )
                         )
@@ -409,7 +409,7 @@ deconvolution_init_ui <- function(ns) {
                           class = "tooltip-bttn",
                           shiny$actionButton(
                             ns("threshold_tooltip_bttn"),
-                            label = "",
+                            label = NULL,
                             icon = shiny$icon("circle-question")
                           )
                         )
@@ -432,7 +432,7 @@ deconvolution_init_ui <- function(ns) {
                       class = "tooltip-bttn",
                       shiny$actionButton(
                         ns("sample_rate_tooltip_bttn"),
-                        label = "",
+                        label = NULL,
                         icon = shiny$icon("circle-question")
                       )
                     )

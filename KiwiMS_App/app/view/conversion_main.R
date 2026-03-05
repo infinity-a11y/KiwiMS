@@ -92,37 +92,41 @@ ui <- function(id) {
               class = "tooltip-bttn",
               shiny::actionButton(
                 ns("fileinput_tooltip_bttn"),
-                label = "",
+                label = NULL,
                 icon = shiny::icon("circle-question")
               )
             )
           ),
           shiny::column(
-            width = 3,
+            width = 2,
             shiny::textOutput(ns("proteins_table_info")),
           ),
           shiny::column(
-            width = 2,
+            width = 5,
             shiny::div(
-              class = "full-width-btn",
+              class = "table-control-buttons",
               shinyjs::disabled(
                 shiny::actionButton(
                   ns("confirm_proteins"),
                   label = "Save",
-                  icon = shiny::icon("bookmark")
+                  icon = shiny::icon("bookmark"),
+                  width = "100%"
                 )
-              )
-            )
-          ),
-          shiny::column(
-            width = 2,
-            shiny::div(
-              class = "full-width-btn",
+              ),
               shinyjs::disabled(
                 shiny::actionButton(
                   ns("edit_proteins"),
                   label = "Edit",
-                  icon = shiny::icon("pen-to-square")
+                  icon = shiny::icon("pen-to-square"),
+                  width = "100%"
+                )
+              ),
+              shinyjs::disabled(
+                shiny::actionButton(
+                  ns("erase_proteins"),
+                  label = "Clear",
+                  icon = shiny::icon("eraser"),
+                  width = "100%"
                 )
               )
             )
@@ -166,37 +170,41 @@ ui <- function(id) {
               class = "tooltip-bttn",
               shiny::actionButton(
                 ns("fileinput_tooltip_bttn"),
-                label = "",
+                label = NULL,
                 icon = shiny::icon("circle-question")
               )
             )
           ),
           shiny::column(
-            width = 3,
+            width = 2,
             shiny::textOutput(ns("compounds_table_info"))
           ),
           shiny::column(
-            width = 2,
+            width = 5,
             shiny::div(
-              class = "full-width-btn",
+              class = "table-control-buttons",
               shinyjs::disabled(
                 shiny::actionButton(
                   ns("confirm_compounds"),
                   label = "Save",
-                  icon = shiny::icon("bookmark")
+                  icon = shiny::icon("bookmark"),
+                  width = "100%"
                 )
-              )
-            )
-          ),
-          shiny::column(
-            width = 2,
-            shiny::div(
-              class = "full-width-btn",
+              ),
               shinyjs::disabled(
                 shiny::actionButton(
                   ns("edit_compounds"),
                   label = "Edit",
-                  icon = shiny::icon("pen-to-square")
+                  icon = shiny::icon("pen-to-square"),
+                  width = "100%"
+                )
+              ),
+              shinyjs::disabled(
+                shiny::actionButton(
+                  ns("erase_compounds"),
+                  label = "Clear",
+                  icon = shiny::icon("eraser"),
+                  width = "100%"
                 )
               )
             )
@@ -240,7 +248,7 @@ ui <- function(id) {
                 class = "tooltip-bttn",
                 shiny::actionButton(
                   ns("resultinput_tooltip_bttn"),
-                  label = "",
+                  label = NULL,
                   icon = shiny::icon("circle-question")
                 )
               ),
@@ -248,39 +256,68 @@ ui <- function(id) {
             )
           ),
           shiny::column(
-            width = 3,
+            width = 2,
             shiny::textOutput(ns("samples_table_info"))
           ),
           shiny::column(
-            width = 1,
+            width = 3,
             shiny::div(
-              class = "full-width-btn",
+              class = "table-control-buttons",
               bslib::tooltip(
-                shinyjs::disabled(
-                  shiny::actionButton(
-                    ns("confirm_samples"),
-                    label = "",
-                    icon = shiny::icon("bookmark")
+                shiny::div(
+                  style = "width: 100%;",
+                  shinyjs::disabled(
+                    shiny::actionButton(
+                      ns("confirm_samples"),
+                      label = NULL,
+                      icon = shiny::icon("bookmark"),
+                      width = "100%"
+                    )
                   )
                 ),
                 "Confirm Sample Table",
                 placement = "top"
-              )
-            )
-          ),
-          shiny::column(
-            width = 1,
-            shiny::div(
-              class = "full-width-btn",
+              ),
               bslib::tooltip(
-                shinyjs::disabled(
-                  shiny::actionButton(
-                    ns("edit_samples"),
-                    label = "",
-                    icon = shiny::icon("pen-to-square")
+                shiny::div(
+                  style = "width: 100%;",
+                  shinyjs::disabled(
+                    shiny::actionButton(
+                      ns("edit_samples"),
+                      label = NULL,
+                      icon = shiny::icon("pen-to-square"),
+                      width = "100%"
+                    )
                   )
                 ),
                 "Edit Sample Table",
+                placement = "top"
+              ),
+              # bslib::tooltip(
+              #   shinyjs::disabled(
+              #     shiny::actionButton(
+              #       ns("erase_samples"),
+              #       label = NULL,
+              #       icon = shiny::icon("eraser"),
+              #       width = "100%"
+              #     )
+              #   ),
+              #   "Clear Sample Table",
+              #   placement = "top"
+              # )
+              bslib::tooltip(
+                shiny::div(
+                  style = "width: 100%;",
+                  shinyjs::disabled(
+                    shiny::actionButton(
+                      ns("erase_samples"),
+                      label = NULL,
+                      icon = shiny::icon("eraser"),
+                      width = "100%"
+                    )
+                  )
+                ),
+                "Clear Sample Table",
                 placement = "top"
               )
             )
@@ -2029,7 +2066,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                               class = "tooltip-bttn",
                               shiny::actionButton(
                                 ns("conversion_samples_protein_tooltip_bttn"),
-                                label = "",
+                                label = NULL,
                                 icon = shiny::icon("circle-question")
                               )
                             )
@@ -2054,7 +2091,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                               class = "tooltip-bttn",
                               shiny::actionButton(
                                 ns("total_pct_bind_tooltip_bttn"),
-                                label = "",
+                                label = NULL,
                                 icon = shiny::icon("circle-question")
                               )
                             )
@@ -2107,7 +2144,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                             class = "tooltip-bttn",
                             shiny::actionButton(
                               ns("mass_spectra_tooltip_bttn"),
-                              label = "",
+                              label = NULL,
                               icon = shiny::icon("circle-question")
                             )
                           )
@@ -2133,7 +2170,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                           class = "tooltip-bttn",
                           shiny::actionButton(
                             ns("mass_spectra_tooltip_bttn"),
-                            label = "",
+                            label = NULL,
                             icon = shiny::icon("circle-question")
                           )
                         )
@@ -2179,7 +2216,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                             class = "tooltip-bttn",
                             shiny::actionButton(
                               ns("mass_spectra_tooltip_bttn"),
-                              label = "",
+                              label = NULL,
                               icon = shiny::icon("circle-question")
                             )
                           )
@@ -2646,7 +2683,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                               class = "tooltip-bttn",
                               shiny::actionButton(
                                 ns("conversion_samples_protein_tooltip_bttn"),
-                                label = "",
+                                label = NULL,
                                 icon = shiny::icon("circle-question")
                               )
                             )
@@ -2673,7 +2710,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                               class = "tooltip-bttn",
                               shiny::actionButton(
                                 ns("total_pct_bind_tooltip_bttn"),
-                                label = "",
+                                label = NULL,
                                 icon = shiny::icon("circle-question")
                               )
                             )
@@ -2724,7 +2761,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                             class = "tooltip-bttn",
                             shiny::actionButton(
                               ns("mass_spectra_tooltip_bttn"),
-                              label = "",
+                              label = NULL,
                               icon = shiny::icon("circle-question")
                             )
                           )
@@ -2770,7 +2807,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                             class = "tooltip-bttn",
                             shiny::actionButton(
                               ns("mass_spectra_tooltip_bttn"),
-                              label = "",
+                              label = NULL,
                               icon = shiny::icon("circle-question")
                             )
                           )
@@ -2809,7 +2846,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                             class = "tooltip-bttn",
                             shiny::actionButton(
                               ns("mass_spectra_tooltip_bttn"),
-                              label = "",
+                              label = NULL,
                               icon = shiny::icon("circle-question")
                             )
                           )
@@ -3352,7 +3389,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                               class = "tooltip-bttn",
                               shiny::actionButton(
                                 ns("conversion_samples_protein_tooltip_bttn"),
-                                label = "",
+                                label = NULL,
                                 icon = shiny::icon("circle-question")
                               )
                             )
@@ -3389,7 +3426,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                                 class = "tooltip-bttn",
                                 shiny::actionButton(
                                   ns("total_pct_bind_tooltip_bttn"),
-                                  label = "",
+                                  label = NULL,
                                   icon = shiny::icon("circle-question")
                                 )
                               )
@@ -3438,7 +3475,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                             class = "tooltip-bttn",
                             shiny::actionButton(
                               ns("mass_spectra_tooltip_bttn"),
-                              label = "",
+                              label = NULL,
                               icon = shiny::icon("circle-question")
                             )
                           )
@@ -3484,7 +3521,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                             class = "tooltip-bttn",
                             shiny::actionButton(
                               ns("mass_spectra_tooltip_bttn"),
-                              label = "",
+                              label = NULL,
                               icon = shiny::icon("circle-question")
                             )
                           )
@@ -3522,7 +3559,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                             class = "tooltip-bttn",
                             shiny::actionButton(
                               ns("mass_spectra_tooltip_bttn"),
-                              label = "",
+                              label = NULL,
                               icon = shiny::icon("circle-question")
                             )
                           )
@@ -4327,7 +4364,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                   class = "tooltip-bttn",
                   shiny::actionButton(
                     ns("conversion_tooltip_bttn"),
-                    label = "",
+                    label = NULL,
                     icon = shiny::icon("circle-question")
                   )
                 )
@@ -4423,7 +4460,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                 #   class = "tooltip-bttn hits-tab-tooltip",
                 #   shiny::actionButton(
                 #     ns("hits_table_tooltip_bttn"),
-                #     label = "",
+                #     label = NULL,
                 #     icon = shiny::icon("circle-question")
                 #   )
                 # ),
@@ -4673,7 +4710,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                       class = "tooltip-bttn",
                       shiny::actionButton(
                         ns("binding_curve_tooltip_bttn"),
-                        label = "",
+                        label = NULL,
                         icon = shiny::icon("circle-question")
                       )
                     )
@@ -4707,7 +4744,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                       class = "tooltip-bttn",
                       shiny::actionButton(
                         ns("kobs_curve_tooltip_bttn"),
-                        label = "",
+                        label = NULL,
                         icon = shiny::icon("circle-question")
                       )
                     )
@@ -4735,7 +4772,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                       class = "tooltip-bttn",
                       shiny::actionButton(
                         ns("binding_analysis_tooltip_bttn"),
-                        label = "",
+                        label = NULL,
                         icon = shiny::icon("circle-question")
                       )
                     )
@@ -4766,7 +4803,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                         class = "tooltip-bttn",
                         shiny::actionButton(
                           ns("kinact_tooltip_bttn"),
-                          label = "",
+                          label = NULL,
                           icon = shiny::icon("circle-question")
                         )
                       )
@@ -4796,7 +4833,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                         class = "tooltip-bttn",
                         shiny::actionButton(
                           ns("Ki_tooltip_bttn"),
-                          label = "",
+                          label = NULL,
                           icon = shiny::icon("circle-question")
                         )
                       )
@@ -4828,7 +4865,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                         class = "tooltip-bttn",
                         shiny::actionButton(
                           ns("Ki_kinact_tooltip_bttn"),
-                          label = "",
+                          label = NULL,
                           icon = shiny::icon("circle-question")
                         )
                       )
@@ -5161,7 +5198,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                             class = "tooltip-bttn",
                             shiny::actionButton(
                               ns("mass_spectra_tooltip_bttn"),
-                              label = "",
+                              label = NULL,
                               icon = shiny::icon("circle-question")
                             )
                           )
@@ -5188,7 +5225,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                           class = "tooltip-bttn",
                           shiny::actionButton(
                             ns("binding_curve_single_tooltip_bttn"),
-                            label = "",
+                            label = NULL,
                             icon = shiny::icon("circle-question")
                           )
                         )
@@ -5224,7 +5261,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                             class = "tooltip-bttn",
                             shiny::actionButton(
                               ns("kobs_value_tooltip_bttn"),
-                              label = "",
+                              label = NULL,
                               icon = shiny::icon("circle-question")
                             )
                           )
@@ -5251,7 +5288,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                             class = "tooltip-bttn",
                             shiny::actionButton(
                               ns("binding_plateau_tooltip_bttn"),
-                              label = "",
+                              label = NULL,
                               icon = shiny::icon("circle-question")
                             )
                           )
@@ -5272,7 +5309,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                             class = "tooltip-bttn",
                             shiny::actionButton(
                               ns("v_value_tooltip_bttn"),
-                              label = "",
+                              label = NULL,
                               icon = shiny::icon("circle-question")
                             )
                           )
@@ -5321,7 +5358,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
                             class = "tooltip-bttn",
                             shiny::actionButton(
                               ns("hits_table_tooltip_bttn"),
-                              label = "",
+                              label = NULL,
                               icon = shiny::icon("circle-question")
                             )
                           )
