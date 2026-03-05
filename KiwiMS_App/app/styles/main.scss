@@ -584,9 +584,15 @@ input[type="number"]::-webkit-inner-spin-button {
   background-color: #000000c9;
 }
 
-#app-conversion_main-fileinput_tooltip_bttn {
+#app-conversion_main-fileinput_tooltip_bttn,
+#app-conversion_main-resultinput_tooltip_bttn {
   margin: 0;
   height: 46.6px;
+}
+
+.sample-declaration-info-ui {
+  display: flex;
+  justify-content: space-around;
 }
 
 .tooltip-bttn .btn {
@@ -1486,7 +1492,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 
 .samples-controls>div,
 .comp-prot-controls>div {
-  align-items: start;
+  align-items: end;
 }
 
 .samples-controls,
@@ -2138,7 +2144,6 @@ th.sorting {
 .table-legend {
   display: flex;
   gap: 10px;
-  box-shadow: inset 0px 0px 65px 4px rgba(0, 0, 0, 0.3019607843);
   border-radius: 4px;
   padding: 10px;
   padding-left: 10px;

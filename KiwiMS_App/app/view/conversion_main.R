@@ -239,7 +239,7 @@ ui <- function(id) {
               shiny::div(
                 class = "tooltip-bttn",
                 shiny::actionButton(
-                  ns("fileinput_tooltip_bttn"),
+                  ns("resultinput_tooltip_bttn"),
                   label = "",
                   icon = shiny::icon("circle-question")
                 )
@@ -5794,6 +5794,38 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
     # Tooltips ----
 
+    ## Sample declaration tooltip ----
+    safe_observe(
+      event_expr = input$resultinput_tooltip_bttn,
+      observer_name = "Tooltips Displayer",
+      handler_fn = function() {
+        shiny::showModal(
+          shiny::div(
+            class = "tip-modal",
+            shiny::modalDialog(
+              shiny::column(
+                width = 12,
+                shiny::div(
+                  class = "tooltip-text",
+                  "Continue from Deconvolution or upload a result file containing deconvolved samples."
+                ),
+                shiny::br(),
+                shiny::div(
+                  class = "tooltip-text",
+                  "Assign each sample their contained protein and compound(s). If a Ki/kinact analysis is intended, samples need to be annotated with their corresponding compound concentration and incubation time. Sample annotation can be performed via file upload or by filling the table directly. The table also supports copy/paste for efficient filling."
+                )
+              ),
+              title = "Samples Declaration",
+              easyClose = TRUE,
+              footer = shiny::tagList(
+                shiny::modalButton("Dismiss")
+              )
+            )
+          )
+        )
+      }
+    )
+
     ## Fileinput tooltips ----
     safe_observe(
       event_expr = input$fileinput_tooltip_bttn,
@@ -5808,7 +5840,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             width = 12,
             shiny::div(
               class = "tooltip-text",
-              "One or more proteins can be screened for. The protein names/IDs together with their Mw values [Da] can be defined either via file upload or by entering the values into the table. The table also supports copy/paste for efficient filling."
+              "One or more proteins can be screened for. The protein names/IDs together with their mass values [Da] can be defined either via file upload or by entering the values into the table. The table also supports copy/paste for efficient filling."
             ),
             shiny::br(),
             shiny::div(
@@ -5835,26 +5867,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
             ),
             shiny::br(),
             shiny::tags$img(
-              src = "static/compound_table.png"
-            ),
-            shiny::br()
-          )
-        } else if (input$tabs == "Samples") {
-          ## Sample declaration ----
-          title <- "Samples Declaration"
-          hints <- shiny::column(
-            width = 12,
-            shiny::div(
-              class = "tooltip-text",
-              "One or more compounds can be screened for. The compound names/IDs together with their mass values [Da] can be defined either via file upload or by entering the values into the table. The table also supports copy/paste for efficient filling."
-            ),
-            shiny::br(),
-            shiny::div(
-              class = "tooltip-img-text",
-              "The format requires the name/ID as first column and up to nine columns the theoretical mass as well as any mass shifts per compound. Headers are optional."
-            ),
-            shiny::br(),
-            shiny::tags$img(
+              style = "width: 60vw;",
               src = "static/compound_table.png"
             ),
             shiny::br()
