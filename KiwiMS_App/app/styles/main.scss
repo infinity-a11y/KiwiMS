@@ -852,18 +852,6 @@ table.dataTable>tbody>tr.selected>* {
 }
 
 /* --- Handsontable --- */
-.handsontable .ht_clone_left thead,
-.handsontable .ht_master thead,
-.handsontable .ht_master tr th {
-  visibility: visible !important;
-}
-
-.handsontable .ht_master .wtHider,
-.handsontable .ht_master .wtSpreader,
-.handsontable table.htCore {
-  width: 100% !important;
-}
-
 .autocompleteEditor .ht_master .wtHolder {
   overflow: unset;
 }
@@ -888,10 +876,6 @@ td.listbox.htDimmed.current.highlight {
   position: relative;
   z-index: 99;
 }
-
-// .ht_master .wtHolder {
-//   width: fit-content !important;
-// }
 
 .htContextMenu table.htCore,
 .htContextMenu:not(.htGhostTable) {

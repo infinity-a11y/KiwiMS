@@ -1,3 +1,32 @@
+$(document).on('shown.bs.tab', 'a[data-bs-toggle=\"tab\"], a[data-toggle=\"tab\"]', function (e) {
+  var target = $(e.target).attr('data-bs-target') || $(e.target).attr('href') || $(e.target).attr('data-target');
+  if (!target) return;
+  target = target.replace('#', '');
+
+  function tryFix() {
+    $('#' + target).find('[id$=\"_proteins_table\"], .rHandsontableOutput, .html-widget-output').each(function () {
+      var el = this;
+      var id = el.id;
+
+      var widget = HTMLWidgets.getInstance(el);
+      if (widget && widget.hot) {
+        widget.hot.updateSettings({});
+        widget.hot.render();
+        console.log('Smooth render via RAF for ' + id);
+      } else {
+        // fallback
+        $(window).trigger('resize');
+      }
+    });
+  }
+
+  // First attempt soon, then one more synced to paint if needed
+  setTimeout(tryFix, 50);                   // very early attempt
+  requestAnimationFrame(function () {
+    requestAnimationFrame(tryFix);          // double-RAF → after next layout/paint
+  });
+});
+
 const resizeSelectOptions = () => {
   const options = document.querySelectorAll('.selectize-dropdown-content .option');
   const dropdown = document.querySelector('.selectize-dropdown-content');
