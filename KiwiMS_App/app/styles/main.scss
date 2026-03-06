@@ -1132,10 +1132,23 @@ td.listbox.htDimmed.current.highlight {
 #app-deconvolution_main-logtext,
 #app-conversion_sidebar-console_log {
   overflow-y: auto;
-  max-height: 22rem;
+  max-height: 50vh;
   height: 100%;
   word-wrap: break-word;
   white-space: pre;
+  margin: 0;
+  margin-top: 10px;
+  padding-right: 30px;
+  line-height: 1.2;
+  width: 100%;
+}
+
+#app-deconvolution_main-logtext {
+  font-size: 12px;
+}
+
+#app-console_log-logtext {
+  font-size: 14px;
 }
 
 #app-deconvolution_main-logtext::-webkit-scrollbar-track,
@@ -3600,12 +3613,12 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   gap: 10px;
 }
 
-.conversion-log-modal .modal-footer {
-  justify-content: space-between;
+.log-modal .modal-dialog {
+  max-width: 40vw;
 }
 
-.conversion-log-modal .modal-content {
-  min-width: fit-content;
+.conversion-footer {
+  justify-content: space-between;
 }
 
 .bslib-page-fill {

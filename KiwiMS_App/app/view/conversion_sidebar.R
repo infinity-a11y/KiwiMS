@@ -242,7 +242,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
 
         shiny::showModal(
           shiny::div(
-            class = "start-modal conversion-log-modal",
+            class = "start-modal log-modal",
             shiny::modalDialog(
               shiny::fluidRow(
                 shiny::br(),
@@ -274,31 +274,34 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
               easyClose = FALSE,
               footer = shiny::tagList(
                 shiny::div(
-                  class = "conversion-save-buttons",
+                  class = "conversion-footer",
                   shiny::div(
-                    class = "modal-button",
-                    shinyjs::disabled(shiny::actionButton(
-                      ns("copy_conversion_log"),
-                      "Clip",
-                      icon = shiny::icon("clipboard")
-                    ))
+                    class = "conversion-save-buttons",
+                    shiny::div(
+                      class = "modal-button",
+                      shinyjs::disabled(shiny::actionButton(
+                        ns("copy_conversion_log"),
+                        "Clip",
+                        icon = shiny::icon("clipboard")
+                      ))
+                    ),
+                    shiny::div(
+                      class = "modal-button",
+                      shinyjs::disabled(shiny::actionButton(
+                        ns("save_conversion_log"),
+                        "Save",
+                        icon = shiny::icon("download"),
+                        width = "auto"
+                      ))
+                    )
                   ),
                   shiny::div(
                     class = "modal-button",
                     shinyjs::disabled(shiny::actionButton(
-                      ns("save_conversion_log"),
-                      "Save",
-                      icon = shiny::icon("download"),
-                      width = "auto"
+                      ns("dismiss_conversion"),
+                      "Dismiss"
                     ))
                   )
-                ),
-                shiny::div(
-                  class = "modal-button",
-                  shinyjs::disabled(shiny::actionButton(
-                    ns("dismiss_conversion"),
-                    "Dismiss"
-                  ))
                 )
               )
             )

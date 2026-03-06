@@ -805,11 +805,16 @@ server <- function(
       saveRDS(config, config_path)
 
       # Initiate output file
-      reactVars$decon_process_out <- file.path(temp, "output.txt")
+      output_path <- file.path(
+        Sys.getenv("LOCALAPPDATA"),
+        "KiwiMS",
+        "deconvolution.log"
+      )
+      file.create(output_path)
+      reactVars$decon_process_out <- output_path
       write("", reactVars$decon_process_out)
 
       # Launch external deconvolution process
-
       tryCatch(
         {
           rx_process <- process$new(
@@ -819,7 +824,8 @@ server <- function(
               temp,
               log_path,
               getwd(),
-              deconvolution_sidebar_vars$targetpath()
+              deconvolution_sidebar_vars$targetpath(),
+              Sys.getenv("KIWIMS_DEV_MODE")
             ),
             stdout = reactVars$decon_process_out,
             stderr = reactVars$decon_process_out
@@ -1787,7 +1793,7 @@ server <- function(
 
       shiny$showModal(
         shiny$div(
-          class = "start-modal",
+          class = "start-modal log-modal",
           shiny$modalDialog(
             shiny$fluidRow(
               shiny$br(),

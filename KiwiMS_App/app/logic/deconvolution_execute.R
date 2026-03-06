@@ -1,6 +1,28 @@
 # app/logic/deconvolution_execute.R
 
+# Enable conda DLL search
 Sys.setenv(CONDA_DLL_SEARCH_MODIFICATION_ENABLE = "1")
+
+# Checking library Paths
+message(paste("Current library paths: \n", paste(.libPaths(), collapse = "\n")))
+
+# In dev mode manually add library paths
+if (commandArgs(trailingOnly = TRUE)[5] == "TRUE") {
+  .libPaths(c(
+    normalizePath(file.path(
+      Sys.getenv("LOCALAPPDATA"),
+      "R",
+      "win-library",
+      "4.5"
+    )),
+    .libPaths()
+  ))
+
+  message(paste(
+    "Modified library paths: \n",
+    paste(.libPaths(), collapse = "\n")
+  ))
+}
 
 # Sourcing deconvolution functions
 source_file <- file.path(
@@ -26,6 +48,11 @@ tryCatch(
     conf <- readRDS(file.path(temp, "config.rds"))
     logfile <- commandArgs(trailingOnly = TRUE)[2]
     result_dir <- commandArgs(trailingOnly = TRUE)[4]
+    output_path <- file.path(
+      Sys.getenv("LOCALAPPDATA"),
+      "KiwiMS",
+      "deconvolution.log"
+    )
   },
   error = function(e) {
     message("Error setting deconvolution parameter: ", e$message)
@@ -67,8 +94,7 @@ tryCatch(
 )
 
 # If test run dont write result file
-testing <- commandArgs(trailingOnly = TRUE)[5]
-if (is.na(testing)) {
+if (commandArgs(trailingOnly = TRUE)[5] != "testing") {
   # Read log and output
   tryCatch(
     {
@@ -78,10 +104,10 @@ if (is.na(testing)) {
         "No log"
       }
 
-      output <- if (file.exists(file.path(temp, "output.txt"))) {
-        readLines(file.path(temp, "output.txt"), warn = FALSE)
+      output <- if (file.exists(output_path)) {
+        readLines(output_path, warn = FALSE)
       } else {
-        "No output"
+        "No output available"
       }
     },
     error = function(e) {

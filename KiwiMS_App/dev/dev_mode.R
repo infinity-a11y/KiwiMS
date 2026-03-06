@@ -1,10 +1,10 @@
 startShiny <- function() {
+  Sys.setenv(KIWIMS_DEV_MODE = "TRUE")
+
   paths <- c(
     "C:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe",
     "C:/Users/marian/AppData/Local/BraveSoftware/Brave-Browser/Application/brave.exe"
   )
-
-  Sys.setenv(KIWIMS_DEV_MODE = "TRUE")
   options(
     browser = paths[which(file.exists(paths))]
   )
