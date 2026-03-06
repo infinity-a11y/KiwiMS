@@ -687,29 +687,78 @@ deconvolution_running_ui_noplate <- function(ns) {
         class = "deconvolution-running-result-card",
         shiny$div(
           class = "deconvolution-result-content-noplate",
-          shiny$fluidRow(
-            shiny$column(
-              width = 4,
-              align = "center",
-              shiny$div(
-                class = "deconvolution-result-controls",
-                disabled(
-                  radioGroupButtons(
-                    ns("toggle_result"),
-                    choiceNames = c("Deconvoluted", "Raw m/z"),
-                    choiceValues = c(FALSE, TRUE)
+          shiny$div(
+            class = "deconvolution-result-controls",
+            shiny::div(
+              class = "deconvolution-sample-picker",
+              shiny$uiOutput(ns("result_picker_ui"))
+            ),
+            shiny::div(
+              class = "card-custom",
+              bslib::card(
+                bslib::card_header(
+                  class = "bg-dark help-header",
+                  "Deconvolution Metadata",
+                  shiny::div(
+                    class = "tooltip-bttn",
+                    shiny::actionButton(
+                      ns("conversion_samples_protein_tooltip_bttn"),
+                      label = NULL,
+                      icon = shiny::icon("circle-question")
+                    )
                   )
                 ),
-                shiny$br(),
-                shiny$uiOutput(ns("result_picker_ui"))
+                DT::dataTableOutput(ns("deconvolution_data"))
               )
-            ),
-            shiny$column(
-              width = 7,
-              align = "center",
-              shiny$div(
-                class = "spectrum-plot-noplate",
-                plotlyOutput(ns("spectrum"), height = "100%")
+            )
+          ),
+          shiny::div(
+            class = "deconvolution-spectrum-card",
+            shiny::div(
+              class = "card-custom",
+              bslib::card(
+                bslib::card_header(
+                  class = "bg-dark help-header d-flex justify-content-between",
+                  "Spectrum",
+                  shiny::div(
+                    class = "box-header-settings-help",
+                    shiny::div(
+                      class = "spectrum-radio-button",
+                      disabled(
+                        radioGroupButtons(
+                          ns("toggle_result"),
+                          choiceNames = c("Deconvoluted", "Raw m/z"),
+                          choiceValues = c(FALSE, TRUE)
+                        )
+                      )
+                    ),
+                    bslib::popover(
+                      shiny::icon("gear"),
+                      shiny::div(
+                        shinyWidgets::materialSwitch(
+                          ns("spectrum_annotation"),
+                          label = "Annotate Hits",
+                          value = TRUE,
+                          right = TRUE
+                        ),
+                        style = "margin-right: 20px;"
+                      ),
+                      title = NULL
+                    ),
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("mass_spectra_tooltip_bttn"),
+                        label = NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    )
+                  )
+                ),
+                shiny$div(
+                  class = "spectrum-plot-noplate",
+                  plotlyOutput(ns("spectrum"), height = "100%")
+                )
               )
             )
           )

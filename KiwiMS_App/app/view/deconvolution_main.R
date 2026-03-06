@@ -765,7 +765,11 @@ server <- function(
       output$result_picker_ui <- shiny$renderUI(
         shiny$div(
           class = "result-picker",
-          disabled(shiny$selectInput(ns("result_picker"), "", choices = ""))
+          disabled(shiny$selectInput(
+            ns("result_picker"),
+            "Select Sample",
+            choices = ""
+          ))
         )
       )
       # Apply JS modifications for picker
@@ -1144,7 +1148,7 @@ server <- function(
                       class = "result-picker",
                       shiny$selectInput(
                         ns("result_picker"),
-                        "",
+                        "Select Sample",
                         choices = gsub(
                           "_rawdata_unidecfiles",
                           ".raw",
@@ -1189,7 +1193,7 @@ server <- function(
                     class = "result-picker",
                     shiny$selectInput(
                       ns("result_picker"),
-                      "",
+                      "Select Sample",
                       choices = choices,
                       selected = selected
                     )
@@ -1423,7 +1427,7 @@ server <- function(
                       class = "result-picker",
                       shiny$selectInput(
                         ns("result_picker"),
-                        "",
+                        "Select Sample",
                         choices = choices,
                         selected = selected
                       )
@@ -1558,7 +1562,11 @@ server <- function(
           spectrum <- spectrum_plot(
             result_path = result_dir,
             raw = as.logical(input$toggle_result),
-            show_peak_labels = FALSE,
+            show_peak_labels = ifelse(
+              is.null(input$spectrum_annotation),
+              TRUE,
+              input$spectrum_annotation
+            ),
             show_mass_diff = FALSE
           )
 
@@ -1568,6 +1576,80 @@ server <- function(
 
           return(spectrum)
         }
+      })
+
+      output$deconvolution_data <- DT::renderDataTable({
+        shiny$req(result_files_sel())
+
+        waiter_show(id = ns("deconvolution_data"), html = spin_wave())
+
+        if (deconvolution_sidebar_vars$selected() == "folder") {
+          result_dir <- file.path(
+            deconvolution_sidebar_vars$targetpath(),
+            gsub(".raw", "_rawdata_unidecfiles", result_files_sel())
+          )
+        } else if (deconvolution_sidebar_vars$selected() == "file") {
+          result_dir <- file.path(
+            deconvolution_sidebar_vars$targetpath(),
+            basename(gsub(
+              ".raw",
+              "_rawdata_unidecfiles",
+              deconvolution_sidebar_vars$file()
+            ))
+          )
+        }
+
+        deconvolution_data_path <- file.path(
+          result_dir,
+          paste0(gsub("_unidecfiles", "", basename(result_dir)), "_error.txt")
+        )
+
+        if (file.exists(deconvolution_data_path)) {
+          deconvolution_data <- readLines(deconvolution_data_path)
+
+          names <- sub(" =.*", "", deconvolution_data)
+          values <- sub(".*= ", "", deconvolution_data)
+          units <- c("", "s", "", "", "m/z", "z", "", "")
+
+          tbl <- data.frame(
+            Parameter = c(
+              "Fitting error",
+              "Computation time",
+              "Iteration count",
+              "UniScore (Quality)",
+              "m/z sigma",
+              "z (Charge) sigma",
+              "beat (Suppression)",
+              "Point sigma"
+            ),
+            Value = values,
+            Units = units
+          )
+        } else {
+          tbl <- data.frame()
+        }
+
+        waiter_hide(id = ns("spectrum"))
+
+        DT::datatable(
+          data = tbl,
+          escape = FALSE,
+          rownames = FALSE,
+          colnames = NULL,
+          class = "order-column",
+          selection = "none",
+          options = list(
+            dom = 't',
+            paging = FALSE,
+            scrollY = TRUE,
+            scrollCollapse = TRUE,
+            ordering = FALSE
+          )
+        ) |>
+          DT::formatStyle(
+            "Value",
+            textAlign = "right"
+          )
       })
 
       ### Render heatmap for batch mode

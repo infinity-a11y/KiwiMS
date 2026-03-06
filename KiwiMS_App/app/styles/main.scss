@@ -1029,7 +1029,11 @@ td.listbox.htDimmed.current.highlight {
 }
 
 .deconvolution-result-content-noplate {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr 2fr;
   height: 100%;
+  width: 100%;
 }
 
 .deconvolution-result-content-plate {
@@ -1037,13 +1041,13 @@ td.listbox.htDimmed.current.highlight {
   align-content: center;
 }
 
-.deconvolution-result-content-noplate > div,
-.deconvolution-result-content-plate > div,
-.deconvolution-result-content-plate > div > div,
-.deconvolution-result-content-noplate > div > div {
-  height: 100%;
-  align-content: center;
-}
+// .deconvolution-result-content-noplate > div,
+// .deconvolution-result-content-plate > div,
+// .deconvolution-result-content-plate > div > div,
+// .deconvolution-result-content-noplate > div > div {
+//   height: 100%;
+//   align-content: center;
+// }
 
 /* Controls & Inputs */
 .deconv-param-input .shiny-input-container .control-label,
@@ -1070,14 +1074,43 @@ td.listbox.htDimmed.current.highlight {
   color: var(--bs-btn-hover-color) !important;
 }
 
-.deconvolution-result-controls,
-.deconvolution-result-controls-noplate {
-  height: 90%;
+.deconvolution-result-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.deconvolution-result-controls {
-  padding-left: 3rem;
-  padding-right: 3rem;
+.deconvolution-result-controls .card-custom {
+  height: 70%;
+}
+
+.deconvolution-result-controls .card,
+.deconvolution-result-controls .card-body {
+  height: 100%;
+}
+
+.deconvolution-sample-picker {
+  align-content: center;
+  padding-left: 20px;
+  padding-right: 20px;
+  background-color: rgba(0, 0, 0, 0.11);
+  border-radius: 3px;
+  box-shadow: inset 0px 0px 65px 2px rgba(255, 255, 255, 0.3);
+  min-height: fit-content;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  color: white;
+  height: 30%;
+}
+
+.deconvolution-sample-picker label {
+  color: white;
+}
+
+.deconvolution-spectrum-card .card-custom,
+.deconvolution-spectrum-card .card,
+.deconvolution-spectrum-card .card-body {
+  height: 100%;
 }
 
 #app-deconvolution_main-target_sel_ui > div > div {
@@ -1264,9 +1297,6 @@ td.listbox.htDimmed.current.highlight {
 }
 
 /* Result Picker & Misc */
-.result-picker {
-  margin-top: -1.5em;
-}
 
 .result-picker .selectize-control.single .selectize-input {
   height: 47px;
@@ -1328,6 +1358,26 @@ decon-report-modal .btn-default {
   width: 160px;
 }
 
+#app-deconvolution_main-deconvolution_data {
+  width: 99% !important;
+  height: 80% !important;
+  flex-basis: unset !important;
+  font-size: 14px;
+}
+
+#app-deconvolution_main-deconvolution_data .odd td {
+  background: #f5f5f540;
+}
+
+#app-deconvolution_main-deconvolution_data .even td {
+  background: #e3e3e359;
+}
+
+#app-deconvolution_main-deconvolution_data th {
+  background: transparent;
+  color: white;
+}
+
 /* ==========================================================================
    8. MODULE: CONVERSION
    ========================================================================== */
@@ -1340,7 +1390,6 @@ decon-report-modal .btn-default {
   display: flex;
   flex-direction: column;
   gap: 5%;
-  // align-items: center;
 }
 
 .conversion-result-wrapper .row {
@@ -1663,22 +1712,18 @@ div[data-value="Protein Conversion"] .tab-pane {
 }
 
 /* Conversion Plots */
-#app-conversion_main-binding_plot>div,
-#app-conversion_main-binding_plot>div>div,
-#app-conversion_main-kobs_plot>div,
-#app-conversion_main-kobs_plot>div>div,
-#app-conversion_main-samples_annotated_spectrum>div,
-#app-conversion_main-samples_annotated_spectrum>div>div,
-// #app-conversion_main-compounds_annotated_spectrum > div,
-// #app-conversion_main-compounds_annotated_spectrum > div > div,
-// #app-conversion_main-proteins_annotated_spectrum > div,
-// #app-conversion_main-proteins_annotated_spectrum > div > div,
-#app-conversion_main-samples_compound_distribution>div,
-#app-conversion_main-samples_compound_distribution>div>div,
-#app-conversion_main-compounds_compound_distribution>div,
-#app-conversion_main-compounds_compound_distribution>div>div,
-#app-conversion_main-proteins_compound_distribution>div,
-#app-conversion_main-proteins_compound_distribution>div>div {
+#app-conversion_main-binding_plot > div,
+#app-conversion_main-binding_plot > div > div,
+#app-conversion_main-kobs_plot > div,
+#app-conversion_main-kobs_plot > div > div,
+#app-conversion_main-samples_annotated_spectrum > div,
+#app-conversion_main-samples_annotated_spectrum > div > div,
+#app-conversion_main-samples_compound_distribution > div,
+#app-conversion_main-samples_compound_distribution > div > div,
+#app-conversion_main-compounds_compound_distribution > div,
+#app-conversion_main-compounds_compound_distribution > div > div,
+#app-conversion_main-proteins_compound_distribution > div,
+#app-conversion_main-proteins_compound_distribution > div > div {
   width: unset !important;
   height: unset !important;
 }
@@ -1906,22 +1951,13 @@ div[data-value="Protein Conversion"] .tab-pane {
 }
 
 /* Spectrum & Plots */
-.spectrum-plot-plate,
-.heatmap-plot {
-  padding-right: 3rem;
-  padding-left: 3rem;
-}
-
-.spectrum-plot-noplate,
-.spectrum-plot-plate,
-.heatmap-plot {
-  height: 90% !important;
-}
-
 .card-custom .spectrum .card-body {
   background: #ddddde !important;
 }
 
+.deconvolution-spectrum-card .plotly #scene,
+.deconvolution-spectrum-card .plot-container .plotly,
+.deconvolution-spectrum-card .plotly .gl-container,
 .result-conc-tab .plotly #scene,
 .result-conc-tab .plot-container .plotly,
 .result-conc-tab .plotly .gl-container,
@@ -1985,6 +2021,9 @@ div[data-value="Protein Conversion"] .tab-pane {
   text-align: left;
 }
 
+.deconvolution-spectrum-card .plotly,
+.deconvolution-spectrum-card .js-plotly-plot .plotly,
+.deconvolution-spectrum-card .js-plotly-plot .plotly .user-select-none,
 .result-conc-tab .plotly,
 .result-conc-tab .js-plotly-plot .plotly,
 .result-conc-tab .js-plotly-plot .plotly .user-select-none,
@@ -2273,7 +2312,7 @@ th.sorting {
   align-content: end;
 }
 
-table.dataTable tbody td {
+.conversion-result-wrapper table.dataTable tbody td {
   background-color: inherit !important;
 }
 
@@ -3619,6 +3658,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 
 .conversion-footer {
   justify-content: space-between;
+  display: flex;
+  width: 100%;
 }
 
 .bslib-page-fill {
