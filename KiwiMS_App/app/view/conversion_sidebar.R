@@ -11,10 +11,13 @@ box::use(
     conversion_functions[
       add_hits,
       summarize_hits,
+      check_filter_hits,
       add_kobs_binding_result,
       add_ki_kinact_result,
       conversion_tracking_js,
       log_binding_kinetics,
+      log_filtered_samples,
+      log_filtered_concentrations,
     ],
   app /
     logic /
@@ -346,6 +349,10 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
                 sample_table = conversion_main_vars$input_list()$Samples_Table
               )
 
+              result_with_hits1 <<- result_with_hits
+
+              message(paste("COMPUTING BINDING KINETICS\n  │"))
+
               # If Ki/kinact analysis is set to be performed
               if (input$run_ki_kinact) {
                 # Get concentration and time units
@@ -366,18 +373,40 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
                   units = units
                 )
 
-                # Add binding/kobs results to result list
-                result_with_hits$binding_kobs_result <- add_kobs_binding_result(
-                  result_with_hits,
-                  conc_time = conc_time,
-                  units = units
+                # Perform checks for binding kinetics analysis prerequisites
+                hits_summary_filtered <- check_filter_hits(
+                  result_with_hits
                 )
 
-                # Add Ki/kinact results to result list
-                result_with_hits$ki_kinact_result <- add_ki_kinact_result(
-                  result_with_hits,
-                  units = units
-                )
+                ki_kinact_check <- is.data.frame(hits_summary_filtered)
+
+                if (ki_kinact_check) {
+                  # Log filtered samples
+                  log_filtered_samples(
+                    diff = nrow(result_with_hits$hits_summary) -
+                      nrow(hits_summary_filtered)
+                  )
+
+                  # Log filtered concentrations
+                  log_filtered_concentrations(
+                    initial_tbl = result_with_hits$hits_summary,
+                    filtered_tbl = hits_summary_filtered,
+                    conc_time = conc_time
+                  )
+
+                  # Add binding/kobs results to result list
+                  result_with_hits$binding_kobs_result <- add_kobs_binding_result(
+                    hits_summary_filtered,
+                    conc_time = conc_time,
+                    units = units
+                  )
+
+                  # Add Ki/kinact results to result list
+                  result_with_hits$ki_kinact_result <- add_ki_kinact_result(
+                    result_with_hits,
+                    units = units
+                  )
+                }
               }
             },
             message = function(m) {
@@ -530,7 +559,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
               class = "custom-disable"
             )
           )
-          if (input$run_ki_kinact) {
+          if (ki_kinact_check) {
             shinyjs::delay(
               500,
               shinyjs::removeClass(

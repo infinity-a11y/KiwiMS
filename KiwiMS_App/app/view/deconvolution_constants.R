@@ -622,6 +622,7 @@ deconvolution_running_ui_plate <- function(ns) {
       deconvolution_status_controls(ns),
       card(
         class = "deconvolution-running-result-card",
+        full_screen = TRUE,
         shiny$fluidRow(
           shiny$column(
             width = 6

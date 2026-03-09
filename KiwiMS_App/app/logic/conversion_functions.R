@@ -1370,16 +1370,15 @@ log_hits_summary <- function(hits_summarized) {
 #' @export
 log_binding_kinetics <- function(concentrations, times, units) {
   message(paste(
-    "COMPUTING BINDING KINETICS\n  │\n",
     sprintf(
-      " ├─ %s concentrations from %s to %s [%s] \n",
+      "  ├─ %s concentrations present from %s to %s [%s] \n",
       length(unique(concentrations)),
       min(concentrations),
       max(concentrations),
       units[1]
     ),
     sprintf(
-      " ├─ %s time points from %s to %s [%s] \n",
+      " ├─ %s time points present from %s to %s [%s] \n",
       length(unique(times)),
       min(times),
       max(times),
@@ -1390,6 +1389,7 @@ log_binding_kinetics <- function(concentrations, times, units) {
 }
 
 # Log filtered samples
+#' @export
 log_filtered_samples <- function(diff) {
   if (diff > 0) {
     message(paste(
@@ -1402,6 +1402,7 @@ log_filtered_samples <- function(diff) {
 }
 
 # Log filtered concentrations
+#' @export
 log_filtered_concentrations <- function(initial_tbl, filtered_tbl, conc_time) {
   conc_diff <- unique(initial_tbl[[conc_time[1]]]) %in%
     unique(filtered_tbl[[conc_time[1]]])
@@ -1411,9 +1412,10 @@ log_filtered_concentrations <- function(initial_tbl, filtered_tbl, conc_time) {
   if (length(not_present_conc)) {
     message(paste(
       sprintf(
-        "  │  ├─ Concentrations %s are omitted after filtering",
+        "  │  ├─ Concentrations %s are omitted after filtering\n",
         paste(not_present_conc, collapse = "; ")
-      )
+      ),
+      " │  │"
     ))
   }
 }
@@ -1637,23 +1639,67 @@ extract_minutes <- function(strings) {
   as.numeric(minutes)
 }
 
+# Function perform checks for ki/kinact analysis prerequisites
+#' @export
+check_filter_hits <- function(result_list) {
+  # Check if hits summary is present and contains hits
+  if (
+    is.null(result_list$hits_summary) || nrow(result_list$hits_summary) == 0
+  ) {
+    # Log no hits detected
+    message(
+      "  └─ No hits detected in any sample. Skipping binding kinetics analysis."
+    )
+    return(NULL)
+  }
+
+  # Filter NA
+  hits_summary <- result_list$hits_summary |>
+    dplyr::filter(!is.na(binding))
+
+  # Summarize filtered hits by concentration
+  tab <- hits_summary |>
+    dplyr::group_by(dplyr::pick(dplyr::contains("Concentration"))) |>
+    dplyr::summarise(count = dplyr::n(), .groups = "drop")
+
+  # Assign concentration column
+  conc_col <- names(tab)[1]
+
+  # Check if >= 3 non-zero concentrations are present
+  if (sum(tab[[conc_col]] != 0) < 3) {
+    message(
+      "  │  ├─ At least 3 different non-zero concentrations are required.\n",
+      "  │  └─ Skipping binding kinetics analysis."
+    )
+    return(NULL)
+  }
+
+  # Check if concentrations have enough data points
+  # Requirement: At least 3 non-zero concentrations must have >= 3 hits
+  valid_concs <- sum(tab$count[tab[[conc_col]] != 0] >= 3)
+
+  if (valid_concs < 3) {
+    message(
+      "  │  ├─ 3 hits per concentration are required.\n",
+      "  │  ├─ Only ",
+      valid_concs,
+      " non-zero concentrations meet this threshold.\n",
+      "  │  └─ Skipping binding kinetics analysis."
+    )
+    return(NULL)
+  }
+
+  return(hits_summary)
+}
+
 # Function to add binding/kobs results to result list
 #' @export
 add_kobs_binding_result <- function(
-  result_list,
+  hits_summary,
   concentrations_select = NULL,
   units,
   conc_time
 ) {
-  # Filter NA
-  hits_summary <- result_list$hits_summary |>
-    dplyr::filter(!is.na(Compound))
-
-  # Log filtered samples
-  log_filtered_samples(
-    diff = nrow(result_list$hits_summary) - nrow(hits_summary)
-  )
-
   # Optional concentration filter
   if (!is.null(concentrations_select)) {
     hits_summary <- dplyr::filter(
@@ -1666,13 +1712,6 @@ add_kobs_binding_result <- function(
         concentrations_select
     )
   }
-
-  # Log filtered samples
-  log_filtered_concentrations(
-    initial_tbl = result_list$hits_summary,
-    filtered_tbl = hits_summary,
-    conc_time = conc_time
-  )
 
   # Compute kobs
   binding_kobs_result <- compute_kobs(hits_summary, units = units)
@@ -2053,13 +2092,12 @@ compute_kobs <- function(hits, units) {
     log_timepoints(data = data, unit = units["Time"], last = last)
 
     # If less than 3 entries abort and continue with next iteration
-    if (nrow(data) < 3) {
+    if (sum(!is.na(data$binding)) < 3) {
       next
     }
-    # if (nrow(data) < 3) {
+
     # Make dummy row to anchor fitting at 0
     dummy_row <- data[1, ]
-    # }
     dummy_row$binding <- 0.0
     dummy_row$time <- 0
 
