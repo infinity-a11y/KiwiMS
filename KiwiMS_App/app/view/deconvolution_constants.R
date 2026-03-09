@@ -699,7 +699,7 @@ deconvolution_running_ui_noplate <- function(ns) {
               bslib::card(
                 bslib::card_header(
                   class = "bg-dark help-header",
-                  "Deconvolution Metadata",
+                  "Deconvolution Metrics",
                   shiny::div(
                     class = "tooltip-bttn",
                     shiny::actionButton(
@@ -709,7 +709,7 @@ deconvolution_running_ui_noplate <- function(ns) {
                     )
                   )
                 ),
-                DT::dataTableOutput(ns("deconvolution_data"))
+                shiny::div(DT::dataTableOutput(ns("deconvolution_data")))
               )
             )
           ),
@@ -759,7 +759,8 @@ deconvolution_running_ui_noplate <- function(ns) {
                 shiny$div(
                   class = "spectrum-plot-noplate",
                   plotlyOutput(ns("spectrum"), height = "100%")
-                )
+                ),
+                full_screen = TRUE
               )
             )
           )

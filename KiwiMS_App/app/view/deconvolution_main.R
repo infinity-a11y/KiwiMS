@@ -1622,8 +1622,7 @@ server <- function(
               "beat (Suppression)",
               "Point sigma"
             ),
-            Value = values,
-            Units = units
+            Value = paste(values, units, sep = " ")
           )
         } else {
           tbl <- data.frame()

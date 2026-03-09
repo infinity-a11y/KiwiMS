@@ -349,8 +349,6 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
                 sample_table = conversion_main_vars$input_list()$Samples_Table
               )
 
-              result_with_hits1 <<- result_with_hits
-
               message(paste("COMPUTING BINDING KINETICS\n  │"))
 
               # If Ki/kinact analysis is set to be performed
@@ -525,10 +523,12 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
             Compound
           ) |>
             dplyr::filter(!is.na(Compound))
+
           choice_values <- stats::setNames(
             complex_df$Compound,
             complex_df$Compound
           )
+
           complexes <- split(choice_values, complex_df$Protein)
 
           complexes(complexes)
