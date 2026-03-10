@@ -162,17 +162,15 @@ symbols <- c(
 #' @export
 chart_js <- '
 function(data, type, row, meta) {
-  return $("<div></div>", {
-    class: "bar-chart-bar"
-  })
-    .append(
-      $("<div></div>", {
-        class: "bar"
-      }).css({
-        width: data + "%"
-      })
-    )
-    .prop("outerHTML");
+  if (type === "display") {
+    var val = parseFloat(data);
+    var width = isNaN(val) ? 0 : val;
+
+    return "<div class=\'bar-chart-bar\'>" +
+             "<div class=\'bar\' style=\'width: " + width + "%;\'></div>" +
+           "</div>";
+  }
+  return data;
 }
 '
 

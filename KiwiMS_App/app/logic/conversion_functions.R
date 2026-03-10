@@ -1063,6 +1063,10 @@ check_hits <- function(
     return(hits_df)
   }
 
+  # Remove peak intensity normalization
+  # Normalize peak intensity
+  # peaks$intensity <- peaks$intensity / max(peaks$intensity) * 100
+
   # Keep only peaks above protein mw
   peaks_valid <- peaks$mass >= protein_mw[, -1] - peak_tolerance
   if (any(peaks_valid) && sum(peaks_valid) > 1) {
@@ -1554,7 +1558,10 @@ add_hits <- function(
     log_start(samples[i])
 
     present_protein <- sample_table$Protein[sample_table$Sample == samples[i]]
-    present_cmp <- sample_table[sample_table$Sample == samples[i], -c(1, 2)]
+    present_cmp <- sample_table[
+      sample_table$Sample == samples[i],
+      grep("Compound", names(sample_table))
+    ]
 
     results$deconvolution[[samples[i]]][["hits"]] <- check_hits(
       sample_table = sample_table,
@@ -1566,7 +1573,8 @@ add_hits <- function(
       sample = samples[i]
     )
 
-    # Add hits data frame to sample
+    # Conversion of relative intensities to %-Binding
+    # Add resulting hits data frame to sample
     results$deconvolution[[samples[i]]][[
       "hits"
     ]] <- conversion(results$deconvolution[[samples[i]]][[
@@ -4099,7 +4107,7 @@ transform_hits <- function(hits_summary) {
       # Format Intensity columns only if numeric
       dplyr::across(
         dplyr::any_of(c("Intensity", "Protein Intensity")) & where(is.numeric),
-        ~ scales::percent(.x / 100, accuracy = 0.1)
+        ~ round(.x, 2)
       ),
       # Format [Da] columns only if numeric
       dplyr::across(
