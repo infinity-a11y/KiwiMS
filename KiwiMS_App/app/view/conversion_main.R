@@ -5810,7 +5810,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
 
         # Add binding/kobs results to result list
         result_list$binding_kobs_result <- add_kobs_binding_result(
-          result_list,
+          result_list$hits_summary,
           concentrations_select = names(
             conversion_vars$select_concentration
           )[which(conversion_vars$select_concentration)],

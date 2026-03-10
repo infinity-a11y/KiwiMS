@@ -1707,6 +1707,10 @@ add_kobs_binding_result <- function(
   units,
   conc_time
 ) {
+  hits_summary <<- hits_summary
+  concentrations_select <<- concentrations_select
+  units1 <<- units
+  conc_time <<- conc_time
   # Optional concentration filter
   if (!is.null(concentrations_select)) {
     hits_summary <- dplyr::filter(

@@ -1,4 +1,7 @@
 startShiny <- function() {
+  # Garbage collection
+  gc()
+
   Sys.setenv(KIWIMS_DEV_MODE = "TRUE")
 
   paths <- c(
