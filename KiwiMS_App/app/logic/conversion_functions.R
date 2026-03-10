@@ -3390,9 +3390,9 @@ render_table_view <- function(table, colors, tab, inputs, units) {
       `%-Binding` = if (
         is.null(inputs$binding_bar) || isTRUE(inputs$binding_bar)
       ) {
-        `%-Binding`
+        round(`%-Binding`, 1)
       } else {
-        as.character(`%-Binding`)
+        as.character(round(`%-Binding`, 1))
       },
       `Total %` = if (
         is.null(inputs$tot_binding_bar) || isTRUE(inputs$tot_binding_bar)
@@ -3563,22 +3563,22 @@ render_hits_table <- function(
       )
   }
 
-  if (length(bar_chart)) {
-    if (
-      "Total %-Binding" %in%
-        names(hits_table) &
-        any("Total %-Binding" %in% bar_chart)
-    ) {
-      hits_table$`Total %-Binding`[hits_table$`Total %-Binding` == "N/A"] <- NA
-    }
-    if (
-      "%-Binding" %in%
-        names(hits_table) &
-        any("%-Binding" %in% bar_chart)
-    ) {
-      hits_table$`%-Binding`[hits_table$`%-Binding` == "N/A"] <- NA
-    }
-  }
+  # if (length(bar_chart)) {
+  #   if (
+  #     "Total %-Binding" %in%
+  #       names(hits_table) &
+  #       any("Total %-Binding" %in% bar_chart)
+  #   ) {
+  #     hits_table$`Total %-Binding`[hits_table$`Total %-Binding` == "N/A"] <- NA
+  #   }
+  #   if (
+  #     "%-Binding" %in%
+  #       names(hits_table) &
+  #       any("%-Binding" %in% bar_chart)
+  #   ) {
+  #     hits_table$`%-Binding`[hits_table$`%-Binding` == "N/A"] <- NA
+  #   }
+  # }
 
   # Filter compounds
   if (!is.null(compounds) && na_include) {
@@ -4099,16 +4099,16 @@ transform_hits <- function(hits_summary) {
   # Shared transformations
   summary_table <- hits_summary |>
     dplyr::mutate(
-      # Format percentages
+      # Format Intensity columns
       dplyr::across(
-        dplyr::any_of(c("% Binding", "Total % Binding")) & where(is.numeric),
-        ~ scales::percent(.x, accuracy = 0.1)
+        dplyr::any_of(c("Intensity", "Protein Intensity")) & where(is.numeric),
+        ~ round(.x, 2)
       ),
-      # # Format Intensity columns only if numeric
-      # dplyr::across(
-      #   dplyr::any_of(c("Intensity", "Protein Intensity")) & where(is.numeric),
-      #   ~ round(.x, 2)
-      # ),
+      # Transform binding cols to rounded percentage
+      dplyr::across(
+        c(`% Binding`, `Total % Binding`),
+        ~ dplyr::if_else(is.na(.x), 0, round(.x * 100, 2))
+      ),
       # Format [Da] columns only if numeric
       dplyr::across(
         dplyr::ends_with("[Da]") & where(is.numeric),
@@ -4120,7 +4120,7 @@ transform_hits <- function(hits_summary) {
       ),
       # Global NA cleanup (convert to character)
       dplyr::across(
-        !dplyr::any_of("Compound"),
+        !dplyr::any_of(c("Compound", "% Binding", "Total % Binding")),
         ~ tidyr::replace_na(as.character(.x), "N/A")
       )
     ) |>

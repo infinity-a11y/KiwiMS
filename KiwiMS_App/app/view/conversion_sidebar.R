@@ -518,10 +518,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
           #   "C:\\Users\\marian\\Desktop\\KF_Testing\\test.rds"
           # )
 
-          # # Assign result list and hits table to reactive vars
-
-          result_with_hits1 <<- result_with_hits
-
+          # Assign result list and hits table to reactive vars
           result_list(result_with_hits)
 
           # Save distinct protein - compound combinations/complexes
