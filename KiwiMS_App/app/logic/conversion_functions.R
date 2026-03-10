@@ -417,10 +417,9 @@ fill_sample_table <- function(sample_table, ki_kinact) {
   }
 
   col_diff <- abs(ncol(sample_table) - 7)
-  # ifelse(ki_kinact, 9, 7)
+
   if (col_diff != 0) {
     # Get concentration, time columns if ki_kinact active
-
     sample_table <- cbind(
       sample_table,
       (data.frame(rep(list(rep("", nrow(sample_table))), col_diff)))
@@ -3825,7 +3824,7 @@ new_sample_table <- function(
     "Sample",
     "Protein",
     paste("Compound", 1:5),
-    if (!is.null(ki_kinact) && ki_kinact) c("Concentration", "Time")
+    if (isTRUE(ki_kinact)) c("Concentration", "Time")
   )
 
   return(sample_tab)

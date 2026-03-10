@@ -432,12 +432,12 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       shiny::debounce(millis = 500)
 
     ## Empty default tables ----
-    protein_table_data <- shiny::reactiveVal({
-      empty_prot_comp_tbl(type = "Protein")
-    })
-    compound_table_data <- shiny::reactiveVal({
-      empty_prot_comp_tbl(type = "Compound")
-    })
+    protein_table_data <- shiny::reactiveVal(empty_prot_comp_tbl(
+      type = "Protein"
+    ))
+    compound_table_data <- shiny::reactiveVal(empty_prot_comp_tbl(
+      type = "Compound"
+    ))
     sample_table_data <- shiny::reactiveVal()
 
     ## Concentration/Time UI ----
@@ -544,6 +544,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       shiny::req(
         sample_table_data()
       )
+
       sample_handsontable(
         tab = sample_table_data(),
         proteins = declaration_vars$protein_table$Protein,
@@ -672,32 +673,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         )]] <- shiny::renderText(
           "Loading ..."
         )
-      }
-    )
-
-    ## Unconfirm sample table on ki/kinact activation ----
-    safe_observe(
-      event_expr = conversion_sidebar_vars$run_ki_kinact(),
-      observer_name = "Unconfirm Sample Table on Ki/Kinact Activation",
-      handler_fn = function() {
-        shiny::req(
-          input$samples_table,
-          isTRUE(declaration_vars$samples_confirmed),
-          isTRUE(conversion_sidebar_vars$run_ki_kinact())
-        )
-
-        # Make UI changes
-        edit_ui_changes(
-          tab = "Samples",
-          session = session,
-          output = output
-        )
-
-        # New editable full sample table data
-        declaration_vars$samples_confirmed <- FALSE
-
-        # Activate table observer
-        declaration_vars$sample_table_active <- TRUE
       }
     )
 
@@ -968,16 +943,55 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       event_expr = conversion_sidebar_vars$run_ki_kinact(),
       observer_name = "Ki/kinact Activation",
       handler_fn = function() {
-        shiny::req(input$samples_table)
-
-        sample_table_data(
-          new_sample_table(
-            result = declaration_vars$result,
-            protein_table = declaration_vars$protein_table,
-            compound_table = declaration_vars$compound_table,
-            ki_kinact = conversion_sidebar_vars$run_ki_kinact()
-          )
+        shiny::req(
+          input$samples_table,
+          sample_table_data()
         )
+
+        if (
+          isTRUE(declaration_vars$samples_confirmed) &&
+            isTRUE(conversion_sidebar_vars$run_ki_kinact())
+        ) {
+          # Make UI changes
+          edit_ui_changes(
+            tab = "Samples",
+            session = session,
+            output = output
+          )
+
+          # New editable full sample table data
+          declaration_vars$samples_confirmed <- FALSE
+
+          # Activate table observer
+          declaration_vars$sample_table_active <- TRUE
+
+          # Fill sample table
+          sample_table <- fill_sample_table(
+            sample_table_data(),
+            ki_kinact = ifelse(
+              all(c("Concentration", "Time") %in% names(sample_table_data())),
+              TRUE,
+              FALSE
+            )
+          )
+
+          sample_table_data(cbind(
+            sample_table,
+            Concentration = as.numeric(NA),
+            Time = as.numeric(NA)
+          ))
+        } else if (isTRUE(conversion_sidebar_vars$run_ki_kinact())) {
+          sample_table_data(cbind(
+            sample_table_data(),
+            Concentration = as.numeric(NA),
+            Time = as.numeric(NA)
+          ))
+        } else {
+          sample_table_data(sample_table_data()[,
+            -grep("Concentration|Time", names(sample_table_data()))
+          ])
+        }
+
         sample_table_trigger(sample_table_trigger() + 1)
       }
     )
