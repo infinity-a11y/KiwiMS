@@ -4104,11 +4104,11 @@ transform_hits <- function(hits_summary) {
         dplyr::any_of(c("% Binding", "Total % Binding")) & where(is.numeric),
         ~ scales::percent(.x, accuracy = 0.1)
       ),
-      # Format Intensity columns only if numeric
-      dplyr::across(
-        dplyr::any_of(c("Intensity", "Protein Intensity")) & where(is.numeric),
-        ~ round(.x, 2)
-      ),
+      # # Format Intensity columns only if numeric
+      # dplyr::across(
+      #   dplyr::any_of(c("Intensity", "Protein Intensity")) & where(is.numeric),
+      #   ~ round(.x, 2)
+      # ),
       # Format [Da] columns only if numeric
       dplyr::across(
         dplyr::ends_with("[Da]") & where(is.numeric),

@@ -203,12 +203,14 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
           bslib::tooltip(
             shiny::div(
               style = "width: 100%;",
-              shinyjs::disabled(shiny::actionButton(
-                ns("run_binding_analysis"),
-                "Start",
-                icon = shiny::icon("play"),
-                width = "100%"
-              ))
+              shinyjs::disabled(
+                shiny::actionButton(
+                  ns("run_binding_analysis"),
+                  "Start",
+                  icon = shiny::icon("play"),
+                  width = "100%"
+                )
+              )
             ),
             "Confirm all tables first",
             placement = "bottom"
@@ -322,6 +324,9 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
         if (analysis_status() == "pending") {
           # Delay conversion start
           Sys.sleep(1)
+
+          # Preset logical ki_kinact_check
+          ki_kinact_check <- FALSE
 
           # Activate JS function for conversion process tracking
           shinyjs::runjs(sprintf(
@@ -514,6 +519,9 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
           # )
 
           # # Assign result list and hits table to reactive vars
+
+          result_with_hits1 <<- result_with_hits
+
           result_list(result_with_hits)
 
           # Save distinct protein - compound combinations/complexes
