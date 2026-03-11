@@ -105,6 +105,10 @@ th {
 /* ==========================================================================
    3. LAYOUT & STRUCTURE
    ========================================================================== */
+.bslib-sidebar-layout > .main {
+  overflow: hidden;
+}
+
 .full-height-row,
 .full-height-row > div {
   height: 100%;
@@ -957,6 +961,23 @@ td.listbox.htDimmed.current.highlight {
 .shiny-spinner-output-container {
   height: 100%;
   display: contents;
+}
+
+.conversion-main-spinner > .shiny-spinner-output-container {
+  display: unset !important;
+}
+
+.conversion-main-spinner > div > .load-container {
+  height: 100% !important;
+  align-content: center !important;
+  background: #3a3c4b !important;
+  border-radius: 7px !important;
+  position: relative !important;
+  z-index: 9999 !important;
+}
+
+.conversion-main-spinner {
+  height: 100%;
 }
 
 .shiny-text-output {

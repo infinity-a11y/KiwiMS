@@ -73,10 +73,13 @@ box::use(
 ui <- function(id) {
   ns <- NS(id)
 
-  shinycssloaders::withSpinner(
-    shiny::uiOutput(ns("conversion_ui")),
-    type = 1,
-    color = "#7777f9"
+  shiny::div(
+    class = "conversion-main-spinner",
+    shinycssloaders::withSpinner(
+      shiny::uiOutput(ns("conversion_ui")),
+      type = 1,
+      color = "#7777f9"
+    )
   )
 }
 
