@@ -1419,15 +1419,15 @@ decon-report-modal .btn-default {
   margin: 0;
 }
 
-// #app-conversion_main-conversion_ui > .card > .tab-content > .tab-pane > .card-body {
-//   padding: 0;
-// }
+#app-conversion_main-conversion_ui > .card > .tab-content > .tab-pane > .card-body {
+  padding: 1%;
+}
 
 /* Structure & Tables */
 .conversion-result-wrapper {
   height: 100%;
   width: 100%;
-  padding: 1%;
+  // padding: 1%;
   display: flex;
   flex-direction: column;
   gap: 5%;

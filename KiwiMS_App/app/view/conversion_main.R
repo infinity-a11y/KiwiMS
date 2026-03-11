@@ -257,11 +257,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     )
 
     ## Conversion Declaration UI ----
-    output$conversion_ui <- shiny::renderUI({
-      message("Declaration UI rendered (initial)")
-
-      conversion_declaration_ui(ns)
-    })
+    output$conversion_ui <- shiny::renderUI(conversion_declaration_ui(ns))
 
     ### UI Render Functions ----
     #### Table render functions ----
@@ -1021,38 +1017,37 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           output$proteins_present_compounds_ui <- NULL
           output$proteins_distribution_labels_ui <- NULL
 
+          # Remove other relative binding interface elements
+          output$color_variable_ui <- NULL
+
+          # Remove ki/kinact interface elements
+          output$binding_tab <- NULL
+          output$kinact <- NULL
+          output$Ki <- NULL
+          output$Ki_kinact <- NULL
+          output$kobs_result <- NULL
+          output$binding_plot <- NULL
+          output$kobs_plot <- NULL
+          output$hits_tab <- NULL
+          if (!is.null(conversion_vars$select_concentration)) {
+            lapply(names(conversion_vars$select_concentration), function(id) {
+              output[[paste0("concentration_tab", id)]] <- NULL
+              output[[paste0("concentration_tab_", id, "_hits")]] <- NULL
+              output[[paste0(
+                "concentration_tab_",
+                id,
+                "_binding_plot"
+              )]] <- NULL
+              output[[paste0("concentration_tab_", id, "_spectra")]] <- NULL
+            })
+          }
+
           # Remove other relative binding interfac elements
           output$color_variable_ui <- NULL
 
-          # Show declaration tabs
-          bslib::nav_show(
-            "tabs",
-            "Proteins"
-          )
-          bslib::nav_show(
-            "tabs",
-            "Compounds"
-          )
-          bslib::nav_show(
-            "tabs",
-            "Samples"
-          )
+          # Show declaration interface
+          output$conversion_ui <- shiny::renderUI(conversion_declaration_ui(ns))
 
-          # Remove results tabs
-          bslib::nav_remove("tabs", "Binding")
-          bslib::nav_remove("tabs", "Hits")
-          for (i in names(conversion_vars$select_concentration)) {
-            bslib::nav_remove(
-              "tabs",
-              paste0("[", i, "]")
-            )
-          }
-          bslib::nav_remove("tabs", "Compounds View")
-          bslib::nav_remove("tabs", "Proteins View")
-          bslib::nav_remove("tabs", "Samples View")
-          shiny::removeUI(
-            selector = paste0("#", ns("conversion_tab_items"))
-          )
           # Reset reactive variables
           conversion_vars <- shiny::reactiveValues(
             modified_results = NULL,
@@ -1102,10 +1097,53 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           class = "custom-disable"
         )
 
-        # Mark tab as undone
+        # Adapt table status tab indicators
         shinyjs::runjs(
           'document.querySelector(".nav-link[data-value=\'Samples\']").classList.remove("done");'
         )
+        # Check protein tab status
+        if (
+          is.null(protein_table_data()) ||
+            isTRUE(declaration_vars$protein_table_active)
+        ) {
+          # Mark tab as undone
+          shinyjs::delay(
+            500,
+            shinyjs::runjs(
+              'document.querySelector(".nav-link[data-value=\'Proteins\']").classList.remove("done");'
+            )
+          )
+        } else {
+          # Mark tab as done
+          shinyjs::delay(
+            500,
+            shinyjs::runjs(
+              'document.querySelector(".nav-link[data-value=\'Proteins\']").classList.add("done");'
+            )
+          )
+        }
+
+        # Check compound tab status
+        if (
+          is.null(compound_table_data()) ||
+            isTRUE(declaration_vars$compound_table_active)
+        ) {
+          # Mark tab as undone
+          shinyjs::delay(
+            500,
+            shinyjs::runjs(
+              'document.querySelector(".nav-link[data-value=\'Compounds\']").classList.remove("done");'
+            )
+          )
+        } else {
+          # Mark tab as done
+          shinyjs::delay(
+            500,
+            shinyjs::runjs(
+              'document.querySelector(".nav-link[data-value=\'Compounds\']").classList.add("done");'
+            )
+          )
+        }
 
         # Select samples tab
         set_selected_tab("Samples", session)
@@ -1365,10 +1403,18 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
           hits_summary <- conversion_vars$hits_summary <- NULL
 
           #### Render declaration ui ----
-          output$conversion_ui <- shiny::renderUI({
-            message("Declaration UI rendered (again)")
+          output$conversion_ui <- shiny::renderUI(conversion_declaration_ui(ns))
 
-            conversion_declaration_ui(ns)
+          shinyjs::delay(500, {
+            shinyjs::runjs(
+              'document.querySelector(".nav-link[data-value=\'Proteins\']").classList.add("done");'
+            )
+            shinyjs::runjs(
+              'document.querySelector(".nav-link[data-value=\'Compounds\']").classList.add("done");'
+            )
+            shinyjs::runjs(
+              'document.querySelector(".nav-link[data-value=\'Samples\']").classList.add("done");'
+            )
           })
 
           # Unblock UI
@@ -3888,8 +3934,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         shiny::req(
           conversion_vars$hits_summary,
           input$color_variable,
-          conversion_sidebar_vars$analysis_select() == 1,
-          !is.null(conversion_sidebar_vars$result_list())
+          conversion_sidebar_vars$analysis_select() == 1
         )
 
         color_scale <- input$color_scale

@@ -178,7 +178,30 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
     })
 
     # Analysis launch UI ----
-    ## Toggle checkbox ----
+    ## Idle checkbox ----
+    # Temporarily blocking UI and wait for conversion main module server answer to allow Start button to react
+    safe_observe(
+      event_expr = input$run_ki_kinact,
+      observer_name = "Checkbox Idle",
+      handler_fn = function() {
+        # Block UI
+        shinyjs::runjs(paste0(
+          'document.getElementById("blocking-overlay").style.display ',
+          '= "block";'
+        ))
+
+        # Unblock UI
+        shinyjs::delay(
+          500,
+          shinyjs::runjs(paste0(
+            'document.getElementById("blocking-overlay").style.display ',
+            '= "none";'
+          ))
+        )
+      }
+    )
+
+    ## Checkbox Toggle ----
     # safe_observe(
     #   event_expr = conversion_main_vars$samples_confirmed(),
     #   observer_name = "Checkbox Toggle",
@@ -322,6 +345,10 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
       observer_name = "Conversion Processing",
       handler_fn = function() {
         if (analysis_status() == "pending") {
+          # Disable ki/kinact analysis checkbox
+          shinyjs::disable("run_ki_kinact")
+          shinyjs::addClass(selector = ".checkbox", class = "checkbox-disable")
+
           # Delay conversion start
           Sys.sleep(1)
 
@@ -354,10 +381,10 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
                 sample_table = conversion_main_vars$input_list()$Samples_Table
               )
 
-              message(paste("COMPUTING BINDING KINETICS\n  │"))
-
               # If Ki/kinact analysis is set to be performed
               if (input$run_ki_kinact) {
+                message(paste("COMPUTING BINDING KINETICS\n  │"))
+
                 # Get concentration and time units
                 conc_time <- names(result_with_hits$hits_summary)[unlist(sapply(
                   c("Concentration", "Time"),
@@ -578,6 +605,13 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
         } else {
           result_list(NULL)
           analysis_status("pending")
+
+          # Enable ki/kinact analysis checkbox
+          shinyjs::enable("run_ki_kinact")
+          shinyjs::removeClass(
+            selector = ".checkbox",
+            class = "checkbox-disable"
+          )
 
           shinyjs::addClass(
             selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(1)",

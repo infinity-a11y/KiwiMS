@@ -709,7 +709,10 @@ deconvolution_running_ui_noplate <- function(ns) {
                     )
                   )
                 ),
-                shiny::div(DT::dataTableOutput(ns("deconvolution_data")))
+                shiny::div(
+                  style = "height: 100%;",
+                  DT::dataTableOutput(ns("deconvolution_data"))
+                )
               )
             )
           ),
