@@ -909,7 +909,7 @@ td.listbox.htDimmed.current.highlight {
 .handsontable tbody th.ht__active_highlight,
 .handsontable thead th.ht__active_highlight {
   background: #35357a !important;
-  color: white;
+  color: white !important;
 }
 
 .handsontable input,
@@ -923,6 +923,7 @@ td.listbox.htDimmed.current.highlight {
 }
 
 /* --- Plotly & MathJax --- */
+
 .js-plotly-plot .plotly svg {
   background: none !important;
 }
@@ -939,6 +940,10 @@ td.listbox.htDimmed.current.highlight {
   max-width: fit-content;
   padding: 1em;
   border-radius: 10px;
+}
+
+.load-container {
+  width: -webkit-fill-available !important;
 }
 
 .conversion-samples-stats .load-container > div {
@@ -1392,6 +1397,11 @@ decon-report-modal .btn-default {
 /* ==========================================================================
    8. MODULE: CONVERSION
    ========================================================================== */
+
+#app-conversion_main-conversion_ui > .card {
+  height: 100%;
+  margin: 0;
+}
 
 /* Structure & Tables */
 .conversion-result-wrapper {
@@ -3683,6 +3693,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 
 .bslib-page-fill {
   background: linear-gradient(135deg, #35357a, #4a4a89, #77778f, #b0b0b8, #e0e0e0) !important;
+  overflow: hidden;
 }
 
 #app-conversion_main-samples_present_compounds_na,
