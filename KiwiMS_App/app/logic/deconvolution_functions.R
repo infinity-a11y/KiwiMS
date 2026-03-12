@@ -227,8 +227,7 @@ deconvolute <- function(
   time_end = ""
 ) {
   # Evaluate processing mode: parallel or sequential
-  # if (length(raw_dirs) > 20 && num_cores > 1) {
-  if (FALSE) {
+  if (length(raw_dirs) > 20 && num_cores > 1) {
     message("Initiating ", num_cores, " cores for parallel processing ...")
 
     # Validate Conda environment
