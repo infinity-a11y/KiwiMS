@@ -969,207 +969,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
     )
 
     ## Continuiation from deconvolution to conversion ----
-    ### User cancels samples table overwrite ----
-    shiny::observeEvent(input$conversion_cont_cancel, {
-      # Remove dialogue window
-      shiny::removeModal()
-    })
-
-    ### User confirms samples table overwrite ----
-    safe_observe(
-      event_expr = input$conversion_cont_conf,
-      observer_name = "Samples Table Overwrite",
-      handler_fn = function() {
-        # Block UI
-        shinyjs::runjs(paste0(
-          'document.getElementById("blocking-overlay").style.display ',
-          '= "block";'
-        ))
-
-        # Load conversion declaration interface
-        if (!is.null(conversion_sidebar_vars$result_list())) {
-          # Remove sample view elements
-          output$samples_selected_protein <- NULL
-          output$samples_total_pct_binding <- NULL
-          output$samples_compound_distribution_ui <- NULL
-          output$samples_present_compounds_na <- NULL
-          output$samples_compound_distribution <- NULL
-          output$samples_annotated_spectrum <- NULL
-          output$samples_table_view <- NULL
-
-          # Remove compound view elements
-          output$compounds_selected_compound <- NULL
-          output$compounds_total_pct_binding <- NULL
-          output$compounds_compound_distribution <- NULL
-          output$compounds_annotated_spectrum <- NULL
-          output$compounds_spectrum_labels_ui <- NULL
-          output$compounds_table_view <- NULL
-          output$compound_distribution_labels_ui <- NULL
-
-          # Remove protein view elements
-          output$proteins_selected_protein <- NULL
-          output$proteins_total_pct_binding <- NULL
-          output$proteins_compound_distribution <- NULL
-          output$proteins_annotated_spectrum <- NULL
-          output$proteins_spectrum_labels_ui <- NULL
-          output$proteins_table_view <- NULL
-          output$proteins_present_compounds_na <- NULL
-          output$proteins_present_compounds_ui <- NULL
-          output$proteins_distribution_labels_ui <- NULL
-
-          # Remove other relative binding interface elements
-          output$color_variable_ui <- NULL
-
-          # Remove ki/kinact interface elements
-          output$binding_tab <- NULL
-          output$kinact <- NULL
-          output$Ki <- NULL
-          output$Ki_kinact <- NULL
-          output$kobs_result <- NULL
-          output$binding_plot <- NULL
-          output$kobs_plot <- NULL
-          output$hits_tab <- NULL
-          if (!is.null(conversion_vars$select_concentration)) {
-            lapply(names(conversion_vars$select_concentration), function(id) {
-              output[[paste0("concentration_tab", id)]] <- NULL
-              output[[paste0("concentration_tab_", id, "_hits")]] <- NULL
-              output[[paste0(
-                "concentration_tab_",
-                id,
-                "_binding_plot"
-              )]] <- NULL
-              output[[paste0("concentration_tab_", id, "_spectra")]] <- NULL
-            })
-          }
-
-          # Remove other relative binding interfac elements
-          output$color_variable_ui <- NULL
-
-          # Show declaration interface
-          output$conversion_ui <- shiny::renderUI(conversion_declaration_ui(ns))
-
-          # Reset reactive variables
-          conversion_vars <- shiny::reactiveValues(
-            modified_results = NULL,
-            select_concentration = NULL,
-            conc_colors = NULL,
-            expand_helper = FALSE,
-            hits_summary = NULL
-          )
-
-          hits_summary <- conversion_vars$hits_summary <- NULL
-        }
-
-        # Activate table observer
-        declaration_vars$sample_table_active <- TRUE
-
-        # Read results .rds file from previous deconvolution
-        declaration_vars$result <- readRDS(
-          deconvolution_main_vars$continue_conversion()
-        )
-
-        # New table data
-        sample_table_data(new_sample_table(
-          result = declaration_vars$result,
-          protein_table = declaration_vars$protein_table,
-          compound_table = declaration_vars$compound_table,
-          ki_kinact = conversion_sidebar_vars$run_ki_kinact()
-        ))
-        sample_table_trigger(sample_table_trigger() + 1)
-
-        # Change buttons
-        shiny::updateActionButton(
-          session = session,
-          "confirm_samples",
-          icon = shiny::icon("bookmark")
-        )
-        shinyjs::enable("confirm_samples")
-        shinyjs::disable("edit_samples")
-
-        # Enable file upload
-        shinyjs::enable("samples_fileinput")
-        shinyjs::removeClass(
-          selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
-          class = "custom-disable"
-        )
-        shinyjs::removeClass(
-          selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
-          class = "custom-disable"
-        )
-
-        # Adapt table status tab indicators
-        shinyjs::delay(
-          500,
-          shinyjs::runjs(
-            'document.querySelector(".nav-link[data-value=\'Samples\']").classList.remove("done");'
-          )
-        )
-
-        # Check protein tab status
-        if (
-          is.null(protein_table_data()) ||
-            isTRUE(declaration_vars$protein_table_active)
-        ) {
-          # Mark tab as undone
-          shinyjs::delay(
-            500,
-            shinyjs::runjs(
-              'document.querySelector(".nav-link[data-value=\'Proteins\']").classList.remove("done");'
-            )
-          )
-        } else {
-          # Mark tab as done
-          shinyjs::delay(
-            500,
-            shinyjs::runjs(
-              'document.querySelector(".nav-link[data-value=\'Proteins\']").classList.add("done");'
-            )
-          )
-        }
-
-        # Check compound tab status
-        if (
-          is.null(compound_table_data()) ||
-            isTRUE(declaration_vars$compound_table_active)
-        ) {
-          # Mark tab as undone
-          shinyjs::delay(
-            500,
-            shinyjs::runjs(
-              'document.querySelector(".nav-link[data-value=\'Compounds\']").classList.remove("done");'
-            )
-          )
-        } else {
-          # Mark tab as done
-          shinyjs::delay(
-            500,
-            shinyjs::runjs(
-              'document.querySelector(".nav-link[data-value=\'Compounds\']").classList.add("done");'
-            )
-          )
-        }
-
-        # Select samples tab
-        set_selected_tab("Samples", session)
-
-        # Remove dialogue window
-        shiny::removeModal()
-
-        # Unblock UI
-        shinyjs::runjs(paste0(
-          'document.getElementById("blocking-overlay").style.display ',
-          '= "none";'
-        ))
-      }
-    )
-
     ### Transfer results from deconvolution to sample table ----
     safe_observe(
       event_expr = deconvolution_main_vars$continue_conversion(),
       observer_name = "Deconvolution Results Transfer",
       handler_fn = function() {
-        shiny::req(deconvolution_main_vars$continue_conversion())
-
         # If present sample table ask confirmation
         if (!is.null(input$samples_table)) {
           # Switch to samples table tab
@@ -1259,6 +1063,146 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
       }
     )
 
+    ### User confirms samples table overwrite ----
+    safe_observe(
+      event_expr = input$conversion_cont_conf,
+      observer_name = "Samples Table Overwrite",
+      handler_fn = function() {
+        # UI Blocking an Cleanup
+        shinyjs::runjs(paste0(
+          'document.getElementById("blocking-overlay").style.display ',
+          '= "block";'
+        ))
+
+        result_list <- conversion_sidebar_vars$result_list()
+
+        if (!is.null(result_list)) {
+          # Show declaration interface
+          output$conversion_ui <- shiny::renderUI(
+            conversion_declaration_ui(
+              ns,
+              proteins_status = "confirmed",
+              compounds_status = "confirmed"
+            )
+          )
+
+          # # Reset reactive variables
+          # conversion_vars$modified_results <- NULL
+          # conversion_vars$select_concentration <- NULL
+          # conversion_vars$conc_colors <- NULL
+          # conversion_vars$expand_helper <- FALSE
+          # conversion_vars$hits_summary <- NULL
+          # hits_summary <- NULL
+        }
+
+        # Activate sample table observer and unconfirm status variable
+        declaration_vars$sample_table_active <- TRUE
+        declaration_vars$samples_confirmed <- FALSE
+
+        # Read results .rds file from previous deconvolution
+        declaration_vars$result <- readRDS(
+          deconvolution_main_vars$continue_conversion()
+        )
+
+        # New table data
+        sample_table_data(new_sample_table(
+          result = declaration_vars$result,
+          protein_table = declaration_vars$protein_table,
+          compound_table = declaration_vars$compound_table,
+          ki_kinact = conversion_sidebar_vars$run_ki_kinact()
+        ))
+        sample_table_trigger(sample_table_trigger() + 1)
+
+        protein_table_active <- declaration_vars$protein_table_active
+        compound_table_active <- declaration_vars$compound_table_active
+
+        # Post-Render Updates
+        session$onFlushed(
+          function() {
+            # Prepare sample table declaration tab
+            # Change buttons
+            shiny::updateActionButton(
+              session = session,
+              "confirm_samples",
+              icon = shiny::icon("bookmark")
+            )
+            shinyjs::enable("confirm_samples")
+            shinyjs::disable("edit_samples")
+
+            # Enable file upload
+            shinyjs::enable("samples_fileinput")
+            shinyjs::removeClass(
+              selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
+              class = "custom-disable"
+            )
+            shinyjs::removeClass(
+              selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
+              class = "custom-disable"
+            )
+
+            # Adapt table status tab indicator
+            shinyjs::delay(
+              250,
+              shinyjs::runjs(
+                'document.querySelector(".nav-link[data-value=\'Samples\']").classList.remove("done");'
+              )
+            )
+
+            # Adapt protein and compound declaration tabs
+            if (!is.null(result_list)) {
+              if (isFALSE(compound_table_active)) {
+                message("TEST")
+                shinyjs::delay(
+                  250,
+                  {
+                    shinyjs::disable("confirm_compounds")
+                    shinyjs::disable("clear_compounds")
+                    shinyjs::enable("edit_compounds")
+                    shinyjs::runjs(
+                      'document.querySelector(".nav-link[data-value=\'Compounds\']").classList.add("done");'
+                    )
+                  }
+                )
+              }
+
+              if (isFALSE(protein_table_active)) {
+                shinyjs::delay(
+                  250,
+                  {
+                    shinyjs::disable("confirm_proteins")
+                    shinyjs::disable("clear_proteins")
+                    shinyjs::enable("edit_proteins")
+                    shinyjs::runjs(
+                      'document.querySelector(".nav-link[data-value=\'Proteins\']").classList.add("done");'
+                    )
+                  }
+                )
+              }
+            }
+
+            # Select samples tab
+            set_selected_tab("Samples", session)
+
+            # Cleanup interface
+            shiny::removeModal()
+
+            # Unblock UI
+            shinyjs::runjs(paste0(
+              'document.getElementById("blocking-overlay").style.display ',
+              '= "none";'
+            ))
+          },
+          once = TRUE
+        )
+      }
+    )
+
+    ### User cancels samples table overwrite ----
+    shiny::observeEvent(input$conversion_cont_cancel, {
+      # Remove dialogue window
+      shiny::removeModal()
+    })
+
     # Conversion Results ------------------
 
     ## Reactive variables ----
@@ -1339,75 +1283,14 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         })
 
         if (is.null(result_list)) {
-          ### Reset results interface ----
-
-          #### Reset ui elements ----
-          # Remove sample view elements
-          output$samples_selected_protein <- NULL
-          output$samples_total_pct_binding <- NULL
-          output$samples_compound_distribution_ui <- NULL
-          output$samples_present_compounds_na <- NULL
-          output$samples_compound_distribution <- NULL
-          output$samples_annotated_spectrum <- NULL
-          output$samples_table_view <- NULL
-
-          # Remove compound view elements
-          output$compounds_selected_compound <- NULL
-          output$compounds_total_pct_binding <- NULL
-          output$compounds_compound_distribution <- NULL
-          output$compounds_annotated_spectrum <- NULL
-          output$compounds_spectrum_labels_ui <- NULL
-          output$compounds_table_view <- NULL
-          output$compound_distribution_labels_ui <- NULL
-
-          # Remove protein view elements
-          output$proteins_selected_protein <- NULL
-          output$proteins_total_pct_binding <- NULL
-          output$proteins_compound_distribution <- NULL
-          output$proteins_annotated_spectrum <- NULL
-          output$proteins_spectrum_labels_ui <- NULL
-          output$proteins_table_view <- NULL
-          output$proteins_present_compounds_na <- NULL
-          output$proteins_present_compounds_ui <- NULL
-          output$proteins_distribution_labels_ui <- NULL
-
-          # Remove other relative binding interface elements
-          output$color_variable_ui <- NULL
-
-          # Remove ki/kinact interface elements
-          output$binding_tab <- NULL
-          output$kinact <- NULL
-          output$Ki <- NULL
-          output$Ki_kinact <- NULL
-          output$kobs_result <- NULL
-          output$binding_plot <- NULL
-          output$kobs_plot <- NULL
-          output$hits_tab <- NULL
-          if (!is.null(conversion_vars$select_concentration)) {
-            lapply(names(conversion_vars$select_concentration), function(id) {
-              output[[paste0("concentration_tab", id)]] <- NULL
-              output[[paste0("concentration_tab_", id, "_hits")]] <- NULL
-              output[[paste0(
-                "concentration_tab_",
-                id,
-                "_binding_plot"
-              )]] <- NULL
-              output[[paste0("concentration_tab_", id, "_spectra")]] <- NULL
-            })
-          }
-
-          #### Reset reactive variables ----
-          conversion_vars <- shiny::reactiveValues(
-            modified_results = NULL,
-            select_concentration = NULL,
-            conc_colors = NULL,
-            expand_helper = FALSE,
-            hits_summary = NULL
-          )
-          hits_summary <- conversion_vars$hits_summary <- NULL
-
           #### Render declaration ui ----
-          output$conversion_ui <- shiny::renderUI(conversion_declaration_ui(ns))
+          output$conversion_ui <- shiny::renderUI(
+            conversion_declaration_ui(
+              ns,
+              proteins_status = "confirmed",
+              compounds_status = "confirmed"
+            )
+          )
 
           shinyjs::delay(500, {
             shinyjs::runjs(

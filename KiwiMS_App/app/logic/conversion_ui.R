@@ -1468,7 +1468,120 @@ binding_results_ui <- function(ns, hits_summary) {
 
 # Declaration interface
 #' @export
-conversion_declaration_ui <- function(ns) {
+conversion_declaration_ui <- function(
+  ns,
+  proteins_status = "",
+  compounds_status = "",
+  samples_status = ""
+) {
+  if (proteins_status == "confirmed") {
+    proteins_control_buttons <- shiny::div(
+      class = "table-control-buttons",
+      shinyjs::disabled(
+        shiny::actionButton(
+          ns("confirm_proteins"),
+          label = "Saved",
+          icon = shiny::icon("check"),
+          width = "100%"
+        )
+      ),
+      shiny::actionButton(
+        ns("edit_proteins"),
+        label = "Edit",
+        icon = shiny::icon("pen-to-square"),
+        width = "100%"
+      ),
+      shinyjs::disabled(
+        shiny::actionButton(
+          ns("clear_proteins"),
+          label = "Clear",
+          icon = shiny::icon("eraser"),
+          width = "100%"
+        )
+      )
+    )
+  } else {
+    proteins_control_buttons <- shiny::div(
+      class = "table-control-buttons",
+      shinyjs::disabled(
+        shiny::actionButton(
+          ns("confirm_proteins"),
+          label = "Save",
+          icon = shiny::icon("bookmark"),
+          width = "100%"
+        )
+      ),
+      shinyjs::disabled(
+        shiny::actionButton(
+          ns("edit_proteins"),
+          label = "Edit",
+          icon = shiny::icon("pen-to-square"),
+          width = "100%"
+        )
+      ),
+      shiny::actionButton(
+        ns("clear_proteins"),
+        label = "Clear",
+        icon = shiny::icon("eraser"),
+        width = "100%"
+      )
+    )
+  }
+
+  if (compounds_status == "confirmed") {
+    compounds_control_buttons <- shiny::div(
+      class = "table-control-buttons",
+      shinyjs::disabled(
+        shiny::actionButton(
+          ns("confirm_compounds"),
+          label = "Saved",
+          icon = shiny::icon("check"),
+          width = "100%"
+        )
+      ),
+      shiny::actionButton(
+        ns("edit_compounds"),
+        label = "Edit",
+        icon = shiny::icon("pen-to-square"),
+        width = "100%"
+      ),
+      shinyjs::disabled(
+        shiny::actionButton(
+          ns("clear_compounds"),
+          label = "Clear",
+          icon = shiny::icon("eraser"),
+          width = "100%"
+        )
+      )
+    )
+  } else {
+    compounds_control_buttons <- shiny::div(
+      class = "table-control-buttons",
+      shinyjs::disabled(
+        shiny::actionButton(
+          ns("confirm_compounds"),
+          label = "Save",
+          icon = shiny::icon("bookmark"),
+          width = "100%"
+        )
+      ),
+      shinyjs::disabled(
+        shiny::actionButton(
+          ns("edit_compounds"),
+          label = "Edit",
+          icon = shiny::icon("pen-to-square"),
+          width = "100%"
+        )
+      ),
+      shiny::actionButton(
+        ns("clear_compounds"),
+        label = "Clear",
+        icon = shiny::icon("eraser"),
+        width = "100%"
+      )
+    )
+  }
+
   bslib::navset_card_tab(
     id = ns("tabs"),
     bslib::nav_panel(
@@ -1507,31 +1620,7 @@ conversion_declaration_ui <- function(ns) {
           ),
           shiny::column(
             width = 5,
-            shiny::div(
-              class = "table-control-buttons",
-              shinyjs::disabled(
-                shiny::actionButton(
-                  ns("confirm_proteins"),
-                  label = "Save",
-                  icon = shiny::icon("bookmark"),
-                  width = "100%"
-                )
-              ),
-              shinyjs::disabled(
-                shiny::actionButton(
-                  ns("edit_proteins"),
-                  label = "Edit",
-                  icon = shiny::icon("pen-to-square"),
-                  width = "100%"
-                )
-              ),
-              shiny::actionButton(
-                ns("clear_proteins"),
-                label = "Clear",
-                icon = shiny::icon("eraser"),
-                width = "100%"
-              )
-            )
+            proteins_control_buttons
           )
         )
       ),
@@ -1583,31 +1672,7 @@ conversion_declaration_ui <- function(ns) {
           ),
           shiny::column(
             width = 5,
-            shiny::div(
-              class = "table-control-buttons",
-              shinyjs::disabled(
-                shiny::actionButton(
-                  ns("confirm_compounds"),
-                  label = "Save",
-                  icon = shiny::icon("bookmark"),
-                  width = "100%"
-                )
-              ),
-              shinyjs::disabled(
-                shiny::actionButton(
-                  ns("edit_compounds"),
-                  label = "Edit",
-                  icon = shiny::icon("pen-to-square"),
-                  width = "100%"
-                )
-              ),
-              shiny::actionButton(
-                ns("clear_compounds"),
-                label = "Clear",
-                icon = shiny::icon("eraser"),
-                width = "100%"
-              )
-            )
+            compounds_control_buttons
           )
         )
       ),

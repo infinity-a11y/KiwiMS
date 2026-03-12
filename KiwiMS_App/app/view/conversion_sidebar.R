@@ -253,6 +253,12 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
           label = "Run",
           icon = shiny::icon("play")
         )
+        # Enable ki/kinact analysis checkbox
+        shinyjs::enable("run_ki_kinact")
+        shinyjs::removeClass(
+          selector = ".checkbox",
+          class = "checkbox-disable"
+        )
         shinyjs::enable("peak_tolerance")
         shinyjs::enable("max_multiples")
         analysis_status("pending")

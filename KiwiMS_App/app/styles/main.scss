@@ -397,7 +397,6 @@ button .sF-modal {
 /* --- Buttons --- */
 button:focus:not(:focus-visible) {
   outline: 0;
-  background-color: #c5c5c5 !important;
   box-shadow: inset 0px 0px 20px 1px #00000029;
 }
 
@@ -3603,7 +3602,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 .material-switch {
-  top: -2px;
+  top: -0.15vw;
   position: relative;
 }
 
@@ -3615,6 +3614,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   height: 32.5px;
   padding-left: 10px;
   padding-right: 10px;
+  top: 1px;
+  position: relative;
 }
 
 .material-switch > input[type="checkbox"]:checked + label.switch:before {
@@ -3630,8 +3631,9 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 .material-switch > label.switch:after {
-  height: 20px;
-  width: 20px;
+  height: 20px !important;
+  width: 20px !important;
+  top: -0.15vw !important;
 }
 
 .material-switch > input[type="checkbox"]:checked + label.switch:after {

@@ -1581,10 +1581,6 @@ server <- function(
       })
 
       output$deconvolution_data <- DT::renderDataTable({
-        testi <<- result_files_sel()
-        deconvolution_sidebar_vars_selected <<- deconvolution_sidebar_vars$selected()
-        deconvolution_sidebar_vars_targetpath <<- deconvolution_sidebar_vars$targetpath()
-
         shiny$req(result_files_sel())
 
         waiter_show(id = ns("deconvolution_data"), html = spin_wave())
@@ -1609,9 +1605,6 @@ server <- function(
           result_dir,
           paste0(gsub("_unidecfiles", "", basename(result_dir)), "_error.txt")
         )
-
-        result_dir <<- result_dir
-        deconvolution_data_path <<- deconvolution_data_path
 
         if (dir.exists(result_dir) && file.exists(deconvolution_data_path)) {
           deconvolution_data <- readLines(deconvolution_data_path)

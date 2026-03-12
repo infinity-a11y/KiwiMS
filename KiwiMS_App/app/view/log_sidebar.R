@@ -26,7 +26,7 @@ ui <- function(id) {
   ns <- NS(id)
 
   sidebar(
-    title = "Log Actions",
+    title = "Actions Log",
     width = "15%",
     column(
       width = 12,
