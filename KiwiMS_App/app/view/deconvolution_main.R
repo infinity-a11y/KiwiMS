@@ -264,6 +264,8 @@ server <- function(
       decon_rep_process_data(NULL)
 
       output$spectrum <- NULL
+      output$deconvolution_data <- NULL
+      result_files_sel(NULL)
     }
 
     ### Event start deconvolution ----
@@ -1579,6 +1581,10 @@ server <- function(
       })
 
       output$deconvolution_data <- DT::renderDataTable({
+        testi <<- result_files_sel()
+        deconvolution_sidebar_vars_selected <<- deconvolution_sidebar_vars$selected()
+        deconvolution_sidebar_vars_targetpath <<- deconvolution_sidebar_vars$targetpath()
+
         shiny$req(result_files_sel())
 
         waiter_show(id = ns("deconvolution_data"), html = spin_wave())
@@ -1604,7 +1610,10 @@ server <- function(
           paste0(gsub("_unidecfiles", "", basename(result_dir)), "_error.txt")
         )
 
-        if (file.exists(deconvolution_data_path)) {
+        result_dir <<- result_dir
+        deconvolution_data_path <<- deconvolution_data_path
+
+        if (dir.exists(result_dir) && file.exists(deconvolution_data_path)) {
           deconvolution_data <- readLines(deconvolution_data_path)
 
           names <- sub(" =.*", "", deconvolution_data)
@@ -1624,31 +1633,29 @@ server <- function(
             ),
             Value = paste(values, units, sep = " ")
           )
-        } else {
-          tbl <- data.frame()
+
+          waiter_hide(id = ns("spectrum"))
+
+          DT::datatable(
+            data = tbl,
+            escape = FALSE,
+            rownames = FALSE,
+            colnames = NULL,
+            class = "order-column",
+            selection = "none",
+            options = list(
+              dom = 't',
+              paging = FALSE,
+              scrollY = TRUE,
+              scrollCollapse = TRUE,
+              ordering = FALSE
+            )
+          ) |>
+            DT::formatStyle(
+              "Value",
+              textAlign = "right"
+            )
         }
-
-        waiter_hide(id = ns("spectrum"))
-
-        DT::datatable(
-          data = tbl,
-          escape = FALSE,
-          rownames = FALSE,
-          colnames = NULL,
-          class = "order-column",
-          selection = "none",
-          options = list(
-            dom = 't',
-            paging = FALSE,
-            scrollY = TRUE,
-            scrollCollapse = TRUE,
-            ordering = FALSE
-          )
-        ) |>
-          DT::formatStyle(
-            "Value",
-            textAlign = "right"
-          )
       })
 
       ### Render heatmap for batch mode

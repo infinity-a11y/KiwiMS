@@ -1480,7 +1480,10 @@ generate_decon_rslt <- function(
   temp_dir
 ) {
   process_path <- function(path) {
-    rslt_folder <- gsub(".raw", "_rawdata_unidecfiles", path)
+    rslt_folder <- file.path(
+      dirname(path),
+      gsub(".raw", "_rawdata_unidecfiles", basename(path))
+    )
     raw_name <- gsub("_unidecfiles", "", basename(rslt_folder))
 
     if (!dir.exists(rslt_folder)) {

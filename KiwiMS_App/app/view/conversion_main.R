@@ -1098,9 +1098,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
         )
 
         # Adapt table status tab indicators
-        shinyjs::runjs(
-          'document.querySelector(".nav-link[data-value=\'Samples\']").classList.remove("done");'
+        shinyjs::delay(
+          500,
+          shinyjs::runjs(
+            'document.querySelector(".nav-link[data-value=\'Samples\']").classList.remove("done");'
+          )
         )
+
         # Check protein tab status
         if (
           is.null(protein_table_data()) ||
