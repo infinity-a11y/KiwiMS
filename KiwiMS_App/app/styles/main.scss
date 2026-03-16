@@ -101,7 +101,7 @@ th {
   overflow-y: scroll;
   z-index: 9999;
   box-shadow: inset 0px 0px 1px 1px #e5e5e5;
-  min-height: 20px;
+  min-height: 30px;
 }
 
 *::-webkit-scrollbar-corner {
@@ -376,6 +376,16 @@ button .sF-modal {
   max-width: 90vw;
   justify-items: center;
   width: 60vw;
+}
+
+.modal-body {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+#app-config_modal_body .load-container {
+  position: relative;
+  -webkit-transform: unset;
 }
 
 .tip-modal .modal-body {
@@ -1362,7 +1372,7 @@ deconv-rep-check {
   top: 3vh;
 }
 
-.batch-file {
+.config-input {
   margin-bottom: -0.5em;
   margin-top: -1em;
 }
@@ -3724,6 +3734,9 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   font-size: 12px;
 }
 
+#app-config:hover,
+#app-config:focus,
+#app-config,
 #app-settings:hover,
 #app-settings:focus,
 #app-settings,
@@ -3759,6 +3772,10 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 .unidec-modal .modal-footer {
   padding: 10px;
   padding-right: 1.5rem;
+}
+
+#app-config_modal_footer > * {
+  margin: calc(var(--bs-modal-footer-gap) * 0.5);
 }
 
 .conversion-samples-control .bootstrap-select .dropdown-menu {
@@ -3902,6 +3919,188 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   background: #ffffff;
   width: fit-content;
   min-width: 100px;
+}
+
+/* ==========================================================================
+   Config Modal
+   ========================================================================== */
+
+/* Nav button indicators */
+.config-nav-indicator--active {
+  color: #7cb342;
+  font-size: 1em;
+  margin-right: 4px;
+  vertical-align: middle;
+  -webkit-text-stroke: 1px #333;
+}
+
+.config-nav-indicator--inactive {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  border-radius: 50%;
+  border: 2px solid #333;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+/* Download example button — gap between icon and label */
+#app-download_example_config i,
+#app-download_example_config .fa,
+#app-download_example_config .fas,
+#app-download_example_config .glyphicon {
+  margin-right: 5px;
+}
+
+/* Modal body wrapper */
+.config-modal-body {
+  font-size: 14px;
+}
+
+/* Column reference table */
+.config-ref-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85em;
+  margin-bottom: 12px;
+
+  thead tr {
+    background: #f0f0f0;
+  }
+
+  th {
+    padding: 5px 8px;
+    text-align: left;
+  }
+
+  td {
+    padding: 4px 8px;
+  }
+
+  tbody tr:nth-child(even) {
+    background: #fafafa;
+  }
+}
+
+/* Required / optional column labels */
+.config-col-required {
+  color: #7cb342;
+}
+
+.config-col-optional {
+  color: #888;
+}
+
+/* Preview / confirmed table scroll container */
+.config-table-scroll {
+  overflow-x: auto;
+  max-height: 300px;
+  overflow-y: auto;
+  font-size: 0.8em;
+}
+
+/* Preview intro paragraph */
+.config-preview-intro {
+  margin-bottom: 10px;
+}
+
+/* Divider between badge and table */
+.config-section-hr {
+  margin: 12px 0 8px;
+}
+
+/* Confirmed: filename display */
+.config-filename-label {
+  margin-top: 8px;
+}
+
+.config-filename-text {
+  margin-left: 6px;
+  font-size: 0.85em;
+  color: #555;
+}
+
+/* File input + download button row */
+.config-upload-row {
+  display: flex;
+  justify-content: space-between;
+  min-height: fit-content;
+  height: 50px;
+  margin-bottom: 30px;
+
+  .input-group > .input-group-prepend > .btn {
+    height: 100%;
+  }
+
+  > .form-group {
+    flex: 1;
+    margin-bottom: 0;
+
+    .input-group {
+      height: 100%;
+
+      input[type="file"] {
+        height: 100%;
+      }
+    }
+  }
+
+  > a.btn,
+  > button.btn {
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    margin-left: 40px;
+    min-width: fit-content;
+    width: 25%;
+    justify-content: center;
+  }
+}
+
+/* config_badge wrapper */
+.config-badge-wrapper {
+  margin-top: 6px;
+}
+
+/* config_badge pill */
+.config-badge-pill {
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 0.8em;
+  font-weight: 600;
+}
+
+/* config_badge detail text */
+.config-badge-detail {
+  margin-left: 8px;
+  font-size: 0.8em;
+  color: #444;
+}
+
+/* Sidebar config status panel */
+.sidebar-config-status {
+  font-size: 0.85em;
+}
+
+.sidebar-config-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.sidebar-config-badge--active {
+  color: #444;
+}
+
+.sidebar-config-badge--inactive {
+  color: #888;
+}
+
+.sidebar-config-upload-btn {
+  margin-top: 2px;
 }
 
 #app-conversion_main-kobs_result .checkbox input {

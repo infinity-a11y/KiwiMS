@@ -58,7 +58,8 @@ server <- function(
   id,
   deconvolution_sidebar_vars,
   conversion_main_vars,
-  reset_button
+  reset_button,
+  config_file
 ) {
   shiny$moduleServer(id, function(input, output, session) {
     Sys.setenv(CONDA_DLL_SEARCH_MODIFICATION_ENABLE = "1")
@@ -316,13 +317,13 @@ server <- function(
         )
 
         if (
-          isTRUE(deconvolution_sidebar_vars$batch_mode()) &&
-            length(deconvolution_sidebar_vars$batch_file())
+          isTRUE(deconvolution_sidebar_vars$use_config()) &&
+            length(config_file())
         ) {
           batch_sel <- gsub(
             ".raw",
             "_rawdata_unidecfiles",
-            deconvolution_sidebar_vars$batch_file()[[deconvolution_sidebar_vars$id_column()]]
+            config_file()[[deconvolution_sidebar_vars$id_column()]]
           )
 
           intersect <- batch_sel %in% basename(finished_files)
@@ -372,10 +373,10 @@ server <- function(
         )
 
         if (
-          isTRUE(deconvolution_sidebar_vars$batch_mode()) &
-            length(deconvolution_sidebar_vars$batch_file())
+          isTRUE(deconvolution_sidebar_vars$use_config()) &
+            length(config_file())
         ) {
-          presence <- deconvolution_sidebar_vars$batch_file()[[deconvolution_sidebar_vars$id_column()]] %in%
+          presence <- config_file()[[deconvolution_sidebar_vars$id_column()]] %in%
             basename(raw_dirs)
 
           if (all(presence)) {
@@ -383,7 +384,7 @@ server <- function(
               shiny$HTML(
                 paste0(
                   "<b>Multiple target file(s) selected</b><br><br><b>",
-                  nrow(deconvolution_sidebar_vars$batch_file()),
+                  nrow(config_file()),
                   "</b> raw file(s) present in ",
                   "the batch file are queried for deconvolution."
                 )
@@ -425,7 +426,7 @@ server <- function(
 
           # if duplicates present disable continue button
           if (
-            any(duplicated(deconvolution_sidebar_vars$batch_file()[[deconvolution_sidebar_vars$id_column()]]))
+            any(duplicated(config_file()[[deconvolution_sidebar_vars$id_column()]]))
           ) {
             disable(
               selector = "#app-deconvolution_main-deconvolute_start_conf"
@@ -489,14 +490,14 @@ server <- function(
 
       if (deconvolution_sidebar_vars$selected() == "folder") {
         if (
-          isTRUE(deconvolution_sidebar_vars$batch_mode()) &&
-            length(deconvolution_sidebar_vars$batch_file())
+          isTRUE(deconvolution_sidebar_vars$use_config()) &&
+            length(config_file())
         ) {
           # check if any duplicated targets in batch
           if (
-            any(duplicated(deconvolution_sidebar_vars$batch_file()[[deconvolution_sidebar_vars$id_column()]]))
+            any(duplicated(config_file()[[deconvolution_sidebar_vars$id_column()]]))
           ) {
-            dup_count <- sum(duplicated(deconvolution_sidebar_vars$batch_file()[[deconvolution_sidebar_vars$id_column()]]))
+            dup_count <- sum(duplicated(config_file()[[deconvolution_sidebar_vars$id_column()]]))
             msg <- ifelse(
               dup_count > 1,
               "</b> targets are duplicated in the batch. ",
@@ -518,7 +519,7 @@ server <- function(
             batch_sel <- gsub(
               ".raw",
               "_rawdata_unidecfiles",
-              deconvolution_sidebar_vars$batch_file()[[deconvolution_sidebar_vars$id_column()]]
+              config_file()[[deconvolution_sidebar_vars$id_column()]]
             )
 
             intersect <- batch_sel %in% basename(finished_files)
@@ -611,8 +612,8 @@ server <- function(
 
       if (
         deconvolution_sidebar_vars$selected() == "folder" &&
-          (isFALSE(deconvolution_sidebar_vars$batch_mode()) ||
-            length(deconvolution_sidebar_vars$batch_file()) == 0)
+          (isFALSE(deconvolution_sidebar_vars$use_config()) ||
+            length(config_file()) == 0)
       ) {
         picker <- pickerInput(
           ns("target_selector"),
@@ -679,12 +680,12 @@ server <- function(
         raw_dirs <- raw_dirs[grep("\\.raw$", raw_dirs)]
 
         if (
-          isTRUE(deconvolution_sidebar_vars$batch_mode()) &&
-            length(deconvolution_sidebar_vars$batch_file())
+          isTRUE(deconvolution_sidebar_vars$use_config()) &&
+            length(config_file())
         ) {
           write_log("Multiple target deconvolution mode (with batch file)")
 
-          batch <- deconvolution_sidebar_vars$batch_file()
+          batch <- config_file()
           sample_names <- batch[[deconvolution_sidebar_vars$id_column()]]
           raw_dirs <- raw_dirs[basename(raw_dirs) %in% sample_names]
 
@@ -692,7 +693,7 @@ server <- function(
           reactVars$sample_names <- gsub(
             ".raw",
             "",
-            deconvolution_sidebar_vars$batch_file()[[deconvolution_sidebar_vars$id_column()]]
+            config_file()[[deconvolution_sidebar_vars$id_column()]]
           )
           reactVars$wells <- gsub(
             ",",
@@ -1003,8 +1004,8 @@ server <- function(
               10
           ) {
             if (
-              isTRUE(deconvolution_sidebar_vars$batch_mode()) &&
-                length(deconvolution_sidebar_vars$batch_file()) &&
+              isTRUE(deconvolution_sidebar_vars$use_config()) &&
+                length(config_file()) &&
                 nrow(reactVars$rslt_df) < reactVars$completed_files
             ) {
               shiny$req(reactVars$sample_names, reactVars$wells)
@@ -1310,8 +1311,8 @@ server <- function(
               # final result check for heatmap update
               if (
                 deconvolution_sidebar_vars$selected() == "folder" &&
-                  isTRUE(deconvolution_sidebar_vars$batch_mode()) &&
-                  length(deconvolution_sidebar_vars$batch_file())
+                  isTRUE(deconvolution_sidebar_vars$use_config()) &&
+                  length(config_file())
               ) {
                 results <- result_files[
                   basename(result_files) %in%
@@ -1482,8 +1483,8 @@ server <- function(
       #### Heatmap click observer ----
       if (
         deconvolution_sidebar_vars$selected() == "folder" &&
-          isTRUE(deconvolution_sidebar_vars$batch_mode()) &&
-          length(deconvolution_sidebar_vars$batch_file())
+          isTRUE(deconvolution_sidebar_vars$use_config()) &&
+          length(config_file())
       ) {
         # Observe clicks on interactive heatmap to show spectra
         reactVars$click_observer <- shiny$observe({
@@ -1517,8 +1518,8 @@ server <- function(
       output$deconvolution_running_ui <- shiny$renderUI({
         if (
           deconvolution_sidebar_vars$selected() == "folder" &&
-            isTRUE(deconvolution_sidebar_vars$batch_mode()) &&
-            length(deconvolution_sidebar_vars$batch_file())
+            isTRUE(deconvolution_sidebar_vars$use_config()) &&
+            length(config_file())
         ) {
           deconvolution_running_ui_plate(ns)
         } else {
@@ -1654,8 +1655,8 @@ server <- function(
       ### Render heatmap for batch mode
       if (
         deconvolution_sidebar_vars$selected() == "folder" &&
-          isTRUE(deconvolution_sidebar_vars$batch_mode()) &&
-          length(deconvolution_sidebar_vars$batch_file())
+          isTRUE(deconvolution_sidebar_vars$use_config()) &&
+          length(config_file())
       ) {
         # Define reactive helper variable to control spinner display
         allow_spinner_heatmap <- shiny$reactiveVal(TRUE)

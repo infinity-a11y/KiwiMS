@@ -4,6 +4,7 @@ box::use(
   bslib,
   shiny,
   shinyjs[disable, enable, hide, hidden, show, runjs, useShinyjs],
+  shinyWidgets[show_toast],
   waiter[useWaiter, waiter_hide, waiterShowOnLoad],
 )
 
@@ -20,8 +21,12 @@ box::use(
     logic /
     helper_functions[
       check_github_version,
+      config_badge,
       get_kiwims_version,
       get_latest_release_url,
+      normalize_colnames,
+      read_config_file,
+      validate_config,
     ],
 )
 
@@ -98,6 +103,7 @@ ui <- function(id) {
         )
       ),
       bslib$nav_spacer(),
+      bslib$nav_item(shiny::uiOutput(ns("config_nav_btn"))),
       bslib$nav_item(
         shiny::actionButton(
           ns("settings"),
@@ -208,11 +214,16 @@ server <- function(id) {
     log_view$server("logs", active_tab_reactive, log_buttons)
 
     reset_button <- shiny$reactiveVal(0)
+    configfile <- shiny$reactiveVal(NULL)
+    pending_config <- shiny$reactiveVal(NULL)
+    config_modal_state <- shiny$reactiveVal("upload")
+    config_filename <- shiny$reactiveVal(NULL)
 
     # Deconvolution sidebar server
     deconvolution_sidebar_vars <- deconvolution_sidebar$server(
       "deconvolution_pars",
-      reset_button = reset_button
+      reset_button = reset_button,
+      config_file = configfile
     )
 
     # Deconvolution process server
@@ -220,21 +231,24 @@ server <- function(id) {
       "deconvolution_main",
       deconvolution_sidebar_vars,
       conversion_main_vars,
-      reset_button = reset_button
+      reset_button = reset_button,
+      config_file = configfile
     )
 
     # Conversion sidebar server
     conversion_sidebar_vars <- conversion_sidebar$server(
       "conversion_sidebar",
       conversion_main_vars,
-      deconvolution_main_vars
+      deconvolution_main_vars,
+      config_file = configfile
     )
 
     # Conversion main server
     conversion_main_vars <- conversion_main$server(
       "conversion_main",
       conversion_sidebar_vars,
-      deconvolution_main_vars
+      deconvolution_main_vars,
+      config_file = configfile
     )
 
     # Check update availability
@@ -316,6 +330,350 @@ server <- function(id) {
         "Deconvolution"
       )
     })
+
+    # Config Modal Window ----
+
+    # Nav button — filled green circle = active, outlined black circle = none
+    output$config_nav_btn <- shiny$renderUI({
+      indicator <- if (!is.null(configfile())) {
+        shiny$tags$i(class = "fa-solid fa-circle config-nav-indicator--active")
+      } else {
+        shiny$tags$span(class = "config-nav-indicator--inactive")
+      }
+      shiny$actionButton(
+        ns("config"),
+        shiny$tagList(indicator, " Config"),
+        class = "nav-link"
+      )
+    })
+
+    # Download handler for example config file
+    output$download_example_config <- shiny$downloadHandler(
+      filename = "example_config.csv",
+      content = function(file) {
+        example <- data.frame(
+          Sample = c("sample1", "sample2", "sample3"),
+          Well = c("A1", "A2", "A3"),
+          Compound_Concentration = c(100, 200, 100),
+          Incubation_Time = c(120, 120, 60),
+          Protein = c("RACA", "RACA", "RACA"),
+          Compound_1 = c("Cmp1", "Cmp1", "Cmp2"),
+          Compound_2 = c("Cmp2", "Cmp2", "Cmp3"),
+          Compound_3 = c("Cmp3", "Cmp3", "Cmp4"),
+          Compound_4 = c("Cmp4", "Cmp4", "Cmp5"),
+          Compound_5 = c("Cmp5", "Cmp5", "Cmp6"),
+          stringsAsFactors = FALSE
+        )
+        utils::write.csv2(example, file, row.names = FALSE)
+      }
+    )
+
+    # Modal body — three pages: "upload", "preview", "confirmed"
+    output$config_modal_body <- shiny$renderUI({
+      state <- config_modal_state()
+
+      if (state == "upload") {
+        shiny$div(
+          class = "config-modal-body",
+          shiny$tags$p(
+            "Upload a semicolon- or comma-separated ",
+            shiny$tags$b(".csv"),
+            " or ",
+            shiny$tags$b(".xlsx"),
+            " file that maps your sample files to experimental metadata."
+          ),
+          shiny$tags$table(
+            class = "config-ref-table",
+            shiny$tags$thead(
+              shiny$tags$tr(
+                shiny$tags$th("Column"),
+                shiny$tags$th("Required"),
+                shiny$tags$th("Format / Notes")
+              )
+            ),
+            shiny$tags$tbody(
+              shiny$tags$tr(
+                shiny$tags$td(shiny$tags$code("Sample")),
+                shiny$tags$td(class = "config-col-required", "Yes"),
+                shiny$tags$td("Unique identifier per row, no duplicates")
+              ),
+              shiny$tags$tr(
+                shiny$tags$td(shiny$tags$code("Protein")),
+                shiny$tags$td(class = "config-col-required", "Yes"),
+                shiny$tags$td("Protein name, no empty values")
+              ),
+              shiny$tags$tr(
+                shiny$tags$td(shiny$tags$code("Well")),
+                shiny$tags$td(class = "config-col-optional", "Optional"),
+                shiny$tags$td(
+                  "Valid well plate ID up to 384-well format (A1\u2013P24) \u00b7 all filled or all empty"
+                )
+              ),
+              shiny$tags$tr(
+                shiny$tags$td(shiny$tags$code("Compound_Concentration")),
+                shiny$tags$td(class = "config-col-optional", "Optional"),
+                shiny$tags$td("Numeric \u00b7 all filled or all empty")
+              ),
+              shiny$tags$tr(
+                shiny$tags$td(shiny$tags$code("Incubation_Time")),
+                shiny$tags$td(class = "config-col-optional", "Optional"),
+                shiny$tags$td("Numeric \u00b7 all filled or all empty")
+              ),
+              shiny$tags$tr(
+                shiny$tags$td(shiny$tags$code("Compound_1 \u2013 Compound_5")),
+                shiny$tags$td(class = "config-col-required", "Min. 1"),
+                shiny$tags$td(
+                  "Compound names \u00b7 no duplicates within a row"
+                )
+              )
+            )
+          ),
+          shiny$div(
+            class = "config-upload-row",
+            shiny$fileInput(
+              ns("experiment_config"),
+              label = NULL,
+              placeholder = "Select .csv or .xlsx",
+              accept = c(".csv", ".xlsx")
+            ),
+            shiny$downloadButton(
+              ns("download_example_config"),
+              "Example Table",
+              class = "btn-sm btn-default"
+            )
+          ),
+          shiny$uiOutput(ns("config_check"))
+        )
+      } else if (state == "preview") {
+        df <- pending_config()
+        n_compounds <- length(grep("^Compound_\\d+$", names(df)))
+        shiny$div(
+          class = "config-modal-body",
+          shiny$tags$p(
+            class = "config-preview-intro",
+            "Please verify the table below matches your experiment layout.",
+            " Confirm to activate this config across all modules."
+          ),
+          config_badge(
+            "ok",
+            "Valid",
+            paste0(
+              nrow(df),
+              " samples \u00b7 ",
+              n_compounds,
+              " compound column(s)"
+            )
+          ),
+          shiny$hr(class = "config-section-hr"),
+          shiny$div(
+            class = "config-table-scroll",
+            shinycssloaders::withSpinner(
+              shiny$tableOutput(ns("config_table")),
+              type = 1,
+              color = "#7777f9"
+            )
+          )
+        )
+      } else {
+        df <- configfile()
+        n_compounds <- length(grep("^Compound_\\d+$", names(df)))
+        shiny$div(
+          class = "config-modal-body",
+          shiny$tags$p("A configuration file is currently active."),
+          config_badge(
+            "ok",
+            "Active",
+            paste0(
+              nrow(df),
+              " samples \u00b7 ",
+              n_compounds,
+              " compound column(s)"
+            )
+          ),
+          shiny$tags$p(
+            class = "config-filename-label",
+            shiny$icon("file"),
+            shiny$tags$span(class = "config-filename-text", config_filename())
+          ),
+          shiny$hr(class = "config-section-hr"),
+          shiny$div(
+            class = "config-table-scroll",
+            shiny$tableOutput(ns("confirmed_config_table"))
+          )
+        )
+      }
+    })
+
+    # Modal footer — three states (always includes Dismiss)
+    output$config_modal_footer <- shiny$renderUI({
+      state <- config_modal_state()
+      if (state == "upload") {
+        shiny$modalButton("Dismiss")
+      } else if (state == "preview") {
+        shiny$tagList(
+          shiny$actionButton(
+            ns("confirm_config"),
+            "Confirm",
+            class = "btn btn-default"
+          ),
+          shiny$modalButton("Dismiss")
+        )
+      } else {
+        shiny$tagList(
+          shiny$actionButton(
+            ns("remove_config"),
+            "Remove Config",
+            class = "btn btn-default"
+          ),
+          shiny$modalButton("Dismiss")
+        )
+      }
+    })
+
+    # Pending config table — Sys.sleep drives the spinner for 1 second
+    output$config_table <- shiny$renderTable(
+      {
+        shiny$req(pending_config())
+        Sys.sleep(1)
+        pending_config()
+      },
+      striped = TRUE,
+      hover = TRUE,
+      bordered = TRUE,
+      spacing = "xs",
+      na = ""
+    )
+
+    # Confirmed config table (no spinner needed)
+    output$confirmed_config_table <- shiny$renderTable(
+      {
+        shiny$req(configfile())
+        configfile()
+      },
+      striped = TRUE,
+      hover = TRUE,
+      bordered = TRUE,
+      spacing = "xs",
+      na = ""
+    )
+
+    # Validate on upload — 1-second spinner buffer before showing preview page
+    shiny$observeEvent(input$experiment_config, {
+      shiny$req(input$experiment_config)
+
+      path <- input$experiment_config$datapath
+      ext <- tolower(tools::file_ext(input$experiment_config$name))
+      df <- tryCatch(read_config_file(path, ext), error = function(e) NULL)
+
+      if (is.null(df)) {
+        output$config_check <- shiny$renderUI(config_badge(
+          "err",
+          "Error",
+          "Failed to read file."
+        ))
+        return()
+      }
+      if (nrow(df) == 0) {
+        output$config_check <- shiny$renderUI(config_badge(
+          "err",
+          "Error",
+          "File is empty."
+        ))
+        return()
+      }
+
+      df <- normalize_colnames(df)
+      issues <- validate_config(df)
+
+      if (length(issues) > 0) {
+        output$config_check <- shiny$renderUI(
+          config_badge("err", paste(length(issues), "issue(s)"), issues)
+        )
+        return()
+      }
+
+      # Clear pending first, switch UI (flush 1 → DOM element created with spinner),
+      # then set data in the next flush so the spinner is visible.
+      pending_config(NULL)
+      config_modal_state("preview")
+      df_captured <- df
+      session$onFlushed(
+        function() {
+          pending_config(df_captured)
+        },
+        once = TRUE
+      )
+    })
+
+    # Confirm — write to configfile, store filename, close modal, toast
+    shiny$observeEvent(input$confirm_config, {
+      configfile(pending_config())
+      config_filename(input$experiment_config$name)
+      pending_config(NULL)
+      shiny$removeModal()
+      show_toast(
+        "Config saved!",
+        text = NULL,
+        type = "success",
+        timer = 3000,
+        timerProgressBar = TRUE
+      )
+    })
+
+    # Cancel — discard pending, close modal
+    shiny$observeEvent(input$cancel_config, {
+      pending_config(NULL)
+      shiny$removeModal()
+    })
+
+    # Remove — clear confirmed config, reset check output, switch to upload page
+    shiny$observeEvent(input$remove_config, {
+      configfile(NULL)
+      config_filename(NULL)
+      pending_config(NULL)
+      output$config_check <- shiny$renderUI(NULL)
+      config_modal_state("upload")
+      show_toast(
+        "Config removed",
+        text = NULL,
+        type = "warning",
+        timer = 3000,
+        timerProgressBar = TRUE
+      )
+    })
+
+    # Shared helper — opens the config modal (used by nav button and sidebar shortcut)
+    open_config_modal <- function(force_upload = FALSE) {
+      pending_config(NULL)
+      output$config_check <- shiny$renderUI(NULL)
+      if (!force_upload && !is.null(configfile())) {
+        config_modal_state("confirmed")
+      } else {
+        config_modal_state("upload")
+      }
+      shiny$showModal(
+        shiny$div(
+          class = "unidec-modal",
+          shiny$modalDialog(
+            title = "Experiment Configuration",
+            size = "l",
+            easyClose = TRUE,
+            shiny$uiOutput(ns("config_modal_body")),
+            footer = shiny$uiOutput(ns("config_modal_footer"))
+          )
+        )
+      )
+    }
+
+    # Open modal via nav button
+    shiny$observeEvent(input$config, {
+      open_config_modal()
+    })
+
+    # Open modal via sidebar shortcut (only shown when no config is active)
+    shiny$observeEvent(deconvolution_sidebar_vars$open_config_clicked(), {
+      open_config_modal(force_upload = TRUE)
+    }, ignoreNULL = TRUE, ignoreInit = TRUE)
 
     # Licence Modal Window ----
     shiny::observeEvent(input$licence, {
