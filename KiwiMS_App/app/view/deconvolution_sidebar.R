@@ -22,7 +22,7 @@ box::use(
 )
 
 box::use(
-  app / logic / helper_functions[get_volumes],
+  app / logic / helper_functions[config_badge, get_volumes],
   app / logic / logging[get_log],
 )
 
@@ -32,42 +32,55 @@ ui <- function(id) {
   ns <- NS(id)
 
   sidebar(
-    title = "Select Files",
     width = "23rem",
-    shiny::tags$div(
-      style = "display: flex; gap: 0.5em;",
-      shinyDirButton(
-        ns("folder"),
-        "Multiple",
-        icon = shiny::icon("folder-open"),
-        title = "Select location with multiple Waters .raw folders",
-        buttonType = "default",
-        root = path_home()
+    div(
+      class = "deconvolution-sidebar-ui",
+
+      # --- Section 1: File Selection ---
+      div(
+        class = "deconvolution-section",
+        div(class = "sidebar-title conversion-title", "Select Files"),
+        shiny::tags$div(
+          style = "display: flex; gap: 0.5em;",
+          shinyDirButton(
+            ns("folder"),
+            "Multiple",
+            icon = shiny::icon("folder-open"),
+            title = "Select location with multiple Waters .raw folders",
+            buttonType = "default",
+            root = path_home()
+          ),
+          shinyDirButton(
+            ns("file"),
+            "Single",
+            multiple = TRUE,
+            icon = shiny::icon("file"),
+            title = "Select individual Waters .raw folder",
+            buttonType = "default",
+            root = path_home()
+          )
+        ),
+        shiny::verbatimTextOutput(ns("path_selected")),
+        shiny::uiOutput(ns("dir_check")),
+        shinyDirButton(
+          ns("target_folder"),
+          "Select Destination Folder",
+          icon = shiny::icon("download"),
+          title = "Select destination folder",
+          buttonType = "default",
+          root = path_home()
+        ),
+        shiny::verbatimTextOutput(ns("targetpath_selected")),
+        shiny::uiOutput(ns("targetpath_check"))
       ),
-      shinyDirButton(
-        ns("file"),
-        "Single",
-        multiple = TRUE,
-        icon = shiny::icon("file"),
-        title = "Select individual Waters .raw folder",
-        buttonType = "default",
-        root = path_home()
+
+      # --- Section 2: Experiment Configuration ---
+      div(
+        class = "deconvolution-section",
+        div(class = "sidebar-title conversion-title", "Experiment Configuration"),
+        uiOutput(ns("config_status_ui"))
       )
-    ),
-    shiny::verbatimTextOutput(ns("path_selected")),
-    shiny::uiOutput(ns("dir_check")),
-    shinyDirButton(
-      ns("target_folder"),
-      "Select Destination Folder",
-      icon = shiny::icon("download"),
-      title = "Select destination folder",
-      buttonType = "default",
-      root = path_home()
-    ),
-    shiny::verbatimTextOutput(ns("targetpath_selected")),
-    shiny::uiOutput(ns("targetpath_check")),
-    hr(),
-    uiOutput(ns("config_status_ui"))
+    )
   )
 }
 
@@ -382,35 +395,37 @@ server <- function(id, reset_button, config_file) {
       ))
     })
 
-    # Config status panel at the bottom of the sidebar
+    # Experiment configuration status panel
     output$config_status_ui <- renderUI({
       if (!is.null(config_file())) {
+        df <- config_file()
+        n_compounds <- length(grep("^Compound_\\d+$", names(df)))
         div(
           class = "sidebar-config-status",
-          div(
-            class = "sidebar-config-badge sidebar-config-badge--active",
-            shiny::tags$i(class = "fa-solid fa-circle config-nav-indicator--active"),
-            "Config active"
+          config_badge(
+            "ok",
+            "Active",
+            paste0(nrow(df), " samples \u00b7 ", n_compounds, " compound column(s)")
           ),
           checkboxInput(
             ns("use_config"),
-            "Use config for analysis",
+            "Use experiment configuration for analysis",
             value = TRUE
           )
         )
       } else {
         div(
           class = "sidebar-config-status",
-          div(
-            class = "sidebar-config-badge sidebar-config-badge--inactive",
-            shiny::tags$span(class = "config-nav-indicator--inactive"),
-            "No config loaded"
+          config_badge("err", "Not loaded"),
+          shiny::tags$p(
+            class = "sidebar-config-description",
+            "Maps sample files to compound metadata, concentrations, and well positions."
           ),
           actionButton(
             ns("open_config_btn"),
-            "Upload Config",
+            "Upload Experiment Configuration",
             icon = icon("upload"),
-            class = "btn btn-sm btn-default sidebar-config-upload-btn"
+            class = "btn btn-sm btn-default"
           )
         )
       }
