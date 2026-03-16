@@ -4,15 +4,17 @@ box::use(
   bslib[sidebar, tooltip],
   fs[path_home],
   shiny[
-    column,
+    actionButton,
+    checkboxInput,
     div,
-    fluidRow,
-    h6,
+    hr,
     icon,
     moduleServer,
     NS,
     reactive,
-    reactiveValues
+    reactiveValues,
+    renderUI,
+    uiOutput,
   ],
   shinyFiles[parseDirPath, shinyDirButton, shinyDirChoose],
   shinyjs[disable, disabled, enable, runjs],
@@ -23,6 +25,7 @@ box::use(
   app / logic / helper_functions[get_volumes],
   app / logic / logging[get_log],
 )
+
 
 #' @export
 ui <- function(id) {
@@ -63,41 +66,13 @@ ui <- function(id) {
     ),
     shiny::verbatimTextOutput(ns("targetpath_selected")),
     shiny::uiOutput(ns("targetpath_check")),
-    shiny::fluidRow(
-      shiny::column(
-        width = 10,
-        disabled(
-          shiny::checkboxInput(
-            ns("batch_mode"),
-            "Batch Processing Mode",
-            value = FALSE
-          )
-        )
-      ),
-      shiny::column(
-        width = 2,
-        tooltip(
-          icon("circle-question"),
-          "Upload a batch file specifying ID and position of samples on a microtiter plate.",
-          placement = "right",
-          options = list(customClass = "tool-tip")
-        )
-      )
-    ),
-    shiny::conditionalPanel(
-      condition = sprintf(
-        "input['%s'] == true",
-        ns("batch_mode")
-      ),
-      shiny::uiOutput(ns("batch_file_ui")),
-      shiny::uiOutput(ns("batch_id_col_ui")),
-      shiny::uiOutput(ns("batch_vial_col_ui"))
-    )
+    hr(),
+    uiOutput(ns("config_status_ui"))
   )
 }
 
 #' @export
-server <- function(id, reset_button) {
+server <- function(id, reset_button, config_file) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -158,44 +133,16 @@ server <- function(id, reset_button) {
       }
     })
 
-    batch_file <- reactive({
-      if (is.null(input$batch_selection)) {
-        character()
-      } else {
-        file_path <- file.path(
-          dirname(input$batch_selection$datapath),
-          basename(input$batch_selection$datapath)
-        )
-        utils::read.csv(file_path)
-      }
-    })
-
     # Collection of reactive vars
     rootdir <- shiny::reactiveVal(character())
     filepath <- shiny::reactiveVal(character())
-    batchfile <- shiny::reactiveVal(character())
     targetpath <- shiny::reactiveVal(character())
 
     shiny::observe({
       filepath(file_path())
       rootdir(root_dir())
-      batchfile(batch_file())
       targetpath(target_path())
     })
-
-    # Render batch selection input element
-    batch_selection <- div(
-      class = "batch-file",
-      shiny::fileInput(
-        ns("batch_selection"),
-        "Select Batch File",
-        accept = c(".csv", ".xlsx")
-      )
-    )
-
-    output$batch_file_ui <- shiny::renderUI(
-      batch_selection
-    )
 
     # Render initial file selection information field
     output$dir_check <- shiny::renderUI(
@@ -268,14 +215,7 @@ server <- function(id, reset_button) {
 
     shiny::observeEvent(input$file, {
       selected("file")
-      output$batch_file_ui <- shiny::renderUI(
-        batch_selection
-      )
       rootdir(character())
-
-      # Disable batch processing field
-      shiny::updateCheckboxInput(inputId = "batch_mode", value = FALSE)
-      disable("batch_mode")
 
       # Render information field
       output$dir_check <- shiny::renderUI({
@@ -330,21 +270,6 @@ server <- function(id, reset_button) {
 
       # Adjust UI elements
       output$path_selected <- shiny::renderPrint(cat("Nothing selected"))
-      shinyjs::reset("batch_selection")
-      shiny::updateSelectInput(
-        session,
-        "vial_column",
-        choices = "",
-        selected = ""
-      )
-      shinyjs::disable("vial_column")
-      shiny::updateSelectInput(
-        session,
-        "id_column",
-        choices = "",
-        selected = ""
-      )
-      shinyjs::disable("id_column")
 
       output$path_selected <- shiny::renderPrint({
         input$file
@@ -372,12 +297,6 @@ server <- function(id, reset_button) {
     shiny::observeEvent(input$folder, {
       selected("folder")
       filepath(character())
-      output$batch_file_ui <- shiny::renderUI(
-        batch_selection
-      )
-
-      # Enable batch mode
-      enable("batch_mode")
 
       # Render information field
       output$dir_check <- shiny::renderUI({
@@ -390,8 +309,6 @@ server <- function(id, reset_button) {
           raw_dirs <- raw_dirs[grep("\\.raw$", raw_dirs)]
 
           if (length(raw_dirs)) {
-            enable(selector = "#deconvolution_pars-batch_mode")
-
             # Highlight path field border color
             runjs(paste0(
               '$("#app-deconvolution_pars-path_selected").css({"border-color": "#8BC34A"})'
@@ -412,9 +329,6 @@ server <- function(id, reset_button) {
               )
             )
           } else {
-            shiny::updateCheckboxInput(session, "batch_mode", value = FALSE)
-            disable(selector = "#deconvolution_pars-batch_mode")
-
             # Highlight path field border color
             runjs(paste0(
               '$("#app-deconvolution_pars-path_selected").css({"border-color": "#D17050"})'
@@ -431,9 +345,6 @@ server <- function(id, reset_button) {
             )
           }
         } else {
-          shiny::updateCheckboxInput(session, "batch_mode", value = FALSE)
-          disable(selector = "#deconvolution_pars-batch_mode")
-
           # Highlight path field border color
           runjs(paste0(
             '$("#app-deconvolution_pars-path_selected").css({"border-color": "#D17050"})'
@@ -471,96 +382,48 @@ server <- function(id, reset_button) {
       ))
     })
 
-    # Render batch column selection UI
-    output$batch_id_col_ui <- shiny::renderUI({
-      if (!is.null(input$batch_selection)) {
-        batch <- batch_file()
-        choices <- colnames(batch)
-        select <- shiny::selectInput(ns("id_column"), "", choices = choices)
-      } else {
-        select <- disabled(shiny::selectInput(
-          ns("id_column"),
-          "",
-          choices = ""
-        ))
-      }
-
-      fluidRow(
-        column(
-          width = 5,
-          h6(
-            "Sample ID Column",
-            style = "font-size: small; margin-top: 0.5em; margin-bottom: 0;"
+    # Config status panel at the bottom of the sidebar
+    output$config_status_ui <- renderUI({
+      if (!is.null(config_file())) {
+        div(
+          class = "sidebar-config-status",
+          div(
+            class = "sidebar-config-badge sidebar-config-badge--active",
+            shiny::tags$i(class = "fa-solid fa-circle config-nav-indicator--active"),
+            "Config active"
+          ),
+          checkboxInput(
+            ns("use_config"),
+            "Use config for analysis",
+            value = TRUE
           )
-        ),
-        column(
-          width = 7,
-          div(class = "batch-select", select)
         )
-      )
-    })
-
-    output$batch_vial_col_ui <- shiny::renderUI({
-      tryCatch(
-        {
-          if (!is.null(input$batch_selection)) {
-            batch <- batch_file()
-            choices <- colnames(batch)[colnames(batch) != input$id_column]
-            select <- shiny::selectInput(
-              ns("vial_column"),
-              "",
-              choices = choices
-            )
-          } else {
-            select <- disabled(shiny::selectInput(
-              ns("vial_column"),
-              "",
-              choices = ""
-            ))
-          }
-
-          fluidRow(
-            column(
-              width = 5,
-              h6(
-                "Vial Column",
-                style = "font-size: small; margin-top: 0.5em; margin-bottom: 0;"
-              )
-            ),
-            column(
-              width = 7,
-              div(class = "batch-select", select)
-            )
+      } else {
+        div(
+          class = "sidebar-config-status",
+          div(
+            class = "sidebar-config-badge sidebar-config-badge--inactive",
+            shiny::tags$span(class = "config-nav-indicator--inactive"),
+            "No config loaded"
+          ),
+          actionButton(
+            ns("open_config_btn"),
+            "Upload Config",
+            icon = icon("upload"),
+            class = "btn btn-sm btn-default sidebar-config-upload-btn"
           )
-        },
-        error = function(e) {
-          NULL
-        }
-      )
+        )
+      }
     })
 
-    vial_column_reactive <- reactive({
-      input$vial_column
-    })
-
-    id_column_reactive <- reactive({
-      input$id_column
-    })
-
-    batchmode <- reactive({
-      input$batch_mode
-    })
-
-    # Return paths
+    # Return paths and config state
     reactiveValues(
       dir = rootdir,
       file = filepath,
       targetpath = targetpath,
-      batch_file = batchfile,
       selected = selected,
-      batch_mode = batchmode,
-      id_column = id_column_reactive,
-      vial_column = vial_column_reactive
+      use_config = shiny::reactive(isTRUE(input$use_config) && !is.null(config_file())),
+      open_config_clicked = shiny::reactive(input$open_config_btn)
     )
   })
 }

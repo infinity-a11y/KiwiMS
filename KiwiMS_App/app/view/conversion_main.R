@@ -84,7 +84,7 @@ ui <- function(id) {
 }
 
 #' @export
-server <- function(id, conversion_sidebar_vars, deconvolution_main_vars) {
+server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_file) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
