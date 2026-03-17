@@ -359,7 +359,7 @@ server <- function(id) {
       filename = "example_config.csv",
       content = function(file) {
         example <- data.frame(
-          Sample = c("sample1", "sample2", "sample3"),
+          Sample = c("sample_1.raw", "sample_2.raw", "sample_3.raw"),
           Well = c("A1", "A2", "A3"),
           Compound_Concentration = c(100, 200, 100),
           Incubation_Time = c(120, 120, 60),
@@ -696,11 +696,11 @@ server <- function(id) {
       open_config_modal()
     })
 
-    # Open modal via sidebar shortcut (only shown when no config is active)
+    # Open modal via sidebar shortcut
     shiny$observeEvent(
       deconvolution_sidebar_vars$open_config_clicked(),
       {
-        open_config_modal(force_upload = TRUE)
+        open_config_modal()
       },
       ignoreNULL = TRUE,
       ignoreInit = TRUE

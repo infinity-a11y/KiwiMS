@@ -111,6 +111,10 @@ th {
 /* ==========================================================================
    3. LAYOUT & STRUCTURE
    ========================================================================== */
+.table.shiny-table > tbody > tr > td {
+  align-content: center;
+}
+
 .bslib-sidebar-layout > .main {
   overflow: hidden;
 }
@@ -378,7 +382,7 @@ button .sF-modal {
   width: 60vw;
 }
 
-.modal-body {
+.modal-body:not(.deconvolute-modal .modal-body) {
   max-height: 60vh;
   overflow-y: auto;
 }
