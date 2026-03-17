@@ -401,41 +401,32 @@ server <- function(id, reset_button, config_file, config_filename) {
 
     # Experiment configuration status panel
     output$config_status_ui <- renderUI({
-      if (!is.null(config_file())) {
-        div(
-          class = "sidebar-config-status",
-          shiny::tags$p(
-            class = "sidebar-config-description",
-            "Maps sample files to compound metadata, concentrations, and well positions."
-          ),
-          config_badge("ok", "Active", config_filename()),
-          checkboxInput(
-            ns("use_config"),
-            "Use Config in Analysis",
-            value = TRUE
-          )
-        )
+      active <- !is.null(config_file())
+      badge <- if (active) {
+        config_badge("ok", "Active", config_filename())
       } else {
-        div(
-          class = "sidebar-config-status",
-          shiny::tags$p(
-            class = "sidebar-config-description",
-            "Maps sample files to compound metadata, concentrations, and well positions."
-          ),
-          config_badge("err", "Not loaded"),
-          actionButton(
-            ns("open_config_btn"),
-            "Upload Experiment Configuration",
-            icon = icon("upload"),
-            class = "btn btn-sm btn-default"
-          ),
-          shinyjs::disabled(checkboxInput(
-            ns("use_config"),
-            "Use Config in Analysis",
-            value = FALSE
-          ))
-        )
+        config_badge("err", "Not loaded")
       }
+      chk <- checkboxInput(
+        ns("use_config"),
+        "Use Config in Analysis",
+        value = active
+      )
+      div(
+        class = "sidebar-config-status",
+        shiny::tags$p(
+          class = "sidebar-config-description",
+          "Maps sample files to compound metadata, concentrations, and well positions."
+        ),
+        badge,
+        actionButton(
+          ns("open_config_btn"),
+          "Experiment Configuration",
+          icon = icon("upload"),
+          class = "btn btn-sm btn-default"
+        ),
+        if (active) chk else shinyjs::disabled(chk)
+      )
     })
 
     # Return paths and config state

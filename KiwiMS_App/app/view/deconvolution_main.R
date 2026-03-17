@@ -275,7 +275,7 @@ server <- function(
     shiny$observeEvent(input$deconvolute_start, {
       shiny$showModal(
         shiny$div(
-          class = "start-modal",
+          class = "start-modal deconvolute-modal",
           shiny$modalDialog(
             shiny$fluidRow(
               shiny$br(),
@@ -307,7 +307,6 @@ server <- function(
     # Dynamic rendering of skip/overwrite selection button
     output$selector_ui <- shiny$renderUI({
       input$deconvolute_start
-
       select <- NULL
 
       if (deconvolution_sidebar_vars$selected() == "folder") {
@@ -320,14 +319,16 @@ server <- function(
           isTRUE(deconvolution_sidebar_vars$use_config()) &&
             length(config_file())
         ) {
-          test <<- config_file()
-          batch_sel <- gsub(
-            ".raw",
-            "_rawdata_unidecfiles",
-            config_file()[[deconvolution_sidebar_vars$id_column()]]
+          config_sel <- paste0(
+            gsub(
+              ".raw",
+              "",
+              config_file()[["Sample"]]
+            ),
+            "_rawdata_unidecfiles"
           )
 
-          intersect <- batch_sel %in% basename(finished_files)
+          intersect <- config_sel %in% basename(finished_files)
 
           if (any(intersect)) {
             select <- shiny$radioButtons(
@@ -363,7 +364,6 @@ server <- function(
       enable(
         selector = "#app-deconvolution_main-deconvolute_start_conf"
       )
-      # shinyjs::addClass("deconvolute_start_conf", "btn-highlight")
 
       message <- NULL
 
@@ -377,7 +377,7 @@ server <- function(
           isTRUE(deconvolution_sidebar_vars$use_config()) &
             length(config_file())
         ) {
-          presence <- config_file()[[deconvolution_sidebar_vars$id_column()]] %in%
+          presence <- config_file()[["Sample"]] %in%
             basename(raw_dirs)
 
           if (all(presence)) {
@@ -386,8 +386,8 @@ server <- function(
                 paste0(
                   "<b>Multiple target file(s) selected</b><br><br><b>",
                   nrow(config_file()),
-                  "</b> raw file(s) present in ",
-                  "the batch file are queried for deconvolution."
+                  "</b> sample(s) present in ",
+                  "the config file are queried for deconvolution."
                 )
               )
             )
@@ -402,8 +402,8 @@ server <- function(
                   "<b>Multiple target file(s) selected</b><br><br>",
                   '<i class="fa-solid fa-circle-exclamation" style="font-size:',
                   '1em; color:black; margin-right: 10px;"></i>',
-                  "<i>None of the raw file(s) present in ",
-                  "the batch file can be found in the root folder.</i>"
+                  "<i>None of the sample(s) present in ",
+                  "the config file can be found in the selected folder.</i>"
                 )
               )
             )
@@ -413,22 +413,20 @@ server <- function(
                 paste0(
                   "<b>Multiple target file(s) selected</b><br><br><b>",
                   sum(presence),
-                  "</b> raw file(s) present in ",
-                  "the batch file are queried for deconvolution.<br><br>",
+                  "</b> sample(s) present in ",
+                  "the config file are queried for deconvolution.<br><br>",
                   '<i class="fa-solid fa-circle-exclamation" style="font-size:',
                   '1em; color:black; margin-right: 10px;"></i><i><b>',
                   sum(!presence),
-                  "</b> of the batch raw file(s) are<b> NOT</b> prese",
-                  "nt in the selected root folder.</i>"
+                  "</b> of the samples specified in the config file are<b> NOT</b> prese",
+                  "nt in the selected folder.</i>"
                 )
               )
             )
           }
 
           # if duplicates present disable continue button
-          if (
-            any(duplicated(config_file()[[deconvolution_sidebar_vars$id_column()]]))
-          ) {
+          if (any(duplicated(config_file()[["Sample"]]))) {
             disable(
               selector = "#app-deconvolution_main-deconvolute_start_conf"
             )
@@ -454,7 +452,7 @@ server <- function(
                 "</b> raw file(s) in the",
                 " selected directory are currently queried for deconvolution.",
                 " If you wish to process only a subset select the respective",
-                " target files or dismiss and upload a batch file."
+                " target files."
               )
             )
           )
@@ -494,55 +492,31 @@ server <- function(
           isTRUE(deconvolution_sidebar_vars$use_config()) &&
             length(config_file())
         ) {
-          # check if any duplicated targets in batch
-          if (
-            any(duplicated(config_file()[[deconvolution_sidebar_vars$id_column()]]))
-          ) {
-            dup_count <- sum(duplicated(config_file()[[deconvolution_sidebar_vars$id_column()]]))
-            msg <- ifelse(
-              dup_count > 1,
-              "</b> targets are duplicated in the batch. ",
-              "</b> target is duplicated in the batch. "
-            )
+          config_sel <- gsub(
+            ".raw",
+            "_rawdata_unidecfiles",
+            config_file()[["Sample"]]
+          )
+
+          intersect <- config_sel %in% basename(finished_files)
+
+          if (any(intersect)) {
+            reactVars$overwrite <- config_sel[intersect]
+
             warning <- shiny$p(
               shiny$HTML(
                 paste0(
                   '<i class="fa-solid fa-circle-exclamation" style="font-size:',
-                  '1em; color:red; margin-right: 10px;"></i>',
+                  '1em; color:black; margin-right: 10px;"></i>',
                   "<b>",
-                  dup_count,
-                  msg,
-                  "Modify the batch file and try again."
-                )
-              )
-            )
-          } else {
-            batch_sel <- gsub(
-              ".raw",
-              "_rawdata_unidecfiles",
-              config_file()[[deconvolution_sidebar_vars$id_column()]]
-            )
-
-            intersect <- batch_sel %in% basename(finished_files)
-
-            if (any(intersect)) {
-              reactVars$overwrite <- batch_sel[intersect]
-
-              warning <- shiny$p(
-                shiny$HTML(
+                  sum(intersect),
                   paste0(
-                    '<i class="fa-solid fa-circle-exclamation" style="font-size:',
-                    '1em; color:black; margin-right: 10px;"></i>',
-                    "<b>",
-                    sum(intersect),
-                    paste0(
-                      "</b> file(s) queried for deconvolution appear to have ",
-                      "already been processed. Please choose how to proceed:"
-                    )
+                    "</b> file(s) queried for deconvolution appear to have ",
+                    "already been processed in the destination folder. Please choose how to proceed:"
                   )
                 )
               )
-            }
+            )
           }
         } else if (!is.null(input$target_selector)) {
           intersect <- gsub(
@@ -568,7 +542,7 @@ server <- function(
                   sum(intersect),
                   paste0(
                     "</b> file(s) queried for deconvolution appear to have ",
-                    "already been processed. Please choose how to proceed:"
+                    "already been processed in the destination folder. Please choose how to proceed:"
                   )
                 )
               )
@@ -684,25 +658,24 @@ server <- function(
           isTRUE(deconvolution_sidebar_vars$use_config()) &&
             length(config_file())
         ) {
-          write_log("Multiple target deconvolution mode (with batch file)")
+          write_log("Multiple target deconvolution mode (with config file)")
 
-          batch <- config_file()
-          sample_names <- batch[[deconvolution_sidebar_vars$id_column()]]
+          sample_names <- config_file()[["Sample"]]
           raw_dirs <- raw_dirs[basename(raw_dirs) %in% sample_names]
 
           # Prepare heatmap variables
           reactVars$sample_names <- gsub(
             ".raw",
             "",
-            config_file()[[deconvolution_sidebar_vars$id_column()]]
+            config_file()[["Sample"]]
           )
           reactVars$wells <- gsub(
             ",",
             "",
-            sub("^.*:", "", batch[[deconvolution_sidebar_vars$vial_column()]])
+            sub("^.*:", "", config_file()[["Well"]])
           )
         } else {
-          write_log("Multiple target deconvolution mode (no batch file)")
+          write_log("Multiple target deconvolution mode (no config file)")
 
           raw_dirs <- raw_dirs[basename(raw_dirs) %in% target_selector_sel()]
         }
@@ -1653,7 +1626,7 @@ server <- function(
         }
       })
 
-      ### Render heatmap for batch mode
+      ### Render heatmap when config has wells specified
       if (
         deconvolution_sidebar_vars$selected() == "folder" &&
           isTRUE(deconvolution_sidebar_vars$use_config()) &&
