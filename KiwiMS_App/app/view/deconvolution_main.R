@@ -320,6 +320,7 @@ server <- function(
           isTRUE(deconvolution_sidebar_vars$use_config()) &&
             length(config_file())
         ) {
+          test <<- config_file()
           batch_sel <- gsub(
             ".raw",
             "_rawdata_unidecfiles",
