@@ -45,7 +45,12 @@ ui <- function(id) {
 }
 
 #' @export
-server <- function(id, conversion_main_vars, deconvolution_main_vars, config_file) {
+server <- function(
+  id,
+  conversion_main_vars,
+  deconvolution_main_vars,
+  config_file
+) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -71,7 +76,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars, config_fil
           shiny::column(
             width = 12,
             shiny::div(
-              class = "sidebar-title conversion-title",
+              class = "sidebar-title custom-sidebar-title",
               "Binding Analysis"
             ),
             shiny::numericInput(
@@ -145,7 +150,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars, config_fil
           shiny::column(
             width = 12,
             shiny::div(
-              class = "sidebar-title conversion-title",
+              class = "sidebar-title custom-sidebar-title",
               "Results Menu"
             ),
             shiny::div(

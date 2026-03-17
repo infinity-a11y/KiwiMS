@@ -32,6 +32,7 @@ ui <- function(id) {
   ns <- NS(id)
 
   sidebar(
+    class = "deconvolution-sidebar",
     width = "23rem",
     div(
       class = "deconvolution-sidebar-ui",
@@ -39,7 +40,8 @@ ui <- function(id) {
       # --- Section 1: File Selection ---
       div(
         class = "deconvolution-section",
-        div(class = "sidebar-title conversion-title", "Select Files"),
+        div(class = "sidebar-title custom-sidebar-title", "Select Files"),
+        shiny::uiOutput(ns("dir_check")),
         shiny::tags$div(
           style = "display: flex; gap: 0.5em;",
           shinyDirButton(
@@ -61,23 +63,25 @@ ui <- function(id) {
           )
         ),
         shiny::verbatimTextOutput(ns("path_selected")),
-        shiny::uiOutput(ns("dir_check")),
+        shiny::uiOutput(ns("targetpath_check")),
         shinyDirButton(
           ns("target_folder"),
           "Select Destination Folder",
-          icon = shiny::icon("download"),
+          icon = shiny::icon("file-export"),
           title = "Select destination folder",
           buttonType = "default",
           root = path_home()
         ),
-        shiny::verbatimTextOutput(ns("targetpath_selected")),
-        shiny::uiOutput(ns("targetpath_check"))
+        shiny::verbatimTextOutput(ns("targetpath_selected"))
       ),
 
       # --- Section 2: Experiment Configuration ---
       div(
         class = "deconvolution-section",
-        div(class = "sidebar-title conversion-title", "Experiment Configuration"),
+        div(
+          class = "sidebar-title custom-sidebar-title",
+          "Experiment Configuration"
+        ),
         uiOutput(ns("config_status_ui"))
       )
     )
@@ -85,7 +89,7 @@ ui <- function(id) {
 }
 
 #' @export
-server <- function(id, reset_button, config_file) {
+server <- function(id, reset_button, config_file, config_filename) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -398,35 +402,38 @@ server <- function(id, reset_button, config_file) {
     # Experiment configuration status panel
     output$config_status_ui <- renderUI({
       if (!is.null(config_file())) {
-        df <- config_file()
-        n_compounds <- length(grep("^Compound_\\d+$", names(df)))
         div(
           class = "sidebar-config-status",
-          config_badge(
-            "ok",
-            "Active",
-            paste0(nrow(df), " samples \u00b7 ", n_compounds, " compound column(s)")
+          shiny::tags$p(
+            class = "sidebar-config-description",
+            "Maps sample files to compound metadata, concentrations, and well positions."
           ),
+          config_badge("ok", "Active", config_filename()),
           checkboxInput(
             ns("use_config"),
-            "Use experiment configuration for analysis",
+            "Use Config in Analysis",
             value = TRUE
           )
         )
       } else {
         div(
           class = "sidebar-config-status",
-          config_badge("err", "Not loaded"),
           shiny::tags$p(
             class = "sidebar-config-description",
             "Maps sample files to compound metadata, concentrations, and well positions."
           ),
+          config_badge("err", "Not loaded"),
           actionButton(
             ns("open_config_btn"),
             "Upload Experiment Configuration",
             icon = icon("upload"),
             class = "btn btn-sm btn-default"
-          )
+          ),
+          shinyjs::disabled(checkboxInput(
+            ns("use_config"),
+            "Use Config in Analysis",
+            value = FALSE
+          ))
         )
       }
     })
@@ -437,7 +444,9 @@ server <- function(id, reset_button, config_file) {
       file = filepath,
       targetpath = targetpath,
       selected = selected,
-      use_config = shiny::reactive(isTRUE(input$use_config) && !is.null(config_file())),
+      use_config = shiny::reactive(
+        isTRUE(input$use_config) && !is.null(config_file())
+      ),
       open_config_clicked = shiny::reactive(input$open_config_btn)
     )
   })
