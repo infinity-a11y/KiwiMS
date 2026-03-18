@@ -3,7 +3,14 @@
 box::use(
   bslib[card, card_body, card_header, tooltip],
   fs[dir_ls],
-  plotly[event_data, event_register, plotlyOutput, plotlyProxy, plotlyProxyInvoke, renderPlotly],
+  plotly[
+    event_data,
+    event_register,
+    plotlyOutput,
+    plotlyProxy,
+    plotlyProxyInvoke,
+    renderPlotly
+  ],
   processx[process],
   shiny,
   shinyjs[delay, disable, disabled, enable, hide, show, hidden, runjs],
@@ -30,7 +37,7 @@ box::use(
   app /
     logic /
     deconvolution_ui[
-      deconvolution_running_ui_noplate,
+      deconvolution_results_ui,
       deconvolution_init_ui
     ],
   app /
@@ -1125,13 +1132,15 @@ server <- function(
 
                 ##### Render result picker with updated choices ----
                 if (nrow(reactVars$rslt_df) > 0) {
-                  enable(selector = "#app-deconvolution_main-toggle_result")
-
-                  test <<- results
-
                   # Render results picker
-                  picker_choices <- gsub("_rawdata_unidecfiles", ".raw", basename(results))
-                  if (is.null(result_files_sel()) && length(picker_choices) > 0) {
+                  picker_choices <- gsub(
+                    "_rawdata_unidecfiles",
+                    ".raw",
+                    basename(results)
+                  )
+                  if (
+                    is.null(result_files_sel()) && length(picker_choices) > 0
+                  ) {
                     result_files_sel(picker_choices[1])
                   }
                   output$result_picker_ui <- shiny$renderUI(
@@ -1172,8 +1181,6 @@ server <- function(
                   choices[1],
                   result_files_sel()
                 )
-
-                enable(selector = "#app-deconvolution_main-toggle_result")
 
                 output$result_picker_ui <- shiny$renderUI(
                   shiny$div(
@@ -1380,9 +1387,14 @@ server <- function(
 
                 # Update result picker with all completed samples
                 if (nrow(reactVars$rslt_df) > 0) {
-                  enable(selector = "#app-deconvolution_main-toggle_result")
-                  picker_choices <- gsub("_rawdata_unidecfiles", ".raw", basename(results))
-                  if (is.null(result_files_sel()) && length(picker_choices) > 0) {
+                  picker_choices <- gsub(
+                    "_rawdata_unidecfiles",
+                    ".raw",
+                    basename(results)
+                  )
+                  if (
+                    is.null(result_files_sel()) && length(picker_choices) > 0
+                  ) {
                     result_files_sel(picker_choices[1])
                   }
                   output$result_picker_ui <- shiny$renderUI(
@@ -1422,9 +1434,6 @@ server <- function(
                 finished_files <- file.exists(peak_files)
 
                 if (sum(finished_files) > 0) {
-                  # Enable spectrum toggle button
-                  enable(selector = "#app-deconvolution_main-toggle_result")
-
                   # Update choices and selected sample of results picker
                   choices <- basename(selected_files)[finished_files]
 
@@ -1505,14 +1514,25 @@ server <- function(
         reactVars$click_observer <- shiny$observe({
           click_data <- event_data("plotly_click")
           if (shiny$isolate(reactVars$heatmap_ready) > 0L) {
-
             # DEBUG — remove once click behaviour is confirmed
             message("=== HEATMAP CLICK ===")
             message("click_data is.null: ", is.null(click_data))
             if (!is.null(click_data)) {
               message("  curveNumber : ", click_data$curveNumber)
-              message("  x           : ", click_data$x, " (class: ", class(click_data$x), ")")
-              message("  y           : ", click_data$y, " (class: ", class(click_data$y), ")")
+              message(
+                "  x           : ",
+                click_data$x,
+                " (class: ",
+                class(click_data$x),
+                ")"
+              )
+              message(
+                "  y           : ",
+                click_data$y,
+                " (class: ",
+                class(click_data$y),
+                ")"
+              )
               message("  pointNumber : ", click_data$pointNumber)
               message("  full dump   : ")
               message(paste(capture.output(print(click_data)), collapse = "\n"))
@@ -1536,7 +1556,9 @@ server <- function(
               message("  resolved row: ", if (is.null(row)) "NULL" else row)
               message("  resolved col: ", round(click_data$x))
 
-              if (is.null(row)) return()
+              if (is.null(row)) {
+                return()
+              }
               col <- round(click_data$x)
               well_id <- paste0(row, col)
 
@@ -1547,7 +1569,10 @@ server <- function(
                   reactVars$rslt_df$sample[reactVars$rslt_df$well_id == well_id]
               )
 
-              message("  clicked_sample: ", paste(clicked_sample, collapse = ", "))
+              message(
+                "  clicked_sample: ",
+                paste(clicked_sample, collapse = ", ")
+              )
 
               if (length(clicked_sample) > 0 && nzchar(clicked_sample[1])) {
                 runjs(paste0(
@@ -1556,10 +1581,13 @@ server <- function(
                 ))
                 result_files_sel(paste0(clicked_sample[1], ".raw"))
                 # Unblock after renders complete (delay covers spectrum + table)
-                delay(2000, runjs(paste0(
-                  'document.getElementById("blocking-overlay").styl',
-                  'e.display = "none";'
-                )))
+                delay(
+                  2000,
+                  runjs(paste0(
+                    'document.getElementById("blocking-overlay").styl',
+                    'e.display = "none";'
+                  ))
+                )
               }
             }
           }
@@ -1583,19 +1611,22 @@ server <- function(
 
             delay(400, {
               plotlyProxy("heatmap", session) |>
-                plotlyProxyInvoke("relayout", list(
-                  shapes = list(list(
-                    type = "rect",
-                    xref = "x",
-                    yref = "y",
-                    x0 = col_num - 0.5,
-                    x1 = col_num + 0.5,
-                    y0 = row_idx - 0.5,
-                    y1 = row_idx + 0.5,
-                    line = list(color = "rgba(80,200,100,0.95)", width = 3),
-                    fillcolor = "rgba(0,0,0,0)"
-                  ))
-                ))
+                plotlyProxyInvoke(
+                  "relayout",
+                  list(
+                    shapes = list(list(
+                      type = "rect",
+                      xref = "x",
+                      yref = "y",
+                      x0 = col_num - 0.5,
+                      x1 = col_num + 0.5,
+                      y0 = row_idx - 0.5,
+                      y1 = row_idx + 0.5,
+                      line = list(color = "rgba(80,200,100,0.95)", width = 3),
+                      fillcolor = "rgba(0,0,0,0)"
+                    ))
+                  )
+                )
             })
           }
         })
@@ -1617,7 +1648,7 @@ server <- function(
           isTRUE(deconvolution_sidebar_vars$use_config()) &&
           !is.null(config_file()) &&
           has_wells
-        deconvolution_running_ui_noplate(ns, show_heatmap)
+        deconvolution_results_ui(ns, show_heatmap)
       })
 
       # Render status spinner icon
@@ -1635,7 +1666,7 @@ server <- function(
           allow_spinner_spectrum(FALSE)
         }
 
-        shiny$req(result_files_sel(), input$toggle_result)
+        shiny$req(result_files_sel())
 
         if (deconvolution_sidebar_vars$selected() == "folder") {
           result_dir <- file.path(
@@ -1657,7 +1688,11 @@ server <- function(
           # Generate the spectrum plot
           spectrum <- spectrum_plot(
             result_path = result_dir,
-            raw = as.logical(input$toggle_result),
+            raw = as.logical(ifelse(
+              !is.null(input$toggle_result),
+              input$toggle_result,
+              FALSE
+            )),
             show_peak_labels = ifelse(
               is.null(input$spectrum_annotation),
               TRUE,
@@ -1781,7 +1816,8 @@ server <- function(
             allow_spinner_heatmap(TRUE)
 
             # Activate click observer / signal highlight observer to re-apply shape
-            reactVars$heatmap_ready <- shiny$isolate(reactVars$heatmap_ready) + 1L
+            reactVars$heatmap_ready <- shiny$isolate(reactVars$heatmap_ready) +
+              1L
 
             return(heatmap)
           }
@@ -1874,20 +1910,31 @@ server <- function(
           'e.display = "none";'
         ))
 
-        # Toggle sidebar for deconvolution initiation UI
+        # Re-open the main page sidebar
         runjs(paste0(
-          "document.querySelector('.bslib-sidebar-layout.sidebar-coll",
-          "apsed>.collapse-toggle').style.display = 'block';"
+          "var aside = document.querySelector('aside.deconvolution-sidebar');",
+          "var mainSb = aside ? aside.closest('.bslib-sidebar-layout') : null;",
+          "if (mainSb && mainSb.classList.contains('sidebar-collapsed')) {",
+          "  mainSb.classList.remove('sidebar-collapsed');",
+          "  aside.removeAttribute('aria-hidden');",
+          "  var tog = mainSb.querySelector('button.collapse-toggle');",
+          "  if (tog) {",
+          "    tog.style.display = '';",
+          "    tog.setAttribute('aria-expanded', 'true');",
+          "  }",
+          "}"
         ))
-        runjs("document.querySelector('button.collapse-toggle').click();")
 
         # bslib sets .transitioning during the toggle animation which hides
         # sidebar content. Force-remove it after the animation completes so
         # the sidebar content becomes visible again.
-        delay(400, runjs(paste0(
-          "document.querySelectorAll('.bslib-sidebar-layout')",
-          ".forEach(function(el){el.classList.remove('transitioning');});"
-        )))
+        delay(
+          400,
+          runjs(paste0(
+            "document.querySelectorAll('.bslib-sidebar-layout')",
+            ".forEach(function(el){el.classList.remove('transitioning');});"
+          ))
+        )
 
         # Signal sidebar module to reevaluate
         reset_button(reset_button() + 1)
