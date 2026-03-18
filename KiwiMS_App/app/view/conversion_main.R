@@ -117,6 +117,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_
     compound_table_trigger <- shiny::reactiveVal(0)
     sample_table_trigger <- shiny::reactiveVal(0)
     render_trigger <- shiny::reactiveVal(0)
+    trigger_ki_kinact <- shiny::reactiveVal(0L)
 
     # Prepare waiter spinner object
     w <- waiter::Waiter$new(
@@ -181,6 +182,38 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_
       type = "Compound"
     ))
     sample_table_data <- shiny::reactiveVal()
+
+    # Helper: auto-fill sample table columns from config file
+    apply_config_autofill <- function(tbl, cfg) {
+      for (i in seq_len(nrow(tbl))) {
+        sample_name <- tbl$Sample[i]
+        match_idx <- which(cfg$Sample == sample_name)
+        if (length(match_idx) == 1) {
+          m <- cfg[match_idx, , drop = FALSE]
+          if ("Protein" %in% names(cfg)) {
+            val <- trimws(as.character(m$Protein))
+            if (!is.na(val) && nchar(val) > 0) tbl$Protein[i] <- val
+          }
+          for (j in 1:5) {
+            col_cfg <- paste0("Compound_", j)
+            col_tbl <- paste0("Compound ", j)
+            if (col_cfg %in% names(cfg) && col_tbl %in% names(tbl)) {
+              val <- trimws(as.character(m[[col_cfg]]))
+              if (!is.na(val) && nchar(val) > 0) tbl[[col_tbl]][i] <- val
+            }
+          }
+          if ("Concentration" %in% names(tbl) && "Compound_Concentration" %in% names(cfg)) {
+            val <- m$Compound_Concentration
+            if (!is.na(val)) tbl$Concentration[i] <- as.numeric(val)
+          }
+          if ("Time" %in% names(tbl) && "Incubation_Time" %in% names(cfg)) {
+            val <- m$Incubation_Time
+            if (!is.na(val)) tbl$Time[i] <- as.numeric(val)
+          }
+        }
+      }
+      tbl
+    }
 
     ## Concentration/Time UI ----
     # Conditional adaption of concentration/time input UI
@@ -523,6 +556,40 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_
         ))
         sample_table_trigger(sample_table_trigger() + 1)
       }
+    )
+
+    ## Config autofill ----
+    safe_observe(
+      event_expr = list(
+        conversion_sidebar_vars$use_config(),
+        conversion_sidebar_vars$run_ki_kinact(),
+        input$samples_fileinput
+      ),
+      observer_name = "Config Autofill",
+      handler_fn = function() {
+        shiny::req(isTRUE(conversion_sidebar_vars$use_config()))
+        shiny::req(!is.null(sample_table_data()))
+        shiny::req(nrow(sample_table_data()) > 0)
+        shiny::req(!is.null(config_file()))
+
+        cfg <- config_file()
+        new_tbl <- apply_config_autofill(sample_table_data(), cfg)
+
+        if (!identical(new_tbl, sample_table_data())) {
+          sample_table_data(new_tbl)
+          sample_table_trigger(sample_table_trigger() + 1)
+        }
+
+        # Signal ki_kinact activation if config has concentration and time values
+        has_conc <- "Compound_Concentration" %in% names(cfg) &&
+          any(!is.na(cfg$Compound_Concentration))
+        has_time <- "Incubation_Time" %in% names(cfg) &&
+          any(!is.na(cfg$Incubation_Time))
+        if (has_conc && has_time && !isTRUE(conversion_sidebar_vars$run_ki_kinact())) {
+          trigger_ki_kinact(trigger_ki_kinact() + 1L)
+        }
+      },
+      priority = -5
     )
 
     ## Table status observer ----
@@ -4848,7 +4915,8 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_
         result = declaration_vars$result
       )),
       samples_confirmed = shiny::reactive(declaration_vars$samples_confirmed),
-      cancel_continuation = shiny::reactive(input$conversion_cont_cancel)
+      cancel_continuation = shiny::reactive(input$conversion_cont_cancel),
+      activate_ki_kinact = shiny::reactive(trigger_ki_kinact())
     )
   })
 }
