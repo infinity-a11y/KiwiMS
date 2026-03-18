@@ -895,6 +895,14 @@ server <- function(
       )
     })
 
+    # Eagerly render all sidebar outputs that are visible on first tab visit so
+    # they are computed in the first reactive flush alongside waiter_hide().
+    shiny::outputOptions(output, "conversion_sidebar_ui", suspendWhenHidden = FALSE)
+    shiny::outputOptions(output, "conversion_analysis_controls_ui", suspendWhenHidden = FALSE)
+    shiny::outputOptions(output, "conversion_result_controls_ui", suspendWhenHidden = FALSE)
+    shiny::outputOptions(output, "run_button_wrapper", suspendWhenHidden = FALSE)
+    shiny::outputOptions(output, "analysis_select_ui", suspendWhenHidden = FALSE)
+
     # Server return values ----
     return(
       shiny::reactiveValues(

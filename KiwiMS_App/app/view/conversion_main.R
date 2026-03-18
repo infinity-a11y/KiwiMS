@@ -4833,7 +4833,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_
       )
     })
 
+    # Eagerly render startup outputs so they are computed in the first reactive
+    # flush and included in the same browser message as waiter_hide().
     shiny::outputOptions(output, "conversion_ui", suspendWhenHidden = FALSE)
+    shiny::outputOptions(output, "declaration_info_ui", suspendWhenHidden = FALSE)
 
     # Return server values ----
     list(
