@@ -664,7 +664,7 @@ check_sample_table <- function(sample_table, proteins, compounds) {
     !is.na(sample_table[, 2]) & sample_table[, 2] != ""
   ]
   if (length(proteins_input) & any(!proteins_input %in% proteins)) {
-    return("Protein name not found")
+    return("Protein name not declared")
   }
 
   # Check if compound names valid
@@ -672,7 +672,7 @@ check_sample_table <- function(sample_table, proteins, compounds) {
     !is.na(sample_table[, -(1:2)]) & sample_table[, -(1:2)] != ""
   ]
   if (length(compounds_input) & any(!compounds_input %in% compounds)) {
-    return("Compound name not found")
+    return("Compound name not declared")
   }
 
   # If all proteins empty

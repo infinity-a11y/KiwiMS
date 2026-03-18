@@ -247,7 +247,8 @@ server <- function(id) {
       "conversion_sidebar",
       conversion_main_vars,
       deconvolution_main_vars,
-      config_file = configfile
+      config_file = configfile,
+      config_filename = config_filename
     )
 
     # Conversion main server
@@ -696,9 +697,19 @@ server <- function(id) {
       open_config_modal()
     })
 
-    # Open modal via sidebar shortcut
+    # Open modal via deconvolution sidebar shortcut
     shiny$observeEvent(
       deconvolution_sidebar_vars$open_config_clicked(),
+      {
+        open_config_modal()
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+
+    # Open modal via conversion sidebar shortcut
+    shiny$observeEvent(
+      conversion_sidebar_vars$open_config_clicked(),
       {
         open_config_modal()
       },
