@@ -70,9 +70,10 @@ process_uploaded_table <- function(df, type) {
     }
   }
 
-  # Convert mass columns to numeric
+  # Convert mass columns to numeric (strip trailing unit suffixes like " Da", " kDa")
   converted_df <- suppressWarnings(dplyr::mutate_all(df[, -1], function(x) {
-    as.numeric(as.character(x))
+    x_stripped <- gsub("\\s+[A-Za-z].*$", "", trimws(as.character(x)))
+    as.numeric(x_stripped)
   }))
 
   # Check if conversion resulted in NAs only where original had NAs
@@ -145,6 +146,7 @@ prot_comp_handsontable <- function(
   proteins = NULL,
   compounds = NULL
 ) {
+  if (is.null(tab) || nrow(tab) == 0) return(NULL)
   js_tolerance_value <- if (is.null(tolerance) || is.na(tolerance)) {
     "null"
   } else {
@@ -4065,32 +4067,40 @@ handle_file_upload <- function(
   output,
   declaration_vars
 ) {
-  # Read in file
-  table_upload <- read_uploaded_file(
-    file_input$datapath,
-    tolower(tools::file_ext(file_input$name))
-  )
-
-  # Process table and check for errors
-  table_upload_processed <- process_uploaded_table(table_upload, type)
-
-  # Update UI and status variable based on processing result
-  if (is.data.frame(table_upload_processed)) {
-    shinyWidgets::show_toast(
-      paste0(tools::toTitleCase(type), " table loaded!"),
-      type = "success",
-      timer = 3000
+  tryCatch({
+    # Read in file
+    table_upload <- read_uploaded_file(
+      file_input$datapath,
+      tolower(tools::file_ext(file_input$name))
     )
-    return(table_upload_processed)
-  } else {
+
+    # Process table and check for errors
+    table_upload_processed <- process_uploaded_table(table_upload, type)
+
+    # Update UI and status variable based on processing result
+    if (is.data.frame(table_upload_processed)) {
+      shinyWidgets::show_toast(
+        paste0(tools::toTitleCase(type), " table loaded!"),
+        type = "success",
+        timer = 3000
+      )
+      return(table_upload_processed)
+    } else {
+      shinyWidgets::show_toast(
+        table_upload_processed,
+        type = "error",
+        timer = 3000
+      )
+      return(NULL)
+    }
+  }, error = function(e) {
     shinyWidgets::show_toast(
-      table_upload_processed,
+      paste0("Failed to load ", type, " file. Please check the file format."),
       type = "error",
-      timer = 3000
+      timer = 4000
     )
-
     return(NULL)
-  }
+  })
 }
 
 # Transform summarized hits into readable table

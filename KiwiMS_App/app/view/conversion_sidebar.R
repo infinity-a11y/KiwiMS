@@ -123,7 +123,7 @@ server <- function(
               class = "ki-kinact-checkbox",
               shiny::checkboxInput(
                 ns("run_ki_kinact"),
-                shiny::div(
+                shiny::span(
                   class = "ki-kinact-label",
                   "Run",
                   shiny::div(
@@ -205,13 +205,8 @@ server <- function(
       } else {
         config_badge("err", "Not loaded")
       }
-      chk <- shiny::checkboxInput(
-        ns("use_config"),
-        "Use Config in Analysis",
-        value = active
-      )
       shiny::div(
-        class = "sidebar-config-status",
+        class = "sidebar-config-status sidebar-config-status--conversion",
         shiny::tags$p(
           class = "sidebar-config-description",
           "Maps sample files to compound metadata, concentrations, and well positions."
@@ -222,8 +217,7 @@ server <- function(
           "Experiment Configuration",
           icon = shiny::icon("upload"),
           class = "btn btn-sm btn-default"
-        ),
-        if (active) chk else shinyjs::disabled(chk)
+        )
       )
     })
 
@@ -992,9 +986,6 @@ server <- function(
         peak_tolerance = shiny::reactive(input$peak_tolerance),
         run_ki_kinact = shiny::reactive(input$run_ki_kinact),
         analysis_select = shiny::reactive(input$analysis_select),
-        use_config = shiny::reactive(
-          isTRUE(input$use_config) && !is.null(config_file())
-        ),
         open_config_clicked = shiny::reactive(input$open_config_btn)
       )
     )

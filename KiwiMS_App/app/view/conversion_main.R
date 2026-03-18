@@ -343,18 +343,6 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_
         ignoreInit = FALSE
       )
 
-    #### Sample number info ----
-    output$sample_number_info <- shiny::renderText({
-      paste(
-        ifelse(
-          !is.null(declaration_vars$result),
-          length(declaration_vars$result$deconvolution),
-          0
-        ),
-        "deconvoluted sample(s)"
-      )
-    })
-
     #### Tab info text ----
     output$declaration_info_ui <- shiny::renderUI({
       shiny::req(input$tabs %in% c("Proteins", "Compounds", "Samples"))
@@ -558,33 +546,53 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_
       }
     )
 
+    ## Config autofill button state ----
+    safe_observe(
+      observer_name = "Use Config Button State",
+      handler_fn = function() {
+        can_use <- !is.null(config_file()) &&
+          !isTRUE(declaration_vars$samples_confirmed) &&
+          !is.null(sample_table_data()) &&
+          nrow(sample_table_data()) > 0
+        if (can_use) shinyjs::enable("use_config") else shinyjs::disable("use_config")
+      }
+    )
+
     ## Config autofill ----
     safe_observe(
-      event_expr = list(
-        conversion_sidebar_vars$use_config(),
-        conversion_sidebar_vars$run_ki_kinact(),
-        input$samples_fileinput
-      ),
+      event_expr = input$use_config,
       observer_name = "Config Autofill",
       handler_fn = function() {
-        shiny::req(isTRUE(conversion_sidebar_vars$use_config()))
+        shiny::req(input$use_config > 0)
         shiny::req(!is.null(sample_table_data()))
         shiny::req(nrow(sample_table_data()) > 0)
         shiny::req(!is.null(config_file()))
 
         cfg <- config_file()
-        new_tbl <- apply_config_autofill(sample_table_data(), cfg)
+        cleared_tbl <- sample_table_data()
+        non_sample_cols <- setdiff(names(cleared_tbl), "Sample")
+        for (col in non_sample_cols) {
+          cleared_tbl[[col]] <- if (is.numeric(cleared_tbl[[col]])) NA_real_ else ""
+        }
+
+        # If config has concentration/time and columns are missing, add them before
+        # autofill so apply_config_autofill can fill the values in one pass
+        has_conc <- "Compound_Concentration" %in% names(cfg) &&
+          any(!is.na(cfg$Compound_Concentration))
+        has_time <- "Incubation_Time" %in% names(cfg) &&
+          any(!is.na(cfg$Incubation_Time))
+        if (has_conc && has_time && !all(c("Concentration", "Time") %in% names(cleared_tbl))) {
+          cleared_tbl$Concentration <- NA_real_
+          cleared_tbl$Time <- NA_real_
+        }
+
+        new_tbl <- apply_config_autofill(cleared_tbl, cfg)
 
         if (!identical(new_tbl, sample_table_data())) {
           sample_table_data(new_tbl)
           sample_table_trigger(sample_table_trigger() + 1)
         }
 
-        # Signal ki_kinact activation if config has concentration and time values
-        has_conc <- "Compound_Concentration" %in% names(cfg) &&
-          any(!is.na(cfg$Compound_Concentration))
-        has_time <- "Incubation_Time" %in% names(cfg) &&
-          any(!is.na(cfg$Incubation_Time))
         if (has_conc && has_time && !isTRUE(conversion_sidebar_vars$run_ki_kinact())) {
           trigger_ki_kinact(trigger_ki_kinact() + 1L)
         }
@@ -793,11 +801,13 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_
             Time = as.numeric(NA)
           ))
         } else if (isTRUE(conversion_sidebar_vars$run_ki_kinact())) {
-          sample_table_data(cbind(
-            sample_table_data(),
-            Concentration = as.numeric(NA),
-            Time = as.numeric(NA)
-          ))
+          if (!all(c("Concentration", "Time") %in% names(sample_table_data()))) {
+            sample_table_data(cbind(
+              sample_table_data(),
+              Concentration = as.numeric(NA),
+              Time = as.numeric(NA)
+            ))
+          }
         } else {
           sample_table_data(sample_table_data()[,
             -grep("Concentration|Time", names(sample_table_data()))
@@ -1343,6 +1353,7 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_
         result_list <- conversion_sidebar_vars$result_list()
 
         analysis_select <- conversion_sidebar_vars$analysis_select()
+        shiny::req(length(analysis_select) > 0)
 
         shiny::isolate({
           run_ki_kinact <- conversion_sidebar_vars$run_ki_kinact()
