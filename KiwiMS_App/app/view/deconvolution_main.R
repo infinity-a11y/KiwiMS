@@ -235,6 +235,11 @@ server <- function(
       shiny$actionButton(ns("deconvolute_start"), "Run Deconvolution")
     })
 
+    # Eagerly render startup outputs so they are computed in the first reactive
+    # flush and included in the same browser message as waiter_hide().
+    shiny$outputOptions(output, "deconvolution_init_ui", suspendWhenHidden = FALSE)
+    shiny$outputOptions(output, "deconvolute_start_ui", suspendWhenHidden = FALSE)
+
     ### Functions ----
     #### check_progress ----
     check_progress <- function(raw_dirs) {

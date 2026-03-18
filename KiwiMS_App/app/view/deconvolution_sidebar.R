@@ -429,6 +429,12 @@ server <- function(id, reset_button, config_file, config_filename) {
       )
     })
 
+    # Eagerly render all sidebar outputs that are visible on app launch so they
+    # are computed in the first reactive flush alongside waiter_hide().
+    shiny::outputOptions(output, "dir_check", suspendWhenHidden = FALSE)
+    shiny::outputOptions(output, "targetpath_check", suspendWhenHidden = FALSE)
+    shiny::outputOptions(output, "config_status_ui", suspendWhenHidden = FALSE)
+
     # Return paths and config state
     reactiveValues(
       dir = rootdir,

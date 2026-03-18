@@ -753,7 +753,11 @@ server <- function(id) {
       )
     })
 
-    # Hide waiter
-    waiter_hide()
+    session$onFlushed(
+      function() {
+        waiter_hide()
+      },
+      once = TRUE
+    )
   })
 }
