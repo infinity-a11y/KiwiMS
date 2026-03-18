@@ -3,7 +3,7 @@
 box::use(
   bslib[card, card_body, card_header, tooltip],
   fs[dir_ls],
-  plotly[event_data, event_register, plotlyOutput, renderPlotly],
+  plotly[event_data, event_register, plotlyOutput, plotlyProxy, plotlyProxyInvoke, renderPlotly],
   processx[process],
   shiny,
   shinyjs[delay, disable, disabled, enable, hide, show, hidden, runjs],
@@ -14,7 +14,7 @@ box::use(
     updateProgressBar
   ],
   clipr[write_clip],
-  utils[head, tail],
+  utils[capture.output, head, tail],
   waiter[useWaiter, spin_wave, waiter_show, waiter_hide, withWaiter],
 )
 
@@ -28,9 +28,8 @@ box::use(
   app / logic / helper_functions[fill_empty, get_kiwims_version],
   app / logic / logging[write_log, get_log],
   app /
-    view /
-    deconvolution_constants[
-      deconvolution_running_ui_plate,
+    logic /
+    deconvolution_ui[
       deconvolution_running_ui_noplate,
       deconvolution_init_ui
     ],
@@ -252,14 +251,13 @@ server <- function(
     #### reset_progress ----
     reset_progress <- function() {
       reactVars$is_running <- FALSE
-      reactVars$heatmap_ready <- FALSE
+      reactVars$heatmap_ready <- 0L
       reactVars$completed_files <- 0
       reactVars$sample_names <- NULL
       reactVars$wells <- NULL
       reactVars$rslt_df <- data.frame()
       reactVars$last_check <- Sys.time()
       reactVars$results_last_check <- Sys.time()
-      reactVars$heatmap_ready <- FALSE
       reactVars$deconv_report_status <- NULL
 
       decon_rep_process_data(NULL)
@@ -980,14 +978,24 @@ server <- function(
             if (
               isTRUE(deconvolution_sidebar_vars$use_config()) &&
                 length(config_file()) &&
+                "Well" %in% names(config_file()) &&
+                any(
+                  !is.na(config_file()[["Well"]]) &
+                    nzchar(trimws(as.character(config_file()[["Well"]])))
+                ) &&
                 nrow(reactVars$rslt_df) < reactVars$completed_files
             ) {
               shiny$req(reactVars$sample_names, reactVars$wells)
+
+              reactVars_sample_names <<- reactVars$sample_names
+              reactVars_wells <<- reactVars$wells
 
               results_all <- dir_ls(
                 deconvolution_sidebar_vars$targetpath(),
                 glob = "*_rawdata_unidecfiles"
               )
+
+              results_all <<- results_all
 
               results <- results_all[
                 basename(results_all) %in%
@@ -1119,18 +1127,20 @@ server <- function(
                 if (nrow(reactVars$rslt_df) > 0) {
                   enable(selector = "#app-deconvolution_main-toggle_result")
 
+                  test <<- results
+
                   # Render results picker
+                  picker_choices <- gsub("_rawdata_unidecfiles", ".raw", basename(results))
+                  if (is.null(result_files_sel()) && length(picker_choices) > 0) {
+                    result_files_sel(picker_choices[1])
+                  }
                   output$result_picker_ui <- shiny$renderUI(
                     shiny$div(
                       class = "result-picker",
                       shiny$selectInput(
                         ns("result_picker"),
                         "Select Sample",
-                        choices = gsub(
-                          "_rawdata_unidecfiles",
-                          ".raw",
-                          basename(results)
-                        ),
+                        choices = picker_choices,
                         selected = result_files_sel()
                       )
                     )
@@ -1286,7 +1296,12 @@ server <- function(
               if (
                 deconvolution_sidebar_vars$selected() == "folder" &&
                   isTRUE(deconvolution_sidebar_vars$use_config()) &&
-                  length(config_file())
+                  length(config_file()) &&
+                  "Well" %in% names(config_file()) &&
+                  any(
+                    !is.na(config_file()[["Well"]]) &
+                      nzchar(trimws(as.character(config_file()[["Well"]])))
+                  )
               ) {
                 results <- result_files[
                   basename(result_files) %in%
@@ -1361,6 +1376,27 @@ server <- function(
                   ]
 
                   reactVars$rslt_df <- rbind(reactVars$rslt_df, new_rslt_df)
+                }
+
+                # Update result picker with all completed samples
+                if (nrow(reactVars$rslt_df) > 0) {
+                  enable(selector = "#app-deconvolution_main-toggle_result")
+                  picker_choices <- gsub("_rawdata_unidecfiles", ".raw", basename(results))
+                  if (is.null(result_files_sel()) && length(picker_choices) > 0) {
+                    result_files_sel(picker_choices[1])
+                  }
+                  output$result_picker_ui <- shiny$renderUI(
+                    shiny$div(
+                      class = "result-picker",
+                      shiny$selectInput(
+                        ns("result_picker"),
+                        "Select Sample",
+                        choices = picker_choices,
+                        selected = result_files_sel()
+                      )
+                    )
+                  )
+                  session$sendCustomMessage("selectize-init", "result_picker")
                 }
 
                 # Save heatmap
@@ -1458,27 +1494,109 @@ server <- function(
       if (
         deconvolution_sidebar_vars$selected() == "folder" &&
           isTRUE(deconvolution_sidebar_vars$use_config()) &&
-          length(config_file())
+          length(config_file()) &&
+          "Well" %in% names(config_file()) &&
+          any(
+            !is.na(config_file()[["Well"]]) &
+              nzchar(trimws(as.character(config_file()[["Well"]])))
+          )
       ) {
         # Observe clicks on interactive heatmap to show spectra
         reactVars$click_observer <- shiny$observe({
-          if (isTRUE(reactVars$heatmap_ready)) {
-            click_data <- event_data("plotly_click")
+          click_data <- event_data("plotly_click")
+          if (shiny$isolate(reactVars$heatmap_ready) > 0L) {
 
+            # DEBUG — remove once click behaviour is confirmed
+            message("=== HEATMAP CLICK ===")
+            message("click_data is.null: ", is.null(click_data))
             if (!is.null(click_data)) {
-              # Get the clicked point's row and column
-              row <- LETTERS[16 - floor(click_data$y) + 1]
+              message("  curveNumber : ", click_data$curveNumber)
+              message("  x           : ", click_data$x, " (class: ", class(click_data$x), ")")
+              message("  y           : ", click_data$y, " (class: ", class(click_data$y), ")")
+              message("  pointNumber : ", click_data$pointNumber)
+              message("  full dump   : ")
+              message(paste(capture.output(print(click_data)), collapse = "\n"))
+            }
+
+            # curveNumber 0 = heatmap; 1 = selection scatter overlay (ignore)
+            if (
+              !is.null(click_data) &&
+                isTRUE(click_data$curveNumber == 0) &&
+                is.numeric(click_data$x)
+            ) {
+              y_val <- click_data$y
+              row <- if (is.character(y_val) && y_val %in% LETTERS[1:16]) {
+                y_val
+              } else if (is.numeric(y_val)) {
+                LETTERS[16 - floor(y_val) + 1]
+              } else {
+                NULL
+              }
+
+              message("  resolved row: ", if (is.null(row)) "NULL" else row)
+              message("  resolved col: ", round(click_data$x))
+
+              if (is.null(row)) return()
               col <- round(click_data$x)
               well_id <- paste0(row, col)
 
-              # Find the corresponding sample in the data
+              message("  well_id: ", well_id)
+
               shiny$isolate(
                 clicked_sample <-
                   reactVars$rslt_df$sample[reactVars$rslt_df$well_id == well_id]
               )
 
-              result_files_sel(paste0(clicked_sample, ".raw"))
+              message("  clicked_sample: ", paste(clicked_sample, collapse = ", "))
+
+              if (length(clicked_sample) > 0 && nzchar(clicked_sample[1])) {
+                runjs(paste0(
+                  'document.getElementById("blocking-overlay").styl',
+                  'e.display = "block";'
+                ))
+                result_files_sel(paste0(clicked_sample[1], ".raw"))
+                # Unblock after renders complete (delay covers spectrum + table)
+                delay(2000, runjs(paste0(
+                  'document.getElementById("blocking-overlay").styl',
+                  'e.display = "none";'
+                )))
+              }
             }
+          }
+        })
+
+        #### Heatmap selection highlight observer ----
+        # Draws a green shape rectangle (data coords) around the selected well
+        shiny$observe({
+          shiny$req(result_files_sel(), reactVars$heatmap_ready > 0L)
+
+          sample_name <- gsub("\\.raw$", "", result_files_sel())
+          well_id <- shiny$isolate(
+            reactVars$rslt_df$well_id[reactVars$rslt_df$sample == sample_name]
+          )
+
+          if (length(well_id) > 0 && nzchar(well_id[1])) {
+            row_letter <- substring(well_id[1], 1, 1)
+            col_num <- as.numeric(substring(well_id[1], 2))
+            # y-axis is categorical: A=index 0, B=1, ... P=15
+            row_idx <- match(row_letter, LETTERS[1:16]) - 1
+
+            delay(400, {
+              plotlyProxy("heatmap", session) |>
+                plotlyProxyInvoke("relayout", list(
+                  shapes = list(list(
+                    type = "rect",
+                    xref = "x",
+                    yref = "y",
+                    x0 = col_num - 0.5,
+                    x1 = col_num + 0.5,
+                    y0 = row_idx - 0.5,
+                    y1 = row_idx + 0.5,
+                    line = list(color = "rgba(80,200,100,0.95)", width = 3),
+                    fillcolor = "rgba(0,0,0,0)"
+                  ))
+                ))
+            })
           }
         })
       }
@@ -1488,17 +1606,18 @@ server <- function(
       runjs("document.querySelector('button.collapse-toggle').click();")
       output$deconvolution_init_ui <- NULL
 
-      # Conditional rendering of running deconvolution UI
       output$deconvolution_running_ui <- shiny$renderUI({
-        if (
-          deconvolution_sidebar_vars$selected() == "folder" &&
-            isTRUE(deconvolution_sidebar_vars$use_config()) &&
-            length(config_file())
-        ) {
-          deconvolution_running_ui_plate(ns)
-        } else {
-          deconvolution_running_ui_noplate(ns)
-        }
+        has_wells <- "Well" %in%
+          names(config_file()) &&
+          any(
+            !is.na(config_file()[["Well"]]) &
+              nzchar(trimws(as.character(config_file()[["Well"]])))
+          )
+        show_heatmap <- deconvolution_sidebar_vars$selected() == "folder" &&
+          isTRUE(deconvolution_sidebar_vars$use_config()) &&
+          !is.null(config_file()) &&
+          has_wells
+        deconvolution_running_ui_noplate(ns, show_heatmap)
       })
 
       # Render status spinner icon
@@ -1555,7 +1674,7 @@ server <- function(
         }
       })
 
-      output$deconvolution_data <- DT::renderDataTable({
+      output$deconvolution_data <- DT::renderDataTable(server = FALSE, {
         shiny$req(result_files_sel())
 
         waiter_show(id = ns("deconvolution_data"), html = spin_wave())
@@ -1602,7 +1721,7 @@ server <- function(
             Value = paste(values, units, sep = " ")
           )
 
-          waiter_hide(id = ns("spectrum"))
+          waiter_hide(id = ns("deconvolution_data"))
 
           DT::datatable(
             data = tbl,
@@ -1630,7 +1749,12 @@ server <- function(
       if (
         deconvolution_sidebar_vars$selected() == "folder" &&
           isTRUE(deconvolution_sidebar_vars$use_config()) &&
-          length(config_file())
+          length(config_file()) &&
+          "Well" %in% names(config_file()) &&
+          any(
+            !is.na(config_file()[["Well"]]) &
+              nzchar(trimws(as.character(config_file()[["Well"]])))
+          )
       ) {
         # Define reactive helper variable to control spinner display
         allow_spinner_heatmap <- shiny$reactiveVal(TRUE)
@@ -1656,8 +1780,8 @@ server <- function(
             # Activate spinner reactivation
             allow_spinner_heatmap(TRUE)
 
-            # Activate click observer
-            reactVars$heatmap_ready <- TRUE
+            # Activate click observer / signal highlight observer to re-apply shape
+            reactVars$heatmap_ready <- shiny$isolate(reactVars$heatmap_ready) + 1L
 
             return(heatmap)
           }
@@ -1756,6 +1880,14 @@ server <- function(
           "apsed>.collapse-toggle').style.display = 'block';"
         ))
         runjs("document.querySelector('button.collapse-toggle').click();")
+
+        # bslib sets .transitioning during the toggle animation which hides
+        # sidebar content. Force-remove it after the animation completes so
+        # the sidebar content becomes visible again.
+        delay(400, runjs(paste0(
+          "document.querySelectorAll('.bslib-sidebar-layout')",
+          ".forEach(function(el){el.classList.remove('transitioning');});"
+        )))
 
         # Signal sidebar module to reevaluate
         reset_button(reset_button() + 1)

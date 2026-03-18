@@ -389,8 +389,8 @@ button .sF-modal {
 
 /* No height constraint inside shinyFiles modals */
 .sF-modal .modal-body {
-  max-height: none;
-  overflow-y: visible;
+  max-height: none !important;
+  overflow-y: visible !important;
 }
 
 #app-config_modal_body .load-container {
@@ -1083,7 +1083,8 @@ td.listbox.htDimmed.current.highlight {
   margin-bottom: 0;
 }
 
-.spectrum-plot-noplate {
+.spectrum-plot-noplate,
+.heatmap-plot {
   height: 100%;
 }
 
@@ -1095,18 +1096,9 @@ td.listbox.htDimmed.current.highlight {
   width: 100%;
 }
 
-.deconvolution-result-content-plate {
-  flex-grow: 1;
-  align-content: center;
+.deconvolution-result-content-noplate.with-heatmap {
+  grid-template-columns: 1fr 1.5fr 1.5fr;
 }
-
-// .deconvolution-result-content-noplate > div,
-// .deconvolution-result-content-plate > div,
-// .deconvolution-result-content-plate > div > div,
-// .deconvolution-result-content-noplate > div > div {
-//   height: 100%;
-//   align-content: center;
-// }
 
 /* Controls & Inputs */
 .deconv-param-input .shiny-input-container .control-label,
@@ -1163,9 +1155,12 @@ td.listbox.htDimmed.current.highlight {
   color: white !important;
 }
 
-.deconvolution-spectrum-card .card-custom,
+.deconvolution-spectrum-card,
 .deconvolution-spectrum-card .card,
-.deconvolution-spectrum-card .card-body {
+.deconvolution-spectrum-card .card-body,
+.deconvolution-heatmap-card,
+.deconvolution-heatmap-card .card,
+.deconvolution-heatmap-card .card-body {
   height: 100%;
 }
 
@@ -2021,6 +2016,9 @@ div[data-value="Protein Conversion"] .tab-pane {
 .deconvolution-spectrum-card .plotly #scene,
 .deconvolution-spectrum-card .plot-container .plotly,
 .deconvolution-spectrum-card .plotly .gl-container,
+.deconvolution-heatmap-card .plotly #scene,
+.deconvolution-heatmap-card .plot-container .plotly,
+.deconvolution-heatmap-card .plotly .gl-container,
 .result-conc-tab .plotly #scene,
 .result-conc-tab .plot-container .plotly,
 .result-conc-tab .plotly .gl-container,
@@ -2087,6 +2085,9 @@ div[data-value="Protein Conversion"] .tab-pane {
 .deconvolution-spectrum-card .plotly,
 .deconvolution-spectrum-card .js-plotly-plot .plotly,
 .deconvolution-spectrum-card .js-plotly-plot .plotly .user-select-none,
+.deconvolution-heatmap-card .plotly,
+.deconvolution-heatmap-card .js-plotly-plot .plotly,
+.deconvolution-heatmap-card .js-plotly-plot .plotly .user-select-none,
 .result-conc-tab .plotly,
 .result-conc-tab .js-plotly-plot .plotly,
 .result-conc-tab .js-plotly-plot .plotly .user-select-none,

@@ -110,14 +110,14 @@ ui <- function(id) {
       ),
       bslib$nav_spacer(),
       bslib$nav_item(shiny::uiOutput(ns("config_nav_btn"))),
-      bslib$nav_item(
-        shiny::actionButton(
-          ns("settings"),
-          "Settings",
-          icon = shiny::icon("gear"),
-          class = "nav-link"
-        )
-      ),
+      # bslib$nav_item(
+      #   shiny::actionButton(
+      #     ns("settings"),
+      #     "Settings",
+      #     icon = shiny::icon("gear"),
+      #     class = "nav-link"
+      #   )
+      # ),
       bslib$nav_item(
         shiny::actionButton(
           ns("licence"),
@@ -146,48 +146,48 @@ ui <- function(id) {
           ),
           "UniDec"
         )
-      ),
-      bslib$nav_menu(
-        title = "Links",
-        align = "right",
-        icon = shiny$icon("link"),
-        bslib$nav_item(
-          shiny$tags$a(
-            shiny$tags$span(
-              shiny$tags$i(class = "fa-brands fa-github me-1"),
-              "KiwiMS GitHub"
-            ),
-            href = "https://github.com/infinity-a11y/MSFlow",
-            target = "_blank",
-            class = "nav-link"
-          )
-        ),
-        bslib$nav_item(
-          shiny$tags$a(
-            shiny$tags$span(
-              shiny$tags$i(class = "fa-brands fa-github me-1"),
-              "UniDec GitHub"
-            ),
-            href = "https://github.com/michaelmarty/UniDec",
-            target = "_blank",
-            class = "nav-link"
-          )
-        ),
-        bslib$nav_item(
-          shiny$tags$a(
-            shiny$tags$span(
-              shiny$tags$img(
-                src = "static/liora_logo.png",
-                style = "height: 1em; margin-right: 5px;"
-              ),
-              "Liora Bioinformatics"
-            ),
-            href = "https://www.liora-bioinformatics.com",
-            target = "_blank",
-            class = "nav-link"
-          )
-        )
       )
+      # bslib$nav_menu(
+      #   title = "Links",
+      #   align = "right",
+      #   icon = shiny$icon("link"),
+      #   bslib$nav_item(
+      #     shiny$tags$a(
+      #       shiny$tags$span(
+      #         shiny$tags$i(class = "fa-brands fa-github me-1"),
+      #         "KiwiMS GitHub"
+      #       ),
+      #       href = "https://github.com/infinity-a11y/MSFlow",
+      #       target = "_blank",
+      #       class = "nav-link"
+      #     )
+      #   ),
+      #   bslib$nav_item(
+      #     shiny$tags$a(
+      #       shiny$tags$span(
+      #         shiny$tags$i(class = "fa-brands fa-github me-1"),
+      #         "UniDec GitHub"
+      #       ),
+      #       href = "https://github.com/michaelmarty/UniDec",
+      #       target = "_blank",
+      #       class = "nav-link"
+      #     )
+      #   ),
+      #   bslib$nav_item(
+      #     shiny$tags$a(
+      #       shiny$tags$span(
+      #         shiny$tags$img(
+      #           src = "static/liora_logo.png",
+      #           style = "height: 1em; margin-right: 5px;"
+      #         ),
+      #         "Liora Bioinformatics"
+      #       ),
+      #       href = "https://www.liora-bioinformatics.com",
+      #       target = "_blank",
+      #       class = "nav-link"
+      #     )
+      #   )
+      # )
     )
   )
 }
