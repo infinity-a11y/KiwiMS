@@ -1632,7 +1632,8 @@ conversion_declaration_ui <- function(
             shiny::uiOutput(ns("proteins_table_hint"))
           ),
           rhandsontable::rHandsontableOutput(
-            ns("proteins_table")
+            ns("proteins_table"),
+            width = "99%"
           ),
           table_legend
         )
@@ -1687,7 +1688,10 @@ conversion_declaration_ui <- function(
             class = "table-hint-anchor",
             shiny::uiOutput(ns("compounds_table_hint"))
           ),
-          rhandsontable::rHandsontableOutput(ns("compounds_table")),
+          rhandsontable::rHandsontableOutput(
+            ns("compounds_table"),
+            width = "99%"
+          ),
           table_legend
         )
       ),
@@ -1819,7 +1823,7 @@ conversion_declaration_ui <- function(
             class = "table-hint-anchor",
             shiny::uiOutput(ns("samples_table_hint"))
           ),
-          rhandsontable::rHandsontableOutput(ns("samples_table"))
+          rhandsontable::rHandsontableOutput(ns("samples_table"), width = "99%")
         )
       ),
       sample_table_legend,

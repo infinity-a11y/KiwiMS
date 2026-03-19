@@ -146,7 +146,9 @@ prot_comp_handsontable <- function(
   proteins = NULL,
   compounds = NULL
 ) {
-  if (is.null(tab) || nrow(tab) == 0) return(NULL)
+  if (is.null(tab) || nrow(tab) == 0) {
+    return(NULL)
+  }
   js_tolerance_value <- if (is.null(tolerance) || is.na(tolerance)) {
     "null"
   } else {
@@ -234,7 +236,7 @@ prot_comp_handsontable <- function(
   table <- rhandsontable::rhandsontable(
     tab,
     rowHeaders = NULL,
-    height = 28 + 23 * ifelse(nrow(tab > 16), 16, nrow(tab)),
+    height = 28 + 23 * ifelse(nrow(tab > 14), 14, nrow(tab)),
     stretchH = ifelse(disabled, "none", "all")
   ) |>
     rhandsontable::hot_cols(fixedColumnsLeft = 1, renderer = renderer_js) |>
@@ -362,7 +364,7 @@ sample_handsontable <- function(
     tab,
     rowHeaders = NULL,
     allowed_per_col = allowed_per_col,
-    height = 28 + 23 * ifelse(nrow(tab > 16), 16, nrow(tab)),
+    height = 28 + 23 * ifelse(nrow(tab > 15), 15, nrow(tab)),
     stretchH = "all"
   ) |>
     rhandsontable::hot_cols(
@@ -517,7 +519,10 @@ clean_sample_table <- function(sample_table, units = NULL) {
     paste("Compound", 1:(ncol(df) - ifelse(has_conc_time, 4, 2))),
     if (has_conc_time) {
       c(
-        paste0("Concentration", if (!is.null(units)) paste0(" [", units$conc, "]")),
+        paste0(
+          "Concentration",
+          if (!is.null(units)) paste0(" [", units$conc, "]")
+        ),
         paste0("Time", if (!is.null(units)) paste0(" [", units$time, "]"))
       )
     }
@@ -726,7 +731,8 @@ check_sample_table <- function(sample_table, proteins, compounds) {
     if (n_conc < 3) {
       return(paste0(
         "At least 3 different non-zero concentrations required (",
-        n_conc, " present)"
+        n_conc,
+        " present)"
       ))
     }
 
@@ -734,11 +740,16 @@ check_sample_table <- function(sample_table, proteins, compounds) {
     unique_concs <- unique(conc_vals[!is.na(conc_vals)])
     for (uc in unique_concs) {
       times_for_conc <- time_vals[!is.na(conc_vals) & conc_vals == uc]
-      n_time <- length(unique(times_for_conc[!is.na(times_for_conc) & times_for_conc != 0]))
+      n_time <- length(unique(times_for_conc[
+        !is.na(times_for_conc) & times_for_conc != 0
+      ]))
       if (n_time < 3) {
         return(paste0(
           "At least 3 different non-zero time points required per concentration (concentration ",
-          uc, " has only ", n_time, ")"
+          uc,
+          " has only ",
+          n_time,
+          ")"
         ))
       }
     }
@@ -4109,40 +4120,43 @@ handle_file_upload <- function(
   output,
   declaration_vars
 ) {
-  tryCatch({
-    # Read in file
-    table_upload <- read_uploaded_file(
-      file_input$datapath,
-      tolower(tools::file_ext(file_input$name))
-    )
-
-    # Process table and check for errors
-    table_upload_processed <- process_uploaded_table(table_upload, type)
-
-    # Update UI and status variable based on processing result
-    if (is.data.frame(table_upload_processed)) {
-      shinyWidgets::show_toast(
-        paste0(tools::toTitleCase(type), " table loaded!"),
-        type = "success",
-        timer = 3000
+  tryCatch(
+    {
+      # Read in file
+      table_upload <- read_uploaded_file(
+        file_input$datapath,
+        tolower(tools::file_ext(file_input$name))
       )
-      return(table_upload_processed)
-    } else {
+
+      # Process table and check for errors
+      table_upload_processed <- process_uploaded_table(table_upload, type)
+
+      # Update UI and status variable based on processing result
+      if (is.data.frame(table_upload_processed)) {
+        shinyWidgets::show_toast(
+          paste0(tools::toTitleCase(type), " table loaded!"),
+          type = "success",
+          timer = 3000
+        )
+        return(table_upload_processed)
+      } else {
+        shinyWidgets::show_toast(
+          table_upload_processed,
+          type = "error",
+          timer = 3000
+        )
+        return(NULL)
+      }
+    },
+    error = function(e) {
       shinyWidgets::show_toast(
-        table_upload_processed,
+        paste0("Failed to load ", type, " file. Please check the file format."),
         type = "error",
-        timer = 3000
+        timer = 4000
       )
       return(NULL)
     }
-  }, error = function(e) {
-    shinyWidgets::show_toast(
-      paste0("Failed to load ", type, " file. Please check the file format."),
-      type = "error",
-      timer = 4000
-    )
-    return(NULL)
-  })
+  )
 }
 
 # Transform summarized hits into readable table
