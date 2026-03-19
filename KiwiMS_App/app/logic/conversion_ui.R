@@ -1627,6 +1627,10 @@ conversion_declaration_ui <- function(
       shiny::fluidRow(
         shiny::column(
           width = 12,
+          shiny::div(
+            class = "table-hint-anchor",
+            shiny::uiOutput(ns("proteins_table_hint"))
+          ),
           rhandsontable::rHandsontableOutput(
             ns("proteins_table")
           ),
@@ -1679,6 +1683,10 @@ conversion_declaration_ui <- function(
       shiny::fluidRow(
         shiny::column(
           width = 12,
+          shiny::div(
+            class = "table-hint-anchor",
+            shiny::uiOutput(ns("compounds_table_hint"))
+          ),
           rhandsontable::rHandsontableOutput(ns("compounds_table")),
           table_legend
         )
@@ -1727,7 +1735,7 @@ conversion_declaration_ui <- function(
           shiny::column(
             width = 4,
             shiny::div(
-              class = "table-control-buttons",
+              class = "table-control-buttons sampletable-control-buttons",
               bslib::tooltip(
                 shiny::div(
                   style = "width: 100%;",
@@ -1807,6 +1815,10 @@ conversion_declaration_ui <- function(
       shiny::fluidRow(
         shiny::column(
           width = 12,
+          shiny::div(
+            class = "table-hint-anchor",
+            shiny::uiOutput(ns("samples_table_hint"))
+          ),
           rhandsontable::rHandsontableOutput(ns("samples_table"))
         )
       ),
