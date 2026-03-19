@@ -768,6 +768,9 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_
           sample_table_data()
         )
 
+        has_conc_time <- any(grepl("^Concentration", names(sample_table_data()))) &&
+          any(grepl("^Time", names(sample_table_data())))
+
         if (
           isTRUE(declaration_vars$samples_confirmed) &&
             isTRUE(conversion_sidebar_vars$run_ki_kinact())
@@ -785,23 +788,26 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_
           # Activate table observer
           declaration_vars$sample_table_active <- TRUE
 
-          # Fill sample table
+          # Fill sample table — use grepl-based detection so unit-suffixed
+          # names like "Concentration [M]" / "Time [s]" are handled correctly
           sample_table <- fill_sample_table(
             sample_table_data(),
-            ki_kinact = ifelse(
-              all(c("Concentration", "Time") %in% names(sample_table_data())),
-              TRUE,
-              FALSE
-            )
+            ki_kinact = has_conc_time
           )
 
-          sample_table_data(cbind(
-            sample_table,
-            Concentration = as.numeric(NA),
-            Time = as.numeric(NA)
-          ))
+          # Only append empty Conc/Time when they were absent before;
+          # fill_sample_table already restores them when ki_kinact = TRUE
+          if (!has_conc_time) {
+            sample_table_data(cbind(
+              sample_table,
+              Concentration = as.numeric(NA),
+              Time = as.numeric(NA)
+            ))
+          } else {
+            sample_table_data(sample_table)
+          }
         } else if (isTRUE(conversion_sidebar_vars$run_ki_kinact())) {
-          if (!all(c("Concentration", "Time") %in% names(sample_table_data()))) {
+          if (!has_conc_time) {
             sample_table_data(cbind(
               sample_table_data(),
               Concentration = as.numeric(NA),
