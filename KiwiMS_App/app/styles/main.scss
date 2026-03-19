@@ -890,7 +890,8 @@ table.dataTable > tbody > tr.selected > * {
 }
 
 .rhandsontable > .handsontable > .wtHolder {
-  overflow-x: hidden;
+  // overflow-x: hidden;
+  width: 100% !important;
 }
 
 .handsontable td {

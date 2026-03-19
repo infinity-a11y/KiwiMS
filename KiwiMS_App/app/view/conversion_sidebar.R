@@ -209,7 +209,7 @@ server <- function(
         class = "sidebar-config-status sidebar-config-status--conversion",
         shiny::tags$p(
           class = "sidebar-config-description",
-          "Maps sample files to compound metadata, concentrations, and well positions."
+          "Maps samples to experimental metadata to auto-fill the samples table."
         ),
         badge,
         shiny::actionButton(

@@ -416,7 +416,7 @@ server <- function(id, reset_button, config_file, config_filename) {
         class = "sidebar-config-status",
         shiny::tags$p(
           class = "sidebar-config-description",
-          "Maps sample files to compound metadata, concentrations, and well positions."
+          "Maps samples to experimental metadata e.g. plate well positions."
         ),
         badge,
         actionButton(
