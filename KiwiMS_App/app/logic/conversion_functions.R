@@ -445,16 +445,14 @@ fill_sample_table <- function(sample_table, ki_kinact) {
 # Construct cleaned-up sample table with only consecutive non-NA entries
 #' @export
 clean_sample_table <- function(sample_table, units = NULL) {
-  has_conc_time <- all(c("Concentration", "Time") %in% names(sample_table))
+  # Use grepl so unit-suffixed names like "Concentration [M]" / "Time [s]"
+  # are detected correctly alongside plain "Concentration" / "Time"
+  conc_col <- grep("^Concentration", names(sample_table), value = TRUE)
+  time_col <- grep("^Time", names(sample_table), value = TRUE)
+  has_conc_time <- length(conc_col) == 1 && length(time_col) == 1
 
-  no_cmp_cols <- names(sample_table) %in%
-    c(
-      "Sample",
-      "Protein",
-      if (has_conc_time) {
-        c("Concentration", "Time")
-      }
-    )
+  no_cmp_cols <- grepl("^Sample$|^Protein$", names(sample_table)) |
+    (has_conc_time & names(sample_table) %in% c(conc_col, time_col))
 
   extra_cmp_section <- sample_table[,
     which(!no_cmp_cols),
@@ -501,23 +499,17 @@ clean_sample_table <- function(sample_table, units = NULL) {
   # Reattach sample, protein, compound columns
   df <- cbind(sample_table[, 1:2, drop = FALSE], df)
   if (has_conc_time) {
-    df <- cbind(
-      df,
-      sample_table[, names(sample_table) %in% c("Concentration", "Time")]
-    )
+    df <- cbind(df, sample_table[, c(conc_col, time_col), drop = FALSE])
   }
 
-  # Rename columns
+  # Rename columns — preserve or apply units to Conc/Time names
   names(df) <- c(
     "Sample",
     "Protein",
     paste("Compound", 1:(ncol(df) - ifelse(has_conc_time, 4, 2))),
     if (has_conc_time) {
       c(
-        paste0(
-          "Concentration",
-          if (!is.null(units)) paste0(" [", units$conc, "]")
-        ),
+        paste0("Concentration", if (!is.null(units)) paste0(" [", units$conc, "]")),
         paste0("Time", if (!is.null(units)) paste0(" [", units$time, "]"))
       )
     }
