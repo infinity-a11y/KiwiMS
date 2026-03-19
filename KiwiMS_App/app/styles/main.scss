@@ -1653,7 +1653,7 @@ div[data-value="Protein Conversion"] .tab-pane {
   gap: 4%;
 }
 
-.table-control-buttons .action-button .action-icon + .action-label {
+.sampletable-control-buttons .action-button .action-icon + .action-label {
   display: none;
 }
 
@@ -2242,6 +2242,42 @@ th.sorting {
 .table-info-green {
   border: 1px solid rgb(139, 195, 74);
   font-family: monospace;
+}
+
+.table-hint-anchor {
+  position: relative;
+  height: 0;
+  overflow: visible;
+  margin-top: 2rem;
+}
+
+.table-hint {
+  position: absolute;
+  bottom: 5px;
+  left: 0;
+  font-style: italic;
+  font-family: monospace;
+  font-size: 0.85rem;
+  padding: 0.4em 1em;
+  border-radius: var(--bs-border-radius);
+  background: rgba(223, 223, 223, 0.26);
+  display: inline-block;
+  line-height: normal;
+  width: fit-content;
+  white-space: nowrap;
+  color: white;
+
+  svg {
+    margin-right: 0.4em;
+  }
+}
+
+.table-hint-red i {
+  color: #ff5a23;
+}
+
+.table-hint-orange i {
+  color: orange;
 }
 
 .custom-disable {
