@@ -22,6 +22,7 @@ box::use(
   app /
     logic /
     helper_functions[
+      config_badge,
       safe_observe,
     ],
   app /
@@ -38,14 +39,20 @@ ui <- function(id) {
 
   bslib::sidebar(
     class = "conversion-sidebar",
-    width = "15%",
+    width = "17%",
     shinyjs::useShinyjs(),
     shiny::uiOutput(ns("conversion_sidebar_ui"))
   )
 }
 
 #' @export
-server <- function(id, conversion_main_vars, deconvolution_main_vars) {
+server <- function(
+  id,
+  conversion_main_vars,
+  deconvolution_main_vars,
+  config_file,
+  config_filename = shiny::reactive(NULL)
+) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -71,7 +78,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
           shiny::column(
             width = 12,
             shiny::div(
-              class = "sidebar-title conversion-title",
+              class = "sidebar-title custom-sidebar-title",
               "Binding Analysis"
             ),
             shiny::numericInput(
@@ -116,7 +123,7 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
               class = "ki-kinact-checkbox",
               shiny::checkboxInput(
                 ns("run_ki_kinact"),
-                shiny::div(
+                shiny::span(
                   class = "ki-kinact-label",
                   "Run",
                   shiny::div(
@@ -138,44 +145,91 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
     )
 
     ## Result controls UI ----
+    # Switches between Experiment Configuration (analysis pending) and
+    # Results Menu (analysis done) based on analysis_status().
     output$conversion_result_controls_ui <- shiny::renderUI({
-      shiny::div(
-        class = "interaction-analysis-flex",
-        shiny::fluidRow(
-          shiny::column(
-            width = 12,
-            shiny::div(
-              class = "sidebar-title conversion-title",
-              "Results Menu"
-            ),
-            shiny::div(
-              class = "result-interface-selector-ui",
-              shiny::uiOutput(ns("analysis_select_ui")),
+      if (analysis_status() == "pending") {
+        shiny::div(
+          class = "deconvolution-section",
+          shiny::div(
+            class = "sidebar-title custom-sidebar-title",
+            "Experiment Configuration"
+          ),
+          shiny::uiOutput(ns("conversion_config_status_ui"))
+        )
+      } else {
+        shiny::div(
+          class = "interaction-analysis-flex",
+          shiny::fluidRow(
+            shiny::column(
+              width = 12,
               shiny::div(
-                class = "complex-picker-ui",
-                shiny::div(id = "complex-picker-connector"),
+                class = "sidebar-title custom-sidebar-title",
+                "Results Menu"
+              ),
+              shiny::div(
+                class = "result-interface-selector-ui",
+                shiny::uiOutput(ns("analysis_select_ui")),
                 shiny::div(
-                  class = "complex-picker custom-disable",
-                  shinyWidgets::pickerInput(
-                    ns("complex"),
-                    NULL,
-                    choices = complexes()
+                  class = "complex-picker-ui",
+                  shiny::div(id = "complex-picker-connector"),
+                  shiny::div(
+                    class = "complex-picker custom-disable",
+                    shinyWidgets::pickerInput(
+                      ns("complex"),
+                      NULL,
+                      choices = complexes()
+                    )
                   )
                 )
-              )
-            ),
-            shinyjs::disabled(
-              shiny::actionButton(
-                ns("report_conversion_results"),
-                "Report",
-                icon = shiny::icon("square-poll-vertical"),
-                width = "100%"
+              ),
+              shinyjs::disabled(
+                shiny::actionButton(
+                  ns("report_conversion_results"),
+                  "Report",
+                  icon = shiny::icon("square-poll-vertical"),
+                  width = "100%"
+                )
               )
             )
           )
         )
+      }
+    })
+
+    ## Experiment Configuration status panel ----
+    output$conversion_config_status_ui <- shiny::renderUI({
+      active <- !is.null(config_file())
+      badge <- if (active) {
+        config_badge("ok", "Active", config_filename())
+      } else {
+        config_badge("err", "Not loaded")
+      }
+      shiny::div(
+        class = "sidebar-config-status sidebar-config-status--conversion",
+        shiny::tags$p(
+          class = "sidebar-config-description",
+          "Maps samples to experimental metadata to auto-fill the samples table."
+        ),
+        badge,
+        shiny::actionButton(
+          ns("open_config_btn"),
+          "Experiment Configuration",
+          icon = shiny::icon("upload"),
+          class = "btn btn-sm btn-default"
+        )
       )
     })
+
+    # Activate ki_kinact from config autofill signal ----
+    safe_observe(
+      event_expr = conversion_main_vars$activate_ki_kinact(),
+      observer_name = "Activate Ki/kinact from Config",
+      handler_fn = function() {
+        shiny::req(conversion_main_vars$activate_ki_kinact() > 0)
+        shiny::updateCheckboxInput(session, "run_ki_kinact", value = TRUE)
+      }
+    )
 
     # Analysis launch UI ----
     ## Idle checkbox ----
@@ -890,6 +944,39 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
       )
     })
 
+    # Eagerly render all sidebar outputs that are visible on first tab visit so
+    # they are computed in the first reactive flush alongside waiter_hide().
+    shiny::outputOptions(
+      output,
+      "conversion_sidebar_ui",
+      suspendWhenHidden = FALSE
+    )
+    shiny::outputOptions(
+      output,
+      "conversion_analysis_controls_ui",
+      suspendWhenHidden = FALSE
+    )
+    shiny::outputOptions(
+      output,
+      "conversion_result_controls_ui",
+      suspendWhenHidden = FALSE
+    )
+    shiny::outputOptions(
+      output,
+      "conversion_config_status_ui",
+      suspendWhenHidden = FALSE
+    )
+    shiny::outputOptions(
+      output,
+      "run_button_wrapper",
+      suspendWhenHidden = FALSE
+    )
+    shiny::outputOptions(
+      output,
+      "analysis_select_ui",
+      suspendWhenHidden = FALSE
+    )
+
     # Server return values ----
     return(
       shiny::reactiveValues(
@@ -898,7 +985,8 @@ server <- function(id, conversion_main_vars, deconvolution_main_vars) {
         run_analysis = shiny::reactive(input$run_binding_analysis),
         peak_tolerance = shiny::reactive(input$peak_tolerance),
         run_ki_kinact = shiny::reactive(input$run_ki_kinact),
-        analysis_select = shiny::reactive(input$analysis_select)
+        analysis_select = shiny::reactive(input$analysis_select),
+        open_config_clicked = shiny::reactive(input$open_config_btn)
       )
     )
   })
