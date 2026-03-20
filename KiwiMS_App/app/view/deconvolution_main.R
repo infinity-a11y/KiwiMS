@@ -3,7 +3,14 @@
 box::use(
   bslib[card, card_body, card_header, tooltip],
   fs[dir_ls],
-  plotly[event_data, event_register, plotlyOutput, renderPlotly],
+  plotly[
+    event_data,
+    event_register,
+    plotlyOutput,
+    plotlyProxy,
+    plotlyProxyInvoke,
+    renderPlotly
+  ],
   processx[process],
   shiny,
   shinyjs[delay, disable, disabled, enable, hide, show, hidden, runjs],
@@ -14,7 +21,7 @@ box::use(
     updateProgressBar
   ],
   clipr[write_clip],
-  utils[head, tail],
+  utils[capture.output, head, tail],
   waiter[useWaiter, spin_wave, waiter_show, waiter_hide, withWaiter],
 )
 
@@ -28,10 +35,9 @@ box::use(
   app / logic / helper_functions[fill_empty, get_kiwims_version],
   app / logic / logging[write_log, get_log],
   app /
-    view /
-    deconvolution_constants[
-      deconvolution_running_ui_plate,
-      deconvolution_running_ui_noplate,
+    logic /
+    deconvolution_ui[
+      deconvolution_results_ui,
       deconvolution_init_ui
     ],
   app /
@@ -58,7 +64,8 @@ server <- function(
   id,
   deconvolution_sidebar_vars,
   conversion_main_vars,
-  reset_button
+  reset_button,
+  config_file
 ) {
   shiny$moduleServer(id, function(input, output, session) {
     Sys.setenv(CONDA_DLL_SEARCH_MODIFICATION_ENABLE = "1")
@@ -228,6 +235,11 @@ server <- function(
       shiny$actionButton(ns("deconvolute_start"), "Run Deconvolution")
     })
 
+    # Eagerly render startup outputs so they are computed in the first reactive
+    # flush and included in the same browser message as waiter_hide().
+    shiny$outputOptions(output, "deconvolution_init_ui", suspendWhenHidden = FALSE)
+    shiny$outputOptions(output, "deconvolute_start_ui", suspendWhenHidden = FALSE)
+
     ### Functions ----
     #### check_progress ----
     check_progress <- function(raw_dirs) {
@@ -251,14 +263,13 @@ server <- function(
     #### reset_progress ----
     reset_progress <- function() {
       reactVars$is_running <- FALSE
-      reactVars$heatmap_ready <- FALSE
+      reactVars$heatmap_ready <- 0L
       reactVars$completed_files <- 0
       reactVars$sample_names <- NULL
       reactVars$wells <- NULL
       reactVars$rslt_df <- data.frame()
       reactVars$last_check <- Sys.time()
       reactVars$results_last_check <- Sys.time()
-      reactVars$heatmap_ready <- FALSE
       reactVars$deconv_report_status <- NULL
 
       decon_rep_process_data(NULL)
@@ -274,7 +285,7 @@ server <- function(
     shiny$observeEvent(input$deconvolute_start, {
       shiny$showModal(
         shiny$div(
-          class = "start-modal",
+          class = "start-modal deconvolute-modal",
           shiny$modalDialog(
             shiny$fluidRow(
               shiny$br(),
@@ -306,7 +317,6 @@ server <- function(
     # Dynamic rendering of skip/overwrite selection button
     output$selector_ui <- shiny$renderUI({
       input$deconvolute_start
-
       select <- NULL
 
       if (deconvolution_sidebar_vars$selected() == "folder") {
@@ -316,16 +326,19 @@ server <- function(
         )
 
         if (
-          isTRUE(deconvolution_sidebar_vars$batch_mode()) &&
-            length(deconvolution_sidebar_vars$batch_file())
+          isTRUE(deconvolution_sidebar_vars$use_config()) &&
+            length(config_file())
         ) {
-          batch_sel <- gsub(
-            ".raw",
-            "_rawdata_unidecfiles",
-            deconvolution_sidebar_vars$batch_file()[[deconvolution_sidebar_vars$id_column()]]
+          config_sel <- paste0(
+            gsub(
+              ".raw",
+              "",
+              config_file()[["Sample"]]
+            ),
+            "_rawdata_unidecfiles"
           )
 
-          intersect <- batch_sel %in% basename(finished_files)
+          intersect <- config_sel %in% basename(finished_files)
 
           if (any(intersect)) {
             select <- shiny$radioButtons(
@@ -361,7 +374,6 @@ server <- function(
       enable(
         selector = "#app-deconvolution_main-deconvolute_start_conf"
       )
-      # shinyjs::addClass("deconvolute_start_conf", "btn-highlight")
 
       message <- NULL
 
@@ -372,10 +384,10 @@ server <- function(
         )
 
         if (
-          isTRUE(deconvolution_sidebar_vars$batch_mode()) &
-            length(deconvolution_sidebar_vars$batch_file())
+          isTRUE(deconvolution_sidebar_vars$use_config()) &
+            length(config_file())
         ) {
-          presence <- deconvolution_sidebar_vars$batch_file()[[deconvolution_sidebar_vars$id_column()]] %in%
+          presence <- config_file()[["Sample"]] %in%
             basename(raw_dirs)
 
           if (all(presence)) {
@@ -383,9 +395,9 @@ server <- function(
               shiny$HTML(
                 paste0(
                   "<b>Multiple target file(s) selected</b><br><br><b>",
-                  nrow(deconvolution_sidebar_vars$batch_file()),
-                  "</b> raw file(s) present in ",
-                  "the batch file are queried for deconvolution."
+                  nrow(config_file()),
+                  "</b> sample(s) present in ",
+                  "the config file are queried for deconvolution."
                 )
               )
             )
@@ -400,8 +412,8 @@ server <- function(
                   "<b>Multiple target file(s) selected</b><br><br>",
                   '<i class="fa-solid fa-circle-exclamation" style="font-size:',
                   '1em; color:black; margin-right: 10px;"></i>',
-                  "<i>None of the raw file(s) present in ",
-                  "the batch file can be found in the root folder.</i>"
+                  "<i>None of the sample(s) present in ",
+                  "the config file can be found in the selected folder.</i>"
                 )
               )
             )
@@ -411,22 +423,20 @@ server <- function(
                 paste0(
                   "<b>Multiple target file(s) selected</b><br><br><b>",
                   sum(presence),
-                  "</b> raw file(s) present in ",
-                  "the batch file are queried for deconvolution.<br><br>",
+                  "</b> sample(s) present in ",
+                  "the config file are queried for deconvolution.<br><br>",
                   '<i class="fa-solid fa-circle-exclamation" style="font-size:',
                   '1em; color:black; margin-right: 10px;"></i><i><b>',
                   sum(!presence),
-                  "</b> of the batch raw file(s) are<b> NOT</b> prese",
-                  "nt in the selected root folder.</i>"
+                  "</b> of the samples specified in the config file are<b> NOT</b> prese",
+                  "nt in the selected folder.</i>"
                 )
               )
             )
           }
 
           # if duplicates present disable continue button
-          if (
-            any(duplicated(deconvolution_sidebar_vars$batch_file()[[deconvolution_sidebar_vars$id_column()]]))
-          ) {
+          if (any(duplicated(config_file()[["Sample"]]))) {
             disable(
               selector = "#app-deconvolution_main-deconvolute_start_conf"
             )
@@ -452,7 +462,7 @@ server <- function(
                 "</b> raw file(s) in the",
                 " selected directory are currently queried for deconvolution.",
                 " If you wish to process only a subset select the respective",
-                " target files or dismiss and upload a batch file."
+                " target files."
               )
             )
           )
@@ -489,58 +499,34 @@ server <- function(
 
       if (deconvolution_sidebar_vars$selected() == "folder") {
         if (
-          isTRUE(deconvolution_sidebar_vars$batch_mode()) &&
-            length(deconvolution_sidebar_vars$batch_file())
+          isTRUE(deconvolution_sidebar_vars$use_config()) &&
+            length(config_file())
         ) {
-          # check if any duplicated targets in batch
-          if (
-            any(duplicated(deconvolution_sidebar_vars$batch_file()[[deconvolution_sidebar_vars$id_column()]]))
-          ) {
-            dup_count <- sum(duplicated(deconvolution_sidebar_vars$batch_file()[[deconvolution_sidebar_vars$id_column()]]))
-            msg <- ifelse(
-              dup_count > 1,
-              "</b> targets are duplicated in the batch. ",
-              "</b> target is duplicated in the batch. "
-            )
+          config_sel <- gsub(
+            ".raw",
+            "_rawdata_unidecfiles",
+            config_file()[["Sample"]]
+          )
+
+          intersect <- config_sel %in% basename(finished_files)
+
+          if (any(intersect)) {
+            reactVars$overwrite <- config_sel[intersect]
+
             warning <- shiny$p(
               shiny$HTML(
                 paste0(
                   '<i class="fa-solid fa-circle-exclamation" style="font-size:',
-                  '1em; color:red; margin-right: 10px;"></i>',
+                  '1em; color:black; margin-right: 10px;"></i>',
                   "<b>",
-                  dup_count,
-                  msg,
-                  "Modify the batch file and try again."
-                )
-              )
-            )
-          } else {
-            batch_sel <- gsub(
-              ".raw",
-              "_rawdata_unidecfiles",
-              deconvolution_sidebar_vars$batch_file()[[deconvolution_sidebar_vars$id_column()]]
-            )
-
-            intersect <- batch_sel %in% basename(finished_files)
-
-            if (any(intersect)) {
-              reactVars$overwrite <- batch_sel[intersect]
-
-              warning <- shiny$p(
-                shiny$HTML(
+                  sum(intersect),
                   paste0(
-                    '<i class="fa-solid fa-circle-exclamation" style="font-size:',
-                    '1em; color:black; margin-right: 10px;"></i>',
-                    "<b>",
-                    sum(intersect),
-                    paste0(
-                      "</b> file(s) queried for deconvolution appear to have ",
-                      "already been processed. Please choose how to proceed:"
-                    )
+                    "</b> file(s) queried for deconvolution appear to have ",
+                    "already been processed in the destination folder. Please choose how to proceed:"
                   )
                 )
               )
-            }
+            )
           }
         } else if (!is.null(input$target_selector)) {
           intersect <- gsub(
@@ -566,7 +552,7 @@ server <- function(
                   sum(intersect),
                   paste0(
                     "</b> file(s) queried for deconvolution appear to have ",
-                    "already been processed. Please choose how to proceed:"
+                    "already been processed in the destination folder. Please choose how to proceed:"
                   )
                 )
               )
@@ -611,8 +597,8 @@ server <- function(
 
       if (
         deconvolution_sidebar_vars$selected() == "folder" &&
-          (isFALSE(deconvolution_sidebar_vars$batch_mode()) ||
-            length(deconvolution_sidebar_vars$batch_file()) == 0)
+          (isFALSE(deconvolution_sidebar_vars$use_config()) ||
+            length(config_file()) == 0)
       ) {
         picker <- pickerInput(
           ns("target_selector"),
@@ -679,28 +665,27 @@ server <- function(
         raw_dirs <- raw_dirs[grep("\\.raw$", raw_dirs)]
 
         if (
-          isTRUE(deconvolution_sidebar_vars$batch_mode()) &&
-            length(deconvolution_sidebar_vars$batch_file())
+          isTRUE(deconvolution_sidebar_vars$use_config()) &&
+            length(config_file())
         ) {
-          write_log("Multiple target deconvolution mode (with batch file)")
+          write_log("Multiple target deconvolution mode (with config file)")
 
-          batch <- deconvolution_sidebar_vars$batch_file()
-          sample_names <- batch[[deconvolution_sidebar_vars$id_column()]]
+          sample_names <- config_file()[["Sample"]]
           raw_dirs <- raw_dirs[basename(raw_dirs) %in% sample_names]
 
           # Prepare heatmap variables
           reactVars$sample_names <- gsub(
             ".raw",
             "",
-            deconvolution_sidebar_vars$batch_file()[[deconvolution_sidebar_vars$id_column()]]
+            config_file()[["Sample"]]
           )
           reactVars$wells <- gsub(
             ",",
             "",
-            sub("^.*:", "", batch[[deconvolution_sidebar_vars$vial_column()]])
+            sub("^.*:", "", config_file()[["Well"]])
           )
         } else {
-          write_log("Multiple target deconvolution mode (no batch file)")
+          write_log("Multiple target deconvolution mode (no config file)")
 
           raw_dirs <- raw_dirs[basename(raw_dirs) %in% target_selector_sel()]
         }
@@ -1003,16 +988,26 @@ server <- function(
               10
           ) {
             if (
-              isTRUE(deconvolution_sidebar_vars$batch_mode()) &&
-                length(deconvolution_sidebar_vars$batch_file()) &&
+              isTRUE(deconvolution_sidebar_vars$use_config()) &&
+                length(config_file()) &&
+                "Well" %in% names(config_file()) &&
+                any(
+                  !is.na(config_file()[["Well"]]) &
+                    nzchar(trimws(as.character(config_file()[["Well"]])))
+                ) &&
                 nrow(reactVars$rslt_df) < reactVars$completed_files
             ) {
               shiny$req(reactVars$sample_names, reactVars$wells)
+
+              reactVars_sample_names <<- reactVars$sample_names
+              reactVars_wells <<- reactVars$wells
 
               results_all <- dir_ls(
                 deconvolution_sidebar_vars$targetpath(),
                 glob = "*_rawdata_unidecfiles"
               )
+
+              results_all <<- results_all
 
               results <- results_all[
                 basename(results_all) %in%
@@ -1142,20 +1137,24 @@ server <- function(
 
                 ##### Render result picker with updated choices ----
                 if (nrow(reactVars$rslt_df) > 0) {
-                  enable(selector = "#app-deconvolution_main-toggle_result")
-
                   # Render results picker
+                  picker_choices <- gsub(
+                    "_rawdata_unidecfiles",
+                    ".raw",
+                    basename(results)
+                  )
+                  if (
+                    is.null(result_files_sel()) && length(picker_choices) > 0
+                  ) {
+                    result_files_sel(picker_choices[1])
+                  }
                   output$result_picker_ui <- shiny$renderUI(
                     shiny$div(
                       class = "result-picker",
                       shiny$selectInput(
                         ns("result_picker"),
                         "Select Sample",
-                        choices = gsub(
-                          "_rawdata_unidecfiles",
-                          ".raw",
-                          basename(results)
-                        ),
+                        choices = picker_choices,
                         selected = result_files_sel()
                       )
                     )
@@ -1187,8 +1186,6 @@ server <- function(
                   choices[1],
                   result_files_sel()
                 )
-
-                enable(selector = "#app-deconvolution_main-toggle_result")
 
                 output$result_picker_ui <- shiny$renderUI(
                   shiny$div(
@@ -1310,8 +1307,13 @@ server <- function(
               # final result check for heatmap update
               if (
                 deconvolution_sidebar_vars$selected() == "folder" &&
-                  isTRUE(deconvolution_sidebar_vars$batch_mode()) &&
-                  length(deconvolution_sidebar_vars$batch_file())
+                  isTRUE(deconvolution_sidebar_vars$use_config()) &&
+                  length(config_file()) &&
+                  "Well" %in% names(config_file()) &&
+                  any(
+                    !is.na(config_file()[["Well"]]) &
+                      nzchar(trimws(as.character(config_file()[["Well"]])))
+                  )
               ) {
                 results <- result_files[
                   basename(result_files) %in%
@@ -1388,6 +1390,32 @@ server <- function(
                   reactVars$rslt_df <- rbind(reactVars$rslt_df, new_rslt_df)
                 }
 
+                # Update result picker with all completed samples
+                if (nrow(reactVars$rslt_df) > 0) {
+                  picker_choices <- gsub(
+                    "_rawdata_unidecfiles",
+                    ".raw",
+                    basename(results)
+                  )
+                  if (
+                    is.null(result_files_sel()) && length(picker_choices) > 0
+                  ) {
+                    result_files_sel(picker_choices[1])
+                  }
+                  output$result_picker_ui <- shiny$renderUI(
+                    shiny$div(
+                      class = "result-picker",
+                      shiny$selectInput(
+                        ns("result_picker"),
+                        "Select Sample",
+                        choices = picker_choices,
+                        selected = result_files_sel()
+                      )
+                    )
+                  )
+                  session$sendCustomMessage("selectize-init", "result_picker")
+                }
+
                 # Save heatmap
                 if (!file.exists(file.path(temp, "heatmap.rds"))) {
                   heatmap <- create_384_plate_heatmap(reactVars$rslt_df)
@@ -1411,9 +1439,6 @@ server <- function(
                 finished_files <- file.exists(peak_files)
 
                 if (sum(finished_files) > 0) {
-                  # Enable spectrum toggle button
-                  enable(selector = "#app-deconvolution_main-toggle_result")
-
                   # Update choices and selected sample of results picker
                   choices <- basename(selected_files)[finished_files]
 
@@ -1482,28 +1507,132 @@ server <- function(
       #### Heatmap click observer ----
       if (
         deconvolution_sidebar_vars$selected() == "folder" &&
-          isTRUE(deconvolution_sidebar_vars$batch_mode()) &&
-          length(deconvolution_sidebar_vars$batch_file())
+          isTRUE(deconvolution_sidebar_vars$use_config()) &&
+          length(config_file()) &&
+          "Well" %in% names(config_file()) &&
+          any(
+            !is.na(config_file()[["Well"]]) &
+              nzchar(trimws(as.character(config_file()[["Well"]])))
+          )
       ) {
         # Observe clicks on interactive heatmap to show spectra
         reactVars$click_observer <- shiny$observe({
-          if (isTRUE(reactVars$heatmap_ready)) {
-            click_data <- event_data("plotly_click")
-
+          click_data <- event_data("plotly_click")
+          if (shiny$isolate(reactVars$heatmap_ready) > 0L) {
+            # DEBUG — remove once click behaviour is confirmed
+            message("=== HEATMAP CLICK ===")
+            message("click_data is.null: ", is.null(click_data))
             if (!is.null(click_data)) {
-              # Get the clicked point's row and column
-              row <- LETTERS[16 - floor(click_data$y) + 1]
+              message("  curveNumber : ", click_data$curveNumber)
+              message(
+                "  x           : ",
+                click_data$x,
+                " (class: ",
+                class(click_data$x),
+                ")"
+              )
+              message(
+                "  y           : ",
+                click_data$y,
+                " (class: ",
+                class(click_data$y),
+                ")"
+              )
+              message("  pointNumber : ", click_data$pointNumber)
+              message("  full dump   : ")
+              message(paste(capture.output(print(click_data)), collapse = "\n"))
+            }
+
+            # curveNumber 0 = heatmap; 1 = selection scatter overlay (ignore)
+            if (
+              !is.null(click_data) &&
+                isTRUE(click_data$curveNumber == 0) &&
+                is.numeric(click_data$x)
+            ) {
+              y_val <- click_data$y
+              row <- if (is.character(y_val) && y_val %in% LETTERS[1:16]) {
+                y_val
+              } else if (is.numeric(y_val)) {
+                LETTERS[16 - floor(y_val) + 1]
+              } else {
+                NULL
+              }
+
+              message("  resolved row: ", if (is.null(row)) "NULL" else row)
+              message("  resolved col: ", round(click_data$x))
+
+              if (is.null(row)) {
+                return()
+              }
               col <- round(click_data$x)
               well_id <- paste0(row, col)
 
-              # Find the corresponding sample in the data
+              message("  well_id: ", well_id)
+
               shiny$isolate(
                 clicked_sample <-
                   reactVars$rslt_df$sample[reactVars$rslt_df$well_id == well_id]
               )
 
-              result_files_sel(paste0(clicked_sample, ".raw"))
+              message(
+                "  clicked_sample: ",
+                paste(clicked_sample, collapse = ", ")
+              )
+
+              if (length(clicked_sample) > 0 && nzchar(clicked_sample[1])) {
+                runjs(paste0(
+                  'document.getElementById("blocking-overlay").styl',
+                  'e.display = "block";'
+                ))
+                result_files_sel(paste0(clicked_sample[1], ".raw"))
+                # Unblock after renders complete (delay covers spectrum + table)
+                delay(
+                  2000,
+                  runjs(paste0(
+                    'document.getElementById("blocking-overlay").styl',
+                    'e.display = "none";'
+                  ))
+                )
+              }
             }
+          }
+        })
+
+        #### Heatmap selection highlight observer ----
+        # Draws a green shape rectangle (data coords) around the selected well
+        shiny$observe({
+          shiny$req(result_files_sel(), reactVars$heatmap_ready > 0L)
+
+          sample_name <- gsub("\\.raw$", "", result_files_sel())
+          well_id <- shiny$isolate(
+            reactVars$rslt_df$well_id[reactVars$rslt_df$sample == sample_name]
+          )
+
+          if (length(well_id) > 0 && nzchar(well_id[1])) {
+            row_letter <- substring(well_id[1], 1, 1)
+            col_num <- as.numeric(substring(well_id[1], 2))
+            # y-axis is categorical: A=index 0, B=1, ... P=15
+            row_idx <- match(row_letter, LETTERS[1:16]) - 1
+
+            delay(400, {
+              plotlyProxy("heatmap", session) |>
+                plotlyProxyInvoke(
+                  "relayout",
+                  list(
+                    shapes = list(list(
+                      type = "rect",
+                      xref = "x",
+                      yref = "y",
+                      x0 = col_num - 0.5,
+                      x1 = col_num + 0.5,
+                      y0 = row_idx - 0.5,
+                      y1 = row_idx + 0.5,
+                      line = list(color = "rgba(80,200,100,0.95)", width = 3),
+                      fillcolor = "rgba(0,0,0,0)"
+                    ))
+                  )
+                )
+            })
           }
         })
       }
@@ -1513,17 +1642,18 @@ server <- function(
       runjs("document.querySelector('button.collapse-toggle').click();")
       output$deconvolution_init_ui <- NULL
 
-      # Conditional rendering of running deconvolution UI
       output$deconvolution_running_ui <- shiny$renderUI({
-        if (
-          deconvolution_sidebar_vars$selected() == "folder" &&
-            isTRUE(deconvolution_sidebar_vars$batch_mode()) &&
-            length(deconvolution_sidebar_vars$batch_file())
-        ) {
-          deconvolution_running_ui_plate(ns)
-        } else {
-          deconvolution_running_ui_noplate(ns)
-        }
+        has_wells <- "Well" %in%
+          names(config_file()) &&
+          any(
+            !is.na(config_file()[["Well"]]) &
+              nzchar(trimws(as.character(config_file()[["Well"]])))
+          )
+        show_heatmap <- deconvolution_sidebar_vars$selected() == "folder" &&
+          isTRUE(deconvolution_sidebar_vars$use_config()) &&
+          !is.null(config_file()) &&
+          has_wells
+        deconvolution_results_ui(ns, show_heatmap)
       })
 
       # Render status spinner icon
@@ -1541,7 +1671,7 @@ server <- function(
           allow_spinner_spectrum(FALSE)
         }
 
-        shiny$req(result_files_sel(), input$toggle_result)
+        shiny$req(result_files_sel())
 
         if (deconvolution_sidebar_vars$selected() == "folder") {
           result_dir <- file.path(
@@ -1563,7 +1693,11 @@ server <- function(
           # Generate the spectrum plot
           spectrum <- spectrum_plot(
             result_path = result_dir,
-            raw = as.logical(input$toggle_result),
+            raw = as.logical(ifelse(
+              !is.null(input$toggle_result),
+              input$toggle_result,
+              FALSE
+            )),
             show_peak_labels = ifelse(
               is.null(input$spectrum_annotation),
               TRUE,
@@ -1580,7 +1714,7 @@ server <- function(
         }
       })
 
-      output$deconvolution_data <- DT::renderDataTable({
+      output$deconvolution_data <- DT::renderDataTable(server = FALSE, {
         shiny$req(result_files_sel())
 
         waiter_show(id = ns("deconvolution_data"), html = spin_wave())
@@ -1627,7 +1761,7 @@ server <- function(
             Value = paste(values, units, sep = " ")
           )
 
-          waiter_hide(id = ns("spectrum"))
+          waiter_hide(id = ns("deconvolution_data"))
 
           DT::datatable(
             data = tbl,
@@ -1651,11 +1785,16 @@ server <- function(
         }
       })
 
-      ### Render heatmap for batch mode
+      ### Render heatmap when config has wells specified
       if (
         deconvolution_sidebar_vars$selected() == "folder" &&
-          isTRUE(deconvolution_sidebar_vars$batch_mode()) &&
-          length(deconvolution_sidebar_vars$batch_file())
+          isTRUE(deconvolution_sidebar_vars$use_config()) &&
+          length(config_file()) &&
+          "Well" %in% names(config_file()) &&
+          any(
+            !is.na(config_file()[["Well"]]) &
+              nzchar(trimws(as.character(config_file()[["Well"]])))
+          )
       ) {
         # Define reactive helper variable to control spinner display
         allow_spinner_heatmap <- shiny$reactiveVal(TRUE)
@@ -1681,8 +1820,9 @@ server <- function(
             # Activate spinner reactivation
             allow_spinner_heatmap(TRUE)
 
-            # Activate click observer
-            reactVars$heatmap_ready <- TRUE
+            # Activate click observer / signal highlight observer to re-apply shape
+            reactVars$heatmap_ready <- shiny$isolate(reactVars$heatmap_ready) +
+              1L
 
             return(heatmap)
           }
@@ -1775,12 +1915,31 @@ server <- function(
           'e.display = "none";'
         ))
 
-        # Toggle sidebar for deconvolution initiation UI
+        # Re-open the main page sidebar
         runjs(paste0(
-          "document.querySelector('.bslib-sidebar-layout.sidebar-coll",
-          "apsed>.collapse-toggle').style.display = 'block';"
+          "var aside = document.querySelector('aside.deconvolution-sidebar');",
+          "var mainSb = aside ? aside.closest('.bslib-sidebar-layout') : null;",
+          "if (mainSb && mainSb.classList.contains('sidebar-collapsed')) {",
+          "  mainSb.classList.remove('sidebar-collapsed');",
+          "  aside.removeAttribute('aria-hidden');",
+          "  var tog = mainSb.querySelector('button.collapse-toggle');",
+          "  if (tog) {",
+          "    tog.style.display = '';",
+          "    tog.setAttribute('aria-expanded', 'true');",
+          "  }",
+          "}"
         ))
-        runjs("document.querySelector('button.collapse-toggle').click();")
+
+        # bslib sets .transitioning during the toggle animation which hides
+        # sidebar content. Force-remove it after the animation completes so
+        # the sidebar content becomes visible again.
+        delay(
+          400,
+          runjs(paste0(
+            "document.querySelectorAll('.bslib-sidebar-layout')",
+            ".forEach(function(el){el.classList.remove('transitioning');});"
+          ))
+        )
 
         # Signal sidebar module to reevaluate
         reset_button(reset_button() + 1)

@@ -70,9 +70,10 @@ process_uploaded_table <- function(df, type) {
     }
   }
 
-  # Convert mass columns to numeric
+  # Convert mass columns to numeric (strip trailing unit suffixes like " Da", " kDa")
   converted_df <- suppressWarnings(dplyr::mutate_all(df[, -1], function(x) {
-    as.numeric(as.character(x))
+    x_stripped <- gsub("\\s+[A-Za-z].*$", "", trimws(as.character(x)))
+    as.numeric(x_stripped)
   }))
 
   # Check if conversion resulted in NAs only where original had NAs
@@ -145,6 +146,9 @@ prot_comp_handsontable <- function(
   proteins = NULL,
   compounds = NULL
 ) {
+  if (is.null(tab) || nrow(tab) == 0) {
+    return(NULL)
+  }
   js_tolerance_value <- if (is.null(tolerance) || is.na(tolerance)) {
     "null"
   } else {
@@ -232,12 +236,12 @@ prot_comp_handsontable <- function(
   table <- rhandsontable::rhandsontable(
     tab,
     rowHeaders = NULL,
-    height = 28 + 23 * ifelse(nrow(tab > 16), 16, nrow(tab)),
+    height = 28 + 23 * ifelse(nrow(tab > 14), 14, nrow(tab)),
     stretchH = ifelse(disabled, "none", "all")
   ) |>
     rhandsontable::hot_cols(fixedColumnsLeft = 1, renderer = renderer_js) |>
     rhandsontable::hot_context_menu(
-      allowRowEdit = ifelse(disabled, FALSE, TRUE),
+      allowRowEdit = FALSE,
       allowColEdit = FALSE
     ) |>
     rhandsontable::hot_cols(
@@ -250,7 +254,7 @@ prot_comp_handsontable <- function(
       allowInvalid = TRUE
     ) |>
     rhandsontable::hot_table(
-      contextMenu = ifelse(disabled, FALSE, TRUE),
+      contextMenu = FALSE,
       highlightCol = TRUE,
       highlightRow = TRUE,
       stretchH = ifelse(disabled, "none", "all")
@@ -273,6 +277,9 @@ sample_handsontable <- function(
 ) {
   cmp_cols <- grep("Compound", colnames(tab))
 
+  # Identify Concentration/Time columns (grepl to handle unit-suffixed names)
+  conc_time_idx <- grep("^Concentration|^Time", colnames(tab))
+
   # Allowed protein and compound values
   if (!is.null(proteins) && !is.null(compounds)) {
     allowed_per_col <- list(
@@ -282,24 +289,29 @@ sample_handsontable <- function(
     )
 
     # Custom renderer
-    renderer_js <- "function(instance, td, row, col, prop, value, cellProperties) {
+    renderer_js <- sprintf(
+      "function(instance, td, row, col, prop, value, cellProperties) {
     Handsontable.renderers.TextRenderer.apply(this, arguments);
-    
+
     td.style.background = ''; // Clear existing background for new rendering
-    
+
+    // Concentration/Time columns: skip validity and duplication checks
+    var concTimeCols = %s;
+    if (concTimeCols.indexOf(col) !== -1) { return; }
+
     var allowedPerCol = instance.params ? instance.params.allowed_per_col : null;
     var normalizedValue = value == null ? '' : String(value).trim();
-    
+
     var allowedRaw;
     if (col === 1) {
-      allowedRaw = allowedPerCol ? allowedPerCol[1] : null; 
+      allowedRaw = allowedPerCol ? allowedPerCol[1] : null;
     } else if (col >= 2) {
-      allowedRaw = allowedPerCol ? allowedPerCol[2] : null; 
+      allowedRaw = allowedPerCol ? allowedPerCol[2] : null;
     } else {
       return;
     }
-    
-    // --- 1. Prepare allowed list (same as before) ---
+
+    // --- 1. Prepare allowed list ---
     var allowedList = [];
     if (Array.isArray(allowedRaw)) {
       allowedList = allowedRaw;
@@ -308,41 +320,41 @@ sample_handsontable <- function(
     } else if (allowedRaw && Array.isArray(allowedRaw) === false) {
       allowedList = [allowedRaw];
     }
-    
+
     // --- 2. Check Validity (Red Highlight Logic) ---
     var isValid = true;
     if (allowedList.length > 0) {
       isValid = allowedList.includes(normalizedValue) || normalizedValue === '';
     }
-    
+
     // --- 3. Check Duplication (Orange Highlight Logic) ---
+    // Exclude col 0 (Sample) and Concentration/Time columns from duplicate scan
     var isDuplicated = false;
     if (normalizedValue !== '') {
       var rowData = instance.getDataAtRow(row);
       var valueCounts = {};
-      var startCol = 1; // Start from column 1 (Protein) to exclude 'Sample' (col 0)
-      
-      for (var i = startCol; i < rowData.length; i++) {
+      for (var i = 1; i < rowData.length; i++) {
+          if (concTimeCols.indexOf(i) !== -1) { continue; }
           var cellValue = rowData[i];
           var trimmedValue = cellValue == null ? '' : String(cellValue).trim();
-          
           if (trimmedValue !== '') {
               valueCounts[trimmedValue] = (valueCounts[trimmedValue] || 0) + 1;
           }
       }
-      
       if (valueCounts[normalizedValue] > 1) {
           isDuplicated = true;
       }
     }
-    
+
     // --- 4. Apply Styles based on Priority ---
     if (!isValid) {
-      td.style.background = 'red'; // Invalid content takes precedence
+      td.style.background = 'red';
     } else if (isDuplicated) {
-      td.style.background = 'orange'; // Duplicated content
+      td.style.background = 'orange';
     }
-  }"
+  }",
+      paste0("[", paste(conc_time_idx - 1L, collapse = ","), "]")
+    )
   } else {
     allowed_per_col <- list(NULL)
     renderer_js <- ""
@@ -352,7 +364,7 @@ sample_handsontable <- function(
     tab,
     rowHeaders = NULL,
     allowed_per_col = allowed_per_col,
-    height = 28 + 23 * ifelse(nrow(tab > 16), 16, nrow(tab)),
+    height = 28 + 23 * ifelse(nrow(tab > 15), 15, nrow(tab)),
     stretchH = "all"
   ) |>
     rhandsontable::hot_cols(
@@ -375,20 +387,20 @@ sample_handsontable <- function(
       strict = FALSE
     ) |>
     rhandsontable::hot_table(
-      contextMenu = ifelse(disabled, FALSE, TRUE),
+      contextMenu = FALSE,
       stretchH = "all"
     )
 
-  if (all(c("Concentration", "Time") %in% colnames(tab))) {
+  if (length(conc_time_idx) == 2) {
     handsontable <- rhandsontable::hot_col(
       handsontable,
-      col = which(colnames(tab) %in% c("Concentration", "Time")),
+      col = conc_time_idx,
       type = "numeric",
       allowInvalid = FALSE,
       format = "0.##########"
     ) |>
       rhandsontable::hot_validate_numeric(
-        cols = which(colnames(tab) %in% c("Concentration", "Time")),
+        cols = conc_time_idx,
         min = 0
       )
   }
@@ -443,16 +455,14 @@ fill_sample_table <- function(sample_table, ki_kinact) {
 # Construct cleaned-up sample table with only consecutive non-NA entries
 #' @export
 clean_sample_table <- function(sample_table, units = NULL) {
-  has_conc_time <- all(c("Concentration", "Time") %in% names(sample_table))
+  # Use grepl so unit-suffixed names like "Concentration [M]" / "Time [s]"
+  # are detected correctly alongside plain "Concentration" / "Time"
+  conc_col <- grep("^Concentration", names(sample_table), value = TRUE)
+  time_col <- grep("^Time", names(sample_table), value = TRUE)
+  has_conc_time <- length(conc_col) == 1 && length(time_col) == 1
 
-  no_cmp_cols <- names(sample_table) %in%
-    c(
-      "Sample",
-      "Protein",
-      if (has_conc_time) {
-        c("Concentration", "Time")
-      }
-    )
+  no_cmp_cols <- grepl("^Sample$|^Protein$", names(sample_table)) |
+    (has_conc_time & names(sample_table) %in% c(conc_col, time_col))
 
   extra_cmp_section <- sample_table[,
     which(!no_cmp_cols),
@@ -499,13 +509,10 @@ clean_sample_table <- function(sample_table, units = NULL) {
   # Reattach sample, protein, compound columns
   df <- cbind(sample_table[, 1:2, drop = FALSE], df)
   if (has_conc_time) {
-    df <- cbind(
-      df,
-      sample_table[, names(sample_table) %in% c("Concentration", "Time")]
-    )
+    df <- cbind(df, sample_table[, c(conc_col, time_col), drop = FALSE])
   }
 
-  # Rename columns
+  # Rename columns — preserve or apply units to Conc/Time names
   names(df) <- c(
     "Sample",
     "Protein",
@@ -643,14 +650,15 @@ slice_cols <- function(sample_table) {
 # Validate sample table
 #' @export
 check_sample_table <- function(sample_table, proteins, compounds) {
-  has_conc_time <- all(c("Concentration", "Time") %in% names(sample_table))
+  conc_col <- grep("^Concentration", names(sample_table), value = TRUE)
+  time_col <- grep("^Time", names(sample_table), value = TRUE)
+  has_conc_time <- length(conc_col) == 1 && length(time_col) == 1
 
   if (has_conc_time) {
-    conc_time_tbl <- sample_table[,
-      names(sample_table) %in% c("Concentration", "Time")
-    ]
+    conc_time_tbl <- sample_table[, c(conc_col, time_col), drop = FALSE]
     sample_table <- sample_table[,
-      !names(sample_table) %in% c("Concentration", "Time")
+      !names(sample_table) %in% c(conc_col, time_col),
+      drop = FALSE
     ]
   }
 
@@ -664,7 +672,7 @@ check_sample_table <- function(sample_table, proteins, compounds) {
     !is.na(sample_table[, 2]) & sample_table[, 2] != ""
   ]
   if (length(proteins_input) & any(!proteins_input %in% proteins)) {
-    return("Protein name not found")
+    return("Protein name not declared")
   }
 
   # Check if compound names valid
@@ -672,7 +680,7 @@ check_sample_table <- function(sample_table, proteins, compounds) {
     !is.na(sample_table[, -(1:2)]) & sample_table[, -(1:2)] != ""
   ]
   if (length(compounds_input) & any(!compounds_input %in% compounds)) {
-    return("Compound name not found")
+    return("Compound name not declared")
   }
 
   # If all proteins empty
@@ -706,14 +714,45 @@ check_sample_table <- function(sample_table, proteins, compounds) {
   }
 
   if (has_conc_time) {
-    # Check for correct concentration input
-    if (any(is.na(conc_time_tbl$Concentration))) {
+    conc_vals <- conc_time_tbl[[conc_col]]
+    time_vals <- conc_time_tbl[[time_col]]
+
+    # Check for missing values
+    if (any(is.na(conc_vals))) {
       return("Fill Concentrations")
     }
-
-    # Check for correct time input
-    if (any(is.na(conc_time_tbl$Time))) {
+    if (any(is.na(time_vals))) {
       return("Fill Time")
+    }
+
+    # At least 3 distinct non-zero concentrations required
+    # (zero is allowed but does not count toward the 3)
+    n_conc <- length(unique(conc_vals[!is.na(conc_vals) & conc_vals != 0]))
+    if (n_conc < 3) {
+      return(paste0(
+        "At least 3 different non-zero concentrations required (",
+        n_conc,
+        " present)"
+      ))
+    }
+
+    # For each unique non-zero concentration, require at least 3 distinct non-zero time points
+    # (concentration = 0 is excluded from this check — only one sample is allowed there)
+    unique_concs <- unique(conc_vals[!is.na(conc_vals) & conc_vals != 0])
+    for (uc in unique_concs) {
+      times_for_conc <- time_vals[!is.na(conc_vals) & conc_vals == uc]
+      n_time <- length(unique(times_for_conc[
+        !is.na(times_for_conc) & times_for_conc != 0
+      ]))
+      if (n_time < 3) {
+        return(paste0(
+          "At least 3 different non-zero time points required per concentration (concentration ",
+          uc,
+          " has only ",
+          n_time,
+          ")"
+        ))
+      }
     }
   }
 
@@ -3988,6 +4027,7 @@ table_observe <- function(
     output[[paste0(tab, "_table_info")]] <- shiny::renderText(
       "Fill table ..."
     )
+    output[[paste0(tab, "_table_hint")]] <- shiny::renderUI(NULL)
 
     # Disable confirm button
     shinyjs::disable(paste0("confirm_", tab))
@@ -4023,6 +4063,7 @@ table_observe <- function(
       output[[paste0(tab, "_table_info")]] <- shiny::renderText(
         "Table can be saved"
       )
+      output[[paste0(tab, "_table_hint")]] <- shiny::renderUI(NULL)
 
       # Enable confirm button
       shinyjs::enable(paste0("confirm_", tab))
@@ -4030,7 +4071,7 @@ table_observe <- function(
       # Set status variable to TRUE
       table_status <- TRUE
     } else {
-      # Table info UI changes
+      # Table info UI changes — show short status, detail goes to hint below table
       shinyjs::removeClass(
         paste0(tab, "_table_info"),
         "table-info-green"
@@ -4040,8 +4081,23 @@ table_observe <- function(
         "table-info-red"
       )
       output[[paste0(tab, "_table_info")]] <- shiny::renderText(
-        table_check
+        "Fix table issues"
       )
+      local({
+        msg <- table_check
+        hint_class <- if (grepl("^Duplicated", msg)) {
+          "table-hint table-hint-orange"
+        } else {
+          "table-hint table-hint-red"
+        }
+        output[[paste0(tab, "_table_hint")]] <- shiny::renderUI(
+          shiny::div(
+            class = hint_class,
+            shiny::icon("triangle-exclamation"),
+            msg
+          )
+        )
+      })
 
       # Disable confirm button
       shinyjs::disable(paste0("confirm_", tab))
@@ -4065,32 +4121,43 @@ handle_file_upload <- function(
   output,
   declaration_vars
 ) {
-  # Read in file
-  table_upload <- read_uploaded_file(
-    file_input$datapath,
-    tolower(tools::file_ext(file_input$name))
+  tryCatch(
+    {
+      # Read in file
+      table_upload <- read_uploaded_file(
+        file_input$datapath,
+        tolower(tools::file_ext(file_input$name))
+      )
+
+      # Process table and check for errors
+      table_upload_processed <- process_uploaded_table(table_upload, type)
+
+      # Update UI and status variable based on processing result
+      if (is.data.frame(table_upload_processed)) {
+        shinyWidgets::show_toast(
+          paste0(tools::toTitleCase(type), " table loaded!"),
+          type = "success",
+          timer = 3000
+        )
+        return(table_upload_processed)
+      } else {
+        shinyWidgets::show_toast(
+          table_upload_processed,
+          type = "error",
+          timer = 3000
+        )
+        return(NULL)
+      }
+    },
+    error = function(e) {
+      shinyWidgets::show_toast(
+        paste0("Failed to load ", type, " file. Please check the file format."),
+        type = "error",
+        timer = 4000
+      )
+      return(NULL)
+    }
   )
-
-  # Process table and check for errors
-  table_upload_processed <- process_uploaded_table(table_upload, type)
-
-  # Update UI and status variable based on processing result
-  if (is.data.frame(table_upload_processed)) {
-    shinyWidgets::show_toast(
-      paste0(tools::toTitleCase(type), " table loaded!"),
-      type = "success",
-      timer = 3000
-    )
-    return(table_upload_processed)
-  } else {
-    shinyWidgets::show_toast(
-      table_upload_processed,
-      type = "error",
-      timer = 3000
-    )
-
-    return(NULL)
-  }
 }
 
 # Transform summarized hits into readable table

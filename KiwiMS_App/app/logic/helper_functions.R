@@ -7,7 +7,8 @@ box::use(
   httr[add_headers, content, GET, status_code],
   minpack.lm[nlsLM],
   plyr[ddply, rename],
-  shiny[div, icon, NS, span],
+  readxl[read_excel],
+  shiny[div, HTML, icon, NS, span],
   stringr[str_split_fixed],
 )
 
@@ -883,4 +884,116 @@ make_KI_plots_png <- function(
 
     dev.off()
   }
+}
+
+# ---- Experiment config helpers ----
+
+#' @export
+read_config_file <- function(path, ext) {
+  if (ext == "xlsx") {
+    as.data.frame(read_excel(path))
+  } else {
+    first_line <- readLines(path, n = 1, warn = FALSE)
+    sep <- if (grepl(";", first_line)) ";" else ","
+    utils::read.csv(path, sep = sep, stringsAsFactors = FALSE)
+  }
+}
+
+#' @export
+normalize_colnames <- function(df) {
+  nms <- trimws(names(df))
+  nms <- gsub("\\s+", "_", nms)
+  nms <- gsub("_+", "_", nms)
+  names(df) <- nms
+  df
+}
+
+#' @export
+validate_config <- function(df) {
+  issues <- character()
+  required_cols <- c("Sample", "Protein")
+  numeric_cols <- c("Compound_Concentration", "Incubation_Time")
+  compound_pattern <- "^Compound_\\d+$"
+
+  missing_req <- setdiff(required_cols, names(df))
+  if (length(missing_req) > 0) {
+    issues <- c(issues, paste("Missing required columns:", paste(missing_req, collapse = ", ")))
+  }
+
+  compound_cols <- grep(compound_pattern, names(df), value = TRUE)
+  if (length(compound_cols) == 0) {
+    issues <- c(issues, "No compound columns found (Compound_1 \u2013 Compound_5); at least one required.")
+  } else {
+    dup_rows <- which(apply(df[compound_cols], 1, function(row) {
+      vals <- row[!is.na(row) & trimws(as.character(row)) != ""]
+      anyDuplicated(vals) > 0
+    }))
+    if (length(dup_rows) > 0) {
+      issues <- c(issues, paste0("Duplicate compound names in row(s): ", paste(dup_rows, collapse = ", "), "."))
+    }
+  }
+
+  for (col in required_cols) {
+    if (col %in% names(df)) {
+      bad <- is.na(df[[col]]) | trimws(as.character(df[[col]])) == ""
+      if (any(bad)) {
+        issues <- c(issues, paste0("'", col, "': ", sum(bad), " missing value(s)."))
+      }
+    }
+  }
+
+  if ("Sample" %in% names(df)) {
+    dups <- df[["Sample"]][duplicated(df[["Sample"]])]
+    if (length(dups) > 0) {
+      issues <- c(issues, paste0("'Sample': duplicate value(s): ", paste(unique(dups), collapse = ", "), "."))
+    }
+  }
+
+  if ("Well" %in% names(df)) {
+    empty <- is.na(df[["Well"]]) | trimws(as.character(df[["Well"]])) == ""
+    if (any(empty) && !all(empty)) {
+      issues <- c(issues, paste0("'Well': must be all filled or all empty (", sum(empty), " missing)."))
+    } else {
+      non_empty <- trimws(as.character(df[["Well"]][!empty]))
+      invalid <- !grepl("^[A-Pa-p](1[0-9]|2[0-4]|[1-9])$", non_empty)
+      if (any(invalid)) {
+        issues <- c(issues, paste0("'Well': invalid well ID (valid range A1\u2013P24): ", paste(non_empty[invalid], collapse = ", "), "."))
+      }
+    }
+  }
+
+  for (col in numeric_cols) {
+    if (col %in% names(df)) {
+      vals <- df[[col]]
+      empty <- is.na(vals) | trimws(as.character(vals)) == ""
+      if (any(empty) && !all(empty)) {
+        issues <- c(issues, paste0("'", col, "': must be all filled or all empty (", sum(empty), " missing)."))
+      } else {
+        non_empty <- vals[!empty]
+        if (length(non_empty) > 0) {
+          converted <- suppressWarnings(as.numeric(as.character(non_empty)))
+          if (any(is.na(converted))) {
+            issues <- c(issues, paste0("'", col, "' contains non-numeric values."))
+          }
+        }
+      }
+    }
+  }
+
+  issues
+}
+
+#' @export
+config_badge <- function(type, label, body = NULL) {
+  bg <- if (type == "ok") "#7CB342" else "#D17050"
+  badge <- paste0(
+    '<span class="config-badge-pill" style="background:', bg, ';">', label, "</span>"
+  )
+  detail <- if (!is.null(body)) {
+    paste0(
+      '<span class="config-badge-detail">',
+      paste0(body, collapse = " \u00b7 "), "</span>"
+    )
+  } else ""
+  div(class = "config-badge-wrapper", HTML(paste0(badge, detail)))
 }

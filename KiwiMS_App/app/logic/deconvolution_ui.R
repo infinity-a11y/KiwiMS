@@ -1,5 +1,4 @@
-# app/view/deconvolution_constants.R
-
+# app/logic/deconvolution_ui.R
 box::use(
   bslib[card, card_body, card_header, tooltip],
   fs[dir_ls],
@@ -612,73 +611,57 @@ deconvolution_status_controls <- function(ns) {
   )
 }
 
-# Deconvolution running interface (batch mode)
+
+# Deconvolution running interface (no batch mode)
 #' @export
-deconvolution_running_ui_plate <- function(ns) {
-  card(
-    class = "deconvolution-parent-card",
-    shiny$div(
-      class = "deconvolution-running-interface",
-      deconvolution_status_controls(ns),
-      card(
-        class = "deconvolution-running-result-card",
-        full_screen = TRUE,
-        shiny$fluidRow(
-          shiny$column(
-            width = 6
-          ),
-          shiny$column(
-            width = 3,
-            align = "center",
-            shiny$div(
-              class = "deconvolution-result-controls-noplate",
-              disabled(
+deconvolution_results_ui <- function(ns, show_heatmap = FALSE) {
+  spectrum_card <- shiny::div(
+    class = "deconvolution-spectrum-card card-custom",
+    bslib::card(
+      bslib::card_header(
+        class = "bg-dark help-header d-flex justify-content-between",
+        "Spectrum",
+        shiny::div(
+          class = "box-header-settings-help",
+          bslib::popover(
+            shiny::icon("gear"),
+            shiny::div(
+              shiny::div(
+                class = "spectrum-radio-button",
                 radioGroupButtons(
                   ns("toggle_result"),
                   choiceNames = c("Deconvoluted", "Raw m/z"),
                   choiceValues = c(FALSE, TRUE)
                 )
-              )
-            )
-          ),
-          shiny$column(
-            width = 3,
-            align = "center",
-            shiny$div(
-              class = "deconvolution-result-controls-noplate",
-              shiny$uiOutput(ns("result_picker_ui"))
-            )
-          )
-        ),
-        shiny$div(
-          class = "deconvolution-result-content-plate",
-          shiny$fluidRow(
-            shiny$column(
-              width = 6,
-              shiny$div(
-                class = "heatmap-plot",
-                withWaiter(
-                  plotlyOutput(ns("heatmap"), height = "100%")
-                )
-              )
+              ),
+              shinyWidgets::materialSwitch(
+                ns("spectrum_annotation"),
+                label = "Annotate Hits",
+                value = TRUE,
+                right = TRUE
+              ),
+              style = "margin-right: 20px;"
             ),
-            shiny$column(
-              width = 6,
-              shiny$div(
-                class = "spectrum-plot-plate",
-                plotlyOutput(ns("spectrum"), height = "100%")
-              )
+            title = NULL
+          ),
+          shiny::div(
+            class = "tooltip-bttn",
+            shiny::actionButton(
+              ns("mass_spectra_tooltip_bttn"),
+              label = NULL,
+              icon = shiny::icon("circle-question")
             )
           )
         )
-      )
+      ),
+      shiny$div(
+        class = "spectrum-plot",
+        plotlyOutput(ns("spectrum"), height = "100%")
+      ),
+      full_screen = TRUE
     )
   )
-}
 
-# Deconvolution running interface (no batch mode)
-#' @export
-deconvolution_running_ui_noplate <- function(ns) {
   card(
     class = "deconvolution-parent-card",
     shiny$div(
@@ -687,7 +670,11 @@ deconvolution_running_ui_noplate <- function(ns) {
       card(
         class = "deconvolution-running-result-card",
         shiny$div(
-          class = "deconvolution-result-content-noplate",
+          class = paste(
+            "deconvolution-result-content"
+            # ,
+            # if (show_heatmap) "with-heatmap"
+          ),
           shiny$div(
             class = "deconvolution-result-controls",
             shiny::div(
@@ -716,57 +703,29 @@ deconvolution_running_ui_noplate <- function(ns) {
               )
             )
           ),
-          shiny::div(
-            class = "deconvolution-spectrum-card",
-            shiny::div(
-              class = "card-custom",
-              bslib::card(
-                bslib::card_header(
-                  class = "bg-dark help-header d-flex justify-content-between",
-                  "Spectrum",
-                  shiny::div(
-                    class = "box-header-settings-help",
-                    shiny::div(
-                      class = "spectrum-radio-button",
-                      disabled(
-                        radioGroupButtons(
-                          ns("toggle_result"),
-                          choiceNames = c("Deconvoluted", "Raw m/z"),
-                          choiceValues = c(FALSE, TRUE)
-                        )
-                      )
-                    ),
-                    bslib::popover(
-                      shiny::icon("gear"),
-                      shiny::div(
-                        shinyWidgets::materialSwitch(
-                          ns("spectrum_annotation"),
-                          label = "Annotate Hits",
-                          value = TRUE,
-                          right = TRUE
-                        ),
-                        style = "margin-right: 20px;"
-                      ),
-                      title = NULL
-                    ),
-                    shiny::div(
-                      class = "tooltip-bttn",
-                      shiny::actionButton(
-                        ns("mass_spectra_tooltip_bttn"),
-                        label = NULL,
-                        icon = shiny::icon("circle-question")
-                      )
+          if (show_heatmap) {
+            bslib::layout_sidebar(
+              spectrum_card,
+              sidebar = bslib::sidebar(
+                width = 450,
+                shiny::div(
+                  class = "deconvolution-heatmap-card card-custom",
+                  bslib::card(
+                    bslib::card_header(class = "bg-dark", "Well Plate"),
+                    shiny$div(
+                      class = "heatmap-plot",
+                      withWaiter(plotlyOutput(ns("heatmap"), height = "100%"))
                     )
                   )
                 ),
-                shiny$div(
-                  class = "spectrum-plot-noplate",
-                  plotlyOutput(ns("spectrum"), height = "100%")
-                ),
-                full_screen = TRUE
-              )
+                position = "right",
+                open = TRUE
+              ),
+              border = FALSE
             )
-          )
+          } else {
+            spectrum_card
+          }
         )
       )
     )

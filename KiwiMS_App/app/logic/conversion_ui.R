@@ -1627,8 +1627,13 @@ conversion_declaration_ui <- function(
       shiny::fluidRow(
         shiny::column(
           width = 12,
+          shiny::div(
+            class = "table-hint-anchor",
+            shiny::uiOutput(ns("proteins_table_hint"))
+          ),
           rhandsontable::rHandsontableOutput(
-            ns("proteins_table")
+            ns("proteins_table"),
+            width = "99%"
           ),
           table_legend
         )
@@ -1679,7 +1684,14 @@ conversion_declaration_ui <- function(
       shiny::fluidRow(
         shiny::column(
           width = 12,
-          rhandsontable::rHandsontableOutput(ns("compounds_table")),
+          shiny::div(
+            class = "table-hint-anchor",
+            shiny::uiOutput(ns("compounds_table_hint"))
+          ),
+          rhandsontable::rHandsontableOutput(
+            ns("compounds_table"),
+            width = "99%"
+          ),
           table_legend
         )
       ),
@@ -1706,7 +1718,8 @@ conversion_declaration_ui <- function(
             )
           ),
           shiny::column(
-            width = 2,
+            width = 1,
+            align = "left",
             shiny::div(
               class = "sample-declaration-info-ui",
               shiny::div(
@@ -1717,7 +1730,6 @@ conversion_declaration_ui <- function(
                   icon = shiny::icon("circle-question")
                 )
               ),
-              shiny::textOutput(ns("sample_number_info"))
             )
           ),
           shiny::column(
@@ -1725,9 +1737,9 @@ conversion_declaration_ui <- function(
             shiny::textOutput(ns("samples_table_info"))
           ),
           shiny::column(
-            width = 3,
+            width = 4,
             shiny::div(
-              class = "table-control-buttons",
+              class = "table-control-buttons sampletable-control-buttons",
               bslib::tooltip(
                 shiny::div(
                   style = "width: 100%;",
@@ -1741,6 +1753,21 @@ conversion_declaration_ui <- function(
                   )
                 ),
                 "Confirm Sample Table",
+                placement = "top"
+              ),
+              bslib::tooltip(
+                shiny::div(
+                  style = "width: 100%;",
+                  shinyjs::disabled(
+                    shiny::actionButton(
+                      ns("use_config"),
+                      label = NULL,
+                      icon = shiny::icon("wand-magic-sparkles"),
+                      width = "100%"
+                    )
+                  )
+                ),
+                "Use Experiment Config",
                 placement = "top"
               ),
               bslib::tooltip(
@@ -1792,7 +1819,11 @@ conversion_declaration_ui <- function(
       shiny::fluidRow(
         shiny::column(
           width = 12,
-          rhandsontable::rHandsontableOutput(ns("samples_table"))
+          shiny::div(
+            class = "table-hint-anchor",
+            shiny::uiOutput(ns("samples_table_hint"))
+          ),
+          rhandsontable::rHandsontableOutput(ns("samples_table"), width = "99%")
         )
       ),
       sample_table_legend,

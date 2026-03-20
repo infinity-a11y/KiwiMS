@@ -12,7 +12,7 @@ box::use(
     parLapply,
     stopCluster
   ],
-  plotly[config, event_register, ggplotly, hide_colorbar, layout, style],
+  plotly[config, event_register, layout],
   reticulate[use_condaenv, use_python, py_config, py_run_string],
   scales[percent_format],
   utils[read.delim, read.table],
@@ -410,160 +410,96 @@ deconvolute <- function(
 # create_384_plate_heatmap(): Make 384 well plate layout ----
 #' @export
 create_384_plate_heatmap <- function(data) {
-  # Create plate layout coordinates
-  rows <- rev(LETTERS[1:16])
+  # A at top (index 1), P at bottom (index 16) — yaxis autorange="reversed"
+  # maps them so A appears at the top of the plot
+  rows <- LETTERS[1:16]
   cols <- 1:24
+
   plate_layout <- expand.grid(row = rows, col = cols) |>
     mutate(well_id = paste0(row, col))
 
-  # Merge data with plate layout
   plate_data <- left_join(plate_layout, data, by = "well_id")
 
-  # Tooltip text creation
-  plate_data <- plate_data |>
-    mutate(
-      value_fmt = ifelse(is.na(value), "NA", sprintf("%.2f", value)),
-      sample_fmt = ifelse(is.na(sample), "Empty", as.character(sample)),
-      tooltip_text = sprintf(
-        "Well: %s\nValue: %s\nSample: %s",
-        well_id,
-        value_fmt,
-        sample_fmt
-      )
-    )
+  # Build z matrix (rows = A..P, cols = 1..24) and tooltip text matrix
+  z_mat <- matrix(0, nrow = 16, ncol = 24, dimnames = list(rows, cols))
+  text_mat <- matrix("", nrow = 16, ncol = 24, dimnames = list(rows, cols))
 
-  num_unique_values <- n_distinct(plate_data$value, na.rm = TRUE)
-
-  if (num_unique_values == 1) {
-    left <- 80
-  } else {
-    left <- 0
+  for (r in rows) {
+    for (c in cols) {
+      wid <- paste0(r, c)
+      d <- plate_data[plate_data$well_id == wid, ]
+      if (nrow(d) > 0 && !is.na(d$value[1])) {
+        z_mat[r, as.character(c)] <- 1
+        text_mat[r, as.character(c)] <- paste0("Well: ", wid, "<br>Sample: ", d$sample[1])
+      } else {
+        text_mat[r, as.character(c)] <- paste0("Well: ", wid, "<br>Empty")
+      }
+    }
   }
 
-  # Create the heatmap
-  plate_plot <- ggplot2$ggplot(
-    plate_data,
-    ggplot2$aes(x = col, y = factor(row, levels = rev(rows)), fill = value)
-  ) +
-    ggplot2$geom_rect(
-      data = plate_layout,
-      ggplot2$aes(
-        xmin = col - 0.5,
-        xmax = col + 0.5,
-        ymin = match(row, rev(rows)) - 0.5,
-        ymax = match(row, rev(rows)) + 0.5
-      ),
-      fill = NA,
-      color = "black",
-      linewidth = 0.5
-    ) +
-    suppressWarnings({
-      ggplot2$geom_tile(
-        ggplot2$aes(text = tooltip_text),
-        width = 0.95,
-        height = 0.95
-      )
-    }) +
-    ggplot2$scale_y_discrete(limits = rows) +
-    ggplot2$scale_x_continuous(
-      breaks = 1:24,
-      labels = 1:24,
-      position = "top",
-      expand = c(0, 0)
-    ) +
-    ggplot2$scale_fill_viridis_c(
-      name = "Peak Mass [Da]",
-      na.value = "white"
-    ) +
-    ggplot2$coord_fixed() +
-    ggplot2$theme_minimal() +
-    ggplot2$theme(
-      axis.text.x = ggplot2$element_text(
-        size = 8,
-        angle = 0,
-        vjust = 0,
-        hjust = 0.5
-      ),
-      axis.text.y = ggplot2$element_text(size = 8, hjust = 1),
-      axis.title = ggplot2$element_blank(),
-      panel.grid = ggplot2$element_blank(),
-      axis.ticks = ggplot2$element_blank()
-    )
+  # Colorscale:
+  #   0 = empty well  — solid dark fill so xgap/ygap border is visible
+  #   1 = occupied    — white
+  colorscale <- list(c(0, "rgba(42,44,52,1)"), c(1, "white"))
 
-  # Convert to plotly
-  interactive_plot <- ggplotly(plate_plot, tooltip = "text")
-
-  interactive_plot <- interactive_plot |>
+  plotly::plot_ly(
+    z = z_mat,
+    x = cols,
+    y = rows,
+    type = "heatmap",
+    colorscale = colorscale,
+    showscale = FALSE,
+    zmin = 0,
+    zmax = 1,
+    xgap = 2,
+    ygap = 2,
+    text = text_mat,
+    hovertemplate = "%{text}<extra></extra>"
+  ) |>
     layout(
       dragmode = FALSE,
+      showlegend = FALSE,
       hoverlabel = list(
         bgcolor = "#38387Cdb",
         font = list(size = 14, color = "white"),
         bordercolor = "white"
       ),
+      xaxis = list(
+        side = "top",
+        tickmode = "array",
+        tickvals = cols,
+        ticktext = as.character(cols),
+        tickfont = list(color = "white", size = 12),
+        tickangle = 0,
+        ticklen = 0,
+        showgrid = FALSE,
+        zeroline = FALSE,
+        automargin = FALSE,
+        scaleanchor = "y",
+        scaleratio = 1
+      ),
       yaxis = list(
+        autorange = "reversed",
+        tickfont = list(color = "white", size = 12),
+        ticklen = 0,
+        showgrid = FALSE,
+        zeroline = FALSE,
         scaleanchor = "x",
         scaleratio = 1,
-        showgrid = FALSE,
-        zeroline = FALSE,
-        tickson = "boundaries",
-        tickfont = list(size = 12),
-        tickangle = 0,
-        automargin = TRUE,
-        title = "",
-        ticklabelposition = "outside",
-        ticklabeloverflow = "allow"
+        automargin = FALSE
       ),
-      xaxis = list(
-        anchor = "y",
-        automargin = TRUE,
-        overlaying = "y",
-        side = "top",
-        showgrid = FALSE,
-        griddash = "20px",
-        zeroline = FALSE,
-        tickmode = "array",
-        tickvals = 1:24,
-        ticktext = as.character(1:24),
-        tickfont = list(size = 12),
-        tickangle = 0
-      ),
-      # margin = list(t = 40, r = 60, b = 0, l = left),
-      margin = list(t = 0, r = 60, b = 0, l = left),
-      plot_bgcolor = "#dfdfdf42",
-      paper_bgcolor = "#dfdfdf42"
+      margin = list(t = 25, r = 0, b = 0, l = 30),
+      plot_bgcolor = "rgba(160,160,170,0.25)",
+      paper_bgcolor = "rgba(0,0,0,0)"
     ) |>
     config(
       displayModeBar = "hover",
       scrollZoom = FALSE,
-      modeBarButtons = list(
-        list(
-          "zoom2d",
-          "toImage",
-          "autoScale2d",
-          "resetScale2d",
-          "zoomIn2d",
-          "zoomOut2d"
-        )
-      ),
-      toImageButtonOptions = list(
-        filename = paste0(Sys.Date(), "_Plate_Heatmap")
-      )
+      modeBarButtons = list(list(
+        "zoom2d", "toImage", "autoScale2d", "resetScale2d", "zoomIn2d", "zoomOut2d"
+      )),
+      toImageButtonOptions = list(filename = paste0(Sys.Date(), "_Plate_Heatmap"))
     )
-
-  if (num_unique_values == 1) {
-    interactive_plot |>
-      style(
-        0,
-        colorscale = list(c(0, 1), c("#440154FF", "#440154FF")),
-        showscale = FALSE,
-        showlegend = FALSE,
-        traces = 2
-      ) |>
-      hide_colorbar()
-  } else {
-    interactive_plot
-  }
 }
 
 # process_plot_data(): Helper function to harmonize data for plotting ----

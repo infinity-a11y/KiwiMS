@@ -42,5 +42,5 @@ if (length(pkgs_to_fix) > 0) {
   renv::install(pkgs_to_fix, type = "binary")
 
   # Snapshot to save these new working versions to your lockfile
-  # renv::snapshot()
+  renv::snapshot(prompt = "FALSE")
 }
