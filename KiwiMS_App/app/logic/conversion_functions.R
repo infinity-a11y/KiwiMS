@@ -736,8 +736,9 @@ check_sample_table <- function(sample_table, proteins, compounds) {
       ))
     }
 
-    # For each unique concentration value, require at least 3 distinct non-zero time points
-    unique_concs <- unique(conc_vals[!is.na(conc_vals)])
+    # For each unique non-zero concentration, require at least 3 distinct non-zero time points
+    # (concentration = 0 is excluded from this check — only one sample is allowed there)
+    unique_concs <- unique(conc_vals[!is.na(conc_vals) & conc_vals != 0])
     for (uc in unique_concs) {
       times_for_conc <- time_vals[!is.na(conc_vals) & conc_vals == uc]
       n_time <- length(unique(times_for_conc[
