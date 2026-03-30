@@ -45,10 +45,12 @@ KiwiMS is an interactive pipeline with graphical user interface to perform prote
 
 ### Citation
 
->Please cite both **KiwiMS** and **UniDec** if you used this software in your work.
+Please cite both **KiwiMS** and **UniDec** if you used this software in your work.
 
+<br>
 Marian Freisleben. (2026). infinity-a11y/KiwiMS: KiwiMS 0.4.1. Zenodo. DOI: https://doi.org/10.5281/zenodo.18552188
-```      
+
+```    
 @software{marian_freisleben_2026_18552188,
   author       = {Marian Freisleben},
   title        = {infinity-a11y/KiwiMS: KiwiMS 0.4.1},
@@ -62,7 +64,7 @@ Marian Freisleben. (2026). infinity-a11y/KiwiMS: KiwiMS 0.4.1. Zenodo. DOI: http
 ```
 
 <br>
-Marty, M. T.; Baldwin, A. J.; Marklund, E. G.; Hochberg, G. K.; Benesch, J. L.; Robinson, C. V. Bayesian deconvolution of mass and ion mobility spectra: from binary interactions to polydisperse ensembles. Analytical chemistry 2015, 87 (8), 4370– 6,  DOI: https://doi.org/10.1021/acs.analchem.5b00140
+Marty, M. T.; Baldwin, A. J.; Marklund, E. G.; Hochberg, G. K.; Benesch, J. L.; Robinson, C. V. Bayesian deconvolution of mass and ion mobility spectra: from binary interactions to polydisperse ensembles. Analytical chemistry 2015, 87 (8), 4370– 6. DOI: https://doi.org/10.1021/acs.analchem.5b00140
 
 ```
 @article{marty_bayesian_2015,
