@@ -271,7 +271,7 @@ server <- function(
         return(shiny::actionButton(
           ns("run_binding_analysis"),
           "Start",
-          icon = shiny::icon("play"),
+          icon = shiny::icon("circle-play"),
           width = "100%",
           class = "btn-highlight"
         ))
@@ -284,7 +284,7 @@ server <- function(
                 shiny::actionButton(
                   ns("run_binding_analysis"),
                   "Start",
-                  icon = shiny::icon("play"),
+                  icon = shiny::icon("circle-play"),
                   width = "100%"
                 )
               )

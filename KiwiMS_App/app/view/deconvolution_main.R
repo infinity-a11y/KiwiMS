@@ -117,9 +117,183 @@ server <- function(
 
     decon_process_data <- shiny$reactiveVal(NULL)
 
+    ### Smart analysis name suggestion ----
+    # Base session name, e.g. "KiwiMS_2026-04-03_id1234"
+    session_base_name <- gsub("\\.log$", "", basename(log_path))
+
+    # Compute the lowest non-existing name in the target folder
+    smart_analysis_name <- shiny$reactive({
+      base <- session_base_name
+      target <- deconvolution_sidebar_vars$targetpath()
+      if (
+        is.null(target) ||
+          length(target) == 0 ||
+          !nzchar(target) ||
+          !dir.exists(target)
+      ) {
+        return(base)
+      }
+      if (!dir.exists(file.path(target, base))) {
+        return(base)
+      }
+      n <- 2L
+      repeat {
+        candidate <- paste0(base, "_", n)
+        if (!dir.exists(file.path(target, candidate))) {
+          return(candidate)
+        }
+        n <- n + 1L
+      }
+    })
+
+    # Tentative destination (live) = targetpath / analysis_name
+    effective_dest <- shiny$reactive({
+      target <- deconvolution_sidebar_vars$targetpath()
+      if (is.null(target) || length(target) == 0 || !nzchar(target)) return(NULL)
+      name <- trimws(input$analysis_name)
+      if (!nzchar(name)) name <- session_base_name
+      file.path(target, name)
+    })
+
+    # Locked destination — set once when deconvolute_start_conf fires
+    analysis_dest <- shiny$reactiveVal(NULL)
+
+    # Update the text input when the destination folder changes
+    shiny$observeEvent(deconvolution_sidebar_vars$targetpath(), {
+      suggested <- smart_analysis_name()
+      shiny$updateTextInput(
+        session,
+        "analysis_name",
+        value = suggested,
+        placeholder = suggested
+      )
+    })
+
     ### Deconvolution initiation interface ----
     output$deconvolution_init_ui <- shiny$renderUI({
-      deconvolution_init_ui(ns)
+      deconvolution_init_ui(
+        ns,
+        analysis_name_default = smart_analysis_name()
+      )
+    })
+
+    ### Validation state reactive ----
+    # Returns NULL when all conditions are met, otherwise the first failing message.
+    deconv_validation_msg <- shiny$reactive({
+      files_ok <-
+        (!is.null(deconvolution_sidebar_vars$file()) &&
+          length(deconvolution_sidebar_vars$file()) > 0) ||
+        (!is.null(deconvolution_sidebar_vars$dir()) &&
+          length(deconvolution_sidebar_vars$dir()) > 0)
+      if (!files_ok) {
+        return("Select target file(s) from the sidebar to start ...")
+      }
+
+      target <- deconvolution_sidebar_vars$targetpath()
+      if (is.null(target) || length(target) == 0 || !nzchar(target)) {
+        return("Select a destination folder from the sidebar to start ...")
+      }
+
+      if (
+        !is.null(input$startz) &&
+          !is.null(input$endz) &&
+          input$startz >= input$endz
+      ) {
+        return("High charge z must be greater than low charge z ...")
+      }
+
+      if (
+        !is.null(input$minmz) &&
+          !is.null(input$maxmz) &&
+          input$minmz >= input$maxmz
+      ) {
+        return("High m/z must be greater than low m/z ...")
+      }
+
+      if (
+        !is.null(input$masslb) &&
+          !is.null(input$massub) &&
+          input$masslb >= input$massub
+      ) {
+        return("High mass Mw must be greater than low mass Mw ...")
+      }
+
+      if (
+        !is.null(input$time_start) &&
+          !is.null(input$time_end) &&
+          input$time_start >= input$time_end
+      ) {
+        return("Retention start time must be earlier than end time ...")
+      }
+
+      sel <- deconvolution_sidebar_vars$selected()
+      if (!is.null(sel) && sel == "folder") {
+        if (
+          length(dir_ls(deconvolution_sidebar_vars$dir(), glob = "*.raw")) == 0
+        ) {
+          return("No valid target folder selected ...")
+        }
+      } else if (!is.null(sel) && sel == "file") {
+        f <- deconvolution_sidebar_vars$file()
+        valid_file <- length(f) > 0 &&
+          grepl("\\.raw$", f, ignore.case = TRUE) &&
+          dir.exists(f)
+        if (!valid_file) return("No valid target file selected ...")
+      }
+
+      NULL
+    })
+
+    ### Analysis name path feedback ----
+    output$analysis_name_feedback <- shiny$renderUI({
+      msg <- deconv_validation_msg()
+
+      if (!is.null(msg)) {
+        return(shiny$div(
+          style = "color: black; font-size: 0.85em; margin-top: 2px;",
+          shiny$tags$span(style = "color: #D17050;", shiny$icon("triangle-exclamation")),
+          shiny$HTML(paste0(" ", msg))
+        ))
+      }
+
+      # All valid — show path feedback
+      target <- deconvolution_sidebar_vars$targetpath()
+      name <- trimws(input$analysis_name)
+      if (!nzchar(name)) {
+        name <- smart_analysis_name()
+      }
+
+      full_path <- file.path(target, name)
+
+      display_path <- if (nchar(full_path) > 60) {
+        paste0(
+          "\u2026",
+          substr(full_path, nchar(full_path) - 57L, nchar(full_path))
+        )
+      } else {
+        full_path
+      }
+      path_html <- paste0(
+        "<code title='",
+        full_path,
+        "' style='cursor:default;'>",
+        display_path,
+        "</code>"
+      )
+
+      if (dir.exists(full_path)) {
+        shiny$div(
+          style = "color: black; font-size: 0.85em; margin-top: 2px;",
+          shiny$tags$span(style = "color: #D17050;", shiny$icon("triangle-exclamation")),
+          shiny$HTML(paste0(" Folder already exists: ", path_html))
+        )
+      } else {
+        shiny$div(
+          style = "color: black; font-size: 0.85em; margin-top: 2px;",
+          shiny$tags$span(style = "color: #5cb85c;", shiny$icon("folder-plus")),
+          shiny$HTML(paste0(" Will be saved to: ", path_html))
+        )
+      }
     })
 
     # Conditional enabling of advanced settings
@@ -137,115 +311,42 @@ server <- function(
       }
     })
 
-    ### Validate start button ----
+    ### Start button ----
     output$deconvolute_start_ui <- shiny$renderUI({
       reset_button()
-
-      shiny$validate(
-        shiny$need(
-          ((!is.null(deconvolution_sidebar_vars$file()) &&
-            length(deconvolution_sidebar_vars$file()) > 0) ||
-            (!is.null(deconvolution_sidebar_vars$dir()) &&
-              length(deconvolution_sidebar_vars$dir()) > 0)),
-          "Select target file(s) from the sidebar to start ..."
-        )
+      btn <- shiny$actionButton(
+        ns("deconvolute_start"),
+        "Run",
+        icon = shiny$icon("circle-play"),
+        width = "100%"
       )
-
-      if (
-        !is.null(deconvolution_sidebar_vars$targetpath()) &&
-          length(deconvolution_sidebar_vars$targetpath()) > 0
-      ) {
-        sessionId <- gsub(".log", "", basename(log_path))
-        result_files <- list.files(deconvolution_sidebar_vars$targetpath())
-
-        if (any(grepl(sessionId, gsub("_RESULT.rds", "", result_files)))) {
-          valid_destination <- FALSE
-        } else {
-          valid_destination <- TRUE
-        }
-      } else {
-        valid_destination <- FALSE
-      }
-
-      shiny$validate(
-        shiny$need(
-          valid_destination,
-          "Select destination for result file(s) from the sidebar to start ..."
-        )
-      )
-
-      shiny$validate(
-        shiny$need(
-          input$startz < input$endz,
-          "High charge z must be greater than low charge z ..."
-        )
-      )
-
-      shiny$validate(
-        shiny$need(
-          input$minmz < input$maxmz,
-          "High m/z must be greater than low m/z ..."
-        )
-      )
-
-      shiny$validate(
-        shiny$need(
-          input$masslb < input$massub,
-          "High mass Mw must be greater than low mass Mw ..."
-        )
-      )
-
-      shiny$validate(
-        shiny$need(
-          input$time_start < input$time_end,
-          "Retention start time must be earlier than end time ..."
-        )
-      )
-
-      if (deconvolution_sidebar_vars$selected() == "folder") {
-        valid_folder <- length(dir_ls(
-          deconvolution_sidebar_vars$dir(),
-          glob = "*.raw"
-        )) !=
-          0
-
-        shiny$validate(
-          shiny$need(
-            valid_folder,
-            "No valid target folder selected ..."
-          )
-        )
-      } else if (deconvolution_sidebar_vars$selected() == "file") {
-        valid_file <- (length(deconvolution_sidebar_vars$file()) &&
-          grepl(
-            "\\.raw$",
-            deconvolution_sidebar_vars$file(),
-            ignore.case = TRUE
-          ) &&
-          dir.exists(deconvolution_sidebar_vars$file()))
-
-        shiny$validate(
-          shiny$need(
-            valid_file,
-            "No valid target file selected ..."
-          )
-        )
-      }
-
-      shiny$actionButton(ns("deconvolute_start"), "Run Deconvolution")
+      if (!is.null(deconv_validation_msg())) disabled(btn) else btn
     })
 
     # Eagerly render startup outputs so they are computed in the first reactive
     # flush and included in the same browser message as waiter_hide().
-    shiny$outputOptions(output, "deconvolution_init_ui", suspendWhenHidden = FALSE)
-    shiny$outputOptions(output, "deconvolute_start_ui", suspendWhenHidden = FALSE)
+    shiny$outputOptions(
+      output,
+      "deconvolution_init_ui",
+      suspendWhenHidden = FALSE
+    )
+    shiny$outputOptions(
+      output,
+      "deconvolute_start_ui",
+      suspendWhenHidden = FALSE
+    )
+    shiny$outputOptions(
+      output,
+      "analysis_name_feedback",
+      suspendWhenHidden = FALSE
+    )
 
     ### Functions ----
     #### check_progress ----
     check_progress <- function(raw_dirs) {
       message("Checking progress at: ", Sys.time())
       fin_dirs <- file.path(
-        deconvolution_sidebar_vars$targetpath(),
+        analysis_dest(),
         basename(gsub(
           ".raw",
           "_rawdata_unidecfiles",
@@ -320,10 +421,12 @@ server <- function(
       select <- NULL
 
       if (deconvolution_sidebar_vars$selected() == "folder") {
-        finished_files <- dir_ls(
-          deconvolution_sidebar_vars$targetpath(),
-          glob = "*_rawdata_unidecfiles"
-        )
+        dest_dir <- effective_dest() %||% deconvolution_sidebar_vars$targetpath()
+        finished_files <- if (!is.null(dest_dir) && dir.exists(dest_dir)) {
+          dir_ls(dest_dir, glob = "*_rawdata_unidecfiles")
+        } else {
+          character(0)
+        }
 
         if (
           isTRUE(deconvolution_sidebar_vars$use_config()) &&
@@ -491,11 +594,13 @@ server <- function(
       warning <- NULL
       reactVars$overwrite <- FALSE
 
-      # Get finished files in destination path
-      finished_files <- dir_ls(
-        deconvolution_sidebar_vars$targetpath(),
-        glob = "*_rawdata_unidecfiles"
-      )
+      # Get finished files in destination path (dir may not exist yet)
+      dest_dir <- effective_dest() %||% deconvolution_sidebar_vars$targetpath()
+      finished_files <- if (!is.null(dest_dir) && dir.exists(dest_dir)) {
+        dir_ls(dest_dir, glob = "*_rawdata_unidecfiles")
+      } else {
+        character(0)
+      }
 
       if (deconvolution_sidebar_vars$selected() == "folder") {
         if (
@@ -636,6 +741,13 @@ server <- function(
       # Reset modal and previous processes
       shiny$removeModal()
       reset_progress()
+
+      # Lock in analysis destination and create directory
+      analysis_dest(effective_dest())
+      if (!is.null(analysis_dest()) && !dir.exists(analysis_dest())) {
+        dir.create(analysis_dest(), recursive = TRUE)
+      }
+
       write_log("Deconvolution initiated")
 
       # UI changes
@@ -702,7 +814,7 @@ server <- function(
       }
       write_log(paste(
         "Destination path:",
-        deconvolution_sidebar_vars$targetpath()
+        analysis_dest()
       ))
 
       # Overwrite or skip already present result dirs
@@ -710,7 +822,7 @@ server <- function(
         if (reactVars$duplicated == "Overwrite Files") {
           # Remove result files and dirs
           rslt_dirs <- file.path(
-            deconvolution_sidebar_vars$targetpath(),
+            analysis_dest(),
             basename(reactVars$overwrite)
           )
 
@@ -815,7 +927,7 @@ server <- function(
               temp,
               log_path,
               getwd(),
-              deconvolution_sidebar_vars$targetpath(),
+              analysis_dest(),
               Sys.getenv("KIWIMS_DEV_MODE")
             ),
             stdout = reactVars$decon_process_out,
@@ -1003,7 +1115,7 @@ server <- function(
               reactVars_wells <<- reactVars$wells
 
               results_all <- dir_ls(
-                deconvolution_sidebar_vars$targetpath(),
+                analysis_dest(),
                 glob = "*_rawdata_unidecfiles"
               )
 
@@ -1169,7 +1281,7 @@ server <- function(
                 target_selector_sel()
               )
               fin_dirs <- file.path(
-                deconvolution_sidebar_vars$targetpath(),
+                analysis_dest(),
                 basename(gsub(
                   ".raw",
                   "_rawdata_unidecfiles",
@@ -1271,7 +1383,7 @@ server <- function(
             )
 
             result_files <- file.path(
-              deconvolution_sidebar_vars$targetpath(),
+              analysis_dest(),
               basename(gsub(".raw", "_rawdata_unidecfiles", raw_dirs))
             )
 
@@ -1279,7 +1391,7 @@ server <- function(
             if (
               all(file.exists(file.path(result_files, "plots.rds"))) &&
                 file.exists(file.path(
-                  deconvolution_sidebar_vars$targetpath(),
+                  analysis_dest(),
                   gsub(
                     ".log",
                     "_RESULT.rds",
@@ -1432,7 +1544,7 @@ server <- function(
                 }
 
                 fin_dirs <- file.path(
-                  deconvolution_sidebar_vars$targetpath(),
+                  analysis_dest(),
                   basename(gsub(".raw", "_rawdata_unidecfiles", selected_files))
                 )
                 peak_files <- file.path(fin_dirs, "plots.rds")
@@ -1675,12 +1787,12 @@ server <- function(
 
         if (deconvolution_sidebar_vars$selected() == "folder") {
           result_dir <- file.path(
-            deconvolution_sidebar_vars$targetpath(),
+            analysis_dest(),
             gsub(".raw", "_rawdata_unidecfiles", result_files_sel())
           )
         } else if (deconvolution_sidebar_vars$selected() == "file") {
           result_dir <- file.path(
-            deconvolution_sidebar_vars$targetpath(),
+            analysis_dest(),
             basename(gsub(
               ".raw",
               "_rawdata_unidecfiles",
@@ -1721,12 +1833,12 @@ server <- function(
 
         if (deconvolution_sidebar_vars$selected() == "folder") {
           result_dir <- file.path(
-            deconvolution_sidebar_vars$targetpath(),
+            analysis_dest(),
             gsub(".raw", "_rawdata_unidecfiles", result_files_sel())
           )
         } else if (deconvolution_sidebar_vars$selected() == "file") {
           result_dir <- file.path(
-            deconvolution_sidebar_vars$targetpath(),
+            analysis_dest(),
             basename(gsub(
               ".raw",
               "_rawdata_unidecfiles",
@@ -2183,7 +2295,7 @@ server <- function(
               basename(log_path)
             )
             filename_path <- file.path(
-              deconvolution_sidebar_vars$targetpath(),
+              analysis_dest(),
               filename
             )
 
@@ -2242,7 +2354,7 @@ server <- function(
                 basename(log_path)
               )
               filename_path <- file.path(
-                deconvolution_sidebar_vars$targetpath(),
+                analysis_dest(),
                 filename
               )
 
@@ -2371,7 +2483,7 @@ server <- function(
               fill_empty(input$decon_rep_desc),
               output_file,
               log_path,
-              deconvolution_sidebar_vars$targetpath(),
+              analysis_dest(),
               get_kiwims_version()["version"],
               get_kiwims_version()["date"],
               temp
@@ -2649,7 +2761,7 @@ server <- function(
     shiny$observeEvent(input$forward_deconvolution, {
       # Return result file path as module output
       reactVars$continue_conversion <- file.path(
-        deconvolution_sidebar_vars$targetpath(),
+        analysis_dest(),
         gsub(".log", "_RESULT.rds", basename(log_path))
       )
 
