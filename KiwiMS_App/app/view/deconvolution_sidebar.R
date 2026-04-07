@@ -174,42 +174,22 @@ server <- function(id, reset_button, config_file, config_filename) {
       reset_button()
 
       if (!is.null(target_path()) && length(target_path())) {
-        # Check if result files already present
-        sessionId <- gsub(".log", "", basename(get_log()))
-        result_files <- list.files(target_path())
+        runjs(paste0(
+          '$("#app-deconvolution_pars-targetpath_selected").css({"border-color": "#8BC34A"})'
+        ))
 
-        if (any(grepl(sessionId, gsub("_RESULT.rds", "", result_files)))) {
-          runjs(paste0(
-            '$("#app-deconvolution_pars-targetpath_selected").css({"border-color": "#D17050"})'
-          ))
-
-          shiny::p(
-            shiny::HTML(
-              paste0(
-                '<i class="fa-solid fa-circle-exclamation" style="font-size:1e',
-                'm; color:black; margin-right: 10px;"></i>',
-                "Destination already has results from this session."
-              )
+        shiny::p(
+          shiny::HTML(
+            paste0(
+              '<i class="fa-solid fa-circle-check" style="font-size:1em; c',
+              'olor:#000000; margin-right: 10px;"></i>',
+              "Destination path is valid."
             )
           )
-        } else {
-          runjs(paste0(
-            '$("#app-deconvolution_pars-targetpath_selected").css({"border-color": "#8BC34A"})'
-          ))
-
-          shiny::p(
-            shiny::HTML(
-              paste0(
-                '<i class="fa-solid fa-circle-check" style="font-size:1em; c',
-                'olor:#000000; margin-right: 10px;"></i>',
-                "Destination path is valid."
-              )
-            )
-          )
-        }
+        )
       } else {
         runjs(paste0(
-          '$("#app-deconvolution_pars-targetpath_selected").css({"border-color": "#D17050"})'
+          '$("#app-deconvolution_pars-targetpath_selected").css({"border-color": ""})'
         ))
 
         shiny::p(
