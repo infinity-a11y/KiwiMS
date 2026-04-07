@@ -30,6 +30,7 @@ box::use(
       config_badge,
       get_kiwims_version,
       get_latest_release_url,
+      get_volumes,
       normalize_colnames,
       read_config_file,
       validate_config,
@@ -225,12 +226,134 @@ server <- function(id) {
     config_modal_state <- shiny$reactiveVal("upload")
     config_filename <- shiny$reactiveVal(NULL)
 
+    # User settings persistence
+    settings_dir <- file.path(Sys.getenv("LOCALAPPDATA"), "KiwiMS", "settings")
+    dest_settings_file <- file.path(settings_dir, "default_dest_path.rds")
+    dest_settings <- shiny$reactiveVal(
+      if (file.exists(dest_settings_file)) {
+        readRDS(dest_settings_file)
+      } else {
+        list(path = "", enabled = FALSE)
+      }
+    )
+
+    # Reusable function to open the settings modal
+    # initial_path: pre-fill from caller (e.g. currently selected destination path)
+    open_settings_modal <- function(initial_path = NULL) {
+      base <- if (length(initial_path) == 1L && nzchar(initial_path)) initial_path
+              else dest_settings()$path
+      shiny$showModal(
+        shiny$div(
+          class = "unidec-modal",
+          shiny$modalDialog(
+            title = "Settings",
+            size = "l",
+            easyClose = TRUE,
+            shiny$div(
+              class = "settings-modal-body",
+              shiny$h6("Default Destination Folder"),
+              shiny$tags$p(
+                class = "text-muted settings-modal-hint",
+                "When enabled, this path is pre-selected as the destination folder at session start."
+              ),
+              shiny$div(
+                class = "settings-dest-row",
+                shiny$textInput(
+                  ns("settings_dest_path"),
+                  label = NULL,
+                  value = base,
+                  placeholder = "Paste or type an absolute folder path",
+                  width = "100%"
+                ),
+                shiny$checkboxInput(
+                  ns("settings_dest_enabled"),
+                  label = "Use as default",
+                  value = isTRUE(dest_settings()$enabled)
+                )
+              ),
+              shiny$uiOutput(ns("settings_dest_path_display"))
+            ),
+            footer = shiny$tagList(
+              shiny$modalButton("Dismiss"),
+              shiny$actionButton(
+                ns("save_settings"),
+                "Save",
+                icon = shiny$icon("floppy-disk"),
+                class = "load-db"
+              )
+            )
+          )
+        )
+      )
+    }
+
+    # Resolve typed/pasted path from the text input
+    settings_dest_picked <- shiny$reactive({
+      p <- input$settings_dest_path
+      trimws(if (!is.null(p)) p else dest_settings()$path)
+    })
+
+    # Settings opened from nav button (pre-fill from saved setting)
+    shiny$observeEvent(input$settings, { open_settings_modal() })
+
+    # Live feedback below the text input
+    output$settings_dest_path_display <- shiny$renderUI({
+      path <- settings_dest_picked()
+      if (!nzchar(path)) return(NULL)
+      if (dir.exists(path)) {
+        shiny$div(
+          class = "settings-dest-feedback settings-dest-feedback--valid",
+          shiny$icon("circle-check"), " Folder exists"
+        )
+      } else {
+        shiny$div(
+          class = "settings-dest-feedback settings-dest-feedback--invalid",
+          shiny$icon("triangle-exclamation"), " Folder not found"
+        )
+      }
+    })
+
+    shiny$observeEvent(input$save_settings, {
+      path <- settings_dest_picked()
+      enabled <- isTRUE(input$settings_dest_enabled)
+      if (enabled && !nzchar(path)) {
+        shiny$showNotification("Select a folder first.", type = "error", duration = 4)
+        return()
+      }
+      if (enabled && !dir.exists(path)) {
+        shiny$showNotification("Folder not found — settings not saved.", type = "error", duration = 4)
+        return()
+      }
+      if (!dir.exists(settings_dir)) dir.create(settings_dir, recursive = TRUE)
+      new_settings <- list(path = path, enabled = enabled)
+      saveRDS(new_settings, dest_settings_file)
+      dest_settings(new_settings)
+      shiny$removeModal()
+      shiny$showNotification("Settings saved.", type = "message", duration = 3)
+    })
+
     # Deconvolution sidebar server
     deconvolution_sidebar_vars <- deconvolution_sidebar$server(
       "deconvolution_pars",
       reset_button = reset_button,
       config_file = configfile,
-      config_filename = config_filename
+      config_filename = config_filename,
+      default_dest_path = shiny$reactive({
+        s <- dest_settings()
+        if (isTRUE(s$enabled) && nzchar(s$path)) s$path else NULL
+      })
+    )
+
+    # Settings opened from sidebar gear button — pre-fill with currently active path
+    shiny$observeEvent(
+      deconvolution_sidebar_vars$open_settings_clicked(),
+      {
+        open_settings_modal(
+          initial_path = deconvolution_sidebar_vars$targetpath()
+        )
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
     )
 
     # Deconvolution process server

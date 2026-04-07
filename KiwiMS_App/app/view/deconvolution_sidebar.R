@@ -64,13 +64,22 @@ ui <- function(id) {
         ),
         shiny::verbatimTextOutput(ns("path_selected")),
         shiny::uiOutput(ns("targetpath_check")),
-        shinyDirButton(
-          ns("target_folder"),
-          "Select Destination Folder",
-          icon = shiny::icon("file-export"),
-          title = "Select destination folder",
-          buttonType = "default",
-          root = path_home()
+        shiny::div(
+          class = "dest-folder-row",
+          shinyDirButton(
+            ns("target_folder"),
+            "Select Destination Folder",
+            icon = shiny::icon("file-export"),
+            title = "Select destination folder",
+            buttonType = "default",
+            root = path_home()
+          ),
+          actionButton(
+            ns("open_settings_btn"),
+            label = NULL,
+            icon = icon("gear"),
+            class = "dest-settings-btn btn-sm"
+          )
         ),
         shiny::verbatimTextOutput(ns("targetpath_selected"))
       ),
@@ -89,7 +98,8 @@ ui <- function(id) {
 }
 
 #' @export
-server <- function(id, reset_button, config_file, config_filename) {
+server <- function(id, reset_button, config_file, config_filename,
+                   default_dest_path = shiny::reactive(NULL)) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -125,6 +135,7 @@ server <- function(id, reset_button, config_file, config_filename) {
       session = session
     )
 
+
     # Get selected paths
     root_dir <- reactive({
       if (is.null(input$folder)) {
@@ -155,10 +166,21 @@ server <- function(id, reset_button, config_file, config_filename) {
     filepath <- shiny::reactiveVal(character())
     targetpath <- shiny::reactiveVal(character())
 
+    # Apply default destination path once on init (if configured)
+    shiny::observe({
+      def <- default_dest_path()
+      tp <- targetpath()
+      if (length(def) == 1L && nzchar(def) && dir.exists(def) &&
+          (length(tp) == 0L || !nzchar(tp))) {
+        targetpath(def)
+      }
+    })
+
     shiny::observe({
       filepath(file_path())
       rootdir(root_dir())
-      targetpath(target_path())
+      p <- target_path()
+      if (length(p) && nzchar(p)) targetpath(p)
     })
 
     # Render initial file selection information field
@@ -172,8 +194,9 @@ server <- function(id, reset_button, config_file, config_filename) {
 
     output$targetpath_check <- shiny::renderUI({
       reset_button()
+      tp <- targetpath()
 
-      if (!is.null(target_path()) && length(target_path())) {
+      if (length(tp) && nzchar(tp)) {
         runjs(paste0(
           '$("#app-deconvolution_pars-targetpath_selected").css({"border-color": "#8BC34A"})'
         ))
@@ -202,12 +225,9 @@ server <- function(id, reset_button, config_file, config_filename) {
 
     # Initial file selection feedback
     output$path_selected <- shiny::renderPrint(cat("Nothing selected"))
-    output$targetpath_selected <- shiny::renderPrint({
-      if (!is.null(targetpath()) && length(targetpath()) > 0) {
-        targetpath()
-      } else {
-        cat("Nothing selected")
-      }
+    output$targetpath_selected <- shiny::renderText({
+      tp <- targetpath()
+      if (length(tp) > 0 && nzchar(tp)) tp else "Nothing selected"
     })
 
     shiny::observeEvent(input$file, {
@@ -424,7 +444,8 @@ server <- function(id, reset_button, config_file, config_filename) {
       use_config = shiny::reactive(
         isTRUE(input$use_config) && !is.null(config_file())
       ),
-      open_config_clicked = shiny::reactive(input$open_config_btn)
+      open_config_clicked = shiny::reactive(input$open_config_btn),
+      open_settings_clicked = shiny::reactive(input$open_settings_btn)
     )
   })
 }

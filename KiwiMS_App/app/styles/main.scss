@@ -1004,6 +1004,10 @@ td.listbox.htDimmed.current.highlight {
   height: 100%;
 }
 
+.deconv-pre-init .shiny-spinner-placeholder {
+  display: none !important;
+}
+
 .shiny-text-output {
   overflow: auto;
   margin-bottom: 0;
@@ -1035,6 +1039,16 @@ td.listbox.htDimmed.current.highlight {
 #app-deconvolution_main-deconvolution_init_ui > div {
   height: 100%;
   margin-bottom: unset;
+}
+
+.deconvolution-running-interface .card:first-of-type {
+  height: 100%;
+}
+
+.deconvolution-running-interface .card-body:first-of-type,
+.deconvolution-running-interface .bslib-card .card-body:first-of-type,
+#app-deconvolution_main-deconvolution_ui > div > .card-body {
+  padding: 0 !important;
 }
 
 .decon-btn {
@@ -1239,6 +1253,9 @@ td.listbox.htDimmed.current.highlight {
   font-size: 0.85em;
   margin-top: 2px;
   height: 100%;
+}
+
+.deconvolution-running-interface + card {
 }
 
 #app-deconvolution_main-deconvolute_start:hover {
@@ -4226,6 +4243,59 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   height: 100%;
   gap: 2% !important;
   margin-left: -3px;
+}
+
+/* Destination folder row (dir button + gear) */
+.dest-folder-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.dest-settings-btn {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 0.25em 0.4em;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+}
+
+/* Settings modal */
+.settings-modal-hint {
+  font-size: 0.85em;
+}
+
+.settings-dest-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75em;
+  flex-wrap: wrap;
+}
+
+.settings-dest-feedback {
+  font-size: 0.85em;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &--none {
+    color: var(--bs-secondary);
+    font-style: italic;
+  }
+
+  &--valid i {
+    color: #8bc34a;
+  }
+
+  &--invalid i {
+    color: #d17050;
+  }
 }
 
 .deconvolution-section {
