@@ -52,16 +52,16 @@ box::use(
 ui <- function(id) {
   ns <- shiny$NS(id)
 
-  shiny::div(
-    class = "conversion-main-spinner",
-    shinycssloaders::withSpinner(
-      shiny$div(
-        class = "deconvolution-running-interface",
-        shiny$uiOutput(ns("deconvolution_init_ui")),
-        shiny$uiOutput(ns("deconvolution_running_ui"))
-      ),
-      type = 1,
-      color = "#7777f9"
+  shiny$div(
+    class = "deconvolution-running-interface",
+    shiny::div(
+      id = ns("deconvolution_ui_container"),
+      class = "conversion-main-spinner deconv-pre-init",
+      shinycssloaders::withSpinner(
+        shiny$uiOutput(ns("deconvolution_ui")),
+        type = 1,
+        color = "#7777f9"
+      )
     )
   )
 }
@@ -91,6 +91,20 @@ server <- function(
 
     # Make temp dir for session
     temp <- tempdir()
+
+    # Remove the pre-init class after the first flush so spinner is active for
+    # subsequent re-evaluations only (not during initial page load)
+    session$onFlushed(
+      function() {
+        runjs(paste0(
+          'var el=document.getElementById("',
+          ns("deconvolution_ui_container"),
+          '");',
+          'if(el)el.classList.remove("deconv-pre-init");'
+        ))
+      },
+      once = TRUE
+    )
 
     ### Reactive variables declaration ----
     reactVars <- shiny$reactiveValues(
@@ -181,8 +195,8 @@ server <- function(
       )
     })
 
-    ### Deconvolution initiation interface ----
-    output$deconvolution_init_ui <- shiny$renderUI({
+    ### Deconvolution interface (init or running, one output) ----
+    output$deconvolution_ui <- shiny$renderUI({
       deconvolution_init_ui(
         ns,
         analysis_name_default = smart_analysis_name()
@@ -296,7 +310,7 @@ server <- function(
       path_html <- paste0(
         "<code title='",
         full_path,
-        "' style='cursor:default; white-space:nowrap;'>",
+        "' style='cursor:default;'>",
         display_path,
         "</code>"
       )
@@ -361,7 +375,7 @@ server <- function(
     # flush and included in the same browser message as waiter_hide().
     shiny$outputOptions(
       output,
-      "deconvolution_init_ui",
+      "deconvolution_ui",
       suspendWhenHidden = FALSE
     )
     shiny$outputOptions(
@@ -1787,9 +1801,7 @@ server <- function(
       #### Switch to running UI ----
       # Toggle to hide sidebar
       runjs("document.querySelector('button.collapse-toggle').click();")
-      output$deconvolution_init_ui <- NULL
-
-      output$deconvolution_running_ui <- shiny$renderUI({
+      output$deconvolution_ui <- shiny$renderUI({
         has_wells <- "Well" %in%
           names(config_file()) &&
           any(
@@ -2048,11 +2060,10 @@ server <- function(
         # Null dynamic UI
         output$decon_rep_logtext <- NULL
         output$decon_rep_logtext_ui <- NULL
-        output$deconvolution_running_ui <- NULL
         output$heatmap <- NULL
 
-        # Render deconvolution initiation UI
-        output$deconvolution_init_ui <- shiny$renderUI(
+        # Switch back to initiation UI
+        output$deconvolution_ui <- shiny$renderUI(
           deconvolution_init_ui(
             ns,
             analysis_name_default = smart_analysis_name()
