@@ -110,14 +110,14 @@ ui <- function(id) {
       ),
       bslib$nav_spacer(),
       bslib$nav_item(shiny::uiOutput(ns("config_nav_btn"))),
-      # bslib$nav_item(
-      #   shiny::actionButton(
-      #     ns("settings"),
-      #     "Settings",
-      #     icon = shiny::icon("gear"),
-      #     class = "nav-link"
-      #   )
-      # ),
+      bslib$nav_item(
+        shiny::actionButton(
+          ns("settings"),
+          "Settings",
+          icon = shiny::icon("gear"),
+          class = "nav-link"
+        )
+      ),
       bslib$nav_item(
         shiny::actionButton(
           ns("licence"),

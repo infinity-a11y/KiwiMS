@@ -52,10 +52,17 @@ box::use(
 ui <- function(id) {
   ns <- shiny$NS(id)
 
-  shiny$div(
-    class = "deconvolution-running-interface",
-    shiny$uiOutput(ns("deconvolution_init_ui")),
-    shiny$uiOutput(ns("deconvolution_running_ui"))
+  shiny::div(
+    class = "conversion-main-spinner",
+    shinycssloaders::withSpinner(
+      shiny$div(
+        class = "deconvolution-running-interface",
+        shiny$uiOutput(ns("deconvolution_init_ui")),
+        shiny$uiOutput(ns("deconvolution_running_ui"))
+      ),
+      type = 1,
+      color = "#7777f9"
+    )
   )
 }
 
@@ -123,6 +130,7 @@ server <- function(
 
     # Compute the lowest non-existing name in the target folder
     smart_analysis_name <- shiny$reactive({
+      reset_button() # re-evaluate after reset so dir.exists() sees newly created folders
       base <- session_base_name
       target <- deconvolution_sidebar_vars$targetpath()
       if (
@@ -149,9 +157,13 @@ server <- function(
     # Tentative destination (live) = targetpath / analysis_name
     effective_dest <- shiny$reactive({
       target <- deconvolution_sidebar_vars$targetpath()
-      if (is.null(target) || length(target) == 0 || !nzchar(target)) return(NULL)
+      if (is.null(target) || length(target) == 0 || !nzchar(target)) {
+        return(NULL)
+      }
       name <- trimws(input$analysis_name)
-      if (!nzchar(name)) name <- session_base_name
+      if (!nzchar(name)) {
+        name <- session_base_name
+      }
       file.path(target, name)
     })
 
@@ -250,8 +262,11 @@ server <- function(
 
       if (!is.null(msg)) {
         return(shiny$div(
-          style = "color: black; font-size: 0.85em; margin-top: 2px;",
-          shiny$tags$span(style = "color: #D17050;", shiny$icon("triangle-exclamation")),
+          class = "analysis-name-feedback-row",
+          shiny$tags$span(
+            style = "color: #D17050; flex-shrink:0;",
+            shiny$icon("triangle-exclamation")
+          ),
           shiny$HTML(paste0(" ", msg))
         ))
       }
@@ -265,33 +280,52 @@ server <- function(
 
       full_path <- file.path(target, name)
 
-      display_path <- if (nchar(full_path) > 60) {
-        paste0(
-          "\u2026",
-          substr(full_path, nchar(full_path) - 57L, nchar(full_path))
-        )
-      } else {
+      base_name <- basename(full_path)
+      max_len <- 55L
+      display_path <- if (nchar(full_path) <= max_len) {
         full_path
+      } else {
+        suffix <- paste0("/", base_name)
+        prefix_len <- max_len - nchar(suffix) - 1L # 1 char for …
+        if (prefix_len <= 0) {
+          paste0("\u2026", suffix)
+        } else {
+          paste0(substr(full_path, 1L, prefix_len), "\u2026", suffix)
+        }
       }
       path_html <- paste0(
         "<code title='",
         full_path,
-        "' style='cursor:default;'>",
+        "' style='cursor:default; white-space:nowrap;'>",
         display_path,
         "</code>"
       )
 
       if (dir.exists(full_path)) {
         shiny$div(
-          style = "color: black; font-size: 0.85em; margin-top: 2px;",
-          shiny$tags$span(style = "color: #D17050;", shiny$icon("triangle-exclamation")),
-          shiny$HTML(paste0(" Folder already exists: ", path_html))
+          class = "analysis-name-feedback-row",
+          shiny$tags$span(
+            style = "color: #D17050; flex-shrink:0;",
+            shiny$icon("triangle-exclamation")
+          ),
+          shiny$tags$span(
+            style = "white-space:nowrap; flex-shrink:0;",
+            "Folder already exists:"
+          ),
+          shiny$HTML(path_html)
         )
       } else {
         shiny$div(
-          style = "color: black; font-size: 0.85em; margin-top: 2px;",
-          shiny$tags$span(style = "color: #5cb85c;", shiny$icon("folder-plus")),
-          shiny$HTML(paste0(" Will be saved to: ", path_html))
+          class = "analysis-name-feedback-row",
+          shiny$tags$span(
+            style = "color:#5cb85c; flex-shrink:0;",
+            shiny$icon("folder-plus")
+          ),
+          shiny$tags$span(
+            style = "white-space:nowrap; flex-shrink:0;",
+            "Will be saved to:"
+          ),
+          shiny$HTML(path_html)
         )
       }
     })
@@ -421,7 +455,8 @@ server <- function(
       select <- NULL
 
       if (deconvolution_sidebar_vars$selected() == "folder") {
-        dest_dir <- effective_dest() %||% deconvolution_sidebar_vars$targetpath()
+        dest_dir <- effective_dest() %||%
+          deconvolution_sidebar_vars$targetpath()
         finished_files <- if (!is.null(dest_dir) && dir.exists(dest_dir)) {
           dir_ls(dest_dir, glob = "*_rawdata_unidecfiles")
         } else {
@@ -2018,7 +2053,10 @@ server <- function(
 
         # Render deconvolution initiation UI
         output$deconvolution_init_ui <- shiny$renderUI(
-          deconvolution_init_ui(ns)
+          deconvolution_init_ui(
+            ns,
+            analysis_name_default = smart_analysis_name()
+          )
         )
 
         # Unblock mouse pointer
