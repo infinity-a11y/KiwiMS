@@ -77,8 +77,8 @@ ui <- function(id) {
           actionButton(
             ns("open_settings_btn"),
             label = NULL,
-            icon = icon("gear"),
-            class = "dest-settings-btn btn-sm"
+            icon = icon("floppy-disk"),
+            class = "btn-default"
           )
         ),
         shiny::verbatimTextOutput(ns("targetpath_selected"))
@@ -98,8 +98,13 @@ ui <- function(id) {
 }
 
 #' @export
-server <- function(id, reset_button, config_file, config_filename,
-                   default_dest_path = shiny::reactive(NULL)) {
+server <- function(
+  id,
+  reset_button,
+  config_file,
+  config_filename,
+  default_dest_path = shiny::reactive(NULL)
+) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -135,7 +140,6 @@ server <- function(id, reset_button, config_file, config_filename,
       session = session
     )
 
-
     # Get selected paths
     root_dir <- reactive({
       if (is.null(input$folder)) {
@@ -170,8 +174,12 @@ server <- function(id, reset_button, config_file, config_filename,
     shiny::observe({
       def <- default_dest_path()
       tp <- targetpath()
-      if (length(def) == 1L && nzchar(def) && dir.exists(def) &&
-          (length(tp) == 0L || !nzchar(tp))) {
+      if (
+        length(def) == 1L &&
+          nzchar(def) &&
+          dir.exists(def) &&
+          (length(tp) == 0L || !nzchar(tp))
+      ) {
         targetpath(def)
       }
     })
