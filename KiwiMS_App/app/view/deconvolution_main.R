@@ -34,6 +34,7 @@ box::use(
     ],
   app / logic / helper_functions[fill_empty, get_kiwims_version],
   app / logic / logging[write_log, get_log],
+  app / logic / user_settings[update_user_setting],
   app /
     logic /
     deconvolution_ui[
@@ -413,14 +414,140 @@ server <- function(
       }
     })
 
+    ### Save-default handlers for parameter inputs ----
+    shiny$observeEvent(
+      input$save_startz_btn,
+      {
+        if (!is.null(input$startz) && !is.na(input$startz)) {
+          update_user_setting("deconv_startz", input$startz)
+        }
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+    shiny$observeEvent(
+      input$save_endz_btn,
+      {
+        if (!is.null(input$endz) && !is.na(input$endz)) {
+          update_user_setting("deconv_endz", input$endz)
+        }
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+    shiny$observeEvent(
+      input$save_minmz_btn,
+      {
+        if (!is.null(input$minmz) && !is.na(input$minmz)) {
+          update_user_setting("deconv_minmz", input$minmz)
+        }
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+    shiny$observeEvent(
+      input$save_maxmz_btn,
+      {
+        if (!is.null(input$maxmz) && !is.na(input$maxmz)) {
+          update_user_setting("deconv_maxmz", input$maxmz)
+        }
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+    shiny$observeEvent(
+      input$save_masslb_btn,
+      {
+        if (!is.null(input$masslb) && !is.na(input$masslb)) {
+          update_user_setting("deconv_masslb", input$masslb)
+        }
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+    shiny$observeEvent(
+      input$save_massub_btn,
+      {
+        if (!is.null(input$massub) && !is.na(input$massub)) {
+          update_user_setting("deconv_massub", input$massub)
+        }
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+    shiny$observeEvent(
+      input$save_time_start_btn,
+      {
+        if (!is.null(input$time_start) && !is.na(input$time_start)) {
+          update_user_setting("deconv_time_start", input$time_start)
+        }
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+    shiny$observeEvent(
+      input$save_time_end_btn,
+      {
+        if (!is.null(input$time_end) && !is.na(input$time_end)) {
+          update_user_setting("deconv_time_end", input$time_end)
+        }
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+    shiny$observeEvent(
+      input$save_peakwindow_btn,
+      {
+        if (!is.null(input$peakwindow) && !is.na(input$peakwindow)) {
+          update_user_setting("deconv_peakwindow", input$peakwindow)
+        }
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+    shiny$observeEvent(
+      input$save_peaknorm_btn,
+      {
+        if (!is.null(input$peaknorm)) {
+          update_user_setting("deconv_peaknorm", input$peaknorm)
+        }
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+    shiny$observeEvent(
+      input$save_peakthresh_btn,
+      {
+        if (!is.null(input$peakthresh) && !is.na(input$peakthresh)) {
+          update_user_setting("deconv_peakthresh", input$peakthresh)
+        }
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+    shiny$observeEvent(
+      input$save_massbins_btn,
+      {
+        if (!is.null(input$massbins) && !is.na(input$massbins)) {
+          update_user_setting("deconv_massbins", input$massbins)
+        }
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+
     ### Start button ----
     output$deconvolute_start_ui <- shiny$renderUI({
       reset_button()
-      btn <- shiny$actionButton(
-        ns("deconvolute_start"),
-        "Run",
-        icon = shiny$icon("circle-play"),
-        width = "100%"
+      btn <- shiny$div(
+        class = "start-button",
+        style = "height: 100%;",
+        shiny$actionButton(
+          ns("deconvolute_start"),
+          "Start",
+          icon = shiny$icon("circle-play"),
+          width = "100%"
+        )
       )
       if (!is.null(deconv_validation_msg())) disabled(btn) else btn
     })
@@ -2882,7 +3009,7 @@ server <- function(
     })
 
     ### Tooltip events ----
-    shiny$observeEvent(input$detection_window_tooltip_bttn, {
+    shiny$observeEvent(input$peak_parameter_tooltip_bttn, {
       shiny$showModal(
         shiny$div(
           class = "start-modal",
@@ -2891,37 +3018,23 @@ server <- function(
               shiny$br(),
               shiny$column(
                 width = 11,
+                shiny$h5(
+                  "Peak Detection Threshold"
+                ),
                 shiny$div(
                   class = "tooltip-text",
                   "The peak detection range specifies the local window to consider when detecting a peak. A peak needs to be the local max within a window of +/- this range to be considered a peak. For example, if you set the window as 10 Da, only peaks within a window of +/- 10 Da will be considered peak. Any other local maximum are ignored."
                 ),
-                shiny$br(),
-                shiny$a(
-                  href = "https://github.com/michaelmarty/UniDec/wiki/Peak-Selection-and-Plotting#picking-peaks",
-                  "UniDec Wiki - Picking Peaks",
-                  target = "_blank"
-                )
+                shiny$br()
               )
             ),
-            title = "Peak Detection Range (Da)",
-            easyClose = TRUE,
-            footer = shiny$tagList(
-              shiny$modalButton("Dismiss")
-            )
-          )
-        )
-      )
-    })
-
-    shiny$observeEvent(input$threshold_tooltip_bttn, {
-      shiny$showModal(
-        shiny$div(
-          class = "start-modal",
-          shiny$modalDialog(
             shiny$fluidRow(
               shiny$br(),
               shiny$column(
                 width = 11,
+                shiny$h5(
+                  "Peak Detection Range (Da)"
+                ),
                 shiny$div(
                   class = "tooltip-text",
                   "The peak detection threshold specifies how tall the relative peak height (normalized to a max spectrum intensity of 1) needs to be to considered a peak. For example, a threshold of 0.1 would mean that any peaks below a 10% max intensity would be ignored. If you set this to 0, any local maximum (within the defined detection range) are counted."
@@ -2934,7 +3047,7 @@ server <- function(
                 )
               )
             ),
-            title = "Peak Detection Threshold",
+            title = "Peak Parameter",
             easyClose = TRUE,
             footer = shiny$tagList(
               shiny$modalButton("Dismiss")

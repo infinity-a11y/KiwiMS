@@ -74,11 +74,19 @@ server <- function(
     ## Analysis controls UI ----
     output$conversion_analysis_controls_ui <- shiny::renderUI({
       saved <- read_user_settings()
-      pt_default <- if (!is.null(saved$peak_tolerance)) saved$peak_tolerance else 3
-      mm_default <- if (!is.null(saved$max_multiples)) saved$max_multiples else 4
+      pt_default <- if (!is.null(saved$peak_tolerance)) {
+        saved$peak_tolerance
+      } else {
+        3
+      }
+      mm_default <- if (!is.null(saved$max_multiples)) {
+        saved$max_multiples
+      } else {
+        4
+      }
 
       shiny::div(
-        class = "interaction-analysis-flex",
+        class = "sidebar-section",
         shiny::fluidRow(
           shiny::column(
             width = 12,
@@ -87,75 +95,81 @@ server <- function(
               "Binding Analysis"
             ),
             shiny::div(
-              class = "dest-folder-row dest-folder-row--input",
-              shiny::div(
-                style = "flex: 1; min-width: 0;",
-                shiny::numericInput(
-                  ns("peak_tolerance"),
+              class = "dest-folder-row",
+              shiny::numericInput(
+                ns("peak_tolerance"),
+                shiny::div(
+                  class = "label-tooltip",
+                  shiny::tags$label("Peak Tolerance [Da]"),
                   shiny::div(
-                    class = "label-tooltip",
-                    shiny::tags$label("Peak Tolerance [Da]"),
-                    shiny::div(
-                      class = "tooltip-bttn",
-                      shiny::actionButton(
-                        ns("peak_tol_tooltip_bttn"),
-                        label = NULL,
-                        icon = shiny::icon("circle-question")
-                      )
+                    class = "tooltip-bttn",
+                    shiny::actionButton(
+                      ns("peak_tol_tooltip_bttn"),
+                      label = NULL,
+                      icon = shiny::icon("circle-question")
+                    )
+                  )
+                ),
+                value = pt_default,
+                min = 0,
+                max = 20,
+                step = 0.1,
+                width = "100%"
+              ),
+              shiny::div(
+                style = "height: -webkit-fill-available;",
+                tooltip(
+                  shiny::div(
+                    class = "save-button",
+                    shiny::actionButton(
+                      ns("save_peak_tol_btn"),
+                      label = NULL,
+                      icon = shiny::icon("floppy-disk"),
+                      class = "btn-default"
                     )
                   ),
-                  value = pt_default,
-                  min = 0,
-                  max = 20,
-                  step = 0.1,
-                  width = "100%"
+                  "Save as default value",
+                  placement = "bottom"
                 )
-              ),
-              tooltip(
-                shiny::actionButton(
-                  ns("save_peak_tol_btn"),
-                  label = NULL,
-                  icon = shiny::icon("floppy-disk"),
-                  class = "btn-default"
-                ),
-                "Save as default value",
-                placement = "bottom"
               )
             ),
             shiny::div(
-              class = "dest-folder-row dest-folder-row--input",
-              shiny::div(
-                style = "flex: 1; min-width: 0;",
-                shiny::numericInput(
-                  ns("max_multiples"),
+              class = "dest-folder-row",
+              shiny::numericInput(
+                ns("max_multiples"),
+                shiny::div(
+                  class = "label-tooltip",
+                  shiny::tags$label("Max. Stoichiometry"),
                   shiny::div(
-                    class = "label-tooltip",
-                    shiny::tags$label("Max. Stoichiometry"),
-                    shiny::div(
-                      class = "tooltip-bttn",
-                      shiny::actionButton(
-                        ns("max_mult_tooltip_bttn"),
-                        label = NULL,
-                        icon = shiny::icon("circle-question")
-                      )
+                    class = "tooltip-bttn",
+                    shiny::actionButton(
+                      ns("max_mult_tooltip_bttn"),
+                      label = NULL,
+                      icon = shiny::icon("circle-question")
+                    )
+                  )
+                ),
+                value = mm_default,
+                min = 1,
+                max = 20,
+                step = 1,
+                width = "100%"
+              ),
+              shiny::div(
+                style = "height: -webkit-fill-available;",
+                tooltip(
+                  shiny::div(
+                    class = "save-button",
+                    shiny::actionButton(
+                      ns("save_max_mult_btn"),
+                      label = NULL,
+                      icon = shiny::icon("floppy-disk"),
+                      class = "btn-default"
                     )
                   ),
-                  value = mm_default,
-                  min = 1,
-                  max = 20,
-                  step = 1,
-                  width = "100%"
+                  "Save as default value",
+                  placement = "bottom"
                 )
-              ),
-              tooltip(
-                shiny::actionButton(
-                  ns("save_max_mult_btn"),
-                  label = NULL,
-                  icon = shiny::icon("floppy-disk"),
-                  class = "btn-default"
-                ),
-                "Save as default value",
-                placement = "bottom"
               )
             ),
             shiny::div(
@@ -189,7 +203,7 @@ server <- function(
     output$conversion_result_controls_ui <- shiny::renderUI({
       if (analysis_status() == "pending") {
         shiny::div(
-          class = "deconvolution-section",
+          class = "sidebar-section",
           shiny::div(
             class = "sidebar-title custom-sidebar-title",
             "Experiment Configuration"
@@ -198,7 +212,7 @@ server <- function(
         )
       } else {
         shiny::div(
-          class = "interaction-analysis-flex",
+          class = "sidebar-section",
           shiny::fluidRow(
             shiny::column(
               width = 12,
@@ -307,18 +321,23 @@ server <- function(
     ## Conditional tooltip for launch button ----
     output$run_button_wrapper <- shiny::renderUI({
       if (isTRUE(conversion_main_vars$conversion_ready())) {
-        return(shiny::actionButton(
-          ns("run_binding_analysis"),
-          "Start",
-          icon = shiny::icon("circle-play"),
-          width = "100%",
-          class = "btn-highlight"
-        ))
+        return(
+          shiny::div(
+            class = "start-button",
+            shiny::actionButton(
+              ns("run_binding_analysis"),
+              "Start",
+              icon = shiny::icon("circle-play"),
+              width = "100%",
+              class = "btn-highlight"
+            )
+          )
+        )
       } else {
         return(
           bslib::tooltip(
             shiny::div(
-              style = "width: 100%;",
+              class = "start-button",
               shinyjs::disabled(
                 shiny::actionButton(
                   ns("run_binding_analysis"),
@@ -343,7 +362,7 @@ server <- function(
         shiny::updateActionButton(
           session = session,
           "run_binding_analysis",
-          label = "Run",
+          label = "Start",
           icon = shiny::icon("play")
         )
         # Enable ki/kinact analysis checkbox
@@ -403,7 +422,7 @@ server <- function(
                 shiny::div(
                   class = "conversion-footer",
                   shiny::div(
-                    class = "conversion-save-buttons",
+                    class = "conversion-save-button",
                     shiny::div(
                       class = "modal-button",
                       shinyjs::disabled(shiny::actionButton(
@@ -740,7 +759,7 @@ server <- function(
           shiny::updateActionButton(
             session = session,
             "run_binding_analysis",
-            label = "Run",
+            label = "Start",
             icon = shiny::icon("play"),
             disabled = FALSE
           )
@@ -882,10 +901,12 @@ server <- function(
       val <- input$peak_tolerance
       if (!is.null(val) && !is.na(val)) {
         update_user_setting("peak_tolerance", val)
-        shiny::showNotification(
+        shinyWidgets::show_toast(
           paste0("Peak Tolerance default set to ", val, " Da"),
-          type = "message",
-          duration = 3
+          text = NULL,
+          type = "success",
+          timer = 3000,
+          timerProgressBar = TRUE
         )
       }
     })
@@ -894,10 +915,12 @@ server <- function(
       val <- input$max_multiples
       if (!is.null(val) && !is.na(val)) {
         update_user_setting("max_multiples", val)
-        shiny::showNotification(
+        shinyWidgets::show_toast(
           paste0("Max. Stoichiometry default set to ", val),
-          type = "message",
-          duration = 3
+          text = NULL,
+          type = "success",
+          timer = 3000,
+          timerProgressBar = TRUE
         )
       }
     })

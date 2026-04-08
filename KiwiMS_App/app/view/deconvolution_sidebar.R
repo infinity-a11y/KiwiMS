@@ -39,7 +39,7 @@ ui <- function(id) {
 
       # --- Section 1: File Selection ---
       div(
-        class = "deconvolution-section",
+        class = "sidebar-section",
         div(class = "sidebar-title custom-sidebar-title", "Select Files"),
         shiny::uiOutput(ns("dir_check")),
         shiny::tags$div(
@@ -75,11 +75,14 @@ ui <- function(id) {
             root = path_home()
           ),
           bslib::tooltip(
-            actionButton(
-              ns("open_settings_btn"),
-              label = NULL,
-              icon = icon("floppy-disk"),
-              class = "btn-default"
+            shiny::div(
+              class = "save-button",
+              actionButton(
+                ns("open_settings_btn"),
+                label = NULL,
+                icon = icon("floppy-disk"),
+                class = "btn-default"
+              )
             ),
             "Save default folder",
             placement = "bottom"
@@ -90,7 +93,7 @@ ui <- function(id) {
 
       # --- Section 2: Experiment Configuration ---
       div(
-        class = "deconvolution-section",
+        class = "sidebar-section",
         div(
           class = "sidebar-title custom-sidebar-title",
           "Experiment Configuration"
