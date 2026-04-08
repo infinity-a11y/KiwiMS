@@ -23,7 +23,9 @@ box::use(
   app / view / log_view,
   app / view / log_sidebar,
   app / logic / logging[start_logging, write_log, close_logging],
-  app / logic / user_settings[read_user_settings, update_user_setting, clear_user_setting],
+  app /
+    logic /
+    user_settings[read_user_settings, update_user_setting, clear_user_setting],
   app /
     logic /
     helper_functions[
@@ -432,7 +434,13 @@ server <- function(id) {
       }
 
       shiny$removeModal()
-      shiny$showNotification("Settings saved.", type = "message", duration = 3)
+      shinyWidgets::show_toast(
+        "Settings saved.",
+        text = NULL,
+        type = "success",
+        timer = 3000,
+        timerProgressBar = TRUE
+      )
     })
 
     # Deconvolution sidebar server

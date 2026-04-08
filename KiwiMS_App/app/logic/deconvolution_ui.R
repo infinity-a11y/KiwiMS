@@ -17,9 +17,43 @@ box::use(
   waiter[useWaiter, spin_wave, waiter_show, waiter_hide, withWaiter],
 )
 
+box::use(
+  app / logic / user_settings[read_user_settings],
+)
+
 # Deconvolution initiation interface
 #' @export
 deconvolution_init_ui <- function(ns, analysis_name_default = "") {
+  s <- read_user_settings()
+  startz_def <- if (!is.null(s$deconv_startz)) s$deconv_startz else 1
+  endz_def <- if (!is.null(s$deconv_endz)) s$deconv_endz else 50
+  minmz_def <- if (!is.null(s$deconv_minmz)) s$deconv_minmz else 710
+  maxmz_def <- if (!is.null(s$deconv_maxmz)) s$deconv_maxmz else 1100
+  masslb_def <- if (!is.null(s$deconv_masslb)) s$deconv_masslb else 10000
+  massub_def <- if (!is.null(s$deconv_massub)) s$deconv_massub else 60000
+  time_start_def <- if (!is.null(s$deconv_time_start)) {
+    s$deconv_time_start
+  } else {
+    0.5
+  }
+  time_end_def <- if (!is.null(s$deconv_time_end)) s$deconv_time_end else 1.5
+  peakwindow_def <- if (!is.null(s$deconv_peakwindow)) {
+    s$deconv_peakwindow
+  } else {
+    40
+  }
+  peaknorm_def <- if (!is.null(s$deconv_peaknorm)) {
+    as.character(s$deconv_peaknorm)
+  } else {
+    "2"
+  }
+  peakthresh_def <- if (!is.null(s$deconv_peakthresh)) {
+    s$deconv_peakthresh
+  } else {
+    0.07
+  }
+  massbins_def <- if (!is.null(s$deconv_massbins)) s$deconv_massbins else 0.5
+
   card(
     card_header(
       shiny$div(
@@ -89,16 +123,35 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                         shiny$h6("Low", style = "margin-top: 8px;")
                       ),
                       shiny$column(
-                        width = 6,
+                        width = 7,
                         shiny$div(
-                          class = "deconv-param-input",
-                          shiny$numericInput(
-                            ns("startz"),
-                            "",
-                            min = 1,
-                            max = 100,
-                            value = 1,
-                            step = 1
+                          class = "dest-folder-row",
+                          shiny$div(
+                            class = "deconv-param-input",
+                            shiny$numericInput(
+                              ns("startz"),
+                              "",
+                              min = 1,
+                              max = 100,
+                              value = startz_def,
+                              step = 1
+                            )
+                          ),
+                          shiny::div(
+                            style = "height: -webkit-fill-available;",
+                            tooltip(
+                              shiny$div(
+                                class = "save-button",
+                                shiny$actionButton(
+                                  ns("save_startz_btn"),
+                                  NULL,
+                                  icon = shiny$icon("floppy-disk"),
+                                  class = "btn-default"
+                                )
+                              ),
+                              "Save as default value",
+                              placement = "bottom"
+                            )
                           )
                         )
                       )
@@ -109,16 +162,35 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                         shiny$h6("High", style = "margin-top: 8px;")
                       ),
                       shiny$column(
-                        width = 6,
+                        width = 7,
                         shiny$div(
-                          class = "deconv-param-input",
-                          shiny$numericInput(
-                            ns("endz"),
-                            "",
-                            min = 1,
-                            max = 100,
-                            value = 50,
-                            step = 1
+                          class = "dest-folder-row",
+                          shiny$div(
+                            class = "deconv-param-input",
+                            shiny$numericInput(
+                              ns("endz"),
+                              "",
+                              min = 1,
+                              max = 100,
+                              value = endz_def,
+                              step = 1
+                            )
+                          ),
+                          shiny::div(
+                            style = "height: -webkit-fill-available;",
+                            tooltip(
+                              shiny$div(
+                                class = "save-button",
+                                shiny$actionButton(
+                                  ns("save_endz_btn"),
+                                  NULL,
+                                  icon = shiny$icon("floppy-disk"),
+                                  class = "btn-default"
+                                )
+                              ),
+                              "Save as default value",
+                              placement = "bottom"
+                            )
                           )
                         )
                       )
@@ -144,16 +216,35 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                         shiny$h6("Low", style = "margin-top: 8px;")
                       ),
                       shiny$column(
-                        width = 6,
+                        width = 7,
                         shiny$div(
-                          class = "deconv-param-input",
-                          shiny$numericInput(
-                            ns("minmz"),
-                            "",
-                            min = 1,
-                            max = 100000,
-                            value = 710,
-                            step = 1
+                          class = "dest-folder-row",
+                          shiny$div(
+                            class = "deconv-param-input",
+                            shiny$numericInput(
+                              ns("minmz"),
+                              "",
+                              min = 1,
+                              max = 100000,
+                              value = minmz_def,
+                              step = 1
+                            )
+                          ),
+                          shiny::div(
+                            style = "height: -webkit-fill-available;",
+                            tooltip(
+                              shiny$div(
+                                class = "save-button",
+                                shiny$actionButton(
+                                  ns("save_minmz_btn"),
+                                  NULL,
+                                  icon = shiny$icon("floppy-disk"),
+                                  class = "btn-default"
+                                )
+                              ),
+                              "Save as default value",
+                              placement = "bottom"
+                            )
                           )
                         )
                       )
@@ -164,16 +255,35 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                         shiny$h6("High", style = "margin-top: 8px;")
                       ),
                       shiny$column(
-                        width = 6,
+                        width = 7,
                         shiny$div(
-                          class = "deconv-param-input",
-                          shiny$numericInput(
-                            ns("maxmz"),
-                            "",
-                            min = 1,
-                            max = 100000,
-                            value = 1100,
-                            step = 1
+                          class = "dest-folder-row",
+                          shiny$div(
+                            class = "deconv-param-input",
+                            shiny$numericInput(
+                              ns("maxmz"),
+                              "",
+                              min = 1,
+                              max = 100000,
+                              value = maxmz_def,
+                              step = 1
+                            )
+                          ),
+                          shiny::div(
+                            style = "height: -webkit-fill-available;",
+                            tooltip(
+                              shiny$div(
+                                class = "save-button",
+                                shiny$actionButton(
+                                  ns("save_maxmz_btn"),
+                                  NULL,
+                                  icon = shiny$icon("floppy-disk"),
+                                  class = "btn-default"
+                                )
+                              ),
+                              "Save as default value",
+                              placement = "bottom"
+                            )
                           )
                         )
                       )
@@ -210,16 +320,35 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                         shiny$h6("Low", style = "margin-top: 8px;")
                       ),
                       shiny$column(
-                        width = 6,
+                        width = 7,
                         shiny$div(
-                          class = "deconv-param-input",
-                          shiny$numericInput(
-                            ns("masslb"),
-                            "",
-                            min = 1,
-                            max = 2000000,
-                            value = 10000,
-                            step = 1
+                          class = "dest-folder-row",
+                          shiny$div(
+                            class = "deconv-param-input",
+                            shiny$numericInput(
+                              ns("masslb"),
+                              "",
+                              min = 1,
+                              max = 2000000,
+                              value = masslb_def,
+                              step = 1
+                            )
+                          ),
+                          shiny::div(
+                            style = "height: -webkit-fill-available;",
+                            tooltip(
+                              shiny$div(
+                                class = "save-button",
+                                shiny$actionButton(
+                                  ns("save_masslb_btn"),
+                                  NULL,
+                                  icon = shiny$icon("floppy-disk"),
+                                  class = "btn-default"
+                                )
+                              ),
+                              "Save as default value",
+                              placement = "bottom"
+                            )
                           )
                         )
                       )
@@ -230,16 +359,35 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                         shiny$h6("High", style = "margin-top: 8px;")
                       ),
                       shiny$column(
-                        width = 6,
+                        width = 7,
                         shiny$div(
-                          class = "deconv-param-input",
-                          shiny$numericInput(
-                            ns("massub"),
-                            "",
-                            min = 1,
-                            max = 2000000,
-                            value = 60000,
-                            step = 1
+                          class = "dest-folder-row",
+                          shiny$div(
+                            class = "deconv-param-input",
+                            shiny$numericInput(
+                              ns("massub"),
+                              "",
+                              min = 1,
+                              max = 2000000,
+                              value = massub_def,
+                              step = 1
+                            )
+                          ),
+                          shiny::div(
+                            style = "height: -webkit-fill-available;",
+                            tooltip(
+                              shiny$div(
+                                class = "save-button",
+                                shiny$actionButton(
+                                  ns("save_massub_btn"),
+                                  NULL,
+                                  icon = shiny$icon("floppy-disk"),
+                                  class = "btn-default"
+                                )
+                              ),
+                              "Save as default value",
+                              placement = "bottom"
+                            )
                           )
                         )
                       )
@@ -265,16 +413,35 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                         shiny$h6("Start", style = "margin-top: 8px;")
                       ),
                       shiny$column(
-                        width = 6,
+                        width = 7,
                         shiny$div(
-                          class = "deconv-param-input",
-                          shiny$numericInput(
-                            ns("time_start"),
-                            "",
-                            min = 0,
-                            max = 100,
-                            value = 0.5,
-                            step = 0.05
+                          class = "dest-folder-row",
+                          shiny$div(
+                            class = "deconv-param-input",
+                            shiny$numericInput(
+                              ns("time_start"),
+                              "",
+                              min = 0,
+                              max = 100,
+                              value = time_start_def,
+                              step = 0.05
+                            )
+                          ),
+                          shiny::div(
+                            style = "height: -webkit-fill-available;",
+                            tooltip(
+                              shiny$div(
+                                class = "save-button",
+                                shiny$actionButton(
+                                  ns("save_time_start_btn"),
+                                  NULL,
+                                  icon = shiny$icon("floppy-disk"),
+                                  class = "btn-default"
+                                )
+                              ),
+                              "Save as default value",
+                              placement = "bottom"
+                            )
                           )
                         )
                       )
@@ -285,16 +452,35 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                         shiny$h6("End", style = "margin-top: 8px;")
                       ),
                       shiny$column(
-                        width = 6,
+                        width = 7,
                         shiny$div(
-                          class = "deconv-param-input",
-                          shiny$numericInput(
-                            ns("time_end"),
-                            "",
-                            min = 0,
-                            max = 100,
-                            value = 1.5,
-                            step = 0.05
+                          class = "dest-folder-row",
+                          shiny$div(
+                            class = "deconv-param-input",
+                            shiny$numericInput(
+                              ns("time_end"),
+                              "",
+                              min = 0,
+                              max = 100,
+                              value = time_end_def,
+                              step = 0.05
+                            )
+                          ),
+                          shiny::div(
+                            style = "height: -webkit-fill-available;",
+                            tooltip(
+                              shiny$div(
+                                class = "save-button",
+                                shiny$actionButton(
+                                  ns("save_time_end_btn"),
+                                  NULL,
+                                  icon = shiny$icon("floppy-disk"),
+                                  class = "btn-default"
+                                )
+                              ),
+                              "Save as default value",
+                              placement = "bottom"
+                            )
                           )
                         )
                       )
@@ -313,7 +499,15 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                     tooltip(
                       "Peak parameters",
                       "Expected characteristics of spectral peaks.",
-                      placement = "right"
+                      placement = "bottom"
+                    ),
+                    shiny$div(
+                      class = "tooltip-bttn",
+                      shiny$actionButton(
+                        ns("peak_parameter_tooltip_bttn"),
+                        label = NULL,
+                        icon = shiny$icon("circle-question")
+                      )
                     )
                   ),
                   card_body(
@@ -326,29 +520,37 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                         )
                       ),
                       shiny$column(
-                        width = 4,
+                        width = 6,
                         shiny$div(
-                          class = "deconv-param-input-adv",
-                          disabled(
-                            shiny$numericInput(
-                              ns("peakwindow"),
-                              "",
-                              min = 1,
-                              max = 500,
-                              value = 40,
-                              step = 1
+                          class = "dest-folder-row",
+                          shiny$div(
+                            class = "deconv-param-input-adv",
+                            disabled(
+                              shiny$numericInput(
+                                ns("peakwindow"),
+                                "",
+                                min = 1,
+                                max = 500,
+                                value = peakwindow_def,
+                                step = 1
+                              )
                             )
-                          )
-                        )
-                      ),
-                      shiny$column(
-                        width = 2,
-                        shiny$div(
-                          class = "tooltip-bttn",
-                          shiny$actionButton(
-                            ns("detection_window_tooltip_bttn"),
-                            label = NULL,
-                            icon = shiny$icon("circle-question")
+                          ),
+                          shiny::div(
+                            style = "height: -webkit-fill-available;",
+                            tooltip(
+                              shiny$div(
+                                class = "save-button",
+                                shiny$actionButton(
+                                  ns("save_peakwindow_btn"),
+                                  NULL,
+                                  icon = shiny$icon("floppy-disk"),
+                                  class = "btn-default"
+                                )
+                              ),
+                              "Save as default value",
+                              placement = "bottom"
+                            )
                           )
                         )
                       )
@@ -370,17 +572,36 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                       shiny$column(
                         width = 5,
                         shiny$div(
-                          class = "deconv-param-input-adv",
-                          disabled(
-                            shiny$selectInput(
-                              ns("peaknorm"),
-                              "",
-                              choices = c(
-                                "No normalization" = 0,
-                                "Max Normalization" = 1,
-                                "Normalization to Sum" = 2
+                          class = "dest-folder-row",
+                          shiny$div(
+                            class = "deconv-param-input-adv peaknorm-selector",
+                            disabled(
+                              shiny$selectInput(
+                                ns("peaknorm"),
+                                "",
+                                choices = c(
+                                  "No normalization" = 0,
+                                  "Max Normalization" = 1,
+                                  "Normalization to Sum" = 2
+                                ),
+                                selected = peaknorm_def
+                              )
+                            )
+                          ),
+                          shiny::div(
+                            style = "height: -webkit-fill-available;",
+                            tooltip(
+                              shiny$div(
+                                class = "save-button",
+                                shiny$actionButton(
+                                  ns("save_peaknorm_btn"),
+                                  NULL,
+                                  icon = shiny$icon("floppy-disk"),
+                                  class = "btn-default"
+                                )
                               ),
-                              selected = "Normalization to Sum"
+                              "Save as default value",
+                              placement = "bottom"
                             )
                           )
                         )
@@ -395,29 +616,37 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                         )
                       ),
                       shiny$column(
-                        width = 4,
+                        width = 6,
                         shiny$div(
-                          class = "deconv-param-input-adv",
-                          disabled(
-                            shiny$numericInput(
-                              ns("peakthresh"),
-                              "",
-                              min = 0,
-                              max = 1,
-                              value = 0.07,
-                              step = 0.01
+                          class = "dest-folder-row",
+                          shiny$div(
+                            class = "deconv-param-input-adv",
+                            disabled(
+                              shiny$numericInput(
+                                ns("peakthresh"),
+                                "",
+                                min = 0,
+                                max = 1,
+                                value = peakthresh_def,
+                                step = 0.01
+                              )
                             )
-                          )
-                        )
-                      ),
-                      shiny$column(
-                        width = 2,
-                        shiny$div(
-                          class = "tooltip-bttn",
-                          shiny$actionButton(
-                            ns("threshold_tooltip_bttn"),
-                            label = NULL,
-                            icon = shiny$icon("circle-question")
+                          ),
+                          shiny::div(
+                            style = "height: -webkit-fill-available;",
+                            tooltip(
+                              shiny$div(
+                                class = "save-button",
+                                shiny$actionButton(
+                                  ns("save_peakthresh_btn"),
+                                  NULL,
+                                  icon = shiny$icon("floppy-disk"),
+                                  class = "btn-default"
+                                )
+                              ),
+                              "Save as default value",
+                              placement = "bottom"
+                            )
                           )
                         )
                       )
@@ -453,15 +682,34 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                       shiny$column(
                         width = 4,
                         shiny$div(
-                          class = "deconv-param-input-adv mass-bin-input",
-                          disabled(
-                            shiny$numericInput(
-                              ns("massbins"),
-                              "",
-                              min = 0.1,
-                              max = 10,
-                              value = 0.5,
-                              step = 0.1
+                          class = "dest-folder-row",
+                          shiny$div(
+                            class = "deconv-param-input-adv mass-bin-input",
+                            disabled(
+                              shiny$numericInput(
+                                ns("massbins"),
+                                "",
+                                min = 0.1,
+                                max = 10,
+                                value = massbins_def,
+                                step = 0.1
+                              )
+                            )
+                          ),
+                          shiny::div(
+                            style = "height: -webkit-fill-available;",
+                            tooltip(
+                              shiny$div(
+                                class = "save-button",
+                                shiny$actionButton(
+                                  ns("save_massbins_btn"),
+                                  NULL,
+                                  icon = shiny$icon("floppy-disk"),
+                                  class = "btn-default"
+                                )
+                              ),
+                              "Save as default value",
+                              placement = "bottom"
                             )
                           )
                         )
