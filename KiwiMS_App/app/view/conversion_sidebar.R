@@ -1,7 +1,7 @@
 # app/view/upload_spectra.R
 
 box::use(
-  bslib[card, card_body, card_header, sidebar],
+  bslib[card, card_body, card_header, sidebar, tooltip],
   shiny[actionButton, fileInput, NS, textInput, moduleServer, reactive],
 )
 
@@ -30,7 +30,8 @@ box::use(
     logging[
       write_log,
       get_session_id,
-    ]
+    ],
+  app / logic / user_settings[read_user_settings, update_user_setting],
 )
 
 #' @export
@@ -71,7 +72,11 @@ server <- function(
     })
 
     ## Analysis controls UI ----
-    output$conversion_analysis_controls_ui <- shiny::renderUI(
+    output$conversion_analysis_controls_ui <- shiny::renderUI({
+      saved <- read_user_settings()
+      pt_default <- if (!is.null(saved$peak_tolerance)) saved$peak_tolerance else 3
+      mm_default <- if (!is.null(saved$max_multiples)) saved$max_multiples else 4
+
       shiny::div(
         class = "interaction-analysis-flex",
         shiny::fluidRow(
@@ -81,43 +86,77 @@ server <- function(
               class = "sidebar-title custom-sidebar-title",
               "Binding Analysis"
             ),
-            shiny::numericInput(
-              ns("peak_tolerance"),
+            shiny::div(
+              class = "dest-folder-row dest-folder-row--input",
               shiny::div(
-                class = "label-tooltip",
-                shiny::tags$label("Peak Tolerance [Da]"),
-                shiny::div(
-                  class = "tooltip-bttn",
-                  shiny::actionButton(
-                    ns("peak_tol_tooltip_bttn"),
-                    label = NULL,
-                    icon = shiny::icon("circle-question")
-                  )
+                style = "flex: 1; min-width: 0;",
+                shiny::numericInput(
+                  ns("peak_tolerance"),
+                  shiny::div(
+                    class = "label-tooltip",
+                    shiny::tags$label("Peak Tolerance [Da]"),
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("peak_tol_tooltip_bttn"),
+                        label = NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    )
+                  ),
+                  value = pt_default,
+                  min = 0,
+                  max = 20,
+                  step = 0.1,
+                  width = "100%"
                 )
               ),
-              value = 3,
-              min = 0,
-              max = 20,
-              step = 0.1
+              tooltip(
+                shiny::actionButton(
+                  ns("save_peak_tol_btn"),
+                  label = NULL,
+                  icon = shiny::icon("floppy-disk"),
+                  class = "btn-default"
+                ),
+                "Save as default value",
+                placement = "bottom"
+              )
             ),
-            shiny::numericInput(
-              ns("max_multiples"),
+            shiny::div(
+              class = "dest-folder-row dest-folder-row--input",
               shiny::div(
-                class = "label-tooltip",
-                shiny::tags$label("Max. Stoichiometry"),
-                shiny::div(
-                  class = "tooltip-bttn",
-                  shiny::actionButton(
-                    ns("max_mult_tooltip_bttn"),
-                    label = NULL,
-                    icon = shiny::icon("circle-question")
-                  )
+                style = "flex: 1; min-width: 0;",
+                shiny::numericInput(
+                  ns("max_multiples"),
+                  shiny::div(
+                    class = "label-tooltip",
+                    shiny::tags$label("Max. Stoichiometry"),
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("max_mult_tooltip_bttn"),
+                        label = NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    )
+                  ),
+                  value = mm_default,
+                  min = 1,
+                  max = 20,
+                  step = 1,
+                  width = "100%"
                 )
               ),
-              value = 4,
-              min = 1,
-              max = 20,
-              step = 1
+              tooltip(
+                shiny::actionButton(
+                  ns("save_max_mult_btn"),
+                  label = NULL,
+                  icon = shiny::icon("floppy-disk"),
+                  class = "btn-default"
+                ),
+                "Save as default value",
+                placement = "bottom"
+              )
             ),
             shiny::div(
               class = "ki-kinact-checkbox",
@@ -142,7 +181,7 @@ server <- function(
           )
         )
       )
-    )
+    })
 
     ## Result controls UI ----
     # Switches between Experiment Configuration (analysis pending) and
@@ -836,6 +875,31 @@ server <- function(
         class = "complex-picker-connector-color",
         asis = TRUE
       )
+    })
+
+    # Save default value buttons ----
+    shiny::observeEvent(input$save_peak_tol_btn, {
+      val <- input$peak_tolerance
+      if (!is.null(val) && !is.na(val)) {
+        update_user_setting("peak_tolerance", val)
+        shiny::showNotification(
+          paste0("Peak Tolerance default set to ", val, " Da"),
+          type = "message",
+          duration = 3
+        )
+      }
+    })
+
+    shiny::observeEvent(input$save_max_mult_btn, {
+      val <- input$max_multiples
+      if (!is.null(val) && !is.na(val)) {
+        update_user_setting("max_multiples", val)
+        shiny::showNotification(
+          paste0("Max. Stoichiometry default set to ", val),
+          type = "message",
+          duration = 3
+        )
+      }
     })
 
     # Tooltips ----

@@ -23,6 +23,7 @@ box::use(
   app / view / log_view,
   app / view / log_sidebar,
   app / logic / logging[start_logging, write_log, close_logging],
+  app / logic / user_settings[read_user_settings, update_user_setting, clear_user_setting],
   app /
     logic /
     helper_functions[
@@ -239,13 +240,16 @@ server <- function(id) {
     )
 
     # Reusable function to open the settings modal
-    # initial_path: pre-fill from caller (e.g. currently selected destination path)
+    # initial_path: pre-fill dest folder from caller (e.g. currently active path)
     open_settings_modal <- function(initial_path = NULL) {
+      s <- dest_settings()
       base <- if (length(initial_path) == 1L && nzchar(initial_path)) {
         initial_path
       } else {
-        dest_settings()$path
+        s$path
       }
+      us <- read_user_settings()
+
       shiny$showModal(
         shiny$div(
           class = "unidec-modal",
@@ -255,27 +259,90 @@ server <- function(id) {
             easyClose = TRUE,
             shiny$div(
               class = "settings-modal-body",
-              shiny$h6("Default Destination Folder"),
               shiny$tags$p(
                 class = "text-muted settings-modal-hint",
-                "When enabled, this path is pre-selected as the destination folder at session start."
+                "Default values are restored at the start of each session."
               ),
-              shiny$div(
-                class = "settings-dest-row",
-                shiny$textInput(
-                  ns("settings_dest_path"),
-                  label = NULL,
-                  value = base,
-                  placeholder = "Paste or type an absolute folder path",
-                  width = "100%"
+              shiny$tags$table(
+                class = "table table-sm table-bordered settings-table",
+                shiny$tags$thead(
+                  shiny$tags$tr(
+                    shiny$tags$th("Setting"),
+                    shiny$tags$th("Default Value")
+                  )
                 ),
-                shiny$checkboxInput(
-                  ns("settings_dest_enabled"),
-                  label = "Use as default",
-                  value = isTRUE(dest_settings()$enabled)
+                shiny$tags$tbody(
+                  # --- Destination Folder ---
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Destination Folder"
+                    ),
+                    shiny$tags$td(
+                      shiny$textInput(
+                        ns("settings_dest_path"),
+                        label = NULL,
+                        value = base,
+                        placeholder = "Paste or type an absolute folder path",
+                        width = "100%"
+                      ),
+                      shiny$div(
+                        class = "settings-dest-row",
+                        shiny$checkboxInput(
+                          ns("settings_dest_enabled"),
+                          label = "Use as default",
+                          value = isTRUE(s$enabled)
+                        ),
+                        shiny$uiOutput(ns("settings_dest_path_display"))
+                      )
+                    )
+                  ),
+                  # --- Peak Tolerance ---
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Peak Tolerance [Da]"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_peak_tol"),
+                        label = NULL,
+                        value = us$peak_tolerance,
+                        min = 0,
+                        max = 20,
+                        step = 0.1,
+                        width = "150px"
+                      ),
+                      shiny$tags$small(
+                        class = "text-muted settings-modal-hint",
+                        "Leave empty to remove default."
+                      )
+                    )
+                  ),
+                  # --- Max. Stoichiometry ---
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Max. Stoichiometry"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_max_mult"),
+                        label = NULL,
+                        value = us$max_multiples,
+                        min = 1,
+                        max = 20,
+                        step = 1,
+                        width = "150px"
+                      ),
+                      shiny$tags$small(
+                        class = "text-muted settings-modal-hint",
+                        "Leave empty to remove default."
+                      )
+                    )
+                  )
                 )
-              ),
-              shiny$uiOutput(ns("settings_dest_path_display"))
+              )
             ),
             footer = shiny$tagList(
               shiny$modalButton("Dismiss"),
@@ -297,12 +364,12 @@ server <- function(id) {
       trimws(if (!is.null(p)) p else dest_settings()$path)
     })
 
-    # Settings opened from nav button (pre-fill from saved setting)
+    # Settings opened from nav button
     shiny$observeEvent(input$settings, {
       open_settings_modal()
     })
 
-    # Live feedback below the text input
+    # Live feedback for destination folder path inside modal
     output$settings_dest_path_display <- shiny$renderUI({
       path <- settings_dest_picked()
       if (!nzchar(path)) {
@@ -324,6 +391,7 @@ server <- function(id) {
     })
 
     shiny$observeEvent(input$save_settings, {
+      # --- Destination folder ---
       path <- settings_dest_picked()
       enabled <- isTRUE(input$settings_dest_enabled)
       if (enabled && !nzchar(path)) {
@@ -345,9 +413,24 @@ server <- function(id) {
       if (!dir.exists(settings_dir)) {
         dir.create(settings_dir, recursive = TRUE)
       }
-      new_settings <- list(path = path, enabled = enabled)
-      saveRDS(new_settings, dest_settings_file)
-      dest_settings(new_settings)
+      new_dest <- list(path = path, enabled = enabled)
+      saveRDS(new_dest, dest_settings_file)
+      dest_settings(new_dest)
+
+      # --- Numeric defaults ---
+      pt <- input$settings_peak_tol
+      mm <- input$settings_max_mult
+      if (!is.null(pt) && !is.na(pt)) {
+        update_user_setting("peak_tolerance", pt)
+      } else {
+        clear_user_setting("peak_tolerance")
+      }
+      if (!is.null(mm) && !is.na(mm)) {
+        update_user_setting("max_multiples", mm)
+      } else {
+        clear_user_setting("max_multiples")
+      }
+
       shiny$removeModal()
       shiny$showNotification("Settings saved.", type = "message", duration = 3)
     })

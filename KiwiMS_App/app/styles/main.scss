@@ -4187,6 +4187,10 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   display: flex;
   align-items: center;
   gap: 0.4em;
+
+  &--input {
+    align-items: flex-end;
+  }
   justify-content: space-between;
 }
 
@@ -4204,6 +4208,33 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 /* Settings modal */
 .settings-modal-hint {
   font-size: 0.85em;
+}
+
+.settings-table {
+  width: 100%;
+  margin-bottom: 0;
+
+  thead th {
+    font-weight: 600;
+    font-size: 0.875em;
+    border-bottom-width: 1px;
+  }
+
+  td {
+    vertical-align: top;
+    padding: 0.6rem 0.75rem;
+  }
+
+  .settings-table-label {
+    font-weight: 500;
+    padding-top: 0.75rem;
+    width: 35%;
+    white-space: nowrap;
+  }
+
+  .form-group {
+    margin-bottom: 0.4rem;
+  }
 }
 
 .settings-dest-row {
