@@ -494,6 +494,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
               shiny$div(
                 class = "card-custom",
                 card(
+                  style = "overflow: visible !important;",
                   card_header(
                     class = "bg-dark help-header",
                     tooltip(
@@ -511,6 +512,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                     )
                   ),
                   card_body(
+                    style = "overflow: visible !important;",
                     shiny$fluidRow(
                       shiny$column(
                         width = 6,
@@ -680,7 +682,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                         shiny$h6("Size [Da]", style = "margin-top: 8px;")
                       ),
                       shiny$column(
-                        width = 4,
+                        width = 6,
                         shiny$div(
                           class = "dest-folder-row",
                           shiny$div(

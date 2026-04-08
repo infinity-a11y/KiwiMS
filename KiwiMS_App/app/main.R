@@ -313,11 +313,7 @@ server <- function(id) {
                         min = 0,
                         max = 20,
                         step = 0.1,
-                        width = "150px"
-                      ),
-                      shiny$tags$small(
-                        class = "text-muted settings-modal-hint",
-                        "Leave empty to remove default."
+                        width = "200px"
                       )
                     )
                   ),
@@ -335,11 +331,212 @@ server <- function(id) {
                         min = 1,
                         max = 20,
                         step = 1,
-                        width = "150px"
-                      ),
-                      shiny$tags$small(
-                        class = "text-muted settings-modal-hint",
-                        "Leave empty to remove default."
+                        width = "200px"
+                      )
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Min. charge state [z]"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_startz"),
+                        label = NULL,
+                        min = 1,
+                        max = 100,
+                        value = us$deconv_startz,
+                        step = 1,
+                        width = "200px"
+                      )
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Max. charge state [z]"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_endz"),
+                        label = NULL,
+                        min = 1,
+                        max = 100,
+                        value = us$deconv_endz,
+                        step = 1,
+                        width = "200px"
+                      )
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Lower deconvolution range [m/z]"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_minmz"),
+                        label = NULL,
+                        min = 1,
+                        max = 100000,
+                        value = us$deconv_minmz,
+                        step = 1,
+                        width = "200px"
+                      )
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Upper deconvolution range [m/z]"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_maxmz"),
+                        label = NULL,
+                        min = 1,
+                        max = 100000,
+                        value = us$deconv_maxmz,
+                        step = 1,
+                        width = "200px"
+                      )
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Lower mass range [Da]"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_masslb"),
+                        label = NULL,
+                        min = 1,
+                        max = 2000000,
+                        value = us$deconv_masslb,
+                        step = 1,
+                        width = "200px"
+                      )
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Upper mass range [Da]"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_massub"),
+                        label = NULL,
+                        min = 1,
+                        max = 2000000,
+                        value = us$deconv_massub,
+                        step = 1,
+                        width = "200px"
+                      )
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Elution start time [min]"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_time_start"),
+                        label = NULL,
+                        min = 0,
+                        max = 100,
+                        value = us$deconv_time_start,
+                        step = 0.05,
+                        width = "200px"
+                      )
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Elution end time [min]"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_time_end"),
+                        label = NULL,
+                        min = 0,
+                        max = 100,
+                        value = us$deconv_time_end,
+                        step = 0.05,
+                        width = "200px"
+                      )
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Detection window [Da]"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_peakwindow"),
+                        label = NULL,
+                        min = 1,
+                        max = 500,
+                        value = us$deconv_peakwindow,
+                        step = 1,
+                        width = "200px"
+                      )
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Peak normalization"
+                    ),
+                    shiny$tags$td(
+                      shiny$div(
+                        class = "settings-peaknorm",
+                        shiny$selectInput(
+                          ns("settings_peaknorm"),
+                          label = NULL,
+                          choices = c(
+                            "No normalization" = 0,
+                            "Max Normalization" = 1,
+                            "Normalization to Sum" = 2
+                          ),
+                          selected = us$deconv_peaknorm,
+                          width = "200px"
+                        )
+                      )
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Peak threshold"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_peakthresh"),
+                        label = NULL,
+                        min = 0,
+                        max = 1,
+                        value = us$deconv_peakthresh,
+                        step = 0.01,
+                        width = "200px"
+                      )
+                    )
+                  ),
+                  shiny$tags$tr(
+                    style = "margin-top: 1rem;",
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                    ),
+                    shiny$tags$td(
+                      shiny$actionButton(
+                        ns("reset_default"),
+                        "Reset All",
+                        width = "100%"
                       )
                     )
                   )
@@ -359,6 +556,87 @@ server <- function(id) {
         )
       )
     }
+
+    shiny$observeEvent(input$reset_default, {
+      # Reset default deconvolution values
+      shiny::updateNumericInput(
+        session = session,
+        "settings_startz",
+        value = 1
+      )
+      shiny::updateNumericInput(
+        session = session,
+        "settings_endz",
+        value = 50
+      )
+      shiny::updateNumericInput(
+        session = session,
+        "settings_minmz",
+        value = 710
+      )
+      shiny::updateNumericInput(
+        session = session,
+        "settings_maxmz",
+        value = 1100
+      )
+      shiny::updateNumericInput(
+        session = session,
+        "settings_masslb",
+        value = 10000
+      )
+      shiny::updateNumericInput(
+        session = session,
+        "settings_massub",
+        value = 60000
+      )
+      shiny::updateNumericInput(
+        session = session,
+        "settings_peak_tol",
+        value = 3
+      )
+      shiny::updateNumericInput(
+        session = session,
+        "settings_time_start",
+        value = 0.5
+      )
+      shiny::updateNumericInput(
+        session = session,
+        "settings_time_end",
+        value = 1.5
+      )
+      shiny::updateNumericInput(
+        session = session,
+        "settings_peakwindow",
+        value = 40
+      )
+      shiny::updateSelectInput(
+        session = session,
+        "settings_peaknorm",
+        selected = 2
+      )
+      shiny::updateNumericInput(
+        session = session,
+        "settings_peakthresh",
+        value = 0.07
+      )
+      shiny::updateNumericInput(
+        session = session,
+        "settings_massbins",
+        value = 0.5
+      )
+
+      # Reset default conversion values
+      shiny::updateNumericInput(
+        session = session,
+        "settings_peak_tol",
+        value = 3
+      )
+      shiny::updateNumericInput(
+        session = session,
+        "settings_max_mult",
+        value = 4
+      )
+    })
 
     # Resolve typed/pasted path from the text input
     settings_dest_picked <- shiny$reactive({

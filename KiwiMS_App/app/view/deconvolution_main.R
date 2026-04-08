@@ -420,16 +420,31 @@ server <- function(
       {
         if (!is.null(input$startz) && !is.na(input$startz)) {
           update_user_setting("deconv_startz", input$startz)
+          shinyWidgets::show_toast(
+            paste0("Min. charge state default set to ", input$startz),
+            text = NULL,
+            type = "success",
+            timer = 3000,
+            timerProgressBar = TRUE
+          )
         }
       },
       ignoreNULL = TRUE,
       ignoreInit = TRUE
     )
+
     shiny$observeEvent(
       input$save_endz_btn,
       {
         if (!is.null(input$endz) && !is.na(input$endz)) {
           update_user_setting("deconv_endz", input$endz)
+          shinyWidgets::show_toast(
+            paste0("Max. charge state default set to ", input$endz),
+            text = NULL,
+            type = "success",
+            timer = 3000,
+            timerProgressBar = TRUE
+          )
         }
       },
       ignoreNULL = TRUE,
@@ -440,6 +455,17 @@ server <- function(
       {
         if (!is.null(input$minmz) && !is.na(input$minmz)) {
           update_user_setting("deconv_minmz", input$minmz)
+          shinyWidgets::show_toast(
+            paste0(
+              "Min. m/z ratio default set to ",
+              input$minmz,
+              " [m/z]"
+            ),
+            text = NULL,
+            type = "success",
+            timer = 3000,
+            timerProgressBar = TRUE
+          )
         }
       },
       ignoreNULL = TRUE,
@@ -450,6 +476,17 @@ server <- function(
       {
         if (!is.null(input$maxmz) && !is.na(input$maxmz)) {
           update_user_setting("deconv_maxmz", input$maxmz)
+          shinyWidgets::show_toast(
+            paste0(
+              "Max. m/z ratio default set to ",
+              input$maxmz,
+              " [m/z]"
+            ),
+            text = NULL,
+            type = "success",
+            timer = 3000,
+            timerProgressBar = TRUE
+          )
         }
       },
       ignoreNULL = TRUE,
@@ -460,6 +497,17 @@ server <- function(
       {
         if (!is.null(input$masslb) && !is.na(input$masslb)) {
           update_user_setting("deconv_masslb", input$masslb)
+          shinyWidgets::show_toast(
+            paste0(
+              "Min. mass default set to ",
+              input$masslb,
+              " [Da]"
+            ),
+            text = NULL,
+            type = "success",
+            timer = 3000,
+            timerProgressBar = TRUE
+          )
         }
       },
       ignoreNULL = TRUE,
@@ -470,6 +518,17 @@ server <- function(
       {
         if (!is.null(input$massub) && !is.na(input$massub)) {
           update_user_setting("deconv_massub", input$massub)
+          shinyWidgets::show_toast(
+            paste0(
+              "Max. mass default set to ",
+              input$massub,
+              " [Da]"
+            ),
+            text = NULL,
+            type = "success",
+            timer = 3000,
+            timerProgressBar = TRUE
+          )
         }
       },
       ignoreNULL = TRUE,
@@ -480,6 +539,17 @@ server <- function(
       {
         if (!is.null(input$time_start) && !is.na(input$time_start)) {
           update_user_setting("deconv_time_start", input$time_start)
+          shinyWidgets::show_toast(
+            paste0(
+              "Default elution start ",
+              input$time_start,
+              " [min]"
+            ),
+            text = NULL,
+            type = "success",
+            timer = 3000,
+            timerProgressBar = TRUE
+          )
         }
       },
       ignoreNULL = TRUE,
@@ -490,6 +560,17 @@ server <- function(
       {
         if (!is.null(input$time_end) && !is.na(input$time_end)) {
           update_user_setting("deconv_time_end", input$time_end)
+          shinyWidgets::show_toast(
+            paste0(
+              "Default elution end ",
+              input$time_end,
+              " [min]"
+            ),
+            text = NULL,
+            type = "success",
+            timer = 3000,
+            timerProgressBar = TRUE
+          )
         }
       },
       ignoreNULL = TRUE,
@@ -500,6 +581,17 @@ server <- function(
       {
         if (!is.null(input$peakwindow) && !is.na(input$peakwindow)) {
           update_user_setting("deconv_peakwindow", input$peakwindow)
+          shinyWidgets::show_toast(
+            paste0(
+              "Default peak window set to ",
+              input$peakwindow,
+              " [Da]"
+            ),
+            text = NULL,
+            type = "success",
+            timer = 3000,
+            timerProgressBar = TRUE
+          )
         }
       },
       ignoreNULL = TRUE,
@@ -510,6 +602,16 @@ server <- function(
       {
         if (!is.null(input$peaknorm)) {
           update_user_setting("deconv_peaknorm", input$peaknorm)
+          shinyWidgets::show_toast(
+            paste0(
+              "Default peak normalization set to ",
+              input$peaknorm
+            ),
+            text = NULL,
+            type = "success",
+            timer = 3000,
+            timerProgressBar = TRUE
+          )
         }
       },
       ignoreNULL = TRUE,
@@ -520,6 +622,16 @@ server <- function(
       {
         if (!is.null(input$peakthresh) && !is.na(input$peakthresh)) {
           update_user_setting("deconv_peakthresh", input$peakthresh)
+          shinyWidgets::show_toast(
+            paste0(
+              "Default peak threshold set to ",
+              input$peaknorm
+            ),
+            text = NULL,
+            type = "success",
+            timer = 3000,
+            timerProgressBar = TRUE
+          )
         }
       },
       ignoreNULL = TRUE,
