@@ -761,20 +761,20 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 
 // TODO: make text-align element id specific
-.selectize-dropdown-content {
-  overflow-y: auto;
-  overflow-x: hidden;
-  max-height: 200px;
-  min-width: fit-content;
-  background: #e5e5e5;
-  // text-align: end;
-  text-align: left;
-  position: absolute;
-  right: 0%;
-  border-radius: 5px;
-  box-shadow: 0 0 9px 0 #00000094;
-  white-space: nowrap;
-}
+// .selectize-dropdown-content {
+//   overflow-y: auto;
+//   overflow-x: hidden;
+//   max-height: 200px;
+//   min-width: fit-content;
+//   background: #e5e5e5;
+//   // text-align: end;
+//   text-align: left;
+//   position: absolute;
+//   right: 0%;
+//   border-radius: 5px;
+//   box-shadow: 0 0 9px 0 #00000094;
+//   white-space: nowrap;
+// }
 
 .selectize-dropdown {
   border: none;
@@ -1172,8 +1172,13 @@ td.listbox.htDimmed.current.highlight {
 .peaknorm-selector {
 }
 
+.settings-peaknorm .selectize-input {
+  border: 1px solid #e5e5e5 !important;
+}
+
 .deconv-param-input-adv {
-  width: 100;
+  width: 100%;
+  height: 36.5px;
 }
 
 .deconv-param-input .shiny-input-container .control-label,
@@ -1275,6 +1280,7 @@ td.listbox.htDimmed.current.highlight {
   background: rgb(190 209 193);
   color: black;
   border-radius: var(--bs-border-radius);
+  text-align: center;
 }
 
 .analysis-name-feedback-row {
