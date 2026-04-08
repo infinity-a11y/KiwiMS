@@ -74,11 +74,15 @@ ui <- function(id) {
             buttonType = "default",
             root = path_home()
           ),
-          actionButton(
-            ns("open_settings_btn"),
-            label = NULL,
-            icon = icon("floppy-disk"),
-            class = "btn-default"
+          bslib::tooltip(
+            actionButton(
+              ns("open_settings_btn"),
+              label = NULL,
+              icon = icon("floppy-disk"),
+              class = "btn-default"
+            ),
+            "Save default folder",
+            placement = "bottom"
           )
         ),
         shiny::verbatimTextOutput(ns("targetpath_selected"))

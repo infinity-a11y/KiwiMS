@@ -105,6 +105,7 @@ ui <- function(id) {
         bslib$page_sidebar(
           sidebar = log_sidebar$ui(ns("log_sidebar")),
           bslib$card(
+            class = "logs-card",
             log_view$ui(ns("logs"))
           )
         )
@@ -240,8 +241,11 @@ server <- function(id) {
     # Reusable function to open the settings modal
     # initial_path: pre-fill from caller (e.g. currently selected destination path)
     open_settings_modal <- function(initial_path = NULL) {
-      base <- if (length(initial_path) == 1L && nzchar(initial_path)) initial_path
-              else dest_settings()$path
+      base <- if (length(initial_path) == 1L && nzchar(initial_path)) {
+        initial_path
+      } else {
+        dest_settings()$path
+      }
       shiny$showModal(
         shiny$div(
           class = "unidec-modal",
@@ -294,21 +298,27 @@ server <- function(id) {
     })
 
     # Settings opened from nav button (pre-fill from saved setting)
-    shiny$observeEvent(input$settings, { open_settings_modal() })
+    shiny$observeEvent(input$settings, {
+      open_settings_modal()
+    })
 
     # Live feedback below the text input
     output$settings_dest_path_display <- shiny$renderUI({
       path <- settings_dest_picked()
-      if (!nzchar(path)) return(NULL)
+      if (!nzchar(path)) {
+        return(NULL)
+      }
       if (dir.exists(path)) {
         shiny$div(
           class = "settings-dest-feedback settings-dest-feedback--valid",
-          shiny$icon("circle-check"), " Folder exists"
+          shiny$icon("circle-check"),
+          " Folder exists"
         )
       } else {
         shiny$div(
           class = "settings-dest-feedback settings-dest-feedback--invalid",
-          shiny$icon("triangle-exclamation"), " Folder not found"
+          shiny$icon("triangle-exclamation"),
+          " Folder not found"
         )
       }
     })
@@ -317,14 +327,24 @@ server <- function(id) {
       path <- settings_dest_picked()
       enabled <- isTRUE(input$settings_dest_enabled)
       if (enabled && !nzchar(path)) {
-        shiny$showNotification("Select a folder first.", type = "error", duration = 4)
+        shiny$showNotification(
+          "Select a folder first.",
+          type = "error",
+          duration = 4
+        )
         return()
       }
       if (enabled && !dir.exists(path)) {
-        shiny$showNotification("Folder not found — settings not saved.", type = "error", duration = 4)
+        shiny$showNotification(
+          "Folder not found — settings not saved.",
+          type = "error",
+          duration = 4
+        )
         return()
       }
-      if (!dir.exists(settings_dir)) dir.create(settings_dir, recursive = TRUE)
+      if (!dir.exists(settings_dir)) {
+        dir.create(settings_dir, recursive = TRUE)
+      }
       new_settings <- list(path = path, enabled = enabled)
       saveRDS(new_settings, dest_settings_file)
       dest_settings(new_settings)
