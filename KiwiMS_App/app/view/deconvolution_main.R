@@ -194,7 +194,7 @@ server <- function(
     output$deconvolution_ui <- shiny$renderUI({
       deconvolution_init_ui(
         ns,
-        analysis_name_default = smart_analysis_name()
+        analysis_name_default = shiny$isolate(smart_analysis_name())
       )
     })
 
@@ -215,36 +215,95 @@ server <- function(
         return("Select a destination folder from the sidebar to start ...")
       }
 
-      if (
-        !is.null(input$startz) &&
-          !is.null(input$endz) &&
-          input$startz >= input$endz
-      ) {
-        return("High charge z must be greater than low charge z ...")
+      if (!is.null(input$startz) && !is.null(input$endz)) {
+        if (is.na(input$startz) || is.na(input$endz)) {
+          return("Charge z range requires valid whole numbers ...")
+        }
+        if (input$startz < 1 || input$endz < 1) {
+          return("Charge z values must be at least 1 ...")
+        }
+        if (
+          input$startz != floor(input$startz) || input$endz != floor(input$endz)
+        ) {
+          return("Charge z values must be whole numbers ...")
+        }
+        if (input$startz >= input$endz) {
+          return("High charge z must be greater than low charge z ...")
+        }
       }
 
-      if (
-        !is.null(input$minmz) &&
-          !is.null(input$maxmz) &&
-          input$minmz >= input$maxmz
-      ) {
-        return("High m/z must be greater than low m/z ...")
+      if (!is.null(input$minmz) && !is.null(input$maxmz)) {
+        if (is.na(input$minmz) || is.na(input$maxmz)) {
+          return("m/z range requires valid whole numbers ...")
+        }
+        if (input$minmz < 1 || input$maxmz < 1) {
+          return("m/z values must be at least 1 ...")
+        }
+        if (
+          input$minmz != floor(input$minmz) || input$maxmz != floor(input$maxmz)
+        ) {
+          return("m/z values must be whole numbers ...")
+        }
+        if (input$minmz >= input$maxmz) {
+          return("High m/z must be greater than low m/z ...")
+        }
       }
 
-      if (
-        !is.null(input$masslb) &&
-          !is.null(input$massub) &&
-          input$masslb >= input$massub
-      ) {
-        return("High mass Mw must be greater than low mass Mw ...")
+      if (!is.null(input$masslb) && !is.null(input$massub)) {
+        if (is.na(input$masslb) || is.na(input$massub)) {
+          return("Mass Mw range requires valid whole numbers ...")
+        }
+        if (input$masslb < 1 || input$massub < 1) {
+          return("Mass Mw values must be at least 1 Da ...")
+        }
+        if (
+          input$masslb != floor(input$masslb) ||
+            input$massub != floor(input$massub)
+        ) {
+          return("Mass Mw values must be whole numbers ...")
+        }
+        if (input$masslb >= input$massub) {
+          return("High mass Mw must be greater than low mass Mw ...")
+        }
       }
 
-      if (
-        !is.null(input$time_start) &&
-          !is.null(input$time_end) &&
-          input$time_start >= input$time_end
-      ) {
-        return("Retention start time must be earlier than end time ...")
+      if (!is.null(input$massbins)) {
+        if (is.na(input$massbins)) {
+          return("Sample Rate requires a valid value ...")
+        }
+        if (input$massbins < 0.1 || input$massbins > 10) {
+          return("Sample Rate must be between 0.1 and 10 Da ...")
+        }
+      }
+
+      if (!is.null(input$peakwindow)) {
+        if (is.na(input$peakwindow)) {
+          return("Detection window requires a valid value ...")
+        }
+        if (input$peakwindow < 1 || input$peakwindow > 500) {
+          return("Detection window must be between 1 and 500 Da ...")
+        }
+        if (input$peakwindow != floor(input$peakwindow)) {
+          return("Detection window must be a whole number ...")
+        }
+      }
+
+      if (!is.null(input$peakthresh)) {
+        if (is.na(input$peakthresh)) {
+          return("Peak threshold requires a valid value ...")
+        }
+        if (input$peakthresh < 0 || input$peakthresh > 1) {
+          return("Peak threshold must be between 0 and 1 ...")
+        }
+      }
+
+      if (!is.null(input$time_start) && !is.null(input$time_end)) {
+        if (is.na(input$time_start) || is.na(input$time_end)) {
+          return("Retention time range requires valid values ...")
+        }
+        if (input$time_start >= input$time_end) {
+          return("Retention start time must be earlier than end time ...")
+        }
       }
 
       sel <- deconvolution_sidebar_vars$selected()
