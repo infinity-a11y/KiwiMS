@@ -52,15 +52,20 @@ box::use(
 ui <- function(id) {
   ns <- shiny$NS(id)
 
-  shiny$div(
-    class = "deconvolution-running-interface",
-    shiny::div(
-      id = ns("deconvolution_ui_container"),
-      class = "conversion-main-spinner deconv-pre-init",
-      shinycssloaders::withSpinner(
-        shiny$uiOutput(ns("deconvolution_ui")),
-        type = 1,
-        color = "#7777f9"
+  shiny$tagList(
+    shiny$tags$head(
+      shiny$tags$script(src = "static/js/deconvolution.js")
+    ),
+    shiny$div(
+      class = "deconvolution-ui-interface",
+      shiny::div(
+        id = ns("deconvolution_ui_container"),
+        class = "conversion-main-spinner deconv-pre-init",
+        shinycssloaders::withSpinner(
+          shiny$uiOutput(ns("deconvolution_ui")),
+          type = 1,
+          color = "#7777f9"
+        )
       )
     )
   )
@@ -92,19 +97,9 @@ server <- function(
     # Make temp dir for session
     temp <- tempdir()
 
-    # Remove the pre-init class after the first flush so spinner is active for
-    # subsequent re-evaluations only (not during initial page load)
-    session$onFlushed(
-      function() {
-        runjs(paste0(
-          'var el=document.getElementById("',
-          ns("deconvolution_ui_container"),
-          '");',
-          'if(el)el.classList.remove("deconv-pre-init");'
-        ))
-      },
-      once = TRUE
-    )
+    # deconv-pre-init is removed from inside renderUI so the JS fires in the
+    # same WebSocket message as the rendered HTML — by the time the class is
+    # removed the output is already in the DOM and no spinner flash occurs.
 
     ### Reactive variables declaration ----
     reactVars <- shiny$reactiveValues(

@@ -28,6 +28,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
       )
     ),
     card_body(
+      class = "deconvolution-init-card",
       shiny$div(
         class = "deconvolution-init-ui-wrapper",
         shiny$column(
