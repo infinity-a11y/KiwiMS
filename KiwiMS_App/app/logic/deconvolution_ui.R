@@ -95,9 +95,10 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                           shiny$numericInput(
                             ns("startz"),
                             "",
-                            min = 0,
+                            min = 1,
                             max = 100,
-                            value = 1
+                            value = 1,
+                            step = 1
                           )
                         )
                       )
@@ -114,9 +115,10 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                           shiny$numericInput(
                             ns("endz"),
                             "",
-                            min = 0,
+                            min = 1,
                             max = 100,
-                            value = 50
+                            value = 50,
+                            step = 1
                           )
                         )
                       )
@@ -148,9 +150,10 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                           shiny$numericInput(
                             ns("minmz"),
                             "",
-                            min = 0,
+                            min = 1,
                             max = 100000,
-                            value = 710
+                            value = 710,
+                            step = 1
                           )
                         )
                       )
@@ -167,9 +170,10 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                           shiny$numericInput(
                             ns("maxmz"),
                             "",
-                            min = 0,
+                            min = 1,
                             max = 100000,
-                            value = 1100
+                            value = 1100,
+                            step = 1
                           )
                         )
                       )
@@ -212,9 +216,10 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                           shiny$numericInput(
                             ns("masslb"),
                             "",
-                            min = 0,
-                            max = 100000,
-                            value = 10000
+                            min = 1,
+                            max = 2000000,
+                            value = 10000,
+                            step = 1
                           )
                         )
                       )
@@ -231,9 +236,10 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                           shiny$numericInput(
                             ns("massub"),
                             "",
-                            min = 0,
-                            max = 100000,
-                            value = 60000
+                            min = 1,
+                            max = 2000000,
+                            value = 60000,
+                            step = 1
                           )
                         )
                       )
@@ -327,9 +333,10 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                             shiny$numericInput(
                               ns("peakwindow"),
                               "",
-                              min = 0,
-                              max = 1000,
-                              value = 40
+                              min = 1,
+                              max = 500,
+                              value = 40,
+                              step = 1
                             )
                           )
                         )
@@ -451,8 +458,8 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                             shiny$numericInput(
                               ns("massbins"),
                               "",
-                              min = 0,
-                              max = 100,
+                              min = 0.1,
+                              max = 10,
                               value = 0.5,
                               step = 0.1
                             )
