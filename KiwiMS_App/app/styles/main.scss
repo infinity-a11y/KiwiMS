@@ -1280,12 +1280,15 @@ td.listbox.htDimmed.current.highlight {
   background: rgb(190 209 193);
   color: black;
   border-radius: var(--bs-border-radius);
-  text-align: center;
 }
 
 .analysis-name-feedback-row {
   font-size: 0.85em;
   height: 100%;
+}
+
+code {
+  font-size: 0.7em;
 }
 
 .deconvolution-ui-interface + card {
