@@ -27,7 +27,7 @@ ui <- function(id) {
 
   sidebar(
     title = "Actions Log",
-    width = "15%",
+    width = "17%",
     column(
       width = 12,
       align = "center",
