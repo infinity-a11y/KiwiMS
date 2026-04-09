@@ -916,7 +916,8 @@ deconvolution_results_ui <- function(ns, show_heatmap = FALSE) {
       ),
       shiny$div(
         class = "spectrum-plot",
-        plotlyOutput(ns("spectrum"), height = "100%")
+        plotlyOutput(ns("spectrum"), height = "100%"),
+        shiny$uiOutput(ns("spectrum_failure_msg"))
       ),
       full_screen = TRUE
     )
@@ -956,8 +957,9 @@ deconvolution_results_ui <- function(ns, show_heatmap = FALSE) {
                   )
                 ),
                 shiny::div(
-                  style = "height: 100%;",
-                  DT::dataTableOutput(ns("deconvolution_data"))
+                  class = "deconvolution-metrics-body",
+                  DT::dataTableOutput(ns("deconvolution_data")),
+                  shiny$uiOutput(ns("metrics_failure_msg"))
                 )
               )
             )

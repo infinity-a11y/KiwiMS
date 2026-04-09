@@ -114,6 +114,7 @@ server <- function(
       count = 0,
       rep_count = 0,
       rslt_df = data.frame(),
+      failed_samples = character(0),
       logs = "",
       deconv_report_status = NULL,
       continue_conversion = NULL
@@ -422,7 +423,7 @@ server <- function(
 
       tooltip(
         shiny$div(
-          style = "cursor:pointer; margin-bottom: 5px;",
+          style = "cursor:pointer; margin-bottom: 5px; margin-left: 20px;",
           onclick = paste0(
             "Shiny.setInputValue('",
             ns("open_dest"),
@@ -763,9 +764,14 @@ server <- function(
       reactVars$is_running <- FALSE
       reactVars$heatmap_ready <- 0L
       reactVars$completed_files <- 0
+      reactVars$current_total_files <- 0
+      reactVars$expected_files <- 0
+      reactVars$initial_file_count <- 0
+      reactVars$count <- 0
       reactVars$sample_names <- NULL
       reactVars$wells <- NULL
       reactVars$rslt_df <- data.frame()
+      reactVars$failed_samples <- character(0)
       reactVars$last_check <- Sys.time()
       reactVars$results_last_check <- Sys.time()
       reactVars$deconv_report_status <- NULL
@@ -1290,6 +1296,20 @@ server <- function(
       # Apply JS modifications for picker
       session$sendCustomMessage("selectize-init", "result_picker")
 
+      # Remove leftover _FAILED.rds sentinels for the current sample set so the
+      # progress observer does not mistake them for failures from this run.
+      stale_sentinels <- file.path(
+        analysis_dest(),
+        paste0(
+          gsub("\\.raw$", "", basename(raw_dirs), ignore.case = TRUE),
+          "_FAILED.rds"
+        )
+      )
+      stale_sentinels <- stale_sentinels[file.exists(stale_sentinels)]
+      if (length(stale_sentinels) > 0) {
+        file.remove(stale_sentinels)
+      }
+
       # Initialization variables
       reactVars$is_running <- TRUE
       reactVars$catch_error <- FALSE
@@ -1527,15 +1547,10 @@ server <- function(
             ) {
               shiny$req(reactVars$sample_names, reactVars$wells)
 
-              reactVars_sample_names <<- reactVars$sample_names
-              reactVars_wells <<- reactVars$wells
-
               results_all <- dir_ls(
                 analysis_dest(),
                 glob = "*_rawdata_unidecfiles"
               )
-
-              results_all <<- results_all
 
               results <- results_all[
                 basename(results_all) %in%
@@ -1664,17 +1679,29 @@ server <- function(
                 }
 
                 ##### Render result picker with updated choices ----
-                if (nrow(reactVars$rslt_df) > 0) {
-                  # Render results picker
-                  picker_choices <- gsub(
-                    "_rawdata_unidecfiles",
-                    ".raw",
-                    basename(results)
-                  )
-                  if (
-                    is.null(result_files_sel()) && length(picker_choices) > 0
-                  ) {
-                    result_files_sel(picker_choices[1])
+                choices_ok <- gsub(
+                  "_rawdata_unidecfiles",
+                  ".raw",
+                  basename(results)
+                )
+                failed_in_run <- reactVars$failed_samples[
+                  reactVars$failed_samples %in% reactVars$sample_names
+                ]
+                choices_failed <- paste0(failed_in_run, ".raw")
+                named_choices <- character(0)
+                if (length(choices_ok) > 0) {
+                  named_choices <- c(named_choices, choices_ok)
+                  names(named_choices)[seq_along(choices_ok)] <- choices_ok
+                }
+                if (length(choices_failed) > 0) {
+                  prev_len <- length(named_choices)
+                  named_choices <- c(named_choices, choices_failed)
+                  names(named_choices)[prev_len + seq_along(choices_failed)] <-
+                    paste0(failed_in_run, " (failed)")
+                }
+                if (length(named_choices) > 0) {
+                  if (is.null(result_files_sel())) {
+                    result_files_sel(unname(named_choices[1]))
                   }
                   output$result_picker_ui <- shiny$renderUI(
                     shiny$div(
@@ -1682,12 +1709,11 @@ server <- function(
                       shiny$selectInput(
                         ns("result_picker"),
                         "Select Sample",
-                        choices = picker_choices,
+                        choices = named_choices,
                         selected = result_files_sel()
                       )
                     )
                   )
-                  # Apply JS modifications for picker
                   session$sendCustomMessage("selectize-init", "result_picker")
                 }
               }
@@ -1707,26 +1733,50 @@ server <- function(
               peak_files <- file.path(fin_dirs, "plots.rds")
               finished_files <- file.exists(peak_files)
 
-              if (sum(finished_files) > 0) {
-                choices <- basename(selected_files)[finished_files]
-                selected <- ifelse(
-                  is.null(result_files_sel()),
-                  choices[1],
-                  result_files_sel()
-                )
+              sel_base <- gsub(
+                "\\.raw$",
+                "",
+                basename(selected_files),
+                ignore.case = TRUE
+              )
+              failed_mask <- sel_base %in%
+                reactVars$failed_samples &
+                !finished_files
 
+              choices_ok <- basename(selected_files)[finished_files]
+              choices_failed <- basename(selected_files)[failed_mask]
+              named_choices <- character(0)
+              if (length(choices_ok) > 0) {
+                named_choices <- c(named_choices, choices_ok)
+                names(named_choices)[seq_along(choices_ok)] <- choices_ok
+              }
+              if (length(choices_failed) > 0) {
+                prev_len <- length(named_choices)
+                named_choices <- c(named_choices, choices_failed)
+                names(named_choices)[prev_len + seq_along(choices_failed)] <-
+                  paste0(
+                    gsub("\\.raw$", "", choices_failed, ignore.case = TRUE),
+                    " (failed)"
+                  )
+              }
+
+              if (length(named_choices) > 0) {
+                sel_default <- if (!is.null(result_files_sel())) {
+                  result_files_sel()
+                } else {
+                  unname(named_choices[1])
+                }
                 output$result_picker_ui <- shiny$renderUI(
                   shiny$div(
                     class = "result-picker",
                     shiny$selectInput(
                       ns("result_picker"),
                       "Select Sample",
-                      choices = choices,
-                      selected = selected
+                      choices = named_choices,
+                      selected = sel_default
                     )
                   )
                 )
-                # Apply JS modifications for picker
                 session$sendCustomMessage("selectize-init", "result_picker")
               }
 
@@ -1750,9 +1800,33 @@ server <- function(
         shiny$invalidateLater(1000)
 
         if (difftime(Sys.time(), reactVars$last_check, units = "secs") >= 0.5) {
+          # Scan only for sentinels that belong to the current raw_dirs so that
+          # residual files from other runs in the same directory are ignored.
+          current_base_names <- gsub(
+            "\\.raw$",
+            "",
+            basename(raw_dirs),
+            ignore.case = TRUE
+          )
+          current_sentinels <- file.path(
+            analysis_dest(),
+            paste0(current_base_names, "_FAILED.rds")
+          )
+          newly_failed <- setdiff(
+            current_base_names[file.exists(current_sentinels)],
+            reactVars$failed_samples
+          )
+          if (length(newly_failed) > 0) {
+            reactVars$failed_samples <- c(
+              reactVars$failed_samples,
+              newly_failed
+            )
+          }
+
           reactVars$current_total_files <- check_progress(raw_dirs)
           reactVars$completed_files <-
-            reactVars$current_total_files - reactVars$initial_file_count
+            (reactVars$current_total_files - reactVars$initial_file_count) +
+            length(reactVars$failed_samples)
           reactVars$last_check <- Sys.time()
 
           progress_pct <- min(
@@ -1778,7 +1852,7 @@ server <- function(
             reactVars$count <- 0
           }
 
-          if (reactVars$current_total_files == 0) {
+          if (reactVars$completed_files == 0) {
             title <- paste0(
               "Initializing ",
               paste0(rep(".", reactVars$count), collapse = "")
@@ -1803,18 +1877,29 @@ server <- function(
               basename(gsub(".raw", "_rawdata_unidecfiles", raw_dirs))
             )
 
-            # Check if deconvolution finished for all target files
-            if (
-              all(file.exists(file.path(result_files, "plots.rds"))) &&
-                file.exists(file.path(
-                  analysis_dest(),
-                  gsub(
-                    ".log",
-                    "_RESULT.rds",
-                    basename(log_path)
-                  )
-                ))
-            ) {
+            # Check if deconvolution finished for all target files.
+            # A sample is considered processed when it either has a plots.rds
+            # (success) or a _FAILED.rds sentinel written by the worker (failure).
+            sample_base_names <- gsub(
+              "\\.raw$",
+              "",
+              basename(raw_dirs),
+              ignore.case = TRUE
+            )
+            failure_sentinels <- file.path(
+              analysis_dest(),
+              paste0(sample_base_names, "_FAILED.rds")
+            )
+            all_processed <- all(
+              file.exists(file.path(result_files, "plots.rds")) |
+                file.exists(failure_sentinels)
+            ) &&
+              file.exists(file.path(
+                analysis_dest(),
+                gsub(".log", "_RESULT.rds", basename(log_path))
+              ))
+
+            if (all_processed) {
               # Stop observers
               if (!is.null(reactVars$progress_observer)) {
                 reactVars$progress_observer$destroy()
@@ -1966,29 +2051,53 @@ server <- function(
                 peak_files <- file.path(fin_dirs, "plots.rds")
                 finished_files <- file.exists(peak_files)
 
-                if (sum(finished_files) > 0) {
-                  # Update choices and selected sample of results picker
-                  choices <- basename(selected_files)[finished_files]
+                # Build picker: successful samples + failed samples (labelled)
+                sel_base <- gsub(
+                  "\\.raw$",
+                  "",
+                  basename(selected_files),
+                  ignore.case = TRUE
+                )
+                failed_mask <- sel_base %in%
+                  reactVars$failed_samples &
+                  !finished_files
 
-                  selected <- ifelse(
-                    is.null(result_files_sel()),
-                    choices[1],
+                choices_ok <- basename(selected_files)[finished_files]
+                choices_failed <- basename(selected_files)[failed_mask]
+
+                named_choices <- character(0)
+                if (length(choices_ok) > 0) {
+                  named_choices <- c(named_choices, choices_ok)
+                  names(named_choices)[seq_along(choices_ok)] <- choices_ok
+                }
+                if (length(choices_failed) > 0) {
+                  prev_len <- length(named_choices)
+                  named_choices <- c(named_choices, choices_failed)
+                  names(named_choices)[prev_len + seq_along(choices_failed)] <-
+                    paste0(
+                      gsub("\\.raw$", "", choices_failed, ignore.case = TRUE),
+                      " (failed)"
+                    )
+                }
+
+                if (length(named_choices) > 0) {
+                  sel_default <- if (!is.null(result_files_sel())) {
                     result_files_sel()
-                  )
+                  } else {
+                    unname(named_choices[1])
+                  }
 
-                  # Render sample picker with updated choices
                   output$result_picker_ui <- shiny$renderUI(
                     shiny$div(
                       class = "result-picker",
                       shiny$selectInput(
                         ns("result_picker"),
                         "Select Sample",
-                        choices = choices,
-                        selected = selected
+                        choices = named_choices,
+                        selected = sel_default
                       )
                     )
                   )
-                  # Apply JS modifications for picker
                   session$sendCustomMessage("selectize-init", "result_picker")
                 }
               }
@@ -2015,11 +2124,51 @@ server <- function(
                 selector = "#app-deconvolution_main-forward_deconvolution"
               )
 
-              # Change spinner to finished
+              # Change spinner: error icon when all samples failed, check otherwise
               hide(selector = "#app-deconvolution_main-processing")
-              show(selector = "#app-deconvolution_main-processing_fin")
-
-              write_log("Deconvolution finalized")
+              n_succeeded <- reactVars$current_total_files -
+                reactVars$initial_file_count
+              n_failed <- length(reactVars$failed_samples)
+              n_total <- reactVars$expected_files
+              if (n_succeeded == 0 && n_failed > 0) {
+                show(selector = "#app-deconvolution_main-processing_error")
+                title <- paste0(
+                  "Finalized with errors (",
+                  n_failed,
+                  "/",
+                  n_total,
+                  " failed)"
+                )
+                write_log(paste(
+                  "Deconvolution finalized — all",
+                  n_failed,
+                  "/",
+                  n_total,
+                  "sample(s) failed"
+                ))
+              } else {
+                show(selector = "#app-deconvolution_main-processing_fin")
+                if (n_failed > 0) {
+                  title <- paste0(
+                    "Finalized (",
+                    n_failed,
+                    "/",
+                    n_total,
+                    " failed)"
+                  )
+                  write_log(paste(
+                    "Deconvolution finalized —",
+                    n_succeeded,
+                    "succeeded,",
+                    n_failed,
+                    "/",
+                    n_total,
+                    "failed"
+                  ))
+                } else {
+                  write_log("Deconvolution finalized")
+                }
+              }
             }
           }
 
@@ -2215,6 +2364,26 @@ server <- function(
           )
         }
 
+        # Check for a failure sentinel before attempting to render
+        sel_base <- gsub("\\.raw$", "", result_files_sel(), ignore.case = TRUE)
+        failure_sentinel <- file.path(
+          analysis_dest(),
+          paste0(sel_base, "_FAILED.rds")
+        )
+        if (file.exists(failure_sentinel)) {
+          waiter_hide(id = ns("spectrum"))
+          allow_spinner_spectrum(TRUE)
+          return(
+            plotly::plot_ly() |>
+              plotly::layout(
+                paper_bgcolor = "rgba(0,0,0,0)",
+                plot_bgcolor = "rgba(0,0,0,0)",
+                xaxis = list(visible = FALSE),
+                yaxis = list(visible = FALSE)
+              )
+          )
+        }
+
         if (dir.exists(result_dir)) {
           # Generate the spectrum plot
           spectrum <- spectrum_plot(
@@ -2258,6 +2427,27 @@ server <- function(
               "_rawdata_unidecfiles",
               deconvolution_sidebar_vars$file()
             ))
+          )
+        }
+
+        # Check for a failure sentinel first
+        sel_base_dt <- gsub(
+          "\\.raw$",
+          "",
+          result_files_sel(),
+          ignore.case = TRUE
+        )
+        failure_sentinel_dt <- file.path(
+          analysis_dest(),
+          paste0(sel_base_dt, "_FAILED.rds")
+        )
+        if (file.exists(failure_sentinel_dt)) {
+          waiter_hide(id = ns("deconvolution_data"))
+          return(
+            DT::datatable(
+              data = data.frame(),
+              options = list(dom = '', paging = FALSE)
+            )
           )
         }
 
@@ -2310,6 +2500,23 @@ server <- function(
             )
         }
       })
+
+      ### Failure overlay messages for Spectrum and Metrics cards
+      failure_msg_ui <- function(output_id) {
+        shiny$renderUI({
+          shiny$req(result_files_sel())
+          sel <- gsub("\\.raw$", "", result_files_sel(), ignore.case = TRUE)
+          sentinel <- file.path(analysis_dest(), paste0(sel, "_FAILED.rds"))
+          if (file.exists(sentinel)) {
+            shiny$div(
+              class = "sample-failed-msg",
+              "Sample failed to deconvolute."
+            )
+          }
+        })
+      }
+      output$spectrum_failure_msg <- failure_msg_ui("spectrum_failure_msg")
+      output$metrics_failure_msg <- failure_msg_ui("metrics_failure_msg")
 
       ### Render heatmap when config has wells specified
       if (
