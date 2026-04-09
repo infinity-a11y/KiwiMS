@@ -399,6 +399,62 @@ server <- function(
       }
     })
 
+    ### Running destination path display ----
+    output$running_dest_ui <- shiny$renderUI({
+      dest <- analysis_dest()
+      if (is.null(dest)) {
+        return(NULL)
+      }
+
+      base_name <- basename(dest)
+      max_len <- 40L
+      display_path <- if (nchar(dest) <= max_len) {
+        dest
+      } else {
+        suffix <- paste0("/", base_name)
+        prefix_len <- max_len - nchar(suffix) - 1L
+        if (prefix_len <= 0) {
+          paste0("\u2026", suffix)
+        } else {
+          paste0(substr(dest, 1L, prefix_len), "\u2026", suffix)
+        }
+      }
+
+      tooltip(
+        shiny$div(
+          style = "cursor:pointer; margin-bottom: 5px;",
+          onclick = paste0(
+            "Shiny.setInputValue('",
+            ns("open_dest"),
+            "', Math.random())"
+          ),
+          shiny$tags$span(
+            style = "color:#5cb85c; flex-shrink:0;",
+            shiny$icon("folder-open")
+          ),
+          shiny$HTML(paste(
+            "<code style='cursor:pointer;'>",
+            "Saved in:",
+            display_path,
+            "</code>"
+          ))
+        ),
+        "Click to open in File Explorer",
+        placement = "bottom"
+      )
+    })
+
+    shiny$observeEvent(input$open_dest, {
+      dest <- analysis_dest()
+      if (!is.null(dest) && dir.exists(dest)) {
+        if (.Platform$OS.type == "windows") {
+          shell.exec(dest)
+        } else {
+          utils::browseURL(dest)
+        }
+      }
+    })
+
     # Conditional enabling of advanced settings
     shiny$observe({
       if (isTRUE(input$show_advanced)) {

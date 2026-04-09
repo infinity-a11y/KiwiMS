@@ -25,18 +25,18 @@ box::use(
 #' @export
 deconvolution_init_ui <- function(ns, analysis_name_default = "") {
   s <- read_user_settings()
-  startz_def    <- s$deconv_startz
-  endz_def      <- s$deconv_endz
-  minmz_def     <- s$deconv_minmz
-  maxmz_def     <- s$deconv_maxmz
-  masslb_def    <- s$deconv_masslb
-  massub_def    <- s$deconv_massub
+  startz_def <- s$deconv_startz
+  endz_def <- s$deconv_endz
+  minmz_def <- s$deconv_minmz
+  maxmz_def <- s$deconv_maxmz
+  masslb_def <- s$deconv_masslb
+  massub_def <- s$deconv_massub
   time_start_def <- s$deconv_time_start
-  time_end_def  <- s$deconv_time_end
+  time_end_def <- s$deconv_time_end
   peakwindow_def <- s$deconv_peakwindow
-  peaknorm_def  <- as.character(s$deconv_peaknorm)
+  peaknorm_def <- as.character(s$deconv_peaknorm)
   peakthresh_def <- s$deconv_peakthresh
-  massbins_def  <- s$deconv_massbins
+  massbins_def <- s$deconv_massbins
 
   card(
     card_header(
@@ -816,7 +816,7 @@ deconvolution_status_controls <- function(ns) {
                 width = "100%"
               )
             )
-          ),
+          )
         )
       )
     ),
@@ -930,16 +930,15 @@ deconvolution_results_ui <- function(ns, show_heatmap = FALSE) {
       card(
         class = "deconvolution-running-result-card",
         shiny$div(
-          class = paste(
-            "deconvolution-result-content"
-            # ,
-            # if (show_heatmap) "with-heatmap"
-          ),
+          class = "deconvolution-result-content",
           shiny$div(
             class = "deconvolution-result-controls",
             shiny::div(
-              class = "deconvolution-sample-picker",
-              shiny$uiOutput(ns("result_picker_ui"))
+              shiny$uiOutput(ns("running_dest_ui")),
+              shiny::div(
+                class = "deconvolution-sample-picker",
+                shiny$uiOutput(ns("result_picker_ui"))
+              )
             ),
             shiny::div(
               class = "card-custom",
