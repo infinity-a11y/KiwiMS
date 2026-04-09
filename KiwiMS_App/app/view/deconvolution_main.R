@@ -863,6 +863,13 @@ server <- function(
               )
             )
           } else {
+            missing_samples <- config_file()[["Sample"]][!presence]
+            missing_items_html <- paste0(
+              "<div style='font-family:monospace; font-size:0.9em;'>",
+              paste(missing_samples, collapse = "<br>"),
+              "</div>"
+            )
+
             message <- shiny$p(
               shiny$HTML(
                 paste0(
@@ -874,7 +881,18 @@ server <- function(
                   '1em; color:black; margin-right: 10px;"></i><i><b>',
                   sum(!presence),
                   "</b> of the samples specified in the config file are<b> NOT</b> prese",
-                  "nt in the selected folder.</i>"
+                  "nt in the selected folder.</i><br><br>",
+                  "<details style='font-size:0.85em; color:gray; cursor:pointer;'>",
+                  "<summary style='user-select:none;'>",
+                  '<i class="fa-solid fa-circle-info" style="margin-right:4px;"></i>',
+                  "View missing sample(s)",
+                  "</summary>",
+                  "<div style='margin-top:6px; max-height:150px; overflow-y:auto;",
+                  " border:1px solid #ddd; border-radius:4px; padding:6px;",
+                  " background:#f8f8f8;'>",
+                  missing_items_html,
+                  "</div>",
+                  "</details>"
                 )
               )
             )
