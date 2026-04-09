@@ -25,34 +25,18 @@ box::use(
 #' @export
 deconvolution_init_ui <- function(ns, analysis_name_default = "") {
   s <- read_user_settings()
-  startz_def <- if (!is.null(s$deconv_startz)) s$deconv_startz else 1
-  endz_def <- if (!is.null(s$deconv_endz)) s$deconv_endz else 50
-  minmz_def <- if (!is.null(s$deconv_minmz)) s$deconv_minmz else 710
-  maxmz_def <- if (!is.null(s$deconv_maxmz)) s$deconv_maxmz else 1100
-  masslb_def <- if (!is.null(s$deconv_masslb)) s$deconv_masslb else 10000
-  massub_def <- if (!is.null(s$deconv_massub)) s$deconv_massub else 60000
-  time_start_def <- if (!is.null(s$deconv_time_start)) {
-    s$deconv_time_start
-  } else {
-    0.5
-  }
-  time_end_def <- if (!is.null(s$deconv_time_end)) s$deconv_time_end else 1.5
-  peakwindow_def <- if (!is.null(s$deconv_peakwindow)) {
-    s$deconv_peakwindow
-  } else {
-    40
-  }
-  peaknorm_def <- if (!is.null(s$deconv_peaknorm)) {
-    as.character(s$deconv_peaknorm)
-  } else {
-    "2"
-  }
-  peakthresh_def <- if (!is.null(s$deconv_peakthresh)) {
-    s$deconv_peakthresh
-  } else {
-    0.07
-  }
-  massbins_def <- if (!is.null(s$deconv_massbins)) s$deconv_massbins else 0.5
+  startz_def    <- s$deconv_startz
+  endz_def      <- s$deconv_endz
+  minmz_def     <- s$deconv_minmz
+  maxmz_def     <- s$deconv_maxmz
+  masslb_def    <- s$deconv_masslb
+  massub_def    <- s$deconv_massub
+  time_start_def <- s$deconv_time_start
+  time_end_def  <- s$deconv_time_end
+  peakwindow_def <- s$deconv_peakwindow
+  peaknorm_def  <- as.character(s$deconv_peaknorm)
+  peakthresh_def <- s$deconv_peakthresh
+  massbins_def  <- s$deconv_massbins
 
   card(
     card_header(

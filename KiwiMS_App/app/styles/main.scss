@@ -4378,6 +4378,26 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   }
 }
 
+.settings-table-feedback {
+  width: 20%;
+  min-width: 110px;
+  vertical-align: middle !important;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.settings-feedback {
+  font-size: 0.85em;
+
+  &--valid i {
+    color: #8bc34a;
+  }
+
+  &--invalid i {
+    color: #d17050;
+  }
+}
+
 .sidebar-section {
   display: flex;
   flex-direction: column;
@@ -4388,7 +4408,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   border: 1px solid rgba(0, 0, 0, 0.3);
   border-left: none;
   height: -webkit-fill-available;
-  box-shadow: inset 0px 0px 65px 0px #00000052;
+  box-shadow: inset 0px 0px 65px 0px rgb(0 0 0 / 20%);
 }
 
 /* Sidebar config status panel */
