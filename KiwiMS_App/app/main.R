@@ -25,7 +25,11 @@ box::use(
   app / logic / logging[start_logging, write_log, close_logging],
   app /
     logic /
-    user_settings[read_user_settings, update_user_setting, clear_user_setting],
+    user_settings[
+      read_user_settings,
+      save_user_settings,
+      update_user_setting,
+    ],
   app /
     logic /
     helper_functions[
@@ -270,7 +274,8 @@ server <- function(id) {
                 shiny$tags$thead(
                   shiny$tags$tr(
                     shiny$tags$th("Setting"),
-                    shiny$tags$th("Default Value")
+                    shiny$tags$th("Default Value"),
+                    shiny$tags$th("Status")
                   )
                 ),
                 shiny$tags$tbody(
@@ -294,45 +299,12 @@ server <- function(id) {
                           ns("settings_dest_enabled"),
                           label = "Use as default",
                           value = isTRUE(s$enabled)
-                        ),
-                        shiny$uiOutput(ns("settings_dest_path_display"))
+                        )
                       )
-                    )
-                  ),
-                  # --- Peak Tolerance ---
-                  shiny$tags$tr(
-                    shiny$tags$td(
-                      class = "settings-table-label",
-                      "Peak Tolerance [Da]"
                     ),
                     shiny$tags$td(
-                      shiny$numericInput(
-                        ns("settings_peak_tol"),
-                        label = NULL,
-                        value = us$peak_tolerance,
-                        min = 0,
-                        max = 20,
-                        step = 0.1,
-                        width = "200px"
-                      )
-                    )
-                  ),
-                  # --- Max. Stoichiometry ---
-                  shiny$tags$tr(
-                    shiny$tags$td(
-                      class = "settings-table-label",
-                      "Max. Stoichiometry"
-                    ),
-                    shiny$tags$td(
-                      shiny$numericInput(
-                        ns("settings_max_mult"),
-                        label = NULL,
-                        value = us$max_multiples,
-                        min = 1,
-                        max = 20,
-                        step = 1,
-                        width = "200px"
-                      )
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_dest_path_display"))
                     )
                   ),
                   shiny$tags$tr(
@@ -350,6 +322,10 @@ server <- function(id) {
                         step = 1,
                         width = "200px"
                       )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_startz_feedback"))
                     )
                   ),
                   shiny$tags$tr(
@@ -367,6 +343,10 @@ server <- function(id) {
                         step = 1,
                         width = "200px"
                       )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_endz_feedback"))
                     )
                   ),
                   shiny$tags$tr(
@@ -384,6 +364,10 @@ server <- function(id) {
                         step = 1,
                         width = "200px"
                       )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_minmz_feedback"))
                     )
                   ),
                   shiny$tags$tr(
@@ -401,6 +385,10 @@ server <- function(id) {
                         step = 1,
                         width = "200px"
                       )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_maxmz_feedback"))
                     )
                   ),
                   shiny$tags$tr(
@@ -418,6 +406,10 @@ server <- function(id) {
                         step = 1,
                         width = "200px"
                       )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_masslb_feedback"))
                     )
                   ),
                   shiny$tags$tr(
@@ -435,6 +427,10 @@ server <- function(id) {
                         step = 1,
                         width = "200px"
                       )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_massub_feedback"))
                     )
                   ),
                   shiny$tags$tr(
@@ -452,6 +448,10 @@ server <- function(id) {
                         step = 0.05,
                         width = "200px"
                       )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_time_start_feedback"))
                     )
                   ),
                   shiny$tags$tr(
@@ -469,6 +469,10 @@ server <- function(id) {
                         step = 0.05,
                         width = "200px"
                       )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_time_end_feedback"))
                     )
                   ),
                   shiny$tags$tr(
@@ -486,6 +490,10 @@ server <- function(id) {
                         step = 1,
                         width = "200px"
                       )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_peakwindow_feedback"))
                     )
                   ),
                   shiny$tags$tr(
@@ -508,6 +516,10 @@ server <- function(id) {
                           width = "200px"
                         )
                       )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_peaknorm_feedback"))
                     )
                   ),
                   shiny$tags$tr(
@@ -525,6 +537,52 @@ server <- function(id) {
                         step = 0.01,
                         width = "200px"
                       )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_peakthresh_feedback"))
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Peak Tolerance [Da]"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_peak_tol"),
+                        label = NULL,
+                        value = us$peak_tolerance,
+                        min = 0,
+                        max = 20,
+                        step = 0.1,
+                        width = "200px"
+                      )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_peak_tol_feedback"))
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Max. Stoichiometry"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_max_mult"),
+                        label = NULL,
+                        value = us$max_multiples,
+                        min = 1,
+                        max = 20,
+                        step = 1,
+                        width = "200px"
+                      )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_max_mult_feedback"))
                     )
                   ),
                   shiny$tags$tr(
@@ -533,6 +591,7 @@ server <- function(id) {
                       class = "settings-table-label",
                     ),
                     shiny$tags$td(
+                      colspan = "2",
                       shiny$actionButton(
                         ns("reset_default"),
                         "Reset All",
@@ -670,6 +729,227 @@ server <- function(id) {
       }
     })
 
+    # Helper tags for settings validation feedback
+    settings_ok_tag <- function(msg = "Valid") {
+      shiny$div(
+        class = "settings-feedback settings-feedback--valid",
+        shiny$icon("circle-check"),
+        paste0(" ", msg)
+      )
+    }
+    settings_err_tag <- function(msg) {
+      shiny$div(
+        class = "settings-feedback settings-feedback--invalid",
+        shiny$icon("triangle-exclamation"),
+        paste0(" ", msg)
+      )
+    }
+
+    # Peak Tolerance [Da] — min 0, max 20
+    output$settings_peak_tol_feedback <- shiny$renderUI({
+      val <- input$settings_peak_tol
+      if (is.null(val) || is.na(val)) {
+        return(settings_err_tag("Enter a valid number"))
+      }
+      if (val < 0 || val > 20) {
+        return(settings_err_tag("Must be between 0 and 20 Da"))
+      }
+      settings_ok_tag("Valid")
+    })
+
+    # Max. Stoichiometry — min 1, max 20, integer
+    output$settings_max_mult_feedback <- shiny$renderUI({
+      val <- input$settings_max_mult
+      if (is.null(val) || is.na(val)) {
+        return(settings_err_tag("Enter a valid number"))
+      }
+      if (val < 1 || val > 20) {
+        return(settings_err_tag("Must be between 1 and 20"))
+      }
+      if (val != floor(val)) {
+        return(settings_err_tag("Must be a whole number"))
+      }
+      settings_ok_tag("Valid")
+    })
+
+    # Min. charge state [z] — min 1, max 100, integer, < endz
+    output$settings_startz_feedback <- shiny$renderUI({
+      val <- input$settings_startz
+      endz <- input$settings_endz
+      if (is.null(val) || is.na(val)) {
+        return(settings_err_tag("Enter a valid number"))
+      }
+      if (val < 1) {
+        return(settings_err_tag("Must be at least 1"))
+      }
+      if (val != floor(val)) {
+        return(settings_err_tag("Must be a whole number"))
+      }
+      if (!is.null(endz) && !is.na(endz) && val >= endz) {
+        return(settings_err_tag("Must be less than max. charge state"))
+      }
+      settings_ok_tag("Valid")
+    })
+
+    # Max. charge state [z] — min 1, max 100, integer, > startz
+    output$settings_endz_feedback <- shiny$renderUI({
+      val <- input$settings_endz
+      startz <- input$settings_startz
+      if (is.null(val) || is.na(val)) {
+        return(settings_err_tag("Enter a valid number"))
+      }
+      if (val < 1) {
+        return(settings_err_tag("Must be at least 1"))
+      }
+      if (val != floor(val)) {
+        return(settings_err_tag("Must be a whole number"))
+      }
+      if (!is.null(startz) && !is.na(startz) && val <= startz) {
+        return(settings_err_tag("Must be greater than min. charge state"))
+      }
+      settings_ok_tag("Valid")
+    })
+
+    # Lower deconvolution range [m/z] — min 1, max 100000, integer, < maxmz
+    output$settings_minmz_feedback <- shiny$renderUI({
+      val <- input$settings_minmz
+      maxmz <- input$settings_maxmz
+      if (is.null(val) || is.na(val)) {
+        return(settings_err_tag("Enter a valid number"))
+      }
+      if (val < 1) {
+        return(settings_err_tag("Must be at least 1"))
+      }
+      if (val != floor(val)) {
+        return(settings_err_tag("Must be a whole number"))
+      }
+      if (!is.null(maxmz) && !is.na(maxmz) && val >= maxmz) {
+        return(settings_err_tag("Must be less than upper m/z"))
+      }
+      settings_ok_tag("Valid")
+    })
+
+    # Upper deconvolution range [m/z] — min 1, max 100000, integer, > minmz
+    output$settings_maxmz_feedback <- shiny$renderUI({
+      val <- input$settings_maxmz
+      minmz <- input$settings_minmz
+      if (is.null(val) || is.na(val)) {
+        return(settings_err_tag("Enter a valid number"))
+      }
+      if (val < 1) {
+        return(settings_err_tag("Must be at least 1"))
+      }
+      if (val != floor(val)) {
+        return(settings_err_tag("Must be a whole number"))
+      }
+      if (!is.null(minmz) && !is.na(minmz) && val <= minmz) {
+        return(settings_err_tag("Must be greater than lower m/z"))
+      }
+      settings_ok_tag("Valid")
+    })
+
+    # Lower mass range [Da] — min 1, max 2000000, integer, < massub
+    output$settings_masslb_feedback <- shiny$renderUI({
+      val <- input$settings_masslb
+      massub <- input$settings_massub
+      if (is.null(val) || is.na(val)) {
+        return(settings_err_tag("Enter a valid number"))
+      }
+      if (val < 1) {
+        return(settings_err_tag("Must be at least 1 Da"))
+      }
+      if (val != floor(val)) {
+        return(settings_err_tag("Must be a whole number"))
+      }
+      if (!is.null(massub) && !is.na(massub) && val >= massub) {
+        return(settings_err_tag("Must be less than upper mass"))
+      }
+      settings_ok_tag("Valid")
+    })
+
+    # Upper mass range [Da] — min 1, max 2000000, integer, > masslb
+    output$settings_massub_feedback <- shiny$renderUI({
+      val <- input$settings_massub
+      masslb <- input$settings_masslb
+      if (is.null(val) || is.na(val)) {
+        return(settings_err_tag("Enter a valid number"))
+      }
+      if (val < 1) {
+        return(settings_err_tag("Must be at least 1 Da"))
+      }
+      if (val != floor(val)) {
+        return(settings_err_tag("Must be a whole number"))
+      }
+      if (!is.null(masslb) && !is.na(masslb) && val <= masslb) {
+        return(settings_err_tag("Must be greater than lower mass"))
+      }
+      settings_ok_tag("Valid")
+    })
+
+    # Elution start time [min] — min 0, max 100, < time_end
+    output$settings_time_start_feedback <- shiny$renderUI({
+      val <- input$settings_time_start
+      time_end <- input$settings_time_end
+      if (is.null(val) || is.na(val)) {
+        return(settings_err_tag("Enter a valid number"))
+      }
+      if (val < 0 || val > 100) {
+        return(settings_err_tag("Must be between 0 and 100 min"))
+      }
+      if (!is.null(time_end) && !is.na(time_end) && val >= time_end) {
+        return(settings_err_tag("Must be earlier than end time"))
+      }
+      settings_ok_tag("Valid")
+    })
+
+    # Elution end time [min] — min 0, max 100, > time_start
+    output$settings_time_end_feedback <- shiny$renderUI({
+      val <- input$settings_time_end
+      time_start <- input$settings_time_start
+      if (is.null(val) || is.na(val)) {
+        return(settings_err_tag("Enter a valid number"))
+      }
+      if (val < 0 || val > 100) {
+        return(settings_err_tag("Must be between 0 and 100 min"))
+      }
+      if (!is.null(time_start) && !is.na(time_start) && val <= time_start) {
+        return(settings_err_tag("Must be later than start time"))
+      }
+      settings_ok_tag("Valid")
+    })
+
+    # Detection window [Da] — min 1, max 500, integer
+    output$settings_peakwindow_feedback <- shiny$renderUI({
+      val <- input$settings_peakwindow
+      if (is.null(val) || is.na(val)) {
+        return(settings_err_tag("Enter a valid number"))
+      }
+      if (val < 1 || val > 500) {
+        return(settings_err_tag("Must be between 1 and 500 Da"))
+      }
+      if (val != floor(val)) {
+        return(settings_err_tag("Must be a whole number"))
+      }
+      settings_ok_tag("Valid")
+    })
+
+    # Peak normalization — always valid (fixed choices)
+    output$settings_peaknorm_feedback <- shiny$renderUI({
+      settings_ok_tag("Valid")
+    })
+
+    # Peak threshold — min 0, max 1
+    output$settings_peakthresh_feedback <- shiny$renderUI({
+      val <- input$settings_peakthresh
+      if (is.null(val) || is.na(val)) {
+        return(settings_err_tag("Enter a valid number"))
+      }
+      if (val < 0 || val > 1) {
+        return(settings_err_tag("Must be between 0 and 1"))
+      }
+      settings_ok_tag("Valid")
+    })
+
     shiny$observeEvent(input$save_settings, {
       # --- Destination folder ---
       path <- settings_dest_picked()
@@ -697,19 +977,66 @@ server <- function(id) {
       saveRDS(new_dest, dest_settings_file)
       dest_settings(new_dest)
 
-      # --- Numeric defaults ---
+      # --- Numeric defaults — only overwrite keys whose input passes validation.
+      # Empty/invalid fields are left at their stored value (or built-in default).
+      # Note: is.numeric(NA) is FALSE in R, so we use is.na() directly.
+      current <- read_user_settings() # already NA-sanitised; contains stored or defaults
+      ok     <- function(v) !is.null(v) && !is.na(v)
+      int_ok <- function(v) ok(v) && v == floor(v)
+
       pt <- input$settings_peak_tol
+      if (ok(pt) && pt >= 0 && pt <= 20) current$peak_tolerance <- pt
+
       mm <- input$settings_max_mult
-      if (!is.null(pt) && !is.na(pt)) {
-        update_user_setting("peak_tolerance", pt)
+      if (int_ok(mm) && mm >= 1 && mm <= 20) current$max_multiples <- mm
+
+      pw <- input$settings_peakwindow
+      if (int_ok(pw) && pw >= 1 && pw <= 500) current$deconv_peakwindow <- pw
+
+      current$deconv_peaknorm <- as.numeric(input$settings_peaknorm)
+
+      p2 <- input$settings_peakthresh
+      if (ok(p2) && p2 >= 0 && p2 <= 1) current$deconv_peakthresh <- p2
+
+      # Paired fields: save the pair only when both individually valid AND ordered;
+      # save each side independently when its counterpart is absent/invalid.
+      sz <- input$settings_startz;  sz_ok <- int_ok(sz) && sz >= 1
+      ez <- input$settings_endz;    ez_ok <- int_ok(ez) && ez >= 1
+      if (sz_ok && ez_ok) {
+        if (sz < ez) { current$deconv_startz <- sz; current$deconv_endz <- ez }
       } else {
-        clear_user_setting("peak_tolerance")
+        if (sz_ok) current$deconv_startz <- sz
+        if (ez_ok) current$deconv_endz   <- ez
       }
-      if (!is.null(mm) && !is.na(mm)) {
-        update_user_setting("max_multiples", mm)
+
+      mn <- input$settings_minmz;  mn_ok <- int_ok(mn) && mn >= 1
+      mx <- input$settings_maxmz;  mx_ok <- int_ok(mx) && mx >= 1
+      if (mn_ok && mx_ok) {
+        if (mn < mx) { current$deconv_minmz <- mn; current$deconv_maxmz <- mx }
       } else {
-        clear_user_setting("max_multiples")
+        if (mn_ok) current$deconv_minmz <- mn
+        if (mx_ok) current$deconv_maxmz <- mx
       }
+
+      lb <- input$settings_masslb;  lb_ok <- int_ok(lb) && lb >= 1
+      ub <- input$settings_massub;  ub_ok <- int_ok(ub) && ub >= 1
+      if (lb_ok && ub_ok) {
+        if (lb < ub) { current$deconv_masslb <- lb; current$deconv_massub <- ub }
+      } else {
+        if (lb_ok) current$deconv_masslb <- lb
+        if (ub_ok) current$deconv_massub <- ub
+      }
+
+      ts <- input$settings_time_start;  ts_ok <- ok(ts) && ts >= 0 && ts <= 100
+      te <- input$settings_time_end;    te_ok <- ok(te) && te >= 0 && te <= 100
+      if (ts_ok && te_ok) {
+        if (ts < te) { current$deconv_time_start <- ts; current$deconv_time_end <- te }
+      } else {
+        if (ts_ok) current$deconv_time_start <- ts
+        if (te_ok) current$deconv_time_end   <- te
+      }
+
+      save_user_settings(current)
 
       shiny$removeModal()
       shinyWidgets::show_toast(

@@ -74,16 +74,8 @@ server <- function(
     ## Analysis controls UI ----
     output$conversion_analysis_controls_ui <- shiny::renderUI({
       saved <- read_user_settings()
-      pt_default <- if (!is.null(saved$peak_tolerance)) {
-        saved$peak_tolerance
-      } else {
-        3
-      }
-      mm_default <- if (!is.null(saved$max_multiples)) {
-        saved$max_multiples
-      } else {
-        4
-      }
+      pt_default <- saved$peak_tolerance
+      mm_default <- saved$max_multiples
 
       shiny::div(
         class = "sidebar-section",
