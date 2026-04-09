@@ -60,6 +60,13 @@ tryCatch(
   }
 )
 
+# Remove any leftover failure sentinels from a previous run
+existing_failed <- list.files(result_dir, pattern = "_FAILED\\.rds$", full.names = TRUE)
+if (length(existing_failed) > 0) {
+  file.remove(existing_failed)
+  message("Removed ", length(existing_failed), " leftover failure sentinel(s) from result directory.")
+}
+
 # Start deconvolution
 tryCatch(
   {

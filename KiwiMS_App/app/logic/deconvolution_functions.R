@@ -18,6 +18,39 @@ box::use(
   utils[read.delim, read.table],
 )
 
+# record_decon_failure(): Write per-sample failure info to result_dir ----
+# Safe for parallel workers: each call writes a uniquely-named file derived
+# from the sample name, so no locking or synchronisation is needed.
+record_decon_failure <- function(
+  waters_dir,
+  result_dir,
+  reason,
+  error_msg = NULL
+) {
+  sample_name <- gsub("\\.raw$", "", basename(waters_dir), ignore.case = TRUE)
+  failure_file <- file.path(result_dir, paste0(sample_name, "_FAILED.rds"))
+
+  failure_info <- list(
+    waters_dir = waters_dir,
+    result_dir = result_dir,
+    timestamp = format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+    reason = reason,
+    error_msg = error_msg
+  )
+
+  tryCatch(
+    saveRDS(failure_info, failure_file),
+    error = function(e) {
+      message(
+        "Could not write failure record for ",
+        sample_name,
+        ": ",
+        e$message
+      )
+    }
+  )
+}
+
 # process_single_dir(): Processing a single waters dir ----
 #' @export
 process_single_dir <- function(
@@ -182,26 +215,35 @@ engine.pick_peaks()
 
         saveRDS(plots, file.path(result, "plots.rds"))
       } else {
-        stop()
+        record_decon_failure(
+          waters_dir = waters_dir,
+          result_dir = result_dir,
+          reason = "no_output_dir"
+        )
       }
     },
     error = function(e) {
       py_err <- reticulate::py_last_error()
+      err_detail <- if (!is.null(py_err)) {
+        paste(c(e$message, as.character(py_err)), collapse = "\n")
+      } else {
+        e$message
+      }
 
-      # Print the main error and the Python stack trace if it exists
-      message("Error in single deconvolution processing: ", e$message)
-
+      message("Error in single deconvolution processing: ", err_detail)
       cat(
         "Error in process_single_dir for",
         waters_dir,
-        ":",
-        "\n",
-        e$message,
-        "\n",
-        if (!is.null(py_err)) {
-          message(py_err)
-        },
+        ":\n",
+        err_detail,
         "\n"
+      )
+
+      record_decon_failure(
+        waters_dir = waters_dir,
+        result_dir = result_dir,
+        reason = "error",
+        error_msg = err_detail
       )
     }
   )
@@ -318,6 +360,7 @@ deconvolute <- function(
       c(
         "process_plot_data",
         "process_single_dir",
+        "record_decon_failure",
         "spectrum_plot",
         "process_wrapper",
         "params_list"
@@ -430,7 +473,12 @@ create_384_plate_heatmap <- function(data) {
       d <- plate_data[plate_data$well_id == wid, ]
       if (nrow(d) > 0 && !is.na(d$value[1])) {
         z_mat[r, as.character(c)] <- 1
-        text_mat[r, as.character(c)] <- paste0("Well: ", wid, "<br>Sample: ", d$sample[1])
+        text_mat[r, as.character(c)] <- paste0(
+          "Well: ",
+          wid,
+          "<br>Sample: ",
+          d$sample[1]
+        )
       } else {
         text_mat[r, as.character(c)] <- paste0("Well: ", wid, "<br>Empty")
       }
@@ -496,9 +544,16 @@ create_384_plate_heatmap <- function(data) {
       displayModeBar = "hover",
       scrollZoom = FALSE,
       modeBarButtons = list(list(
-        "zoom2d", "toImage", "autoScale2d", "resetScale2d", "zoomIn2d", "zoomOut2d"
+        "zoom2d",
+        "toImage",
+        "autoScale2d",
+        "resetScale2d",
+        "zoomIn2d",
+        "zoomOut2d"
       )),
-      toImageButtonOptions = list(filename = paste0(Sys.Date(), "_Plate_Heatmap"))
+      toImageButtonOptions = list(
+        filename = paste0(Sys.Date(), "_Plate_Heatmap")
+      )
     )
 }
 
