@@ -878,132 +878,109 @@ server <- function(
     # Dynamic rendering of message with info for selected files
     output$message_ui <- shiny$renderUI({
       input$deconvolute_start
-      enable(
-        selector = "#app-deconvolution_main-deconvolute_start_conf"
-      )
+      enable(selector = "#app-deconvolution_main-deconvolute_start_conf")
+
+      icon_warn <- '<i class="fa-solid fa-circle-exclamation" style="font-size:1em; color:black; margin-right:10px;"></i>'
+      icon_info <- '<i class="fa-solid fa-circle-info" style="margin-right:4px;"></i>'
+
+      make_warning <- function(text) {
+        paste0(icon_warn, "<i>", text, "</i>")
+      }
+
+      make_details <- function(label, items) {
+        paste0(
+          "<details style='font-size:0.85em; color:gray; cursor:pointer;'>",
+          "<summary style='user-select:none;'>",
+          icon_info,
+          label,
+          "</summary>",
+          "<div style='margin-top:6px; max-height:150px; overflow-y:auto;",
+          " border:1px solid #ddd; border-radius:4px; padding:6px; background:#f8f8f8;'>",
+          "<div style='font-family:monospace; font-size:0.9em;'>",
+          paste(items, collapse = "<br>"),
+          "</div></div></details>"
+        )
+      }
 
       message <- NULL
 
       if (deconvolution_sidebar_vars$selected() == "folder") {
-        raw_dirs <- dir_ls(
-          deconvolution_sidebar_vars$dir(),
-          glob = "*.raw"
-        )
+        raw_dirs <- dir_ls(deconvolution_sidebar_vars$dir(), glob = "*.raw")
 
         if (
-          isTRUE(deconvolution_sidebar_vars$use_config()) &
+          isTRUE(deconvolution_sidebar_vars$use_config()) &&
             length(config_file())
         ) {
-          presence <- config_file()[["Sample"]] %in%
-            basename(raw_dirs)
+          presence <- config_file()[["Sample"]] %in% basename(raw_dirs)
+          extras <- basename(raw_dirs)[
+            !basename(raw_dirs) %in% config_file()[["Sample"]]
+          ]
 
-          if (all(presence)) {
-            message <- shiny$p(
-              shiny$HTML(
-                paste0(
-                  "<b>Multiple target file(s) selected</b><br><br><b>",
-                  nrow(config_file()),
-                  "</b> sample(s) present in ",
-                  "the config file are queried for deconvolution."
-                )
-              )
-            )
-          } else if (sum(presence) == 0) {
-            disable(
-              selector = "#app-deconvolution_main-deconvolute_start_conf"
-            )
-
-            message <- shiny$p(
-              shiny$HTML(
-                paste0(
-                  "<b>Multiple target file(s) selected</b><br><br>",
-                  '<i class="fa-solid fa-circle-exclamation" style="font-size:',
-                  '1em; color:black; margin-right: 10px;"></i>',
-                  "<i>None of the sample(s) present in ",
-                  "the config file can be found in the selected folder.</i>"
-                )
-              )
+          html <- if (sum(presence) == 0) {
+            disable(selector = "#app-deconvolution_main-deconvolute_start_conf")
+            paste0(
+              "<b>Multiple target file(s) selected</b><br><br>",
+              make_warning("None of the sample(s) present in the config file can be found in the selected folder.")
             )
           } else {
-            missing_samples <- config_file()[["Sample"]][!presence]
-            missing_items_html <- paste0(
-              "<div style='font-family:monospace; font-size:0.9em;'>",
-              paste(missing_samples, collapse = "<br>"),
-              "</div>"
+            parts <- paste0(
+              "<b>Multiple target file(s) selected</b><br><br>",
+              "<b>", sum(presence), "</b> sample(s) present in the config file are queried for deconvolution."
             )
-
-            message <- shiny$p(
-              shiny$HTML(
-                paste0(
-                  "<b>Multiple target file(s) selected</b><br><br><b>",
-                  sum(presence),
-                  "</b> sample(s) present in ",
-                  "the config file are queried for deconvolution.<br><br>",
-                  '<i class="fa-solid fa-circle-exclamation" style="font-size:',
-                  '1em; color:black; margin-right: 10px;"></i><i><b>',
-                  sum(!presence),
-                  "</b> of the samples specified in the config file are<b> NOT</b> prese",
-                  "nt in the selected folder.</i><br><br>",
-                  "<details style='font-size:0.85em; color:gray; cursor:pointer;'>",
-                  "<summary style='user-select:none;'>",
-                  '<i class="fa-solid fa-circle-info" style="margin-right:4px;"></i>',
-                  "View missing sample(s)",
-                  "</summary>",
-                  "<div style='margin-top:6px; max-height:150px; overflow-y:auto;",
-                  " border:1px solid #ddd; border-radius:4px; padding:6px;",
-                  " background:#f8f8f8;'>",
-                  missing_items_html,
-                  "</div>",
-                  "</details>"
-                )
+            if (!all(presence)) {
+              missing <- config_file()[["Sample"]][!presence]
+              parts <- paste0(
+                parts,
+                "<br><br>",
+                make_warning(paste0(
+                  "<b>", sum(!presence), "</b> of the samples specified in the config file are <b>NOT</b> present in the selected folder."
+                )),
+                "<br>",
+                make_details("View missing sample(s)", missing)
               )
+            }
+            parts
+          }
+
+          if (length(extras) > 0) {
+            html <- paste0(
+              html,
+              "<br>",
+              make_warning(paste0(
+                "<b>", length(extras), "</b> sample(s) present in the selected folder are <b>NOT</b> in the experiment config and will not be deconvoluted."
+              )),
+              "<br>",
+              make_details("View unqueued sample(s)", extras)
             )
           }
 
-          # if duplicates present disable continue button
           if (any(duplicated(config_file()[["Sample"]]))) {
-            disable(
-              selector = "#app-deconvolution_main-deconvolute_start_conf"
-            )
+            disable(selector = "#app-deconvolution_main-deconvolute_start_conf")
           }
+
+          message <- shiny$p(shiny$HTML(html))
         } else {
-          if (is.null(input$target_selector)) {
-            num_targets <- 0
-          } else {
-            num_targets <- length(input$target_selector)
-          }
+          num_targets <- length(input$target_selector) %||% 0
 
           if (num_targets == 0) {
-            disable(
-              selector = "#app-deconvolution_main-deconvolute_start_conf"
-            )
+            disable(selector = "#app-deconvolution_main-deconvolute_start_conf")
           }
 
-          message <- shiny$p(
-            shiny$HTML(
-              paste0(
-                "<b>Multiple target file(s) selected</b><br><br><b>",
-                num_targets,
-                "</b> raw file(s) in the",
-                " selected directory are currently queried for deconvolution.",
-                " If you wish to process only a subset select the respective",
-                " target files."
-              )
-            )
-          )
+          message <- shiny$p(shiny$HTML(paste0(
+            "<b>Multiple target file(s) selected</b><br><br>",
+            "<b>",
+            num_targets,
+            "</b> raw file(s) in the selected directory are currently",
+            " queried for deconvolution. If you wish to process only a subset select the",
+            " respective target files."
+          )))
         }
       } else {
-        name <- basename(deconvolution_sidebar_vars$file())
-
-        message <- shiny$p(
-          shiny$HTML(
-            paste0(
-              "<b>Individual target file selected</b><br><br>",
-              name,
-              " is queried for deconvolution."
-            )
-          )
-        )
+        message <- shiny$p(shiny$HTML(paste0(
+          "<b>Individual target file selected</b><br><br>",
+          "<span style='white-space:nowrap;'>", basename(deconvolution_sidebar_vars$file()), "</span>",
+          " is queried for deconvolution."
+        )))
       }
 
       return(message)
@@ -1207,16 +1184,17 @@ server <- function(
           sample_names <- config_file()[["Sample"]]
           raw_dirs <- raw_dirs[basename(raw_dirs) %in% sample_names]
 
-          # Prepare heatmap variables
+          # Prepare heatmap variables — restrict to samples present in folder
+          present_in_folder <- sample_names %in% basename(raw_dirs)
           reactVars$sample_names <- gsub(
             ".raw",
             "",
-            config_file()[["Sample"]]
+            sample_names[present_in_folder]
           )
           reactVars$wells <- gsub(
             ",",
             "",
-            sub("^.*:", "", config_file()[["Well"]])
+            sub("^.*:", "", config_file()[["Well"]][present_in_folder])
           )
         } else {
           write_log("Multiple target deconvolution mode (no config file)")
