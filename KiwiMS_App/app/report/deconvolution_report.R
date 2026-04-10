@@ -28,14 +28,7 @@ tryCatch(
 )
 
 result_file <-
-  file.path(
-    results_dir,
-    gsub(
-      ".log",
-      "_RESULT.rds",
-      basename(log_path)
-    )
-  )
+  list.files(results_dir, pattern = "\\.db$", full.names = TRUE)[1]
 
 Sys.sleep(1)
 message("Started render engine ...")

@@ -387,6 +387,10 @@ button .sF-modal {
   overflow-y: auto;
 }
 
+.deconvolute-modal .modal-body {
+  overflow-y: visible !important;
+}
+
 /* No height constraint inside shinyFiles modals */
 .sF-modal .modal-body {
   max-height: none !important;
