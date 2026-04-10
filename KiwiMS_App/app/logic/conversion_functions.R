@@ -94,7 +94,8 @@ read_uploaded_file <- function(file_path, ext) {
     df <- utils::read.csv(
       file_path,
       stringsAsFactors = FALSE,
-      sep = ","
+      sep = ",",
+      header = FALSE
     )
 
     # If only one column read, try semicolon separator
@@ -102,21 +103,24 @@ read_uploaded_file <- function(file_path, ext) {
       df <- utils::read.csv(
         file_path,
         stringsAsFactors = FALSE,
-        sep = ";"
+        sep = ";",
+        header = FALSE
       )
     }
   } else if (ext == "tsv") {
     df <- readr::read_tsv(
       file_path,
-      show_col_types = FALSE
+      show_col_types = FALSE,
+      col_names = FALSE
     )
   } else if (ext == "txt") {
     df <- utils::read.delim(
       file_path,
-      stringsAsFactors = FALSE
+      stringsAsFactors = FALSE,
+      header = FALSE
     )
   } else if (ext %in% c("xlsx", "xls")) {
-    df <- readxl::read_excel(file_path)
+    df <- readxl::read_excel(file_path, col_names = FALSE)
   } else {
     stop("Unsupported file format")
   }
@@ -240,10 +244,6 @@ prot_comp_handsontable <- function(
     stretchH = ifelse(disabled, "none", "all")
   ) |>
     rhandsontable::hot_cols(fixedColumnsLeft = 1, renderer = renderer_js) |>
-    rhandsontable::hot_context_menu(
-      allowRowEdit = FALSE,
-      allowColEdit = FALSE
-    ) |>
     rhandsontable::hot_cols(
       cols = 2:ncol(tab),
       format = "0.##########",
@@ -254,12 +254,19 @@ prot_comp_handsontable <- function(
       allowInvalid = TRUE
     ) |>
     rhandsontable::hot_table(
-      contextMenu = FALSE,
+      contextMenu = TRUE,
       highlightCol = TRUE,
       highlightRow = TRUE,
       stretchH = ifelse(disabled, "none", "all")
     ) |>
-    htmlwidgets::onRender(paste_hook_js)
+    htmlwidgets::onRender(paste_hook_js) |>
+    htmlwidgets::onRender(
+      "function(el, x) {
+        this.hot.updateSettings({
+          contextMenu: { items: { row_above: {}, row_below: {} } }
+        });
+      }"
+    )
 
   if (disabled) {
     table <- rhandsontable::hot_cols(table, readOnly = TRUE)
