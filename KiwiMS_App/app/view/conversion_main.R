@@ -49,6 +49,8 @@ box::use(
       render_table_view,
       make_kobs_plot,
       empty_prot_comp_tbl,
+      read_decon_metadata,
+      read_decon_result,
     ],
   app /
     logic /
@@ -531,9 +533,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_
           declaration_vars$compound_table
         )
 
-        # Read results .rds file from selected path
+        # Read metadata from selected result DB (fast — sample names only)
         file_path <- file.path(input$samples_fileinput$datapath)
-        declaration_vars$result <- readRDS(file_path)
+        meta <- read_decon_metadata(file_path)
+        declaration_vars$result <- c(meta, list(.db_path = file_path))
 
         # New table data
         sample_table_data(new_sample_table(
@@ -1115,10 +1118,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_
             '= "block";'
           ))
 
-          # Read results .rds file from previous deconvolution
-          declaration_vars$result <- readRDS(
-            deconvolution_main_vars$continue_conversion()
-          )
+          # Read metadata only from result DB (fast — sample names only)
+          db_path <- deconvolution_main_vars$continue_conversion()
+          meta <- read_decon_metadata(db_path)
+          declaration_vars$result <- c(meta, list(.db_path = db_path))
 
           # New table data
           sample_table_data(new_sample_table(
@@ -1182,10 +1185,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_
         declaration_vars$sample_table_active <- TRUE
         declaration_vars$samples_confirmed <- FALSE
 
-        # Read results .rds file from previous deconvolution
-        declaration_vars$result <- readRDS(
-          deconvolution_main_vars$continue_conversion()
-        )
+        # Read metadata only from result DB (fast — sample names only)
+        db_path <- deconvolution_main_vars$continue_conversion()
+        meta <- read_decon_metadata(db_path)
+        declaration_vars$result <- c(meta, list(.db_path = db_path))
 
         # New table data
         sample_table_data(new_sample_table(
@@ -4929,7 +4932,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_
         Protein_Table = protein_table_data(),
         Compound_Table = compound_table_data(),
         Samples_Table = declaration_vars$sample_table,
-        result = declaration_vars$result
+        result = if (!is.null(declaration_vars$result$.db_path)) {
+          read_decon_result(declaration_vars$result$.db_path)
+        } else {
+          declaration_vars$result
+        }
       )),
       samples_confirmed = shiny::reactive(declaration_vars$samples_confirmed),
       cancel_continuation = shiny::reactive(input$conversion_cont_cancel),

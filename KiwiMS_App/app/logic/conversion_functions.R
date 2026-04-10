@@ -87,6 +87,88 @@ process_uploaded_table <- function(df, type) {
   return(df)
 }
 
+# Read only metadata (sample names, session, output) from a result SQLite DB
+#' @export
+read_decon_metadata <- function(db_path) {
+  con <- DBI::dbConnect(RSQLite::SQLite(), db_path, flags = RSQLite::SQLITE_RO)
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+  list(
+    samples = DBI::dbGetQuery(con, "SELECT sample FROM metadata")[["sample"]],
+    session = DBI::dbGetQuery(con, "SELECT line FROM session ORDER BY line_num")[["line"]],
+    output  = DBI::dbGetQuery(con, "SELECT line FROM output_log ORDER BY line_num")[["line"]]
+  )
+}
+
+# Read max peak mass per sample from the peaks table (lightweight, for heatmap)
+#' @export
+read_decon_peaks_max <- function(db_path, samples = NULL) {
+  con <- DBI::dbConnect(RSQLite::SQLite(), db_path, flags = RSQLite::SQLITE_RO)
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+  where <- if (!is.null(samples) && length(samples) > 0) {
+    sprintf(
+      "WHERE sample IN (%s)",
+      paste(sprintf("'%s'", samples), collapse = ",")
+    )
+  } else {
+    ""
+  }
+  DBI::dbGetQuery(con, sprintf(
+    "SELECT sample, MAX(mass) AS max_mass FROM peaks %s GROUP BY sample", where
+  ))
+}
+
+# Read full result from a result SQLite DB, reconstructing the nested list structure
+#' @export
+read_decon_result <- function(db_path, samples = NULL) {
+  con <- DBI::dbConnect(RSQLite::SQLite(), db_path, flags = RSQLite::SQLITE_RO)
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+
+  all_samples <- DBI::dbGetQuery(con, "SELECT sample FROM metadata")[["sample"]]
+  if (!is.null(samples)) all_samples <- intersect(all_samples, samples)
+
+  q <- function(tbl, s) {
+    DBI::dbGetQuery(
+      con,
+      sprintf("SELECT * FROM %s WHERE sample = ?", tbl),
+      params = list(s)
+    )
+  }
+
+  deconvolution <- lapply(stats::setNames(all_samples, all_samples), function(s) {
+    config_long <- q("config", s)
+    config_wide <- if (nrow(config_long) > 0) {
+      tidyr::pivot_wider(
+        config_long[, c("key", "value")],
+        names_from  = "key",
+        values_from = "value"
+      )
+    } else {
+      data.frame()
+    }
+
+    raw   <- q("rawdata", s);   raw$sample   <- NULL
+    inp   <- q("input_dat", s); inp$sample   <- NULL
+    peaks <- q("peaks", s);     peaks$sample <- NULL
+    mass  <- q("mass_data", s); mass$sample  <- NULL
+    err   <- q("error", s);     err$sample   <- NULL
+
+    list(
+      config  = config_wide,
+      peaks   = peaks,
+      error   = err,
+      rawdata = raw,
+      mass    = mass,
+      input   = inp
+    )
+  })
+
+  list(
+    deconvolution = deconvolution,
+    session = DBI::dbGetQuery(con, "SELECT line FROM session ORDER BY line_num")[["line"]],
+    output  = DBI::dbGetQuery(con, "SELECT line FROM output_log ORDER BY line_num")[["line"]]
+  )
+}
+
 # Helper function to read uploaded files
 #' @export
 read_uploaded_file <- function(file_path, ext) {
@@ -3852,7 +3934,7 @@ new_sample_table <- function(
   ki_kinact = FALSE
 ) {
   sample_tab <- data.frame(
-    Sample = names(result$deconvolution),
+    Sample = result$samples %||% names(result$deconvolution),
     Protein = ifelse(
       length(protein_table$Protein) == 1,
       protein_table$Protein,

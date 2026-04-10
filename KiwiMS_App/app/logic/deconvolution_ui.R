@@ -840,13 +840,17 @@ deconvolution_status_controls <- function(ns) {
               width = 4,
               shiny$div(
                 class = "decon-btn",
-                disabled(
-                  shiny$actionButton(
-                    ns("deconvolution_report"),
-                    "Report",
-                    icon = shiny$icon("square-poll-vertical"),
-                    width = "100%"
-                  )
+                bslib::tooltip(
+                  disabled(
+                    shiny$actionButton(
+                      ns("deconvolution_report"),
+                      "Report",
+                      icon = shiny$icon("square-poll-vertical"),
+                      width = "100%"
+                    )
+                  ),
+                  "Report generation is temporarily unavailable",
+                  placement = "top"
                 )
               )
             ),

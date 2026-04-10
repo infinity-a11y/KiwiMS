@@ -586,6 +586,26 @@ server <- function(id) {
                     )
                   ),
                   shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Keep UniDec output files"
+                    ),
+                    shiny$tags$td(
+                      shiny$checkboxInput(
+                        ns("settings_keep_raw_output"),
+                        label = NULL,
+                        value = isTRUE(us$deconv_keep_raw_output)
+                      )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$tags$small(
+                        class = "text-muted",
+                        "Keep *_rawdata.txt and *_rawdata_unidecfiles/ after analysis"
+                      )
+                    )
+                  ),
+                  shiny$tags$tr(
                     style = "margin-top: 1rem;",
                     shiny$tags$td(
                       class = "settings-table-label",
@@ -694,6 +714,12 @@ server <- function(id) {
         session = session,
         "settings_max_mult",
         value = 4
+      )
+
+      shiny::updateCheckboxInput(
+        session = session,
+        "settings_keep_raw_output",
+        value = FALSE
       )
     })
 
@@ -1035,6 +1061,8 @@ server <- function(id) {
         if (ts_ok) current$deconv_time_start <- ts
         if (te_ok) current$deconv_time_end   <- te
       }
+
+      current$deconv_keep_raw_output <- isTRUE(input$settings_keep_raw_output)
 
       save_user_settings(current)
 

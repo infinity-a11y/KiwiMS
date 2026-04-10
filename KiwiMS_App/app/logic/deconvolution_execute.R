@@ -48,6 +48,8 @@ tryCatch(
     conf <- readRDS(file.path(temp, "config.rds"))
     logfile <- commandArgs(trailingOnly = TRUE)[2]
     result_dir <- commandArgs(trailingOnly = TRUE)[4]
+    db_path <- commandArgs(trailingOnly = TRUE)[6]
+    keep_raw_output <- isTRUE(as.logical(commandArgs(trailingOnly = TRUE)[7]))
     output_path <- file.path(
       Sys.getenv("LOCALAPPDATA"),
       "KiwiMS",
@@ -60,12 +62,99 @@ tryCatch(
   }
 )
 
-# Remove any leftover failure sentinels from a previous run
-existing_failed <- list.files(result_dir, pattern = "_FAILED\\.rds$", full.names = TRUE)
-if (length(existing_failed) > 0) {
-  file.remove(existing_failed)
-  message("Removed ", length(existing_failed), " leftover failure sentinel(s) from result directory.")
-}
+# Load DB packages (sourced module uses box::use so these aren't globally attached)
+library(DBI)
+library(RSQLite)
+
+# Initialise SQLite DB (WAL mode; write run_info, metadata, status tables upfront)
+# When extending an existing DB, existing records for OTHER samples are preserved.
+# Only the samples being processed in THIS run are reset so progress tracking
+# starts clean for them (handles both skip-others and overwrite cases).
+message("Initialising SQLite database ...")
+tryCatch(
+  {
+    sample_bases <- gsub("\\.raw$", "", basename(conf$dirs), ignore.case = TRUE)
+
+    con_init <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+    DBI::dbExecute(con_init, "PRAGMA journal_mode=WAL")
+    DBI::dbExecute(con_init, "PRAGMA busy_timeout=5000")
+    # Checkpoint + truncate any stale WAL left by a prior aborted run.
+    # Safe no-op when no WAL exists or when readers hold a shared lock.
+    DBI::dbExecute(con_init, "PRAGMA wal_checkpoint(TRUNCATE)")
+
+    # run_info: always overwrite (records this run's start time)
+    DBI::dbWriteTable(
+      con_init, "run_info",
+      data.frame(
+        started_at = format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+        n_samples   = length(conf$dirs),
+        stringsAsFactors = FALSE
+      ),
+      overwrite = TRUE
+    )
+
+    # metadata: ensure table exists, then upsert only the samples being
+    # processed (delete + insert).  Samples from previous runs that are NOT
+    # being processed in this run are left untouched (extend case).
+    # Using delete+insert rather than INSERT OR IGNORE avoids the need for a
+    # UNIQUE constraint, which dbWriteTable does not create.
+    if (!DBI::dbExistsTable(con_init, "metadata")) {
+      DBI::dbExecute(con_init,
+        "CREATE TABLE metadata (sample TEXT)")
+    }
+    for (s in sample_bases) {
+      DBI::dbExecute(con_init,
+        "DELETE FROM metadata WHERE sample = ?", params = list(s))
+      DBI::dbExecute(con_init,
+        "INSERT INTO metadata(sample) VALUES (?)", params = list(s))
+    }
+
+    # status: create if new; otherwise delete only the samples being processed
+    # so prior done/failed records for skipped samples are untouched.
+    if (!DBI::dbExistsTable(con_init, "status")) {
+      DBI::dbWriteTable(
+        con_init, "status",
+        data.frame(
+          sample    = character(0),
+          state     = character(0),
+          reason    = character(0),
+          error_msg = character(0),
+          timestamp = character(0),
+          stringsAsFactors = FALSE
+        )
+      )
+    } else {
+      for (s in sample_bases) {
+        DBI::dbExecute(con_init,
+          "DELETE FROM status WHERE sample = ?", params = list(s))
+      }
+    }
+
+    # For samples being (re)processed: clear any existing per-sample data rows
+    # so a clean overwrite is written (avoids duplicate rows in peaks/mass_data/etc.)
+    per_sample_tbls <- c("peaks", "mass_data", "error", "config", "rawdata", "input_dat")
+    for (tbl in per_sample_tbls) {
+      if (DBI::dbExistsTable(con_init, tbl)) {
+        for (s in sample_bases) {
+          DBI::dbExecute(con_init,
+            sprintf("DELETE FROM %s WHERE sample = ?", tbl), params = list(s))
+        }
+      }
+    }
+
+    # Drop stale completed sentinel so the Shiny observer does not fire
+    # immediately when a run is added to an already-finished DB.
+    if (DBI::dbExistsTable(con_init, "completed")) {
+      DBI::dbExecute(con_init, "DROP TABLE completed")
+    }
+
+    DBI::dbDisconnect(con_init)
+  },
+  error = function(e) {
+    message("Error initialising SQLite database: ", e$message)
+    stop("DB initialisation failed.")
+  }
+)
 
 # Start deconvolution
 tryCatch(
@@ -73,6 +162,8 @@ tryCatch(
     deconvolute(
       raw_dirs = conf$dirs,
       result_dir = result_dir,
+      db_path = db_path,
+      keep_raw_output = keep_raw_output,
       startz = conf$params$startz,
       endz = conf$params$endz,
       minmz = conf$params$minmz,
@@ -123,28 +214,19 @@ if (commandArgs(trailingOnly = TRUE)[5] != "testing") {
     }
   )
 
-  # Summarizing results in rds file
+  # Finalise SQLite DB (write session/output_log + completed sentinel)
   tryCatch(
     {
-      result <- generate_decon_rslt(
-        paths = conf$dirs,
+      generate_decon_rslt(
         log = log,
         output = output,
-        result_dir = result_dir,
-        temp_dir = temp
+        db_path = db_path
       )
-
-      result_id <- gsub(
-        ".log",
-        "_RESULT.rds",
-        basename(logfile)
-      )
-
-      saveRDS(result, file.path(result_dir, result_id), compress = FALSE)
     },
     error = function(e) {
-      message("Error in result file generation: ", e$message)
-      stop("Error in result file generation.")
+      message("Error finalising SQLite database: ", e$message)
+      stop("Error finalising SQLite database.")
     }
   )
+
 }
