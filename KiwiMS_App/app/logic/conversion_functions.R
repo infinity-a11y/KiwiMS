@@ -108,11 +108,11 @@ read_uploaded_file <- function(file_path, ext) {
       )
     }
   } else if (ext == "tsv") {
-    df <- readr::read_tsv(
+    df <- suppressMessages(readr::read_tsv(
       file_path,
       show_col_types = FALSE,
       col_names = FALSE
-    )
+    ))
   } else if (ext == "txt") {
     df <- utils::read.delim(
       file_path,
@@ -120,7 +120,7 @@ read_uploaded_file <- function(file_path, ext) {
       header = FALSE
     )
   } else if (ext %in% c("xlsx", "xls")) {
-    df <- readxl::read_excel(file_path, col_names = FALSE)
+    df <- suppressMessages(readxl::read_excel(file_path, col_names = FALSE))
   } else {
     stop("Unsupported file format")
   }
