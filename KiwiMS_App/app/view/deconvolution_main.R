@@ -786,7 +786,7 @@ server <- function(
         plotly::plot_ly() |>
           plotly::layout(
             paper_bgcolor = "rgba(0,0,0,0)",
-            plot_bgcolor  = "rgba(0,0,0,0)",
+            plot_bgcolor = "rgba(0,0,0,0)",
             xaxis = list(visible = FALSE),
             yaxis = list(visible = FALSE)
           )
@@ -797,7 +797,7 @@ server <- function(
       )
       output$result_picker_ui <- shiny$renderUI(NULL)
       output$spectrum_failure_msg <- shiny$renderUI(NULL)
-      output$metrics_failure_msg  <- shiny$renderUI(NULL)
+      output$metrics_failure_msg <- shiny$renderUI(NULL)
       result_files_sel(NULL)
 
       # Immediately clear the progress bar title so a stale title from a prior
@@ -861,7 +861,10 @@ server <- function(
       # may still be NULL while the picker inside the modal is rendering.
       sample_bases <- if (deconvolution_sidebar_vars$selected() == "folder") {
         raw_dirs_all <- dir_ls(deconvolution_sidebar_vars$dir(), glob = "*.raw")
-        if (isTRUE(deconvolution_sidebar_vars$use_config()) && length(config_file())) {
+        if (
+          isTRUE(deconvolution_sidebar_vars$use_config()) &&
+            length(config_file())
+        ) {
           samps <- config_file()[["Sample"]]
           samps <- samps[samps %in% basename(raw_dirs_all)]
           gsub("\\.raw$", "", samps, ignore.case = TRUE)
@@ -871,76 +874,114 @@ server <- function(
           gsub("\\.raw$", "", bases, ignore.case = TRUE)
         }
       } else {
-        gsub("\\.raw$", "", basename(deconvolution_sidebar_vars$file() %||% ""), ignore.case = TRUE)
+        gsub(
+          "\\.raw$",
+          "",
+          basename(deconvolution_sidebar_vars$file() %||% ""),
+          ignore.case = TRUE
+        )
       }
-      if (length(sample_bases) == 0 || !nzchar(sample_bases[1])) return(NULL)
+      if (length(sample_bases) == 0 || !nzchar(sample_bases[1])) {
+        return(NULL)
+      }
 
       warnings_list <- list()
 
       # ── Warning 1: stale UniDec output (only when keeping raw output) ──────
-      if (!is.null(dest_dir) && dir.exists(dest_dir) &&
-          isTRUE(read_user_settings()$deconv_keep_raw_output)) {
+      if (
+        !is.null(dest_dir) &&
+          dir.exists(dest_dir) &&
+          isTRUE(read_user_settings()$deconv_keep_raw_output)
+      ) {
         stale <- character(0)
         for (s in sample_bases) {
-          txt  <- file.path(dest_dir, paste0(s, "_rawdata.txt"))
+          txt <- file.path(dest_dir, paste0(s, "_rawdata.txt"))
           udir <- file.path(dest_dir, paste0(s, "_rawdata_unidecfiles"))
-          if (file.exists(txt))  stale <- c(stale, txt)
-          if (dir.exists(udir))  stale <- c(stale, udir)
+          if (file.exists(txt)) {
+            stale <- c(stale, txt)
+          }
+          if (dir.exists(udir)) stale <- c(stale, udir)
         }
         if (length(stale) > 0) {
           reactVars$stale_unidec_output <- stale
           n_aff <- length(unique(
             gsub("(_rawdata\\.txt|_rawdata_unidecfiles)$", "", basename(stale))
           ))
-          warnings_list <- c(warnings_list, list(shiny$p(shiny$HTML(paste0(
-            '<i class="fa-solid fa-circle-exclamation" style="font-size:1em;',
-            ' color:black; margin-right:10px;"></i>',
-            "<b>", n_aff, "</b> sample(s) have leftover UniDec output in the",
-            " destination folder. Continuing will delete these files before reprocessing."
-          )))))
+          warnings_list <- c(
+            warnings_list,
+            list(shiny$p(shiny$HTML(paste0(
+              '<i class="fa-solid fa-circle-exclamation" style="font-size:1em;',
+              ' color:black; margin-right:10px;"></i>',
+              "<b>",
+              n_aff,
+              "</b> sample(s) have leftover UniDec output in the",
+              " destination folder. Continuing will delete these files before reprocessing."
+            ))))
+          )
         }
       }
 
       # ── Warning 2: samples already done in the existing DB ─────────────────
-      db_path_chk <- if (!is.null(dest_dir) &&
-                         nzchar(trimws(input$analysis_name %||% ""))) {
+      db_path_chk <- if (
+        !is.null(dest_dir) &&
+          nzchar(trimws(input$analysis_name %||% ""))
+      ) {
         file.path(dest_dir, paste0(trimws(input$analysis_name), ".db"))
-      } else NULL
+      } else {
+        NULL
+      }
 
       if (!is.null(db_path_chk) && file.exists(db_path_chk)) {
-        done_samples <- tryCatch({
-          con_w <- DBI::dbConnect(RSQLite::SQLite(), db_path_chk,
-                                  flags = RSQLite::SQLITE_RO)
-          on.exit(DBI::dbDisconnect(con_w), add = TRUE)
-          if (DBI::dbExistsTable(con_w, "status")) {
-            DBI::dbGetQuery(con_w,
-              "SELECT sample FROM status WHERE state = 'done'")$sample
-          } else {
-            character(0)
-          }
-        }, error = function(e) character(0))
+        done_samples <- tryCatch(
+          {
+            con_w <- DBI::dbConnect(
+              RSQLite::SQLite(),
+              db_path_chk,
+              flags = RSQLite::SQLITE_RO
+            )
+            on.exit(DBI::dbDisconnect(con_w), add = TRUE)
+            if (DBI::dbExistsTable(con_w, "status")) {
+              DBI::dbGetQuery(
+                con_w,
+                "SELECT sample FROM status WHERE state = 'done'"
+              )$sample
+            } else {
+              character(0)
+            }
+          },
+          error = function(e) character(0)
+        )
 
         dup_bases <- intersect(sample_bases, done_samples)
         if (length(dup_bases) > 0) {
           reactVars$overwrite <- dup_bases
-          warnings_list <- c(warnings_list, list(shiny$p(shiny$HTML(paste0(
-            '<i class="fa-solid fa-circle-exclamation" style="font-size:1em;',
-            ' color:black; margin-right:10px;"></i>',
-            "<b>", length(dup_bases), "</b> sample(s) queried for deconvolution",
-            " are already present in the existing analysis database.",
-            " Please choose how to proceed:"
-          )))))
+          warnings_list <- c(
+            warnings_list,
+            list(shiny$p(shiny$HTML(paste0(
+              '<i class="fa-solid fa-circle-exclamation" style="font-size:1em;',
+              ' color:black; margin-right:10px;"></i>',
+              "<b>",
+              length(dup_bases),
+              "</b> sample(s) queried for deconvolution",
+              " are already present in the existing analysis database.",
+              " Please choose how to proceed:"
+            ))))
+          )
         }
       }
 
-      if (length(warnings_list) == 0) return(NULL)
+      if (length(warnings_list) == 0) {
+        return(NULL)
+      }
       shiny$tagList(warnings_list)
     })
 
     # Skip/Overwrite radio buttons — shown when duplicate DB samples are detected
     output$selector_ui <- shiny$renderUI({
       input$deconvolute_start
-      if (length(reactVars$overwrite) == 0) return(NULL)
+      if (length(reactVars$overwrite) == 0) {
+        return(NULL)
+      }
       shiny$radioButtons(
         ns("decon_select"),
         "",
@@ -1210,7 +1251,8 @@ server <- function(
               reactVars$overwrite
           ]
           write_log(paste(
-            "Skipping", length(reactVars$overwrite),
+            "Skipping",
+            length(reactVars$overwrite),
             "already-processed sample(s)"
           ))
           if (length(raw_dirs) == 0) {
@@ -1227,7 +1269,8 @@ server <- function(
           }
         } else {
           write_log(paste(
-            "Overwriting", length(reactVars$overwrite),
+            "Overwriting",
+            length(reactVars$overwrite),
             "already-processed sample(s)"
           ))
           # The worker's DB init deletes status + per-sample data rows for
@@ -1241,18 +1284,31 @@ server <- function(
       # samples that will actually be processed (never when all are skipped).
       stale_all <- reactVars$stale_unidec_output
       if (length(stale_all) > 0) {
-        active_bases <- gsub("\\.raw$", "", basename(raw_dirs), ignore.case = TRUE)
+        active_bases <- gsub(
+          "\\.raw$",
+          "",
+          basename(raw_dirs),
+          ignore.case = TRUE
+        )
         stale_active <- stale_all[
-          gsub("(_rawdata\\.txt|_rawdata_unidecfiles)$", "",
-               basename(stale_all)) %in% active_bases
+          gsub(
+            "(_rawdata\\.txt|_rawdata_unidecfiles)$",
+            "",
+            basename(stale_all)
+          ) %in%
+            active_bases
         ]
         if (length(stale_active) > 0) {
           for (path in stale_active) {
-            if (dir.exists(path)) unlink(path, recursive = TRUE)
-            else if (file.exists(path)) file.remove(path)
+            if (dir.exists(path)) {
+              unlink(path, recursive = TRUE)
+            } else if (file.exists(path)) {
+              file.remove(path)
+            }
           }
           write_log(paste(
-            "Deleted", length(stale_active),
+            "Deleted",
+            length(stale_active),
             "stale UniDec output file(s) before reprocessing"
           ))
         }
@@ -1321,28 +1377,42 @@ server <- function(
       #   1. Drop 'completed' sentinel — prevents immediate "Finalized!" flash.
       #   2. Delete status rows for the samples being processed — prevents a
       #      100% progress / "Saving Results" flash when old done records exist.
-      tryCatch({
-        db_path_pre <- file.path(
-          analysis_dest(),
-          paste0(trimws(input$analysis_name), ".db")
-        )
-        if (file.exists(db_path_pre)) {
-          active_bases <- gsub("\\.raw$", "", basename(raw_dirs), ignore.case = TRUE)
-          con_pre <- DBI::dbConnect(RSQLite::SQLite(), db_path_pre)
-          if (DBI::dbExistsTable(con_pre, "completed")) {
-            DBI::dbExecute(con_pre, "DROP TABLE completed")
-          }
-          if (DBI::dbExistsTable(con_pre, "status")) {
-            for (s in active_bases) {
-              DBI::dbExecute(con_pre,
-                "DELETE FROM status WHERE sample = ?", params = list(s))
+      tryCatch(
+        {
+          db_path_pre <- file.path(
+            analysis_dest(),
+            paste0(trimws(input$analysis_name), ".db")
+          )
+          if (file.exists(db_path_pre)) {
+            active_bases <- gsub(
+              "\\.raw$",
+              "",
+              basename(raw_dirs),
+              ignore.case = TRUE
+            )
+            con_pre <- DBI::dbConnect(RSQLite::SQLite(), db_path_pre)
+            if (DBI::dbExistsTable(con_pre, "completed")) {
+              DBI::dbExecute(con_pre, "DROP TABLE completed")
             }
+            if (DBI::dbExistsTable(con_pre, "status")) {
+              for (s in active_bases) {
+                DBI::dbExecute(
+                  con_pre,
+                  "DELETE FROM status WHERE sample = ?",
+                  params = list(s)
+                )
+              }
+            }
+            DBI::dbDisconnect(con_pre)
           }
-          DBI::dbDisconnect(con_pre)
+        },
+        error = function(e) {
+          message(
+            "Warning: could not pre-clear DB state before worker start: ",
+            e$message
+          )
         }
-      }, error = function(e) {
-        message("Warning: could not pre-clear DB state before worker start: ", e$message)
-      })
+      )
 
       # Launch external deconvolution process
       updateProgressBar(
@@ -1521,13 +1591,16 @@ server <- function(
           }
           # Checkpoint any WAL left by an aborted run so sidecar files are removed
           if (file.exists(db_snap)) {
-            tryCatch({
-              con_end <- DBI::dbConnect(RSQLite::SQLite(), db_snap)
-              DBI::dbExecute(con_end, "PRAGMA busy_timeout=3000")
-              DBI::dbExecute(con_end, "PRAGMA wal_checkpoint(TRUNCATE)")
-              DBI::dbExecute(con_end, "PRAGMA journal_mode=DELETE")
-              DBI::dbDisconnect(con_end)
-            }, error = function(e) NULL)
+            tryCatch(
+              {
+                con_end <- DBI::dbConnect(RSQLite::SQLite(), db_snap)
+                DBI::dbExecute(con_end, "PRAGMA busy_timeout=3000")
+                DBI::dbExecute(con_end, "PRAGMA wal_checkpoint(TRUNCATE)")
+                DBI::dbExecute(con_end, "PRAGMA journal_mode=DELETE")
+                DBI::dbDisconnect(con_end)
+              },
+              error = function(e) NULL
+            )
           }
         })
       })
@@ -1989,7 +2062,7 @@ server <- function(
                   picker_choices <- gsub(
                     "_rawdata_unidecfiles",
                     ".raw",
-                    basename(results)
+                    basename(result_files)
                   )
                   if (
                     is.null(result_files_sel()) && length(picker_choices) > 0
@@ -2688,13 +2761,16 @@ server <- function(
           paste0(trimws(input$analysis_name), ".db")
         )
         if (file.exists(db_reset)) {
-          tryCatch({
-            con_reset <- DBI::dbConnect(RSQLite::SQLite(), db_reset)
-            DBI::dbExecute(con_reset, "PRAGMA busy_timeout=3000")
-            DBI::dbExecute(con_reset, "PRAGMA wal_checkpoint(TRUNCATE)")
-            DBI::dbExecute(con_reset, "PRAGMA journal_mode=DELETE")
-            DBI::dbDisconnect(con_reset)
-          }, error = function(e) NULL)
+          tryCatch(
+            {
+              con_reset <- DBI::dbConnect(RSQLite::SQLite(), db_reset)
+              DBI::dbExecute(con_reset, "PRAGMA busy_timeout=3000")
+              DBI::dbExecute(con_reset, "PRAGMA wal_checkpoint(TRUNCATE)")
+              DBI::dbExecute(con_reset, "PRAGMA journal_mode=DELETE")
+              DBI::dbDisconnect(con_reset)
+            },
+            error = function(e) NULL
+          )
         }
 
         # Reset reactive status variables
@@ -2766,13 +2842,16 @@ server <- function(
         paste0(trimws(input$analysis_name), ".db")
       )
       if (file.exists(db_abort)) {
-        tryCatch({
-          con_abort <- DBI::dbConnect(RSQLite::SQLite(), db_abort)
-          DBI::dbExecute(con_abort, "PRAGMA busy_timeout=3000")
-          DBI::dbExecute(con_abort, "PRAGMA wal_checkpoint(TRUNCATE)")
-          DBI::dbExecute(con_abort, "PRAGMA journal_mode=DELETE")
-          DBI::dbDisconnect(con_abort)
-        }, error = function(e) NULL)
+        tryCatch(
+          {
+            con_abort <- DBI::dbConnect(RSQLite::SQLite(), db_abort)
+            DBI::dbExecute(con_abort, "PRAGMA busy_timeout=3000")
+            DBI::dbExecute(con_abort, "PRAGMA wal_checkpoint(TRUNCATE)")
+            DBI::dbExecute(con_abort, "PRAGMA journal_mode=DELETE")
+            DBI::dbDisconnect(con_abort)
+          },
+          error = function(e) NULL
+        )
       }
 
       # Update progress bar to show cancellation
