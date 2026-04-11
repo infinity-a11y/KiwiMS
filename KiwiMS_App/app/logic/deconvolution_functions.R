@@ -23,24 +23,55 @@ box::use(
   utils[read.delim, read.table],
 )
 
+# db_with_retry(): BEGIN IMMEDIATE + body + COMMIT with R-level retry ----
+# Retries the full transaction cycle on any lock/busy error, with random jitter.
+db_with_retry <- function(con, expr, max_wait_s = 60) {
+  deadline <- proc.time()[["elapsed"]] + max_wait_s
+  repeat {
+    ok <- tryCatch({
+      DBI::dbExecute(con, "BEGIN IMMEDIATE")
+      tryCatch(
+        {
+          force(expr)
+          DBI::dbExecute(con, "COMMIT")
+        },
+        error = function(e) {
+          tryCatch(DBI::dbExecute(con, "ROLLBACK"), error = function(e2) NULL)
+          stop(e)
+        }
+      )
+      TRUE
+    }, error = function(e) {
+      if (grepl("locked|busy", e$message, ignore.case = TRUE) &&
+          proc.time()[["elapsed"]] < deadline) {
+        Sys.sleep(runif(1, 0.3, 1.2))
+        FALSE
+      } else {
+        stop(e)
+      }
+    })
+    if (isTRUE(ok)) break
+  }
+}
+
 # write_sample_status(): Write per-sample done/failed status to the shared DB ----
-# WAL mode + busy_timeout on the connection handle concurrent parallel workers.
 write_sample_status <- function(db_path, sample_name, state,
                                 reason = NULL, error_msg = NULL) {
   tryCatch({
     con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
     on.exit(DBI::dbDisconnect(con), add = TRUE)
-    DBI::dbExecute(con, "PRAGMA busy_timeout=5000")
-    DBI::dbExecute(con,
-      "INSERT OR REPLACE INTO status(sample,state,reason,error_msg,timestamp)
-       VALUES (?,?,?,?,?)",
-      params = list(
-        sample_name, state,
-        reason %||% NA_character_,
-        error_msg %||% NA_character_,
-        format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+    db_with_retry(con, {
+      DBI::dbExecute(con,
+        "INSERT OR REPLACE INTO status(sample,state,reason,error_msg,timestamp)
+         VALUES (?,?,?,?,?)",
+        params = list(
+          sample_name, state,
+          reason %||% NA_character_,
+          error_msg %||% NA_character_,
+          format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+        )
       )
-    )
+    })
   }, error = function(e) {
     message("Could not write status to DB for ", sample_name, ": ", e$message)
   })
@@ -239,49 +270,52 @@ engine.pick_peaks()
         )
         input_df <- read_file_safe(file.path(result, paste0(raw_name, "_input.dat")))
 
-        # Open DB connection with WAL + busy_timeout for concurrent parallel workers
         con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
         on.exit(DBI::dbDisconnect(con), add = TRUE)
-        DBI::dbExecute(con, "PRAGMA busy_timeout=5000")
 
-        # Delete any stale rows for this sample (handles the overwrite case
-        # where the sample was previously processed into the same DB).
-        for (tbl_name in c("peaks", "mass_data", "input_dat", "rawdata", "error", "config")) {
-          if (DBI::dbExistsTable(con, tbl_name)) {
-            DBI::dbExecute(con,
-              sprintf("DELETE FROM %s WHERE sample = ?", tbl_name),
-              params = list(sample_basename))
+        db_with_retry(con, {
+          for (tbl_name in c("peaks", "mass_data", "input_dat", "rawdata", "error", "config")) {
+            if (DBI::dbExistsTable(con, tbl_name)) {
+              DBI::dbExecute(con,
+                sprintf("DELETE FROM %s WHERE sample = ?", tbl_name),
+                params = list(sample_basename))
+            }
           }
-        }
 
-        write_tbl <- function(tbl, df) {
-          if (is.null(df) || nrow(df) == 0) return(invisible(NULL))
-          df <- as.data.frame(df)
-          df$sample <- sample_basename
-          DBI::dbWriteTable(con, tbl, df, append = TRUE)
-        }
-        write_tbl("peaks", peaks_df)
-        write_tbl("mass_data", mass_df)
-        write_tbl("input_dat", input_df)
-        write_tbl("rawdata", rawdata_df)
+          write_tbl <- function(tbl, df) {
+            if (is.null(df) || nrow(df) == 0) return(invisible(NULL))
+            df <- as.data.frame(df)
+            df$sample <- sample_basename
+            DBI::dbWriteTable(con, tbl, df, append = TRUE)
+          }
+          write_tbl("peaks", peaks_df)
+          write_tbl("mass_data", mass_df)
+          write_tbl("input_dat", input_df)
+          write_tbl("rawdata", rawdata_df)
 
-        if (!is.null(error_df) && nrow(error_df) > 0) {
-          err_df <- as.data.frame(error_df)
-          err_df$sample <- sample_basename
-          DBI::dbWriteTable(con, "error", err_df, append = TRUE)
-        }
+          if (!is.null(error_df) && nrow(error_df) > 0) {
+            err_df <- as.data.frame(error_df)
+            err_df$sample <- sample_basename
+            DBI::dbWriteTable(con, "error", err_df, append = TRUE)
+          }
 
-        if (!is.null(conf_df) && nrow(conf_df) > 0 && ncol(conf_df) > 0) {
-          config_long <- data.frame(
-            sample = sample_basename,
-            key = names(conf_df),
-            value = as.character(unlist(conf_df[1, ])),
-            stringsAsFactors = FALSE
+          if (!is.null(conf_df) && nrow(conf_df) > 0 && ncol(conf_df) > 0) {
+            config_long <- data.frame(
+              sample = sample_basename,
+              key = names(conf_df),
+              value = as.character(unlist(conf_df[1, ])),
+              stringsAsFactors = FALSE
+            )
+            DBI::dbWriteTable(con, "config", config_long, append = TRUE)
+          }
+
+          DBI::dbExecute(con,
+            "INSERT OR REPLACE INTO status(sample,state,reason,error_msg,timestamp)
+             VALUES (?,?,?,?,?)",
+            params = list(sample_basename, "done", NA_character_, NA_character_,
+                          format(Sys.time(), "%Y-%m-%d %H:%M:%S"))
           )
-          DBI::dbWriteTable(con, "config", config_long, append = TRUE)
-        }
-
-        write_sample_status(db_path, sample_basename, "done")
+        })
       } else {
         write_sample_status(db_path, sample_basename, "failed", "no_output_dir")
       }
@@ -360,8 +394,11 @@ deconvolute <- function(
 
     # Initialize reticulate and Conda environment in each worker
     message("Setting python environment for each worker ...")
+    worker_lib_paths <- .libPaths()
     invisible(capture.output(
       {
+        clusterExport(cl, "worker_lib_paths", envir = environment())
+        clusterEvalQ(cl, .libPaths(worker_lib_paths))
         clusterEvalQ(cl, {
           library(reticulate)
           library(DBI)
@@ -426,6 +463,7 @@ deconvolute <- function(
       c(
         "process_single_dir",
         "write_sample_status",
+        "db_with_retry",
         "read_file_safe",
         "%||%",
         "process_wrapper",
@@ -434,14 +472,18 @@ deconvolute <- function(
       envir = environment()
     )
 
-    # Run parLapply with error handling and collect results
+    # Run parLapply with error handling and collect results.
+    # capture.output suppresses worker stdout; par_results holds the actual
+    # return values (NULL on error, non-NULL on success).
     message("Running parallel deconvolution ...")
-    results <- invisible(capture.output(
+    par_results <- NULL
+    invisible(capture.output(
       {
-        parallel::parLapply(cl, raw_dirs, function(dir) {
+        par_results <- parallel::parLapply(cl, raw_dirs, function(dir) {
           tryCatch(
             {
               process_wrapper(dir, params_list)
+              TRUE
             },
             error = function(e) {
               message("Error processing ", dir, ": ", e$message)
@@ -455,12 +497,13 @@ deconvolute <- function(
 
     message("Parallel processing finalized.")
 
-    # Check for errors in results
-    errors <- vapply(results, is.character, logical(1))
-    if (any(errors)) {
+    # Check for errors: NULL return means the worker's tryCatch caught an error.
+    failed_idx <- vapply(par_results, is.null, logical(1))
+    if (any(failed_idx)) {
       warning(
-        "Errors occurred in processing: ",
-        paste(results[errors], collapse = "; ")
+        "Errors occurred for ",
+        sum(failed_idx), " sample(s): ",
+        paste(basename(raw_dirs[failed_idx]), collapse = ", ")
       )
     }
   } else {
@@ -1633,9 +1676,8 @@ generate_decon_rslt <- function(
   output = NULL,
   db_path
 ) {
-  con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+  con <- DBI::dbConnect(RSQLite::SQLite(), db_path, busy_timeout = 30000)
   on.exit(DBI::dbDisconnect(con), add = TRUE)
-  DBI::dbExecute(con, "PRAGMA busy_timeout=5000")
 
   DBI::dbWriteTable(
     con,
@@ -1670,10 +1712,6 @@ generate_decon_rslt <- function(
     data.frame(finished_at = format(Sys.time(), "%Y-%m-%d %H:%M:%S"), stringsAsFactors = FALSE),
     overwrite = TRUE
   )
-
-  # Switch back to DELETE journal mode: forces a full WAL checkpoint and
-  # removes the -shm / -wal sidecar files before the connection closes.
-  DBI::dbExecute(con, "PRAGMA journal_mode=DELETE")
 
   invisible(db_path)
 }
