@@ -109,7 +109,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                       shiny$column(
                         width = 7,
                         shiny$div(
-                          class = "dest-folder-row",
+                          class = "save-default-button",
                           shiny$div(
                             class = "deconv-param-input",
                             shiny$numericInput(
@@ -148,7 +148,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                       shiny$column(
                         width = 7,
                         shiny$div(
-                          class = "dest-folder-row",
+                          class = "save-default-button",
                           shiny$div(
                             class = "deconv-param-input",
                             shiny$numericInput(
@@ -202,7 +202,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                       shiny$column(
                         width = 7,
                         shiny$div(
-                          class = "dest-folder-row",
+                          class = "save-default-button",
                           shiny$div(
                             class = "deconv-param-input",
                             shiny$numericInput(
@@ -241,7 +241,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                       shiny$column(
                         width = 7,
                         shiny$div(
-                          class = "dest-folder-row",
+                          class = "save-default-button",
                           shiny$div(
                             class = "deconv-param-input",
                             shiny$numericInput(
@@ -306,7 +306,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                       shiny$column(
                         width = 7,
                         shiny$div(
-                          class = "dest-folder-row",
+                          class = "save-default-button",
                           shiny$div(
                             class = "deconv-param-input",
                             shiny$numericInput(
@@ -345,7 +345,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                       shiny$column(
                         width = 7,
                         shiny$div(
-                          class = "dest-folder-row",
+                          class = "save-default-button",
                           shiny$div(
                             class = "deconv-param-input",
                             shiny$numericInput(
@@ -399,7 +399,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                       shiny$column(
                         width = 7,
                         shiny$div(
-                          class = "dest-folder-row",
+                          class = "save-default-button",
                           shiny$div(
                             class = "deconv-param-input",
                             shiny$numericInput(
@@ -438,7 +438,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                       shiny$column(
                         width = 7,
                         shiny$div(
-                          class = "dest-folder-row",
+                          class = "save-default-button",
                           shiny$div(
                             class = "deconv-param-input",
                             shiny$numericInput(
@@ -508,7 +508,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                       shiny$column(
                         width = 6,
                         shiny$div(
-                          class = "dest-folder-row",
+                          class = "save-default-button",
                           shiny$div(
                             class = "deconv-param-input-adv",
                             disabled(
@@ -558,7 +558,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                       shiny$column(
                         width = 5,
                         shiny$div(
-                          class = "dest-folder-row",
+                          class = "save-default-button",
                           shiny$div(
                             class = "deconv-param-input-adv peaknorm-selector",
                             disabled(
@@ -604,7 +604,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                       shiny$column(
                         width = 6,
                         shiny$div(
-                          class = "dest-folder-row",
+                          class = "save-default-button",
                           shiny$div(
                             class = "deconv-param-input-adv",
                             disabled(
@@ -668,7 +668,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                       shiny$column(
                         width = 6,
                         shiny$div(
-                          class = "dest-folder-row",
+                          class = "save-default-button",
                           shiny$div(
                             class = "deconv-param-input-adv mass-bin-input",
                             disabled(
@@ -879,6 +879,9 @@ deconvolution_status_controls <- function(ns) {
 # Deconvolution running interface (no batch mode)
 #' @export
 deconvolution_results_ui <- function(ns, show_heatmap = FALSE) {
+  # Deliberate delay to show spinner
+  Sys.sleep(1)
+
   spectrum_card <- shiny::div(
     class = "deconvolution-spectrum-card card-custom",
     bslib::card(
@@ -920,7 +923,7 @@ deconvolution_results_ui <- function(ns, show_heatmap = FALSE) {
       ),
       shiny$div(
         class = "spectrum-plot",
-        plotlyOutput(ns("spectrum"), height = "100%"),
+        withWaiter(plotlyOutput(ns("spectrum"), height = "100%")),
         shiny$uiOutput(ns("spectrum_failure_msg"))
       ),
       full_screen = TRUE
@@ -962,7 +965,7 @@ deconvolution_results_ui <- function(ns, show_heatmap = FALSE) {
                 ),
                 shiny::div(
                   class = "deconvolution-metrics-body",
-                  DT::dataTableOutput(ns("deconvolution_data")),
+                  withWaiter(DT::dataTableOutput(ns("deconvolution_data"))),
                   shiny$uiOutput(ns("metrics_failure_msg"))
                 )
               )
