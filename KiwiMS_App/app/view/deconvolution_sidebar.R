@@ -43,52 +43,56 @@ ui <- function(id) {
         div(class = "sidebar-title custom-sidebar-title", "Select Files"),
         shiny::uiOutput(ns("dir_check")),
         shiny::tags$div(
-          style = "display: flex; gap: 0.5em;",
-          shinyDirButton(
-            ns("folder"),
-            "Multiple",
-            icon = shiny::icon("folder-open"),
-            title = "Select location with multiple Waters .raw folders",
-            buttonType = "default",
-            root = path_home()
+          class = "sample-file-row",
+          shiny::tags$div(
+            shinyDirButton(
+              ns("folder"),
+              "Multiple",
+              icon = shiny::icon("folder-open"),
+              title = "Select location with multiple Waters .raw folders",
+              buttonType = "default",
+              root = path_home()
+            ),
+            shinyDirButton(
+              ns("file"),
+              "Single",
+              multiple = TRUE,
+              icon = shiny::icon("file"),
+              title = "Select individual Waters .raw folder",
+              buttonType = "default",
+              root = path_home()
+            )
           ),
-          shinyDirButton(
-            ns("file"),
-            "Single",
-            multiple = TRUE,
-            icon = shiny::icon("file"),
-            title = "Select individual Waters .raw folder",
-            buttonType = "default",
-            root = path_home()
-          )
+          shiny::verbatimTextOutput(ns("path_selected"))
         ),
-        shiny::verbatimTextOutput(ns("path_selected")),
         shiny::uiOutput(ns("targetpath_check")),
         shiny::div(
           class = "dest-folder-row",
-          shinyDirButton(
-            ns("target_folder"),
-            "Select Destination Folder",
-            icon = shiny::icon("file-export"),
-            title = "Select destination folder",
-            buttonType = "default",
-            root = path_home()
-          ),
-          bslib::tooltip(
-            shiny::div(
-              class = "save-button",
-              actionButton(
-                ns("open_settings_btn"),
-                label = NULL,
-                icon = icon("floppy-disk"),
-                class = "btn-default"
-              )
+          shiny::div(
+            shinyDirButton(
+              ns("target_folder"),
+              "Select Destination Folder",
+              icon = shiny::icon("file-export"),
+              title = "Select destination folder",
+              buttonType = "default",
+              root = path_home()
             ),
-            "Save default folder",
-            placement = "bottom"
-          )
-        ),
-        shiny::verbatimTextOutput(ns("targetpath_selected"))
+            bslib::tooltip(
+              shiny::div(
+                class = "save-button",
+                actionButton(
+                  ns("open_settings_btn"),
+                  label = NULL,
+                  icon = icon("floppy-disk"),
+                  class = "btn-default"
+                )
+              ),
+              "Save default folder",
+              placement = "bottom"
+            )
+          ),
+          shiny::verbatimTextOutput(ns("targetpath_selected"))
+        )
       ),
 
       # --- Section 2: Experiment Configuration ---

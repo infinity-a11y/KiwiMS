@@ -478,7 +478,7 @@ server <- function(id) {
                   shiny$tags$tr(
                     shiny$tags$td(
                       class = "settings-table-label",
-                      "Detection window [Da]"
+                      "Detection window"
                     ),
                     shiny$tags$td(
                       shiny$numericInput(
@@ -1007,59 +1007,95 @@ server <- function(id) {
       # Empty/invalid fields are left at their stored value (or built-in default).
       # Note: is.numeric(NA) is FALSE in R, so we use is.na() directly.
       current <- read_user_settings() # already NA-sanitised; contains stored or defaults
-      ok     <- function(v) !is.null(v) && !is.na(v)
+      ok <- function(v) !is.null(v) && !is.na(v)
       int_ok <- function(v) ok(v) && v == floor(v)
 
       pt <- input$settings_peak_tol
-      if (ok(pt) && pt >= 0 && pt <= 20) current$peak_tolerance <- pt
+      if (ok(pt) && pt >= 0 && pt <= 20) {
+        current$peak_tolerance <- pt
+      }
 
       mm <- input$settings_max_mult
-      if (int_ok(mm) && mm >= 1 && mm <= 20) current$max_multiples <- mm
+      if (int_ok(mm) && mm >= 1 && mm <= 20) {
+        current$max_multiples <- mm
+      }
 
       pw <- input$settings_peakwindow
-      if (int_ok(pw) && pw >= 1 && pw <= 500) current$deconv_peakwindow <- pw
+      if (int_ok(pw) && pw >= 1 && pw <= 500) {
+        current$deconv_peakwindow <- pw
+      }
 
       current$deconv_peaknorm <- as.numeric(input$settings_peaknorm)
 
       p2 <- input$settings_peakthresh
-      if (ok(p2) && p2 >= 0 && p2 <= 1) current$deconv_peakthresh <- p2
+      if (ok(p2) && p2 >= 0 && p2 <= 1) {
+        current$deconv_peakthresh <- p2
+      }
 
       # Paired fields: save the pair only when both individually valid AND ordered;
       # save each side independently when its counterpart is absent/invalid.
-      sz <- input$settings_startz;  sz_ok <- int_ok(sz) && sz >= 1
-      ez <- input$settings_endz;    ez_ok <- int_ok(ez) && ez >= 1
+      sz <- input$settings_startz
+      sz_ok <- int_ok(sz) && sz >= 1
+      ez <- input$settings_endz
+      ez_ok <- int_ok(ez) && ez >= 1
       if (sz_ok && ez_ok) {
-        if (sz < ez) { current$deconv_startz <- sz; current$deconv_endz <- ez }
+        if (sz < ez) {
+          current$deconv_startz <- sz
+          current$deconv_endz <- ez
+        }
       } else {
-        if (sz_ok) current$deconv_startz <- sz
-        if (ez_ok) current$deconv_endz   <- ez
+        if (sz_ok) {
+          current$deconv_startz <- sz
+        }
+        if (ez_ok) current$deconv_endz <- ez
       }
 
-      mn <- input$settings_minmz;  mn_ok <- int_ok(mn) && mn >= 1
-      mx <- input$settings_maxmz;  mx_ok <- int_ok(mx) && mx >= 1
+      mn <- input$settings_minmz
+      mn_ok <- int_ok(mn) && mn >= 1
+      mx <- input$settings_maxmz
+      mx_ok <- int_ok(mx) && mx >= 1
       if (mn_ok && mx_ok) {
-        if (mn < mx) { current$deconv_minmz <- mn; current$deconv_maxmz <- mx }
+        if (mn < mx) {
+          current$deconv_minmz <- mn
+          current$deconv_maxmz <- mx
+        }
       } else {
-        if (mn_ok) current$deconv_minmz <- mn
+        if (mn_ok) {
+          current$deconv_minmz <- mn
+        }
         if (mx_ok) current$deconv_maxmz <- mx
       }
 
-      lb <- input$settings_masslb;  lb_ok <- int_ok(lb) && lb >= 1
-      ub <- input$settings_massub;  ub_ok <- int_ok(ub) && ub >= 1
+      lb <- input$settings_masslb
+      lb_ok <- int_ok(lb) && lb >= 1
+      ub <- input$settings_massub
+      ub_ok <- int_ok(ub) && ub >= 1
       if (lb_ok && ub_ok) {
-        if (lb < ub) { current$deconv_masslb <- lb; current$deconv_massub <- ub }
+        if (lb < ub) {
+          current$deconv_masslb <- lb
+          current$deconv_massub <- ub
+        }
       } else {
-        if (lb_ok) current$deconv_masslb <- lb
+        if (lb_ok) {
+          current$deconv_masslb <- lb
+        }
         if (ub_ok) current$deconv_massub <- ub
       }
 
-      ts <- input$settings_time_start;  ts_ok <- ok(ts) && ts >= 0 && ts <= 100
-      te <- input$settings_time_end;    te_ok <- ok(te) && te >= 0 && te <= 100
+      ts <- input$settings_time_start
+      ts_ok <- ok(ts) && ts >= 0 && ts <= 100
+      te <- input$settings_time_end
+      te_ok <- ok(te) && te >= 0 && te <= 100
       if (ts_ok && te_ok) {
-        if (ts < te) { current$deconv_time_start <- ts; current$deconv_time_end <- te }
+        if (ts < te) {
+          current$deconv_time_start <- ts
+          current$deconv_time_end <- te
+        }
       } else {
-        if (ts_ok) current$deconv_time_start <- ts
-        if (te_ok) current$deconv_time_end   <- te
+        if (ts_ok) {
+          current$deconv_time_start <- ts
+        }
+        if (te_ok) current$deconv_time_end <- te
       }
 
       current$deconv_keep_raw_output <- isTRUE(input$settings_keep_raw_output)
@@ -1509,7 +1545,7 @@ server <- function(id) {
         "Config saved!",
         text = NULL,
         type = "success",
-        timer = 3000,
+        timer = 2000,
         timerProgressBar = TRUE
       )
     })

@@ -25,7 +25,7 @@ box::use(
 
 # db_with_retry(): BEGIN IMMEDIATE + body + COMMIT with R-level retry ----
 # Retries the full transaction cycle on any lock/busy error, with random jitter.
-db_with_retry <- function(con, expr, max_wait_s = 60) {
+db_with_retry <- function(con, expr, max_wait_s = 300) {
   deadline <- proc.time()[["elapsed"]] + max_wait_s
   repeat {
     ok <- tryCatch({
@@ -60,6 +60,7 @@ write_sample_status <- function(db_path, sample_name, state,
   tryCatch({
     con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
     on.exit(DBI::dbDisconnect(con), add = TRUE)
+    DBI::dbExecute(con, "PRAGMA busy_timeout=300000")
     db_with_retry(con, {
       DBI::dbExecute(con,
         "INSERT OR REPLACE INTO status(sample,state,reason,error_msg,timestamp)
@@ -263,18 +264,24 @@ engine.pick_peaks()
             Value = as.numeric(error_df$V3)
           )
         }
-        rawdata_df <- read_file_safe(file.path(result, paste0(raw_name, "_rawdata.txt")))
         mass_df <- read_file_safe(
           file.path(result, paste0(raw_name, "_mass.txt")),
           c("mass", "intensity")
         )
-        input_df <- read_file_safe(file.path(result, paste0(raw_name, "_input.dat")))
 
         con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
         on.exit(DBI::dbDisconnect(con), add = TRUE)
+        DBI::dbExecute(con, "PRAGMA busy_timeout=300000")
+
+        write_tbl <- function(tbl, df) {
+          if (is.null(df) || nrow(df) == 0) return(invisible(NULL))
+          df <- as.data.frame(df)
+          df$sample <- sample_basename
+          DBI::dbWriteTable(con, tbl, df, append = TRUE)
+        }
 
         db_with_retry(con, {
-          for (tbl_name in c("peaks", "mass_data", "input_dat", "rawdata", "error", "config")) {
+          for (tbl_name in c("peaks", "mass_data", "error", "config")) {
             if (DBI::dbExistsTable(con, tbl_name)) {
               DBI::dbExecute(con,
                 sprintf("DELETE FROM %s WHERE sample = ?", tbl_name),
@@ -282,16 +289,8 @@ engine.pick_peaks()
             }
           }
 
-          write_tbl <- function(tbl, df) {
-            if (is.null(df) || nrow(df) == 0) return(invisible(NULL))
-            df <- as.data.frame(df)
-            df$sample <- sample_basename
-            DBI::dbWriteTable(con, tbl, df, append = TRUE)
-          }
           write_tbl("peaks", peaks_df)
           write_tbl("mass_data", mass_df)
-          write_tbl("input_dat", input_df)
-          write_tbl("rawdata", rawdata_df)
 
           if (!is.null(error_df) && nrow(error_df) > 0) {
             err_df <- as.data.frame(error_df)

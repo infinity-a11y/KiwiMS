@@ -356,46 +356,22 @@ server <- function(
 
       full_path <- file.path(target, paste0(name, ".db"))
 
-      max_len <- 55L
-      display_path <- if (nchar(full_path) <= max_len) {
-        full_path
-      } else {
-        suffix <- paste0("/", basename(full_path))
-        prefix_len <- max_len - nchar(suffix) - 1L
-        if (prefix_len <= 0) {
-          paste0("\u2026", suffix)
-        } else {
-          paste0(substr(full_path, 1L, prefix_len), "\u2026", suffix)
-        }
-      }
-      path_html <- paste0(
-        "<code title='",
-        full_path,
-        "' style='cursor:default;'>",
-        display_path,
-        "</code>"
-      )
-
       db_exists <- file.exists(full_path)
       shiny$div(
-        class = "analysis-name-feedback-row",
+        class = "analysis-name-feedback-row analysis-path-feedback",
         shiny$tags$span(
-          style = if (db_exists) {
-            "color:#000000; flex-shrink:0;"
-          } else {
-            "color:#5cb85c; flex-shrink:0;"
-          },
-          shiny$icon(if (db_exists) "database" else "database")
-        ),
-        shiny$tags$span(
-          style = "white-space:nowrap; flex-shrink:0;",
+          class = "analysis-path-label",
           if (db_exists) {
             "Will extend existing analysis:"
           } else {
             "Will be saved as:"
           }
         ),
-        shiny$HTML(path_html)
+        shiny$tags$pre(
+          class = "path-selector-pre",
+          style = "border-color: rgb(139, 195, 74);",
+          full_path
+        )
       )
     })
 
@@ -1211,10 +1187,14 @@ server <- function(
           # Prepare heatmap variables — restrict to samples present in folder
           present_in_folder <- sample_names %in% basename(raw_dirs)
           reactVars$sample_names <- gsub(
-            ".raw",
+            "\\.raw$",
             "",
-            sample_names[present_in_folder]
+            sample_names[present_in_folder],
+            ignore.case = TRUE
           )
+          reactVars$sample_names <- reactVars$sample_names[nzchar(trimws(
+            reactVars$sample_names
+          ))]
           reactVars$wells <- gsub(
             ",",
             "",
@@ -1548,11 +1528,13 @@ server <- function(
               ) {
                 reactVars$results_observer$destroy()
               }
-            }
 
-            # Set reactive status variables
-            reactVars$is_running <- FALSE
-            reactVars$deconv_report_status <- NULL
+              # Set reactive status variables (error path only — for successful
+              # completion the progress observer sets is_running=FALSE and
+              # updates the button to "Reset" atomically at lines ~1918/2090)
+              reactVars$is_running <- FALSE
+              reactVars$deconv_report_status <- NULL
+            }
           }
         }
       })
@@ -1635,10 +1617,24 @@ server <- function(
             ) {
               shiny$req(reactVars$sample_names, reactVars$wells)
 
-              done_ids <- gsub(
-                "_DONE\\.rds$",
-                "",
-                list.files(analysis_dest(), pattern = "_DONE\\.rds$")
+              db_pth <- file.path(
+                analysis_dest(),
+                paste0(trimws(input$analysis_name), ".db")
+              )
+              done_ids <- tryCatch(
+                {
+                  con_chk <- dbConnect(SQLite(), db_pth, flags = SQLITE_RO)
+                  on.exit(dbDisconnect(con_chk), add = TRUE)
+                  if (dbExistsTable(con_chk, "status")) {
+                    dbGetQuery(
+                      con_chk,
+                      "SELECT sample FROM status WHERE state='done'"
+                    )$sample
+                  } else {
+                    character(0)
+                  }
+                },
+                error = function(e) character(0)
               )
               done_in_run <- intersect(done_ids, reactVars$sample_names)
               results <- file.path(
@@ -1647,120 +1643,26 @@ server <- function(
               )
 
               if (length(done_in_run)) {
-                if (is.null(reactVars$rslt_df) || nrow(reactVars$rslt_df) < 1) {
-                  well <- character()
-                  value <- numeric()
-                  sample_names <- character()
-
-                  for (i in seq_along(results)) {
-                    sample_names[i] <- gsub(
-                      "_rawdata_unidecfiles",
-                      "",
-                      basename(results[i])
-                    )
-                    well[i] <- reactVars$wells[which(
-                      reactVars$sample_names == sample_names[i]
-                    )]
-                    peak_file <- file.path(
-                      results[i],
-                      paste0(sample_names[i], "_rawdata_peaks.dat")
-                    )
-                    if (file.exists(peak_file)) {
-                      peaks <- utils::read.delim(
-                        peak_file,
-                        header = FALSE,
-                        sep = " "
-                      )
-                      max <- max(peaks$V1)
-                      if (length(max) && !is.na(max)) {
-                        value[i] <- max
-                      } else {
-                        value[i] <- NA
-                      }
-                    } else {
-                      value[i] <- NA
-                    }
+                peaks_from_db <- tryCatch(
+                  read_decon_peaks_max(db_pth, done_in_run),
+                  error = function(e) {
+                    data.frame(sample = character(), max_mass = numeric())
                   }
-                  rslt_df <- data.frame(
-                    sample = sample_names,
-                    well_id = well,
-                    value = value
-                  )
-                  reactVars$rslt_df <- rslt_df[
-                    !as.logical(
-                      rowSums(is.na(rslt_df))
-                    ),
+                )
+                if (nrow(peaks_from_db) > 0) {
+                  peaks_from_db$well_id <- reactVars$wells[
+                    match(peaks_from_db$sample, reactVars$sample_names)
                   ]
-                } else {
-                  new <- !gsub(
-                    "_rawdata_unidecfiles",
-                    "",
-                    basename(results)
-                  ) %in%
-                    reactVars$rslt_df$sample
-                  new_results <- results[new]
-
-                  if (length(new_results)) {
-                    well <- character()
-                    value <- numeric()
-                    sample_names <- character()
-                    for (i in seq_along(new_results)) {
-                      sample_names[i] <- gsub(
-                        "_rawdata_unidecfiles",
-                        "",
-                        basename(new_results[i])
-                      )
-                      well[i] <- reactVars$wells[which(
-                        reactVars$sample_names == sample_names[i]
-                      )]
-
-                      peak_file <- file.path(
-                        new_results[i],
-                        paste0(sample_names[i], "_rawdata_peaks.dat")
-                      )
-
-                      if (file.exists(peak_file)) {
-                        get_peaks <- tryCatch(
-                          {
-                            peaks <- utils::read.delim(
-                              peak_file,
-                              header = FALSE,
-                              sep = " "
-                            )
-                          },
-                          error = function(e) {
-                            NULL
-                          }
-                        )
-
-                        if (is.null(peaks)) {
-                          value[i] <- NA
-                          next
-                        }
-
-                        max <- max(peaks$V1)
-                        if (length(max) && !is.na(max)) {
-                          value[i] <- max
-                        } else {
-                          value[i] <- NA
-                        }
-                      } else {
-                        value[i] <- NA
-                      }
-                    }
-
-                    new_rslt_df <- data.frame(
-                      sample = sample_names,
-                      well_id = well,
-                      value = value
+                  peaks_from_db <- peaks_from_db[
+                    !is.na(peaks_from_db$well_id) &
+                      !is.na(peaks_from_db$max_mass),
+                  ]
+                  if (nrow(peaks_from_db) > 0) {
+                    reactVars$rslt_df <- data.frame(
+                      sample = peaks_from_db$sample,
+                      well_id = peaks_from_db$well_id,
+                      value = peaks_from_db$max_mass
                     )
-                    new_rslt_df <- new_rslt_df[
-                      !as.logical(
-                        rowSums(is.na(new_rslt_df))
-                      ),
-                    ]
-
-                    reactVars$rslt_df <- rbind(reactVars$rslt_df, new_rslt_df)
                   }
                 }
 
@@ -1770,10 +1672,17 @@ server <- function(
                   ".raw",
                   basename(results)
                 )
+
                 failed_in_run <- reactVars$failed_samples[
                   reactVars$failed_samples %in% reactVars$sample_names
                 ]
-                choices_failed <- paste0(failed_in_run, ".raw")
+                failed_in_run <- failed_in_run[nzchar(failed_in_run)]
+
+                choices_failed <- character(0)
+                if (length(failed_in_run)) {
+                  choices_failed <- paste0(failed_in_run, ".raw")
+                }
+
                 named_choices <- character(0)
                 if (length(choices_ok) > 0) {
                   named_choices <- c(named_choices, choices_ok)
@@ -1786,10 +1695,16 @@ server <- function(
                     paste0(failed_in_run, " (failed)")
                 }
                 if (length(named_choices) > 0) {
-                  if (is.null(result_files_sel())) {
+                  cur_sel <- result_files_sel()
+                  if (
+                    is.null(cur_sel) ||
+                      !nzchar(cur_sel) ||
+                      !(cur_sel %in% named_choices)
+                  ) {
                     result_files_sel(unname(named_choices[1]))
                   }
-                  output$result_picker_ui <- shiny$renderUI(
+
+                  output$result_picker_ui <- shiny$renderUI({
                     shiny$div(
                       class = "result-picker",
                       shiny$selectInput(
@@ -1799,7 +1714,7 @@ server <- function(
                         selected = result_files_sel()
                       )
                     )
-                  )
+                  })
                   session$sendCustomMessage("selectize-init", "result_picker")
                 }
               }
@@ -1856,12 +1771,18 @@ server <- function(
               }
 
               if (length(named_choices) > 0) {
-                sel_default <- if (!is.null(result_files_sel())) {
-                  result_files_sel()
+                cur_sel <- result_files_sel()
+                sel_default <- if (
+                  !is.null(cur_sel) &&
+                    nzchar(cur_sel) &&
+                    cur_sel %in% named_choices
+                ) {
+                  cur_sel
                 } else {
                   unname(named_choices[1])
                 }
-                output$result_picker_ui <- shiny$renderUI(
+
+                output$result_picker_ui <- shiny$renderUI({
                   shiny$div(
                     class = "result-picker",
                     shiny$selectInput(
@@ -1871,7 +1792,7 @@ server <- function(
                       selected = sel_default
                     )
                   )
-                )
+                })
                 session$sendCustomMessage("selectize-init", "result_picker")
               }
 
@@ -1912,6 +1833,7 @@ server <- function(
             intersect(current_base_names, failed_in_db),
             reactVars$failed_samples
           )
+          newly_failed <- newly_failed[nzchar(trimws(newly_failed))]
           if (length(newly_failed) > 0) {
             reactVars$failed_samples <- c(
               reactVars$failed_samples,
@@ -1948,12 +1870,25 @@ server <- function(
             reactVars$count <- 0
           }
 
+          result_files <- file.path(
+            analysis_dest(),
+            basename(gsub(".raw", "_rawdata_unidecfiles", raw_dirs))
+          )
+
+          # Poll completion sentinel on every cycle
+          all_processed <- decon_is_complete(
+            file.path(
+              analysis_dest(),
+              paste0(trimws(input$analysis_name), ".db")
+            )
+          )
+
           if (reactVars$completed_files == 0) {
             title <- paste0(
               "Initializing ",
               paste0(rep(".", reactVars$count), collapse = "")
             )
-          } else if (progress_pct != 100) {
+          } else if (!all_processed) {
             title <- paste0(
               sprintf(
                 "Processing Files (%d/%d) ",
@@ -1966,20 +1901,6 @@ server <- function(
             title <- paste0(
               "Saving Results ",
               paste0(rep(".", reactVars$count), collapse = "")
-            )
-
-            result_files <- file.path(
-              analysis_dest(),
-              basename(gsub(".raw", "_rawdata_unidecfiles", raw_dirs))
-            )
-
-            # Check if deconvolution finished: 'completed' table written by
-            # generate_decon_rslt() is the single source of truth.
-            all_processed <- decon_is_complete(
-              file.path(
-                analysis_dest(),
-                paste0(trimws(input$analysis_name), ".db")
-              )
             )
 
             if (all_processed) {
@@ -2057,17 +1978,31 @@ server <- function(
                   reactVars$rslt_df <- rbind(reactVars$rslt_df, new_rslt_df)
                 }
 
-                # Update result picker with all completed samples
-                if (nrow(reactVars$rslt_df) > 0) {
-                  picker_choices <- gsub(
-                    "_rawdata_unidecfiles",
-                    ".raw",
-                    basename(result_files)
-                  )
-                  if (
-                    is.null(result_files_sel()) && length(picker_choices) > 0
-                  ) {
-                    result_files_sel(picker_choices[1])
+                # Update result picker with done + failed samples
+                done_bases <- reactVars$rslt_df$sample
+                failed_in_run <- reactVars$failed_samples[
+                  reactVars$failed_samples %in% reactVars$sample_names
+                ]
+                failed_in_run <- failed_in_run[nzchar(failed_in_run)]
+                choices_ok <- paste0(done_bases, ".raw")
+                choices_failed <- character(0)
+                if (length(failed_in_run)) {
+                  choices_failed <- paste0(failed_in_run, ".raw")
+                }
+                named_choices <- character(0)
+                if (length(choices_ok) > 0) {
+                  named_choices <- c(named_choices, choices_ok)
+                  names(named_choices)[seq_along(choices_ok)] <- choices_ok
+                }
+                if (length(choices_failed) > 0) {
+                  prev_len <- length(named_choices)
+                  named_choices <- c(named_choices, choices_failed)
+                  names(named_choices)[prev_len + seq_along(choices_failed)] <-
+                    paste0(failed_in_run, " (failed)")
+                }
+                if (length(named_choices) > 0) {
+                  if (is.null(result_files_sel())) {
+                    result_files_sel(unname(named_choices[1]))
                   }
                   output$result_picker_ui <- shiny$renderUI(
                     shiny$div(
@@ -2075,7 +2010,7 @@ server <- function(
                       shiny$selectInput(
                         ns("result_picker"),
                         "Select Sample",
-                        choices = picker_choices,
+                        choices = named_choices,
                         selected = result_files_sel()
                       )
                     )
@@ -2399,17 +2334,9 @@ server <- function(
 
       ### Render result spectrum
 
-      # Define reactive helper variable to control spinner display
-      allow_spinner_spectrum <- shiny$reactiveVal(TRUE)
-
       output$spectrum <- renderPlotly({
-        # Show spinner only once before plot fully rendered
-        if (shiny$isolate(allow_spinner_spectrum()) == TRUE) {
-          waiter_show(id = ns("spectrum"), html = spin_wave())
-          allow_spinner_spectrum(FALSE)
-        }
-
         shiny$req(result_files_sel())
+        waiter_show(id = ns("spectrum"), html = spin_wave())
 
         if (deconvolution_sidebar_vars$selected() == "folder") {
           result_dir <- file.path(
@@ -2441,7 +2368,6 @@ server <- function(
 
         if (file.exists(db_sp) && sel_base %in% decon_failed_samples(db_sp)) {
           waiter_hide(id = ns("spectrum"))
-          allow_spinner_spectrum(TRUE)
           return(
             plotly::plot_ly() |>
               plotly::layout(
@@ -2473,7 +2399,6 @@ server <- function(
             show_mass_diff = FALSE
           )
           waiter_hide(id = ns("spectrum"))
-          allow_spinner_spectrum(TRUE)
           return(spectrum)
         }
 
@@ -2489,7 +2414,6 @@ server <- function(
             show_mass_diff = FALSE
           )
           waiter_hide(id = ns("spectrum"))
-          allow_spinner_spectrum(TRUE)
           return(spectrum)
         }
       })
@@ -2656,36 +2580,19 @@ server <- function(
               nzchar(trimws(as.character(config_file()[["Well"]])))
           )
       ) {
-        # Define reactive helper variable to control spinner display
-        allow_spinner_heatmap <- shiny$reactiveVal(TRUE)
-
         output$heatmap <- renderPlotly({
-          if (shiny$isolate(allow_spinner_heatmap()) == TRUE) {
-            waiter_show(
-              id = ns("heatmap"),
-              html = spin_wave()
-            )
-            allow_spinner_heatmap(FALSE)
-          }
+          shiny$req(nrow(reactVars$rslt_df) > 0)
+          waiter_show(id = ns("heatmap"), html = spin_wave())
 
-          shiny$req(reactVars$rslt_df)
+          heatmap <- create_384_plate_heatmap(reactVars$rslt_df) |>
+            event_register("plotly_click")
 
-          if (nrow(reactVars$rslt_df) > 0) {
-            heatmap <- create_384_plate_heatmap(reactVars$rslt_df) |>
-              event_register("plotly_click")
+          waiter_hide(id = ns("heatmap"))
 
-            # Hide spinner
-            waiter_hide(id = ns("heatmap"))
+          # Activate click observer / signal highlight observer to re-apply shape
+          reactVars$heatmap_ready <- shiny$isolate(reactVars$heatmap_ready) + 1L
 
-            # Activate spinner reactivation
-            allow_spinner_heatmap(TRUE)
-
-            # Activate click observer / signal highlight observer to re-apply shape
-            reactVars$heatmap_ready <- shiny$isolate(reactVars$heatmap_ready) +
-              1L
-
-            return(heatmap)
-          }
+          return(heatmap)
         })
       }
 
