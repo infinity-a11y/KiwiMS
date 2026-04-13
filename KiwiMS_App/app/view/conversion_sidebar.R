@@ -86,13 +86,26 @@ server <- function(
               class = "sidebar-title custom-sidebar-title",
               "Binding Analysis"
             ),
-            shiny::div(
-              class = "dest-folder-row",
-              shiny::numericInput(
-                ns("peak_tolerance"),
+            shiny::numericInput(
+              ns("peak_tolerance"),
+              shiny::div(
+                class = "label-tooltip",
+                shiny::tags$label("Peak Tolerance [Da]"),
                 shiny::div(
-                  class = "label-tooltip",
-                  shiny::tags$label("Peak Tolerance [Da]"),
+                  class = "label-save-button",
+                  tooltip(
+                    shiny::div(
+                      class = "save-button",
+                      shiny::actionButton(
+                        ns("save_peak_tol_btn"),
+                        label = NULL,
+                        icon = shiny::icon("floppy-disk"),
+                        class = "btn-default"
+                      )
+                    ),
+                    "Save as default value",
+                    placement = "bottom"
+                  ),
                   shiny::div(
                     class = "tooltip-bttn",
                     shiny::actionButton(
@@ -101,37 +114,35 @@ server <- function(
                       icon = shiny::icon("circle-question")
                     )
                   )
-                ),
-                value = pt_default,
-                min = 0,
-                max = 20,
-                step = 0.1,
-                width = "100%"
-              ),
-              shiny::div(
-                style = "height: -webkit-fill-available;",
-                tooltip(
-                  shiny::div(
-                    class = "save-button",
-                    shiny::actionButton(
-                      ns("save_peak_tol_btn"),
-                      label = NULL,
-                      icon = shiny::icon("floppy-disk"),
-                      class = "btn-default"
-                    )
-                  ),
-                  "Save as default value",
-                  placement = "bottom"
                 )
-              )
+              ),
+              value = pt_default,
+              min = 0,
+              max = 20,
+              step = 0.1,
+              width = "100%"
             ),
-            shiny::div(
-              class = "dest-folder-row",
-              shiny::numericInput(
-                ns("max_multiples"),
+            shiny::numericInput(
+              ns("max_multiples"),
+              shiny::div(
+                class = "label-tooltip",
+                shiny::tags$label("Max. Stoichiometry"),
+
                 shiny::div(
-                  class = "label-tooltip",
-                  shiny::tags$label("Max. Stoichiometry"),
+                  class = "label-save-button",
+                  tooltip(
+                    shiny::div(
+                      class = "save-button",
+                      shiny::actionButton(
+                        ns("save_max_mult_btn"),
+                        label = NULL,
+                        icon = shiny::icon("floppy-disk"),
+                        class = "btn-default"
+                      )
+                    ),
+                    "Save as default value",
+                    placement = "bottom"
+                  ),
                   shiny::div(
                     class = "tooltip-bttn",
                     shiny::actionButton(
@@ -140,29 +151,13 @@ server <- function(
                       icon = shiny::icon("circle-question")
                     )
                   )
-                ),
-                value = mm_default,
-                min = 1,
-                max = 20,
-                step = 1,
-                width = "100%"
-              ),
-              shiny::div(
-                style = "height: -webkit-fill-available;",
-                tooltip(
-                  shiny::div(
-                    class = "save-button",
-                    shiny::actionButton(
-                      ns("save_max_mult_btn"),
-                      label = NULL,
-                      icon = shiny::icon("floppy-disk"),
-                      class = "btn-default"
-                    )
-                  ),
-                  "Save as default value",
-                  placement = "bottom"
                 )
-              )
+              ),
+              value = mm_default,
+              min = 1,
+              max = 20,
+              step = 1,
+              width = "100%"
             ),
             shiny::div(
               class = "ki-kinact-checkbox",

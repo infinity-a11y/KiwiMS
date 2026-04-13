@@ -755,18 +755,6 @@ server <- function(
 
       decon_rep_process_data(NULL)
 
-      # Render explicit empty/blank outputs instead of NULL so the DOM
-      # elements are overwritten immediately — NULL leaves the previous
-      # rendered content in place until the next reactive cycle fires.
-      output$spectrum <- renderPlotly(
-        plotly::plot_ly() |>
-          plotly::layout(
-            paper_bgcolor = "rgba(0,0,0,0)",
-            plot_bgcolor = "rgba(0,0,0,0)",
-            xaxis = list(visible = FALSE),
-            yaxis = list(visible = FALSE)
-          )
-      )
       output$deconvolution_data <- DT::renderDataTable(
         DT::datatable(data.frame(), options = list(dom = "", paging = FALSE)),
         server = FALSE

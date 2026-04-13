@@ -265,10 +265,6 @@ server <- function(id) {
             easyClose = TRUE,
             shiny$div(
               class = "settings-modal-body",
-              shiny$tags$p(
-                class = "text-muted settings-modal-hint",
-                "Default values are restored at the start of each session."
-              ),
               shiny$tags$table(
                 class = "table table-sm table-bordered settings-table",
                 shiny$tags$thead(
@@ -279,7 +275,14 @@ server <- function(id) {
                   )
                 ),
                 shiny$tags$tbody(
-                  # --- Destination Folder ---
+                  # --- General ---
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      colspan = "3",
+                      class = "settings-section-header",
+                      "General"
+                    )
+                  ),
                   shiny$tags$tr(
                     shiny$tags$td(
                       class = "settings-table-label",
@@ -305,6 +308,36 @@ server <- function(id) {
                     shiny$tags$td(
                       class = "settings-table-feedback",
                       shiny$uiOutput(ns("settings_dest_path_display"))
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Keep UniDec output files",
+                      shiny$tags$span(
+                        class = "settings-info",
+                        "Keeps *_rawdata.txt and *_rawdata_unidecfiles/ after analysis"
+                      )
+                    ),
+                    shiny$tags$td(
+                      shiny$checkboxInput(
+                        ns("settings_keep_raw_output"),
+                        label = "Enable",
+                        value = isTRUE(us$deconv_keep_raw_output)
+                      )
+                    ),
+                    shiny$tags$td(class = "settings-table-feedback")
+                  ),
+                  # --- Default Input Values ---
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      colspan = "3",
+                      class = "settings-section-header",
+                      "Default Input Values",
+                      shiny$tags$span(
+                        class = "settings-info",
+                        "Restored at the start of each session."
+                      )
                     )
                   ),
                   shiny$tags$tr(
@@ -583,26 +616,6 @@ server <- function(id) {
                     shiny$tags$td(
                       class = "settings-table-feedback",
                       shiny$uiOutput(ns("settings_max_mult_feedback"))
-                    )
-                  ),
-                  shiny$tags$tr(
-                    shiny$tags$td(
-                      class = "settings-table-label",
-                      "Keep UniDec output files"
-                    ),
-                    shiny$tags$td(
-                      shiny$checkboxInput(
-                        ns("settings_keep_raw_output"),
-                        label = NULL,
-                        value = isTRUE(us$deconv_keep_raw_output)
-                      )
-                    ),
-                    shiny$tags$td(
-                      class = "settings-table-feedback",
-                      shiny$tags$small(
-                        class = "text-muted",
-                        "Keep *_rawdata.txt and *_rawdata_unidecfiles/ after analysis"
-                      )
                     )
                   ),
                   shiny$tags$tr(

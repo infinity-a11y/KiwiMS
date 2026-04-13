@@ -94,8 +94,14 @@ read_decon_metadata <- function(db_path) {
   on.exit(DBI::dbDisconnect(con), add = TRUE)
   list(
     samples = DBI::dbGetQuery(con, "SELECT sample FROM metadata")[["sample"]],
-    session = DBI::dbGetQuery(con, "SELECT line FROM session ORDER BY line_num")[["line"]],
-    output  = DBI::dbGetQuery(con, "SELECT line FROM output_log ORDER BY line_num")[["line"]]
+    session = DBI::dbGetQuery(
+      con,
+      "SELECT line FROM session ORDER BY line_num"
+    )[["line"]],
+    output = DBI::dbGetQuery(
+      con,
+      "SELECT line FROM output_log ORDER BY line_num"
+    )[["line"]]
   )
 }
 
@@ -112,9 +118,13 @@ read_decon_peaks_max <- function(db_path, samples = NULL) {
   } else {
     ""
   }
-  DBI::dbGetQuery(con, sprintf(
-    "SELECT sample, MAX(mass) AS max_mass FROM peaks %s GROUP BY sample", where
-  ))
+  DBI::dbGetQuery(
+    con,
+    sprintf(
+      "SELECT sample, MAX(mass) AS max_mass FROM peaks %s GROUP BY sample",
+      where
+    )
+  )
 }
 
 # Read full result from a result SQLite DB, reconstructing the nested list structure
@@ -124,9 +134,12 @@ read_decon_result <- function(db_path, samples = NULL) {
   on.exit(DBI::dbDisconnect(con), add = TRUE)
 
   all_samples <- DBI::dbGetQuery(con, "SELECT sample FROM metadata")[["sample"]]
-  if (!is.null(samples)) all_samples <- intersect(all_samples, samples)
+  if (!is.null(samples)) {
+    all_samples <- intersect(all_samples, samples)
+  }
 
   q <- function(tbl, s) {
+    if (!DBI::dbExistsTable(con, tbl)) return(data.frame())
     DBI::dbGetQuery(
       con,
       sprintf("SELECT * FROM %s WHERE sample = ?", tbl),
@@ -134,38 +147,52 @@ read_decon_result <- function(db_path, samples = NULL) {
     )
   }
 
-  deconvolution <- lapply(stats::setNames(all_samples, all_samples), function(s) {
-    config_long <- q("config", s)
-    config_wide <- if (nrow(config_long) > 0) {
-      tidyr::pivot_wider(
-        config_long[, c("key", "value")],
-        names_from  = "key",
-        values_from = "value"
+  deconvolution <- lapply(
+    stats::setNames(all_samples, all_samples),
+    function(s) {
+      config_long <- q("config", s)
+      config_wide <- if (nrow(config_long) > 0) {
+        tidyr::pivot_wider(
+          config_long[, c("key", "value")],
+          names_from = "key",
+          values_from = "value"
+        )
+      } else {
+        data.frame()
+      }
+
+      raw <- q("rawdata", s)
+      raw$sample <- NULL
+      inp <- q("input_dat", s)
+      inp$sample <- NULL
+      peaks <- q("peaks", s)
+      peaks$sample <- NULL
+      mass <- q("mass_data", s)
+      mass$sample <- NULL
+      err <- q("error", s)
+      err$sample <- NULL
+
+      list(
+        config = config_wide,
+        peaks = peaks,
+        error = err,
+        rawdata = raw,
+        mass = mass,
+        input = inp
       )
-    } else {
-      data.frame()
     }
-
-    raw   <- q("rawdata", s);   raw$sample   <- NULL
-    inp   <- q("input_dat", s); inp$sample   <- NULL
-    peaks <- q("peaks", s);     peaks$sample <- NULL
-    mass  <- q("mass_data", s); mass$sample  <- NULL
-    err   <- q("error", s);     err$sample   <- NULL
-
-    list(
-      config  = config_wide,
-      peaks   = peaks,
-      error   = err,
-      rawdata = raw,
-      mass    = mass,
-      input   = inp
-    )
-  })
+  )
 
   list(
     deconvolution = deconvolution,
-    session = DBI::dbGetQuery(con, "SELECT line FROM session ORDER BY line_num")[["line"]],
-    output  = DBI::dbGetQuery(con, "SELECT line FROM output_log ORDER BY line_num")[["line"]]
+    session = DBI::dbGetQuery(
+      con,
+      "SELECT line FROM session ORDER BY line_num"
+    )[["line"]],
+    output = DBI::dbGetQuery(
+      con,
+      "SELECT line FROM output_log ORDER BY line_num"
+    )[["line"]]
   )
 }
 
@@ -1685,9 +1712,11 @@ add_hits <- function(
 
     log_start(samples[i])
 
-    present_protein <- sample_table$Protein[sample_table$Sample == samples[i]]
+    st_key <- gsub("\\.raw$", "", sample_table$Sample, ignore.case = TRUE)
+    s_key  <- gsub("\\.raw$", "", samples[i],          ignore.case = TRUE)
+    present_protein <- sample_table$Protein[st_key == s_key]
     present_cmp <- sample_table[
-      sample_table$Sample == samples[i],
+      st_key == s_key,
       grep("Compound", names(sample_table))
     ]
 
@@ -3933,8 +3962,9 @@ new_sample_table <- function(
   compound_table,
   ki_kinact = FALSE
 ) {
+  result1 <<- result
   sample_tab <- data.frame(
-    Sample = result$samples %||% names(result$deconvolution),
+    Sample = paste0(result$samples %||% names(result$deconvolution), ".raw"),
     Protein = ifelse(
       length(protein_table$Protein) == 1,
       protein_table$Protein,
