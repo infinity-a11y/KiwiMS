@@ -3,7 +3,7 @@
 [Setup]
 AppName=KiwiMS
 AppId=KiwiMS
-AppVersion=0.4.1
+AppVersion=0.5.0
 AppPublisher=Marian Freisleben
 DefaultDirName={autopf}\KiwiMS
 DefaultGroupName=KiwiMS

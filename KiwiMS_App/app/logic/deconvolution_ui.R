@@ -975,7 +975,7 @@ deconvolution_results_ui <- function(ns, show_heatmap = FALSE) {
             bslib::layout_sidebar(
               spectrum_card,
               sidebar = bslib::sidebar(
-                width = 450,
+                width = 550,
                 shiny::div(
                   class = "deconvolution-heatmap-card card-custom",
                   bslib::card(
