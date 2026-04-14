@@ -192,6 +192,7 @@ import sys
 import unidec
 import re
 import os
+import shutil
       
 # Parameters passed from R
 params = {%s}
@@ -207,7 +208,7 @@ engine.raw_process(input_file)
 # Move processed file to output directory
 txt_file = input_file.removesuffix(".raw") + "_rawdata.txt"
 output = os.path.join(result_dir, os.path.basename(txt_file))
-os.rename(txt_file, output)
+shutil.move(txt_file, output)
 
 # Make result directory
 engine.open_file(output)
