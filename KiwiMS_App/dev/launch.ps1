@@ -9,17 +9,17 @@ $versionFile = if (Test-Path "resources\version.txt") { Get-Content -Path "resou
 # Headless check
 $Headless = $args -contains "--headless"
 
-Write-Output ""
-Write-Output "██╗  ██╗ ██╗            ██╗    ███╗   ███╗  ██████╗ " -ForegroundColor DarkGreen
-Write-Output "██║ ██╔╝ ╚═╝            ╚═╝    ████╗ ████║ ██╔════╝ " -ForegroundColor DarkGreen
-Write-Output "█████╔╝  ██╗ ██╗    ██╗ ██╗    ██╔████╔██║ ╚█████╗  " -ForegroundColor DarkGreen
-Write-Output "██╔═██╗  ██║ ██║ █╗ ██║ ██║    ██║╚██╔╝██║  ╚═══██╗ " -ForegroundColor DarkGreen
-Write-Output "██║  ██╗ ██║ ╚███╔███╔╝ ██║    ██║ ╚═╝ ██║ ██████╔╝ " -ForegroundColor DarkGreen
-Write-Output "╚═╝  ╚═╝ ╚═╝  ╚══╝╚══╝  ╚═╝    ╚═╝     ╚═╝ ╚═════╝  " -ForegroundColor DarkGreen
-Write-Output ""
-Write-Output "---------------------------------------------------" -ForegroundColor DarkGray
-Write-Output "         Welcome to KiwiMS ($versionFile)          " -ForegroundColor White
-Write-Output "---------------------------------------------------" -ForegroundColor DarkGray
+Write-Host ""
+Write-Host "██╗  ██╗ ██╗            ██╗    ███╗   ███╗  ██████╗ " -ForegroundColor DarkGreen
+Write-Host "██║ ██╔╝ ╚═╝            ╚═╝    ████╗ ████║ ██╔════╝ " -ForegroundColor DarkGreen
+Write-Host "█████╔╝  ██╗ ██╗    ██╗ ██╗    ██╔████╔██║ ╚█████╗  " -ForegroundColor DarkGreen
+Write-Host "██╔═██╗  ██║ ██║ █╗ ██║ ██║    ██║╚██╔╝██║  ╚═══██╗ " -ForegroundColor DarkGreen
+Write-Host "██║  ██╗ ██║ ╚███╔███╔╝ ██║    ██║ ╚═╝ ██║ ██████╔╝ " -ForegroundColor DarkGreen
+Write-Host "╚═╝  ╚═╝ ╚═╝  ╚══╝╚══╝  ╚═╝    ╚═╝     ╚═╝ ╚═════╝  " -ForegroundColor DarkGreen
+Write-Host ""
+Write-Host "---------------------------------------------------" -ForegroundColor DarkGray
+Write-Host "         Welcome to KiwiMS ($versionFile)          " -ForegroundColor White
+Write-Host "---------------------------------------------------" -ForegroundColor DarkGray
 
 #-----------------------------#
 # Conda Discovery Function
@@ -40,7 +40,7 @@ function Find-CondaExecutable {
     # Search through hardcoded common paths
     foreach ($path in $searchPaths) {
         if (Test-Path $path) {
-            Write-Output "Found conda at: $path" -ForegroundColor Cyan
+            Write-Host "Found conda at: $path" -ForegroundColor Cyan
             return $path
         }
     }
@@ -48,17 +48,17 @@ function Find-CondaExecutable {
     # Check if conda.exe is in the system PATH
     $condaInPath = Get-Command conda.exe, conda.bat -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($condaInPath) {
-        Write-Output "Found conda in system PATH: $($condaInPath.Path)" -ForegroundColor Cyan
+        Write-Host "Found conda in system PATH: $($condaInPath.Path)" -ForegroundColor Cyan
         return $condaInPath.Path
     }
 
     # Check Environment Variables
     if ($env:CONDA_EXE -and (Test-Path $env:CONDA_EXE)) {
-        Write-Output "Found conda via CONDA_EXE: $env:CONDA_EXE" -ForegroundColor Cyan
+        Write-Host "Found conda via CONDA_EXE: $env:CONDA_EXE" -ForegroundColor Cyan
         return $env:CONDA_EXE
     }
 
-    Write-Output "ERROR: conda.exe not found." -ForegroundColor Red
+    Write-Host "ERROR: conda.exe not found." -ForegroundColor Red
     return $null
 }
 
@@ -80,13 +80,13 @@ if (-Not (Test-Path $logDirectory)) { New-Item -ItemType Directory -Path $logDir
 "$(Get-Date) - INFO: Launcher Initialized." | Out-File $logFile
 
 if (-not $condaCmd) {
-    Write-Output "ERROR: Conda not found! Please reinstall KiwiMS." -ForegroundColor Red
+    Write-Host "ERROR: Conda not found! Please reinstall KiwiMS." -ForegroundColor Red
     "$(Get-Date) - ERROR: Conda executable not found in system or user paths." | Add-Content $logFile
     if (-not $Headless) { pause }
     exit 1
 }
 
-Write-Output "Starting application in default browser..." -ForegroundColor Yellow
+Write-Host "Starting application in default browser..." -ForegroundColor Yellow
 
 try {
     # Extract the base directory to find the 'kiwims' environment
@@ -108,10 +108,10 @@ try {
 catch {
     $msg = "$(Get-Date) - CRITICAL ERROR: $($_.Exception.Message)"
     $msg | Add-Content $logFile
-    Write-Output ""
-    Write-Output "FAILED TO START" -ForegroundColor Red
-    Write-Output "Error: $($_.Exception.Message)"
-    Write-Output "Detailed logs: $logFile"
+    Write-Host ""
+    Write-Host "FAILED TO START" -ForegroundColor Red
+    Write-Host "Error: $($_.Exception.Message)"
+    Write-Host "Detailed logs: $logFile"
     if (-not $Headless) { pause }
     exit 1
 }
