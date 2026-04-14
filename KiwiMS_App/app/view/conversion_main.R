@@ -51,6 +51,7 @@ box::use(
       empty_prot_comp_tbl,
       read_decon_metadata,
       read_decon_result,
+      validate_decon_db,
     ],
   app /
     logic /
@@ -125,6 +126,22 @@ server <- function(
     sample_table_trigger <- shiny::reactiveVal(0)
     render_trigger <- shiny::reactiveVal(0)
     trigger_ki_kinact <- shiny::reactiveVal(0L)
+    manual_render_spectrum <- shiny::reactiveVal(0L)
+
+    # Apply initial disabled styling for samples_fileinput after DOM is ready
+    session$onFlushed(
+      function() {
+        shinyjs::addClass(
+          selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
+          class = "custom-disable"
+        )
+        shinyjs::addClass(
+          selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
+          class = "custom-disable"
+        )
+      },
+      once = TRUE
+    )
 
     # Prepare waiter spinner object
     w <- waiter::Waiter$new(
@@ -544,6 +561,11 @@ server <- function(
 
         # Read metadata from selected result DB (fast — sample names only)
         file_path <- file.path(input$samples_fileinput$datapath)
+        db_err <- validate_decon_db(file_path)
+        if (!is.null(db_err)) {
+          shinyWidgets::show_toast(db_err, type = "info", timer = 6000)
+          return()
+        }
         meta <- read_decon_metadata(file_path)
         meta1 <<- meta
         file_path1 <<- file_path
@@ -1086,7 +1108,7 @@ server <- function(
       }
     )
 
-    ## Continuiation from deconvolution to conversion ----
+    ## Continuation from deconvolution to conversion ----
     ### Transfer results from deconvolution to sample table ----
     safe_observe(
       event_expr = deconvolution_main_vars$continue_conversion(),
@@ -1152,6 +1174,15 @@ server <- function(
 
           # Read metadata only from result DB (fast — sample names only)
           db_path <- deconvolution_main_vars$continue_conversion()
+          db_err <- validate_decon_db(db_path)
+          if (!is.null(db_err)) {
+            shinyjs::runjs(paste0(
+              'document.getElementById("blocking-overlay").style.display ',
+              '= "none";'
+            ))
+            shinyWidgets::show_toast(db_err, type = "info", timer = 6000)
+            return()
+          }
           meta <- read_decon_metadata(db_path)
           declaration_vars$result <- c(meta, list(.db_path = db_path))
 
@@ -1186,13 +1217,14 @@ server <- function(
       event_expr = input$conversion_cont_conf,
       observer_name = "Samples Table Overwrite",
       handler_fn = function() {
-        # UI Blocking an Cleanup
+        # UI Blocking
         shinyjs::runjs(paste0(
           'document.getElementById("blocking-overlay").style.display ',
           '= "block";'
         ))
 
         result_list <- conversion_sidebar_vars$result_list()
+        result_list1 <<- result_list
 
         if (!is.null(result_list)) {
           # Show declaration interface
@@ -1269,7 +1301,6 @@ server <- function(
             # Adapt protein and compound declaration tabs
             if (!is.null(result_list)) {
               if (isFALSE(compound_table_active)) {
-                message("TEST")
                 shinyjs::delay(
                   250,
                   {
@@ -1402,6 +1433,64 @@ server <- function(
         })
 
         if (is.null(result_list)) {
+          #### Reset results ui elements ----
+
+          # Null kinetics interface
+          output$kikinact_hits_tab <- NULL
+          output$kinact <- NULL
+          output$Ki <- NULL
+          output$Ki_kinact <- NULL
+          output$kobs_result <- NULL
+          output$binding_plot <- NULL
+          output$kobs_plot <- NULL
+          conversion_vars_select_concentration <<- conversion_vars$select_concentration
+
+          if (!is.null(conversion_vars$select_concentration)) {
+            lapply(names(conversion_vars$select_concentration), function(id) {
+              output[[paste0("concentration_tab", id)]] <- NULL
+              output[[paste0("concentration_tab_", id, "_hits")]] <- NULL
+              output[[paste0(
+                "concentration_tab_",
+                id,
+                "_binding_plot"
+              )]] <- NULL
+              output[[paste0("concentration_tab_", id, "_spectra")]] <- NULL
+            })
+          }
+
+          # Reset render trigger so bindEvent-guarded plots don't fire stale data
+          render_trigger(0)
+          manual_render_spectrum(0L)
+
+          # Null binding interface
+          output$relbinding_hits_tab <- NULL
+          output$samples_selected_protein <- NULL
+          output$samples_total_pct_binding <- NULL
+          output$samples_compound_distribution_ui <- NULL
+          output$samples_present_compounds_na <- NULL
+          output$samples_compound_distribution <- NULL
+          output$samples_annotated_spectrum <- NULL
+          output$samples_table_view <- NULL
+          output$compounds_selected_compound <- NULL
+          output$compounds_total_pct_binding <- NULL
+          output$compounds_compound_distribution <- NULL
+          output$compounds_distribution_labels_ui <- NULL
+          output$compounds_annotated_spectrum <- NULL
+          output$compounds_spectrum_labels_ui <- NULL
+          output$compounds_table_view <- NULL
+          output$proteins_selected_protein <- NULL
+          output$proteins_total_pct_binding <- NULL
+          output$total_pct_prot_binding <- NULL
+          output$proteins_present_compounds_ui <- NULL
+          output$proteins_present_compounds_na <- NULL
+          output$proteins_compound_distribution <- NULL
+          output$protein_distribution_labels_ui <- NULL
+          output$annotated_spectrum_container <- NULL
+          output$proteins_annotated_spectrum <- NULL
+          output$proteins_spectrum_labels_ui <- NULL
+          output$proteins_table_view <- NULL
+          output$color_variable_ui <- NULL
+
           #### Render declaration ui ----
           output$conversion_ui <- shiny::renderUI(
             conversion_declaration_ui(
@@ -3092,6 +3181,54 @@ server <- function(
             })
 
             ###### Annotated spectrum ----
+
+            shiny::observeEvent(
+              input$conversion_protein_picker,
+              {
+                manual_render_spectrum(0L)
+              },
+              ignoreInit = TRUE
+            )
+
+            shiny::observeEvent(input$render_annotated_spectrum_btn, {
+              manual_render_spectrum(manual_render_spectrum() + 1L)
+            })
+
+            output$annotated_spectrum_container <- shiny::renderUI({
+              shiny::req(hits_summary, input$conversion_protein_picker)
+
+              n_samples <- length(unique(hits_summary$`Sample ID`[
+                hits_summary$`Protein` == input$conversion_protein_picker
+              ]))
+
+              if (n_samples < 30 || manual_render_spectrum() > 0L) {
+                shinycssloaders::withSpinner(
+                  plotly::plotlyOutput(
+                    ns("proteins_annotated_spectrum"),
+                    height = "100%"
+                  ),
+                  type = 1,
+                  color = "#7777f9"
+                )
+              } else {
+                shiny::div(
+                  class = "spectrum-render-prompt",
+                  shiny::p(
+                    sprintf(
+                      "Auto-render disabled for large datasets (%d samples). Click to render manually.",
+                      n_samples
+                    )
+                  ),
+                  shiny::actionButton(
+                    ns("render_annotated_spectrum_btn"),
+                    label = "Render Spectrum",
+                    icon = shiny::icon("chart-line"),
+                    class = "btn-outline-primary btn-sm"
+                  )
+                )
+              }
+            })
+
             output$proteins_annotated_spectrum <- plotly::renderPlotly({
               shiny::req(
                 hits_summary,
@@ -3100,6 +3237,11 @@ server <- function(
                 input$color_variable,
                 input$color_scale
               )
+
+              n_samples_check <- length(unique(hits_summary$`Sample ID`[
+                hits_summary$`Protein` == input$conversion_protein_picker
+              ]))
+              shiny::req(n_samples_check < 30 || manual_render_spectrum() > 0L)
 
               # Block UI
               shinyjs::runjs(paste0(
@@ -3133,36 +3275,42 @@ server <- function(
               ])
 
               # Create spectra plot
-              if (length(samples) == 1) {
-                plot <- spectrum_plot(
-                  sample = result_list$deconvolution[[
-                    samples
-                  ]],
-                  color_cmp = colors,
-                  color_variable = color_variable,
-                  show_peak_labels = TRUE,
-                  show_mass_diff = FALSE
-                )
-              } else {
-                plot <- multiple_spectra(
-                  results_list = result_list,
-                  samples = unique(hits_summary$`Sample ID`[
-                    hits_summary$`Protein` == input$conversion_protein_picker
-                    # &
-                    #   hits_summary$`Meas. Prot.` != "N/A"
-                  ]),
-                  cubic = ifelse(
-                    TRUE,
-                    TRUE,
-                    FALSE
-                  ),
-                  color_cmp = colors,
-                  truncated = if (truncate_names) mapping else FALSE,
-                  color_variable = color_variable,
-                  hits_summary = hits_summary,
-                  labels_show = input$proteins_spectrum_labels
-                )
-              }
+              time_gauge <- system.time({
+                if (length(samples) == 1) {
+                  plot <- spectrum_plot(
+                    sample = result_list$deconvolution[[
+                      samples
+                    ]],
+                    color_cmp = colors,
+                    color_variable = color_variable,
+                    show_peak_labels = TRUE,
+                    show_mass_diff = FALSE
+                  )
+                } else {
+                  plot <- multiple_spectra(
+                    results_list = result_list,
+                    samples = unique(hits_summary$`Sample ID`[
+                      hits_summary$`Protein` == input$conversion_protein_picker
+                      # &
+                      #   hits_summary$`Meas. Prot.` != "N/A"
+                    ]),
+                    cubic = ifelse(
+                      TRUE,
+                      TRUE,
+                      FALSE
+                    ),
+                    color_cmp = colors,
+                    truncated = if (truncate_names) mapping else FALSE,
+                    color_variable = color_variable,
+                    hits_summary = hits_summary,
+                    labels_show = input$proteins_spectrum_labels
+                  )
+                }
+              })
+
+              time_gauge <<- time_gauge
+
+              message(time_gauge)
 
               # Unblock UI
               shinyjs::runjs(paste0(
@@ -3177,7 +3325,8 @@ server <- function(
                 input$color_scale,
                 input$conversion_protein_picker,
                 input$truncate_names,
-                input$proteins_spectrum_labels
+                input$proteins_spectrum_labels,
+                manual_render_spectrum()
               )
 
             ####### Show label input UI ----

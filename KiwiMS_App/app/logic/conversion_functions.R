@@ -87,21 +87,74 @@ process_uploaded_table <- function(df, type) {
   return(df)
 }
 
-# Read only metadata (sample names, session, output) from a result SQLite DB
+# Validate mandatory tables in a deconvolution result DB.
+# Returns NULL if valid, or a character error message.
+#' @export
+validate_decon_db <- function(db_path) {
+  if (!file.exists(db_path)) return("File not found.")
+
+  tryCatch({
+    con <- DBI::dbConnect(RSQLite::SQLite(), db_path, flags = RSQLite::SQLITE_RO)
+    on.exit(DBI::dbDisconnect(con), add = TRUE)
+
+    if (!DBI::dbExistsTable(con, "metadata")) {
+      return("Invalid result file: metadata table missing.")
+    }
+    if (DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM metadata")$n == 0L) {
+      return("Invalid result file: no samples in metadata.")
+    }
+
+    if (!DBI::dbExistsTable(con, "status")) {
+      return("Invalid result file: status table missing.")
+    }
+    n_done <- DBI::dbGetQuery(
+      con, "SELECT COUNT(*) AS n FROM status WHERE state = 'done'"
+    )$n
+    if (n_done == 0L) {
+      return("Result file contains no completed samples (no entries with state = 'done').")
+    }
+
+    for (tbl in c("mass_data", "error", "config")) {
+      if (!DBI::dbExistsTable(con, tbl)) {
+        return(sprintf("Invalid result file: required table '%s' is missing.", tbl))
+      }
+      if (DBI::dbGetQuery(con, sprintf("SELECT COUNT(*) AS n FROM \"%s\"", tbl))$n == 0L) {
+        return(sprintf("Invalid result file: table '%s' is empty.", tbl))
+      }
+    }
+
+    if (!DBI::dbExistsTable(con, "peaks")) {
+      return("Invalid result file: required table 'peaks' is missing.")
+    }
+
+    NULL
+  }, error = function(e) {
+    paste("Could not read result file:", conditionMessage(e))
+  })
+}
+
+# Helper: query done sample names from a status table
+.done_samples <- function(con) {
+  DBI::dbGetQuery(con, "SELECT sample FROM status WHERE state = 'done'")[["sample"]]
+}
+
+# Read only metadata (sample names, session, output) from a result SQLite DB.
+# Only samples with state = 'done' in the status table are returned.
+# session and output_log are written only on completed runs; older or interrupted
+# DBs may not have them.
 #' @export
 read_decon_metadata <- function(db_path) {
   con <- DBI::dbConnect(RSQLite::SQLite(), db_path, flags = RSQLite::SQLITE_RO)
   on.exit(DBI::dbDisconnect(con), add = TRUE)
+
+  read_if_exists <- function(tbl, query) {
+    if (DBI::dbExistsTable(con, tbl)) DBI::dbGetQuery(con, query)[[1L]] else NULL
+  }
+
   list(
-    samples = DBI::dbGetQuery(con, "SELECT sample FROM metadata")[["sample"]],
-    session = DBI::dbGetQuery(
-      con,
-      "SELECT line FROM session ORDER BY line_num"
-    )[["line"]],
-    output = DBI::dbGetQuery(
-      con,
-      "SELECT line FROM output_log ORDER BY line_num"
-    )[["line"]]
+    samples = .done_samples(con),
+    session = read_if_exists("session", "SELECT line FROM session ORDER BY line_num"),
+    output  = read_if_exists("output_log", "SELECT line FROM output_log ORDER BY line_num")
   )
 }
 
@@ -127,19 +180,21 @@ read_decon_peaks_max <- function(db_path, samples = NULL) {
   )
 }
 
-# Read full result from a result SQLite DB, reconstructing the nested list structure
+# Read full result from a result SQLite DB, reconstructing the nested list structure.
+# Only samples with state = 'done' in the status table are included unless an
+# explicit samples vector is supplied (which is then intersected with done samples).
 #' @export
 read_decon_result <- function(db_path, samples = NULL) {
   con <- DBI::dbConnect(RSQLite::SQLite(), db_path, flags = RSQLite::SQLITE_RO)
   on.exit(DBI::dbDisconnect(con), add = TRUE)
 
-  all_samples <- DBI::dbGetQuery(con, "SELECT sample FROM metadata")[["sample"]]
-  if (!is.null(samples)) {
-    all_samples <- intersect(all_samples, samples)
-  }
+  done <- .done_samples(con)
+  all_samples <- if (!is.null(samples)) intersect(done, samples) else done
 
   q <- function(tbl, s) {
-    if (!DBI::dbExistsTable(con, tbl)) return(data.frame())
+    if (!DBI::dbExistsTable(con, tbl)) {
+      return(data.frame())
+    }
     DBI::dbGetQuery(
       con,
       sprintf("SELECT * FROM %s WHERE sample = ?", tbl),
@@ -183,16 +238,14 @@ read_decon_result <- function(db_path, samples = NULL) {
     }
   )
 
+  read_if_exists <- function(tbl, query) {
+    if (DBI::dbExistsTable(con, tbl)) DBI::dbGetQuery(con, query)[[1L]] else NULL
+  }
+
   list(
     deconvolution = deconvolution,
-    session = DBI::dbGetQuery(
-      con,
-      "SELECT line FROM session ORDER BY line_num"
-    )[["line"]],
-    output = DBI::dbGetQuery(
-      con,
-      "SELECT line FROM output_log ORDER BY line_num"
-    )[["line"]]
+    session = read_if_exists("session", "SELECT line FROM session ORDER BY line_num"),
+    output  = read_if_exists("output_log", "SELECT line FROM output_log ORDER BY line_num")
   )
 }
 
@@ -1045,7 +1098,7 @@ get_peaks <- function(peak_file = NULL, result_sample, results) {
   names(peaks) <- c("mass", "intensity")
 
   # Message information
-  log_status(nrow(peaks), min(peaks$mass), max(peaks$mass))
+  log_status(nrow(peaks), peaks$mass)
 
   return(peaks)
 }
@@ -1443,13 +1496,15 @@ log_start <- function(sample_name) {
 }
 
 # Status: Peak Info
-log_status <- function(n_peaks, m_min, m_max) {
-  message(sprintf(
-    "  ├─ Status: %s peaks detected [%.2f - %.2f Da]",
-    n_peaks,
-    m_min,
-    m_max
-  ))
+log_status <- function(n_peaks, mass = NULL) {
+  if (n_peaks > 0 && length(mass) > 0) {
+    message(sprintf(
+      "  ├─ Status: %s peaks detected [%.2f - %.2f Da]",
+      n_peaks, min(mass), max(mass)
+    ))
+  } else {
+    message(sprintf("  ├─ Status: %s peaks detected", n_peaks))
+  }
   # Sys.sleep(0.05)
 }
 
@@ -1514,6 +1569,7 @@ log_err_binding <- function() {
 
 # Log hits summary
 log_hits_summary <- function(hits_summarized) {
+  hits_summarized1 <<- hits_summarized
   message(paste(
     "SUMMARIZING HITS\n  │\n",
     sprintf(
@@ -1713,7 +1769,7 @@ add_hits <- function(
     log_start(samples[i])
 
     st_key <- gsub("\\.raw$", "", sample_table$Sample, ignore.case = TRUE)
-    s_key  <- gsub("\\.raw$", "", samples[i],          ignore.case = TRUE)
+    s_key <- gsub("\\.raw$", "", samples[i], ignore.case = TRUE)
     present_protein <- sample_table$Protein[st_key == s_key]
     present_cmp <- sample_table[
       st_key == s_key,
