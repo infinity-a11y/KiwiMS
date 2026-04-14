@@ -48,7 +48,7 @@ KiwiMS is an interactive pipeline with graphical user interface to perform prote
 Please cite both **KiwiMS** and **UniDec** if you used this software in your work.
 
 <br>
-Marian Freisleben. (2026). infinity-a11y/KiwiMS: KiwiMS 0.5.0. Zenodo. DOI: https://doi.org/10.5281/zenodo.18552188
+Marian Freisleben. (2026). infinity-a11y/KiwiMS: KiwiMS 0.5.0. Zenodo. DOI: https://doi.org/10.5281/zenodo.16575976
 
 ```    
 @software{marian_freisleben_2026_18552188,
@@ -58,8 +58,8 @@ Marian Freisleben. (2026). infinity-a11y/KiwiMS: KiwiMS 0.5.0. Zenodo. DOI: http
   year         = 2026,
   publisher    = {Zenodo},
   version      = {0.5.0},
-  doi          = {10.5281/zenodo.18552188},
-  url          = {https://doi.org/10.5281/zenodo.18552188},
+  doi          = {10.5281/zenodo.16575976},
+  url          = {https://doi.org/10.5281/zenodo.16575976},
 }
 ```
 
