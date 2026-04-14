@@ -1413,14 +1413,7 @@ binding_results_ui <- function(ns, hits_summary) {
                   )
                 )
               ),
-              shinycssloaders::withSpinner(
-                plotly::plotlyOutput(
-                  ns("proteins_annotated_spectrum"),
-                  height = "100%"
-                ),
-                type = 1,
-                color = "#7777f9"
-              ),
+              shiny::uiOutput(ns("annotated_spectrum_container")),
               full_screen = TRUE
             )
           )
@@ -1709,11 +1702,13 @@ conversion_declaration_ui <- function(
             width = 3,
             shiny::div(
               class = "table-input",
-              shiny::fileInput(
-                ns("samples_fileinput"),
-                "Select File",
-                multiple = FALSE,
-                accept = c(".db")
+              shinyjs::disabled(
+                shiny::fileInput(
+                  ns("samples_fileinput"),
+                  "Select File",
+                  multiple = FALSE,
+                  accept = c(".db")
+                )
               )
             )
           ),
