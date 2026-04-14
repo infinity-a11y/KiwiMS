@@ -1713,7 +1713,7 @@ conversion_declaration_ui <- function(
                 ns("samples_fileinput"),
                 "Select File",
                 multiple = FALSE,
-                accept = c(".rds")
+                accept = c(".db")
               )
             )
           ),

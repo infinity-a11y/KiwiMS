@@ -2,6 +2,10 @@
 
 box::use(
   data.table[fread, setnames, data.table, as.data.table],
+  DBI[
+    dbConnect, dbDisconnect, dbExecute, dbWriteTable,
+    dbGetQuery, dbExistsTable
+  ],
   dplyr[left_join, mutate, n_distinct],
   ggplot2,
   parallel[
@@ -14,9 +18,67 @@ box::use(
   ],
   plotly[config, event_register, layout],
   reticulate[use_condaenv, use_python, py_config, py_run_string],
+  RSQLite[SQLite, SQLITE_RO],
   scales[percent_format],
   utils[read.delim, read.table],
 )
+
+# db_with_retry(): BEGIN IMMEDIATE + body + COMMIT with R-level retry ----
+# Retries the full transaction cycle on any lock/busy error, with random jitter.
+db_with_retry <- function(con, expr, max_wait_s = 300) {
+  deadline <- proc.time()[["elapsed"]] + max_wait_s
+  repeat {
+    ok <- tryCatch({
+      DBI::dbExecute(con, "BEGIN IMMEDIATE")
+      tryCatch(
+        {
+          force(expr)
+          DBI::dbExecute(con, "COMMIT")
+        },
+        error = function(e) {
+          tryCatch(DBI::dbExecute(con, "ROLLBACK"), error = function(e2) NULL)
+          stop(e)
+        }
+      )
+      TRUE
+    }, error = function(e) {
+      if (grepl("locked|busy", e$message, ignore.case = TRUE) &&
+          proc.time()[["elapsed"]] < deadline) {
+        Sys.sleep(runif(1, 0.3, 1.2))
+        FALSE
+      } else {
+        stop(e)
+      }
+    })
+    if (isTRUE(ok)) break
+  }
+}
+
+# write_sample_status(): Write per-sample done/failed status to the shared DB ----
+write_sample_status <- function(db_path, sample_name, state,
+                                reason = NULL, error_msg = NULL) {
+  tryCatch({
+    con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+    on.exit(DBI::dbDisconnect(con), add = TRUE)
+    DBI::dbExecute(con, "PRAGMA busy_timeout=300000")
+    db_with_retry(con, {
+      DBI::dbExecute(con,
+        "INSERT OR REPLACE INTO status(sample,state,reason,error_msg,timestamp)
+         VALUES (?,?,?,?,?)",
+        params = list(
+          sample_name, state,
+          reason %||% NA_character_,
+          error_msg %||% NA_character_,
+          format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+        )
+      )
+    })
+  }, error = function(e) {
+    message("Could not write status to DB for ", sample_name, ": ", e$message)
+  })
+}
+
+`%||%` <- function(x, y) if (is.null(x)) y else x
 
 # process_single_dir(): Processing a single waters dir ----
 #' @export
@@ -34,10 +96,26 @@ process_single_dir <- function(
   peakwindow,
   peaknorm,
   time_start,
-  time_end
+  time_end,
+  db_path,
+  keep_raw_output = FALSE
 ) {
   input_path <- gsub("\\\\", "/", waters_dir)
   result_dir <- gsub("\\\\", "/", result_dir)
+
+  # Derive sample base name before tryCatch so it is available in the error handler
+  sample_basename <- gsub("\\.raw$", "", basename(input_path), ignore.case = TRUE)
+
+  # When discarding raw output, route UniDec intermediates to a per-sample
+  # temp dir so the target directory stays clean throughout the run.
+  # The temp dir is deleted after the DB write regardless of success/failure.
+  if (!isTRUE(keep_raw_output)) {
+    work_dir <- file.path(tempdir(), paste0("kiwims_", sample_basename))
+    dir.create(work_dir, showWarnings = FALSE, recursive = TRUE)
+    on.exit(unlink(work_dir, recursive = TRUE), add = TRUE)
+  } else {
+    work_dir <- result_dir
+  }
 
   # Function to properly format parameters for Python
   format_param <- function(x) {
@@ -155,54 +233,110 @@ engine.pick_peaks()
 ',
         params_string,
         input_path,
-        result_dir
+        work_dir
       ))
 
-      # Save spectra
+      # Write per-sample data to DB or record failure if output is missing/incomplete
       result <- file.path(
-        result_dir,
+        work_dir,
         gsub(".raw", "_rawdata_unidecfiles", basename(input_path))
       )
+      raw_name <- paste0(sample_basename, "_rawdata")
+      mass_file <- file.path(result, paste0(raw_name, "_mass.txt"))
+      peaks_file <- file.path(result, paste0(raw_name, "_peaks.dat"))
 
-      if (dir.exists(result)) {
-        plots <- list(
-          decon_spec = spectrum_plot(
-            result_path = result,
-            raw = FALSE,
-            interactive = FALSE,
-            theme = "light"
-          ),
-          raw_spec = spectrum_plot(
-            result_path = result,
-            raw = TRUE,
-            interactive = FALSE,
-            theme = "light"
+      if (dir.exists(result) && file.exists(mass_file) && file.exists(peaks_file)) {
+        conf_df <- read_file_safe(file.path(result, paste0(raw_name, "_conf.dat")))
+        if (nrow(conf_df) > 0) {
+          conf_df <- conf_df[, 1:2]
+          conf_df <- data.table::as.data.table(t(conf_df))
+          data.table::setnames(conf_df, as.character(conf_df[1, ]))
+          conf_df <- conf_df[-1, , drop = FALSE]
+        }
+        peaks_df <- read_file_safe(
+          file.path(result, paste0(raw_name, "_peaks.dat")),
+          c("mass", "intensity")
+        )
+        error_df <- read_file_safe(file.path(result, paste0(raw_name, "_error.txt")))
+        if (nrow(error_df) > 0) {
+          error_df <- data.table::data.table(
+            Key = as.character(error_df$V1),
+            Value = as.numeric(error_df$V3)
           )
+        }
+        mass_df <- read_file_safe(
+          file.path(result, paste0(raw_name, "_mass.txt")),
+          c("mass", "intensity")
         )
 
-        saveRDS(plots, file.path(result, "plots.rds"))
+        con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+        on.exit(DBI::dbDisconnect(con), add = TRUE)
+        DBI::dbExecute(con, "PRAGMA busy_timeout=300000")
+
+        write_tbl <- function(tbl, df) {
+          if (is.null(df) || nrow(df) == 0) return(invisible(NULL))
+          df <- as.data.frame(df)
+          df$sample <- sample_basename
+          DBI::dbWriteTable(con, tbl, df, append = TRUE)
+        }
+
+        db_with_retry(con, {
+          for (tbl_name in c("peaks", "mass_data", "error", "config")) {
+            if (DBI::dbExistsTable(con, tbl_name)) {
+              DBI::dbExecute(con,
+                sprintf("DELETE FROM %s WHERE sample = ?", tbl_name),
+                params = list(sample_basename))
+            }
+          }
+
+          write_tbl("peaks", peaks_df)
+          write_tbl("mass_data", mass_df)
+
+          if (!is.null(error_df) && nrow(error_df) > 0) {
+            err_df <- as.data.frame(error_df)
+            err_df$sample <- sample_basename
+            DBI::dbWriteTable(con, "error", err_df, append = TRUE)
+          }
+
+          if (!is.null(conf_df) && nrow(conf_df) > 0 && ncol(conf_df) > 0) {
+            config_long <- data.frame(
+              sample = sample_basename,
+              key = names(conf_df),
+              value = as.character(unlist(conf_df[1, ])),
+              stringsAsFactors = FALSE
+            )
+            DBI::dbWriteTable(con, "config", config_long, append = TRUE)
+          }
+
+          DBI::dbExecute(con,
+            "INSERT OR REPLACE INTO status(sample,state,reason,error_msg,timestamp)
+             VALUES (?,?,?,?,?)",
+            params = list(sample_basename, "done", NA_character_, NA_character_,
+                          format(Sys.time(), "%Y-%m-%d %H:%M:%S"))
+          )
+        })
       } else {
-        stop()
+        write_sample_status(db_path, sample_basename, "failed", "no_output_dir")
       }
     },
     error = function(e) {
       py_err <- reticulate::py_last_error()
+      err_detail <- if (!is.null(py_err)) {
+        paste(c(e$message, as.character(py_err)), collapse = "\n")
+      } else {
+        e$message
+      }
 
-      # Print the main error and the Python stack trace if it exists
-      message("Error in single deconvolution processing: ", e$message)
-
+      message("Error in single deconvolution processing: ", err_detail)
       cat(
         "Error in process_single_dir for",
         waters_dir,
-        ":",
-        "\n",
-        e$message,
-        "\n",
-        if (!is.null(py_err)) {
-          message(py_err)
-        },
+        ":\n",
+        err_detail,
         "\n"
       )
+
+      write_sample_status(db_path, sample_basename, "failed", "error", err_detail)
     }
   )
 }
@@ -212,6 +346,8 @@ engine.pick_peaks()
 deconvolute <- function(
   raw_dirs,
   result_dir,
+  db_path,
+  keep_raw_output = FALSE,
   num_cores = detectCores() - 2,
   startz = 1,
   endz = 50,
@@ -257,10 +393,16 @@ deconvolute <- function(
 
     # Initialize reticulate and Conda environment in each worker
     message("Setting python environment for each worker ...")
+    worker_lib_paths <- .libPaths()
     invisible(capture.output(
       {
+        clusterExport(cl, "worker_lib_paths", envir = environment())
+        clusterEvalQ(cl, .libPaths(worker_lib_paths))
         clusterEvalQ(cl, {
           library(reticulate)
+          library(DBI)
+          library(RSQLite)
+          library(data.table)
 
           # Set the key env var for conda DLL resolution
           Sys.setenv(CONDA_DLL_SEARCH_MODIFICATION_ENABLE = "1")
@@ -297,6 +439,8 @@ deconvolute <- function(
     # List of all parameters to pass to workers
     params_list <- list(
       result_dir = result_dir,
+      db_path = db_path,
+      keep_raw_output = keep_raw_output,
       startz = startz,
       endz = endz,
       minmz = minmz,
@@ -316,23 +460,29 @@ deconvolute <- function(
     parallel::clusterExport(
       cl,
       c(
-        "process_plot_data",
         "process_single_dir",
-        "spectrum_plot",
+        "write_sample_status",
+        "db_with_retry",
+        "read_file_safe",
+        "%||%",
         "process_wrapper",
         "params_list"
       ),
       envir = environment()
     )
 
-    # Run parLapply with error handling and collect results
+    # Run parLapply with error handling and collect results.
+    # capture.output suppresses worker stdout; par_results holds the actual
+    # return values (NULL on error, non-NULL on success).
     message("Running parallel deconvolution ...")
-    results <- invisible(capture.output(
+    par_results <- NULL
+    invisible(capture.output(
       {
-        parallel::parLapply(cl, raw_dirs, function(dir) {
+        par_results <- parallel::parLapply(cl, raw_dirs, function(dir) {
           tryCatch(
             {
               process_wrapper(dir, params_list)
+              TRUE
             },
             error = function(e) {
               message("Error processing ", dir, ": ", e$message)
@@ -346,12 +496,13 @@ deconvolute <- function(
 
     message("Parallel processing finalized.")
 
-    # Check for errors in results
-    errors <- vapply(results, is.character, logical(1))
-    if (any(errors)) {
+    # Check for errors: NULL return means the worker's tryCatch caught an error.
+    failed_idx <- vapply(par_results, is.null, logical(1))
+    if (any(failed_idx)) {
       warning(
-        "Errors occurred in processing: ",
-        paste(results[errors], collapse = "; ")
+        "Errors occurred for ",
+        sum(failed_idx), " sample(s): ",
+        paste(basename(raw_dirs[failed_idx]), collapse = ", ")
       )
     }
   } else {
@@ -382,6 +533,8 @@ deconvolute <- function(
           process_single_dir(
             waters_dir = raw_dirs[dir],
             result_dir = result_dir,
+            db_path = db_path,
+            keep_raw_output = keep_raw_output,
             startz,
             endz,
             minmz,
@@ -430,7 +583,12 @@ create_384_plate_heatmap <- function(data) {
       d <- plate_data[plate_data$well_id == wid, ]
       if (nrow(d) > 0 && !is.na(d$value[1])) {
         z_mat[r, as.character(c)] <- 1
-        text_mat[r, as.character(c)] <- paste0("Well: ", wid, "<br>Sample: ", d$sample[1])
+        text_mat[r, as.character(c)] <- paste0(
+          "Well: ",
+          wid,
+          "<br>Sample: ",
+          d$sample[1]
+        )
       } else {
         text_mat[r, as.character(c)] <- paste0("Well: ", wid, "<br>Empty")
       }
@@ -496,9 +654,16 @@ create_384_plate_heatmap <- function(data) {
       displayModeBar = "hover",
       scrollZoom = FALSE,
       modeBarButtons = list(list(
-        "zoom2d", "toImage", "autoScale2d", "resetScale2d", "zoomIn2d", "zoomOut2d"
+        "zoom2d",
+        "toImage",
+        "autoScale2d",
+        "resetScale2d",
+        "zoomIn2d",
+        "zoomOut2d"
       )),
-      toImageButtonOptions = list(filename = paste0(Sys.Date(), "_Plate_Heatmap"))
+      toImageButtonOptions = list(
+        filename = paste0(Sys.Date(), "_Plate_Heatmap")
+      )
     )
 }
 
@@ -647,6 +812,7 @@ process_plot_data <- function(
 spectrum_plot <- function(
   result_path = NULL,
   sample = NULL,
+  plot_data = NULL,
   raw = FALSE,
   interactive = TRUE,
   bin_width = 0.01,
@@ -656,12 +822,14 @@ spectrum_plot <- function(
   show_peak_labels = TRUE,
   show_mass_diff = TRUE
 ) {
-  plot_data <- process_plot_data(
-    sample,
-    result_path,
-    raw = raw,
-    bin_width = bin_width
-  )
+  if (is.null(plot_data)) {
+    plot_data <- process_plot_data(
+      sample,
+      result_path,
+      raw = raw,
+      bin_width = bin_width
+    )
+  }
 
   # Theme Styling Logic
   if (tolower(theme) == "light") {
@@ -829,7 +997,8 @@ spectrum_plot <- function(
         nrow(plot_data$highlight_peaks) == 1 & anyNA(plot_data$highlight_peaks)
       )
     ) {
-      if (!is.null(result_path)) {
+      if (is.null(sample)) {
+        # Simple peaks from file or DB — no compound annotation columns
         plot <- plotly::add_markers(
           plot,
           data = plot_data$highlight_peaks,
@@ -1391,7 +1560,7 @@ read_file_safe <- function(filename, col_names = NULL) {
   if (!file.exists(filename)) {
     return(data.frame())
   }
-  df <- fread(
+  df <- data.table::fread(
     filename,
     header = FALSE,
     sep = " ",
@@ -1399,112 +1568,149 @@ read_file_safe <- function(filename, col_names = NULL) {
     showProgress = FALSE
   )
   if (!is.null(col_names)) {
-    setnames(df, col_names)
+    data.table::setnames(df, col_names)
   }
   return(df)
 }
 
-# generate_decon_rslt(): Generate deconvolution report ----
+# decon_progress_count(): Count done samples, optionally restricted to a set ----
+# Pass `samples` (character vector of sample base names) to count only the
+# samples being processed in the current run — avoids inflated counts from
+# pre-existing done records when extending an existing DB.
+#' @export
+decon_progress_count <- function(db_path, samples = NULL) {
+  tryCatch({
+    con <- DBI::dbConnect(RSQLite::SQLite(), db_path, flags = RSQLite::SQLITE_RO)
+    on.exit(DBI::dbDisconnect(con), add = TRUE)
+    if (!DBI::dbExistsTable(con, "status")) return(0L)
+    if (!is.null(samples) && length(samples) > 0) {
+      ph <- paste(rep("?", length(samples)), collapse = ",")
+      DBI::dbGetQuery(con,
+        sprintf("SELECT COUNT(*) AS n FROM status WHERE state='done' AND sample IN (%s)", ph),
+        params = as.list(samples))$n
+    } else {
+      DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM status WHERE state='done'")$n
+    }
+  }, error = function(e) 0L)
+}
+
+# decon_is_complete(): TRUE when the 'completed' sentinel table exists ----
+#' @export
+decon_is_complete <- function(db_path) {
+  tryCatch({
+    con <- DBI::dbConnect(RSQLite::SQLite(), db_path, flags = RSQLite::SQLITE_RO)
+    on.exit(DBI::dbDisconnect(con), add = TRUE)
+    DBI::dbExistsTable(con, "completed")
+  }, error = function(e) FALSE)
+}
+
+# decon_failed_samples(): Return character vector of sample names that failed ----
+#' @export
+decon_failed_samples <- function(db_path) {
+  tryCatch({
+    con <- DBI::dbConnect(RSQLite::SQLite(), db_path, flags = RSQLite::SQLITE_RO)
+    on.exit(DBI::dbDisconnect(con), add = TRUE)
+    if (!DBI::dbExistsTable(con, "status")) return(character(0))
+    DBI::dbGetQuery(con, "SELECT sample FROM status WHERE state='failed'")$sample
+  }, error = function(e) character(0))
+}
+
+# process_plot_data_db(): Load spectrum data for a single sample from the DB ----
+#' @export
+process_plot_data_db <- function(db_path, sample_name, raw = FALSE, bin_width = 0.01) {
+  tryCatch({
+    con <- DBI::dbConnect(RSQLite::SQLite(), db_path, flags = RSQLite::SQLITE_RO)
+    on.exit(DBI::dbDisconnect(con), add = TRUE)
+
+    if (raw) {
+      if (!DBI::dbExistsTable(con, "rawdata")) return(NULL)
+      mass <- DBI::dbGetQuery(
+        con,
+        "SELECT mass, intensity FROM rawdata WHERE sample = ?",
+        params = list(sample_name)
+      )
+      if (nrow(mass) == 0) return(NULL)
+      mass <- as.data.table(mass)
+      mass[, bin := floor(mass / bin_width) * bin_width + bin_width / 2]
+      mass <- mass[, .(intensity = sum(intensity)), by = bin]
+      data.table::setnames(mass, "bin", "mass")
+      mass$intensity <- (mass$intensity - min(mass$intensity)) /
+        (max(mass$intensity) - min(mass$intensity)) * 100
+      return(list(mass = as.data.frame(mass), highlight_peaks = NULL))
+    } else {
+      if (!DBI::dbExistsTable(con, "mass_data")) return(NULL)
+      mass <- DBI::dbGetQuery(
+        con,
+        "SELECT mass, intensity FROM mass_data WHERE sample = ? AND intensity != 0",
+        params = list(sample_name)
+      )
+      if (nrow(mass) < 3) return(NULL)
+      mass <- mass[-c(1, nrow(mass)), ]
+      mass$intensity <- (mass$intensity - min(mass$intensity)) /
+        (max(mass$intensity) - min(mass$intensity)) * 100
+
+      peaks <- if (DBI::dbExistsTable(con, "peaks")) {
+        DBI::dbGetQuery(
+          con,
+          "SELECT mass, intensity FROM peaks WHERE sample = ?",
+          params = list(sample_name)
+        )
+      } else data.frame(mass = numeric(0), intensity = numeric(0))
+
+      highlight_peaks <- mass[mass$mass %in% peaks$mass, ]
+      return(list(mass = mass, highlight_peaks = highlight_peaks))
+    }
+  }, error = function(e) {
+    message("process_plot_data_db error for ", sample_name, ": ", e$message)
+    NULL
+  })
+}
+
+# generate_decon_rslt(): Finalise the SQLite DB after all workers complete ----
+# Per-sample tables are already written by workers in process_single_dir().
+# This function appends session/output_log and marks the run as completed.
 #' @export
 generate_decon_rslt <- function(
-  paths,
   log = NULL,
   output = NULL,
-  heatmap = NULL,
-  result_dir,
-  temp_dir
+  db_path
 ) {
-  process_path <- function(path) {
-    rslt_folder <- file.path(
-      dirname(path),
-      gsub(".raw", "_rawdata_unidecfiles", basename(path))
-    )
-    raw_name <- gsub("_unidecfiles", "", basename(rslt_folder))
+  con <- DBI::dbConnect(RSQLite::SQLite(), db_path, busy_timeout = 30000)
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
 
-    if (!dir.exists(rslt_folder)) {
-      return(list())
+  DBI::dbWriteTable(
+    con,
+    "session",
+    data.frame(line_num = seq_along(log), line = log, stringsAsFactors = FALSE),
+    overwrite = TRUE
+  )
+  DBI::dbWriteTable(
+    con,
+    "output_log",
+    data.frame(
+      line_num = seq_along(output),
+      line = output,
+      stringsAsFactors = FALSE
+    ),
+    overwrite = TRUE
+  )
+
+  # Indexes for fast per-sample queries on large tables (idempotent)
+  for (tbl in c("rawdata", "input_dat", "peaks", "mass_data", "error", "config")) {
+    if (DBI::dbExistsTable(con, tbl)) {
+      DBI::dbExecute(con, sprintf(
+        "CREATE INDEX IF NOT EXISTS idx_%s_sample ON %s(sample)", tbl, tbl
+      ))
     }
-
-    # Read config file
-    conf_df <- read_file_safe(file.path(
-      rslt_folder,
-      paste0(raw_name, "_conf.dat")
-    ))
-    if (nrow(conf_df) > 0) {
-      conf_df <- conf_df[, 1:2]
-      conf_df <- as.data.table(t(conf_df))
-      setnames(conf_df, as.character(conf_df[1, ]))
-      conf_df <- conf_df[-1, , drop = FALSE]
-    }
-
-    # Read other files
-    peaks_df <- read_file_safe(
-      file.path(rslt_folder, paste0(raw_name, "_peaks.dat")),
-      c("mass", "intensity")
-    )
-    error_df <- read_file_safe(file.path(
-      rslt_folder,
-      paste0(raw_name, "_error.txt")
-    ))
-
-    if (nrow(error_df) > 0) {
-      key_value_pairs <- strsplit(error_df$V1, " = ")
-      error_df <- data.table(
-        Key = vapply(key_value_pairs, `[`, 1, FUN.VALUE = character(1)),
-        Value = vapply(key_value_pairs, `[`, 2, FUN.VALUE = character(1))
-      )
-      error_df[, Value := as.numeric(Value)]
-    }
-
-    # Read large files
-    rawdata_df <- read_file_safe(file.path(
-      rslt_folder,
-      paste0(raw_name, "_rawdata.txt")
-    ))
-    mass_df <- read_file_safe(
-      file.path(rslt_folder, paste0(raw_name, "_mass.txt")),
-      c("mass", "intensity")
-    )
-    input_df <- read_file_safe(file.path(
-      rslt_folder,
-      paste0(raw_name, "_input.dat")
-    ))
-
-    plots <- readRDS(file.path(rslt_folder, "plots.rds"))
-    decon_spec <- spectrum_plot(
-      result_path = rslt_folder,
-      raw = FALSE,
-      interactive = FALSE
-    )
-    raw_spec <- spectrum_plot(
-      result_path = rslt_folder,
-      raw = TRUE,
-      interactive = FALSE
-    )
-
-    return(list(
-      config = conf_df,
-      decon_spec = plots$decon_spec,
-      raw_spec = plots$raw_spec,
-      peaks = peaks_df,
-      error = error_df,
-      rawdata = rawdata_df,
-      mass = mass_df,
-      input = input_df
-    ))
   }
 
-  paths <- file.path(result_dir, basename(paths))
-  results <- list()
-  deconvolution <- lapply(paths, process_path)
-  names(deconvolution) <- basename(paths)
-  results[["deconvolution"]] <- deconvolution
-  results[["session"]] <- log
-  results[["output"]] <- output
+  # Completion marker — Shiny observer polls for this table
+  DBI::dbWriteTable(
+    con,
+    "completed",
+    data.frame(finished_at = format(Sys.time(), "%Y-%m-%d %H:%M:%S"), stringsAsFactors = FALSE),
+    overwrite = TRUE
+  )
 
-  if (file.exists(file.path(temp_dir, "heatmap.rds"))) {
-    results[["heatmap"]] <- readRDS(file.path(temp_dir, "heatmap.rds"))
-  }
-
-  return(results)
+  invisible(db_path)
 }

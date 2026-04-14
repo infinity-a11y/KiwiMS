@@ -49,6 +49,8 @@ box::use(
       render_table_view,
       make_kobs_plot,
       empty_prot_comp_tbl,
+      read_decon_metadata,
+      read_decon_result,
     ],
   app /
     logic /
@@ -84,7 +86,12 @@ ui <- function(id) {
 }
 
 #' @export
-server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_file) {
+server <- function(
+  id,
+  conversion_sidebar_vars,
+  deconvolution_main_vars,
+  config_file
+) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -202,7 +209,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_
               if (!is.na(val) && nchar(val) > 0) tbl[[col_tbl]][i] <- val
             }
           }
-          if ("Concentration" %in% names(tbl) && "Compound_Concentration" %in% names(cfg)) {
+          if (
+            "Concentration" %in%
+              names(tbl) &&
+              "Compound_Concentration" %in% names(cfg)
+          ) {
             val <- m$Compound_Concentration
             if (!is.na(val)) tbl$Concentration[i] <- as.numeric(val)
           }
@@ -531,9 +542,12 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_
           declaration_vars$compound_table
         )
 
-        # Read results .rds file from selected path
+        # Read metadata from selected result DB (fast — sample names only)
         file_path <- file.path(input$samples_fileinput$datapath)
-        declaration_vars$result <- readRDS(file_path)
+        meta <- read_decon_metadata(file_path)
+        meta1 <<- meta
+        file_path1 <<- file_path
+        declaration_vars$result <- c(meta, list(.db_path = file_path))
 
         # New table data
         sample_table_data(new_sample_table(
@@ -554,7 +568,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_
           !isTRUE(declaration_vars$samples_confirmed) &&
           !is.null(sample_table_data()) &&
           nrow(sample_table_data()) > 0
-        if (can_use) shinyjs::enable("use_config") else shinyjs::disable("use_config")
+        if (can_use) {
+          shinyjs::enable("use_config")
+        } else {
+          shinyjs::disable("use_config")
+        }
       }
     )
 
@@ -572,16 +590,26 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_
         cleared_tbl <- sample_table_data()
         non_sample_cols <- setdiff(names(cleared_tbl), "Sample")
         for (col in non_sample_cols) {
-          cleared_tbl[[col]] <- if (is.numeric(cleared_tbl[[col]])) NA_real_ else ""
+          cleared_tbl[[col]] <- if (is.numeric(cleared_tbl[[col]])) {
+            NA_real_
+          } else {
+            ""
+          }
         }
 
         # If config has concentration/time and columns are missing, add them before
         # autofill so apply_config_autofill can fill the values in one pass
-        has_conc <- "Compound_Concentration" %in% names(cfg) &&
+        has_conc <- "Compound_Concentration" %in%
+          names(cfg) &&
           any(!is.na(cfg$Compound_Concentration))
-        has_time <- "Incubation_Time" %in% names(cfg) &&
+        has_time <- "Incubation_Time" %in%
+          names(cfg) &&
           any(!is.na(cfg$Incubation_Time))
-        if (has_conc && has_time && !all(c("Concentration", "Time") %in% names(cleared_tbl))) {
+        if (
+          has_conc &&
+            has_time &&
+            !all(c("Concentration", "Time") %in% names(cleared_tbl))
+        ) {
           cleared_tbl$Concentration <- NA_real_
           cleared_tbl$Time <- NA_real_
         }
@@ -593,7 +621,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_
           sample_table_trigger(sample_table_trigger() + 1)
         }
 
-        if (has_conc && has_time && !isTRUE(conversion_sidebar_vars$run_ki_kinact())) {
+        if (
+          has_conc &&
+            has_time &&
+            !isTRUE(conversion_sidebar_vars$run_ki_kinact())
+        ) {
           trigger_ki_kinact(trigger_ki_kinact() + 1L)
         }
       },
@@ -768,7 +800,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_
           sample_table_data()
         )
 
-        has_conc_time <- any(grepl("^Concentration", names(sample_table_data()))) &&
+        has_conc_time <- any(grepl(
+          "^Concentration",
+          names(sample_table_data())
+        )) &&
           any(grepl("^Time", names(sample_table_data())))
 
         if (
@@ -1115,10 +1150,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_
             '= "block";'
           ))
 
-          # Read results .rds file from previous deconvolution
-          declaration_vars$result <- readRDS(
-            deconvolution_main_vars$continue_conversion()
-          )
+          # Read metadata only from result DB (fast — sample names only)
+          db_path <- deconvolution_main_vars$continue_conversion()
+          meta <- read_decon_metadata(db_path)
+          declaration_vars$result <- c(meta, list(.db_path = db_path))
 
           # New table data
           sample_table_data(new_sample_table(
@@ -1182,10 +1217,10 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_
         declaration_vars$sample_table_active <- TRUE
         declaration_vars$samples_confirmed <- FALSE
 
-        # Read results .rds file from previous deconvolution
-        declaration_vars$result <- readRDS(
-          deconvolution_main_vars$continue_conversion()
-        )
+        # Read metadata only from result DB (fast — sample names only)
+        db_path <- deconvolution_main_vars$continue_conversion()
+        meta <- read_decon_metadata(db_path)
+        declaration_vars$result <- c(meta, list(.db_path = db_path))
 
         # New table data
         sample_table_data(new_sample_table(
@@ -4920,7 +4955,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_
     # Eagerly render startup outputs so they are computed in the first reactive
     # flush and included in the same browser message as waiter_hide().
     shiny::outputOptions(output, "conversion_ui", suspendWhenHidden = FALSE)
-    shiny::outputOptions(output, "declaration_info_ui", suspendWhenHidden = FALSE)
+    shiny::outputOptions(
+      output,
+      "declaration_info_ui",
+      suspendWhenHidden = FALSE
+    )
 
     # Return server values ----
     list(
@@ -4929,7 +4968,11 @@ server <- function(id, conversion_sidebar_vars, deconvolution_main_vars, config_
         Protein_Table = protein_table_data(),
         Compound_Table = compound_table_data(),
         Samples_Table = declaration_vars$sample_table,
-        result = declaration_vars$result
+        result = if (!is.null(declaration_vars$result$.db_path)) {
+          read_decon_result(declaration_vars$result$.db_path)
+        } else {
+          declaration_vars$result
+        }
       )),
       samples_confirmed = shiny::reactive(declaration_vars$samples_confirmed),
       cancel_continuation = shiny::reactive(input$conversion_cont_cancel),
