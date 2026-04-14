@@ -52,6 +52,16 @@ ui <- function(id) {
 
   shiny$tagList(
     dev_utils$add_dev_headers(),
+    shiny$tags$head(
+      shiny$tags$link(
+        rel = "stylesheet",
+        type = "text/css",
+        href = paste0(
+          "static/css/app.min.css?v=",
+          get_kiwims_version()["version"]
+        )
+      )
+    ),
     shiny$div(id = "blocking-overlay"),
     useWaiter(),
     waiterShowOnLoad(
