@@ -25,11 +25,19 @@ box::use(
   app / logic / logging[start_logging, write_log, close_logging],
   app /
     logic /
+    user_settings[
+      read_user_settings,
+      save_user_settings,
+      update_user_setting,
+    ],
+  app /
+    logic /
     helper_functions[
       check_github_version,
       config_badge,
       get_kiwims_version,
       get_latest_release_url,
+      get_volumes,
       normalize_colnames,
       read_config_file,
       validate_config,
@@ -44,6 +52,16 @@ ui <- function(id) {
 
   shiny$tagList(
     dev_utils$add_dev_headers(),
+    shiny$tags$head(
+      shiny$tags$link(
+        rel = "stylesheet",
+        type = "text/css",
+        href = paste0(
+          "static/css/app.min.css?v=",
+          get_kiwims_version()["version"]
+        )
+      )
+    ),
     shiny$div(id = "blocking-overlay"),
     useWaiter(),
     waiterShowOnLoad(
@@ -104,20 +122,21 @@ ui <- function(id) {
         bslib$page_sidebar(
           sidebar = log_sidebar$ui(ns("log_sidebar")),
           bslib$card(
+            class = "logs-card",
             log_view$ui(ns("logs"))
           )
         )
       ),
       bslib$nav_spacer(),
       bslib$nav_item(shiny::uiOutput(ns("config_nav_btn"))),
-      # bslib$nav_item(
-      #   shiny::actionButton(
-      #     ns("settings"),
-      #     "Settings",
-      #     icon = shiny::icon("gear"),
-      #     class = "nav-link"
-      #   )
-      # ),
+      bslib$nav_item(
+        shiny::actionButton(
+          ns("settings"),
+          "Settings",
+          icon = shiny::icon("gear"),
+          class = "nav-link"
+        )
+      ),
       bslib$nav_item(
         shiny::actionButton(
           ns("licence"),
@@ -225,12 +244,919 @@ server <- function(id) {
     config_modal_state <- shiny$reactiveVal("upload")
     config_filename <- shiny$reactiveVal(NULL)
 
+    # User settings persistence
+    settings_dir <- file.path(Sys.getenv("LOCALAPPDATA"), "KiwiMS", "settings")
+    dest_settings_file <- file.path(settings_dir, "default_dest_path.rds")
+    dest_settings <- shiny$reactiveVal(
+      if (file.exists(dest_settings_file)) {
+        readRDS(dest_settings_file)
+      } else {
+        list(path = "", enabled = FALSE)
+      }
+    )
+
+    # Reusable function to open the settings modal
+    # initial_path: pre-fill dest folder from caller (e.g. currently active path)
+    open_settings_modal <- function(initial_path = NULL) {
+      s <- dest_settings()
+      base <- if (length(initial_path) == 1L && nzchar(initial_path)) {
+        initial_path
+      } else {
+        s$path
+      }
+      us <- read_user_settings()
+
+      shiny$showModal(
+        shiny$div(
+          class = "unidec-modal",
+          shiny$modalDialog(
+            title = "Settings",
+            size = "l",
+            easyClose = TRUE,
+            shiny$div(
+              class = "settings-modal-body",
+              shiny$tags$table(
+                class = "table table-sm table-bordered settings-table",
+                shiny$tags$thead(
+                  shiny$tags$tr(
+                    shiny$tags$th("Setting"),
+                    shiny$tags$th("Default Value"),
+                    shiny$tags$th("Status")
+                  )
+                ),
+                shiny$tags$tbody(
+                  # --- General ---
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      colspan = "3",
+                      class = "settings-section-header",
+                      "General"
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Destination Folder"
+                    ),
+                    shiny$tags$td(
+                      shiny$textInput(
+                        ns("settings_dest_path"),
+                        label = NULL,
+                        value = base,
+                        placeholder = "Paste or type an absolute folder path",
+                        width = "100%"
+                      ),
+                      shiny$div(
+                        class = "settings-dest-row",
+                        shiny$checkboxInput(
+                          ns("settings_dest_enabled"),
+                          label = "Use as default",
+                          value = isTRUE(s$enabled)
+                        )
+                      )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_dest_path_display"))
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Keep UniDec output files",
+                      shiny$tags$span(
+                        class = "settings-info",
+                        "Keeps *_rawdata.txt and *_rawdata_unidecfiles/ after analysis"
+                      )
+                    ),
+                    shiny$tags$td(
+                      shiny$checkboxInput(
+                        ns("settings_keep_raw_output"),
+                        label = "Enable",
+                        value = isTRUE(us$deconv_keep_raw_output)
+                      )
+                    ),
+                    shiny$tags$td(class = "settings-table-feedback")
+                  ),
+                  # --- Default Input Values ---
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      colspan = "3",
+                      class = "settings-section-header",
+                      "Default Input Values",
+                      shiny$tags$span(
+                        class = "settings-info",
+                        "Restored at the start of each session."
+                      )
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Min. charge state [z]"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_startz"),
+                        label = NULL,
+                        min = 1,
+                        max = 100,
+                        value = us$deconv_startz,
+                        step = 1,
+                        width = "200px"
+                      )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_startz_feedback"))
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Max. charge state [z]"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_endz"),
+                        label = NULL,
+                        min = 1,
+                        max = 100,
+                        value = us$deconv_endz,
+                        step = 1,
+                        width = "200px"
+                      )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_endz_feedback"))
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Lower deconvolution range [m/z]"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_minmz"),
+                        label = NULL,
+                        min = 1,
+                        max = 100000,
+                        value = us$deconv_minmz,
+                        step = 1,
+                        width = "200px"
+                      )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_minmz_feedback"))
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Upper deconvolution range [m/z]"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_maxmz"),
+                        label = NULL,
+                        min = 1,
+                        max = 100000,
+                        value = us$deconv_maxmz,
+                        step = 1,
+                        width = "200px"
+                      )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_maxmz_feedback"))
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Lower mass range [Da]"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_masslb"),
+                        label = NULL,
+                        min = 1,
+                        max = 2000000,
+                        value = us$deconv_masslb,
+                        step = 1,
+                        width = "200px"
+                      )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_masslb_feedback"))
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Upper mass range [Da]"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_massub"),
+                        label = NULL,
+                        min = 1,
+                        max = 2000000,
+                        value = us$deconv_massub,
+                        step = 1,
+                        width = "200px"
+                      )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_massub_feedback"))
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Elution start time [min]"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_time_start"),
+                        label = NULL,
+                        min = 0,
+                        max = 100,
+                        value = us$deconv_time_start,
+                        step = 0.05,
+                        width = "200px"
+                      )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_time_start_feedback"))
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Elution end time [min]"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_time_end"),
+                        label = NULL,
+                        min = 0,
+                        max = 100,
+                        value = us$deconv_time_end,
+                        step = 0.05,
+                        width = "200px"
+                      )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_time_end_feedback"))
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Detection window"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_peakwindow"),
+                        label = NULL,
+                        min = 1,
+                        max = 500,
+                        value = us$deconv_peakwindow,
+                        step = 1,
+                        width = "200px"
+                      )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_peakwindow_feedback"))
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Peak normalization"
+                    ),
+                    shiny$tags$td(
+                      shiny$div(
+                        class = "settings-peaknorm",
+                        shiny$selectInput(
+                          ns("settings_peaknorm"),
+                          label = NULL,
+                          choices = c(
+                            "No normalization" = 0,
+                            "Max Normalization" = 1,
+                            "Normalization to Sum" = 2
+                          ),
+                          selected = us$deconv_peaknorm,
+                          width = "200px"
+                        )
+                      )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_peaknorm_feedback"))
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Peak threshold"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_peakthresh"),
+                        label = NULL,
+                        min = 0,
+                        max = 1,
+                        value = us$deconv_peakthresh,
+                        step = 0.01,
+                        width = "200px"
+                      )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_peakthresh_feedback"))
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Peak Tolerance [Da]"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_peak_tol"),
+                        label = NULL,
+                        value = us$peak_tolerance,
+                        min = 0,
+                        max = 20,
+                        step = 0.1,
+                        width = "200px"
+                      )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_peak_tol_feedback"))
+                    )
+                  ),
+                  shiny$tags$tr(
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                      "Max. Stoichiometry"
+                    ),
+                    shiny$tags$td(
+                      shiny$numericInput(
+                        ns("settings_max_mult"),
+                        label = NULL,
+                        value = us$max_multiples,
+                        min = 1,
+                        max = 20,
+                        step = 1,
+                        width = "200px"
+                      )
+                    ),
+                    shiny$tags$td(
+                      class = "settings-table-feedback",
+                      shiny$uiOutput(ns("settings_max_mult_feedback"))
+                    )
+                  ),
+                  shiny$tags$tr(
+                    style = "margin-top: 1rem;",
+                    shiny$tags$td(
+                      class = "settings-table-label",
+                    ),
+                    shiny$tags$td(
+                      colspan = "2",
+                      shiny$actionButton(
+                        ns("reset_default"),
+                        "Reset All",
+                        width = "100%"
+                      )
+                    )
+                  )
+                )
+              )
+            ),
+            footer = shiny$tagList(
+              shiny$modalButton("Dismiss"),
+              shiny$actionButton(
+                ns("save_settings"),
+                "Save",
+                icon = shiny$icon("floppy-disk"),
+                class = "load-db"
+              )
+            )
+          )
+        )
+      )
+    }
+
+    shiny$observeEvent(input$reset_default, {
+      # Reset default deconvolution values
+      shiny::updateNumericInput(
+        session = session,
+        "settings_startz",
+        value = 1
+      )
+      shiny::updateNumericInput(
+        session = session,
+        "settings_endz",
+        value = 50
+      )
+      shiny::updateNumericInput(
+        session = session,
+        "settings_minmz",
+        value = 710
+      )
+      shiny::updateNumericInput(
+        session = session,
+        "settings_maxmz",
+        value = 1100
+      )
+      shiny::updateNumericInput(
+        session = session,
+        "settings_masslb",
+        value = 10000
+      )
+      shiny::updateNumericInput(
+        session = session,
+        "settings_massub",
+        value = 60000
+      )
+      shiny::updateNumericInput(
+        session = session,
+        "settings_peak_tol",
+        value = 3
+      )
+      shiny::updateNumericInput(
+        session = session,
+        "settings_time_start",
+        value = 0.5
+      )
+      shiny::updateNumericInput(
+        session = session,
+        "settings_time_end",
+        value = 1.5
+      )
+      shiny::updateNumericInput(
+        session = session,
+        "settings_peakwindow",
+        value = 40
+      )
+      shiny::updateSelectInput(
+        session = session,
+        "settings_peaknorm",
+        selected = 2
+      )
+      shiny::updateNumericInput(
+        session = session,
+        "settings_peakthresh",
+        value = 0.07
+      )
+      shiny::updateNumericInput(
+        session = session,
+        "settings_massbins",
+        value = 0.5
+      )
+
+      # Reset default conversion values
+      shiny::updateNumericInput(
+        session = session,
+        "settings_peak_tol",
+        value = 3
+      )
+      shiny::updateNumericInput(
+        session = session,
+        "settings_max_mult",
+        value = 4
+      )
+
+      shiny::updateCheckboxInput(
+        session = session,
+        "settings_keep_raw_output",
+        value = FALSE
+      )
+    })
+
+    # Resolve typed/pasted path from the text input
+    settings_dest_picked <- shiny$reactive({
+      p <- input$settings_dest_path
+      trimws(if (!is.null(p)) p else dest_settings()$path)
+    })
+
+    # Settings opened from nav button
+    shiny$observeEvent(input$settings, {
+      open_settings_modal()
+    })
+
+    # Live feedback for destination folder path inside modal
+    output$settings_dest_path_display <- shiny$renderUI({
+      path <- settings_dest_picked()
+      if (!nzchar(path)) {
+        return(NULL)
+      }
+      if (dir.exists(path)) {
+        shiny$div(
+          class = "settings-dest-feedback settings-dest-feedback--valid",
+          shiny$icon("circle-check"),
+          " Folder exists"
+        )
+      } else {
+        shiny$div(
+          class = "settings-dest-feedback settings-dest-feedback--invalid",
+          shiny$icon("triangle-exclamation"),
+          " Folder not found"
+        )
+      }
+    })
+
+    # Helper tags for settings validation feedback
+    settings_ok_tag <- function(msg = "Valid") {
+      shiny$div(
+        class = "settings-feedback settings-feedback--valid",
+        shiny$icon("circle-check"),
+        paste0(" ", msg)
+      )
+    }
+    settings_err_tag <- function(msg) {
+      shiny$div(
+        class = "settings-feedback settings-feedback--invalid",
+        shiny$icon("triangle-exclamation"),
+        paste0(" ", msg)
+      )
+    }
+
+    # Peak Tolerance [Da] — min 0, max 20
+    output$settings_peak_tol_feedback <- shiny$renderUI({
+      val <- input$settings_peak_tol
+      if (is.null(val) || is.na(val)) {
+        return(settings_err_tag("Enter a valid number"))
+      }
+      if (val < 0 || val > 20) {
+        return(settings_err_tag("Must be between 0 and 20 Da"))
+      }
+      settings_ok_tag("Valid")
+    })
+
+    # Max. Stoichiometry — min 1, max 20, integer
+    output$settings_max_mult_feedback <- shiny$renderUI({
+      val <- input$settings_max_mult
+      if (is.null(val) || is.na(val)) {
+        return(settings_err_tag("Enter a valid number"))
+      }
+      if (val < 1 || val > 20) {
+        return(settings_err_tag("Must be between 1 and 20"))
+      }
+      if (val != floor(val)) {
+        return(settings_err_tag("Must be a whole number"))
+      }
+      settings_ok_tag("Valid")
+    })
+
+    # Min. charge state [z] — min 1, max 100, integer, < endz
+    output$settings_startz_feedback <- shiny$renderUI({
+      val <- input$settings_startz
+      endz <- input$settings_endz
+      if (is.null(val) || is.na(val)) {
+        return(settings_err_tag("Enter a valid number"))
+      }
+      if (val < 1) {
+        return(settings_err_tag("Must be at least 1"))
+      }
+      if (val != floor(val)) {
+        return(settings_err_tag("Must be a whole number"))
+      }
+      if (!is.null(endz) && !is.na(endz) && val >= endz) {
+        return(settings_err_tag("Must be less than max. charge state"))
+      }
+      settings_ok_tag("Valid")
+    })
+
+    # Max. charge state [z] — min 1, max 100, integer, > startz
+    output$settings_endz_feedback <- shiny$renderUI({
+      val <- input$settings_endz
+      startz <- input$settings_startz
+      if (is.null(val) || is.na(val)) {
+        return(settings_err_tag("Enter a valid number"))
+      }
+      if (val < 1) {
+        return(settings_err_tag("Must be at least 1"))
+      }
+      if (val != floor(val)) {
+        return(settings_err_tag("Must be a whole number"))
+      }
+      if (!is.null(startz) && !is.na(startz) && val <= startz) {
+        return(settings_err_tag("Must be greater than min. charge state"))
+      }
+      settings_ok_tag("Valid")
+    })
+
+    # Lower deconvolution range [m/z] — min 1, max 100000, integer, < maxmz
+    output$settings_minmz_feedback <- shiny$renderUI({
+      val <- input$settings_minmz
+      maxmz <- input$settings_maxmz
+      if (is.null(val) || is.na(val)) {
+        return(settings_err_tag("Enter a valid number"))
+      }
+      if (val < 1) {
+        return(settings_err_tag("Must be at least 1"))
+      }
+      if (val != floor(val)) {
+        return(settings_err_tag("Must be a whole number"))
+      }
+      if (!is.null(maxmz) && !is.na(maxmz) && val >= maxmz) {
+        return(settings_err_tag("Must be less than upper m/z"))
+      }
+      settings_ok_tag("Valid")
+    })
+
+    # Upper deconvolution range [m/z] — min 1, max 100000, integer, > minmz
+    output$settings_maxmz_feedback <- shiny$renderUI({
+      val <- input$settings_maxmz
+      minmz <- input$settings_minmz
+      if (is.null(val) || is.na(val)) {
+        return(settings_err_tag("Enter a valid number"))
+      }
+      if (val < 1) {
+        return(settings_err_tag("Must be at least 1"))
+      }
+      if (val != floor(val)) {
+        return(settings_err_tag("Must be a whole number"))
+      }
+      if (!is.null(minmz) && !is.na(minmz) && val <= minmz) {
+        return(settings_err_tag("Must be greater than lower m/z"))
+      }
+      settings_ok_tag("Valid")
+    })
+
+    # Lower mass range [Da] — min 1, max 2000000, integer, < massub
+    output$settings_masslb_feedback <- shiny$renderUI({
+      val <- input$settings_masslb
+      massub <- input$settings_massub
+      if (is.null(val) || is.na(val)) {
+        return(settings_err_tag("Enter a valid number"))
+      }
+      if (val < 1) {
+        return(settings_err_tag("Must be at least 1 Da"))
+      }
+      if (val != floor(val)) {
+        return(settings_err_tag("Must be a whole number"))
+      }
+      if (!is.null(massub) && !is.na(massub) && val >= massub) {
+        return(settings_err_tag("Must be less than upper mass"))
+      }
+      settings_ok_tag("Valid")
+    })
+
+    # Upper mass range [Da] — min 1, max 2000000, integer, > masslb
+    output$settings_massub_feedback <- shiny$renderUI({
+      val <- input$settings_massub
+      masslb <- input$settings_masslb
+      if (is.null(val) || is.na(val)) {
+        return(settings_err_tag("Enter a valid number"))
+      }
+      if (val < 1) {
+        return(settings_err_tag("Must be at least 1 Da"))
+      }
+      if (val != floor(val)) {
+        return(settings_err_tag("Must be a whole number"))
+      }
+      if (!is.null(masslb) && !is.na(masslb) && val <= masslb) {
+        return(settings_err_tag("Must be greater than lower mass"))
+      }
+      settings_ok_tag("Valid")
+    })
+
+    # Elution start time [min] — min 0, max 100, < time_end
+    output$settings_time_start_feedback <- shiny$renderUI({
+      val <- input$settings_time_start
+      time_end <- input$settings_time_end
+      if (is.null(val) || is.na(val)) {
+        return(settings_err_tag("Enter a valid number"))
+      }
+      if (val < 0 || val > 100) {
+        return(settings_err_tag("Must be between 0 and 100 min"))
+      }
+      if (!is.null(time_end) && !is.na(time_end) && val >= time_end) {
+        return(settings_err_tag("Must be earlier than end time"))
+      }
+      settings_ok_tag("Valid")
+    })
+
+    # Elution end time [min] — min 0, max 100, > time_start
+    output$settings_time_end_feedback <- shiny$renderUI({
+      val <- input$settings_time_end
+      time_start <- input$settings_time_start
+      if (is.null(val) || is.na(val)) {
+        return(settings_err_tag("Enter a valid number"))
+      }
+      if (val < 0 || val > 100) {
+        return(settings_err_tag("Must be between 0 and 100 min"))
+      }
+      if (!is.null(time_start) && !is.na(time_start) && val <= time_start) {
+        return(settings_err_tag("Must be later than start time"))
+      }
+      settings_ok_tag("Valid")
+    })
+
+    # Detection window [Da] — min 1, max 500, integer
+    output$settings_peakwindow_feedback <- shiny$renderUI({
+      val <- input$settings_peakwindow
+      if (is.null(val) || is.na(val)) {
+        return(settings_err_tag("Enter a valid number"))
+      }
+      if (val < 1 || val > 500) {
+        return(settings_err_tag("Must be between 1 and 500 Da"))
+      }
+      if (val != floor(val)) {
+        return(settings_err_tag("Must be a whole number"))
+      }
+      settings_ok_tag("Valid")
+    })
+
+    # Peak normalization — always valid (fixed choices)
+    output$settings_peaknorm_feedback <- shiny$renderUI({
+      settings_ok_tag("Valid")
+    })
+
+    # Peak threshold — min 0, max 1
+    output$settings_peakthresh_feedback <- shiny$renderUI({
+      val <- input$settings_peakthresh
+      if (is.null(val) || is.na(val)) {
+        return(settings_err_tag("Enter a valid number"))
+      }
+      if (val < 0 || val > 1) {
+        return(settings_err_tag("Must be between 0 and 1"))
+      }
+      settings_ok_tag("Valid")
+    })
+
+    shiny$observeEvent(input$save_settings, {
+      # --- Destination folder ---
+      path <- settings_dest_picked()
+      enabled <- isTRUE(input$settings_dest_enabled)
+      if (enabled && !nzchar(path)) {
+        shiny$showNotification(
+          "Select a folder first.",
+          type = "error",
+          duration = 4
+        )
+        return()
+      }
+      if (enabled && !dir.exists(path)) {
+        shiny$showNotification(
+          "Folder not found — settings not saved.",
+          type = "error",
+          duration = 4
+        )
+        return()
+      }
+      if (!dir.exists(settings_dir)) {
+        dir.create(settings_dir, recursive = TRUE)
+      }
+      new_dest <- list(path = path, enabled = enabled)
+      saveRDS(new_dest, dest_settings_file)
+      dest_settings(new_dest)
+
+      # --- Numeric defaults — only overwrite keys whose input passes validation.
+      # Empty/invalid fields are left at their stored value (or built-in default).
+      # Note: is.numeric(NA) is FALSE in R, so we use is.na() directly.
+      current <- read_user_settings() # already NA-sanitised; contains stored or defaults
+      ok <- function(v) !is.null(v) && !is.na(v)
+      int_ok <- function(v) ok(v) && v == floor(v)
+
+      pt <- input$settings_peak_tol
+      if (ok(pt) && pt >= 0 && pt <= 20) {
+        current$peak_tolerance <- pt
+      }
+
+      mm <- input$settings_max_mult
+      if (int_ok(mm) && mm >= 1 && mm <= 20) {
+        current$max_multiples <- mm
+      }
+
+      pw <- input$settings_peakwindow
+      if (int_ok(pw) && pw >= 1 && pw <= 500) {
+        current$deconv_peakwindow <- pw
+      }
+
+      current$deconv_peaknorm <- as.numeric(input$settings_peaknorm)
+
+      p2 <- input$settings_peakthresh
+      if (ok(p2) && p2 >= 0 && p2 <= 1) {
+        current$deconv_peakthresh <- p2
+      }
+
+      # Paired fields: save the pair only when both individually valid AND ordered;
+      # save each side independently when its counterpart is absent/invalid.
+      sz <- input$settings_startz
+      sz_ok <- int_ok(sz) && sz >= 1
+      ez <- input$settings_endz
+      ez_ok <- int_ok(ez) && ez >= 1
+      if (sz_ok && ez_ok) {
+        if (sz < ez) {
+          current$deconv_startz <- sz
+          current$deconv_endz <- ez
+        }
+      } else {
+        if (sz_ok) {
+          current$deconv_startz <- sz
+        }
+        if (ez_ok) current$deconv_endz <- ez
+      }
+
+      mn <- input$settings_minmz
+      mn_ok <- int_ok(mn) && mn >= 1
+      mx <- input$settings_maxmz
+      mx_ok <- int_ok(mx) && mx >= 1
+      if (mn_ok && mx_ok) {
+        if (mn < mx) {
+          current$deconv_minmz <- mn
+          current$deconv_maxmz <- mx
+        }
+      } else {
+        if (mn_ok) {
+          current$deconv_minmz <- mn
+        }
+        if (mx_ok) current$deconv_maxmz <- mx
+      }
+
+      lb <- input$settings_masslb
+      lb_ok <- int_ok(lb) && lb >= 1
+      ub <- input$settings_massub
+      ub_ok <- int_ok(ub) && ub >= 1
+      if (lb_ok && ub_ok) {
+        if (lb < ub) {
+          current$deconv_masslb <- lb
+          current$deconv_massub <- ub
+        }
+      } else {
+        if (lb_ok) {
+          current$deconv_masslb <- lb
+        }
+        if (ub_ok) current$deconv_massub <- ub
+      }
+
+      ts <- input$settings_time_start
+      ts_ok <- ok(ts) && ts >= 0 && ts <= 100
+      te <- input$settings_time_end
+      te_ok <- ok(te) && te >= 0 && te <= 100
+      if (ts_ok && te_ok) {
+        if (ts < te) {
+          current$deconv_time_start <- ts
+          current$deconv_time_end <- te
+        }
+      } else {
+        if (ts_ok) {
+          current$deconv_time_start <- ts
+        }
+        if (te_ok) current$deconv_time_end <- te
+      }
+
+      current$deconv_keep_raw_output <- isTRUE(input$settings_keep_raw_output)
+
+      save_user_settings(current)
+
+      shiny$removeModal()
+      shinyWidgets::show_toast(
+        "Settings saved.",
+        text = NULL,
+        type = "success",
+        timer = 3000,
+        timerProgressBar = TRUE
+      )
+    })
+
     # Deconvolution sidebar server
     deconvolution_sidebar_vars <- deconvolution_sidebar$server(
       "deconvolution_pars",
       reset_button = reset_button,
       config_file = configfile,
-      config_filename = config_filename
+      config_filename = config_filename,
+      default_dest_path = shiny$reactive({
+        s <- dest_settings()
+        if (isTRUE(s$enabled) && nzchar(s$path)) s$path else NULL
+      })
+    )
+
+    # Settings opened from sidebar gear button — pre-fill with currently active path
+    shiny$observeEvent(
+      deconvolution_sidebar_vars$open_settings_clicked(),
+      {
+        open_settings_modal(
+          initial_path = deconvolution_sidebar_vars$targetpath()
+        )
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
     )
 
     # Deconvolution process server
@@ -642,7 +1568,7 @@ server <- function(id) {
         "Config saved!",
         text = NULL,
         type = "success",
-        timer = 3000,
+        timer = 2000,
         timerProgressBar = TRUE
       )
     })

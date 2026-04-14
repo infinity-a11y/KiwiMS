@@ -78,6 +78,10 @@ th {
   background: #0000001c;
 }
 
+.selectize-dropdown .option {
+  white-space: nowrap;
+}
+
 /* --- Scrollbars --- */
 *::-webkit-scrollbar {
   width: 8px;
@@ -147,7 +151,7 @@ th {
   margin-bottom: 24px;
   border-top-right-radius: 7px;
   border-bottom-right-radius: 7px;
-  background: #f0ffe0a3 !important;
+  background: #bed1c1 !important;
   box-shadow: inset 0px 0px 50px 14px #ffffff61;
 }
 
@@ -387,6 +391,10 @@ button .sF-modal {
   overflow-y: auto;
 }
 
+.deconvolute-modal .modal-body {
+  overflow-y: visible !important;
+}
+
 /* No height constraint inside shinyFiles modals */
 .sF-modal .modal-body {
   max-height: none !important;
@@ -398,9 +406,13 @@ button .sF-modal {
   -webkit-transform: unset;
 }
 
-.tip-modal .modal-body {
+.tip-modal .modal-body,
+.start-modal .modal-body {
   max-height: 60vh;
   overflow-y: auto;
+}
+
+.tip-modal .modal-body {
   justify-items: center;
 }
 
@@ -695,6 +707,11 @@ input[type="number"]::-webkit-inner-spin-button {
   z-index: 9999;
 }
 
+.comp-prot-controls .waiter-overlay,
+.samples-controls .waiter-overlay {
+  background-color: rgba(0, 0, 0, 0.25) !important;
+}
+
 .waiter-overlay {
   background-color: rgb(255 255 255 / 100%);
 }
@@ -761,20 +778,20 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 
 // TODO: make text-align element id specific
-.selectize-dropdown-content {
-  overflow-y: auto;
-  overflow-x: hidden;
-  max-height: 200px;
-  min-width: fit-content;
-  background: #e5e5e5;
-  // text-align: end;
-  text-align: left;
-  position: absolute;
-  right: 0%;
-  border-radius: 5px;
-  box-shadow: 0 0 9px 0 #00000094;
-  white-space: nowrap;
-}
+// .selectize-dropdown-content {
+//   overflow-y: auto;
+//   overflow-x: hidden;
+//   max-height: 200px;
+//   min-width: fit-content;
+//   background: #e5e5e5;
+//   // text-align: end;
+//   text-align: left;
+//   position: absolute;
+//   right: 0%;
+//   border-radius: 5px;
+//   box-shadow: 0 0 9px 0 #00000094;
+//   white-space: nowrap;
+// }
 
 .selectize-dropdown {
   border: none;
@@ -964,9 +981,10 @@ td.listbox.htDimmed.current.highlight {
   font-weight: 600;
   color: var(--bs-card-color);
   box-shadow: inset 0 0 13px 1px rgba(240, 255, 224, 0.6392156863);
-  max-width: fit-content;
+  // max-width: fit-content;
   padding: 1em;
   border-radius: 10px;
+  text-align: center;
 }
 
 .load-container {
@@ -1003,6 +1021,11 @@ td.listbox.htDimmed.current.highlight {
   height: 100%;
 }
 
+.deconv-pre-init .shiny-spinner-placeholder,
+.deconv-pre-init .load-container {
+  display: none !important;
+}
+
 .shiny-text-output {
   overflow: auto;
   margin-bottom: 0;
@@ -1028,11 +1051,25 @@ td.listbox.htDimmed.current.highlight {
   display: flex;
   height: 100%;
   flex-direction: column;
+  justify-content: space-between;
 }
 
 #app-deconvolution_main-deconvolution_init_ui > div {
   height: 100%;
   margin-bottom: unset;
+}
+
+#app-deconvolution_main-deconvolution_ui > .card {
+  height: 100%;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.logs-card {
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.deconvolution-init-card {
+  padding: 0;
 }
 
 .decon-btn {
@@ -1064,13 +1101,17 @@ td.listbox.htDimmed.current.highlight {
   display: contents;
 }
 
+.deconvolution-ui-interface {
+  height: 100%;
+}
+
 .deconvolution-running-interface {
   height: 100%;
   display: flex;
   flex-direction: column;
 }
 
-.deconvolution-running-interface .sidebar {
+.deconvolution-ui-interface .sidebar {
   background: transparent !important;
   box-shadow: none;
   margin: 0;
@@ -1078,32 +1119,33 @@ td.listbox.htDimmed.current.highlight {
   padding-right: 18px;
 }
 
-.deconvolution-running-interface .bslib-card .card-body {
+.deconvolution-ui-interface .bslib-card .card-body {
   overflow: hidden;
 }
 
-.deconvolution-running-interface .sidebar-content {
+.deconvolution-ui-interface .sidebar-content {
   height: 100%;
   padding: 0 !important;
 }
 
-.deconvolution-running-interface .bslib-sidebar-layout.sidebar-right > .main {
+.deconvolution-ui-interface .bslib-sidebar-layout.sidebar-right > .main {
   padding: 0;
 }
 
-.deconvolution-running-interface .bslib-sidebar-layout {
+.deconvolution-ui-interface .bslib-sidebar-layout {
   background: none !important;
   border: none;
   box-shadow: none;
   border-radius: 0;
   margin: 0;
+  width: 100%;
 }
 
-.deconvolution-running-interface .bslib-sidebar-layout .bslib-sidebar-resize-handle .resize-indicator {
+.deconvolution-ui-interface .bslib-sidebar-layout .bslib-sidebar-resize-handle .resize-indicator {
   background: white;
 }
 
-.deconvolution-running-interface .bslib-sidebar-layout .bslib-sidebar-resize-handle {
+.deconvolution-ui-interface .bslib-sidebar-layout .bslib-sidebar-resize-handle {
   display: block !important;
 }
 
@@ -1115,6 +1157,7 @@ td.listbox.htDimmed.current.highlight {
 
 .deconvolution-running-control-card .card-body {
   justify-content: center;
+  gap: 10px;
 }
 
 .deconvolution-running-result-card {
@@ -1128,10 +1171,29 @@ td.listbox.htDimmed.current.highlight {
   height: 100%;
 }
 
+.deconvolution-metrics-body {
+  height: 100%;
+  position: relative;
+}
+
+.spectrum-plot {
+  position: relative;
+}
+
+.sample-failed-msg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  text-align: center;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
 .deconvolution-result-content {
-  display: grid;
+  display: flex;
   gap: 10px;
-  grid-template-columns: 1fr 2fr;
   height: 100%;
   width: 100%;
 }
@@ -1141,6 +1203,22 @@ td.listbox.htDimmed.current.highlight {
 // }
 
 /* Controls & Inputs */
+.deconv-param-input {
+  width: 100%;
+}
+
+.peaknorm-selector {
+}
+
+.settings-peaknorm .selectize-input {
+  border: 1px solid #e5e5e5 !important;
+}
+
+.deconv-param-input-adv {
+  width: 100%;
+  height: 36.5px;
+}
+
 .deconv-param-input .shiny-input-container .control-label,
 .deconv-param-input-adv .shiny-input-container .control-label,
 .deconv-param-input-time .shiny-input-container .control-label {
@@ -1169,6 +1247,8 @@ td.listbox.htDimmed.current.highlight {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: fit-content;
+  width: 35%;
 }
 
 .deconvolution-result-controls .card,
@@ -1202,6 +1282,7 @@ td.listbox.htDimmed.current.highlight {
 .deconvolution-heatmap-card .card,
 .deconvolution-heatmap-card .card-body {
   height: 100%;
+  width: 100%;
 }
 
 #app-deconvolution_main-target_sel_ui > div > div {
@@ -1220,13 +1301,51 @@ td.listbox.htDimmed.current.highlight {
 
 #app-deconvolution_main-decon_select {
   margin-top: -1em;
+  font-size: 14px;
 }
 
-#app-deconvolution_main-deconvolute_start {
+.start-button .btn {
   background: #38387c;
-  height: 65px;
   box-shadow: inset 0px 0px 20px 4px rgb(255 255 255 / 30%);
   border: 1px solid #e5e5e5;
+  height: 100%;
+  width: 100%;
+  color: white;
+}
+
+#app-deconvolution_main-analysis_name_feedback > div:not(.analysis-path-feedback) {
+  font-style: italic;
+  align-content: center;
+  border: 1px solid #000000b3;
+  border-radius: var(--bs-border-radius);
+  padding: 5px;
+  background: rgb(190 209 193);
+  color: black;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#app-deconvolution_main-analysis_name_feedback > div.analysis-path-feedback {
+  .analysis-path-label {
+    font-size: 14px;
+    display: block;
+    font-style: italic;
+    height: 21px;
+  }
+}
+
+.analysis-name-feedback-row {
+  font-size: 0.85em;
+  height: 100%;
+  align-content: end;
+}
+
+code {
+  font-size: 0.7em;
+}
+
+.deconvolution-ui-interface + card {
 }
 
 #app-deconvolution_main-deconvolute_start:hover {
@@ -1298,6 +1417,7 @@ td.listbox.htDimmed.current.highlight {
 #app-deconvolution_main-message_ui,
 #app-deconvolution_main-warning_ui {
   text-align: justify;
+  font-size: 14px;
 }
 
 #app-deconvolution_main-warning_ui {
@@ -1328,12 +1448,21 @@ td.listbox.htDimmed.current.highlight {
 }
 
 #app-deconvolution_pars-path_selected,
-#app-deconvolution_pars-targetpath_selected {
+#app-deconvolution_pars-targetpath_selected,
+.path-selector-pre {
   border-color: #ff5a23;
   padding: 5px;
-  margin-bottom: 5px;
   font-size: 0.7em;
-  margin-top: -5px;
+  overflow-x: scroll;
+  margin-bottom: 0;
+}
+
+.path-selector-pre {
+  min-height: 36.1px;
+}
+
+#app-deconvolution_pars-path_selected,
+#app-deconvolution_pars-targetpath_selected {
 }
 
 #app-deconvolution_pars-dir_check,
@@ -1471,6 +1600,7 @@ decon-report-modal .btn-default {
 #app-conversion_main-conversion_ui > .card {
   height: 100%;
   margin: 0;
+  border: 1px solid rgb(0 0 0 / 10%);
 }
 
 #app-conversion_main-conversion_ui > .card > .tab-content > .tab-pane > .card-body {
@@ -1504,7 +1634,7 @@ decon-report-modal .btn-default {
 .conversion-sidebar > div,
 .deconvolution-sidebar > div {
   height: 100%;
-  padding: 5% !important;
+  padding: 3% !important;
   padding-left: 0 !important;
   gap: 5px !important;
 }
@@ -1617,10 +1747,12 @@ div[data-value="Protein Conversion"] .tab-pane {
   width: 100%;
   text-align: center;
   border-radius: var(--bs-border-radius);
-  background: rgba(223, 223, 223, 0.2588235294);
   padding-left: 1em;
   padding-right: 1em;
   line-height: normal;
+  border: 1px solid white;
+  background: rgb(190 209 193);
+  color: black;
 }
 
 #app-conversion_main-proteins_table,
@@ -1720,7 +1852,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 }
 
 /* Analysis Specifics inside Conversion */
-.interaction-analysis-flex {
+.sidebar-section {
   display: flex;
   flex-direction: column;
   gap: 15px;
@@ -2172,7 +2304,7 @@ th.sorting {
    ========================================================================== */
 .bg-dark {
   color: #000;
-  background: #f0ffe0a3 !important;
+  background: #bed1c1 !important;
   box-shadow: inset 0px 0px 25px 6px #ffffff78;
 }
 
@@ -2395,6 +2527,47 @@ th.sorting {
 /* ==========================================================================
    12. Uncategorized
    ========================================================================== */
+
+.show-advanced-ui {
+  height: 100%;
+  align-content: end;
+}
+
+.deconvolution-title {
+  font-weight: 400;
+  width: 100%;
+  font-size: 1.25rem;
+  line-height: 1.25;
+  padding: 12px;
+}
+
+.analysis-init-wrapper {
+  background-color: rgba(223, 223, 223, 0.2588235294);
+  padding: 12px;
+}
+
+.deconvolution-init-ui-wrapper > .col-sm-12 {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.deconvolution-ui-interface > div > .card > .card-body {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0;
+  padding-top: 12px;
+}
+
+.deconvolution-ui-interface > div > .card {
+  border: 1px solid rgb(0 0 0 / 10%);
+}
+
+.analysis-init-wrapper label {
+  color: white !important;
+}
+
+.shortcut-bar .form-group {
+  margin: 0;
+}
 
 .bar-chart-bar {
   background-color: rgb(0 0 0 / 42%);
@@ -4170,11 +4343,166 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   flex-direction: column;
   justify-content: space-evenly;
   height: 100%;
-  gap: 2% !important;
+  gap: 1rem !important;
   margin-left: -3px;
 }
 
-.deconvolution-section {
+/* Destination folder row (dir button + gear) */
+.dest-folder-row {
+}
+
+.dest-folder-row > div,
+.sample-file-row > div,
+.save-default-button {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  justify-content: space-between;
+}
+
+.dest-folder-row > div,
+.sample-file-row > div {
+  margin-bottom: 5px;
+}
+
+.save-default-button {
+  margin-bottom: 1em;
+}
+
+.save-default-button .form-group {
+  margin-bottom: 0;
+}
+
+.dest-folder-row .form-group,
+sample-file-row .form-group {
+  margin-bottom: 0;
+}
+
+#app-deconvolution_pars-target_folder {
+  width: 100%;
+}
+
+.save-button {
+  height: 100%;
+  align-content: end;
+}
+
+.label-save-button {
+  display: flex;
+  gap: 5px;
+}
+
+.save-button .btn {
+  width: 30px;
+  height: 100%;
+  padding: 0;
+  border: none;
+  min-width: fit-content;
+}
+
+/* Settings modal */
+.settings-modal-hint {
+  font-size: 0.85em;
+}
+
+.settings-table {
+  width: 100%;
+  margin-bottom: 0;
+
+  thead th {
+    font-weight: 600;
+    font-size: 0.875em;
+    border-bottom-width: 1px;
+  }
+
+  td {
+    vertical-align: top;
+    padding: 0.6rem 0.75rem;
+  }
+
+  .settings-table-label {
+    font-weight: 500;
+    padding-top: 0.75rem;
+    width: 35%;
+    white-space: nowrap;
+  }
+
+  .settings-info {
+    display: block;
+    font-weight: 400;
+    font-size: 0.7em;
+    color: var(--bs-secondary);
+    white-space: normal;
+    margin-top: 0.2rem;
+    text-transform: capitalize;
+  }
+
+  .settings-section-header {
+    font-weight: 600;
+    font-size: 0.75em;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--bs-secondary);
+    background-color: rgba(0, 0, 0, 0.04);
+    padding: 0.35rem 0.75rem !important;
+    border-top: 2px solid rgba(0, 0, 0, 0.08);
+  }
+
+  .form-group {
+    margin-bottom: 0.4rem;
+  }
+}
+
+.settings-dest-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75em;
+  flex-wrap: wrap;
+}
+
+.settings-dest-feedback {
+  font-size: 0.85em;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &--none {
+    color: var(--bs-secondary);
+    font-style: italic;
+  }
+
+  &--valid i {
+    color: #8bc34a;
+  }
+
+  &--invalid i {
+    color: #d17050;
+  }
+}
+
+.settings-table-feedback {
+  width: 20%;
+  min-width: 110px;
+  vertical-align: middle !important;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.settings-feedback {
+  font-size: 0.85em;
+
+  &--valid i {
+    color: #8bc34a;
+  }
+
+  &--invalid i {
+    color: #d17050;
+  }
+}
+
+.sidebar-section {
   display: flex;
   flex-direction: column;
   gap: 15px;
@@ -4184,6 +4512,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   border: 1px solid rgba(0, 0, 0, 0.3);
   border-left: none;
   height: -webkit-fill-available;
+  box-shadow: inset 0px 0px 1vw 0px rgb(0 0 0 / 20%);
 }
 
 /* Sidebar config status panel */
@@ -4201,6 +4530,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 #app-deconvolution_pars-open_config_btn,
 #app-conversion_sidebar-open_config_btn {
   height: 47px;
+  min-height: fit-content;
 }
 
 .sidebar-config-description {
@@ -4214,4 +4544,13 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 #app-conversion_main-kobs_result .checkbox input {
   height: 18px;
   width: 18px;
+}
+
+.deconvolution-ui-interface code {
+  color: white;
+  background-color: rgb(0 0 0 / 20%);
+}
+
+.analysis-name-ui .form-group {
+  margin-bottom: 0;
 }

@@ -39,45 +39,65 @@ ui <- function(id) {
 
       # --- Section 1: File Selection ---
       div(
-        class = "deconvolution-section",
+        class = "sidebar-section",
         div(class = "sidebar-title custom-sidebar-title", "Select Files"),
         shiny::uiOutput(ns("dir_check")),
         shiny::tags$div(
-          style = "display: flex; gap: 0.5em;",
-          shinyDirButton(
-            ns("folder"),
-            "Multiple",
-            icon = shiny::icon("folder-open"),
-            title = "Select location with multiple Waters .raw folders",
-            buttonType = "default",
-            root = path_home()
+          class = "sample-file-row",
+          shiny::tags$div(
+            shinyDirButton(
+              ns("folder"),
+              "Multiple",
+              icon = shiny::icon("folder-open"),
+              title = "Select location with multiple Waters .raw folders",
+              buttonType = "default",
+              root = path_home()
+            ),
+            shinyDirButton(
+              ns("file"),
+              "Single",
+              multiple = TRUE,
+              icon = shiny::icon("file"),
+              title = "Select individual Waters .raw folder",
+              buttonType = "default",
+              root = path_home()
+            )
           ),
-          shinyDirButton(
-            ns("file"),
-            "Single",
-            multiple = TRUE,
-            icon = shiny::icon("file"),
-            title = "Select individual Waters .raw folder",
-            buttonType = "default",
-            root = path_home()
-          )
+          shiny::verbatimTextOutput(ns("path_selected"))
         ),
-        shiny::verbatimTextOutput(ns("path_selected")),
         shiny::uiOutput(ns("targetpath_check")),
-        shinyDirButton(
-          ns("target_folder"),
-          "Select Destination Folder",
-          icon = shiny::icon("file-export"),
-          title = "Select destination folder",
-          buttonType = "default",
-          root = path_home()
-        ),
-        shiny::verbatimTextOutput(ns("targetpath_selected"))
+        shiny::div(
+          class = "dest-folder-row",
+          shiny::div(
+            shinyDirButton(
+              ns("target_folder"),
+              "Select Destination Folder",
+              icon = shiny::icon("file-export"),
+              title = "Select destination folder",
+              buttonType = "default",
+              root = path_home()
+            ),
+            bslib::tooltip(
+              shiny::div(
+                class = "save-button",
+                actionButton(
+                  ns("open_settings_btn"),
+                  label = NULL,
+                  icon = icon("floppy-disk"),
+                  class = "btn-default"
+                )
+              ),
+              "Save default folder",
+              placement = "bottom"
+            )
+          ),
+          shiny::verbatimTextOutput(ns("targetpath_selected"))
+        )
       ),
 
       # --- Section 2: Experiment Configuration ---
       div(
-        class = "deconvolution-section",
+        class = "sidebar-section",
         div(
           class = "sidebar-title custom-sidebar-title",
           "Experiment Configuration"
@@ -89,7 +109,13 @@ ui <- function(id) {
 }
 
 #' @export
-server <- function(id, reset_button, config_file, config_filename) {
+server <- function(
+  id,
+  reset_button,
+  config_file,
+  config_filename,
+  default_dest_path = shiny::reactive(NULL)
+) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -155,10 +181,25 @@ server <- function(id, reset_button, config_file, config_filename) {
     filepath <- shiny::reactiveVal(character())
     targetpath <- shiny::reactiveVal(character())
 
+    # Apply default destination path once on init (if configured)
+    shiny::observe({
+      def <- default_dest_path()
+      tp <- targetpath()
+      if (
+        length(def) == 1L &&
+          nzchar(def) &&
+          dir.exists(def) &&
+          (length(tp) == 0L || !nzchar(tp))
+      ) {
+        targetpath(def)
+      }
+    })
+
     shiny::observe({
       filepath(file_path())
       rootdir(root_dir())
-      targetpath(target_path())
+      p <- target_path()
+      if (length(p) && nzchar(p)) targetpath(p)
     })
 
     # Render initial file selection information field
@@ -172,44 +213,25 @@ server <- function(id, reset_button, config_file, config_filename) {
 
     output$targetpath_check <- shiny::renderUI({
       reset_button()
+      tp <- targetpath()
 
-      if (!is.null(target_path()) && length(target_path())) {
-        # Check if result files already present
-        sessionId <- gsub(".log", "", basename(get_log()))
-        result_files <- list.files(target_path())
+      if (length(tp) && nzchar(tp)) {
+        runjs(paste0(
+          '$("#app-deconvolution_pars-targetpath_selected").css({"border-color": "#8BC34A"})'
+        ))
 
-        if (any(grepl(sessionId, gsub("_RESULT.rds", "", result_files)))) {
-          runjs(paste0(
-            '$("#app-deconvolution_pars-targetpath_selected").css({"border-color": "#D17050"})'
-          ))
-
-          shiny::p(
-            shiny::HTML(
-              paste0(
-                '<i class="fa-solid fa-circle-exclamation" style="font-size:1e',
-                'm; color:black; margin-right: 10px;"></i>',
-                "Destination already has results from this session."
-              )
+        shiny::p(
+          shiny::HTML(
+            paste0(
+              '<i class="fa-solid fa-circle-check" style="font-size:1em; c',
+              'olor:#000000; margin-right: 10px;"></i>',
+              "Destination path is valid."
             )
           )
-        } else {
-          runjs(paste0(
-            '$("#app-deconvolution_pars-targetpath_selected").css({"border-color": "#8BC34A"})'
-          ))
-
-          shiny::p(
-            shiny::HTML(
-              paste0(
-                '<i class="fa-solid fa-circle-check" style="font-size:1em; c',
-                'olor:#000000; margin-right: 10px;"></i>',
-                "Destination path is valid."
-              )
-            )
-          )
-        }
+        )
       } else {
         runjs(paste0(
-          '$("#app-deconvolution_pars-targetpath_selected").css({"border-color": "#D17050"})'
+          '$("#app-deconvolution_pars-targetpath_selected").css({"border-color": ""})'
         ))
 
         shiny::p(
@@ -222,12 +244,9 @@ server <- function(id, reset_button, config_file, config_filename) {
 
     # Initial file selection feedback
     output$path_selected <- shiny::renderPrint(cat("Nothing selected"))
-    output$targetpath_selected <- shiny::renderPrint({
-      if (!is.null(targetpath()) && length(targetpath()) > 0) {
-        targetpath()
-      } else {
-        cat("Nothing selected")
-      }
+    output$targetpath_selected <- shiny::renderText({
+      tp <- targetpath()
+      if (length(tp) > 0 && nzchar(tp)) tp else "Nothing selected"
     })
 
     shiny::observeEvent(input$file, {
@@ -444,7 +463,8 @@ server <- function(id, reset_button, config_file, config_filename) {
       use_config = shiny::reactive(
         isTRUE(input$use_config) && !is.null(config_file())
       ),
-      open_config_clicked = shiny::reactive(input$open_config_btn)
+      open_config_clicked = shiny::reactive(input$open_config_btn),
+      open_settings_clicked = shiny::reactive(input$open_settings_btn)
     )
   })
 }

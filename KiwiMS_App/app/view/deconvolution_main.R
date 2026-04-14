@@ -2,6 +2,8 @@
 
 box::use(
   bslib[card, card_body, card_header, tooltip],
+  DBI[dbConnect, dbDisconnect, dbExistsTable, dbGetQuery],
+  RSQLite[SQLite, SQLITE_RO],
   fs[dir_ls],
   plotly[
     event_data,
@@ -30,10 +32,16 @@ box::use(
     logic /
     deconvolution_functions[
       create_384_plate_heatmap,
-      spectrum_plot
+      spectrum_plot,
+      decon_progress_count,
+      decon_is_complete,
+      decon_failed_samples,
+      process_plot_data_db
     ],
   app / logic / helper_functions[fill_empty, get_kiwims_version],
   app / logic / logging[write_log, get_log],
+  app / logic / user_settings[update_user_setting, read_user_settings],
+  app / logic / conversion_functions[read_decon_metadata, read_decon_peaks_max],
   app /
     logic /
     deconvolution_ui[
@@ -52,10 +60,22 @@ box::use(
 ui <- function(id) {
   ns <- shiny$NS(id)
 
-  shiny$div(
-    class = "deconvolution-running-interface",
-    shiny$uiOutput(ns("deconvolution_init_ui")),
-    shiny$uiOutput(ns("deconvolution_running_ui"))
+  shiny$tagList(
+    shiny$tags$head(
+      shiny$tags$script(src = "static/js/deconvolution.js")
+    ),
+    shiny$div(
+      class = "deconvolution-ui-interface",
+      shiny::div(
+        id = ns("deconvolution_ui_container"),
+        class = "conversion-main-spinner deconv-pre-init",
+        shinycssloaders::withSpinner(
+          shiny$uiOutput(ns("deconvolution_ui")),
+          type = 1,
+          color = "#7777f9"
+        )
+      )
+    )
   )
 }
 
@@ -85,6 +105,10 @@ server <- function(
     # Make temp dir for session
     temp <- tempdir()
 
+    # deconv-pre-init is removed from inside renderUI so the JS fires in the
+    # same WebSocket message as the rendered HTML — by the time the class is
+    # removed the output is already in the DOM and no spinner flash occurs.
+
     ### Reactive variables declaration ----
     reactVars <- shiny$reactiveValues(
       is_running = FALSE,
@@ -97,9 +121,13 @@ server <- function(
       count = 0,
       rep_count = 0,
       rslt_df = data.frame(),
+      failed_samples = character(0),
       logs = "",
       deconv_report_status = NULL,
-      continue_conversion = NULL
+      continue_conversion = NULL,
+      stale_unidec_output = character(0),
+      overwrite = character(0),
+      duplicated = "Overwrite Samples"
     )
 
     decon_rep_process_data <- shiny$reactiveVal(NULL)
@@ -117,9 +145,290 @@ server <- function(
 
     decon_process_data <- shiny$reactiveVal(NULL)
 
-    ### Deconvolution initiation interface ----
-    output$deconvolution_init_ui <- shiny$renderUI({
-      deconvolution_init_ui(ns)
+    ### Smart analysis name suggestion ----
+    # Base session name, e.g. "KiwiMS_2026-04-03_id1234"
+    session_base_name <- gsub("\\.log$", "", basename(log_path))
+
+    # Compute the lowest non-existing name in the target folder
+    smart_analysis_name <- shiny$reactive({
+      reset_button() # re-evaluate after reset so file.exists() sees newly created .db files
+      base <- session_base_name
+      target <- deconvolution_sidebar_vars$targetpath()
+      if (
+        is.null(target) ||
+          length(target) == 0 ||
+          !nzchar(target) ||
+          !dir.exists(target)
+      ) {
+        return(base)
+      }
+      if (!file.exists(file.path(target, paste0(base, ".db")))) {
+        return(base)
+      }
+      n <- 2L
+      repeat {
+        candidate <- paste0(base, "_", n)
+        if (!file.exists(file.path(target, paste0(candidate, ".db")))) {
+          return(candidate)
+        }
+        n <- n + 1L
+      }
+    })
+
+    # Tentative destination (live) = targetpath / analysis_name
+    effective_dest <- shiny$reactive({
+      target <- deconvolution_sidebar_vars$targetpath()
+      if (is.null(target) || length(target) == 0 || !nzchar(target)) {
+        return(NULL)
+      }
+      target
+    })
+
+    # Locked destination — set once when deconvolute_start_conf fires
+    analysis_dest <- shiny$reactiveVal(NULL)
+
+    # Update the text input when the destination folder changes
+    shiny$observeEvent(deconvolution_sidebar_vars$targetpath(), {
+      suggested <- smart_analysis_name()
+      shiny$updateTextInput(
+        session,
+        "analysis_name",
+        value = suggested,
+        placeholder = suggested
+      )
+    })
+
+    ### Deconvolution interface (init or running, one output) ----
+    output$deconvolution_ui <- shiny$renderUI({
+      deconvolution_init_ui(
+        ns,
+        analysis_name_default = shiny$isolate(smart_analysis_name())
+      )
+    })
+
+    ### Validation state reactive ----
+    # Returns NULL when all conditions are met, otherwise the first failing message.
+    deconv_validation_msg <- shiny$reactive({
+      files_ok <-
+        (!is.null(deconvolution_sidebar_vars$file()) &&
+          length(deconvolution_sidebar_vars$file()) > 0) ||
+        (!is.null(deconvolution_sidebar_vars$dir()) &&
+          length(deconvolution_sidebar_vars$dir()) > 0)
+      if (!files_ok) {
+        return("Select target file(s) from the sidebar to start ...")
+      }
+
+      target <- deconvolution_sidebar_vars$targetpath()
+      if (is.null(target) || length(target) == 0 || !nzchar(target)) {
+        return("Select a destination folder from the sidebar to start ...")
+      }
+
+      if (!is.null(input$startz) && !is.null(input$endz)) {
+        if (is.na(input$startz) || is.na(input$endz)) {
+          return("Charge z range requires valid whole numbers ...")
+        }
+        if (input$startz < 1 || input$endz < 1) {
+          return("Charge z values must be at least 1 ...")
+        }
+        if (
+          input$startz != floor(input$startz) || input$endz != floor(input$endz)
+        ) {
+          return("Charge z values must be whole numbers ...")
+        }
+        if (input$startz >= input$endz) {
+          return("High charge z must be greater than low charge z ...")
+        }
+      }
+
+      if (!is.null(input$minmz) && !is.null(input$maxmz)) {
+        if (is.na(input$minmz) || is.na(input$maxmz)) {
+          return("m/z range requires valid whole numbers ...")
+        }
+        if (input$minmz < 1 || input$maxmz < 1) {
+          return("m/z values must be at least 1 ...")
+        }
+        if (
+          input$minmz != floor(input$minmz) || input$maxmz != floor(input$maxmz)
+        ) {
+          return("m/z values must be whole numbers ...")
+        }
+        if (input$minmz >= input$maxmz) {
+          return("High m/z must be greater than low m/z ...")
+        }
+      }
+
+      if (!is.null(input$masslb) && !is.null(input$massub)) {
+        if (is.na(input$masslb) || is.na(input$massub)) {
+          return("Mass Mw range requires valid whole numbers ...")
+        }
+        if (input$masslb < 1 || input$massub < 1) {
+          return("Mass Mw values must be at least 1 Da ...")
+        }
+        if (
+          input$masslb != floor(input$masslb) ||
+            input$massub != floor(input$massub)
+        ) {
+          return("Mass Mw values must be whole numbers ...")
+        }
+        if (input$masslb >= input$massub) {
+          return("High mass Mw must be greater than low mass Mw ...")
+        }
+      }
+
+      if (!is.null(input$massbins)) {
+        if (is.na(input$massbins)) {
+          return("Sample Rate requires a valid value ...")
+        }
+        if (input$massbins < 0.1 || input$massbins > 10) {
+          return("Sample Rate must be between 0.1 and 10 Da ...")
+        }
+      }
+
+      if (!is.null(input$peakwindow)) {
+        if (is.na(input$peakwindow)) {
+          return("Detection window requires a valid value ...")
+        }
+        if (input$peakwindow < 1 || input$peakwindow > 500) {
+          return("Detection window must be between 1 and 500 Da ...")
+        }
+        if (input$peakwindow != floor(input$peakwindow)) {
+          return("Detection window must be a whole number ...")
+        }
+      }
+
+      if (!is.null(input$peakthresh)) {
+        if (is.na(input$peakthresh)) {
+          return("Peak threshold requires a valid value ...")
+        }
+        if (input$peakthresh < 0 || input$peakthresh > 1) {
+          return("Peak threshold must be between 0 and 1 ...")
+        }
+      }
+
+      if (!is.null(input$time_start) && !is.null(input$time_end)) {
+        if (is.na(input$time_start) || is.na(input$time_end)) {
+          return("Retention time range requires valid values ...")
+        }
+        if (input$time_start >= input$time_end) {
+          return("Retention start time must be earlier than end time ...")
+        }
+      }
+
+      sel <- deconvolution_sidebar_vars$selected()
+      if (!is.null(sel) && sel == "folder") {
+        if (
+          length(dir_ls(deconvolution_sidebar_vars$dir(), glob = "*.raw")) == 0
+        ) {
+          return("No valid target folder selected ...")
+        }
+      } else if (!is.null(sel) && sel == "file") {
+        f <- deconvolution_sidebar_vars$file()
+        valid_file <- length(f) > 0 &&
+          grepl("\\.raw$", f, ignore.case = TRUE) &&
+          dir.exists(f)
+        if (!valid_file) return("No valid target file selected ...")
+      }
+
+      NULL
+    })
+
+    ### Analysis name path feedback ----
+    output$analysis_name_feedback <- shiny$renderUI({
+      msg <- deconv_validation_msg()
+
+      if (!is.null(msg)) {
+        return(shiny$div(
+          class = "analysis-name-feedback-row",
+          shiny$tags$span(
+            style = "color: #D17050; flex-shrink:0;",
+            shiny$icon("triangle-exclamation")
+          ),
+          shiny$HTML(paste0(" ", msg))
+        ))
+      }
+
+      # All valid — show DB file path feedback
+      target <- deconvolution_sidebar_vars$targetpath()
+      name <- trimws(input$analysis_name)
+      if (!nzchar(name)) {
+        name <- smart_analysis_name()
+      }
+
+      full_path <- file.path(target, paste0(name, ".db"))
+
+      db_exists <- file.exists(full_path)
+      shiny$div(
+        class = "analysis-name-feedback-row analysis-path-feedback",
+        shiny$tags$span(
+          class = "analysis-path-label",
+          if (db_exists) {
+            "Will extend existing analysis:"
+          } else {
+            "Will be saved as:"
+          }
+        ),
+        shiny$tags$pre(
+          class = "path-selector-pre",
+          style = "border-color: rgb(139, 195, 74);",
+          full_path
+        )
+      )
+    })
+
+    ### Running destination path display ----
+    output$running_dest_ui <- shiny$renderUI({
+      dest <- analysis_dest()
+      if (is.null(dest)) {
+        return(NULL)
+      }
+
+      base_name <- basename(dest)
+      max_len <- 40L
+      display_path <- if (nchar(dest) <= max_len) {
+        dest
+      } else {
+        suffix <- paste0("/", base_name)
+        prefix_len <- max_len - nchar(suffix) - 1L
+        if (prefix_len <= 0) {
+          paste0("\u2026", suffix)
+        } else {
+          paste0(substr(dest, 1L, prefix_len), "\u2026", suffix)
+        }
+      }
+
+      tooltip(
+        shiny$div(
+          style = "cursor:pointer; margin-bottom: 5px; margin-left: 20px;",
+          onclick = paste0(
+            "Shiny.setInputValue('",
+            ns("open_dest"),
+            "', Math.random())"
+          ),
+          shiny$tags$span(
+            style = "color:#5cb85c; flex-shrink:0;",
+            shiny$icon("folder-open")
+          ),
+          shiny$HTML(paste(
+            "<code style='cursor:pointer;'>",
+            "Saved in:",
+            display_path,
+            "</code>"
+          ))
+        ),
+        "Click to open in File Explorer",
+        placement = "bottom"
+      )
+    })
+
+    shiny$observeEvent(input$open_dest, {
+      dest <- analysis_dest()
+      if (!is.null(dest) && dir.exists(dest)) {
+        if (.Platform$OS.type == "windows") {
+          shell.exec(dest)
+        } else {
+          utils::browseURL(dest)
+        }
+      }
     })
 
     # Conditional enabling of advanced settings
@@ -137,126 +446,293 @@ server <- function(
       }
     })
 
-    ### Validate start button ----
+    ### Save-default handlers for parameter inputs ----
+    shiny$observeEvent(
+      input$save_startz_btn,
+      {
+        if (!is.null(input$startz) && !is.na(input$startz)) {
+          update_user_setting("deconv_startz", input$startz)
+          shinyWidgets::show_toast(
+            paste0("Min. charge state default set to ", input$startz),
+            text = NULL,
+            type = "success",
+            timer = 3000,
+            timerProgressBar = TRUE
+          )
+        }
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+
+    shiny$observeEvent(
+      input$save_endz_btn,
+      {
+        if (!is.null(input$endz) && !is.na(input$endz)) {
+          update_user_setting("deconv_endz", input$endz)
+          shinyWidgets::show_toast(
+            paste0("Max. charge state default set to ", input$endz),
+            text = NULL,
+            type = "success",
+            timer = 3000,
+            timerProgressBar = TRUE
+          )
+        }
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+    shiny$observeEvent(
+      input$save_minmz_btn,
+      {
+        if (!is.null(input$minmz) && !is.na(input$minmz)) {
+          update_user_setting("deconv_minmz", input$minmz)
+          shinyWidgets::show_toast(
+            paste0(
+              "Min. m/z ratio default set to ",
+              input$minmz,
+              " [m/z]"
+            ),
+            text = NULL,
+            type = "success",
+            timer = 3000,
+            timerProgressBar = TRUE
+          )
+        }
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+    shiny$observeEvent(
+      input$save_maxmz_btn,
+      {
+        if (!is.null(input$maxmz) && !is.na(input$maxmz)) {
+          update_user_setting("deconv_maxmz", input$maxmz)
+          shinyWidgets::show_toast(
+            paste0(
+              "Max. m/z ratio default set to ",
+              input$maxmz,
+              " [m/z]"
+            ),
+            text = NULL,
+            type = "success",
+            timer = 3000,
+            timerProgressBar = TRUE
+          )
+        }
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+    shiny$observeEvent(
+      input$save_masslb_btn,
+      {
+        if (!is.null(input$masslb) && !is.na(input$masslb)) {
+          update_user_setting("deconv_masslb", input$masslb)
+          shinyWidgets::show_toast(
+            paste0(
+              "Min. mass default set to ",
+              input$masslb,
+              " [Da]"
+            ),
+            text = NULL,
+            type = "success",
+            timer = 3000,
+            timerProgressBar = TRUE
+          )
+        }
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+    shiny$observeEvent(
+      input$save_massub_btn,
+      {
+        if (!is.null(input$massub) && !is.na(input$massub)) {
+          update_user_setting("deconv_massub", input$massub)
+          shinyWidgets::show_toast(
+            paste0(
+              "Max. mass default set to ",
+              input$massub,
+              " [Da]"
+            ),
+            text = NULL,
+            type = "success",
+            timer = 3000,
+            timerProgressBar = TRUE
+          )
+        }
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+    shiny$observeEvent(
+      input$save_time_start_btn,
+      {
+        if (!is.null(input$time_start) && !is.na(input$time_start)) {
+          update_user_setting("deconv_time_start", input$time_start)
+          shinyWidgets::show_toast(
+            paste0(
+              "Default elution start ",
+              input$time_start,
+              " [min]"
+            ),
+            text = NULL,
+            type = "success",
+            timer = 3000,
+            timerProgressBar = TRUE
+          )
+        }
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+    shiny$observeEvent(
+      input$save_time_end_btn,
+      {
+        if (!is.null(input$time_end) && !is.na(input$time_end)) {
+          update_user_setting("deconv_time_end", input$time_end)
+          shinyWidgets::show_toast(
+            paste0(
+              "Default elution end ",
+              input$time_end,
+              " [min]"
+            ),
+            text = NULL,
+            type = "success",
+            timer = 3000,
+            timerProgressBar = TRUE
+          )
+        }
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+    shiny$observeEvent(
+      input$save_peakwindow_btn,
+      {
+        if (!is.null(input$peakwindow) && !is.na(input$peakwindow)) {
+          update_user_setting("deconv_peakwindow", input$peakwindow)
+          shinyWidgets::show_toast(
+            paste0(
+              "Default peak window set to ",
+              input$peakwindow,
+              " [Da]"
+            ),
+            text = NULL,
+            type = "success",
+            timer = 3000,
+            timerProgressBar = TRUE
+          )
+        }
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+    shiny$observeEvent(
+      input$save_peaknorm_btn,
+      {
+        if (!is.null(input$peaknorm)) {
+          update_user_setting("deconv_peaknorm", input$peaknorm)
+          shinyWidgets::show_toast(
+            paste0(
+              "Default peak normalization set to ",
+              input$peaknorm
+            ),
+            text = NULL,
+            type = "success",
+            timer = 3000,
+            timerProgressBar = TRUE
+          )
+        }
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+    shiny$observeEvent(
+      input$save_peakthresh_btn,
+      {
+        if (!is.null(input$peakthresh) && !is.na(input$peakthresh)) {
+          update_user_setting("deconv_peakthresh", input$peakthresh)
+          shinyWidgets::show_toast(
+            paste0(
+              "Default peak threshold set to ",
+              input$peaknorm
+            ),
+            text = NULL,
+            type = "success",
+            timer = 3000,
+            timerProgressBar = TRUE
+          )
+        }
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+    shiny$observeEvent(
+      input$save_massbins_btn,
+      {
+        if (!is.null(input$massbins) && !is.na(input$massbins)) {
+          update_user_setting("deconv_massbins", input$massbins)
+        }
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+
+    ### Start button ----
     output$deconvolute_start_ui <- shiny$renderUI({
       reset_button()
-
-      shiny$validate(
-        shiny$need(
-          ((!is.null(deconvolution_sidebar_vars$file()) &&
-            length(deconvolution_sidebar_vars$file()) > 0) ||
-            (!is.null(deconvolution_sidebar_vars$dir()) &&
-              length(deconvolution_sidebar_vars$dir()) > 0)),
-          "Select target file(s) from the sidebar to start ..."
+      btn <- shiny$div(
+        class = "start-button",
+        style = "height: 100%;",
+        shiny$actionButton(
+          ns("deconvolute_start"),
+          "Start",
+          icon = shiny$icon("circle-play"),
+          width = "100%"
         )
       )
-
-      if (
-        !is.null(deconvolution_sidebar_vars$targetpath()) &&
-          length(deconvolution_sidebar_vars$targetpath()) > 0
-      ) {
-        sessionId <- gsub(".log", "", basename(log_path))
-        result_files <- list.files(deconvolution_sidebar_vars$targetpath())
-
-        if (any(grepl(sessionId, gsub("_RESULT.rds", "", result_files)))) {
-          valid_destination <- FALSE
-        } else {
-          valid_destination <- TRUE
-        }
-      } else {
-        valid_destination <- FALSE
-      }
-
-      shiny$validate(
-        shiny$need(
-          valid_destination,
-          "Select destination for result file(s) from the sidebar to start ..."
-        )
-      )
-
-      shiny$validate(
-        shiny$need(
-          input$startz < input$endz,
-          "High charge z must be greater than low charge z ..."
-        )
-      )
-
-      shiny$validate(
-        shiny$need(
-          input$minmz < input$maxmz,
-          "High m/z must be greater than low m/z ..."
-        )
-      )
-
-      shiny$validate(
-        shiny$need(
-          input$masslb < input$massub,
-          "High mass Mw must be greater than low mass Mw ..."
-        )
-      )
-
-      shiny$validate(
-        shiny$need(
-          input$time_start < input$time_end,
-          "Retention start time must be earlier than end time ..."
-        )
-      )
-
-      if (deconvolution_sidebar_vars$selected() == "folder") {
-        valid_folder <- length(dir_ls(
-          deconvolution_sidebar_vars$dir(),
-          glob = "*.raw"
-        )) !=
-          0
-
-        shiny$validate(
-          shiny$need(
-            valid_folder,
-            "No valid target folder selected ..."
-          )
-        )
-      } else if (deconvolution_sidebar_vars$selected() == "file") {
-        valid_file <- (length(deconvolution_sidebar_vars$file()) &&
-          grepl(
-            "\\.raw$",
-            deconvolution_sidebar_vars$file(),
-            ignore.case = TRUE
-          ) &&
-          dir.exists(deconvolution_sidebar_vars$file()))
-
-        shiny$validate(
-          shiny$need(
-            valid_file,
-            "No valid target file selected ..."
-          )
-        )
-      }
-
-      shiny$actionButton(ns("deconvolute_start"), "Run Deconvolution")
+      if (!is.null(deconv_validation_msg())) disabled(btn) else btn
     })
 
     # Eagerly render startup outputs so they are computed in the first reactive
     # flush and included in the same browser message as waiter_hide().
-    shiny$outputOptions(output, "deconvolution_init_ui", suspendWhenHidden = FALSE)
-    shiny$outputOptions(output, "deconvolute_start_ui", suspendWhenHidden = FALSE)
+    shiny$outputOptions(
+      output,
+      "deconvolution_ui",
+      suspendWhenHidden = FALSE
+    )
+    shiny$outputOptions(
+      output,
+      "deconvolute_start_ui",
+      suspendWhenHidden = FALSE
+    )
+    shiny$outputOptions(
+      output,
+      "analysis_name_feedback",
+      suspendWhenHidden = FALSE
+    )
 
     ### Functions ----
+
     #### check_progress ----
+    # Counts only the samples in raw_dirs — never inflated by pre-existing
+    # done records from a previous run in the same DB (extend case).
     check_progress <- function(raw_dirs) {
       message("Checking progress at: ", Sys.time())
-      fin_dirs <- file.path(
-        deconvolution_sidebar_vars$targetpath(),
-        basename(gsub(
-          ".raw",
-          "_rawdata_unidecfiles",
-          raw_dirs
-        ))
+      db <- file.path(
+        analysis_dest(),
+        paste0(trimws(input$analysis_name), ".db")
       )
-      peak_files <- file.path(fin_dirs, "plots.rds")
-      finished_files <- file.exists(peak_files)
-      count <- sum(finished_files)
-      message("Found files: ", count)
-
+      sample_bases <- gsub(
+        "\\.raw$",
+        "",
+        basename(raw_dirs),
+        ignore.case = TRUE
+      )
+      count <- decon_progress_count(db, sample_bases)
+      message("Done count from DB: ", count)
       count
     }
 
@@ -265,18 +741,37 @@ server <- function(
       reactVars$is_running <- FALSE
       reactVars$heatmap_ready <- 0L
       reactVars$completed_files <- 0
+      reactVars$current_total_files <- 0
+      reactVars$expected_files <- 0
+      reactVars$initial_file_count <- 0
+      reactVars$count <- 0
       reactVars$sample_names <- NULL
       reactVars$wells <- NULL
       reactVars$rslt_df <- data.frame()
+      reactVars$failed_samples <- character(0)
       reactVars$last_check <- Sys.time()
       reactVars$results_last_check <- Sys.time()
       reactVars$deconv_report_status <- NULL
 
       decon_rep_process_data(NULL)
 
-      output$spectrum <- NULL
-      output$deconvolution_data <- NULL
+      output$deconvolution_data <- DT::renderDataTable(
+        DT::datatable(data.frame(), options = list(dom = "", paging = FALSE)),
+        server = FALSE
+      )
+      output$result_picker_ui <- shiny$renderUI(NULL)
+      output$spectrum_failure_msg <- shiny$renderUI(NULL)
+      output$metrics_failure_msg <- shiny$renderUI(NULL)
       result_files_sel(NULL)
+
+      # Immediately clear the progress bar title so a stale title from a prior
+      # run is never visible during the setup phase of the next run.
+      updateProgressBar(
+        session = session,
+        id = ns("progressBar"),
+        value = 0,
+        title = "Ready"
+      )
     }
 
     ### Event start deconvolution ----
@@ -295,7 +790,7 @@ server <- function(
                 shiny$uiOutput(ns("target_sel_ui")),
                 shiny$br(),
                 shiny$uiOutput(ns("warning_ui")),
-                shiny$uiOutput(ns("selector_ui"))
+                shiny$uiOutput(ns("selector_ui")),
               )
             ),
             title = "Start Deconvolution",
@@ -314,279 +809,277 @@ server <- function(
       )
     })
 
-    # Dynamic rendering of skip/overwrite selection button
-    output$selector_ui <- shiny$renderUI({
+    # Dynamic rendering of warnings for the start dialog.
+    # Covers two cases:
+    #   1. Stale UniDec output files in destination (keep_raw_output=TRUE only)
+    #   2. Samples already present (done) in an existing analysis DB
+    output$warning_ui <- shiny$renderUI({
       input$deconvolute_start
-      select <- NULL
+      reactVars$stale_unidec_output <- character(0)
+      reactVars$overwrite <- character(0)
 
-      if (deconvolution_sidebar_vars$selected() == "folder") {
-        finished_files <- dir_ls(
-          deconvolution_sidebar_vars$targetpath(),
-          glob = "*_rawdata_unidecfiles"
-        )
+      dest_dir <- effective_dest() %||% deconvolution_sidebar_vars$targetpath()
 
+      # ── Collect queried sample base names ──────────────────────────────────
+      # Use target_selector_sel() (persisted) not input$target_selector which
+      # may still be NULL while the picker inside the modal is rendering.
+      sample_bases <- if (deconvolution_sidebar_vars$selected() == "folder") {
+        raw_dirs_all <- dir_ls(deconvolution_sidebar_vars$dir(), glob = "*.raw")
         if (
           isTRUE(deconvolution_sidebar_vars$use_config()) &&
             length(config_file())
         ) {
-          config_sel <- paste0(
-            gsub(
-              ".raw",
-              "",
-              config_file()[["Sample"]]
-            ),
-            "_rawdata_unidecfiles"
+          samps <- config_file()[["Sample"]]
+          samps <- samps[samps %in% basename(raw_dirs_all)]
+          gsub("\\.raw$", "", samps, ignore.case = TRUE)
+        } else {
+          sel <- target_selector_sel()
+          bases <- if (length(sel) > 0) sel else basename(raw_dirs_all)
+          gsub("\\.raw$", "", bases, ignore.case = TRUE)
+        }
+      } else {
+        gsub(
+          "\\.raw$",
+          "",
+          basename(deconvolution_sidebar_vars$file() %||% ""),
+          ignore.case = TRUE
+        )
+      }
+      if (length(sample_bases) == 0 || !nzchar(sample_bases[1])) {
+        return(NULL)
+      }
+
+      warnings_list <- list()
+
+      # ── Warning 1: stale UniDec output (only when keeping raw output) ──────
+      if (
+        !is.null(dest_dir) &&
+          dir.exists(dest_dir) &&
+          isTRUE(read_user_settings()$deconv_keep_raw_output)
+      ) {
+        stale <- character(0)
+        for (s in sample_bases) {
+          txt <- file.path(dest_dir, paste0(s, "_rawdata.txt"))
+          udir <- file.path(dest_dir, paste0(s, "_rawdata_unidecfiles"))
+          if (file.exists(txt)) {
+            stale <- c(stale, txt)
+          }
+          if (dir.exists(udir)) stale <- c(stale, udir)
+        }
+        if (length(stale) > 0) {
+          reactVars$stale_unidec_output <- stale
+          n_aff <- length(unique(
+            gsub("(_rawdata\\.txt|_rawdata_unidecfiles)$", "", basename(stale))
+          ))
+          warnings_list <- c(
+            warnings_list,
+            list(shiny$p(shiny$HTML(paste0(
+              '<i class="fa-solid fa-circle-exclamation" style="font-size:1em;',
+              ' color:black; margin-right:10px;"></i>',
+              "<b>",
+              n_aff,
+              "</b> sample(s) have leftover UniDec output in the",
+              " destination folder. Continuing will delete these files before reprocessing."
+            ))))
           )
-
-          intersect <- config_sel %in% basename(finished_files)
-
-          if (any(intersect)) {
-            select <- shiny$radioButtons(
-              ns("decon_select"),
-              "",
-              c("Overwrite Files", "Skip Files")
-            )
-          }
-        } else if (!is.null(input$target_selector)) {
-          intersect <- gsub(
-            ".raw",
-            "_rawdata_unidecfiles",
-            input$target_selector
-          ) %in%
-            basename(finished_files)
-
-          if (any(intersect)) {
-            select <- shiny$radioButtons(
-              ns("decon_select"),
-              "",
-              c("Overwrite Files", "Skip Files")
-            )
-          }
         }
       }
 
-      return(select)
+      # ── Warning 2: samples already done in the existing DB ─────────────────
+      db_path_chk <- if (
+        !is.null(dest_dir) &&
+          nzchar(trimws(input$analysis_name %||% ""))
+      ) {
+        file.path(dest_dir, paste0(trimws(input$analysis_name), ".db"))
+      } else {
+        NULL
+      }
+
+      if (!is.null(db_path_chk) && file.exists(db_path_chk)) {
+        done_samples <- tryCatch(
+          {
+            con_w <- DBI::dbConnect(
+              RSQLite::SQLite(),
+              db_path_chk,
+              flags = RSQLite::SQLITE_RO
+            )
+            on.exit(DBI::dbDisconnect(con_w), add = TRUE)
+            if (DBI::dbExistsTable(con_w, "status")) {
+              DBI::dbGetQuery(
+                con_w,
+                "SELECT sample FROM status WHERE state = 'done'"
+              )$sample
+            } else {
+              character(0)
+            }
+          },
+          error = function(e) character(0)
+        )
+
+        dup_bases <- intersect(sample_bases, done_samples)
+        if (length(dup_bases) > 0) {
+          reactVars$overwrite <- dup_bases
+          warnings_list <- c(
+            warnings_list,
+            list(shiny$p(shiny$HTML(paste0(
+              '<i class="fa-solid fa-circle-exclamation" style="font-size:1em;',
+              ' color:black; margin-right:10px;"></i>',
+              "<b>",
+              length(dup_bases),
+              "</b> sample(s) queried for deconvolution",
+              " are already present in the existing analysis database.",
+              " Please choose how to proceed:"
+            ))))
+          )
+        }
+      }
+
+      if (length(warnings_list) == 0) {
+        return(NULL)
+      }
+      shiny$tagList(warnings_list)
+    })
+
+    # Skip/Overwrite radio buttons — shown when duplicate DB samples are detected
+    output$selector_ui <- shiny$renderUI({
+      input$deconvolute_start
+      if (length(reactVars$overwrite) == 0) {
+        return(NULL)
+      }
+      shiny$radioButtons(
+        ns("decon_select"),
+        "",
+        choices = c("Overwrite Samples", "Skip Samples"),
+        selected = "Overwrite Samples"
+      )
+    })
+
+    # Persist the user's overwrite/skip choice
+    shiny$observe({
+      if (!is.null(input$decon_select)) {
+        reactVars$duplicated <- input$decon_select
+      }
     })
 
     # Dynamic rendering of message with info for selected files
     output$message_ui <- shiny$renderUI({
       input$deconvolute_start
-      enable(
-        selector = "#app-deconvolution_main-deconvolute_start_conf"
-      )
+      enable(selector = "#app-deconvolution_main-deconvolute_start_conf")
+
+      icon_warn <- '<i class="fa-solid fa-circle-exclamation" style="font-size:1em; color:black; margin-right:10px;"></i>'
+      icon_info <- '<i class="fa-solid fa-circle-info" style="margin-right:4px;"></i>'
+
+      make_warning <- function(text) {
+        paste0(icon_warn, "<i>", text, "</i>")
+      }
+
+      make_details <- function(label, items) {
+        paste0(
+          "<details style='font-size:0.85em; color:gray; cursor:pointer;'>",
+          "<summary style='user-select:none;'>",
+          icon_info,
+          label,
+          "</summary>",
+          "<div style='margin-top:6px; max-height:150px; overflow-y:auto;",
+          " border:1px solid #ddd; border-radius:4px; padding:6px; background:#f8f8f8;'>",
+          "<div style='font-family:monospace; font-size:0.9em;'>",
+          paste(items, collapse = "<br>"),
+          "</div></div></details>"
+        )
+      }
 
       message <- NULL
 
       if (deconvolution_sidebar_vars$selected() == "folder") {
-        raw_dirs <- dir_ls(
-          deconvolution_sidebar_vars$dir(),
-          glob = "*.raw"
-        )
+        raw_dirs <- dir_ls(deconvolution_sidebar_vars$dir(), glob = "*.raw")
 
-        if (
-          isTRUE(deconvolution_sidebar_vars$use_config()) &
-            length(config_file())
-        ) {
-          presence <- config_file()[["Sample"]] %in%
-            basename(raw_dirs)
-
-          if (all(presence)) {
-            message <- shiny$p(
-              shiny$HTML(
-                paste0(
-                  "<b>Multiple target file(s) selected</b><br><br><b>",
-                  nrow(config_file()),
-                  "</b> sample(s) present in ",
-                  "the config file are queried for deconvolution."
-                )
-              )
-            )
-          } else if (sum(presence) == 0) {
-            disable(
-              selector = "#app-deconvolution_main-deconvolute_start_conf"
-            )
-
-            message <- shiny$p(
-              shiny$HTML(
-                paste0(
-                  "<b>Multiple target file(s) selected</b><br><br>",
-                  '<i class="fa-solid fa-circle-exclamation" style="font-size:',
-                  '1em; color:black; margin-right: 10px;"></i>',
-                  "<i>None of the sample(s) present in ",
-                  "the config file can be found in the selected folder.</i>"
-                )
-              )
-            )
-          } else {
-            message <- shiny$p(
-              shiny$HTML(
-                paste0(
-                  "<b>Multiple target file(s) selected</b><br><br><b>",
-                  sum(presence),
-                  "</b> sample(s) present in ",
-                  "the config file are queried for deconvolution.<br><br>",
-                  '<i class="fa-solid fa-circle-exclamation" style="font-size:',
-                  '1em; color:black; margin-right: 10px;"></i><i><b>',
-                  sum(!presence),
-                  "</b> of the samples specified in the config file are<b> NOT</b> prese",
-                  "nt in the selected folder.</i>"
-                )
-              )
-            )
-          }
-
-          # if duplicates present disable continue button
-          if (any(duplicated(config_file()[["Sample"]]))) {
-            disable(
-              selector = "#app-deconvolution_main-deconvolute_start_conf"
-            )
-          }
-        } else {
-          if (is.null(input$target_selector)) {
-            num_targets <- 0
-          } else {
-            num_targets <- length(input$target_selector)
-          }
-
-          if (num_targets == 0) {
-            disable(
-              selector = "#app-deconvolution_main-deconvolute_start_conf"
-            )
-          }
-
-          message <- shiny$p(
-            shiny$HTML(
-              paste0(
-                "<b>Multiple target file(s) selected</b><br><br><b>",
-                num_targets,
-                "</b> raw file(s) in the",
-                " selected directory are currently queried for deconvolution.",
-                " If you wish to process only a subset select the respective",
-                " target files."
-              )
-            )
-          )
-        }
-      } else {
-        name <- basename(deconvolution_sidebar_vars$file())
-
-        message <- shiny$p(
-          shiny$HTML(
-            paste0(
-              "<b>Individual target file selected</b><br><br>",
-              name,
-              " is queried for deconvolution."
-            )
-          )
-        )
-      }
-
-      return(message)
-    })
-
-    # Dynamic rendering of warnings for file selection
-    output$warning_ui <- shiny$renderUI({
-      input$deconvolute_start
-
-      warning <- NULL
-      reactVars$overwrite <- FALSE
-
-      # Get finished files in destination path
-      finished_files <- dir_ls(
-        deconvolution_sidebar_vars$targetpath(),
-        glob = "*_rawdata_unidecfiles"
-      )
-
-      if (deconvolution_sidebar_vars$selected() == "folder") {
         if (
           isTRUE(deconvolution_sidebar_vars$use_config()) &&
             length(config_file())
         ) {
-          config_sel <- gsub(
-            ".raw",
-            "_rawdata_unidecfiles",
-            config_file()[["Sample"]]
-          )
+          presence <- config_file()[["Sample"]] %in% basename(raw_dirs)
+          extras <- basename(raw_dirs)[
+            !basename(raw_dirs) %in% config_file()[["Sample"]]
+          ]
 
-          intersect <- config_sel %in% basename(finished_files)
-
-          if (any(intersect)) {
-            reactVars$overwrite <- config_sel[intersect]
-
-            warning <- shiny$p(
-              shiny$HTML(
-                paste0(
-                  '<i class="fa-solid fa-circle-exclamation" style="font-size:',
-                  '1em; color:black; margin-right: 10px;"></i>',
-                  "<b>",
-                  sum(intersect),
-                  paste0(
-                    "</b> file(s) queried for deconvolution appear to have ",
-                    "already been processed in the destination folder. Please choose how to proceed:"
-                  )
-                )
-              )
-            )
-          }
-        } else if (!is.null(input$target_selector)) {
-          intersect <- gsub(
-            ".raw",
-            "_rawdata_unidecfiles",
-            input$target_selector
-          ) %in%
-            basename(finished_files)
-
-          if (sum(intersect) > 0) {
-            reactVars$overwrite <- gsub(
-              ".raw",
-              "_rawdata_unidecfiles",
-              input$target_selector[intersect]
-            )
-
-            warning <- shiny$p(
-              shiny$HTML(
-                paste0(
-                  '<i class="fa-solid fa-circle-exclamation" style="font-size:',
-                  '1em; color:black; margin-right: 10px;"></i>',
-                  "<b>",
-                  sum(intersect),
-                  paste0(
-                    "</b> file(s) queried for deconvolution appear to have ",
-                    "already been processed in the destination folder. Please choose how to proceed:"
-                  )
-                )
-              )
-            )
-          }
-        }
-      } else if (
-        gsub(
-          ".raw",
-          "_rawdata_unidecfiles",
-          basename(deconvolution_sidebar_vars$file())
-        ) %in%
-          basename(finished_files)
-      ) {
-        reactVars$overwrite <- gsub(
-          ".raw",
-          "_rawdata_unidecfiles",
-          deconvolution_sidebar_vars$file()
-        )
-        reactVars$duplicated <- "Overwrite Files"
-        warning <- shiny$p(
-          shiny$HTML(
+          html <- if (sum(presence) == 0) {
+            disable(selector = "#app-deconvolution_main-deconvolute_start_conf")
             paste0(
-              '<i class="fa-solid fa-circle-exclamation" style="font-size:1e',
-              'm; color:black; margin-right: 10px;"></i>',
-              "The file queried for deconvolution appears to have already",
-              " been processed. Choosing to continue will overwrite",
-              " the present result."
+              "<b>Multiple target file(s) selected</b><br><br>",
+              make_warning(
+                "None of the sample(s) present in the config file can be found in the selected folder."
+              )
             )
-          )
-        )
+          } else {
+            parts <- paste0(
+              "<b>Multiple target file(s) selected</b><br><br>",
+              "<b>",
+              sum(presence),
+              "</b> sample(s) present in the config file are queried for deconvolution."
+            )
+            if (!all(presence)) {
+              missing <- config_file()[["Sample"]][!presence]
+              parts <- paste0(
+                parts,
+                "<br><br>",
+                make_warning(paste0(
+                  "<b>",
+                  sum(!presence),
+                  "</b> of the samples specified in the config file are <b>NOT</b> present in the selected folder."
+                )),
+                "<br>",
+                make_details("View missing sample(s)", missing)
+              )
+            }
+            parts
+          }
+
+          if (length(extras) > 0) {
+            html <- paste0(
+              html,
+              "<br>",
+              make_warning(paste0(
+                "<b>",
+                length(extras),
+                "</b> sample(s) present in the selected folder are <b>NOT</b> in the experiment config and will not be deconvoluted."
+              )),
+              "<br>",
+              make_details("View unqueued sample(s)", extras)
+            )
+          }
+
+          if (any(duplicated(config_file()[["Sample"]]))) {
+            disable(selector = "#app-deconvolution_main-deconvolute_start_conf")
+          }
+
+          message <- shiny$p(shiny$HTML(html))
+        } else {
+          num_targets <- length(input$target_selector) %||% 0
+
+          if (num_targets == 0) {
+            disable(selector = "#app-deconvolution_main-deconvolute_start_conf")
+          }
+
+          message <- shiny$p(shiny$HTML(paste0(
+            "<b>Multiple target file(s) selected</b><br><br>",
+            "<b>",
+            num_targets,
+            "</b> raw file(s) in the selected directory are currently",
+            " queried for deconvolution. If you wish to process only a subset select the",
+            " respective target files."
+          )))
+        }
+      } else {
+        message <- shiny$p(shiny$HTML(paste0(
+          "<b>Individual target file selected</b><br><br>",
+          "<span style='white-space:nowrap;'>",
+          basename(deconvolution_sidebar_vars$file()),
+          "</span>",
+          " is queried for deconvolution."
+        )))
       }
 
-      return(warning)
+      return(message)
     })
 
     # Dynamic rendering of target file selector
@@ -624,18 +1117,24 @@ server <- function(
       return(picker)
     })
 
-    # Observe choice for overwrite/skip already present results
-    shiny$observe({
-      if (!is.null(input$decon_select)) {
-        reactVars$duplicated <- input$decon_select
-      }
-    })
-
     #### Deconvolution start ----
     shiny$observeEvent(input$deconvolute_start_conf, {
       # Reset modal and previous processes
       shiny$removeModal()
       reset_progress()
+
+      # Show that setup is underway (reset_progress already cleared to "Ready";
+      # this immediately reflects the new run phase before the observer fires).
+      updateProgressBar(
+        session = session,
+        id = ns("progressBar"),
+        value = 0,
+        title = "Setting up ..."
+      )
+
+      # Lock in analysis destination (sidebar path — no subfolder created)
+      analysis_dest(effective_dest())
+
       write_log("Deconvolution initiated")
 
       # UI changes
@@ -673,16 +1172,21 @@ server <- function(
           sample_names <- config_file()[["Sample"]]
           raw_dirs <- raw_dirs[basename(raw_dirs) %in% sample_names]
 
-          # Prepare heatmap variables
+          # Prepare heatmap variables — restrict to samples present in folder
+          present_in_folder <- sample_names %in% basename(raw_dirs)
           reactVars$sample_names <- gsub(
-            ".raw",
+            "\\.raw$",
             "",
-            config_file()[["Sample"]]
+            sample_names[present_in_folder],
+            ignore.case = TRUE
           )
+          reactVars$sample_names <- reactVars$sample_names[nzchar(trimws(
+            reactVars$sample_names
+          ))]
           reactVars$wells <- gsub(
             ",",
             "",
-            sub("^.*:", "", config_file()[["Well"]])
+            sub("^.*:", "", config_file()[["Well"]][present_in_folder])
           )
         } else {
           write_log("Multiple target deconvolution mode (no config file)")
@@ -702,50 +1206,81 @@ server <- function(
       }
       write_log(paste(
         "Destination path:",
-        deconvolution_sidebar_vars$targetpath()
+        analysis_dest()
       ))
 
-      # Overwrite or skip already present result dirs
-      if (!isFALSE(reactVars$overwrite)) {
-        if (reactVars$duplicated == "Overwrite Files") {
-          # Remove result files and dirs
-          rslt_dirs <- file.path(
-            deconvolution_sidebar_vars$targetpath(),
-            basename(reactVars$overwrite)
-          )
-
-          if (deconvolution_sidebar_vars$selected() == "file") {
-            write_log(paste("Overwriting existing", rslt_dirs))
-          } else {
-            write_log(paste(
-              "Overwriting",
-              length(rslt_dirs),
-              "existing result file(s)"
-            ))
-          }
-
-          rslt_dirs <- rslt_dirs[dir.exists(rslt_dirs)]
-          unlink(rslt_dirs, recursive = TRUE)
-
-          txt_files <- gsub(
-            "_rawdata_unidecfiles",
-            "_rawdata.txt",
-            rslt_dirs
-          )
-          txt_files <- txt_files[file.exists(txt_files)]
-          file.remove(txt_files)
-        } else if (reactVars$duplicated == "Skip Files") {
+      # Handle duplicate samples already present (done) in an existing DB
+      if (length(reactVars$overwrite) > 0) {
+        choice <- reactVars$duplicated %||% "Overwrite Samples"
+        if (choice == "Skip Samples") {
+          # Remove already-done samples from the queue
           raw_dirs <- raw_dirs[
-            !basename(raw_dirs) %in%
-              gsub("_rawdata_unidecfiles", ".raw", reactVars$overwrite)
+            !gsub("\\.raw$", "", basename(raw_dirs), ignore.case = TRUE) %in%
+              reactVars$overwrite
           ]
-
           write_log(paste(
             "Skipping",
-            length(raw_dirs),
-            "existing result file(s)"
+            length(reactVars$overwrite),
+            "already-processed sample(s)"
+          ))
+          if (length(raw_dirs) == 0) {
+            shiny$showNotification(
+              "All selected samples are already processed — nothing to do.",
+              type = "warning",
+              duration = 5
+            )
+            runjs(paste0(
+              'document.getElementById("blocking-overlay").style.display = "none";'
+            ))
+            reset_progress()
+            return()
+          }
+        } else {
+          write_log(paste(
+            "Overwriting",
+            length(reactVars$overwrite),
+            "already-processed sample(s)"
+          ))
+          # The worker's DB init deletes status + per-sample data rows for
+          # these samples before reprocessing, so no additional cleanup needed here.
+        }
+      }
+
+      # Delete stale UniDec output (txt + unidecfiles dirs) that would cause
+      # os.rename() FileExistsError inside the Python worker.
+      # Done here — after skip filtering — so files are only deleted for
+      # samples that will actually be processed (never when all are skipped).
+      stale_all <- reactVars$stale_unidec_output
+      if (length(stale_all) > 0) {
+        active_bases <- gsub(
+          "\\.raw$",
+          "",
+          basename(raw_dirs),
+          ignore.case = TRUE
+        )
+        stale_active <- stale_all[
+          gsub(
+            "(_rawdata\\.txt|_rawdata_unidecfiles)$",
+            "",
+            basename(stale_all)
+          ) %in%
+            active_bases
+        ]
+        if (length(stale_active) > 0) {
+          for (path in stale_active) {
+            if (dir.exists(path)) {
+              unlink(path, recursive = TRUE)
+            } else if (file.exists(path)) {
+              file.remove(path)
+            }
+          }
+          write_log(paste(
+            "Deleted",
+            length(stale_active),
+            "stale UniDec output file(s) before reprocessing"
           ))
         }
+        reactVars$stale_unidec_output <- character(0)
       }
 
       # Render disabled results picker
@@ -766,8 +1301,7 @@ server <- function(
       reactVars$is_running <- TRUE
       reactVars$catch_error <- FALSE
       reactVars$expected_files <- length(raw_dirs)
-      reactVars$initial_file_count <- check_progress(raw_dirs)
-      message("Initial file count: ", reactVars$initial_file_count)
+      reactVars$initial_file_count <- 0L # check_progress already scopes to raw_dirs
 
       #### Start computation ----
 
@@ -805,7 +1339,56 @@ server <- function(
       reactVars$decon_process_out <- output_path
       write("", reactVars$decon_process_out)
 
+      # Pre-clear stale DB state before spawning the worker to eliminate race
+      # conditions where the progress observer fires before the worker has had
+      # time to initialise the DB:
+      #   1. Drop 'completed' sentinel — prevents immediate "Finalized!" flash.
+      #   2. Delete status rows for the samples being processed — prevents a
+      #      100% progress / "Saving Results" flash when old done records exist.
+      tryCatch(
+        {
+          db_path_pre <- file.path(
+            analysis_dest(),
+            paste0(trimws(input$analysis_name), ".db")
+          )
+          if (file.exists(db_path_pre)) {
+            active_bases <- gsub(
+              "\\.raw$",
+              "",
+              basename(raw_dirs),
+              ignore.case = TRUE
+            )
+            con_pre <- DBI::dbConnect(RSQLite::SQLite(), db_path_pre)
+            if (DBI::dbExistsTable(con_pre, "completed")) {
+              DBI::dbExecute(con_pre, "DROP TABLE completed")
+            }
+            if (DBI::dbExistsTable(con_pre, "status")) {
+              for (s in active_bases) {
+                DBI::dbExecute(
+                  con_pre,
+                  "DELETE FROM status WHERE sample = ?",
+                  params = list(s)
+                )
+              }
+            }
+            DBI::dbDisconnect(con_pre)
+          }
+        },
+        error = function(e) {
+          message(
+            "Warning: could not pre-clear DB state before worker start: ",
+            e$message
+          )
+        }
+      )
+
       # Launch external deconvolution process
+      updateProgressBar(
+        session = session,
+        id = ns("progressBar"),
+        value = 0,
+        title = "Launching worker ..."
+      )
       tryCatch(
         {
           rx_process <- process$new(
@@ -815,8 +1398,13 @@ server <- function(
               temp,
               log_path,
               getwd(),
-              deconvolution_sidebar_vars$targetpath(),
-              Sys.getenv("KIWIMS_DEV_MODE")
+              analysis_dest(),
+              Sys.getenv("KIWIMS_DEV_MODE"),
+              file.path(
+                analysis_dest(),
+                paste0(trimws(input$analysis_name), ".db")
+              ),
+              as.character(isTRUE(read_user_settings()$deconv_keep_raw_output))
             ),
             stdout = reactVars$decon_process_out,
             stderr = reactVars$decon_process_out
@@ -928,11 +1516,13 @@ server <- function(
               ) {
                 reactVars$results_observer$destroy()
               }
-            }
 
-            # Set reactive status variables
-            reactVars$is_running <- FALSE
-            reactVars$deconv_report_status <- NULL
+              # Set reactive status variables (error path only — for successful
+              # completion the progress observer sets is_running=FALSE and
+              # updates the button to "Reset" atomically at lines ~1918/2090)
+              reactVars$is_running <- FALSE
+              reactVars$deconv_report_status <- NULL
+            }
           }
         }
       })
@@ -947,9 +1537,13 @@ server <- function(
         paste(formatted_params, collapse = "\n")
       ))
 
-      # On app close kill deconvolution process and log status
+      # On app close: kill process and checkpoint DB to remove WAL sidecar files
       reactVars$process_observer <- shiny$observe({
         proc <- decon_process_data()
+        db_snap <- file.path(
+          analysis_dest(),
+          paste0(trimws(input$analysis_name), ".db")
+        )
 
         completed_files <- reactVars$completed_files
         expected_files <- reactVars$expected_files
@@ -963,8 +1557,20 @@ server <- function(
               expected_files,
               "target(s) completed"
             ))
-
             proc$kill_tree()
+          }
+          # Checkpoint any WAL left by an aborted run so sidecar files are removed
+          if (file.exists(db_snap)) {
+            tryCatch(
+              {
+                con_end <- DBI::dbConnect(RSQLite::SQLite(), db_snap)
+                DBI::dbExecute(con_end, "PRAGMA busy_timeout=3000")
+                DBI::dbExecute(con_end, "PRAGMA wal_checkpoint(TRUNCATE)")
+                DBI::dbExecute(con_end, "PRAGMA journal_mode=DELETE")
+                DBI::dbDisconnect(con_end)
+              },
+              error = function(e) NULL
+            )
           }
         })
       })
@@ -999,167 +1605,104 @@ server <- function(
             ) {
               shiny$req(reactVars$sample_names, reactVars$wells)
 
-              reactVars_sample_names <<- reactVars$sample_names
-              reactVars_wells <<- reactVars$wells
-
-              results_all <- dir_ls(
-                deconvolution_sidebar_vars$targetpath(),
-                glob = "*_rawdata_unidecfiles"
+              db_pth <- file.path(
+                analysis_dest(),
+                paste0(trimws(input$analysis_name), ".db")
+              )
+              done_ids <- tryCatch(
+                {
+                  con_chk <- dbConnect(SQLite(), db_pth, flags = SQLITE_RO)
+                  on.exit(dbDisconnect(con_chk), add = TRUE)
+                  if (dbExistsTable(con_chk, "status")) {
+                    dbGetQuery(
+                      con_chk,
+                      "SELECT sample FROM status WHERE state='done'"
+                    )$sample
+                  } else {
+                    character(0)
+                  }
+                },
+                error = function(e) character(0)
+              )
+              done_in_run <- intersect(done_ids, reactVars$sample_names)
+              results <- file.path(
+                analysis_dest(),
+                paste0(done_in_run, "_rawdata_unidecfiles")
               )
 
-              results_all <<- results_all
-
-              results <- results_all[
-                basename(results_all) %in%
-                  paste0(
-                    reactVars$sample_names,
-                    "_rawdata_unidecfiles"
-                  )
-              ]
-
-              if (length(results_all)) {
-                if (is.null(reactVars$rslt_df) || nrow(reactVars$rslt_df) < 1) {
-                  well <- character()
-                  value <- numeric()
-                  sample_names <- character()
-
-                  for (i in seq_along(results)) {
-                    sample_names[i] <- gsub(
-                      "_rawdata_unidecfiles",
-                      "",
-                      basename(results[i])
-                    )
-                    well[i] <- reactVars$wells[which(
-                      reactVars$sample_names == sample_names[i]
-                    )]
-                    peak_file <- file.path(
-                      results[i],
-                      paste0(sample_names[i], "_rawdata_peaks.dat")
-                    )
-                    if (file.exists(peak_file)) {
-                      peaks <- utils::read.delim(
-                        peak_file,
-                        header = FALSE,
-                        sep = " "
-                      )
-                      max <- max(peaks$V1)
-                      if (length(max) && !is.na(max)) {
-                        value[i] <- max
-                      } else {
-                        value[i] <- NA
-                      }
-                    } else {
-                      value[i] <- NA
-                    }
+              if (length(done_in_run)) {
+                peaks_from_db <- tryCatch(
+                  read_decon_peaks_max(db_pth, done_in_run),
+                  error = function(e) {
+                    data.frame(sample = character(), max_mass = numeric())
                   }
-                  rslt_df <- data.frame(
-                    sample = sample_names,
-                    well_id = well,
-                    value = value
-                  )
-                  reactVars$rslt_df <- rslt_df[
-                    !as.logical(
-                      rowSums(is.na(rslt_df))
-                    ),
+                )
+                if (nrow(peaks_from_db) > 0) {
+                  peaks_from_db$well_id <- reactVars$wells[
+                    match(peaks_from_db$sample, reactVars$sample_names)
                   ]
-                } else {
-                  new <- !gsub(
-                    "_rawdata_unidecfiles",
-                    "",
-                    basename(results)
-                  ) %in%
-                    reactVars$rslt_df$sample
-                  new_results <- results[new]
-
-                  if (length(new_results)) {
-                    well <- character()
-                    value <- numeric()
-                    sample_names <- character()
-                    for (i in seq_along(new_results)) {
-                      sample_names[i] <- gsub(
-                        "_rawdata_unidecfiles",
-                        "",
-                        basename(new_results[i])
-                      )
-                      well[i] <- reactVars$wells[which(
-                        reactVars$sample_names == sample_names[i]
-                      )]
-
-                      peak_file <- file.path(
-                        new_results[i],
-                        paste0(sample_names[i], "_rawdata_peaks.dat")
-                      )
-
-                      if (file.exists(peak_file)) {
-                        get_peaks <- tryCatch(
-                          {
-                            peaks <- utils::read.delim(
-                              peak_file,
-                              header = FALSE,
-                              sep = " "
-                            )
-                          },
-                          error = function(e) {
-                            NULL
-                          }
-                        )
-
-                        if (is.null(peaks)) {
-                          value[i] <- NA
-                          next
-                        }
-
-                        max <- max(peaks$V1)
-                        if (length(max) && !is.na(max)) {
-                          value[i] <- max
-                        } else {
-                          value[i] <- NA
-                        }
-                      } else {
-                        value[i] <- NA
-                      }
-                    }
-
-                    new_rslt_df <- data.frame(
-                      sample = sample_names,
-                      well_id = well,
-                      value = value
+                  peaks_from_db <- peaks_from_db[
+                    !is.na(peaks_from_db$well_id) &
+                      !is.na(peaks_from_db$max_mass),
+                  ]
+                  if (nrow(peaks_from_db) > 0) {
+                    reactVars$rslt_df <- data.frame(
+                      sample = peaks_from_db$sample,
+                      well_id = peaks_from_db$well_id,
+                      value = peaks_from_db$max_mass
                     )
-                    new_rslt_df <- new_rslt_df[
-                      !as.logical(
-                        rowSums(is.na(new_rslt_df))
-                      ),
-                    ]
-
-                    reactVars$rslt_df <- rbind(reactVars$rslt_df, new_rslt_df)
                   }
                 }
 
                 ##### Render result picker with updated choices ----
-                if (nrow(reactVars$rslt_df) > 0) {
-                  # Render results picker
-                  picker_choices <- gsub(
-                    "_rawdata_unidecfiles",
-                    ".raw",
-                    basename(results)
-                  )
+                choices_ok <- gsub(
+                  "_rawdata_unidecfiles",
+                  ".raw",
+                  basename(results)
+                )
+
+                failed_in_run <- reactVars$failed_samples[
+                  reactVars$failed_samples %in% reactVars$sample_names
+                ]
+                failed_in_run <- failed_in_run[nzchar(failed_in_run)]
+
+                choices_failed <- character(0)
+                if (length(failed_in_run)) {
+                  choices_failed <- paste0(failed_in_run, ".raw")
+                }
+
+                named_choices <- character(0)
+                if (length(choices_ok) > 0) {
+                  named_choices <- c(named_choices, choices_ok)
+                  names(named_choices)[seq_along(choices_ok)] <- choices_ok
+                }
+                if (length(choices_failed) > 0) {
+                  prev_len <- length(named_choices)
+                  named_choices <- c(named_choices, choices_failed)
+                  names(named_choices)[prev_len + seq_along(choices_failed)] <-
+                    paste0(failed_in_run, " (failed)")
+                }
+                if (length(named_choices) > 0) {
+                  cur_sel <- result_files_sel()
                   if (
-                    is.null(result_files_sel()) && length(picker_choices) > 0
+                    is.null(cur_sel) ||
+                      !nzchar(cur_sel) ||
+                      !(cur_sel %in% named_choices)
                   ) {
-                    result_files_sel(picker_choices[1])
+                    result_files_sel(unname(named_choices[1]))
                   }
-                  output$result_picker_ui <- shiny$renderUI(
+
+                  output$result_picker_ui <- shiny$renderUI({
                     shiny$div(
                       class = "result-picker",
                       shiny$selectInput(
                         ns("result_picker"),
                         "Select Sample",
-                        choices = picker_choices,
+                        choices = named_choices,
                         selected = result_files_sel()
                       )
                     )
-                  )
-                  # Apply JS modifications for picker
+                  })
                   session$sendCustomMessage("selectize-init", "result_picker")
                 }
               }
@@ -1168,37 +1711,76 @@ server <- function(
                 deconvolution_sidebar_vars$dir(),
                 target_selector_sel()
               )
-              fin_dirs <- file.path(
-                deconvolution_sidebar_vars$targetpath(),
-                basename(gsub(
-                  ".raw",
-                  "_rawdata_unidecfiles",
-                  selected_files
-                ))
+              sel_base <- gsub(
+                "\\.raw$",
+                "",
+                basename(selected_files),
+                ignore.case = TRUE
               )
-              peak_files <- file.path(fin_dirs, "plots.rds")
-              finished_files <- file.exists(peak_files)
+              db <- file.path(
+                analysis_dest(),
+                paste0(trimws(input$analysis_name), ".db")
+              )
+              done_samples <- tryCatch(
+                {
+                  con_chk <- dbConnect(SQLite(), db, flags = SQLITE_RO)
+                  on.exit(dbDisconnect(con_chk), add = TRUE)
+                  if (dbExistsTable(con_chk, "status")) {
+                    dbGetQuery(
+                      con_chk,
+                      "SELECT sample FROM status WHERE state='done'"
+                    )$sample
+                  } else {
+                    character(0)
+                  }
+                },
+                error = function(e) character(0)
+              )
+              finished_files <- sel_base %in% done_samples
+              failed_mask <- sel_base %in%
+                reactVars$failed_samples &
+                !finished_files
 
-              if (sum(finished_files) > 0) {
-                choices <- basename(selected_files)[finished_files]
-                selected <- ifelse(
-                  is.null(result_files_sel()),
-                  choices[1],
-                  result_files_sel()
-                )
+              choices_ok <- basename(selected_files)[finished_files]
+              choices_failed <- basename(selected_files)[failed_mask]
+              named_choices <- character(0)
+              if (length(choices_ok) > 0) {
+                named_choices <- c(named_choices, choices_ok)
+                names(named_choices)[seq_along(choices_ok)] <- choices_ok
+              }
+              if (length(choices_failed) > 0) {
+                prev_len <- length(named_choices)
+                named_choices <- c(named_choices, choices_failed)
+                names(named_choices)[prev_len + seq_along(choices_failed)] <-
+                  paste0(
+                    gsub("\\.raw$", "", choices_failed, ignore.case = TRUE),
+                    " (failed)"
+                  )
+              }
 
-                output$result_picker_ui <- shiny$renderUI(
+              if (length(named_choices) > 0) {
+                cur_sel <- result_files_sel()
+                sel_default <- if (
+                  !is.null(cur_sel) &&
+                    nzchar(cur_sel) &&
+                    cur_sel %in% named_choices
+                ) {
+                  cur_sel
+                } else {
+                  unname(named_choices[1])
+                }
+
+                output$result_picker_ui <- shiny$renderUI({
                   shiny$div(
                     class = "result-picker",
                     shiny$selectInput(
                       ns("result_picker"),
                       "Select Sample",
-                      choices = choices,
-                      selected = selected
+                      choices = named_choices,
+                      selected = sel_default
                     )
                   )
-                )
-                # Apply JS modifications for picker
+                })
                 session$sendCustomMessage("selectize-init", "result_picker")
               }
 
@@ -1222,9 +1804,35 @@ server <- function(
         shiny$invalidateLater(1000)
 
         if (difftime(Sys.time(), reactVars$last_check, units = "secs") >= 0.5) {
+          # Scan only for sentinels that belong to the current raw_dirs so that
+          # residual files from other runs in the same directory are ignored.
+          current_base_names <- gsub(
+            "\\.raw$",
+            "",
+            basename(raw_dirs),
+            ignore.case = TRUE
+          )
+          db_pth <- file.path(
+            analysis_dest(),
+            paste0(trimws(input$analysis_name), ".db")
+          )
+          failed_in_db <- decon_failed_samples(db_pth)
+          newly_failed <- setdiff(
+            intersect(current_base_names, failed_in_db),
+            reactVars$failed_samples
+          )
+          newly_failed <- newly_failed[nzchar(trimws(newly_failed))]
+          if (length(newly_failed) > 0) {
+            reactVars$failed_samples <- c(
+              reactVars$failed_samples,
+              newly_failed
+            )
+          }
+
           reactVars$current_total_files <- check_progress(raw_dirs)
           reactVars$completed_files <-
-            reactVars$current_total_files - reactVars$initial_file_count
+            (reactVars$current_total_files - reactVars$initial_file_count) +
+            length(reactVars$failed_samples)
           reactVars$last_check <- Sys.time()
 
           progress_pct <- min(
@@ -1250,12 +1858,25 @@ server <- function(
             reactVars$count <- 0
           }
 
-          if (reactVars$current_total_files == 0) {
+          result_files <- file.path(
+            analysis_dest(),
+            basename(gsub(".raw", "_rawdata_unidecfiles", raw_dirs))
+          )
+
+          # Poll completion sentinel on every cycle
+          all_processed <- decon_is_complete(
+            file.path(
+              analysis_dest(),
+              paste0(trimws(input$analysis_name), ".db")
+            )
+          )
+
+          if (reactVars$completed_files == 0) {
             title <- paste0(
               "Initializing ",
               paste0(rep(".", reactVars$count), collapse = "")
             )
-          } else if (progress_pct != 100) {
+          } else if (!all_processed) {
             title <- paste0(
               sprintf(
                 "Processing Files (%d/%d) ",
@@ -1270,23 +1891,7 @@ server <- function(
               paste0(rep(".", reactVars$count), collapse = "")
             )
 
-            result_files <- file.path(
-              deconvolution_sidebar_vars$targetpath(),
-              basename(gsub(".raw", "_rawdata_unidecfiles", raw_dirs))
-            )
-
-            # Check if deconvolution finished for all target files
-            if (
-              all(file.exists(file.path(result_files, "plots.rds"))) &&
-                file.exists(file.path(
-                  deconvolution_sidebar_vars$targetpath(),
-                  gsub(
-                    ".log",
-                    "_RESULT.rds",
-                    basename(log_path)
-                  )
-                ))
-            ) {
+            if (all_processed) {
               # Stop observers
               if (!is.null(reactVars$progress_observer)) {
                 reactVars$progress_observer$destroy()
@@ -1315,64 +1920,35 @@ server <- function(
                       nzchar(trimws(as.character(config_file()[["Well"]])))
                   )
               ) {
-                results <- result_files[
-                  basename(result_files) %in%
-                    paste0(
-                      reactVars$sample_names,
-                      "_rawdata_unidecfiles"
-                    )
-                ]
-
-                new <- !gsub("_rawdata_unidecfiles", "", basename(results)) %in%
+                new_sample_names <- setdiff(
+                  reactVars$sample_names,
                   reactVars$rslt_df$sample
-                new_results <- results[new]
+                )
 
-                if (length(new_results)) {
+                if (length(new_sample_names)) {
+                  db_path_hm <- file.path(
+                    analysis_dest(),
+                    paste0(trimws(input$analysis_name), ".db")
+                  )
+                  peaks_max <- tryCatch(
+                    read_decon_peaks_max(db_path_hm, new_sample_names),
+                    error = function(e) {
+                      data.frame(sample = character(), max_mass = numeric())
+                    }
+                  )
+
                   well <- character()
                   value <- numeric()
-                  sample_names <- character()
-                  for (i in seq_along(new_results)) {
-                    sample_names[i] <- gsub(
-                      "_rawdata_unidecfiles",
-                      "",
-                      basename(new_results[i])
-                    )
+                  sample_names <- new_sample_names
+                  for (i in seq_along(sample_names)) {
                     well[i] <- reactVars$wells[which(
                       reactVars$sample_names == sample_names[i]
                     )]
-
-                    peak_file <- file.path(
-                      new_results[i],
-                      paste0(sample_names[i], "_rawdata_peaks.dat")
-                    )
-
-                    if (file.exists(peak_file)) {
-                      get_peaks <- tryCatch(
-                        {
-                          peaks <- utils::read.delim(
-                            peak_file,
-                            header = FALSE,
-                            sep = " "
-                          )
-                        },
-                        error = function(e) {
-                          NULL
-                        }
-                      )
-
-                      if (is.null(peaks)) {
-                        value[i] <- NA
-                        next
-                      }
-
-                      max <- max(peaks$V1)
-                      if (length(max) && !is.na(max)) {
-                        value[i] <- max
-                      } else {
-                        value[i] <- NA
-                      }
+                    row <- peaks_max[peaks_max$sample == sample_names[i], ]
+                    value[i] <- if (nrow(row) > 0 && !is.na(row$max_mass[1])) {
+                      row$max_mass[1]
                     } else {
-                      value[i] <- NA
+                      NA
                     }
                   }
 
@@ -1390,17 +1966,31 @@ server <- function(
                   reactVars$rslt_df <- rbind(reactVars$rslt_df, new_rslt_df)
                 }
 
-                # Update result picker with all completed samples
-                if (nrow(reactVars$rslt_df) > 0) {
-                  picker_choices <- gsub(
-                    "_rawdata_unidecfiles",
-                    ".raw",
-                    basename(results)
-                  )
-                  if (
-                    is.null(result_files_sel()) && length(picker_choices) > 0
-                  ) {
-                    result_files_sel(picker_choices[1])
+                # Update result picker with done + failed samples
+                done_bases <- reactVars$rslt_df$sample
+                failed_in_run <- reactVars$failed_samples[
+                  reactVars$failed_samples %in% reactVars$sample_names
+                ]
+                failed_in_run <- failed_in_run[nzchar(failed_in_run)]
+                choices_ok <- paste0(done_bases, ".raw")
+                choices_failed <- character(0)
+                if (length(failed_in_run)) {
+                  choices_failed <- paste0(failed_in_run, ".raw")
+                }
+                named_choices <- character(0)
+                if (length(choices_ok) > 0) {
+                  named_choices <- c(named_choices, choices_ok)
+                  names(named_choices)[seq_along(choices_ok)] <- choices_ok
+                }
+                if (length(choices_failed) > 0) {
+                  prev_len <- length(named_choices)
+                  named_choices <- c(named_choices, choices_failed)
+                  names(named_choices)[prev_len + seq_along(choices_failed)] <-
+                    paste0(failed_in_run, " (failed)")
+                }
+                if (length(named_choices) > 0) {
+                  if (is.null(result_files_sel())) {
+                    result_files_sel(unname(named_choices[1]))
                   }
                   output$result_picker_ui <- shiny$renderUI(
                     shiny$div(
@@ -1408,7 +1998,7 @@ server <- function(
                       shiny$selectInput(
                         ns("result_picker"),
                         "Select Sample",
-                        choices = picker_choices,
+                        choices = named_choices,
                         selected = result_files_sel()
                       )
                     )
@@ -1431,36 +2021,73 @@ server <- function(
                   selected_files <- raw_dirs
                 }
 
-                fin_dirs <- file.path(
-                  deconvolution_sidebar_vars$targetpath(),
-                  basename(gsub(".raw", "_rawdata_unidecfiles", selected_files))
+                # Build picker: successful samples + failed samples (labelled)
+                sel_base <- gsub(
+                  "\\.raw$",
+                  "",
+                  basename(selected_files),
+                  ignore.case = TRUE
                 )
-                peak_files <- file.path(fin_dirs, "plots.rds")
-                finished_files <- file.exists(peak_files)
+                db_fin <- file.path(
+                  analysis_dest(),
+                  paste0(trimws(input$analysis_name), ".db")
+                )
+                done_samples_fin <- tryCatch(
+                  {
+                    con_fin <- dbConnect(SQLite(), db_fin, flags = SQLITE_RO)
+                    on.exit(dbDisconnect(con_fin), add = TRUE)
+                    if (dbExistsTable(con_fin, "status")) {
+                      dbGetQuery(
+                        con_fin,
+                        "SELECT sample FROM status WHERE state='done'"
+                      )$sample
+                    } else {
+                      character(0)
+                    }
+                  },
+                  error = function(e) character(0)
+                )
+                finished_files <- sel_base %in% done_samples_fin
+                failed_mask <- sel_base %in%
+                  reactVars$failed_samples &
+                  !finished_files
 
-                if (sum(finished_files) > 0) {
-                  # Update choices and selected sample of results picker
-                  choices <- basename(selected_files)[finished_files]
+                choices_ok <- basename(selected_files)[finished_files]
+                choices_failed <- basename(selected_files)[failed_mask]
 
-                  selected <- ifelse(
-                    is.null(result_files_sel()),
-                    choices[1],
+                named_choices <- character(0)
+                if (length(choices_ok) > 0) {
+                  named_choices <- c(named_choices, choices_ok)
+                  names(named_choices)[seq_along(choices_ok)] <- choices_ok
+                }
+                if (length(choices_failed) > 0) {
+                  prev_len <- length(named_choices)
+                  named_choices <- c(named_choices, choices_failed)
+                  names(named_choices)[prev_len + seq_along(choices_failed)] <-
+                    paste0(
+                      gsub("\\.raw$", "", choices_failed, ignore.case = TRUE),
+                      " (failed)"
+                    )
+                }
+
+                if (length(named_choices) > 0) {
+                  sel_default <- if (!is.null(result_files_sel())) {
                     result_files_sel()
-                  )
+                  } else {
+                    unname(named_choices[1])
+                  }
 
-                  # Render sample picker with updated choices
                   output$result_picker_ui <- shiny$renderUI(
                     shiny$div(
                       class = "result-picker",
                       shiny$selectInput(
                         ns("result_picker"),
                         "Select Sample",
-                        choices = choices,
-                        selected = selected
+                        choices = named_choices,
+                        selected = sel_default
                       )
                     )
                   )
-                  # Apply JS modifications for picker
                   session$sendCustomMessage("selectize-init", "result_picker")
                 }
               }
@@ -1476,22 +2103,58 @@ server <- function(
               # Change progress bar title to "Finalized!"
               title <- "Finalized!"
 
-              # Enable deconvolution report
-              reactVars$deconv_report_status <- "idle"
-              enable(
-                selector = "#app-deconvolution_main-deconvolution_report"
-              )
+              # Report generation is temporarily disabled
 
               # Enable continuation button to protein conversion
               enable(
                 selector = "#app-deconvolution_main-forward_deconvolution"
               )
 
-              # Change spinner to finished
+              # Change spinner: error icon when all samples failed, check otherwise
               hide(selector = "#app-deconvolution_main-processing")
-              show(selector = "#app-deconvolution_main-processing_fin")
-
-              write_log("Deconvolution finalized")
+              n_succeeded <- reactVars$current_total_files -
+                reactVars$initial_file_count
+              n_failed <- length(reactVars$failed_samples)
+              n_total <- reactVars$expected_files
+              if (n_succeeded == 0 && n_failed > 0) {
+                show(selector = "#app-deconvolution_main-processing_error")
+                title <- paste0(
+                  "Finalized with errors (",
+                  n_failed,
+                  "/",
+                  n_total,
+                  " failed)"
+                )
+                write_log(paste(
+                  "Deconvolution finalized — all",
+                  n_failed,
+                  "/",
+                  n_total,
+                  "sample(s) failed"
+                ))
+              } else {
+                show(selector = "#app-deconvolution_main-processing_fin")
+                if (n_failed > 0) {
+                  title <- paste0(
+                    "Finalized (",
+                    n_failed,
+                    "/",
+                    n_total,
+                    " failed)"
+                  )
+                  write_log(paste(
+                    "Deconvolution finalized —",
+                    n_succeeded,
+                    "succeeded,",
+                    n_failed,
+                    "/",
+                    n_total,
+                    "failed"
+                  ))
+                } else {
+                  write_log("Deconvolution finalized")
+                }
+              }
             }
           }
 
@@ -1635,14 +2298,12 @@ server <- function(
             })
           }
         })
-      }
+      } # end heatmap-click block
 
       #### Switch to running UI ----
       # Toggle to hide sidebar
       runjs("document.querySelector('button.collapse-toggle').click();")
-      output$deconvolution_init_ui <- NULL
-
-      output$deconvolution_running_ui <- shiny$renderUI({
+      output$deconvolution_ui <- shiny$renderUI({
         has_wells <- "Well" %in%
           names(config_file()) &&
           any(
@@ -1661,26 +2322,18 @@ server <- function(
 
       ### Render result spectrum
 
-      # Define reactive helper variable to control spinner display
-      allow_spinner_spectrum <- shiny$reactiveVal(TRUE)
-
       output$spectrum <- renderPlotly({
-        # Show spinner only once before plot fully rendered
-        if (shiny$isolate(allow_spinner_spectrum()) == TRUE) {
-          waiter_show(id = ns("spectrum"), html = spin_wave())
-          allow_spinner_spectrum(FALSE)
-        }
-
         shiny$req(result_files_sel())
+        waiter_show(id = ns("spectrum"), html = spin_wave())
 
         if (deconvolution_sidebar_vars$selected() == "folder") {
           result_dir <- file.path(
-            deconvolution_sidebar_vars$targetpath(),
+            analysis_dest(),
             gsub(".raw", "_rawdata_unidecfiles", result_files_sel())
           )
         } else if (deconvolution_sidebar_vars$selected() == "file") {
           result_dir <- file.path(
-            deconvolution_sidebar_vars$targetpath(),
+            analysis_dest(),
             basename(gsub(
               ".raw",
               "_rawdata_unidecfiles",
@@ -1689,15 +2342,43 @@ server <- function(
           )
         }
 
-        if (dir.exists(result_dir)) {
-          # Generate the spectrum plot
+        # Check DB for failure / get plot data
+        sel_base <- gsub("\\.raw$", "", result_files_sel(), ignore.case = TRUE)
+        db_sp <- file.path(
+          analysis_dest(),
+          paste0(trimws(input$analysis_name), ".db")
+        )
+        is_raw_toggle <- as.logical(ifelse(
+          !is.null(input$toggle_result),
+          input$toggle_result,
+          FALSE
+        ))
+
+        if (file.exists(db_sp) && sel_base %in% decon_failed_samples(db_sp)) {
+          waiter_hide(id = ns("spectrum"))
+          return(
+            plotly::plot_ly() |>
+              plotly::layout(
+                paper_bgcolor = "rgba(0,0,0,0)",
+                plot_bgcolor = "rgba(0,0,0,0)",
+                xaxis = list(visible = FALSE),
+                yaxis = list(visible = FALSE)
+              )
+          )
+        }
+
+        # Try DB first (works even when raw files were cleaned up)
+        plot_data <- if (file.exists(db_sp)) {
+          process_plot_data_db(db_sp, sel_base, raw = is_raw_toggle)
+        } else {
+          NULL
+        }
+
+        # Fall back to file-based reader when DB not available (e.g. older runs)
+        if (is.null(plot_data) && dir.exists(result_dir)) {
           spectrum <- spectrum_plot(
             result_path = result_dir,
-            raw = as.logical(ifelse(
-              !is.null(input$toggle_result),
-              input$toggle_result,
-              FALSE
-            )),
+            raw = is_raw_toggle,
             show_peak_labels = ifelse(
               is.null(input$spectrum_annotation),
               TRUE,
@@ -1705,11 +2386,22 @@ server <- function(
             ),
             show_mass_diff = FALSE
           )
-
-          # Hide spinner and activate reactive spinner variable again
           waiter_hide(id = ns("spectrum"))
-          allow_spinner_spectrum(TRUE)
+          return(spectrum)
+        }
 
+        if (!is.null(plot_data)) {
+          spectrum <- spectrum_plot(
+            plot_data = plot_data,
+            raw = is_raw_toggle,
+            show_peak_labels = ifelse(
+              is.null(input$spectrum_annotation),
+              TRUE,
+              input$spectrum_annotation
+            ),
+            show_mass_diff = FALSE
+          )
+          waiter_hide(id = ns("spectrum"))
           return(spectrum)
         }
       })
@@ -1721,12 +2413,12 @@ server <- function(
 
         if (deconvolution_sidebar_vars$selected() == "folder") {
           result_dir <- file.path(
-            deconvolution_sidebar_vars$targetpath(),
+            analysis_dest(),
             gsub(".raw", "_rawdata_unidecfiles", result_files_sel())
           )
         } else if (deconvolution_sidebar_vars$selected() == "file") {
           result_dir <- file.path(
-            deconvolution_sidebar_vars$targetpath(),
+            analysis_dest(),
             basename(gsub(
               ".raw",
               "_rawdata_unidecfiles",
@@ -1735,18 +2427,72 @@ server <- function(
           )
         }
 
-        deconvolution_data_path <- file.path(
-          result_dir,
-          paste0(gsub("_unidecfiles", "", basename(result_dir)), "_error.txt")
+        # Check DB for failure before rendering metrics
+        sel_base_dt <- gsub(
+          "\\.raw$",
+          "",
+          result_files_sel(),
+          ignore.case = TRUE
         )
+        db_dt <- file.path(
+          analysis_dest(),
+          paste0(trimws(input$analysis_name), ".db")
+        )
+        if (
+          file.exists(db_dt) && sel_base_dt %in% decon_failed_samples(db_dt)
+        ) {
+          waiter_hide(id = ns("deconvolution_data"))
+          return(
+            DT::datatable(
+              data = data.frame(),
+              options = list(dom = '', paging = FALSE)
+            )
+          )
+        }
 
-        if (dir.exists(result_dir) && file.exists(deconvolution_data_path)) {
-          deconvolution_data <- readLines(deconvolution_data_path)
+        # Try DB first, fall back to file
+        db_metrics <- file.path(
+          analysis_dest(),
+          paste0(trimws(input$analysis_name), ".db")
+        )
+        error_rows <- if (file.exists(db_metrics)) {
+          tryCatch(
+            {
+              con_m <- dbConnect(SQLite(), db_metrics, flags = SQLITE_RO)
+              on.exit(dbDisconnect(con_m), add = TRUE)
+              if (dbExistsTable(con_m, "error")) {
+                dbGetQuery(
+                  con_m,
+                  "SELECT Key, Value FROM error WHERE sample = ?",
+                  params = list(sel_base_dt)
+                )
+              } else {
+                data.frame()
+              }
+            },
+            error = function(e) data.frame()
+          )
+        } else {
+          data.frame()
+        }
 
-          names <- sub(" =.*", "", deconvolution_data)
-          values <- sub(".*= ", "", deconvolution_data)
+        if (nrow(error_rows) == 0) {
+          # Fall back to file when DB doesn't have the data yet
+          deconvolution_data_path <- file.path(
+            result_dir,
+            paste0(gsub("_unidecfiles", "", basename(result_dir)), "_error.txt")
+          )
+          if (dir.exists(result_dir) && file.exists(deconvolution_data_path)) {
+            raw_lines <- readLines(deconvolution_data_path)
+            error_rows <- data.frame(
+              Key = sub(" =.*", "", raw_lines),
+              Value = as.numeric(sub(".*= ([^ ]+).*", "\\1", raw_lines))
+            )
+          }
+        }
+
+        if (nrow(error_rows) > 0) {
           units <- c("", "s", "", "", "m/z", "z", "", "")
-
           tbl <- data.frame(
             Parameter = c(
               "Fitting error",
@@ -1757,8 +2503,12 @@ server <- function(
               "z (Charge) sigma",
               "beat (Suppression)",
               "Point sigma"
-            ),
-            Value = paste(values, units, sep = " ")
+            )[seq_len(nrow(error_rows))],
+            Value = paste(
+              round(error_rows$Value, 6),
+              units[seq_len(nrow(error_rows))],
+              sep = " "
+            )
           )
 
           waiter_hide(id = ns("deconvolution_data"))
@@ -1785,6 +2535,28 @@ server <- function(
         }
       })
 
+      ### Failure overlay messages for Spectrum and Metrics cards
+      failure_msg_ui <- function(output_id) {
+        shiny$renderUI({
+          shiny$req(result_files_sel())
+          sel <- gsub("\\.raw$", "", result_files_sel(), ignore.case = TRUE)
+          db_fm <- file.path(
+            analysis_dest(),
+            paste0(trimws(input$analysis_name), ".db")
+          )
+          is_failed <- file.exists(db_fm) &&
+            sel %in% decon_failed_samples(db_fm)
+          if (is_failed) {
+            shiny$div(
+              class = "sample-failed-msg",
+              "Sample failed to deconvolute."
+            )
+          }
+        })
+      }
+      output$spectrum_failure_msg <- failure_msg_ui("spectrum_failure_msg")
+      output$metrics_failure_msg <- failure_msg_ui("metrics_failure_msg")
+
       ### Render heatmap when config has wells specified
       if (
         deconvolution_sidebar_vars$selected() == "folder" &&
@@ -1796,36 +2568,19 @@ server <- function(
               nzchar(trimws(as.character(config_file()[["Well"]])))
           )
       ) {
-        # Define reactive helper variable to control spinner display
-        allow_spinner_heatmap <- shiny$reactiveVal(TRUE)
-
         output$heatmap <- renderPlotly({
-          if (shiny$isolate(allow_spinner_heatmap()) == TRUE) {
-            waiter_show(
-              id = ns("heatmap"),
-              html = spin_wave()
-            )
-            allow_spinner_heatmap(FALSE)
-          }
+          shiny$req(nrow(reactVars$rslt_df) > 0)
+          waiter_show(id = ns("heatmap"), html = spin_wave())
 
-          shiny$req(reactVars$rslt_df)
+          heatmap <- create_384_plate_heatmap(reactVars$rslt_df) |>
+            event_register("plotly_click")
 
-          if (nrow(reactVars$rslt_df) > 0) {
-            heatmap <- create_384_plate_heatmap(reactVars$rslt_df) |>
-              event_register("plotly_click")
+          waiter_hide(id = ns("heatmap"))
 
-            # Hide spinner
-            waiter_hide(id = ns("heatmap"))
+          # Activate click observer / signal highlight observer to re-apply shape
+          reactVars$heatmap_ready <- shiny$isolate(reactVars$heatmap_ready) + 1L
 
-            # Activate spinner reactivation
-            allow_spinner_heatmap(TRUE)
-
-            # Activate click observer / signal highlight observer to re-apply shape
-            reactVars$heatmap_ready <- shiny$isolate(reactVars$heatmap_ready) +
-              1L
-
-            return(heatmap)
-          }
+          return(heatmap)
         })
       }
 
@@ -1895,18 +2650,38 @@ server <- function(
           reactVars$results_observer$destroy()
         }
 
+        # Checkpoint any WAL sidecar files left by an aborted run
+        db_reset <- file.path(
+          analysis_dest(),
+          paste0(trimws(input$analysis_name), ".db")
+        )
+        if (file.exists(db_reset)) {
+          tryCatch(
+            {
+              con_reset <- DBI::dbConnect(RSQLite::SQLite(), db_reset)
+              DBI::dbExecute(con_reset, "PRAGMA busy_timeout=3000")
+              DBI::dbExecute(con_reset, "PRAGMA wal_checkpoint(TRUNCATE)")
+              DBI::dbExecute(con_reset, "PRAGMA journal_mode=DELETE")
+              DBI::dbDisconnect(con_reset)
+            },
+            error = function(e) NULL
+          )
+        }
+
         # Reset reactive status variables
         reset_progress()
 
         # Null dynamic UI
         output$decon_rep_logtext <- NULL
         output$decon_rep_logtext_ui <- NULL
-        output$deconvolution_running_ui <- NULL
         output$heatmap <- NULL
 
-        # Render deconvolution initiation UI
-        output$deconvolution_init_ui <- shiny$renderUI(
-          deconvolution_init_ui(ns)
+        # Switch back to initiation UI
+        output$deconvolution_ui <- shiny$renderUI(
+          deconvolution_init_ui(
+            ns,
+            analysis_name_default = smart_analysis_name()
+          )
         )
 
         # Unblock mouse pointer
@@ -1954,6 +2729,24 @@ server <- function(
       proc <- decon_process_data()
       if (!is.null(proc) && proc$is_alive()) {
         proc$kill_tree()
+      }
+
+      # Checkpoint WAL sidecar files left by the aborted worker
+      db_abort <- file.path(
+        analysis_dest(),
+        paste0(trimws(input$analysis_name), ".db")
+      )
+      if (file.exists(db_abort)) {
+        tryCatch(
+          {
+            con_abort <- DBI::dbConnect(RSQLite::SQLite(), db_abort)
+            DBI::dbExecute(con_abort, "PRAGMA busy_timeout=3000")
+            DBI::dbExecute(con_abort, "PRAGMA wal_checkpoint(TRUNCATE)")
+            DBI::dbExecute(con_abort, "PRAGMA journal_mode=DELETE")
+            DBI::dbDisconnect(con_abort)
+          },
+          error = function(e) NULL
+        )
       }
 
       # Update progress bar to show cancellation
@@ -2183,7 +2976,7 @@ server <- function(
               basename(log_path)
             )
             filename_path <- file.path(
-              deconvolution_sidebar_vars$targetpath(),
+              analysis_dest(),
               filename
             )
 
@@ -2242,7 +3035,7 @@ server <- function(
                 basename(log_path)
               )
               filename_path <- file.path(
-                deconvolution_sidebar_vars$targetpath(),
+                analysis_dest(),
                 filename
               )
 
@@ -2371,7 +3164,7 @@ server <- function(
               fill_empty(input$decon_rep_desc),
               output_file,
               log_path,
-              deconvolution_sidebar_vars$targetpath(),
+              analysis_dest(),
               get_kiwims_version()["version"],
               get_kiwims_version()["date"],
               temp
@@ -2649,8 +3442,8 @@ server <- function(
     shiny$observeEvent(input$forward_deconvolution, {
       # Return result file path as module output
       reactVars$continue_conversion <- file.path(
-        deconvolution_sidebar_vars$targetpath(),
-        gsub(".log", "_RESULT.rds", basename(log_path))
+        analysis_dest(),
+        paste0(trimws(input$analysis_name), ".db")
       )
 
       # Disable continuation/forward button
@@ -2667,7 +3460,7 @@ server <- function(
     })
 
     ### Tooltip events ----
-    shiny$observeEvent(input$detection_window_tooltip_bttn, {
+    shiny$observeEvent(input$peak_parameter_tooltip_bttn, {
       shiny$showModal(
         shiny$div(
           class = "start-modal",
@@ -2676,37 +3469,23 @@ server <- function(
               shiny$br(),
               shiny$column(
                 width = 11,
+                shiny$h5(
+                  "Peak Detection Threshold"
+                ),
                 shiny$div(
                   class = "tooltip-text",
                   "The peak detection range specifies the local window to consider when detecting a peak. A peak needs to be the local max within a window of +/- this range to be considered a peak. For example, if you set the window as 10 Da, only peaks within a window of +/- 10 Da will be considered peak. Any other local maximum are ignored."
                 ),
-                shiny$br(),
-                shiny$a(
-                  href = "https://github.com/michaelmarty/UniDec/wiki/Peak-Selection-and-Plotting#picking-peaks",
-                  "UniDec Wiki - Picking Peaks",
-                  target = "_blank"
-                )
+                shiny$br()
               )
             ),
-            title = "Peak Detection Range (Da)",
-            easyClose = TRUE,
-            footer = shiny$tagList(
-              shiny$modalButton("Dismiss")
-            )
-          )
-        )
-      )
-    })
-
-    shiny$observeEvent(input$threshold_tooltip_bttn, {
-      shiny$showModal(
-        shiny$div(
-          class = "start-modal",
-          shiny$modalDialog(
             shiny$fluidRow(
               shiny$br(),
               shiny$column(
                 width = 11,
+                shiny$h5(
+                  "Peak Detection Range (Da)"
+                ),
                 shiny$div(
                   class = "tooltip-text",
                   "The peak detection threshold specifies how tall the relative peak height (normalized to a max spectrum intensity of 1) needs to be to considered a peak. For example, a threshold of 0.1 would mean that any peaks below a 10% max intensity would be ignored. If you set this to 0, any local maximum (within the defined detection range) are counted."
@@ -2719,7 +3498,7 @@ server <- function(
                 )
               )
             ),
-            title = "Peak Detection Threshold",
+            title = "Peak Parameter",
             easyClose = TRUE,
             footer = shiny$tagList(
               shiny$modalButton("Dismiss")

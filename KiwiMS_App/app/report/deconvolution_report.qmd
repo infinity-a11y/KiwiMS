@@ -78,11 +78,10 @@ format:
 #| warning: false
 #| include: false
 
-# Load the result list from RDS file
-result <- readRDS(file.path(params$result_file))
-names_result <- names(result$deconvolution)[
-  !names(result$deconvolution) %in% c("session", "output")
-]
+# Load result from SQLite database
+box::use(app/logic/conversion_functions[read_decon_result])
+result <- read_decon_result(params$result_file)
+names_result <- names(result$deconvolution)
 ```
 
 `r if(params$comment != "") paste("<div class='comment-text'>", params$comment, "</div> <hr>")`
@@ -347,69 +346,10 @@ ggplot_to_base64 <- function(plot, width = 5, height = 5, dpi = 300) {
   return(base64_data)
 }
 
-# Store image sections in a list for rendering
-plot_output <- list()
-
-for (name in names_result) {
-  if (
-    !is.null(result$deconvolution[[name]]$decon_spec) &&
-      !is.null(result$deconvolution[[name]]$raw_spec)
-  ) {
-    # Convert ggplots to Base64 without saving to disk
-    img1_base64 <- ggplot_to_base64(result$deconvolution[[name]]$decon_spec)
-    img2_base64 <- ggplot_to_base64(result$deconvolution[[name]]$raw_spec)
-
-    config <- result$deconvolution[[name]]$config
-
-    config_path <- ifelse(
-      length(config$input) > 1,
-      paste(config$input[1], config$input[2]),
-      config$input
-    )
-
-    # Create a linked section header and horizontal separator
-    section_html <- htmltools::tagList(
-      htmltools::tags$section(
-        id = tolower(name),
-        class = "level4",
-        htmltools::h4(
-          class = "anchored",
-          `data-anchor-id` = tolower(name),
-          htmltools::span(class = "name-part", paste(name)),
-          " ",
-          htmltools::span(
-            class = "subtitle-part",
-            "Deconvoluted Spectrum | Original Raw Spectrum"
-          ),
-          htmltools::a(
-            class = "anchorjs-link",
-            `aria-label` = "Anchor",
-            `data-anchorjs-icon` = "\uE84B",
-            href = paste0("#", tolower(name)),
-            style = "font: 1em / 1 anchorjs-icons; margin-left: 0.1875em; padding-right: 0.1875em;"
-          )
-        ),
-        htmltools::div(
-          class = "result-path",
-          style = "overflow-wrap: anywhere;",
-          htmltools::p(normalizePath(dirname(config_path)))
-        ),
-        # Side-by-side images
-        htmltools::div(
-          style = "display: flex;",
-          htmltools::img(src = img1_base64, width = "50%"),
-          htmltools::img(src = img2_base64, width = "50%")
-        )
-      )
-    )
-
-    # Append the section to the output list
-    plot_output <- append(plot_output, list(section_html))
-  }
-}
-
-# Force Quarto to recognize and render everything
-htmltools::tagList(plot_output)
+# Spectrum plots are not included in this version of the report
+htmltools::p(
+  htmltools::em("Spectrum plots are temporarily unavailable in this report version.")
+)
 ```
 
 `r paste("<br><br>Session:<i>", paste0(Sys.Date(), "_", regmatches(     basename(result$session[3]),     regexpr("id\\d+", basename(result$session[3])) )), "</i>")`

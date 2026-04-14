@@ -63,26 +63,9 @@ function Find-CondaExecutable {
 }
 
 #-----------------------------#
-# Port Check
+# Port Selection
 #-----------------------------#
-$port = 3838
-Write-Output "Checking if port $port is available..." -ForegroundColor Yellow
-
-$portProcess = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
-
-if ($portProcess) {
-    $pidToKill = $portProcess.OwningProcess
-    Write-Output "Port $port is occupied by PID $pidToKill. Clearing it now..." -ForegroundColor Yellow
-    try {
-        Stop-Process -Id $pidToKill -Force -ErrorAction Stop
-        Write-Output "Existing process terminated." -ForegroundColor Gray
-        Start-Sleep -Seconds 2 # Time to release the socket
-    } catch {
-        Write-Output "Warning: Could not stop process $pidToKill." -ForegroundColor Red
-    }
-} else {
-    Write-Output "Port $port is free." -ForegroundColor Gray
-}
+# Port selection is handled by Shiny automatically (httpuv::randomPort).
 
 #-----------------------------#
 # Path & Log Configuration
@@ -115,7 +98,7 @@ try {
 
     # Launch the App
     # Use --no-capture-output to ensure logs flow into our file correctly
-    $shinyCmd = "shiny::runApp('app.R', port = 3838, launch.browser = $(if ($Headless) { 'FALSE' } else { 'TRUE' }))"
+    $shinyCmd = "shiny::runApp('app.R', launch.browser = $(if ($Headless) { 'FALSE' } else { 'TRUE' }))"
     & $condaCmd run -n kiwims Rscript.exe -e "$shinyCmd" --vanilla *> $logFile 2>&1
 
     if ($LASTEXITCODE -ne 0) {
