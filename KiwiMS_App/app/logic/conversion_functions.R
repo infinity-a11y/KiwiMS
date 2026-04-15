@@ -91,51 +91,74 @@ process_uploaded_table <- function(df, type) {
 # Returns NULL if valid, or a character error message.
 #' @export
 validate_decon_db <- function(db_path) {
-  if (!file.exists(db_path)) return("File not found.")
+  if (!file.exists(db_path)) {
+    return("File not found.")
+  }
 
-  tryCatch({
-    con <- DBI::dbConnect(RSQLite::SQLite(), db_path, flags = RSQLite::SQLITE_RO)
-    on.exit(DBI::dbDisconnect(con), add = TRUE)
+  tryCatch(
+    {
+      con <- DBI::dbConnect(
+        RSQLite::SQLite(),
+        db_path,
+        flags = RSQLite::SQLITE_RO
+      )
+      on.exit(DBI::dbDisconnect(con), add = TRUE)
 
-    if (!DBI::dbExistsTable(con, "metadata")) {
-      return("Invalid result file: metadata table missing.")
-    }
-    if (DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM metadata")$n == 0L) {
-      return("Invalid result file: no samples in metadata.")
-    }
-
-    if (!DBI::dbExistsTable(con, "status")) {
-      return("Invalid result file: status table missing.")
-    }
-    n_done <- DBI::dbGetQuery(
-      con, "SELECT COUNT(*) AS n FROM status WHERE state = 'done'"
-    )$n
-    if (n_done == 0L) {
-      return("Result file contains no completed samples (no entries with state = 'done').")
-    }
-
-    for (tbl in c("mass_data", "error", "config")) {
-      if (!DBI::dbExistsTable(con, tbl)) {
-        return(sprintf("Invalid result file: required table '%s' is missing.", tbl))
+      if (!DBI::dbExistsTable(con, "metadata")) {
+        return("Invalid result file: metadata table missing.")
       }
-      if (DBI::dbGetQuery(con, sprintf("SELECT COUNT(*) AS n FROM \"%s\"", tbl))$n == 0L) {
-        return(sprintf("Invalid result file: table '%s' is empty.", tbl))
+      if (DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM metadata")$n == 0L) {
+        return("Invalid result file: no samples in metadata.")
       }
-    }
 
-    if (!DBI::dbExistsTable(con, "peaks")) {
-      return("Invalid result file: required table 'peaks' is missing.")
-    }
+      if (!DBI::dbExistsTable(con, "status")) {
+        return("Invalid result file: status table missing.")
+      }
+      n_done <- DBI::dbGetQuery(
+        con,
+        "SELECT COUNT(*) AS n FROM status WHERE state = 'done'"
+      )$n
+      if (n_done == 0L) {
+        return(
+          "Result file contains no completed samples (no entries with state = 'done')."
+        )
+      }
 
-    NULL
-  }, error = function(e) {
-    paste("Could not read result file:", conditionMessage(e))
-  })
+      for (tbl in c("mass_data", "error", "config")) {
+        if (!DBI::dbExistsTable(con, tbl)) {
+          return(sprintf(
+            "Invalid result file: required table '%s' is missing.",
+            tbl
+          ))
+        }
+        if (
+          DBI::dbGetQuery(
+            con,
+            sprintf("SELECT COUNT(*) AS n FROM \"%s\"", tbl)
+          )$n ==
+            0L
+        ) {
+          return(sprintf("Invalid result file: table '%s' is empty.", tbl))
+        }
+      }
+
+      if (!DBI::dbExistsTable(con, "peaks")) {
+        return("Invalid result file: required table 'peaks' is missing.")
+      }
+
+      NULL
+    },
+    error = function(e) {
+      paste("Could not read result file:", conditionMessage(e))
+    }
+  )
 }
 
 # Helper: query done sample names from a status table
 .done_samples <- function(con) {
-  DBI::dbGetQuery(con, "SELECT sample FROM status WHERE state = 'done'")[["sample"]]
+  DBI::dbGetQuery(con, "SELECT sample FROM status WHERE state = 'done'")[[
+    "sample"
+  ]]
 }
 
 # Read only metadata (sample names, session, output) from a result SQLite DB.
@@ -148,13 +171,23 @@ read_decon_metadata <- function(db_path) {
   on.exit(DBI::dbDisconnect(con), add = TRUE)
 
   read_if_exists <- function(tbl, query) {
-    if (DBI::dbExistsTable(con, tbl)) DBI::dbGetQuery(con, query)[[1L]] else NULL
+    if (DBI::dbExistsTable(con, tbl)) {
+      DBI::dbGetQuery(con, query)[[1L]]
+    } else {
+      NULL
+    }
   }
 
   list(
     samples = .done_samples(con),
-    session = read_if_exists("session", "SELECT line FROM session ORDER BY line_num"),
-    output  = read_if_exists("output_log", "SELECT line FROM output_log ORDER BY line_num")
+    session = read_if_exists(
+      "session",
+      "SELECT line FROM session ORDER BY line_num"
+    ),
+    output = read_if_exists(
+      "output_log",
+      "SELECT line FROM output_log ORDER BY line_num"
+    )
   )
 }
 
@@ -239,13 +272,23 @@ read_decon_result <- function(db_path, samples = NULL) {
   )
 
   read_if_exists <- function(tbl, query) {
-    if (DBI::dbExistsTable(con, tbl)) DBI::dbGetQuery(con, query)[[1L]] else NULL
+    if (DBI::dbExistsTable(con, tbl)) {
+      DBI::dbGetQuery(con, query)[[1L]]
+    } else {
+      NULL
+    }
   }
 
   list(
     deconvolution = deconvolution,
-    session = read_if_exists("session", "SELECT line FROM session ORDER BY line_num"),
-    output  = read_if_exists("output_log", "SELECT line FROM output_log ORDER BY line_num")
+    session = read_if_exists(
+      "session",
+      "SELECT line FROM session ORDER BY line_num"
+    ),
+    output = read_if_exists(
+      "output_log",
+      "SELECT line FROM output_log ORDER BY line_num"
+    )
   )
 }
 
@@ -1500,7 +1543,9 @@ log_status <- function(n_peaks, mass = NULL) {
   if (n_peaks > 0 && length(mass) > 0) {
     message(sprintf(
       "  ├─ Status: %s peaks detected [%.2f - %.2f Da]",
-      n_peaks, min(mass), max(mass)
+      n_peaks,
+      min(mass),
+      max(mass)
     ))
   } else {
     message(sprintf("  ├─ Status: %s peaks detected", n_peaks))
@@ -4595,4 +4640,597 @@ filter_color_list <- function(color_list, min_n) {
   })
 
   return(filtered_list)
+}
+
+# Make compound distribution plot for proteins tab
+#' @export
+prot_compound_distribution <- function(
+  hits_summary,
+  protein,
+  color_variable,
+  truncate_names,
+  color_scale,
+  distribution_scale,
+  distribution_labels = NULL
+) {
+  tbl <- hits_summary |>
+    dplyr::filter(
+      `Protein` == protein &
+        !is.na(`Cmp Name`)
+    )
+
+  colors <- get_cmp_colorScale(
+    filtered_table = tbl,
+    scale = color_scale,
+    variable = color_variable,
+    trunc = truncate_names
+  )
+
+  if (color_variable == "Compounds") {
+    color <- ~`Cmp Name`
+  } else if (color_variable == "Samples") {
+    color <- ~`Sample ID`
+  }
+
+  tbl <- tbl |>
+    dplyr::group_by(`Cmp Name`) |>
+    dplyr::mutate(
+      `Sample ID` = if (truncate_names) {
+        `truncSample_ID`
+      } else {
+        `Sample ID`
+      },
+      mass_stoich = paste0(
+        "[",
+        `Theor. Cmp`,
+        "]",
+        sapply(`Bind. Stoich.`, function(x) {
+          as.character(htmltools::tags$sub(x))
+        })
+      ),
+      Group = match(`Sample ID`, unique(`Sample ID`)),
+      `Cmp Name` = factor(`Cmp Name`, levels = unique(`Cmp Name`)),
+      `Sample ID` = factor(
+        `Sample ID`,
+        levels = unique(`Sample ID`)
+      ),
+      `%-Binding` = factor(
+        `%-Binding`,
+        levels = unique(`%-Binding`)
+      ),
+      bg_hex = if (color_variable == "Compounds") {
+        colors[as.character(`Cmp Name`)]
+      } else if (color_variable == "Samples") {
+        colors[as.character(`Sample ID`)]
+      },
+      label_color = get_contrast_color(bg_hex),
+      mass_stoich = paste0(
+        "<span style='color:",
+        label_color,
+        "'>",
+        mass_stoich,
+        "</span>"
+      )
+    ) |>
+    dplyr::ungroup()
+
+  range <- c(
+    0,
+    max(tbl$`Total %-Binding`) + 10
+  )
+
+  if (!is.null(distribution_scale) && distribution_scale == "100") {
+    range <- c(0, 101)
+  }
+
+  condition <- ifelse(
+    length(levels(tbl$`Cmp Name`)) > 1,
+    max(nchar(levels(tbl$`Cmp Name`))) <= 22,
+    max(nchar(levels(tbl$`Sample ID`))) <= 22
+  )
+
+  showticklabels <- ifelse(
+    !is.null(distribution_labels),
+    distribution_labels,
+    condition
+  )
+
+  if (length(unique(tbl$`Cmp Name`)) > 1) {
+    layout_list <- list(
+      barmode = "relative",
+      paper_bgcolor = 'rgba(0,0,0,0)',
+      plot_bgcolor = 'rgba(0,0,0,0)',
+      xaxis = list(
+        type = "category",
+        tickson = "boundaries",
+        categoryorder = "array",
+        categoryarray = levels(tbl$`Cmp Name`),
+        showgrid = FALSE,
+        zeroline = FALSE,
+        color = '#ffffff',
+        showticklabels = showticklabels
+      ),
+      yaxis = list(
+        range = range,
+        title = list(text = "%-Binding"),
+        zeroline = FALSE,
+        gridcolor = "#7f7f7fff",
+        color = '#ffffff',
+        dtick = 20,
+        tick0 = 0
+      )
+    )
+
+    groups <- unique(tbl$Group)
+    n_groups <- length(groups)
+    group_map <- stats::setNames(0:(n_groups - 1), groups)
+
+    bar_width <- min(0.3, 0.85 / (n_groups + max(0, n_groups - 1) * 0.15))
+    group_gap <- bar_width * 0.15
+
+    compound_local_n <- tbl |>
+      dplyr::group_by(`Cmp Name`) |>
+      dplyr::summarize(local_n = dplyr::n_distinct(Group), .groups = "drop")
+    compound_local_n_map <- stats::setNames(
+      compound_local_n$local_n,
+      compound_local_n$`Cmp Name`
+    )
+
+    if (n_groups > 1) {
+      for (i in 2:n_groups) {
+        axis_name <- paste0("yaxis", i)
+        layout_list[[axis_name]] <- list(
+          visible = FALSE,
+          matches = "y",
+          overlaying = "y",
+          anchor = "x",
+          range = range,
+          dtick = 20,
+          tick0 = 0
+        )
+      }
+    }
+
+    bar_chart <- plotly::plot_ly(showlegend = FALSE)
+    bar_chart <- do.call(
+      plotly::layout,
+      c(list(bar_chart), layout_list)
+    )
+
+    for (i in 1:nrow(tbl)) {
+      row <- tbl[i, ]
+      g <- row$Group[[1]]
+      i_group <- group_map[[g]]
+      yax <- ifelse(i_group == 0, "y", paste0("y", i_group + 1))
+      local_n <- compound_local_n_map[[as.character(row$`Cmp Name`[[1]])]]
+      local_cluster_width <- local_n *
+        bar_width +
+        max(0, local_n - 1) * group_gap
+      off <- -local_cluster_width / 2 + i_group * (bar_width + group_gap)
+
+      if (color_variable == "Compounds") {
+        var <- as.character(row$`Cmp Name`[[1]])
+      } else if (color_variable == "Samples") {
+        var <- as.character(row$`Sample ID`[[1]])
+      }
+
+      col <- colors[[var]]
+      y_val <- row$`%-Binding`[[1]]
+
+      hover_text <- paste0(
+        "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
+        row$`Theor. Cmp`[[1]],
+        "</b><br>",
+        "<span style='opacity: 0.8'>Stoichiometry:</span> <b>",
+        row$`Bind. Stoich.`[[1]],
+        "</b><br>",
+        "<span style='opacity: 0.8'>%-Binding:</span> <b>",
+        row$`%-Binding`[[1]],
+        "</b>",
+        "<extra><div style='text-align: left;'>",
+        "<span style='opacity: 0.8;;'>Cmp Name: </span><b>",
+        row$`Cmp Name`[[1]],
+        "</b><br>",
+        "<span style='opacity: 0.8;'>Sample ID: </span><b>",
+        row$`Sample ID`[[1]],
+        "</b>",
+        "</div></extra>"
+      )
+
+      bar_chart <- plotly::add_bars(
+        bar_chart,
+        x = row$`Cmp Name`[[1]],
+        y = as.numeric(as.character(y_val)),
+        offsetgroup = i_group,
+        offset = off,
+        width = bar_width,
+        text = row$mass_stoich[[1]],
+        textposition = 'inside',
+        insidetextanchor = 'middle',
+        hovertemplate = hover_text,
+        hoverlabel = list(align = "left", valign = "middle"),
+        marker = list(
+          color = col,
+          line = list(color = 'black', width = 1)
+        ),
+        yaxis = yax,
+        showlegend = FALSE
+      )
+    }
+
+    bar_chart <- bar_chart |>
+      plotly::layout(
+        xaxis = list(title = list(text = NULL))
+      )
+  } else {
+    bar_chart <- plotly::plot_ly(data = tbl) |>
+      plotly::add_trace(
+        x = ~`Sample ID`,
+        y = ~ as.numeric(as.character(`%-Binding`)),
+        color = color,
+        colors = colors,
+        type = 'bar',
+        name = ~mass_stoich,
+        hovertemplate = ~ paste0(
+          "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
+          `Theor. Cmp`,
+          "</b><br>",
+          "<span style='opacity: 0.8'>Stoichiometry:</span> <b>",
+          `Bind. Stoich.`,
+          "</b><br>",
+          "<span style='opacity: 0.8'>%-Binding:</span> <b>",
+          `%-Binding`,
+          "</b>",
+          "<extra><div style='text-align: left;'>",
+          "<span style='opacity: 0.8;;'>Cmp Name: </span><b>",
+          `Cmp Name`,
+          "</b><br>",
+          "<span style='opacity: 0.8;'>Sample ID: </span><b>",
+          `Sample ID`,
+          "</b>",
+          "</div></extra>"
+        ),
+        hoverlabel = list(align = "left", valign = "middle"),
+        text = ~mass_stoich,
+        textposition = 'inside',
+        marker = list(line = list(color = 'white', width = 1)),
+        showlegend = FALSE
+      )
+
+    if (length(tbl$`Sample ID`) <= 20) {
+      totals <- dplyr::group_by(tbl, `Sample ID`) |>
+        dplyr::summarize(
+          total_val = sum(as.numeric(as.character(`%-Binding`)))
+        )
+      bar_chart <- bar_chart |>
+        plotly::add_trace(
+          data = totals,
+          x = ~`Sample ID`,
+          y = ~total_val,
+          type = 'scatter',
+          mode = 'text',
+          text = ~ paste0(total_val, "%"),
+          textposition = 'top center',
+          showlegend = FALSE,
+          hoverinfo = 'none',
+          inherit = FALSE,
+          textfont = list(
+            color = '#ffffff',
+            size = if (length(tbl$`Sample ID`) <= 8) {
+              16
+            } else if (length(tbl$`Sample ID`) <= 16) {
+              14
+            } else {
+              12
+            }
+          )
+        )
+    }
+
+    bar_chart <- bar_chart |>
+      plotly::layout(
+        barmode = 'stack',
+        bargap = 0.5,
+        paper_bgcolor = 'rgba(0,0,0,0)',
+        plot_bgcolor = 'rgba(0,0,0,0)',
+        xaxis = list(
+          title = list(text = NULL),
+          showgrid = FALSE,
+          zeroline = FALSE,
+          color = '#ffffff',
+          showticklabels = showticklabels
+        ),
+        yaxis = list(
+          range = range,
+          title = list(text = "%-Binding"),
+          zeroline = FALSE,
+          gridcolor = "#7f7f7fff",
+          color = '#ffffff'
+        )
+      )
+  }
+
+  return(bar_chart)
+}
+
+# Make compound distribution plot for compounds tab
+#' @export
+cmp_compound_distribution <- function(
+  hits_summary,
+  compound,
+  color_variable,
+  truncate_names,
+  color_scale,
+  distribution_scale,
+  distribution_labels = NULL
+) {
+  tbl <- hits_summary |>
+    dplyr::filter(`Cmp Name` == compound) |>
+    dplyr::mutate(
+      `Sample ID` = if (truncate_names) {
+        `truncSample_ID`
+      } else {
+        `Sample ID`
+      },
+      mass_stoich = paste0(
+        "[",
+        `Theor. Cmp`,
+        "]",
+        sapply(`Bind. Stoich.`, function(x) {
+          as.character(htmltools::tags$sub(x))
+        })
+      )
+    )
+
+  tbl$`Sample ID` <- factor(
+    tbl$`Sample ID`,
+    levels = unique(tbl$`Sample ID`)
+  )
+
+  colors <- get_cmp_colorScale(
+    filtered_table = tbl,
+    scale = color_scale,
+    variable = color_variable,
+    trunc = truncate_names
+  )
+
+  tbl <- tbl |>
+    dplyr::mutate(
+      bg_hex = if (color_variable == "Compounds") {
+        colors[as.character(`Cmp Name`)]
+      } else if (color_variable == "Samples") {
+        colors[as.character(`Sample ID`)]
+      },
+      label_color = get_contrast_color(bg_hex),
+      mass_stoich = paste0(
+        "<span style='color:",
+        label_color,
+        "'>",
+        mass_stoich,
+        "</span>"
+      )
+    )
+
+  if (color_variable == "Compounds") {
+    color <- ~`Cmp Name`
+  } else if (color_variable == "Samples") {
+    color <- ~`Sample ID`
+  }
+
+  bar_chart <- plotly::plot_ly(data = tbl) |>
+    plotly::add_trace(
+      x = ~`Sample ID`,
+      y = ~`%-Binding`,
+      color = color,
+      colors = colors,
+      type = 'bar',
+      name = ~mass_stoich,
+      hovertemplate = ~ paste0(
+        "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
+        `Theor. Cmp`,
+        "</b><br>",
+        "<span style='opacity: 0.8'>Stoichiometry:</span> <b>",
+        `Bind. Stoich.`,
+        "</b><br>",
+        "<span style='opacity: 0.8'>%-Binding:</span> <b>",
+        `%-Binding`,
+        "</b>",
+        "<extra><div style='text-align: left;'>",
+        "<span style='opacity: 0.8;;'>Cmp Name: </span><b>",
+        `Cmp Name`,
+        "</b><br>",
+        "<span style='opacity: 0.8;'>Sample ID: </span><b>",
+        `Sample ID`,
+        "</b>",
+        "</div></extra>"
+      ),
+      hoverlabel = list(align = "left", valign = "middle"),
+      text = ~mass_stoich,
+      textposition = 'inside',
+      marker = list(line = list(color = 'white', width = 1)),
+      showlegend = FALSE
+    )
+
+  if (length(tbl$`Sample ID`) <= 20) {
+    totals <- dplyr::group_by(tbl, `Sample ID`) |>
+      dplyr::summarize(
+        total_val = sum(`%-Binding`)
+      )
+    bar_chart <- bar_chart |>
+      plotly::add_trace(
+        data = totals,
+        x = ~`Sample ID`,
+        y = ~total_val,
+        type = 'scatter',
+        mode = 'text',
+        text = ~ paste0(total_val, "%"),
+        textposition = 'top center',
+        showlegend = FALSE,
+        hoverinfo = 'none',
+        inherit = FALSE,
+        textfont = list(
+          color = '#ffffff',
+          size = if (length(tbl$`Sample ID`) <= 8) {
+            16
+          } else if (length(tbl$`Sample ID`) <= 16) {
+            14
+          } else {
+            12
+          }
+        )
+      )
+  }
+
+  range <- c(
+    0,
+    max(tbl$`Total %-Binding`) + 10
+  )
+
+  if (!is.null(distribution_scale) && distribution_scale == "100") {
+    range <- c(0, 101)
+  }
+
+  bar_chart |>
+    plotly::layout(
+      barmode = 'stack',
+      bargap = 0.5,
+      paper_bgcolor = 'rgba(0,0,0,0)',
+      plot_bgcolor = 'rgba(0,0,0,0)',
+      xaxis = list(
+        title = list(text = NULL),
+        showgrid = FALSE,
+        zeroline = FALSE,
+        color = '#ffffff',
+        showticklabels = ifelse(
+          !is.null(distribution_labels),
+          distribution_labels,
+          max(nchar(levels(tbl$`Sample ID`))) <= 22 | nrow(tbl) < 4
+        )
+      ),
+      yaxis = list(
+        range = range,
+        title = list(text = "%-Binding"),
+        zeroline = FALSE,
+        gridcolor = "#7f7f7fff",
+        color = '#ffffff'
+      )
+    )
+}
+
+# Make compound distribution pie chart for samples tab
+#' @export
+smpl_compound_distribution <- function(
+  hits_summary,
+  sample,
+  color_variable,
+  truncate_names,
+  color_scale
+) {
+  tbl <- hits_summary |>
+    dplyr::filter(`Sample ID` == sample)
+
+  if (anyNA(tbl)) {
+    return(NULL)
+  }
+
+  cmp_table <- tbl |>
+    dplyr::group_by(`Cmp Name`) |>
+    dplyr::arrange(dplyr::desc(`Theor. Cmp`), `Bind. Stoich.`) |>
+    dplyr::reframe(
+      `Cmp Name` = `Cmp Name`,
+      `Sample ID` = if (truncate_names) `truncSample_ID` else `Sample ID`,
+      total_bind = `Total %-Binding`,
+      mass_shift = `Theor. Cmp`,
+      mass_stoich = paste0(
+        "[",
+        `Theor. Cmp`,
+        "]",
+        sapply(`Bind. Stoich.`, function(x) {
+          as.character(htmltools::tags$sub(x))
+        })
+      ),
+      relBinding = `%-Binding` / 100,
+      `%-Binding` = paste0(as.character(`%-Binding`), "%"),
+    ) |>
+    rbind(
+      data.frame(
+        "Unbound",
+        "Unbound",
+        100 - tbl$`Total %-Binding`[1],
+        "Unbound",
+        "Unbound",
+        1 - tbl$`Total %-Binding`[1] / 100,
+        "Unbound"
+      ) |>
+        stats::setNames(c(
+          "Sample ID", "Cmp Name", "total_bind",
+          "mass_shift", "mass_stoich", "relBinding", "%-Binding"
+        )) |>
+        dplyr::select(c(
+          "Cmp Name", "Sample ID", "total_bind",
+          "mass_shift", "mass_stoich", "relBinding", "%-Binding"
+        ))
+    )
+
+  colors <- c(
+    "#e5e5e5",
+    get_cmp_colorScale(
+      filtered_table = tbl,
+      scale = color_scale,
+      variable = color_variable,
+      trunc = truncate_names
+    )
+  )
+  names(colors) <- c("empty", names(colors)[-1])
+
+  if (color_variable == "Compounds") {
+    cmp_table$color <- colors[match(cmp_table$`Cmp Name`, names(colors))]
+  } else {
+    cmp_table$color <- colors[match(cmp_table$`Sample ID`, names(colors))]
+  }
+  cmp_table$color[cmp_table$mass_shift == "Unbound"] <- "#333338"
+
+  plotly::plot_ly(
+    data = cmp_table,
+    labels = ~mass_stoich,
+    values = ~relBinding,
+    sort = FALSE,
+    type = 'pie',
+    hole = 0.4,
+    textinfo = 'label+percent',
+    texttemplate = "%{label}<br>%{percent}",
+    textposition = 'auto',
+    hovertemplate = ~ paste0(
+      "<span style='opacity: 0.8'>Compound:</span> <b>",
+      `Cmp Name`,
+      "</b><br>",
+      "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
+      `mass_stoich`,
+      "</b><br>",
+      "<span style='opacity: 0.8'>%-Binding:</span> <b>",
+      `%-Binding`,
+      "<extra></extra>"
+    ),
+    outsidetextfont = list(color = 'white'),
+    marker = list(
+      colors = ~ I(color),
+      line = list(color = '#e5e5e5', width = 1)
+    )
+  ) |>
+    plotly::layout(
+      showlegend = FALSE,
+      annotations = list(
+        list(
+          x = 0.5,
+          y = 0.5,
+          text = paste0("<b>", cmp_table$total_bind[1], "%</b><br>Bound"),
+          xref = "paper",
+          yref = "paper",
+          xanchor = "center",
+          yanchor = "middle",
+          showarrow = FALSE,
+          font = list(size = 22, color = "white")
+        )
+      )
+    )
 }

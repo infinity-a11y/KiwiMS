@@ -1186,14 +1186,7 @@ binding_results_ui <- function(ns, hits_summary) {
                   )
                 )
               ),
-              shinycssloaders::withSpinner(
-                plotly::plotlyOutput(
-                  ns("compounds_annotated_spectrum"),
-                  height = "100%"
-                ),
-                type = 1,
-                color = "#7777f9"
-              ),
+              shiny::uiOutput(ns("cmp_annotated_spectrum_container")),
               full_screen = TRUE
             )
           )
