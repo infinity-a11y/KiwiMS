@@ -1879,11 +1879,22 @@ summarize_hits <- function(result_list, sample_table) {
   ))]
 
   if (length(conc_time) == 2) {
+    sample_table_join <- sample_table[, c("Sample", conc_time)]
+    sample_table_join$Sample <- gsub(
+      "\\.raw$",
+      "",
+      sample_table_join$Sample,
+      ignore.case = TRUE
+    )
+    hits_summarized$Sample <- gsub(
+      "\\.raw$",
+      "",
+      hits_summarized$Sample,
+      ignore.case = TRUE
+    )
+
     hits_summarized <- hits_summarized |>
-      dplyr::left_join(
-        sample_table[, c("Sample", conc_time)],
-        by = "Sample"
-      ) |>
+      dplyr::left_join(sample_table_join, by = "Sample") |>
       dplyr::mutate(binding = `Total % Binding` * 100) |>
       dplyr::arrange(dplyr::across(all_of(conc_time)))
   }
@@ -1931,7 +1942,8 @@ check_filter_hits <- function(result_list) {
   conc_col <- names(tab)[1]
 
   # Check if >= 3 non-zero concentrations are present
-  if (sum(tab[[conc_col]] != 0) < 3) {
+  nonzero_conc <- !is.na(tab[[conc_col]]) & tab[[conc_col]] != 0
+  if (sum(nonzero_conc) < 3) {
     message(
       "  │  ├─ At least 3 different non-zero concentrations are required.\n",
       "  │  └─ Skipping binding kinetics analysis."
@@ -1941,7 +1953,7 @@ check_filter_hits <- function(result_list) {
 
   # Check if concentrations have enough data points
   # Requirement: At least 3 non-zero concentrations must have >= 3 hits
-  valid_concs <- sum(tab$count[tab[[conc_col]] != 0] >= 3)
+  valid_concs <- sum(tab$count[nonzero_conc] >= 3)
 
   if (valid_concs < 3) {
     message(
@@ -4064,8 +4076,12 @@ new_sample_table <- function(
   ki_kinact = FALSE
 ) {
   result1 <<- result
+  sample_names <- sort(paste0(
+    result$samples %||% names(result$deconvolution),
+    ".raw"
+  ))
   sample_tab <- data.frame(
-    Sample = paste0(result$samples %||% names(result$deconvolution), ".raw"),
+    Sample = sample_names,
     Protein = ifelse(
       length(protein_table$Protein) == 1,
       protein_table$Protein,
@@ -5163,12 +5179,22 @@ smpl_compound_distribution <- function(
         "Unbound"
       ) |>
         stats::setNames(c(
-          "Sample ID", "Cmp Name", "total_bind",
-          "mass_shift", "mass_stoich", "relBinding", "%-Binding"
+          "Sample ID",
+          "Cmp Name",
+          "total_bind",
+          "mass_shift",
+          "mass_stoich",
+          "relBinding",
+          "%-Binding"
         )) |>
         dplyr::select(c(
-          "Cmp Name", "Sample ID", "total_bind",
-          "mass_shift", "mass_stoich", "relBinding", "%-Binding"
+          "Cmp Name",
+          "Sample ID",
+          "total_bind",
+          "mass_shift",
+          "mass_stoich",
+          "relBinding",
+          "%-Binding"
         ))
     )
 

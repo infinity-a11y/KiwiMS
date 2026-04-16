@@ -895,6 +895,11 @@ server <- function(
       observer_name = "Edit Table Event",
       handler_fn = function() {
         shiny::req(input$tabs)
+        shiny::req(
+          isTRUE(input$edit_proteins > 0) ||
+            isTRUE(input$edit_compounds > 0) ||
+            isTRUE(input$edit_samples > 0)
+        )
 
         # If edit applied always activate edit mode for sample table if present
         if (!is.null(input$samples_table)) {
@@ -969,6 +974,13 @@ server <- function(
       ),
       observer_name = "Confirm Table Event",
       handler_fn = function() {
+        # Guard against spurious fires when buttons are re-initialized to 0
+        shiny::req(
+          isTRUE(input$confirm_proteins > 0) ||
+            isTRUE(input$confirm_compounds > 0) ||
+            isTRUE(input$confirm_samples > 0)
+        )
+
         # Block UI
         shinyjs::runjs(paste0(
           'document.getElementById("blocking-overlay").style.display ',
@@ -1477,8 +1489,11 @@ server <- function(
           output$samples_table_view <- NULL
           output$compounds_selected_compound <- NULL
           output$compounds_total_pct_binding <- NULL
+          output$compounds_compound_distribution_ui <- NULL
           output$compounds_compound_distribution <- NULL
+          output$compounds_present_compounds_na <- NULL
           output$compounds_distribution_labels_ui <- NULL
+          output$cmp_annotated_spectrum_na <- NULL
           output$cmp_annotated_spectrum_container <- NULL
           output$compounds_annotated_spectrum <- NULL
           output$compounds_spectrum_labels_ui <- NULL
@@ -1501,11 +1516,12 @@ server <- function(
             conversion_declaration_ui(
               ns,
               proteins_status = "confirmed",
-              compounds_status = "confirmed"
+              compounds_status = "confirmed",
+              samples_status = "confirmed"
             )
           )
 
-          shinyjs::delay(500, {
+          shinyjs::delay(250, {
             shinyjs::runjs(
               'document.querySelector(".nav-link[data-value=\'Proteins\']").classList.add("done");'
             )
@@ -1796,7 +1812,7 @@ server <- function(
               ]
 
               if (all(is.na(tbl$`Cmp Name`))) {
-                return("N/A")
+                return(shiny::div("N/A", class = "na-placeholder"))
               }
 
               shiny::div(
@@ -1940,6 +1956,8 @@ server <- function(
                   input$color_scale
                 )
 
+                hits_summary1 <<- hits_summary
+
                 tbl <- hits_summary |>
                   dplyr::filter(
                     `Sample ID` == input$conversion_sample_picker &
@@ -2042,10 +2060,11 @@ server <- function(
 
             ###### Total %-binding ----
             output$compounds_total_pct_binding <- shiny::renderUI({
-              shiny::req(
-                hits_summary,
-                input$conversion_compound_picker
-              )
+              shiny::req(hits_summary)
+
+              if (is.null(input$conversion_compound_picker)) {
+                return(shiny::div("N/A", class = "na-placeholder"))
+              }
 
               total_bind <- hits_summary$`Total %-Binding`[
                 hits_summary$`Cmp Name` == input$conversion_compound_picker &
@@ -2090,6 +2109,27 @@ server <- function(
             })
 
             ###### Compound distribution ----
+            output$compounds_compound_distribution_ui <- shiny::renderUI({
+              shiny::req(hits_summary)
+
+              if (is.null(input$conversion_compound_picker)) {
+                shiny::textOutput(ns("compounds_present_compounds_na"))
+              } else {
+                shinycssloaders::withSpinner(
+                  plotly::plotlyOutput(
+                    ns("compounds_compound_distribution"),
+                    height = "100%"
+                  ),
+                  type = 1,
+                  color = "#7777f9"
+                )
+              }
+            })
+
+            output$compounds_present_compounds_na <- shiny::renderText(
+              "No binding events"
+            )
+
             output$compounds_compound_distribution <- plotly::renderPlotly({
               shiny::req(
                 hits_summary,
@@ -2156,8 +2196,14 @@ server <- function(
               manual_render_cmp_spectrum(manual_render_cmp_spectrum() + 1L)
             })
 
+            output$cmp_annotated_spectrum_na <- shiny::renderText("N/A")
+
             output$cmp_annotated_spectrum_container <- shiny::renderUI({
-              shiny::req(hits_summary, input$conversion_compound_picker)
+              shiny::req(hits_summary)
+
+              if (is.null(input$conversion_compound_picker)) {
+                return(shiny::textOutput(ns("cmp_annotated_spectrum_na")))
+              }
 
               n_samples <- length(unique(hits_summary$`Sample ID`[
                 hits_summary$`Cmp Name` == input$conversion_compound_picker
@@ -2318,16 +2364,19 @@ server <- function(
               {
                 shiny::req(
                   hits_summary,
-                  input$conversion_compound_picker,
                   input$color_variable,
                   !is.null(input$truncate_names),
                   input$color_scale
                 )
 
-                tbl <- hits_summary |>
-                  dplyr::filter(
-                    `Cmp Name` == input$conversion_compound_picker
-                  )
+                tbl <- if (is.null(input$conversion_compound_picker)) {
+                  hits_summary[0, ]
+                } else {
+                  hits_summary |>
+                    dplyr::filter(
+                      `Cmp Name` == input$conversion_compound_picker
+                    )
+                }
 
                 render_table_view(
                   table = tbl,
@@ -2482,7 +2531,7 @@ server <- function(
               ]
 
               if (all(is.na(total_bind_pre$`Cmp Name`))) {
-                return("N/A")
+                return(shiny::div("N/A", class = "na-placeholder"))
               }
 
               # Get selected compound
@@ -2503,7 +2552,7 @@ server <- function(
                 shiny::div(
                   class = "conversion-sample-protein-names",
                   shiny::HTML(paste(
-                    "Compounds<br>Selected<br>",
+                    "No. Compounds<br>Selected<br>",
                     if (length(total_bind$`Total %-Binding`) > 1) "Range<br>",
                     "Mean",
                     if (length(total_bind$`Total %-Binding`) > 1) "± SD"

@@ -1147,14 +1147,7 @@ binding_results_ui <- function(ns, hits_summary) {
                   )
                 )
               ),
-              shinycssloaders::withSpinner(
-                plotly::plotlyOutput(
-                  ns("compounds_compound_distribution"),
-                  height = "100%"
-                ),
-                type = 1,
-                color = "#7777f9"
-              ),
+              shiny::uiOutput(ns("compounds_compound_distribution_ui")),
               full_screen = TRUE
             )
           ),
@@ -1514,6 +1507,120 @@ conversion_declaration_ui <- function(
     )
   }
 
+  if (samples_status == "confirmed") {
+    samples_control_buttons <- shiny::div(
+      class = "table-control-buttons sampletable-control-buttons",
+      bslib::tooltip(
+        shiny::div(
+          style = "width: 100%;",
+          shinyjs::disabled(shiny::actionButton(
+            ns("confirm_samples"),
+            label = NULL,
+            icon = shiny::icon("check"),
+            width = "100%"
+          ))
+        ),
+        "Confirm Sample Table",
+        placement = "top"
+      ),
+      bslib::tooltip(
+        shiny::div(
+          style = "width: 100%;",
+          shinyjs::disabled(shiny::actionButton(
+            ns("use_config"),
+            label = NULL,
+            icon = shiny::icon("wand-magic-sparkles"),
+            width = "100%"
+          ))
+        ),
+        "Use Experiment Config",
+        placement = "top"
+      ),
+      bslib::tooltip(
+        shiny::div(
+          style = "width: 100%;",
+          shiny::actionButton(
+            ns("edit_samples"),
+            label = NULL,
+            icon = shiny::icon("pen-to-square"),
+            width = "100%"
+          )
+        ),
+        "Edit Sample Table",
+        placement = "top"
+      ),
+      bslib::tooltip(
+        shiny::div(
+          style = "width: 100%;",
+          shinyjs::disabled(shiny::actionButton(
+            ns("clear_samples"),
+            label = NULL,
+            icon = shiny::icon("eraser"),
+            width = "100%"
+          ))
+        ),
+        "Clear Sample Table",
+        placement = "top"
+      )
+    )
+  } else {
+    samples_control_buttons <- shiny::div(
+      class = "table-control-buttons sampletable-control-buttons",
+      bslib::tooltip(
+        shiny::div(
+          style = "width: 100%;",
+          shinyjs::disabled(shiny::actionButton(
+            ns("confirm_samples"),
+            label = NULL,
+            icon = shiny::icon("bookmark"),
+            width = "100%"
+          ))
+        ),
+        "Confirm Sample Table",
+        placement = "top"
+      ),
+      bslib::tooltip(
+        shiny::div(
+          style = "width: 100%;",
+          shinyjs::disabled(shiny::actionButton(
+            ns("use_config"),
+            label = NULL,
+            icon = shiny::icon("wand-magic-sparkles"),
+            width = "100%"
+          ))
+        ),
+        "Use Experiment Config",
+        placement = "top"
+      ),
+      bslib::tooltip(
+        shiny::div(
+          style = "width: 100%;",
+          shinyjs::disabled(shiny::actionButton(
+            ns("edit_samples"),
+            label = NULL,
+            icon = shiny::icon("pen-to-square"),
+            width = "100%"
+          ))
+        ),
+        "Edit Sample Table",
+        placement = "top"
+      ),
+      bslib::tooltip(
+        shiny::div(
+          style = "width: 100%;",
+          shiny::actionButton(
+            ns("clear_samples"),
+            label = NULL,
+            icon = shiny::icon("eraser"),
+            width = "100%"
+          )
+        ),
+        "Clear Sample Table",
+        placement = "top"
+      )
+    )
+  }
+
   if (compounds_status == "confirmed") {
     compounds_control_buttons <- shiny::div(
       class = "table-control-buttons",
@@ -1726,67 +1833,7 @@ conversion_declaration_ui <- function(
           ),
           shiny::column(
             width = 4,
-            shiny::div(
-              class = "table-control-buttons sampletable-control-buttons",
-              bslib::tooltip(
-                shiny::div(
-                  style = "width: 100%;",
-                  shinyjs::disabled(
-                    shiny::actionButton(
-                      ns("confirm_samples"),
-                      label = NULL,
-                      icon = shiny::icon("bookmark"),
-                      width = "100%"
-                    )
-                  )
-                ),
-                "Confirm Sample Table",
-                placement = "top"
-              ),
-              bslib::tooltip(
-                shiny::div(
-                  style = "width: 100%;",
-                  shinyjs::disabled(
-                    shiny::actionButton(
-                      ns("use_config"),
-                      label = NULL,
-                      icon = shiny::icon("wand-magic-sparkles"),
-                      width = "100%"
-                    )
-                  )
-                ),
-                "Use Experiment Config",
-                placement = "top"
-              ),
-              bslib::tooltip(
-                shiny::div(
-                  style = "width: 100%;",
-                  shinyjs::disabled(
-                    shiny::actionButton(
-                      ns("edit_samples"),
-                      label = NULL,
-                      icon = shiny::icon("pen-to-square"),
-                      width = "100%"
-                    )
-                  )
-                ),
-                "Edit Sample Table",
-                placement = "top"
-              ),
-              bslib::tooltip(
-                shiny::div(
-                  style = "width: 100%;",
-                  shiny::actionButton(
-                    ns("clear_samples"),
-                    label = NULL,
-                    icon = shiny::icon("eraser"),
-                    width = "100%"
-                  )
-                ),
-                "Clear Sample Table",
-                placement = "top"
-              )
-            )
+            samples_control_buttons
           ),
           shiny::column(
             width = 1,

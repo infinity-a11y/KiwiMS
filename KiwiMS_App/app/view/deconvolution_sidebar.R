@@ -45,13 +45,28 @@ ui <- function(id) {
         shiny::tags$div(
           class = "sample-file-row",
           shiny::tags$div(
-            shinyDirButton(
-              ns("folder"),
-              "Multiple",
-              icon = shiny::icon("folder-open"),
-              title = "Select location with multiple Waters .raw folders",
-              buttonType = "default",
-              root = path_home()
+            shiny::div(
+              shinyDirButton(
+                ns("folder"),
+                "Multiple",
+                icon = shiny::icon("folder-open"),
+                title = "Select location with multiple Waters .raw folders",
+                buttonType = "default",
+                root = path_home()
+              ),
+              bslib::tooltip(
+                shiny::div(
+                  class = "save-button",
+                  actionButton(
+                    ns("save_input_dir"),
+                    label = NULL,
+                    icon = icon("floppy-disk"),
+                    class = "btn-default"
+                  )
+                ),
+                "Save default folder",
+                placement = "bottom"
+              )
             ),
             shinyDirButton(
               ns("file"),
@@ -71,9 +86,9 @@ ui <- function(id) {
           shiny::div(
             shinyDirButton(
               ns("target_folder"),
-              "Select Destination Folder",
+              "Select Output Path",
               icon = shiny::icon("file-export"),
-              title = "Select destination folder",
+              title = "Select output path",
               buttonType = "default",
               root = path_home()
             ),
@@ -81,7 +96,7 @@ ui <- function(id) {
               shiny::div(
                 class = "save-button",
                 actionButton(
-                  ns("open_settings_btn"),
+                  ns("save_output_dir"),
                   label = NULL,
                   icon = icon("floppy-disk"),
                   class = "btn-default"
@@ -142,7 +157,7 @@ server <- function(
       session = session
     )
 
-    # Specify destination path for results
+    # Specify output path for results
     shinyDirChoose(
       input,
       id = "target_folder",
@@ -181,7 +196,7 @@ server <- function(
     filepath <- shiny::reactiveVal(character())
     targetpath <- shiny::reactiveVal(character())
 
-    # Apply default destination path once on init (if configured)
+    # Apply default output path once on init (if configured)
     shiny::observe({
       def <- default_dest_path()
       tp <- targetpath()
@@ -225,7 +240,7 @@ server <- function(
             paste0(
               '<i class="fa-solid fa-circle-check" style="font-size:1em; c',
               'olor:#000000; margin-right: 10px;"></i>',
-              "Destination path is valid."
+              "Output path is valid."
             )
           )
         )
@@ -464,7 +479,7 @@ server <- function(
         isTRUE(input$use_config) && !is.null(config_file())
       ),
       open_config_clicked = shiny::reactive(input$open_config_btn),
-      open_settings_clicked = shiny::reactive(input$open_settings_btn)
+      open_settings_clicked = shiny::reactive(input$save_output_dir)
     )
   })
 }
