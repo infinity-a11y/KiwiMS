@@ -375,7 +375,7 @@ server <- function(
       )
     })
 
-    ### Running destination path display ----
+    ### Running output path display ----
     output$running_dest_ui <- shiny$renderUI({
       dest <- analysis_dest()
       if (is.null(dest)) {
@@ -1205,7 +1205,7 @@ server <- function(
         write_log(paste("Target:", deconvolution_sidebar_vars$file()))
       }
       write_log(paste(
-        "Destination path:",
+        "Output path:",
         analysis_dest()
       ))
 
