@@ -672,6 +672,16 @@ input[type="number"]::-webkit-inner-spin-button {
   margin: 0;
 }
 
+.label-tooltip .save-button .btn {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.label-tooltip .save-button .btn:hover {
+  color: unset;
+  background-color: unset;
+}
+
 .card-header .tooltip-bttn button {
   color: black;
 }
@@ -1321,6 +1331,7 @@ td.listbox.htDimmed.current.highlight {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-align: center;
 }
 
 #app-deconvolution_main-analysis_name_feedback>div.analysis-path-feedback {
@@ -4299,7 +4310,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   margin-left: -3px;
 }
 
-/* Destination folder row (dir button + gear) */
+/* Output path row (dir button + gear) */
 .dest-folder-row {}
 
 .dest-folder-row>div,
@@ -4347,7 +4358,8 @@ sample-file-row .form-group {
   width: 30px;
   height: 100%;
   padding: 0;
-  border: none;
+  border: 1px solid;
+  border-color: var(--bs-btn-border-color);
   min-width: fit-content;
 }
 
@@ -4388,20 +4400,42 @@ sample-file-row .form-group {
     text-transform: capitalize;
   }
 
-  .settings-section-header {
-    font-weight: 600;
-    font-size: 0.75em;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--bs-secondary);
-    background-color: rgba(0, 0, 0, 0.04);
-    padding: 0.35rem 0.75rem !important;
-    border-top: 2px solid rgba(0, 0, 0, 0.08);
-  }
-
   .form-group {
     margin-bottom: 0.4rem;
   }
+}
+
+.settings-collapse-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  padding: 0.4rem 0.75rem;
+  font-weight: 600;
+  font-size: 0.75em;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--bs-secondary);
+  background-color: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-bottom: none;
+  user-select: none;
+
+  &:first-of-type {
+    border-top: 2px solid rgba(0, 0, 0, 0.08);
+  }
+
+  .settings-collapse-icon {
+    transition: transform 0.2s ease;
+  }
+
+  &.collapsed .settings-collapse-icon {
+    transform: rotate(-90deg);
+  }
+}
+
+.settings-collapse-header+.collapse>.settings-table {
+  border-top: none;
 }
 
 .settings-dest-row {
@@ -4417,7 +4451,7 @@ sample-file-row .form-group {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 
   &--none {
     color: var(--bs-secondary);
@@ -4435,7 +4469,7 @@ sample-file-row .form-group {
 
 .settings-table-feedback {
   width: 20%;
-  min-width: 110px;
+  min-width: 200px;
   vertical-align: middle !important;
   word-break: break-word;
   overflow-wrap: anywhere;

@@ -103,16 +103,20 @@ server <- function(
                         class = "btn-default"
                       )
                     ),
-                    "Save as default value",
+                    "Save setting",
                     placement = "bottom"
                   ),
-                  shiny::div(
-                    class = "tooltip-bttn",
-                    shiny::actionButton(
-                      ns("peak_tol_tooltip_bttn"),
-                      label = NULL,
-                      icon = shiny::icon("circle-question")
-                    )
+                  tooltip(
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("peak_tol_tooltip_bttn"),
+                        label = NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    ),
+                    "Help",
+                    placement = "top"
                   )
                 )
               ),
@@ -140,16 +144,20 @@ server <- function(
                         class = "btn-default"
                       )
                     ),
-                    "Save as default value",
+                    "Save setting",
                     placement = "bottom"
                   ),
-                  shiny::div(
-                    class = "tooltip-bttn",
-                    shiny::actionButton(
-                      ns("max_mult_tooltip_bttn"),
-                      label = NULL,
-                      icon = shiny::icon("circle-question")
-                    )
+                  tooltip(
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("max_mult_tooltip_bttn"),
+                        label = NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    ),
+                    "Help",
+                    placement = "top"
                   )
                 )
               ),
