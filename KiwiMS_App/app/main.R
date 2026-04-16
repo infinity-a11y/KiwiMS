@@ -275,375 +275,414 @@ server <- function(id) {
             easyClose = TRUE,
             shiny$div(
               class = "settings-modal-body",
-              shiny$tags$table(
-                class = "table table-sm table-bordered settings-table",
-                shiny$tags$thead(
-                  shiny$tags$tr(
-                    shiny$tags$th("Setting"),
-                    shiny$tags$th("Default Value"),
-                    shiny$tags$th("Status")
-                  )
-                ),
-                shiny$tags$tbody(
-                  # --- General ---
-                  shiny$tags$tr(
-                    shiny$tags$td(
-                      colspan = "3",
-                      class = "settings-section-header",
-                      "General"
-                    )
-                  ),
-                  shiny$tags$tr(
-                    shiny$tags$td(
-                      class = "settings-table-label",
-                      "Destination Folder"
-                    ),
-                    shiny$tags$td(
-                      shiny$textInput(
-                        ns("settings_dest_path"),
-                        label = NULL,
-                        value = base,
-                        placeholder = "Paste or type an absolute folder path",
-                        width = "100%"
+
+              # --- General ---
+              shiny$div(
+                class = "settings-collapse-header",
+                `data-bs-toggle` = "collapse",
+                `data-bs-target` = paste0("#", ns("settings_general_body")),
+                "General",
+                shiny$icon("chevron-down", class = "settings-collapse-icon")
+              ),
+              shiny$div(
+                id = ns("settings_general_body"),
+                class = "collapse show",
+                shiny$tags$table(
+                  class = "table table-sm table-bordered settings-table",
+                  shiny$tags$tbody(
+                    shiny$tags$tr(
+                      shiny$tags$td(
+                        class = "settings-table-label",
+                        "Input Path"
                       ),
-                      shiny$div(
-                        class = "settings-dest-row",
-                        shiny$checkboxInput(
-                          ns("settings_dest_enabled"),
-                          label = "Use as default",
-                          value = isTRUE(s$enabled)
-                        )
-                      )
-                    ),
-                    shiny$tags$td(
-                      class = "settings-table-feedback",
-                      shiny$uiOutput(ns("settings_dest_path_display"))
-                    )
-                  ),
-                  shiny$tags$tr(
-                    shiny$tags$td(
-                      class = "settings-table-label",
-                      "Keep UniDec output files",
-                      shiny$tags$span(
-                        class = "settings-info",
-                        "Keeps *_rawdata.txt and *_rawdata_unidecfiles/ after analysis"
-                      )
-                    ),
-                    shiny$tags$td(
-                      shiny$checkboxInput(
-                        ns("settings_keep_raw_output"),
-                        label = "Enable",
-                        value = isTRUE(us$deconv_keep_raw_output)
-                      )
-                    ),
-                    shiny$tags$td(class = "settings-table-feedback")
-                  ),
-                  # --- Default Input Values ---
-                  shiny$tags$tr(
-                    shiny$tags$td(
-                      colspan = "3",
-                      class = "settings-section-header",
-                      "Default Input Values",
-                      shiny$tags$span(
-                        class = "settings-info",
-                        "Restored at the start of each session."
-                      )
-                    )
-                  ),
-                  shiny$tags$tr(
-                    shiny$tags$td(
-                      class = "settings-table-label",
-                      "Min. charge state [z]"
-                    ),
-                    shiny$tags$td(
-                      shiny$numericInput(
-                        ns("settings_startz"),
-                        label = NULL,
-                        min = 1,
-                        max = 100,
-                        value = us$deconv_startz,
-                        step = 1,
-                        width = "200px"
-                      )
-                    ),
-                    shiny$tags$td(
-                      class = "settings-table-feedback",
-                      shiny$uiOutput(ns("settings_startz_feedback"))
-                    )
-                  ),
-                  shiny$tags$tr(
-                    shiny$tags$td(
-                      class = "settings-table-label",
-                      "Max. charge state [z]"
-                    ),
-                    shiny$tags$td(
-                      shiny$numericInput(
-                        ns("settings_endz"),
-                        label = NULL,
-                        min = 1,
-                        max = 100,
-                        value = us$deconv_endz,
-                        step = 1,
-                        width = "200px"
-                      )
-                    ),
-                    shiny$tags$td(
-                      class = "settings-table-feedback",
-                      shiny$uiOutput(ns("settings_endz_feedback"))
-                    )
-                  ),
-                  shiny$tags$tr(
-                    shiny$tags$td(
-                      class = "settings-table-label",
-                      "Lower deconvolution range [m/z]"
-                    ),
-                    shiny$tags$td(
-                      shiny$numericInput(
-                        ns("settings_minmz"),
-                        label = NULL,
-                        min = 1,
-                        max = 100000,
-                        value = us$deconv_minmz,
-                        step = 1,
-                        width = "200px"
-                      )
-                    ),
-                    shiny$tags$td(
-                      class = "settings-table-feedback",
-                      shiny$uiOutput(ns("settings_minmz_feedback"))
-                    )
-                  ),
-                  shiny$tags$tr(
-                    shiny$tags$td(
-                      class = "settings-table-label",
-                      "Upper deconvolution range [m/z]"
-                    ),
-                    shiny$tags$td(
-                      shiny$numericInput(
-                        ns("settings_maxmz"),
-                        label = NULL,
-                        min = 1,
-                        max = 100000,
-                        value = us$deconv_maxmz,
-                        step = 1,
-                        width = "200px"
-                      )
-                    ),
-                    shiny$tags$td(
-                      class = "settings-table-feedback",
-                      shiny$uiOutput(ns("settings_maxmz_feedback"))
-                    )
-                  ),
-                  shiny$tags$tr(
-                    shiny$tags$td(
-                      class = "settings-table-label",
-                      "Lower mass range [Da]"
-                    ),
-                    shiny$tags$td(
-                      shiny$numericInput(
-                        ns("settings_masslb"),
-                        label = NULL,
-                        min = 1,
-                        max = 2000000,
-                        value = us$deconv_masslb,
-                        step = 1,
-                        width = "200px"
-                      )
-                    ),
-                    shiny$tags$td(
-                      class = "settings-table-feedback",
-                      shiny$uiOutput(ns("settings_masslb_feedback"))
-                    )
-                  ),
-                  shiny$tags$tr(
-                    shiny$tags$td(
-                      class = "settings-table-label",
-                      "Upper mass range [Da]"
-                    ),
-                    shiny$tags$td(
-                      shiny$numericInput(
-                        ns("settings_massub"),
-                        label = NULL,
-                        min = 1,
-                        max = 2000000,
-                        value = us$deconv_massub,
-                        step = 1,
-                        width = "200px"
-                      )
-                    ),
-                    shiny$tags$td(
-                      class = "settings-table-feedback",
-                      shiny$uiOutput(ns("settings_massub_feedback"))
-                    )
-                  ),
-                  shiny$tags$tr(
-                    shiny$tags$td(
-                      class = "settings-table-label",
-                      "Elution start time [min]"
-                    ),
-                    shiny$tags$td(
-                      shiny$numericInput(
-                        ns("settings_time_start"),
-                        label = NULL,
-                        min = 0,
-                        max = 100,
-                        value = us$deconv_time_start,
-                        step = 0.05,
-                        width = "200px"
-                      )
-                    ),
-                    shiny$tags$td(
-                      class = "settings-table-feedback",
-                      shiny$uiOutput(ns("settings_time_start_feedback"))
-                    )
-                  ),
-                  shiny$tags$tr(
-                    shiny$tags$td(
-                      class = "settings-table-label",
-                      "Elution end time [min]"
-                    ),
-                    shiny$tags$td(
-                      shiny$numericInput(
-                        ns("settings_time_end"),
-                        label = NULL,
-                        min = 0,
-                        max = 100,
-                        value = us$deconv_time_end,
-                        step = 0.05,
-                        width = "200px"
-                      )
-                    ),
-                    shiny$tags$td(
-                      class = "settings-table-feedback",
-                      shiny$uiOutput(ns("settings_time_end_feedback"))
-                    )
-                  ),
-                  shiny$tags$tr(
-                    shiny$tags$td(
-                      class = "settings-table-label",
-                      "Detection window"
-                    ),
-                    shiny$tags$td(
-                      shiny$numericInput(
-                        ns("settings_peakwindow"),
-                        label = NULL,
-                        min = 1,
-                        max = 500,
-                        value = us$deconv_peakwindow,
-                        step = 1,
-                        width = "200px"
-                      )
-                    ),
-                    shiny$tags$td(
-                      class = "settings-table-feedback",
-                      shiny$uiOutput(ns("settings_peakwindow_feedback"))
-                    )
-                  ),
-                  shiny$tags$tr(
-                    shiny$tags$td(
-                      class = "settings-table-label",
-                      "Peak normalization"
-                    ),
-                    shiny$tags$td(
-                      shiny$div(
-                        class = "settings-peaknorm",
-                        shiny$selectInput(
-                          ns("settings_peaknorm"),
+                      shiny$tags$td(
+                        shiny$textInput(
+                          ns("settings_input_path"),
                           label = NULL,
-                          choices = c(
-                            "No normalization" = 0,
-                            "Max Normalization" = 1,
-                            "Normalization to Sum" = 2
-                          ),
-                          selected = us$deconv_peaknorm,
+                          value = us$deconv_input_dir,
+                          placeholder = "Paste or type an absolute folder path",
+                          width = "100%"
+                        )
+                      ),
+                      shiny$tags$td(
+                        class = "settings-table-feedback",
+                        shiny$uiOutput(ns("settings_input_path_display"))
+                      )
+                    ),
+                    shiny$tags$tr(
+                      shiny$tags$td(
+                        class = "settings-table-label",
+                        "Output Path"
+                      ),
+                      shiny$tags$td(
+                        shiny$textInput(
+                          ns("settings_dest_path"),
+                          label = NULL,
+                          value = base,
+                          placeholder = "Paste or type an absolute folder path",
+                          width = "100%"
+                        )
+                      ),
+                      shiny$tags$td(
+                        class = "settings-table-feedback",
+                        shiny$uiOutput(ns("settings_dest_path_display"))
+                      )
+                    ),
+                    shiny$tags$tr(
+                      shiny$tags$td(
+                        class = "settings-table-label",
+                        shiny$span(
+                          "Keep UniDec output files",
+                          bslib$tooltip(
+                            shiny$actionButton(
+                              ns("keep_raw_info_btn"),
+                              label = NULL,
+                              icon = shiny$icon("circle-info"),
+                              class = "btn-link p-0",
+                              style = "font-size:0.85em; opacity:0.6; vertical-align:baseline; box-shadow:none;"
+                            ),
+                            "Keeps *_rawdata.txt and *_rawdata_unidecfiles/ after analysis",
+                            placement = "right"
+                          )
+                        )
+                      ),
+                      shiny$tags$td(
+                        shiny$checkboxInput(
+                          ns("settings_keep_raw_output"),
+                          label = "Enable",
+                          value = isTRUE(us$deconv_keep_raw_output)
+                        )
+                      ),
+                      shiny$tags$td(class = "settings-table-feedback")
+                    )
+                  )
+                )
+              ),
+
+              # --- Deconvolution Input Values ---
+              shiny$div(
+                class = "settings-collapse-header",
+                `data-bs-toggle` = "collapse",
+                `data-bs-target` = paste0("#", ns("settings_deconv_body")),
+                "Deconvolution Input Values",
+                shiny$icon("chevron-down", class = "settings-collapse-icon")
+              ),
+              shiny$div(
+                id = ns("settings_deconv_body"),
+                class = "collapse show",
+                shiny$tags$table(
+                  class = "table table-sm table-bordered settings-table",
+                  shiny$tags$tbody(
+                    shiny$tags$tr(
+                      shiny$tags$td(
+                        class = "settings-table-label",
+                        "Min. charge state [z]"
+                      ),
+                      shiny$tags$td(
+                        shiny$numericInput(
+                          ns("settings_startz"),
+                          label = NULL,
+                          min = 1,
+                          max = 100,
+                          value = us$deconv_startz,
+                          step = 1,
                           width = "200px"
                         )
+                      ),
+                      shiny$tags$td(
+                        class = "settings-table-feedback",
+                        shiny$uiOutput(ns("settings_startz_feedback"))
                       )
                     ),
-                    shiny$tags$td(
-                      class = "settings-table-feedback",
-                      shiny$uiOutput(ns("settings_peaknorm_feedback"))
-                    )
-                  ),
-                  shiny$tags$tr(
-                    shiny$tags$td(
-                      class = "settings-table-label",
-                      "Peak threshold"
-                    ),
-                    shiny$tags$td(
-                      shiny$numericInput(
-                        ns("settings_peakthresh"),
-                        label = NULL,
-                        min = 0,
-                        max = 1,
-                        value = us$deconv_peakthresh,
-                        step = 0.01,
-                        width = "200px"
+                    shiny$tags$tr(
+                      shiny$tags$td(
+                        class = "settings-table-label",
+                        "Max. charge state [z]"
+                      ),
+                      shiny$tags$td(
+                        shiny$numericInput(
+                          ns("settings_endz"),
+                          label = NULL,
+                          min = 1,
+                          max = 100,
+                          value = us$deconv_endz,
+                          step = 1,
+                          width = "200px"
+                        )
+                      ),
+                      shiny$tags$td(
+                        class = "settings-table-feedback",
+                        shiny$uiOutput(ns("settings_endz_feedback"))
                       )
                     ),
-                    shiny$tags$td(
-                      class = "settings-table-feedback",
-                      shiny$uiOutput(ns("settings_peakthresh_feedback"))
-                    )
-                  ),
-                  shiny$tags$tr(
-                    shiny$tags$td(
-                      class = "settings-table-label",
-                      "Peak Tolerance [Da]"
-                    ),
-                    shiny$tags$td(
-                      shiny$numericInput(
-                        ns("settings_peak_tol"),
-                        label = NULL,
-                        value = us$peak_tolerance,
-                        min = 0,
-                        max = 20,
-                        step = 0.1,
-                        width = "200px"
+                    shiny$tags$tr(
+                      shiny$tags$td(
+                        class = "settings-table-label",
+                        "Lower deconvolution range [m/z]"
+                      ),
+                      shiny$tags$td(
+                        shiny$numericInput(
+                          ns("settings_minmz"),
+                          label = NULL,
+                          min = 1,
+                          max = 100000,
+                          value = us$deconv_minmz,
+                          step = 1,
+                          width = "200px"
+                        )
+                      ),
+                      shiny$tags$td(
+                        class = "settings-table-feedback",
+                        shiny$uiOutput(ns("settings_minmz_feedback"))
                       )
                     ),
-                    shiny$tags$td(
-                      class = "settings-table-feedback",
-                      shiny$uiOutput(ns("settings_peak_tol_feedback"))
-                    )
-                  ),
-                  shiny$tags$tr(
-                    shiny$tags$td(
-                      class = "settings-table-label",
-                      "Max. Stoichiometry"
-                    ),
-                    shiny$tags$td(
-                      shiny$numericInput(
-                        ns("settings_max_mult"),
-                        label = NULL,
-                        value = us$max_multiples,
-                        min = 1,
-                        max = 20,
-                        step = 1,
-                        width = "200px"
+                    shiny$tags$tr(
+                      shiny$tags$td(
+                        class = "settings-table-label",
+                        "Upper deconvolution range [m/z]"
+                      ),
+                      shiny$tags$td(
+                        shiny$numericInput(
+                          ns("settings_maxmz"),
+                          label = NULL,
+                          min = 1,
+                          max = 100000,
+                          value = us$deconv_maxmz,
+                          step = 1,
+                          width = "200px"
+                        )
+                      ),
+                      shiny$tags$td(
+                        class = "settings-table-feedback",
+                        shiny$uiOutput(ns("settings_maxmz_feedback"))
                       )
                     ),
-                    shiny$tags$td(
-                      class = "settings-table-feedback",
-                      shiny$uiOutput(ns("settings_max_mult_feedback"))
-                    )
-                  ),
-                  shiny$tags$tr(
-                    style = "margin-top: 1rem;",
-                    shiny$tags$td(
-                      class = "settings-table-label",
+                    shiny$tags$tr(
+                      shiny$tags$td(
+                        class = "settings-table-label",
+                        "Lower mass range [Da]"
+                      ),
+                      shiny$tags$td(
+                        shiny$numericInput(
+                          ns("settings_masslb"),
+                          label = NULL,
+                          min = 1,
+                          max = 2000000,
+                          value = us$deconv_masslb,
+                          step = 1,
+                          width = "200px"
+                        )
+                      ),
+                      shiny$tags$td(
+                        class = "settings-table-feedback",
+                        shiny$uiOutput(ns("settings_masslb_feedback"))
+                      )
                     ),
-                    shiny$tags$td(
-                      colspan = "2",
-                      shiny$actionButton(
-                        ns("reset_default"),
-                        "Reset All",
-                        width = "100%"
+                    shiny$tags$tr(
+                      shiny$tags$td(
+                        class = "settings-table-label",
+                        "Upper mass range [Da]"
+                      ),
+                      shiny$tags$td(
+                        shiny$numericInput(
+                          ns("settings_massub"),
+                          label = NULL,
+                          min = 1,
+                          max = 2000000,
+                          value = us$deconv_massub,
+                          step = 1,
+                          width = "200px"
+                        )
+                      ),
+                      shiny$tags$td(
+                        class = "settings-table-feedback",
+                        shiny$uiOutput(ns("settings_massub_feedback"))
+                      )
+                    ),
+                    shiny$tags$tr(
+                      shiny$tags$td(
+                        class = "settings-table-label",
+                        "Elution start time [min]"
+                      ),
+                      shiny$tags$td(
+                        shiny$numericInput(
+                          ns("settings_time_start"),
+                          label = NULL,
+                          min = 0,
+                          max = 100,
+                          value = us$deconv_time_start,
+                          step = 0.05,
+                          width = "200px"
+                        )
+                      ),
+                      shiny$tags$td(
+                        class = "settings-table-feedback",
+                        shiny$uiOutput(ns("settings_time_start_feedback"))
+                      )
+                    ),
+                    shiny$tags$tr(
+                      shiny$tags$td(
+                        class = "settings-table-label",
+                        "Elution end time [min]"
+                      ),
+                      shiny$tags$td(
+                        shiny$numericInput(
+                          ns("settings_time_end"),
+                          label = NULL,
+                          min = 0,
+                          max = 100,
+                          value = us$deconv_time_end,
+                          step = 0.05,
+                          width = "200px"
+                        )
+                      ),
+                      shiny$tags$td(
+                        class = "settings-table-feedback",
+                        shiny$uiOutput(ns("settings_time_end_feedback"))
+                      )
+                    ),
+                    shiny$tags$tr(
+                      shiny$tags$td(
+                        class = "settings-table-label",
+                        "Detection window"
+                      ),
+                      shiny$tags$td(
+                        shiny$numericInput(
+                          ns("settings_peakwindow"),
+                          label = NULL,
+                          min = 1,
+                          max = 500,
+                          value = us$deconv_peakwindow,
+                          step = 1,
+                          width = "200px"
+                        )
+                      ),
+                      shiny$tags$td(
+                        class = "settings-table-feedback",
+                        shiny$uiOutput(ns("settings_peakwindow_feedback"))
+                      )
+                    ),
+                    shiny$tags$tr(
+                      shiny$tags$td(
+                        class = "settings-table-label",
+                        "Peak normalization"
+                      ),
+                      shiny$tags$td(
+                        shiny$div(
+                          class = "settings-peaknorm",
+                          shiny$selectInput(
+                            ns("settings_peaknorm"),
+                            label = NULL,
+                            choices = c(
+                              "No normalization" = 0,
+                              "Max Normalization" = 1,
+                              "Normalization to Sum" = 2
+                            ),
+                            selected = us$deconv_peaknorm,
+                            width = "200px"
+                          )
+                        )
+                      ),
+                      shiny$tags$td(
+                        class = "settings-table-feedback",
+                        shiny$uiOutput(ns("settings_peaknorm_feedback"))
+                      )
+                    ),
+                    shiny$tags$tr(
+                      shiny$tags$td(
+                        class = "settings-table-label",
+                        "Peak threshold"
+                      ),
+                      shiny$tags$td(
+                        shiny$numericInput(
+                          ns("settings_peakthresh"),
+                          label = NULL,
+                          min = 0,
+                          max = 1,
+                          value = us$deconv_peakthresh,
+                          step = 0.01,
+                          width = "200px"
+                        )
+                      ),
+                      shiny$tags$td(
+                        class = "settings-table-feedback",
+                        shiny$uiOutput(ns("settings_peakthresh_feedback"))
                       )
                     )
                   )
                 )
-              )
+              ),
+
+              # --- Protein Conversion Input Values ---
+              shiny$div(
+                class = "settings-collapse-header",
+                  `data-bs-toggle` = "collapse",
+                  `data-bs-target` = paste0("#", ns("settings_conv_body")),
+                  "Protein Conversion Input Values",
+                  shiny$icon("chevron-down", class = "settings-collapse-icon")
+                ),
+                shiny$div(
+                  id = ns("settings_conv_body"),
+                  class = "collapse show",
+                  shiny$tags$table(
+                    class = "table table-sm table-bordered settings-table",
+                    shiny$tags$tbody(
+                      shiny$tags$tr(
+                        shiny$tags$td(
+                          class = "settings-table-label",
+                          "Peak Tolerance [Da]"
+                        ),
+                        shiny$tags$td(
+                          shiny$numericInput(
+                            ns("settings_peak_tol"),
+                            label = NULL,
+                            value = us$peak_tolerance,
+                            min = 0,
+                            max = 20,
+                            step = 0.1,
+                            width = "200px"
+                          )
+                        ),
+                        shiny$tags$td(
+                          class = "settings-table-feedback",
+                          shiny$uiOutput(ns("settings_peak_tol_feedback"))
+                        )
+                      ),
+                      shiny$tags$tr(
+                        shiny$tags$td(
+                          class = "settings-table-label",
+                          "Max. Stoichiometry"
+                        ),
+                        shiny$tags$td(
+                          shiny$numericInput(
+                            ns("settings_max_mult"),
+                            label = NULL,
+                            value = us$max_multiples,
+                            min = 1,
+                            max = 20,
+                            step = 1,
+                            width = "200px"
+                          )
+                        ),
+                        shiny$tags$td(
+                          class = "settings-table-feedback",
+                          shiny$uiOutput(ns("settings_max_mult_feedback"))
+                        )
+                      ),
+                      shiny$tags$tr(
+                        shiny$tags$td(class = "settings-table-label"),
+                        shiny$tags$td(
+                          colspan = "2",
+                          shiny$actionButton(
+                            ns("reset_default"),
+                            "Reset All",
+                            width = "100%"
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
             ),
             footer = shiny$tagList(
               shiny$modalButton("Dismiss"),
@@ -752,18 +791,58 @@ server <- function(id) {
       trimws(if (!is.null(p)) p else dest_settings()$path)
     })
 
+    settings_input_path_picked <- shiny$reactive({
+      p <- input$settings_input_path
+      trimws(if (!is.null(p)) p else read_user_settings()$deconv_input_dir)
+    })
+
     # Settings opened from nav button
     shiny$observeEvent(input$settings, {
       open_settings_modal()
     })
 
-    # Live feedback for destination folder path inside modal
+    # Live feedback for output path inside modal
     output$settings_dest_path_display <- shiny$renderUI({
       path <- settings_dest_picked()
       if (!nzchar(path)) {
-        return(NULL)
+        return(shiny$div(
+          class = "settings-dest-feedback",
+          shiny$icon("circle-minus"),
+          " No default set"
+        ))
       }
       if (dir.exists(path)) {
+        shiny$div(
+          class = "settings-dest-feedback settings-dest-feedback--valid",
+          shiny$icon("circle-check"),
+          " Folder exists"
+        )
+      } else {
+        shiny$div(
+          class = "settings-dest-feedback settings-dest-feedback--invalid",
+          shiny$icon("triangle-exclamation"),
+          " Folder not found"
+        )
+      }
+    })
+
+    # Live feedback for input folder path inside modal
+    output$settings_input_path_display <- shiny$renderUI({
+      path <- settings_input_path_picked()
+      if (!nzchar(path)) {
+        return(shiny$div(
+          class = "settings-dest-feedback",
+          shiny$icon("circle-minus"),
+          " No default set"
+        ))
+      }
+      if (grepl("\\.raw$", path, ignore.case = TRUE)) {
+        shiny$div(
+          class = "settings-dest-feedback settings-dest-feedback--invalid",
+          shiny$icon("triangle-exclamation"),
+          " Cannot use a .raw folder as default input"
+        )
+      } else if (dir.exists(path)) {
         shiny$div(
           class = "settings-dest-feedback settings-dest-feedback--valid",
           shiny$icon("circle-check"),
@@ -1000,29 +1079,12 @@ server <- function(id) {
     })
 
     shiny$observeEvent(input$save_settings, {
-      # --- Destination folder ---
+      # --- Output path ---
       path <- settings_dest_picked()
-      enabled <- isTRUE(input$settings_dest_enabled)
-      if (enabled && !nzchar(path)) {
-        shiny$showNotification(
-          "Select a folder first.",
-          type = "error",
-          duration = 4
-        )
-        return()
-      }
-      if (enabled && !dir.exists(path)) {
-        shiny$showNotification(
-          "Folder not found — settings not saved.",
-          type = "error",
-          duration = 4
-        )
-        return()
-      }
       if (!dir.exists(settings_dir)) {
         dir.create(settings_dir, recursive = TRUE)
       }
-      new_dest <- list(path = path, enabled = enabled)
+      new_dest <- list(path = path, enabled = nzchar(path))
       saveRDS(new_dest, dest_settings_file)
       dest_settings(new_dest)
 
@@ -1123,6 +1185,15 @@ server <- function(id) {
 
       current$deconv_keep_raw_output <- isTRUE(input$settings_keep_raw_output)
 
+      inp <- trimws(
+        if (!is.null(input$settings_input_path)) {
+          input$settings_input_path
+        } else {
+          ""
+        }
+      )
+      current$deconv_input_dir <- inp
+
       save_user_settings(current)
 
       shiny$removeModal()
@@ -1143,8 +1214,44 @@ server <- function(id) {
       config_filename = config_filename,
       default_dest_path = shiny$reactive({
         s <- dest_settings()
-        if (isTRUE(s$enabled) && nzchar(s$path)) s$path else NULL
+        if (nzchar(s$path) && dir.exists(s$path)) s$path else NULL
+      }),
+      default_input_path = shiny$reactive({
+        p <- read_user_settings()$deconv_input_dir
+        if (length(p) == 1L && nzchar(p) && dir.exists(p)) p else NULL
       })
+    )
+
+    # Save default input folder when floppy button next to Input is clicked
+    shiny$observeEvent(
+      deconvolution_sidebar_vars$save_input_dir_clicked(),
+      {
+        p <- deconvolution_sidebar_vars$dir()
+        if (
+          length(p) == 1L &&
+            nzchar(p) &&
+            grepl("\\.raw$", p, ignore.case = TRUE)
+        ) {
+          shinyWidgets::show_toast(
+            title = "Cannot save a .raw folder as default input.",
+            text = NULL,
+            type = "error",
+            timer = 3000,
+            timerProgressBar = TRUE
+          )
+        } else if (length(p) == 1L && nzchar(p) && dir.exists(p)) {
+          update_user_setting("deconv_input_dir", p)
+          shinyWidgets::show_toast(
+            title = "Default input folder saved.",
+            text = NULL,
+            type = "success",
+            timer = 3000,
+            timerProgressBar = TRUE
+          )
+        }
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
     )
 
     # Settings opened from sidebar gear button — pre-fill with currently active path
