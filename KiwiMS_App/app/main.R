@@ -331,19 +331,10 @@ server <- function(id) {
                     shiny$tags$tr(
                       shiny$tags$td(
                         class = "settings-table-label",
-                        shiny$span(
+                        shiny$tags$span(
                           "Keep UniDec output files",
-                          bslib$tooltip(
-                            shiny$actionButton(
-                              ns("keep_raw_info_btn"),
-                              label = NULL,
-                              icon = shiny$icon("circle-info"),
-                              class = "btn-link p-0",
-                              style = "font-size:0.85em; opacity:0.6; vertical-align:baseline; box-shadow:none;"
-                            ),
-                            "Keeps *_rawdata.txt and *_rawdata_unidecfiles/ after analysis",
-                            placement = "right"
-                          )
+                          class = "settings-label-tooltip",
+                          `data-tooltip` = "Keeps *_rawdata.txt and *_rawdata_unidecfiles/ after analysis"
                         )
                       ),
                       shiny$tags$td(
@@ -616,73 +607,73 @@ server <- function(id) {
               # --- Protein Conversion Input Values ---
               shiny$div(
                 class = "settings-collapse-header",
-                  `data-bs-toggle` = "collapse",
-                  `data-bs-target` = paste0("#", ns("settings_conv_body")),
-                  "Protein Conversion Input Values",
-                  shiny$icon("chevron-down", class = "settings-collapse-icon")
-                ),
-                shiny$div(
-                  id = ns("settings_conv_body"),
-                  class = "collapse show",
-                  shiny$tags$table(
-                    class = "table table-sm table-bordered settings-table",
-                    shiny$tags$tbody(
-                      shiny$tags$tr(
-                        shiny$tags$td(
-                          class = "settings-table-label",
-                          "Peak Tolerance [Da]"
-                        ),
-                        shiny$tags$td(
-                          shiny$numericInput(
-                            ns("settings_peak_tol"),
-                            label = NULL,
-                            value = us$peak_tolerance,
-                            min = 0,
-                            max = 20,
-                            step = 0.1,
-                            width = "200px"
-                          )
-                        ),
-                        shiny$tags$td(
-                          class = "settings-table-feedback",
-                          shiny$uiOutput(ns("settings_peak_tol_feedback"))
+                `data-bs-toggle` = "collapse",
+                `data-bs-target` = paste0("#", ns("settings_conv_body")),
+                "Protein Conversion Input Values",
+                shiny$icon("chevron-down", class = "settings-collapse-icon")
+              ),
+              shiny$div(
+                id = ns("settings_conv_body"),
+                class = "collapse show",
+                shiny$tags$table(
+                  class = "table table-sm table-bordered settings-table",
+                  shiny$tags$tbody(
+                    shiny$tags$tr(
+                      shiny$tags$td(
+                        class = "settings-table-label",
+                        "Peak Tolerance [Da]"
+                      ),
+                      shiny$tags$td(
+                        shiny$numericInput(
+                          ns("settings_peak_tol"),
+                          label = NULL,
+                          value = us$peak_tolerance,
+                          min = 0,
+                          max = 20,
+                          step = 0.1,
+                          width = "200px"
                         )
                       ),
-                      shiny$tags$tr(
-                        shiny$tags$td(
-                          class = "settings-table-label",
-                          "Max. Stoichiometry"
-                        ),
-                        shiny$tags$td(
-                          shiny$numericInput(
-                            ns("settings_max_mult"),
-                            label = NULL,
-                            value = us$max_multiples,
-                            min = 1,
-                            max = 20,
-                            step = 1,
-                            width = "200px"
-                          )
-                        ),
-                        shiny$tags$td(
-                          class = "settings-table-feedback",
-                          shiny$uiOutput(ns("settings_max_mult_feedback"))
+                      shiny$tags$td(
+                        class = "settings-table-feedback",
+                        shiny$uiOutput(ns("settings_peak_tol_feedback"))
+                      )
+                    ),
+                    shiny$tags$tr(
+                      shiny$tags$td(
+                        class = "settings-table-label",
+                        "Max. Stoichiometry"
+                      ),
+                      shiny$tags$td(
+                        shiny$numericInput(
+                          ns("settings_max_mult"),
+                          label = NULL,
+                          value = us$max_multiples,
+                          min = 1,
+                          max = 20,
+                          step = 1,
+                          width = "200px"
                         )
                       ),
-                      shiny$tags$tr(
-                        shiny$tags$td(class = "settings-table-label"),
-                        shiny$tags$td(
-                          colspan = "2",
-                          shiny$actionButton(
-                            ns("reset_default"),
-                            "Reset All",
-                            width = "100%"
-                          )
+                      shiny$tags$td(
+                        class = "settings-table-feedback",
+                        shiny$uiOutput(ns("settings_max_mult_feedback"))
+                      )
+                    ),
+                    shiny$tags$tr(
+                      shiny$tags$td(class = "settings-table-label"),
+                      shiny$tags$td(
+                        colspan = "2",
+                        shiny$actionButton(
+                          ns("reset_default"),
+                          "Reset All",
+                          width = "100%"
                         )
                       )
                     )
                   )
                 )
+              )
             ),
             footer = shiny$tagList(
               shiny$modalButton("Dismiss"),
@@ -691,7 +682,7 @@ server <- function(id) {
                 "Save",
                 icon = shiny$icon("floppy-disk"),
                 class = "load-db"
-              )
+              ),
             )
           )
         )
