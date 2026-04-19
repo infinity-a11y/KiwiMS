@@ -5,6 +5,7 @@ box::use(
   htmlwidgets[saveWidget],
   plotly[as_widget, plotly_json],
   shiny,
+  shinyWidgets[show_toast],
 )
 
 box::use(
@@ -76,12 +77,16 @@ setup_plot_dl <- function(input, output, session, prefix, build_fn, filename_fn)
   output[[paste0("dl_", prefix, "_html")]] <- shiny::downloadHandler(
     filename = function() paste0(filename_fn(), ".html"),
     content = function(file) {
+      show_toast("Exporting as HTML", text = NULL, type = "info",
+        timer = 3000, timerProgressBar = TRUE)
       p <- build_fn(input[[paste0(prefix, "_dl_theme")]] %||% "light")
       saveWidget(as_widget(p), file, selfcontained = TRUE)
     }
   )
 
   shiny::observeEvent(input[[paste0("dl_", prefix, "_png")]], {
+    show_toast("Exporting as PNG", text = NULL, type = "info",
+      timer = 3000, timerProgressBar = TRUE)
     p <- build_fn(input[[paste0(prefix, "_dl_theme")]] %||% "light")
     session$sendCustomMessage("downloadPlot", list(
       json     = plotly_json(p, jsonedit = FALSE),
@@ -93,6 +98,8 @@ setup_plot_dl <- function(input, output, session, prefix, build_fn, filename_fn)
   })
 
   shiny::observeEvent(input[[paste0("dl_", prefix, "_svg")]], {
+    show_toast("Exporting as SVG", text = NULL, type = "info",
+      timer = 3000, timerProgressBar = TRUE)
     p <- build_fn(input[[paste0(prefix, "_dl_theme")]] %||% "light")
     session$sendCustomMessage("downloadPlot", list(
       json     = plotly_json(p, jsonedit = FALSE),

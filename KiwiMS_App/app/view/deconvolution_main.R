@@ -40,7 +40,7 @@ box::use(
     ],
   app / logic / helper_functions[fill_empty, get_kiwims_version],
   app / logic / plot_download[setup_plot_dl],
-  app / logic / logging[write_log, get_log],
+  app / logic / logging[write_log, get_log, get_session_prefix],
   app / logic / user_settings[update_user_setting, read_user_settings],
   app / logic / conversion_functions[read_decon_metadata, read_decon_peaks_max],
   app /
@@ -2379,7 +2379,7 @@ server <- function(
             shiny$req(FALSE)
           }
         },
-        filename_fn = function() paste0("spectrum_", gsub("\\.raw$", "", result_files_sel(), ignore.case = TRUE))
+        filename_fn = function() paste0(get_session_prefix(), "_Spectrum")
       )
 
       output$spectrum <- renderPlotly({
