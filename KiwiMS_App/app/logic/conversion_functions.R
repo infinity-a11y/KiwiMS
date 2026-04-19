@@ -2048,7 +2048,8 @@ make_binding_plot <- function(
   kobs_result,
   filter_conc = NULL,
   colors = NULL,
-  units = NULL
+  units = NULL,
+  theme = "dark"
 ) {
   # Filter for specified concentration
   if (!is.null(filter_conc)) {
@@ -2069,6 +2070,10 @@ make_binding_plot <- function(
     symbols[1:length(levels(df_points$concentration))],
     levels(df_points$concentration)
   )
+
+  font_color     <- if (theme == "light") "black"             else "white"
+  grid_color     <- if (theme == "light") "rgba(0,0,0,0.1)"   else "rgba(255,255,255,0.2)"
+  zeroline_color <- if (theme == "light") "rgba(0,0,0,0.5)"   else "rgba(255,255,255,0.5)"
 
   # Generate plot
   binding_plot <- plotly::plot_ly() |>
@@ -2137,7 +2142,7 @@ make_binding_plot <- function(
       hovermode = "closest",
       paper_bgcolor = "rgba(0,0,0,0)",
       plot_bgcolor = "rgba(0,0,0,0)",
-      font = list(size = 14, color = "white"),
+      font = list(size = 14, color = font_color),
       legend = list(
         title = list(
           text = paste0(
@@ -2145,25 +2150,25 @@ make_binding_plot <- function(
             gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
             "]"
           ),
-          font = list(color = "white")
+          font = list(color = font_color)
         ),
         bgcolor = "rgba(0,0,0,0)",
         bordercolor = "rgba(0,0,0,0)",
-        font = list(color = "white")
+        font = list(color = font_color)
       ),
       xaxis = list(
         title = "Time [min]",
-        color = "white",
+        color = font_color,
         showgrid = TRUE,
-        gridcolor = "rgba(255, 255, 255, 0.2)",
-        zerolinecolor = "rgba(255, 255, 255, 0.5)"
+        gridcolor = grid_color,
+        zerolinecolor = zeroline_color
       ),
       yaxis = list(
         title = "Binding [%]",
-        color = "white",
+        color = font_color,
         showgrid = TRUE,
-        gridcolor = "rgba(255, 255, 255, 0.2)",
-        zerolinecolor = "rgba(255, 255, 255, 0.5)"
+        gridcolor = grid_color,
+        zerolinecolor = zeroline_color
       )
     )
 
@@ -2173,7 +2178,7 @@ make_binding_plot <- function(
 
 # Function to generate and display kobs plot
 #' @export
-make_kobs_plot <- function(ki_kinact_result, colors, units) {
+make_kobs_plot <- function(ki_kinact_result, colors, units, theme = "dark") {
   # Get predicted/modeled kobs
   df <- ki_kinact_result$Kobs_Data[
     !is.na(ki_kinact_result$Kobs_Data$predicted_kobs),
@@ -2196,6 +2201,10 @@ make_kobs_plot <- function(ki_kinact_result, colors, units) {
     symbols[1:length(ordered_conc)],
     ordered_conc
   )
+
+  font_color     <- if (theme == "light") "black"             else "white"
+  grid_color     <- if (theme == "light") "rgba(0,0,0,0.1)"   else "rgba(255,255,255,0.2)"
+  zeroline_color <- if (theme == "light") "rgba(0,0,0,0.5)"   else "rgba(255,255,255,0.5)"
 
   # Generate plot
   kobs_plot <- plotly::plot_ly() |>
@@ -2257,8 +2266,7 @@ make_kobs_plot <- function(ki_kinact_result, colors, units) {
       hovermode = "closest",
       paper_bgcolor = "rgba(0,0,0,0)",
       plot_bgcolor = "rgba(0,0,0,0)",
-      # Global font settings (White)
-      font = list(size = 14, color = "white"),
+      font = list(size = 14, color = font_color),
       legend = list(
         title = list(
           text = paste0(
@@ -2266,31 +2274,29 @@ make_kobs_plot <- function(ki_kinact_result, colors, units) {
             gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
             "]"
           ),
-          font = list(color = "white")
+          font = list(color = font_color)
         ),
         bgcolor = "rgba(0,0,0,0)",
         bordercolor = "rgba(0,0,0,0)",
-        font = list(color = "white")
+        font = list(color = font_color)
       ),
-      # X-Axis Styling (White)
       xaxis = list(
         title = paste0(
           "Compound [",
           gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
           "]"
         ),
-        color = "white",
+        color = font_color,
         showgrid = TRUE,
-        gridcolor = "rgba(255, 255, 255, 0.2)",
-        zerolinecolor = "rgba(255, 255, 255, 0.5)"
+        gridcolor = grid_color,
+        zerolinecolor = zeroline_color
       ),
-      # Y-Axis Styling (White)
       yaxis = list(
         title = "k<sub>obs</sub> [s⁻¹]",
-        color = "white",
+        color = font_color,
         showgrid = TRUE,
-        gridcolor = "rgba(255, 255, 255, 0.2)",
-        zerolinecolor = "rgba(255, 255, 255, 0.5)"
+        gridcolor = grid_color,
+        zerolinecolor = zeroline_color
       )
     )
 
@@ -3097,7 +3103,8 @@ multiple_spectra <- function(
   truncated = FALSE,
   color_variable = NULL,
   hits_summary = NULL,
-  units = NULL
+  units = NULL,
+  theme = "dark"
 ) {
   # Omit NA in samples
   samples <- samples[!is.na(samples)]
@@ -3281,6 +3288,10 @@ multiple_spectra <- function(
   # Remove NA peaks
   peaks_data <- peaks_data[!is.na(peaks_data$mass), ]
 
+  font_color     <- if (theme == "light") "black"                  else "white"
+  grid_color     <- if (theme == "light") "rgba(0,0,0,0.1)"        else "#7f7f7fff"
+  zeroline_color <- if (theme == "light") "rgba(0,0,0,0.5)"        else "rgba(255,255,255,0.5)"
+
   if (cubic) {
     plot <- plotly::plot_ly(
       data = spectrum_data,
@@ -3371,12 +3382,12 @@ multiple_spectra <- function(
     plot |>
       plotly::layout(
         paper_bgcolor = "rgba(0,0,0,0)",
-        paper_bgcolor = "rgba(255,255,255,0)",
-        font = list(color = "white"),
+        plot_bgcolor = "rgba(0,0,0,0)",
+        font = list(size = 14, color = font_color),
         legend = list(
           bgcolor = "rgba(0,0,0,0)",
           bordercolor = "rgba(0,0,0,0)",
-          font = list(color = "white"),
+          font = list(color = font_color),
           title = list(
             text = paste(
               "<b>",
@@ -3391,7 +3402,7 @@ multiple_spectra <- function(
               ),
               "</b>"
             ),
-            color = "white"
+            color = font_color
           )
         ),
         # 3D Scene Styling
@@ -3404,7 +3415,7 @@ multiple_spectra <- function(
           ),
           xaxis = list(
             title = "Mass [Da]",
-            gridcolor = "#7f7f7fff",
+            gridcolor = grid_color,
             showgrid = TRUE,
             showline = FALSE,
             showzeroline = FALSE,
@@ -3414,7 +3425,7 @@ multiple_spectra <- function(
           ),
           yaxis = list(
             title = "Intensity [%]",
-            gridcolor = "#7f7f7fff",
+            gridcolor = grid_color,
             showgrid = TRUE,
             showline = FALSE,
             showzeroline = FALSE,
@@ -3432,7 +3443,7 @@ multiple_spectra <- function(
               ),
               ""
             ),
-            gridcolor = "#7f7f7fff",
+            gridcolor = grid_color,
             showgrid = ifelse(time, TRUE, FALSE),
             showline = FALSE,
             showzeroline = FALSE,
@@ -3552,30 +3563,30 @@ multiple_spectra <- function(
       plotly::layout(
         paper_bgcolor = "rgba(0,0,0,0)",
         plot_bgcolor = "rgba(0,0,0,0)",
-        font = list(color = "white"),
+        font = list(size = 14, color = font_color),
         xaxis = list(
           title = "Mass [Da]",
-          color = "white",
-          gridcolor = "rgba(255, 255, 255, 0.2)",
-          zerolinecolor = "rgba(255, 255, 255, 0.5)"
+          color = font_color,
+          gridcolor = grid_color,
+          zerolinecolor = zeroline_color
         ),
         yaxis = list(
           title = "Intensity [%]",
-          color = "white",
-          gridcolor = "rgba(255, 255, 255, 0.2)",
-          zerolinecolor = "rgba(255, 255, 255, 0.5)"
+          color = font_color,
+          gridcolor = grid_color,
+          zerolinecolor = zeroline_color
         ),
         legend = list(
           bgcolor = "rgba(0,0,0,0)",
           bordercolor = "rgba(0,0,0,0)",
-          font = list(color = "white"),
+          font = list(color = font_color),
           title = list(
             text = paste0(
               "<b>Time</b> [",
               gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
               "]"
             ),
-            color = "white"
+            color = font_color
           )
         )
       )
@@ -4667,7 +4678,8 @@ prot_compound_distribution <- function(
   truncate_names,
   color_scale,
   distribution_scale,
-  distribution_labels = NULL
+  distribution_labels = NULL,
+  theme = "dark"
 ) {
   tbl <- hits_summary |>
     dplyr::filter(
@@ -4751,9 +4763,13 @@ prot_compound_distribution <- function(
     condition
   )
 
+  axis_color <- if (theme == "light") "black" else "#ffffff"
+  grid_color <- if (theme == "light") "rgba(0,0,0,0.2)" else "#7f7f7fff"
+
   if (length(unique(tbl$`Cmp Name`)) > 1) {
     layout_list <- list(
       barmode = "relative",
+      font = list(size = 12, color = axis_color),
       paper_bgcolor = 'rgba(0,0,0,0)',
       plot_bgcolor = 'rgba(0,0,0,0)',
       xaxis = list(
@@ -4763,15 +4779,15 @@ prot_compound_distribution <- function(
         categoryarray = levels(tbl$`Cmp Name`),
         showgrid = FALSE,
         zeroline = FALSE,
-        color = '#ffffff',
+        color = axis_color,
         showticklabels = showticklabels
       ),
       yaxis = list(
         range = range,
         title = list(text = "%-Binding"),
         zeroline = FALSE,
-        gridcolor = "#7f7f7fff",
-        color = '#ffffff',
+        gridcolor = grid_color,
+        color = axis_color,
         dtick = 20,
         tick0 = 0
       )
@@ -4863,6 +4879,7 @@ prot_compound_distribution <- function(
         text = row$mass_stoich[[1]],
         textposition = 'inside',
         insidetextanchor = 'middle',
+        textfont = list(size = 12),
         hovertemplate = hover_text,
         hoverlabel = list(align = "left", valign = "middle"),
         marker = list(
@@ -4909,6 +4926,7 @@ prot_compound_distribution <- function(
         hoverlabel = list(align = "left", valign = "middle"),
         text = ~mass_stoich,
         textposition = 'inside',
+        textfont = list(size = 12),
         marker = list(line = list(color = 'white', width = 1)),
         showlegend = FALSE
       )
@@ -4931,7 +4949,7 @@ prot_compound_distribution <- function(
           hoverinfo = 'none',
           inherit = FALSE,
           textfont = list(
-            color = '#ffffff',
+            color = axis_color,
             size = if (length(tbl$`Sample ID`) <= 8) {
               16
             } else if (length(tbl$`Sample ID`) <= 16) {
@@ -4947,21 +4965,22 @@ prot_compound_distribution <- function(
       plotly::layout(
         barmode = 'stack',
         bargap = 0.5,
+        font = list(size = 12, color = axis_color),
         paper_bgcolor = 'rgba(0,0,0,0)',
         plot_bgcolor = 'rgba(0,0,0,0)',
         xaxis = list(
           title = list(text = NULL),
           showgrid = FALSE,
           zeroline = FALSE,
-          color = '#ffffff',
+          color = axis_color,
           showticklabels = showticklabels
         ),
         yaxis = list(
           range = range,
           title = list(text = "%-Binding"),
           zeroline = FALSE,
-          gridcolor = "#7f7f7fff",
-          color = '#ffffff'
+          gridcolor = grid_color,
+          color = axis_color
         )
       )
   }
@@ -4978,7 +4997,8 @@ cmp_compound_distribution <- function(
   truncate_names,
   color_scale,
   distribution_scale,
-  distribution_labels = NULL
+  distribution_labels = NULL,
+  theme = "dark"
 ) {
   tbl <- hits_summary |>
     dplyr::filter(`Cmp Name` == compound) |>
@@ -5033,6 +5053,9 @@ cmp_compound_distribution <- function(
     color <- ~`Sample ID`
   }
 
+  axis_color <- if (theme == "light") "black" else "#ffffff"
+  grid_color <- if (theme == "light") "rgba(0,0,0,0.2)" else "#7f7f7fff"
+
   bar_chart <- plotly::plot_ly(data = tbl) |>
     plotly::add_trace(
       x = ~`Sample ID`,
@@ -5063,6 +5086,7 @@ cmp_compound_distribution <- function(
       hoverlabel = list(align = "left", valign = "middle"),
       text = ~mass_stoich,
       textposition = 'inside',
+      textfont = list(size = 12),
       marker = list(line = list(color = 'white', width = 1)),
       showlegend = FALSE
     )
@@ -5085,7 +5109,7 @@ cmp_compound_distribution <- function(
         hoverinfo = 'none',
         inherit = FALSE,
         textfont = list(
-          color = '#ffffff',
+          color = axis_color,
           size = if (length(tbl$`Sample ID`) <= 8) {
             16
           } else if (length(tbl$`Sample ID`) <= 16) {
@@ -5110,13 +5134,14 @@ cmp_compound_distribution <- function(
     plotly::layout(
       barmode = 'stack',
       bargap = 0.5,
+      font = list(size = 12, color = axis_color),
       paper_bgcolor = 'rgba(0,0,0,0)',
       plot_bgcolor = 'rgba(0,0,0,0)',
       xaxis = list(
         title = list(text = NULL),
         showgrid = FALSE,
         zeroline = FALSE,
-        color = '#ffffff',
+        color = axis_color,
         showticklabels = ifelse(
           !is.null(distribution_labels),
           distribution_labels,
@@ -5127,8 +5152,8 @@ cmp_compound_distribution <- function(
         range = range,
         title = list(text = "%-Binding"),
         zeroline = FALSE,
-        gridcolor = "#7f7f7fff",
-        color = '#ffffff'
+        gridcolor = grid_color,
+        color = axis_color
       )
     )
 }
@@ -5238,6 +5263,7 @@ smpl_compound_distribution <- function(
       `%-Binding`,
       "<extra></extra>"
     ),
+    insidetextfont = list(size = 14),
     outsidetextfont = list(color = 'white', size = 14),
     marker = list(
       colors = ~ I(color),

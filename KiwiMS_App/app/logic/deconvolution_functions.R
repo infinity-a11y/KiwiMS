@@ -834,8 +834,8 @@ spectrum_plot <- function(
 
   # Theme Styling Logic
   if (tolower(theme) == "light") {
-    bg_color <- "white"
-    plot_bg_color <- "white"
+    bg_color <- "rgba(0,0,0,0)"
+    plot_bg_color <- "rgba(0,0,0,0)"
     font_color <- "black"
     grid_color <- "rgba(0, 0, 0, 0.1)"
     zeroline_color <- "rgba(0, 0, 0, 0.5)"
