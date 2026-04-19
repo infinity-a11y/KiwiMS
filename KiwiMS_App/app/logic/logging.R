@@ -51,6 +51,12 @@ get_session_id <- function() {
   return(session_id)
 }
 
+# Get full session prefix e.g. "KiwiMS_2026-04-19_id2686"
+#' @export
+get_session_prefix <- function() {
+  gsub("\\.log$", "", basename(log_path))
+}
+
 # Log messages
 #' @export
 write_log <- function(msg, level = "INFO") {

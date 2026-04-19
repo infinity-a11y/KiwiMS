@@ -63,6 +63,7 @@ box::use(
     ],
   app / logic / deconvolution_functions[spectrum_plot, ],
   app / logic / plot_download[setup_plot_dl],
+  app / logic / logging[get_session_prefix],
   app /
     logic /
     conversion_constants[
@@ -3329,7 +3330,7 @@ server <- function(
                   theme = theme
                 )
               },
-              filename_fn = function() "binding_curve"
+              filename_fn = function() paste0(get_session_prefix(), "_Binding_Curve")
             )
 
             setup_plot_dl(input, output, session, "kobs",
@@ -3343,7 +3344,7 @@ server <- function(
                   theme = theme
                 )
               },
-              filename_fn = function() "kobs_curve"
+              filename_fn = function() paste0(get_session_prefix(), "_kobs_Curve")
             )
 
             ##### Concentration tabs ----
@@ -3500,7 +3501,7 @@ server <- function(
                       theme = theme
                     )
                   },
-                  filename_fn = function() paste0("binding_curve_", local_concentration)
+                  filename_fn = function() paste0(get_session_prefix(), "_Binding_Curve")
                 )
 
                 decon_samples_local <- gsub(
@@ -3523,7 +3524,7 @@ server <- function(
                       theme = theme
                     )
                   },
-                  filename_fn = function() paste0("mass_spectra_", local_concentration)
+                  filename_fn = function() paste0(get_session_prefix(), "_Mass_Spectra")
                 )
               })
             }
@@ -3565,7 +3566,7 @@ server <- function(
           theme = theme
         )
       },
-      filename_fn = function() paste0("annotated_spectrum_", input$conversion_sample_picker)
+      filename_fn = function() paste0(get_session_prefix(), "_Annotated_Spectrum")
     )
 
     setup_plot_dl(input, output, session, "samples_cmp_dist",
@@ -3586,7 +3587,7 @@ server <- function(
           theme = theme
         )
       },
-      filename_fn = function() paste0("compound_distribution_", input$conversion_sample_picker)
+      filename_fn = function() paste0(get_session_prefix(), "_Compound_Distribution")
     )
 
     setup_plot_dl(input, output, session, "compounds_spectrum",
@@ -3604,7 +3605,7 @@ server <- function(
           multiple_spectra(results_list = result_list, samples = samples, cubic = TRUE, color_cmp = colors, truncated = if (input$truncate_names) id_mapping else FALSE, color_variable = input$color_variable, hits_summary = hits_summary, labels_show = input$compounds_spectrum_labels, theme = theme)
         }
       },
-      filename_fn = function() paste0("annotated_spectrum_", input$conversion_compound_picker)
+      filename_fn = function() paste0(get_session_prefix(), "_Annotated_Spectrum")
     )
 
     setup_plot_dl(input, output, session, "compounds_cmp_dist",
@@ -3627,7 +3628,7 @@ server <- function(
           theme = theme
         )
       },
-      filename_fn = function() paste0("compound_distribution_", input$conversion_compound_picker)
+      filename_fn = function() paste0(get_session_prefix(), "_Compound_Distribution")
     )
 
     setup_plot_dl(input, output, session, "proteins_spectrum",
@@ -3645,7 +3646,7 @@ server <- function(
           multiple_spectra(results_list = result_list, samples = samples, cubic = TRUE, color_cmp = colors, truncated = if (input$truncate_names) id_mapping else FALSE, color_variable = input$color_variable, hits_summary = hits_summary, labels_show = input$proteins_spectrum_labels, theme = theme)
         }
       },
-      filename_fn = function() paste0("annotated_spectrum_", input$conversion_protein_picker)
+      filename_fn = function() paste0(get_session_prefix(), "_Annotated_Spectrum")
     )
 
     setup_plot_dl(input, output, session, "proteins_cmp_dist",
@@ -3668,7 +3669,7 @@ server <- function(
           theme = theme
         )
       },
-      filename_fn = function() paste0("compound_distribution_", input$conversion_protein_picker)
+      filename_fn = function() paste0(get_session_prefix(), "_Compound_Distribution")
     )
 
     ## Observer for conversion result interface ----
