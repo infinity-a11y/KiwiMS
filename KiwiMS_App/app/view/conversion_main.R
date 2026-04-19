@@ -3325,7 +3325,8 @@ server <- function(
                 make_binding_plot(
                   kobs_result = result_list$binding_kobs_result,
                   colors = concentration_colors,
-                  units = units
+                  units = units,
+                  theme = theme
                 )
               },
               filename_fn = function() "binding_curve"
@@ -3338,7 +3339,8 @@ server <- function(
                 make_kobs_plot(
                   ki_kinact_result = rl$ki_kinact_result,
                   colors = concentration_colors,
-                  units = units
+                  units = units,
+                  theme = theme
                 )
               },
               filename_fn = function() "kobs_curve"
@@ -3494,7 +3496,8 @@ server <- function(
                       kobs_result = result_list$binding_kobs_result,
                       filter_conc = local_concentration,
                       colors = concentration_colors,
-                      units = units
+                      units = units,
+                      theme = theme
                     )
                   },
                   filename_fn = function() paste0("binding_curve_", local_concentration)
@@ -3516,7 +3519,8 @@ server <- function(
                       ),
                       time = TRUE,
                       hits_summary = hits_summary,
-                      units = units
+                      units = units,
+                      theme = theme
                     )
                   },
                   filename_fn = function() paste0("mass_spectra_", local_concentration)
@@ -3597,7 +3601,7 @@ server <- function(
           spectrum_plot(sample = result_list$deconvolution[[samples]], color_cmp = colors, color_variable = input$color_variable, show_peak_labels = TRUE, show_mass_diff = FALSE, theme = theme)
         } else {
           id_mapping <- data.frame(original = unique(hits_summary$`Sample ID`), truncated = label_smart_clean(unique(hits_summary$`Sample ID`)))
-          multiple_spectra(results_list = result_list, samples = samples, cubic = TRUE, color_cmp = colors, truncated = if (input$truncate_names) id_mapping else FALSE, color_variable = input$color_variable, hits_summary = hits_summary, labels_show = input$compounds_spectrum_labels)
+          multiple_spectra(results_list = result_list, samples = samples, cubic = TRUE, color_cmp = colors, truncated = if (input$truncate_names) id_mapping else FALSE, color_variable = input$color_variable, hits_summary = hits_summary, labels_show = input$compounds_spectrum_labels, theme = theme)
         }
       },
       filename_fn = function() paste0("annotated_spectrum_", input$conversion_compound_picker)
@@ -3619,7 +3623,8 @@ server <- function(
           truncate_names = input$truncate_names,
           color_scale = input$color_scale,
           distribution_scale = input$cmp_distribution_scale,
-          distribution_labels = input$cmp_distribution_labels
+          distribution_labels = input$cmp_distribution_labels,
+          theme = theme
         )
       },
       filename_fn = function() paste0("compound_distribution_", input$conversion_compound_picker)
@@ -3637,7 +3642,7 @@ server <- function(
           spectrum_plot(sample = result_list$deconvolution[[samples]], color_cmp = colors, color_variable = input$color_variable, show_peak_labels = TRUE, show_mass_diff = FALSE, theme = theme)
         } else {
           id_mapping <- data.frame(original = unique(hits_summary$`Sample ID`), truncated = label_smart_clean(unique(hits_summary$`Sample ID`)))
-          multiple_spectra(results_list = result_list, samples = samples, cubic = TRUE, color_cmp = colors, truncated = if (input$truncate_names) id_mapping else FALSE, color_variable = input$color_variable, hits_summary = hits_summary, labels_show = input$proteins_spectrum_labels)
+          multiple_spectra(results_list = result_list, samples = samples, cubic = TRUE, color_cmp = colors, truncated = if (input$truncate_names) id_mapping else FALSE, color_variable = input$color_variable, hits_summary = hits_summary, labels_show = input$proteins_spectrum_labels, theme = theme)
         }
       },
       filename_fn = function() paste0("annotated_spectrum_", input$conversion_protein_picker)
@@ -3659,7 +3664,8 @@ server <- function(
           truncate_names = input$truncate_names,
           color_scale = input$color_scale,
           distribution_scale = input$protein_distribution_scale,
-          distribution_labels = input$protein_distribution_labels
+          distribution_labels = input$protein_distribution_labels,
+          theme = theme
         )
       },
       filename_fn = function() paste0("compound_distribution_", input$conversion_protein_picker)
