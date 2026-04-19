@@ -17,6 +17,7 @@ box::use(
     conversion_functions[
       format_scientific,
     ],
+  app / logic / plot_download[plot_dl_popover],
 )
 
 # Ki/kinact results interface
@@ -28,7 +29,7 @@ ki_kinact_concentrations_tabs <- function(ns, local_ui_id, conc_result, units) {
       class = "card-custom spectrum",
       bslib::card(
         bslib::card_header(
-          class = "bg-dark help-header",
+          class = "bg-dark help-header d-flex justify-content-between",
           "Mass Spectra",
           shiny::div(
             class = "box-header-settings-help",
@@ -49,13 +50,18 @@ ki_kinact_concentrations_tabs <- function(ns, local_ui_id, conc_result, units) {
               ),
               title = NULL
             ),
+            plot_dl_popover(ns, paste0(local_ui_id, "_spectra")),
             bslib::tooltip(
               shiny::div(
                 class = "tooltip-bttn",
-                shiny::actionButton(
-                  ns("mass_spectra_tooltip_bttn"),
-                  label = NULL,
-                  icon = shiny::icon("circle-question")
+                shiny::tags$button(
+                  type = "button",
+                  class = "btn btn-default",
+                  onclick = sprintf(
+                    "Shiny.setInputValue('%s', Math.random());",
+                    ns("mass_spectra_tooltip_bttn")
+                  ),
+                  shiny::icon("circle-question")
                 )
               ),
               "Help",
@@ -78,19 +84,23 @@ ki_kinact_concentrations_tabs <- function(ns, local_ui_id, conc_result, units) {
       class = "card-custom binding",
       bslib::card(
         bslib::card_header(
-          class = "bg-dark help-header",
+          class = "bg-dark help-header d-flex justify-content-between",
           "Binding Curve",
-          bslib::tooltip(
-            shiny::div(
-              class = "tooltip-bttn",
-              shiny::actionButton(
-                ns("binding_curve_single_tooltip_bttn"),
-                label = NULL,
-                icon = shiny::icon("circle-question")
-              )
-            ),
-            "Help",
-            placement = "top"
+          shiny::div(
+            class = "box-header-settings-help",
+            plot_dl_popover(ns, paste0(local_ui_id, "_binding")),
+            bslib::tooltip(
+              shiny::div(
+                class = "tooltip-bttn",
+                shiny::actionButton(
+                  ns("binding_curve_single_tooltip_bttn"),
+                  label = NULL,
+                  icon = shiny::icon("circle-question")
+                )
+              ),
+              "Help",
+              placement = "top"
+            )
           )
         ),
         full_screen = TRUE,
@@ -434,19 +444,23 @@ ki_kinact_results_ui <- function(
             bslib::card(
               full_screen = TRUE,
               bslib::card_header(
-                class = "bg-dark help-header",
+                class = "bg-dark help-header d-flex justify-content-between",
                 "Binding Curve",
-                bslib::tooltip(
-                  shiny::div(
-                    class = "tooltip-bttn",
-                    shiny::actionButton(
-                      ns("binding_curve_tooltip_bttn"),
-                      label = NULL,
-                      icon = shiny::icon("circle-question")
-                    )
-                  ),
-                  "Help",
-                  placement = "top"
+                shiny::div(
+                  class = "box-header-settings-help",
+                  plot_dl_popover(ns, "binding"),
+                  bslib::tooltip(
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("binding_curve_tooltip_bttn"),
+                        label = NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    ),
+                    "Help",
+                    placement = "top"
+                  )
                 )
               ),
               bslib::card_body(
@@ -466,7 +480,7 @@ ki_kinact_results_ui <- function(
             bslib::card(
               full_screen = TRUE,
               bslib::card_header(
-                class = "bg-dark help-header",
+                class = "bg-dark help-header d-flex justify-content-between",
                 htmltools::tagList(
                   shiny::div(
                     "k",
@@ -474,17 +488,21 @@ ki_kinact_results_ui <- function(
                     " Curve"
                   )
                 ),
-                bslib::tooltip(
-                  shiny::div(
-                    class = "tooltip-bttn",
-                    shiny::actionButton(
-                      ns("kobs_curve_tooltip_bttn"),
-                      label = NULL,
-                      icon = shiny::icon("circle-question")
-                    )
-                  ),
-                  "Help",
-                  placement = "top"
+                shiny::div(
+                  class = "box-header-settings-help",
+                  plot_dl_popover(ns, "kobs"),
+                  bslib::tooltip(
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("kobs_curve_tooltip_bttn"),
+                        label = NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    ),
+                    "Help",
+                    placement = "top"
+                  )
                 )
               ),
               bslib::card_body(
@@ -855,10 +873,14 @@ binding_results_ui <- function(ns, hits_summary) {
                     bslib::tooltip(
                       shiny::div(
                         class = "tooltip-bttn",
-                        shiny::actionButton(
-                          ns("conversion_samples_protein_tooltip_bttn"),
-                          label = NULL,
-                          icon = shiny::icon("circle-question")
+                        shiny::tags$button(
+                          type = "button",
+                          class = "btn btn-default",
+                          onclick = sprintf(
+                            "Shiny.setInputValue('%s', Math.random());",
+                            ns("conversion_samples_protein_tooltip_bttn")
+                          ),
+                          shiny::icon("circle-question")
                         )
                       ),
                       "Help",
@@ -884,10 +906,14 @@ binding_results_ui <- function(ns, hits_summary) {
                     bslib::tooltip(
                       shiny::div(
                         class = "tooltip-bttn",
-                        shiny::actionButton(
-                          ns("total_pct_bind_tooltip_bttn"),
-                          label = NULL,
-                          icon = shiny::icon("circle-question")
+                        shiny::tags$button(
+                          type = "button",
+                          class = "btn btn-default",
+                          onclick = sprintf(
+                            "Shiny.setInputValue('%s', Math.random());",
+                            ns("total_pct_bind_tooltip_bttn")
+                          ),
+                          shiny::icon("circle-question")
                         )
                       ),
                       "Help",
@@ -943,10 +969,14 @@ binding_results_ui <- function(ns, hits_summary) {
                   bslib::tooltip(
                     shiny::div(
                       class = "tooltip-bttn",
-                      shiny::actionButton(
-                        ns("mass_spectra_tooltip_bttn"),
-                        label = NULL,
-                        icon = shiny::icon("circle-question")
+                      shiny::tags$button(
+                        type = "button",
+                        class = "btn btn-default",
+                        onclick = sprintf(
+                          "Shiny.setInputValue('%s', Math.random());",
+                          ns("mass_spectra_tooltip_bttn")
+                        ),
+                        shiny::icon("circle-question")
                       )
                     ),
                     "Help",
@@ -968,19 +998,27 @@ binding_results_ui <- function(ns, hits_summary) {
             class = "card-custom",
             bslib::card(
               bslib::card_header(
-                class = "bg-dark help-header",
+                class = "bg-dark help-header d-flex justify-content-between",
                 "Compound Distribution",
-                bslib::tooltip(
-                  shiny::div(
-                    class = "tooltip-bttn",
-                    shiny::actionButton(
-                      ns("mass_spectra_tooltip_bttn"),
-                      label = NULL,
-                      icon = shiny::icon("circle-question")
-                    )
-                  ),
-                  "Help",
-                  placement = "top"
+                shiny::div(
+                  class = "box-header-settings-help",
+                  plot_dl_popover(ns, "samples_cmp_dist"),
+                  bslib::tooltip(
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::tags$button(
+                        type = "button",
+                        class = "btn btn-default",
+                        onclick = sprintf(
+                          "Shiny.setInputValue('%s', Math.random());",
+                          ns("mass_spectra_tooltip_bttn")
+                        ),
+                        shiny::icon("circle-question")
+                      )
+                    ),
+                    "Help",
+                    placement = "top"
+                  )
                 )
               ),
               shinycssloaders::withSpinner(
@@ -1020,13 +1058,18 @@ binding_results_ui <- function(ns, hits_summary) {
                     ),
                     title = NULL
                   ),
+                  plot_dl_popover(ns, "samples_spectrum"),
                   bslib::tooltip(
                     shiny::div(
                       class = "tooltip-bttn",
-                      shiny::actionButton(
-                        ns("mass_spectra_tooltip_bttn"),
-                        label = NULL,
-                        icon = shiny::icon("circle-question")
+                      shiny::tags$button(
+                        type = "button",
+                        class = "btn btn-default",
+                        onclick = sprintf(
+                          "Shiny.setInputValue('%s', Math.random());",
+                          ns("mass_spectra_tooltip_bttn")
+                        ),
+                        shiny::icon("circle-question")
                       )
                     ),
                     "Help",
@@ -1084,10 +1127,14 @@ binding_results_ui <- function(ns, hits_summary) {
                     bslib::tooltip(
                       shiny::div(
                         class = "tooltip-bttn",
-                        shiny::actionButton(
-                          ns("conversion_samples_protein_tooltip_bttn"),
-                          label = NULL,
-                          icon = shiny::icon("circle-question")
+                        shiny::tags$button(
+                          type = "button",
+                          class = "btn btn-default",
+                          onclick = sprintf(
+                            "Shiny.setInputValue('%s', Math.random());",
+                            ns("conversion_samples_protein_tooltip_bttn")
+                          ),
+                          shiny::icon("circle-question")
                         )
                       ),
                       "Help",
@@ -1115,10 +1162,14 @@ binding_results_ui <- function(ns, hits_summary) {
                     bslib::tooltip(
                       shiny::div(
                         class = "tooltip-bttn",
-                        shiny::actionButton(
-                          ns("total_pct_bind_tooltip_bttn"),
-                          label = NULL,
-                          icon = shiny::icon("circle-question")
+                        shiny::tags$button(
+                          type = "button",
+                          class = "btn btn-default",
+                          onclick = sprintf(
+                            "Shiny.setInputValue('%s', Math.random());",
+                            ns("total_pct_bind_tooltip_bttn")
+                          ),
+                          shiny::icon("circle-question")
                         )
                       ),
                       "Help",
@@ -1170,10 +1221,14 @@ binding_results_ui <- function(ns, hits_summary) {
                   bslib::tooltip(
                     shiny::div(
                       class = "tooltip-bttn",
-                      shiny::actionButton(
-                        ns("mass_spectra_tooltip_bttn"),
-                        label = NULL,
-                        icon = shiny::icon("circle-question")
+                      shiny::tags$button(
+                        type = "button",
+                        class = "btn btn-default",
+                        onclick = sprintf(
+                          "Shiny.setInputValue('%s', Math.random());",
+                          ns("mass_spectra_tooltip_bttn")
+                        ),
+                        shiny::icon("circle-question")
                       )
                     ),
                     "Help",
@@ -1195,7 +1250,7 @@ binding_results_ui <- function(ns, hits_summary) {
             class = "card-custom",
             bslib::card(
               bslib::card_header(
-                class = "bg-dark help-header",
+                class = "bg-dark help-header d-flex justify-content-between",
                 "Compound Distribution",
                 shiny::div(
                   class = "box-header-settings-help",
@@ -1217,13 +1272,18 @@ binding_results_ui <- function(ns, hits_summary) {
                     ),
                     title = NULL
                   ),
+                  plot_dl_popover(ns, "compounds_cmp_dist"),
                   bslib::tooltip(
                     shiny::div(
                       class = "tooltip-bttn",
-                      shiny::actionButton(
-                        ns("mass_spectra_tooltip_bttn"),
-                        label = NULL,
-                        icon = shiny::icon("circle-question")
+                      shiny::tags$button(
+                        type = "button",
+                        class = "btn btn-default",
+                        onclick = sprintf(
+                          "Shiny.setInputValue('%s', Math.random());",
+                          ns("mass_spectra_tooltip_bttn")
+                        ),
+                        shiny::icon("circle-question")
                       )
                     ),
                     "Help",
@@ -1239,7 +1299,7 @@ binding_results_ui <- function(ns, hits_summary) {
             class = "card-custom",
             bslib::card(
               bslib::card_header(
-                class = "bg-dark help-header",
+                class = "bg-dark help-header d-flex justify-content-between",
                 "Annotated Spectrum",
                 shiny::div(
                   class = "box-header-settings-help",
@@ -1253,13 +1313,18 @@ binding_results_ui <- function(ns, hits_summary) {
                     ),
                     title = NULL
                   ),
+                  plot_dl_popover(ns, "compounds_spectrum"),
                   bslib::tooltip(
                     shiny::div(
                       class = "tooltip-bttn",
-                      shiny::actionButton(
-                        ns("mass_spectra_tooltip_bttn"),
-                        label = NULL,
-                        icon = shiny::icon("circle-question")
+                      shiny::tags$button(
+                        type = "button",
+                        class = "btn btn-default",
+                        onclick = sprintf(
+                          "Shiny.setInputValue('%s', Math.random());",
+                          ns("mass_spectra_tooltip_bttn")
+                        ),
+                        shiny::icon("circle-question")
                       )
                     ),
                     "Help",
@@ -1308,10 +1373,14 @@ binding_results_ui <- function(ns, hits_summary) {
                     bslib::tooltip(
                       shiny::div(
                         class = "tooltip-bttn",
-                        shiny::actionButton(
-                          ns("conversion_samples_protein_tooltip_bttn"),
-                          label = NULL,
-                          icon = shiny::icon("circle-question")
+                        shiny::tags$button(
+                          type = "button",
+                          class = "btn btn-default",
+                          onclick = sprintf(
+                            "Shiny.setInputValue('%s', Math.random());",
+                            ns("conversion_samples_protein_tooltip_bttn")
+                          ),
+                          shiny::icon("circle-question")
                         )
                       ),
                       "Help",
@@ -1351,10 +1420,14 @@ binding_results_ui <- function(ns, hits_summary) {
                       bslib::tooltip(
                         shiny::div(
                           class = "tooltip-bttn",
-                          shiny::actionButton(
-                            ns("total_pct_bind_tooltip_bttn"),
-                            label = NULL,
-                            icon = shiny::icon("circle-question")
+                          shiny::tags$button(
+                            type = "button",
+                            class = "btn btn-default",
+                            onclick = sprintf(
+                              "Shiny.setInputValue('%s', Math.random());",
+                              ns("total_pct_bind_tooltip_bttn")
+                            ),
+                            shiny::icon("circle-question")
                           )
                         ),
                         "Help",
@@ -1404,10 +1477,14 @@ binding_results_ui <- function(ns, hits_summary) {
                   bslib::tooltip(
                     shiny::div(
                       class = "tooltip-bttn",
-                      shiny::actionButton(
-                        ns("mass_spectra_tooltip_bttn"),
-                        label = NULL,
-                        icon = shiny::icon("circle-question")
+                      shiny::tags$button(
+                        type = "button",
+                        class = "btn btn-default",
+                        onclick = sprintf(
+                          "Shiny.setInputValue('%s', Math.random());",
+                          ns("mass_spectra_tooltip_bttn")
+                        ),
+                        shiny::icon("circle-question")
                       )
                     ),
                     "Help",
@@ -1451,13 +1528,18 @@ binding_results_ui <- function(ns, hits_summary) {
                     ),
                     title = NULL
                   ),
+                  plot_dl_popover(ns, "proteins_cmp_dist"),
                   bslib::tooltip(
                     shiny::div(
                       class = "tooltip-bttn",
-                      shiny::actionButton(
-                        ns("mass_spectra_tooltip_bttn"),
-                        label = NULL,
-                        icon = shiny::icon("circle-question")
+                      shiny::tags$button(
+                        type = "button",
+                        class = "btn btn-default",
+                        onclick = sprintf(
+                          "Shiny.setInputValue('%s', Math.random());",
+                          ns("mass_spectra_tooltip_bttn")
+                        ),
+                        shiny::icon("circle-question")
                       )
                     ),
                     "Help",
@@ -1493,13 +1575,18 @@ binding_results_ui <- function(ns, hits_summary) {
                     ),
                     title = NULL
                   ),
+                  plot_dl_popover(ns, "proteins_spectrum"),
                   bslib::tooltip(
                     shiny::div(
                       class = "tooltip-bttn",
-                      shiny::actionButton(
-                        ns("mass_spectra_tooltip_bttn"),
-                        label = NULL,
-                        icon = shiny::icon("circle-question")
+                      shiny::tags$button(
+                        type = "button",
+                        class = "btn btn-default",
+                        onclick = sprintf(
+                          "Shiny.setInputValue('%s', Math.random());",
+                          ns("mass_spectra_tooltip_bttn")
+                        ),
+                        shiny::icon("circle-question")
                       )
                     ),
                     "Help",
@@ -1813,10 +1900,14 @@ conversion_declaration_ui <- function(
             bslib::tooltip(
               shiny::div(
                 class = "tooltip-bttn",
-                shiny::actionButton(
-                  ns("fileinput_tooltip_bttn"),
-                  label = NULL,
-                  icon = shiny::icon("circle-question")
+                shiny::tags$button(
+                  type = "button",
+                  class = "btn btn-default fileinput-tooltip-btn",
+                  onclick = sprintf(
+                    "Shiny.setInputValue('%s', Math.random());",
+                    ns("fileinput_tooltip_bttn")
+                  ),
+                  shiny::icon("circle-question")
                 )
               ),
               "Help",
@@ -1874,10 +1965,14 @@ conversion_declaration_ui <- function(
             bslib::tooltip(
               shiny::div(
                 class = "tooltip-bttn",
-                shiny::actionButton(
-                  ns("fileinput_tooltip_bttn"),
-                  label = NULL,
-                  icon = shiny::icon("circle-question")
+                shiny::tags$button(
+                  type = "button",
+                  class = "btn btn-default fileinput-tooltip-btn",
+                  onclick = sprintf(
+                    "Shiny.setInputValue('%s', Math.random());",
+                    ns("fileinput_tooltip_bttn")
+                  ),
+                  shiny::icon("circle-question")
                 )
               ),
               "Help",

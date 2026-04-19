@@ -563,7 +563,8 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 
 .form-label,
-.shiny-input-container .control-label {
+.shiny-input-container .control-label,
+.plot-dl-label {
   margin-bottom: 0;
   color: RGBA(var(--bs-emphasis-color-rgb, 0, 0, 0), 0.5);
   font-style: italic;
@@ -668,10 +669,24 @@ input[type="number"]::-webkit-inner-spin-button {
   }
 }
 
-#app-conversion_main-fileinput_tooltip_bttn,
+.fileinput-tooltip-btn,
 #app-conversion_main-resultinput_tooltip_bttn {
   margin: 0;
   height: 46.6px;
+}
+
+.plot-dl-buttons {
+  display: flex;
+  gap: 4px;
+
+  >.btn {
+    flex: 1;
+  }
+}
+
+.plotly-dl-offscreen {
+  position: absolute;
+  left: -9999px;
 }
 
 .sample-declaration-info-ui {

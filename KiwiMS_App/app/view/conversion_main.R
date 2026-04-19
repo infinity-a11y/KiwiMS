@@ -62,6 +62,7 @@ box::use(
       safe_observe,
     ],
   app / logic / deconvolution_functions[spectrum_plot, ],
+  app / logic / plot_download[setup_plot_dl],
   app /
     logic /
     conversion_constants[
@@ -567,6 +568,20 @@ server <- function(
         file_path <- file.path(input$samples_fileinput$datapath)
         db_err <- validate_decon_db(file_path)
         if (!is.null(db_err)) {
+          shinyjs::runjs(paste0(
+            'document.getElementById("blocking-overlay").style.display ',
+            '= "none";'
+          ))
+          shinyjs::enable("samples_fileinput")
+          shinyjs::removeClass(
+            selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
+            class = "custom-disable"
+          )
+          shinyjs::removeClass(
+            selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
+            class = "custom-disable"
+          )
+          output$samples_table_info <- shiny::renderText("Add Deconvoluted Samples")
           shinyWidgets::show_toast(db_err, type = "info", timer = 6000)
           return()
         }
@@ -3304,6 +3319,31 @@ server <- function(
               )
             })
 
+            setup_plot_dl(input, output, session, "binding",
+              build_fn = function(theme) {
+                shiny::req(result_list)
+                make_binding_plot(
+                  kobs_result = result_list$binding_kobs_result,
+                  colors = concentration_colors,
+                  units = units
+                )
+              },
+              filename_fn = function() "binding_curve"
+            )
+
+            setup_plot_dl(input, output, session, "kobs",
+              build_fn = function(theme) {
+                shiny::req(result_list)
+                rl <- if (is.null(conversion_vars$modified_results)) result_list else conversion_vars$modified_results
+                make_kobs_plot(
+                  ki_kinact_result = rl$ki_kinact_result,
+                  colors = concentration_colors,
+                  units = units
+                )
+              },
+              filename_fn = function() "kobs_curve"
+            )
+
             ##### Concentration tabs ----
 
             # Add tabs for each present concentration
@@ -3447,6 +3487,40 @@ server <- function(
                     local_ui_id,
                     "_kind"
                   )]])
+
+                setup_plot_dl(input, output, session, paste0(local_ui_id, "_binding"),
+                  build_fn = function(theme) {
+                    make_binding_plot(
+                      kobs_result = result_list$binding_kobs_result,
+                      filter_conc = local_concentration,
+                      colors = concentration_colors,
+                      units = units
+                    )
+                  },
+                  filename_fn = function() paste0("binding_curve_", local_concentration)
+                )
+
+                decon_samples_local <- gsub(
+                  "o", ".",
+                  sapply(strsplit(names(result_list$deconvolution), "_"), `[`, 3)
+                )
+                setup_plot_dl(input, output, session, paste0(local_ui_id, "_spectra"),
+                  build_fn = function(theme) {
+                    multiple_spectra(
+                      results_list = result_list,
+                      samples = names(result_list$deconvolution)[which(decon_samples_local == local_concentration)],
+                      cubic = ifelse(
+                        is.null(input[[paste0(local_ui_id, "_kind")]]) ||
+                          input[[paste0(local_ui_id, "_kind")]] == "3D",
+                        TRUE, FALSE
+                      ),
+                      time = TRUE,
+                      hits_summary = hits_summary,
+                      units = units
+                    )
+                  },
+                  filename_fn = function() paste0("mass_spectra_", local_concentration)
+                )
               })
             }
 
@@ -3462,6 +3536,133 @@ server <- function(
         ))
       },
       suspended = TRUE
+    )
+
+    ## Plot download handlers ----
+
+    setup_plot_dl(input, output, session, "samples_spectrum",
+      build_fn = function(theme) {
+        result_list <- conversion_sidebar_vars$result_list()
+        selected_sample <- input$conversion_sample_picker
+        shiny::req(result_list, selected_sample)
+        tbl <- conversion_vars$hits_summary |>
+          dplyr::filter(`Sample ID` == selected_sample)
+        spectrum_plot(
+          sample = result_list$deconvolution[[selected_sample]],
+          color_cmp = get_cmp_colorScale(
+            filtered_table = tbl,
+            scale = input$color_scale,
+            variable = input$color_variable,
+            trunc = input$truncate_names
+          ),
+          color_variable = input$color_variable,
+          show_peak_labels = isTRUE(input$sample_view_spectrum_annotation),
+          show_mass_diff = !isFALSE(input$sample_view_spectrum_diff),
+          theme = theme
+        )
+      },
+      filename_fn = function() paste0("annotated_spectrum_", input$conversion_sample_picker)
+    )
+
+    setup_plot_dl(input, output, session, "samples_cmp_dist",
+      build_fn = function(theme) {
+        shiny::req(
+          conversion_vars$hits_summary,
+          input$conversion_sample_picker,
+          input$color_scale,
+          input$color_variable,
+          !is.null(input$truncate_names)
+        )
+        smpl_compound_distribution(
+          hits_summary = conversion_vars$hits_summary,
+          sample = input$conversion_sample_picker,
+          color_variable = input$color_variable,
+          truncate_names = input$truncate_names,
+          color_scale = input$color_scale,
+          theme = theme
+        )
+      },
+      filename_fn = function() paste0("compound_distribution_", input$conversion_sample_picker)
+    )
+
+    setup_plot_dl(input, output, session, "compounds_spectrum",
+      build_fn = function(theme) {
+        hits_summary <- conversion_vars$hits_summary
+        shiny::req(hits_summary, input$conversion_compound_picker, !is.null(input$truncate_names), input$color_variable, input$color_scale)
+        result_list <- conversion_sidebar_vars$result_list()
+        tbl <- dplyr::filter(hits_summary, `Cmp Name` == input$conversion_compound_picker)
+        colors <- get_cmp_colorScale(filtered_table = tbl, scale = input$color_scale, variable = input$color_variable, trunc = input$truncate_names)
+        samples <- unique(hits_summary$`Sample ID`[hits_summary$`Cmp Name` == input$conversion_compound_picker])
+        if (length(samples) == 1) {
+          spectrum_plot(sample = result_list$deconvolution[[samples]], color_cmp = colors, color_variable = input$color_variable, show_peak_labels = TRUE, show_mass_diff = FALSE, theme = theme)
+        } else {
+          id_mapping <- data.frame(original = unique(hits_summary$`Sample ID`), truncated = label_smart_clean(unique(hits_summary$`Sample ID`)))
+          multiple_spectra(results_list = result_list, samples = samples, cubic = TRUE, color_cmp = colors, truncated = if (input$truncate_names) id_mapping else FALSE, color_variable = input$color_variable, hits_summary = hits_summary, labels_show = input$compounds_spectrum_labels)
+        }
+      },
+      filename_fn = function() paste0("annotated_spectrum_", input$conversion_compound_picker)
+    )
+
+    setup_plot_dl(input, output, session, "compounds_cmp_dist",
+      build_fn = function(theme) {
+        shiny::req(
+          conversion_vars$hits_summary,
+          input$conversion_compound_picker,
+          input$color_variable,
+          !is.null(input$truncate_names),
+          input$color_scale
+        )
+        cmp_compound_distribution(
+          hits_summary = conversion_vars$hits_summary,
+          compound = input$conversion_compound_picker,
+          color_variable = input$color_variable,
+          truncate_names = input$truncate_names,
+          color_scale = input$color_scale,
+          distribution_scale = input$cmp_distribution_scale,
+          distribution_labels = input$cmp_distribution_labels
+        )
+      },
+      filename_fn = function() paste0("compound_distribution_", input$conversion_compound_picker)
+    )
+
+    setup_plot_dl(input, output, session, "proteins_spectrum",
+      build_fn = function(theme) {
+        hits_summary <- conversion_vars$hits_summary
+        shiny::req(hits_summary, input$conversion_protein_picker, !is.null(input$truncate_names), input$color_variable, input$color_scale)
+        result_list <- conversion_sidebar_vars$result_list()
+        tbl <- dplyr::filter(hits_summary, `Protein` == input$conversion_protein_picker)
+        colors <- if (nrow(tbl)) get_cmp_colorScale(filtered_table = tbl, scale = input$color_scale, variable = input$color_variable, trunc = input$truncate_names) else NULL
+        samples <- unique(hits_summary$`Sample ID`[hits_summary$`Protein` == input$conversion_protein_picker])
+        if (length(samples) == 1) {
+          spectrum_plot(sample = result_list$deconvolution[[samples]], color_cmp = colors, color_variable = input$color_variable, show_peak_labels = TRUE, show_mass_diff = FALSE, theme = theme)
+        } else {
+          id_mapping <- data.frame(original = unique(hits_summary$`Sample ID`), truncated = label_smart_clean(unique(hits_summary$`Sample ID`)))
+          multiple_spectra(results_list = result_list, samples = samples, cubic = TRUE, color_cmp = colors, truncated = if (input$truncate_names) id_mapping else FALSE, color_variable = input$color_variable, hits_summary = hits_summary, labels_show = input$proteins_spectrum_labels)
+        }
+      },
+      filename_fn = function() paste0("annotated_spectrum_", input$conversion_protein_picker)
+    )
+
+    setup_plot_dl(input, output, session, "proteins_cmp_dist",
+      build_fn = function(theme) {
+        shiny::req(
+          conversion_vars$hits_summary,
+          input$conversion_protein_picker,
+          input$color_variable,
+          !is.null(input$truncate_names),
+          input$color_scale
+        )
+        prot_compound_distribution(
+          hits_summary = conversion_vars$hits_summary,
+          protein = input$conversion_protein_picker,
+          color_variable = input$color_variable,
+          truncate_names = input$truncate_names,
+          color_scale = input$color_scale,
+          distribution_scale = input$protein_distribution_scale,
+          distribution_labels = input$protein_distribution_labels
+        )
+      },
+      filename_fn = function() paste0("compound_distribution_", input$conversion_protein_picker)
     )
 
     ## Observer for conversion result interface ----
