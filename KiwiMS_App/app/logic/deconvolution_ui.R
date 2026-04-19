@@ -19,6 +19,7 @@ box::use(
 
 box::use(
   app / logic / user_settings[read_user_settings],
+  app / logic / plot_download[plot_dl_popover],
 )
 
 # Deconvolution initiation interface
@@ -927,6 +928,7 @@ deconvolution_results_ui <- function(ns, show_heatmap = FALSE) {
             ),
             title = NULL
           ),
+          plot_dl_popover(ns, "decon_spectrum"),
           tooltip(
             shiny::div(
               class = "tooltip-bttn",

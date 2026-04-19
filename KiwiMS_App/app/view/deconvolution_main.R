@@ -39,6 +39,7 @@ box::use(
       process_plot_data_db
     ],
   app / logic / helper_functions[fill_empty, get_kiwims_version],
+  app / logic / plot_download[setup_plot_dl],
   app / logic / logging[write_log, get_log],
   app / logic / user_settings[update_user_setting, read_user_settings],
   app / logic / conversion_functions[read_decon_metadata, read_decon_peaks_max],
@@ -2348,6 +2349,38 @@ server <- function(
       delay(1000, show(selector = "#app-deconvolution_main-processing"))
 
       ### Render result spectrum
+
+      setup_plot_dl(input, output, session, "decon_spectrum",
+        build_fn = function(theme) {
+          shiny$req(result_files_sel())
+          result_dir <- file.path(
+            analysis_dest(),
+            gsub(".raw", "_rawdata_unidecfiles", result_files_sel())
+          )
+          sel_base <- gsub("\\.raw$", "", result_files_sel(), ignore.case = TRUE)
+          db_sp <- file.path(
+            analysis_dest(),
+            paste0(trimws(input$analysis_name), ".db")
+          )
+          is_raw_toggle <- as.logical(ifelse(
+            !is.null(input$toggle_result), input$toggle_result, FALSE
+          ))
+          plot_data <- if (file.exists(db_sp)) {
+            process_plot_data_db(db_sp, sel_base, raw = is_raw_toggle)
+          } else {
+            NULL
+          }
+          show_labels <- ifelse(is.null(input$spectrum_annotation), TRUE, input$spectrum_annotation)
+          if (!is.null(plot_data)) {
+            spectrum_plot(plot_data = plot_data, raw = is_raw_toggle, show_peak_labels = show_labels, show_mass_diff = FALSE, theme = theme)
+          } else if (dir.exists(result_dir)) {
+            spectrum_plot(result_path = result_dir, raw = is_raw_toggle, show_peak_labels = show_labels, show_mass_diff = FALSE, theme = theme)
+          } else {
+            shiny$req(FALSE)
+          }
+        },
+        filename_fn = function() paste0("spectrum_", gsub("\\.raw$", "", result_files_sel(), ignore.case = TRUE))
+      )
 
       output$spectrum <- renderPlotly({
         shiny$req(result_files_sel())

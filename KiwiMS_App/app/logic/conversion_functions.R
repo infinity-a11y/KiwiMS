@@ -5140,7 +5140,8 @@ smpl_compound_distribution <- function(
   sample,
   color_variable,
   truncate_names,
-  color_scale
+  color_scale,
+  theme = "dark"
 ) {
   tbl <- hits_summary |>
     dplyr::filter(`Sample ID` == sample)
@@ -5237,7 +5238,7 @@ smpl_compound_distribution <- function(
       `%-Binding`,
       "<extra></extra>"
     ),
-    outsidetextfont = list(color = 'white'),
+    outsidetextfont = list(color = 'white', size = 14),
     marker = list(
       colors = ~ I(color),
       line = list(color = '#e5e5e5', width = 1)
@@ -5245,6 +5246,8 @@ smpl_compound_distribution <- function(
   ) |>
     plotly::layout(
       showlegend = FALSE,
+      paper_bgcolor = "rgba(0,0,0,0)",
+      plot_bgcolor = "rgba(0,0,0,0)",
       annotations = list(
         list(
           x = 0.5,
@@ -5255,7 +5258,7 @@ smpl_compound_distribution <- function(
           xanchor = "center",
           yanchor = "middle",
           showarrow = FALSE,
-          font = list(size = 22, color = "white")
+          font = list(size = 22, color = if (theme == "light") "black" else "white")
         )
       )
     )

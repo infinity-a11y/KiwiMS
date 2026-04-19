@@ -63,6 +63,50 @@ ui <- function(id) {
       )
     ),
     shiny$div(id = "blocking-overlay"),
+    shiny$tags$script(shiny$HTML("
+      Shiny.addCustomMessageHandler('downloadPlot', function(msg) {
+        var qualityMap = {
+          low:    { width: 1280, height: 720,  scale: 1 },
+          normal: { width: 1920, height: 1080, scale: 2 },
+          high:   { width: 2560, height: 1440, scale: 4 }
+        };
+        var q = qualityMap[msg.quality] || qualityMap.normal;
+        var contextScale = { small: 0.75, normal: 1.0, large: 1.5, xlarge: 2.0 }[msg.context] || 1.0;
+        var fig = JSON.parse(JSON.stringify(msg.json));
+        if (contextScale !== 1.0) {
+          (function scaleFonts(obj) {
+            if (!obj || typeof obj !== 'object') return;
+            if (typeof obj.size === 'number') obj.size = Math.round(obj.size * contextScale);
+            Object.values(obj).forEach(scaleFonts);
+          })(fig.layout);
+          fig.data.forEach(function(trace) {
+            if (trace.marker && typeof trace.marker.size === 'number')
+              trace.marker.size = Math.round(trace.marker.size * contextScale);
+            if (trace.line && typeof trace.line.width === 'number')
+              trace.line.width = Math.round(trace.line.width * contextScale);
+            ['textfont', 'outsidetextfont', 'insidetextfont'].forEach(function(key) {
+              if (trace[key] && typeof trace[key].size === 'number')
+                trace[key].size = Math.round(trace[key].size * contextScale);
+            });
+          });
+        }
+        document.body.style.cursor = 'progress';
+        var div = document.createElement('div');
+        div.className = 'plotly-dl-offscreen';
+        div.style.width  = q.width  + 'px';
+        div.style.height = q.height + 'px';
+        document.body.appendChild(div);
+        Plotly.newPlot(div, fig.data, fig.layout, fig.config || {}).then(function() {
+          return Plotly.downloadImage(div, {
+            format: msg.format, width: q.width, height: q.height,
+            scale: msg.format === 'svg' ? 1 : q.scale, filename: msg.filename
+          });
+        }).then(function() {
+          document.body.removeChild(div);
+          document.body.style.cursor = '';
+        });
+      });
+    ")),
     useWaiter(),
     waiterShowOnLoad(
       html = shiny$tags$div(
