@@ -3641,6 +3641,7 @@ filter_table_view <- function(table, colors, inputs, units) {
       `Cmp Name` = `Cmp Name`,
       dplyr::any_of(optional_cols),
       `Mass Shift` = `Theor. Cmp`,
+      `Bind. Stoich.` = `Bind. Stoich.`,
       `%-Binding` = `%-Binding`,
       `Total %` = `Total %-Binding`
     ) |>
@@ -3651,18 +3652,6 @@ filter_table_view <- function(table, colors, inputs, units) {
         `Sample ID`
       },
       `Cmp Name` = ifelse(is.na(`Cmp Name`), "N/A", `Cmp Name`),
-      `Mass Shift` = ifelse(
-        `Mass Shift` == "N/A",
-        "N/A",
-        paste0(
-          "[",
-          `Mass Shift`,
-          "]",
-          "&thinsp;<sub>",
-          table$`Bind. Stoich.`,
-          "</sub>"
-        )
-      ),
       label_color = get_contrast_color(colors[match(
         if (
           length(units) == 2 && inputs$color_variable == units["Concentration"]
@@ -3756,6 +3745,19 @@ render_table_view <- function(table, colors, tab, inputs, units) {
     row_group <- list(dataSrc = which(names(table) == group_variable) - 1)
   }
 
+  # Format Mass Shift with stoichiometry subscript for display
+  table <- dplyr::mutate(
+    table,
+    `Mass Shift` = ifelse(
+      `Mass Shift` == "N/A",
+      "N/A",
+      paste0(
+        "[", `Mass Shift`, "]",
+        "&thinsp;<sub>", `Bind. Stoich.`, "</sub>"
+      )
+    )
+  )
+
   DT::datatable(
     data = table,
     escape = FALSE,
@@ -3784,6 +3786,7 @@ render_table_view <- function(table, colors, tab, inputs, units) {
           targets = c(
             "col_var",
             "label_color",
+            "Bind. Stoich.",
             if (tab == "Concentration") "Cmp Name"
           )
         ),

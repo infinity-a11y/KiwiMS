@@ -64,7 +64,9 @@ box::use(
       safe_observe,
     ],
   app / logic / deconvolution_functions[spectrum_plot, ],
-  app / logic / plot_download[setup_plot_dl, setup_table_dl, prepare_hits_export],
+  app /
+    logic /
+    plot_download[setup_plot_dl, setup_table_dl, prepare_hits_export],
   app / logic / logging[get_session_prefix],
   app /
     logic /
@@ -2013,16 +2015,21 @@ server <- function(
 
                 # If table empty
                 if (!nrow(tbl)) {
+                  empty_df <- data.frame(rep(list(as.character()), 5)) |>
+                    stats::setNames(c(
+                      "Sample ID",
+                      "Cmp Name",
+                      "Mass Shift",
+                      "%-Binding",
+                      "Total %"
+                    ))
+
+                  # Assign filtered table to reactive for eventual export
+                  samples_table_view_raw(empty_df)
+
                   return(
                     DT::datatable(
-                      data.frame(rep(list(as.character()), 5)) |>
-                        stats::setNames(c(
-                          "Sample ID",
-                          "Cmp Name",
-                          "Mass Shift",
-                          "%-Binding",
-                          "Total %"
-                        )),
+                      empty_df,
                       selection = "none",
                       class = "order-column",
                       options = list(
@@ -2063,19 +2070,9 @@ server <- function(
                 # Create DT table
                 render_table_view(
                   table = tbl,
-                  colors = get_cmp_colorScale(
-                    filtered_table = tbl,
-                    scale = input$color_scale,
-                    variable = input$color_variable,
-                    trunc = input$truncate_names
-                  ),
+                  colors = colors,
                   tab = "Samples",
-                  inputs = list(
-                    binding_bar = input$samples_table_view_binding_bar,
-                    tot_binding_bar = input$samples_table_view_tot_binding_bar,
-                    truncate_names = input$truncate_names,
-                    color_variable = input$color_variable
-                  ),
+                  inputs = inputs,
                   units = units
                 )
               },
@@ -4001,7 +3998,7 @@ server <- function(
       output,
       session,
       "samples_table_view",
-      data_fn = function() samples_table_view_raw(),
+      data_fn = function() prepare_hits_export(samples_table_view_raw()),
       filename_fn = function() {
         paste0(get_session_prefix(), "_Table_View_Samples")
       }
@@ -4012,7 +4009,7 @@ server <- function(
       output,
       session,
       "compounds_table_view",
-      data_fn = function() compounds_table_view_raw(),
+      data_fn = function() prepare_hits_export(compounds_table_view_raw()),
       filename_fn = function() {
         paste0(get_session_prefix(), "_Table_View_Compounds")
       }
@@ -4023,7 +4020,7 @@ server <- function(
       output,
       session,
       "proteins_table_view",
-      data_fn = function() proteins_table_view_raw(),
+      data_fn = function() prepare_hits_export(proteins_table_view_raw()),
       filename_fn = function() {
         paste0(get_session_prefix(), "_Table_View_Proteins")
       }

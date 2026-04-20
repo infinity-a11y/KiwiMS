@@ -89,6 +89,21 @@ ui <- function(id) {
                 trace[key].size = Math.round(trace[key].size * contextScale);
             });
           });
+          // Pad 3D scene axis titles to prevent overlap with scaled tick labels
+          if (contextScale > 1.0) {
+            var br = new Array(Math.ceil(contextScale) + 1).join('<br>');
+            Object.keys(fig.layout).forEach(function(key) {
+              if (!/^scene/.test(key)) return;
+              ['xaxis', 'yaxis', 'zaxis'].forEach(function(ax) {
+                var axis = fig.layout[key] && fig.layout[key][ax];
+                if (!axis) return;
+                if (typeof axis.title === 'string' && axis.title.length)
+                  axis.title = br + axis.title;
+                else if (axis.title && typeof axis.title.text === 'string' && axis.title.text.length)
+                  axis.title.text = br + axis.title.text;
+              });
+            });
+          }
         }
         document.body.style.cursor = 'progress';
         var div = document.createElement('div');

@@ -192,7 +192,8 @@ table_dl_buttons <- function(ns, prefix) {
 # drops the internal truncSample_ID column.
 #' @export
 prepare_hits_export <- function(table) {
-  is.na(table) <- "N/A"
+  table1 <<- table
+  table[is.na(table)] <- "N/A"
   table[, !names(table) %in% c("truncSample_ID", "label_color", "col_var")]
 }
 
