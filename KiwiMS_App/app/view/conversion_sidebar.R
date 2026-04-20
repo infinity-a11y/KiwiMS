@@ -222,7 +222,8 @@ server <- function(
                   class = "complex-picker-ui",
                   shiny::div(id = "complex-picker-connector"),
                   shiny::div(
-                    class = "complex-picker custom-disable",
+                    # class = "complex-picker custom-disable",
+                    class = "complex-picker",
                     shinyWidgets::pickerInput(
                       ns("complex"),
                       NULL,
@@ -231,13 +232,17 @@ server <- function(
                   )
                 )
               ),
-              shinyjs::disabled(
-                shiny::actionButton(
-                  ns("report_conversion_results"),
-                  "Report",
-                  icon = shiny::icon("square-poll-vertical"),
-                  width = "100%"
-                )
+              bslib::tooltip(
+                shinyjs::disabled(
+                  shiny::actionButton(
+                    ns("report_conversion_results"),
+                    "Report",
+                    icon = shiny::icon("square-poll-vertical"),
+                    width = "100%"
+                  )
+                ),
+                "Report generation is temporarily unavailable",
+                placement = "top"
               )
             )
           )
