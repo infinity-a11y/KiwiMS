@@ -3184,6 +3184,11 @@ multiple_spectra <- function(
     }
   )
 
+  font_color     <- if (theme == "light") "black"             else "white"
+  inv_color      <- if (theme == "light") "white"             else "black"
+  grid_color     <- if (theme == "light") "rgba(0,0,0,0.1)"   else "#7f7f7fff"
+  zeroline_color <- if (theme == "light") "rgba(0,0,0,0.5)"   else "rgba(255,255,255,0.5)"
+
   # Prepare hit marker symbols
   if (!all(is.na(peaks_data$mass))) {
     prot_peaks <- hits_summary$`Meas. Prot.`[
@@ -3207,7 +3212,7 @@ multiple_spectra <- function(
     peaks_data <- dplyr::mutate(
       peaks_data,
       symbol = ifelse(mass %in% prot_peaks, "diamond", "circle"),
-      linecolor = ifelse(mass %in% prot_peaks, "#000000", "#ffffff")
+      linecolor = ifelse(mass %in% prot_peaks, inv_color, font_color)
     )
   }
 
@@ -3218,7 +3223,7 @@ multiple_spectra <- function(
     if (color_variable == "Compounds") {
       if (length(color_cmp)) {
         # Adding protein peak marker
-        prot_colors <- rep("#ffffff", length(prot_names))
+        prot_colors <- rep(font_color, length(prot_names))
         names(prot_colors) <- prot_names
         color_cmp <- c(prot_colors, color_cmp)
 
@@ -3230,13 +3235,13 @@ multiple_spectra <- function(
 
         marker_color <- ~ I(color)
       } else {
-        marker_color <- "#ffffff"
+        marker_color <- font_color
       }
 
       # Declare coloring variables for graph elements
       color <- NULL
-      line <- list(color = "white", width = 1)
-      z_linecolor <- list(color = "#ffffff")
+      line <- list(color = font_color, width = 1)
+      z_linecolor <- list(color = font_color)
     } else if (color_variable == "Samples") {
       # Match colors to peaks and spectrum data
       peaks_data$z_color <- color_cmp[match(peaks_data$z, names(color_cmp))]
@@ -3262,7 +3267,7 @@ multiple_spectra <- function(
     # Adding protein peak marker
     peaks_data <- dplyr::mutate(
       peaks_data,
-      color = ifelse(symbol == "diamond", "#ffffff", "#000000")
+      color = ifelse(symbol == "diamond", font_color, inv_color)
     )
     marker_color <- ~ I(color)
 
@@ -3287,10 +3292,6 @@ multiple_spectra <- function(
 
   # Remove NA peaks
   peaks_data <- peaks_data[!is.na(peaks_data$mass), ]
-
-  font_color     <- if (theme == "light") "black"                  else "white"
-  grid_color     <- if (theme == "light") "rgba(0,0,0,0.1)"        else "#7f7f7fff"
-  zeroline_color <- if (theme == "light") "rgba(0,0,0,0.5)"        else "rgba(255,255,255,0.5)"
 
   if (cubic) {
     plot <- plotly::plot_ly(
@@ -3415,6 +3416,8 @@ multiple_spectra <- function(
           ),
           xaxis = list(
             title = "Mass [Da]",
+            titlefont = list(size = 14, color = font_color),
+            tickfont = list(size = 12, color = font_color),
             gridcolor = grid_color,
             showgrid = TRUE,
             showline = FALSE,
@@ -3425,6 +3428,8 @@ multiple_spectra <- function(
           ),
           yaxis = list(
             title = "Intensity [%]",
+            titlefont = list(size = 14, color = font_color),
+            tickfont = list(size = 12, color = font_color),
             gridcolor = grid_color,
             showgrid = TRUE,
             showline = FALSE,
@@ -3443,6 +3448,8 @@ multiple_spectra <- function(
               ),
               ""
             ),
+            titlefont = list(size = 14, color = font_color),
+            tickfont = list(size = 12, color = font_color),
             gridcolor = grid_color,
             showgrid = ifelse(time, TRUE, FALSE),
             showline = FALSE,

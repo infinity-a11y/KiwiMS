@@ -3,6 +3,7 @@
 box::use(
   bslib,
   htmlwidgets[saveWidget],
+  openxlsx[write.xlsx],
   plotly[as_widget, plotly_json],
   shiny,
   shinyWidgets[show_toast],
@@ -109,4 +110,76 @@ setup_plot_dl <- function(input, output, session, prefix, build_fn, filename_fn)
       filename = filename_fn()
     ))
   })
+}
+
+# Export popover for DT tables inside card headers (same icon as plot exports).
+#' @export
+table_dl_popover <- function(ns, prefix) {
+  bslib::popover(
+    shiny::icon("arrow-up-from-bracket"),
+    shiny::div(
+      class = "plot-dl-popover",
+      shiny::div(class = "plot-dl-label", "File Format"),
+      shiny::div(
+        class = "plot-dl-buttons",
+        shiny::downloadButton(
+          ns(paste0("dl_", prefix, "_csv")),
+          "CSV",
+          class = "btn-sm btn-default",
+          icon = NULL
+        ),
+        shiny::downloadButton(
+          ns(paste0("dl_", prefix, "_xlsx")),
+          "Excel",
+          class = "btn-sm btn-default",
+          icon = NULL
+        )
+      )
+    ),
+    title = "Export Table"
+  )
+}
+
+# Renders CSV/Excel export buttons for a DT table.
+#' @export
+table_dl_buttons <- function(ns, prefix) {
+  shiny::div(
+    class = "table-dl-buttons",
+    shiny::downloadButton(
+      ns(paste0("dl_", prefix, "_csv")),
+      "CSV",
+      class = "btn-sm btn-default",
+      icon = NULL
+    ),
+    shiny::downloadButton(
+      ns(paste0("dl_", prefix, "_xlsx")),
+      "Excel",
+      class = "btn-sm btn-default",
+      icon = NULL
+    )
+  )
+}
+
+# Registers CSV/Excel download handlers for a DT table.
+# data_fn() must return a plain data.frame to export.
+# filename_fn() must return a string (no extension).
+#' @export
+setup_table_dl <- function(input, output, session, prefix, data_fn, filename_fn) {
+  output[[paste0("dl_", prefix, "_csv")]] <- shiny::downloadHandler(
+    filename = function() paste0(filename_fn(), ".csv"),
+    content = function(file) {
+      show_toast("Exporting as CSV", text = NULL, type = "info",
+        timer = 3000, timerProgressBar = TRUE)
+      utils::write.csv(data_fn(), file, row.names = FALSE)
+    }
+  )
+
+  output[[paste0("dl_", prefix, "_xlsx")]] <- shiny::downloadHandler(
+    filename = function() paste0(filename_fn(), ".xlsx"),
+    content = function(file) {
+      show_toast("Exporting as Excel", text = NULL, type = "info",
+        timer = 3000, timerProgressBar = TRUE)
+      write.xlsx(data_fn(), file)
+    }
+  )
 }

@@ -17,7 +17,7 @@ box::use(
     conversion_functions[
       format_scientific,
     ],
-  app / logic / plot_download[plot_dl_popover],
+  app / logic / plot_download[plot_dl_popover, table_dl_buttons, table_dl_popover],
 )
 
 # Ki/kinact results interface
@@ -239,6 +239,7 @@ ki_kinact_concentrations_tabs <- function(ns, local_ui_id, conc_result, units) {
               ),
               title = NULL
             ),
+            table_dl_popover(ns, paste0(local_ui_id, "_hits")),
             bslib::tooltip(
               shiny::div(
                 class = "tooltip-bttn",
@@ -522,19 +523,23 @@ ki_kinact_results_ui <- function(
             bslib::card(
               full_screen = TRUE,
               bslib::card_header(
-                class = "bg-dark help-header",
+                class = "bg-dark help-header d-flex justify-content-between",
                 "Binding Analysis",
-                bslib::tooltip(
-                  shiny::div(
-                    class = "tooltip-bttn",
-                    shiny::actionButton(
-                      ns("binding_analysis_tooltip_bttn"),
-                      label = NULL,
-                      icon = shiny::icon("circle-question")
-                    )
-                  ),
-                  "Help",
-                  placement = "top"
+                shiny::div(
+                  class = "box-header-settings-help",
+                  table_dl_popover(ns, "kobs_result"),
+                  bslib::tooltip(
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("binding_analysis_tooltip_bttn"),
+                        label = NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    ),
+                    "Help",
+                    placement = "top"
+                  )
                 )
               ),
               bslib::card_body(
@@ -808,6 +813,15 @@ binding_results_ui <- function(ns, hits_summary) {
                 )
               )
             )
+          ),
+          shiny::column(
+            width = 2,
+            align = "center",
+            shiny::div(
+              class = "hits-table-export",
+              shiny::div(class = "hits-tab-export-label", "Export Table"),
+              table_dl_buttons(ns, "relbinding_hits_tab")
+            )
           )
         ),
         shiny::div(
@@ -966,6 +980,7 @@ binding_results_ui <- function(ns, hits_summary) {
                     ),
                     title = NULL
                   ),
+                  table_dl_popover(ns, "samples_table_view"),
                   bslib::tooltip(
                     shiny::div(
                       class = "tooltip-bttn",
@@ -1218,6 +1233,7 @@ binding_results_ui <- function(ns, hits_summary) {
                     ),
                     title = NULL
                   ),
+                  table_dl_popover(ns, "compounds_table_view"),
                   bslib::tooltip(
                     shiny::div(
                       class = "tooltip-bttn",
@@ -1474,6 +1490,7 @@ binding_results_ui <- function(ns, hits_summary) {
                     ),
                     title = NULL
                   ),
+                  table_dl_popover(ns, "proteins_table_view"),
                   bslib::tooltip(
                     shiny::div(
                       class = "tooltip-bttn",
