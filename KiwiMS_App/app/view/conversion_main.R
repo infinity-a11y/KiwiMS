@@ -62,7 +62,7 @@ box::use(
       safe_observe,
     ],
   app / logic / deconvolution_functions[spectrum_plot, ],
-  app / logic / plot_download[setup_plot_dl],
+  app / logic / plot_download[setup_plot_dl, setup_table_dl],
   app / logic / logging[get_session_prefix],
   app /
     logic /
@@ -1398,7 +1398,14 @@ server <- function(
 
     # Reactive value to track current hits data frame
     relbinding_hits_current <- shiny::reactiveVal()
+    relbinding_hits_raw <- shiny::reactiveVal()
     kikinact_hits_current <- shiny::reactiveVal()
+
+    # Raw data frames for table exports
+    samples_table_view_raw <- shiny::reactiveVal()
+    compounds_table_view_raw <- shiny::reactiveVal()
+    proteins_table_view_raw <- shiny::reactiveVal()
+    kobs_result_raw <- shiny::reactiveVal()
 
     ## Reactive functions ----
     # Infer Ki/kinact result from selected samples
@@ -1645,6 +1652,8 @@ server <- function(
                     )
                   )
 
+                relbinding_hits_raw(hits_table)
+
                 hits_datatable <- render_hits_table(
                   hits_table = hits_table,
                   concentration_colors = NULL,
@@ -1682,6 +1691,12 @@ server <- function(
                 input$relbinding_hits_tab_sample_select,
                 input$relbinding_hits_tab_na
               )
+
+            ###### Hits table export ----
+            setup_table_dl(input, output, session, "relbinding_hits_tab",
+              data_fn = function() relbinding_hits_raw(),
+              filename_fn = function() paste0(get_session_prefix(), "_Hits_Table")
+            )
 
             ####### Hits table clicking observer ----
             safe_observe(
@@ -1979,6 +1994,8 @@ server <- function(
                     `Sample ID` == input$conversion_sample_picker &
                       !is.na(`Cmp Name`)
                   )
+
+                samples_table_view_raw(tbl)
 
                 render_table_view(
                   table = tbl,
@@ -2393,6 +2410,8 @@ server <- function(
                       `Cmp Name` == input$conversion_compound_picker
                     )
                 }
+
+                compounds_table_view_raw(tbl)
 
                 render_table_view(
                   table = tbl,
@@ -2891,6 +2910,8 @@ server <- function(
                 tbl <- hits_summary |>
                   dplyr::filter(`Protein` == input$conversion_protein_picker)
 
+                proteins_table_view_raw(tbl)
+
                 render_table_view(
                   table = tbl,
                   colors = get_cmp_colorScale(
@@ -3200,12 +3221,7 @@ server <- function(
                     concentration = as.numeric(rownames(kobs_results)),
                     kobs = as.numeric(format(kobs, digits = 3)),
                     v = as.numeric(format(v, digits = 3)),
-                    plateau = as.numeric(format(plateau, digits = 3)),
-                    Included = checkboxColumn(
-                      nrow(kobs_results),
-                      5,
-                      value = TRUE
-                    )
+                    plateau = as.numeric(format(plateau, digits = 3))
                   ) |>
                   dplyr::relocate(concentration, .before = kobs) |>
                   stats::setNames(c(
@@ -3217,12 +3233,22 @@ server <- function(
                     paste0(
                       "kobs [",
                       gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
-                      "⁻¹]"
+                      "\u207b\u00b9]"
                     ),
                     "Velocity",
-                    "Plateau [%]",
-                    "Included"
+                    "Plateau [%]"
                   ))
+
+                kobs_result_raw(kobs_results)
+
+                kobs_results <- kobs_results |>
+                  dplyr::mutate(
+                    Included = checkboxColumn(
+                      nrow(kobs_results),
+                      5,
+                      value = TRUE
+                    )
+                  )
 
                 # Kobs present concentrations
                 kobs_conc <- kobs_results[[paste0(
@@ -3383,6 +3409,7 @@ server <- function(
               local({
                 local_concentration <- concentration
                 local_ui_id <- ui_id
+                conc_tbl_raw <- shiny::reactiveVal()
 
                 conc_result <- result_list$binding_kobs_result[[
                   local_concentration
@@ -3405,6 +3432,7 @@ server <- function(
                       !!rlang::sym(units["Concentration"]) ==
                         local_concentration
                     )
+                  conc_tbl_raw(tbl)
                   render_table_view(
                     table = tbl,
                     colors = conversion_vars$conc_colors,
@@ -3434,6 +3462,14 @@ server <- function(
                       "concentrations_table_view_tot_binding_bar"
                     )]]
                   )
+
+                ###### Concentration table export ----
+                setup_table_dl(input, output, session, paste0(local_ui_id, "_hits"),
+                  data_fn = function() conc_tbl_raw(),
+                  filename_fn = function() paste0(
+                    get_session_prefix(), "_Table_View_", local_concentration
+                  )
+                )
 
                 ###### Binding plot ----
                 output[[paste0(
@@ -3670,6 +3706,26 @@ server <- function(
         )
       },
       filename_fn = function() paste0(get_session_prefix(), "_Compound_Distribution")
+    )
+
+    setup_table_dl(input, output, session, "samples_table_view",
+      data_fn = function() samples_table_view_raw(),
+      filename_fn = function() paste0(get_session_prefix(), "_Table_View_Samples")
+    )
+
+    setup_table_dl(input, output, session, "compounds_table_view",
+      data_fn = function() compounds_table_view_raw(),
+      filename_fn = function() paste0(get_session_prefix(), "_Table_View_Compounds")
+    )
+
+    setup_table_dl(input, output, session, "proteins_table_view",
+      data_fn = function() proteins_table_view_raw(),
+      filename_fn = function() paste0(get_session_prefix(), "_Table_View_Proteins")
+    )
+
+    setup_table_dl(input, output, session, "kobs_result",
+      data_fn = function() kobs_result_raw(),
+      filename_fn = function() paste0(get_session_prefix(), "_Binding_Analysis")
     )
 
     ## Observer for conversion result interface ----

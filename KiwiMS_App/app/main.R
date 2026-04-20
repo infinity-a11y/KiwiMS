@@ -106,6 +106,16 @@ ui <- function(id) {
           document.body.style.cursor = '';
         });
       });
+
+      // Set loading cursor immediately on plot export button click, before the
+      // R round-trip. PNG/SVG reset via downloadPlot above; HTML resets on focus.
+      $(document).on('click', '.plot-dl-buttons button, .plot-dl-buttons a', function() {
+        document.body.style.cursor = 'progress';
+      });
+      $(window).on('focus', function() {
+        if (document.body.style.cursor === 'progress')
+          setTimeout(function() { document.body.style.cursor = ''; }, 300);
+      });
     ")),
     useWaiter(),
     waiterShowOnLoad(
