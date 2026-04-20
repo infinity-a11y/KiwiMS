@@ -19,7 +19,7 @@ box::use(
 
 box::use(
   app / logic / user_settings[read_user_settings],
-  app / logic / plot_download[plot_dl_popover],
+  app / logic / plot_download[plot_dl_popover, table_dl_popover],
 )
 
 # Deconvolution initiation interface
@@ -974,19 +974,23 @@ deconvolution_results_ui <- function(ns, show_heatmap = FALSE) {
               class = "card-custom",
               bslib::card(
                 bslib::card_header(
-                  class = "bg-dark help-header",
+                  class = "bg-dark help-header d-flex justify-content-between",
                   "Deconvolution Metrics",
-                  tooltip(
-                    shiny::div(
-                      class = "tooltip-bttn",
-                      shiny::actionButton(
-                        ns("conversion_samples_protein_tooltip_bttn"),
-                        label = NULL,
-                        icon = shiny::icon("circle-question")
-                      )
-                    ),
-                    "Help",
-                    placement = "top"
+                  shiny::div(
+                    class = "box-header-settings-help",
+                    table_dl_popover(ns, "deconvolution_data"),
+                    tooltip(
+                      shiny::div(
+                        class = "tooltip-bttn",
+                        shiny::actionButton(
+                          ns("conversion_samples_protein_tooltip_bttn"),
+                          label = NULL,
+                          icon = shiny::icon("circle-question")
+                        )
+                      ),
+                      "Help",
+                      placement = "top"
+                    )
                   )
                 ),
                 shiny::div(

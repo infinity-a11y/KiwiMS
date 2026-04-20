@@ -4,12 +4,6 @@ box::use(
   app /
     logic /
     conversion_constants[
-      empty_protein_table,
-      chart_js,
-      sequential_scales,
-      qualitative_scales,
-      gradient_scales,
-      hits_table_names,
       popover_autoclose,
     ],
   app /
@@ -17,7 +11,9 @@ box::use(
     conversion_functions[
       format_scientific,
     ],
-  app / logic / plot_download[plot_dl_popover, table_dl_buttons, table_dl_popover],
+  app /
+    logic /
+    plot_download[plot_dl_popover, table_dl_buttons, table_dl_popover],
 )
 
 # Ki/kinact results interface
@@ -419,6 +415,15 @@ ki_kinact_results_ui <- function(
                 )
               )
             )
+          ),
+          shiny::column(
+            width = 2,
+            align = "left",
+            shiny::div(
+              class = "hits-table-export",
+              shiny::tags$label(class = "control-label", "Export Table"),
+              table_dl_buttons(ns, "kikinact_hits_tab")
+            )
           )
         ),
         shiny::div(
@@ -816,10 +821,10 @@ binding_results_ui <- function(ns, hits_summary) {
           ),
           shiny::column(
             width = 2,
-            align = "center",
+            align = "left",
             shiny::div(
               class = "hits-table-export",
-              shiny::div(class = "hits-tab-export-label", "Export Table"),
+              shiny::tags$label(class = "control-label", "Export Table"),
               table_dl_buttons(ns, "relbinding_hits_tab")
             )
           )
