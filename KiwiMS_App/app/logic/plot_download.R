@@ -74,41 +74,69 @@ plot_dl_popover <- function(ns, prefix) {
 # build_fn(theme) must return a plotly figure.
 # filename_fn() must return a string (no extension).
 #' @export
-setup_plot_dl <- function(input, output, session, prefix, build_fn, filename_fn) {
+setup_plot_dl <- function(
+  input,
+  output,
+  session,
+  prefix,
+  build_fn,
+  filename_fn
+) {
   output[[paste0("dl_", prefix, "_html")]] <- shiny::downloadHandler(
     filename = function() paste0(filename_fn(), ".html"),
     content = function(file) {
-      show_toast("Exporting as HTML", text = NULL, type = "info",
-        timer = 3000, timerProgressBar = TRUE)
+      show_toast(
+        "Exporting as HTML",
+        text = NULL,
+        type = "info",
+        timer = 3000,
+        timerProgressBar = TRUE
+      )
       p <- build_fn(input[[paste0(prefix, "_dl_theme")]] %||% "light")
       saveWidget(as_widget(p), file, selfcontained = TRUE)
     }
   )
 
   shiny::observeEvent(input[[paste0("dl_", prefix, "_png")]], {
-    show_toast("Exporting as PNG", text = NULL, type = "info",
-      timer = 3000, timerProgressBar = TRUE)
+    show_toast(
+      "Exporting as PNG",
+      text = NULL,
+      type = "info",
+      timer = 3000,
+      timerProgressBar = TRUE
+    )
     p <- build_fn(input[[paste0(prefix, "_dl_theme")]] %||% "light")
-    session$sendCustomMessage("downloadPlot", list(
-      json     = plotly_json(p, jsonedit = FALSE),
-      format   = "png",
-      quality  = input[[paste0(prefix, "_dl_quality")]] %||% "normal",
-      context  = input[[paste0(prefix, "_dl_context")]] %||% "normal",
-      filename = filename_fn()
-    ))
+    session$sendCustomMessage(
+      "downloadPlot",
+      list(
+        json = plotly_json(p, jsonedit = FALSE),
+        format = "png",
+        quality = input[[paste0(prefix, "_dl_quality")]] %||% "normal",
+        context = input[[paste0(prefix, "_dl_context")]] %||% "normal",
+        filename = filename_fn()
+      )
+    )
   })
 
   shiny::observeEvent(input[[paste0("dl_", prefix, "_svg")]], {
-    show_toast("Exporting as SVG", text = NULL, type = "info",
-      timer = 3000, timerProgressBar = TRUE)
+    show_toast(
+      "Exporting as SVG",
+      text = NULL,
+      type = "info",
+      timer = 3000,
+      timerProgressBar = TRUE
+    )
     p <- build_fn(input[[paste0(prefix, "_dl_theme")]] %||% "light")
-    session$sendCustomMessage("downloadPlot", list(
-      json     = plotly_json(p, jsonedit = FALSE),
-      format   = "svg",
-      quality  = input[[paste0(prefix, "_dl_quality")]] %||% "normal",
-      context  = input[[paste0(prefix, "_dl_context")]] %||% "normal",
-      filename = filename_fn()
-    ))
+    session$sendCustomMessage(
+      "downloadPlot",
+      list(
+        json = plotly_json(p, jsonedit = FALSE),
+        format = "svg",
+        quality = input[[paste0(prefix, "_dl_quality")]] %||% "normal",
+        context = input[[paste0(prefix, "_dl_context")]] %||% "normal",
+        filename = filename_fn()
+      )
+    )
   })
 }
 
@@ -160,16 +188,36 @@ table_dl_buttons <- function(ns, prefix) {
   )
 }
 
+# Prepares a hits table data.frame for export: replaces NA with "N/A" and
+# drops the internal truncSample_ID column.
+#' @export
+prepare_hits_export <- function(table) {
+  is.na(table) <- "N/A"
+  table[, !names(table) %in% c("truncSample_ID", "label_color", "col_var")]
+}
+
 # Registers CSV/Excel download handlers for a DT table.
 # data_fn() must return a plain data.frame to export.
 # filename_fn() must return a string (no extension).
 #' @export
-setup_table_dl <- function(input, output, session, prefix, data_fn, filename_fn) {
+setup_table_dl <- function(
+  input,
+  output,
+  session,
+  prefix,
+  data_fn,
+  filename_fn
+) {
   output[[paste0("dl_", prefix, "_csv")]] <- shiny::downloadHandler(
     filename = function() paste0(filename_fn(), ".csv"),
     content = function(file) {
-      show_toast("Exporting as CSV", text = NULL, type = "info",
-        timer = 3000, timerProgressBar = TRUE)
+      show_toast(
+        "Exporting as CSV",
+        text = NULL,
+        type = "info",
+        timer = 3000,
+        timerProgressBar = TRUE
+      )
       utils::write.csv(data_fn(), file, row.names = FALSE)
     }
   )
@@ -177,8 +225,13 @@ setup_table_dl <- function(input, output, session, prefix, data_fn, filename_fn)
   output[[paste0("dl_", prefix, "_xlsx")]] <- shiny::downloadHandler(
     filename = function() paste0(filename_fn(), ".xlsx"),
     content = function(file) {
-      show_toast("Exporting as Excel", text = NULL, type = "info",
-        timer = 3000, timerProgressBar = TRUE)
+      show_toast(
+        "Exporting as Excel",
+        text = NULL,
+        type = "info",
+        timer = 3000,
+        timerProgressBar = TRUE
+      )
       write.xlsx(data_fn(), file)
     }
   )

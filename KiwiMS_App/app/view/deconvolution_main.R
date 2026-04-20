@@ -39,7 +39,7 @@ box::use(
       process_plot_data_db
     ],
   app / logic / helper_functions[fill_empty, get_kiwims_version],
-  app / logic / plot_download[setup_plot_dl],
+  app / logic / plot_download[setup_plot_dl, setup_table_dl],
   app / logic / logging[write_log, get_log, get_session_prefix],
   app / logic / user_settings[update_user_setting, read_user_settings],
   app / logic / conversion_functions[read_decon_metadata, read_decon_peaks_max],
@@ -2572,6 +2572,86 @@ server <- function(
             )
         }
       })
+
+      ### Deconvolution metrics export ----
+      deconvolution_metrics_raw <- shiny$reactive({
+        shiny$req(result_files_sel())
+
+        result_dir <- file.path(
+          analysis_dest(),
+          gsub(".raw", "_rawdata_unidecfiles", result_files_sel())
+        )
+        sel_base <- gsub("\\.raw$", "", result_files_sel(), ignore.case = TRUE)
+        db_path <- file.path(
+          analysis_dest(),
+          paste0(trimws(input$analysis_name), ".db")
+        )
+
+        if (file.exists(db_path) && sel_base %in% decon_failed_samples(db_path)) {
+          return(data.frame())
+        }
+
+        error_rows <- if (file.exists(db_path)) {
+          tryCatch(
+            {
+              con_m <- dbConnect(SQLite(), db_path, flags = SQLITE_RO)
+              on.exit(dbDisconnect(con_m), add = TRUE)
+              if (dbExistsTable(con_m, "error")) {
+                dbGetQuery(
+                  con_m,
+                  "SELECT Key, Value FROM error WHERE sample = ?",
+                  params = list(sel_base)
+                )
+              } else {
+                data.frame()
+              }
+            },
+            error = function(e) data.frame()
+          )
+        } else {
+          data.frame()
+        }
+
+        if (nrow(error_rows) == 0) {
+          data_path <- file.path(
+            result_dir,
+            paste0(gsub("_unidecfiles", "", basename(result_dir)), "_error.txt")
+          )
+          if (dir.exists(result_dir) && file.exists(data_path)) {
+            raw_lines <- readLines(data_path)
+            error_rows <- data.frame(
+              Key = sub(" =.*", "", raw_lines),
+              Value = as.numeric(sub(".*= ([^ ]+).*", "\\1", raw_lines))
+            )
+          }
+        }
+
+        shiny$req(nrow(error_rows) > 0)
+
+        units <- c("", "s", "", "", "m/z", "z", "", "")
+        data.frame(
+          Parameter = c(
+            "Fitting error",
+            "Computation time",
+            "Iteration count",
+            "UniScore (Quality)",
+            "m/z sigma",
+            "z (Charge) sigma",
+            "beat (Suppression)",
+            "Point sigma"
+          )[seq_len(nrow(error_rows))],
+          Value = paste(
+            round(error_rows$Value, 6),
+            units[seq_len(nrow(error_rows))],
+            sep = " "
+          )
+        )
+      })
+
+      setup_table_dl(input, output, session, "deconvolution_data",
+        data_fn = function() deconvolution_metrics_raw(),
+        filename_fn = function() paste0(get_session_prefix(), "_Deconvolution_Metrics")
+      )
 
       ### Failure overlay messages for Spectrum and Metrics cards
       failure_msg_ui <- function(output_id) {

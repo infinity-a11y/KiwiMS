@@ -2071,9 +2071,17 @@ make_binding_plot <- function(
     levels(df_points$concentration)
   )
 
-  font_color     <- if (theme == "light") "black"             else "white"
-  grid_color     <- if (theme == "light") "rgba(0,0,0,0.1)"   else "rgba(255,255,255,0.2)"
-  zeroline_color <- if (theme == "light") "rgba(0,0,0,0.5)"   else "rgba(255,255,255,0.5)"
+  font_color <- if (theme == "light") "black" else "white"
+  grid_color <- if (theme == "light") {
+    "rgba(0,0,0,0.1)"
+  } else {
+    "rgba(255,255,255,0.2)"
+  }
+  zeroline_color <- if (theme == "light") {
+    "rgba(0,0,0,0.5)"
+  } else {
+    "rgba(255,255,255,0.5)"
+  }
 
   # Generate plot
   binding_plot <- plotly::plot_ly() |>
@@ -2202,9 +2210,17 @@ make_kobs_plot <- function(ki_kinact_result, colors, units, theme = "dark") {
     ordered_conc
   )
 
-  font_color     <- if (theme == "light") "black"             else "white"
-  grid_color     <- if (theme == "light") "rgba(0,0,0,0.1)"   else "rgba(255,255,255,0.2)"
-  zeroline_color <- if (theme == "light") "rgba(0,0,0,0.5)"   else "rgba(255,255,255,0.5)"
+  font_color <- if (theme == "light") "black" else "white"
+  grid_color <- if (theme == "light") {
+    "rgba(0,0,0,0.1)"
+  } else {
+    "rgba(255,255,255,0.2)"
+  }
+  zeroline_color <- if (theme == "light") {
+    "rgba(0,0,0,0.5)"
+  } else {
+    "rgba(255,255,255,0.5)"
+  }
 
   # Generate plot
   kobs_plot <- plotly::plot_ly() |>
@@ -3184,10 +3200,14 @@ multiple_spectra <- function(
     }
   )
 
-  font_color     <- if (theme == "light") "black"             else "white"
-  inv_color      <- if (theme == "light") "white"             else "black"
-  grid_color     <- if (theme == "light") "rgba(0,0,0,0.1)"   else "#7f7f7fff"
-  zeroline_color <- if (theme == "light") "rgba(0,0,0,0.5)"   else "rgba(255,255,255,0.5)"
+  font_color <- if (theme == "light") "black" else "white"
+  inv_color <- if (theme == "light") "white" else "black"
+  grid_color <- if (theme == "light") "rgba(0,0,0,0.1)" else "#7f7f7fff"
+  zeroline_color <- if (theme == "light") {
+    "rgba(0,0,0,0.5)"
+  } else {
+    "rgba(255,255,255,0.5)"
+  }
 
   # Prepare hit marker symbols
   if (!all(is.na(peaks_data$mass))) {
@@ -3600,28 +3620,11 @@ multiple_spectra <- function(
   }
 }
 
-# Rendering function for relative binding table view
+# Filter function for table view
 #' @export
-render_table_view <- function(table, colors, tab, inputs, units) {
-  # If table empty
-  if (!nrow(table)) {
-    return(DT::datatable(
-      data.frame(rep(list(as.character()), 5)) |>
-        stats::setNames(c(
-          "Sample ID",
-          "Cmp Name",
-          "Mass Shift",
-          "%-Binding",
-          "Total %"
-        )),
-      selection = "none",
-      class = "order-column",
-      options = list(
-        dom = 't',
-        paging = FALSE
-      )
-    ))
-  }
+filter_table_view <- function(table, colors, inputs, units) {
+  # Replace NA in color names
+  names(colors)[is.na(names(colors))] <- "N/A"
 
   # Get optional concentration and time cols
   optional_cols <- if (length(units) == 2) {
@@ -3629,9 +3632,6 @@ render_table_view <- function(table, colors, tab, inputs, units) {
   } else {
     NULL
   }
-
-  # Replace NA in color names
-  names(colors)[is.na(names(colors))] <- "N/A"
 
   # Prepate data frame for table
   tbl <- table |>
@@ -3703,6 +3703,15 @@ render_table_view <- function(table, colors, tab, inputs, units) {
       )
     )
 
+  return(tbl)
+}
+
+# Rendering function for relative binding table view
+#' @export
+render_table_view <- function(table, colors, tab, inputs, units) {
+  # Replace NA in color names
+  names(colors)[is.na(names(colors))] <- "N/A"
+
   # Apply bar renderer to binding column
   if (
     is.null(inputs$binding_bar) ||
@@ -3726,13 +3735,13 @@ render_table_view <- function(table, colors, tab, inputs, units) {
   # Determine grouped row variable
   if (tab == "Compounds") {
     group_variable <- "Sample ID"
-    if (length(unique(tbl[[group_variable]])) != nrow(tbl)) {
-      tbl$`Sample ID` <- paste("Sample ID:", tbl$`Sample ID`)
+    if (length(unique(table[[group_variable]])) != nrow(table)) {
+      table$`Sample ID` <- paste("Sample ID:", table$`Sample ID`)
     }
   } else if (any(tab %in% c("Samples", "Proteins"))) {
     group_variable <- "Cmp Name"
-    if (length(unique(tbl[[group_variable]])) != nrow(tbl)) {
-      tbl$`Cmp Name` <- paste("Compound:", tbl$`Cmp Name`)
+    if (length(unique(table[[group_variable]])) != nrow(table)) {
+      table$`Cmp Name` <- paste("Compound:", table$`Cmp Name`)
     }
   } else {
     group_variable <- NULL
@@ -3740,15 +3749,15 @@ render_table_view <- function(table, colors, tab, inputs, units) {
 
   if (
     is.null(group_variable) ||
-      length(unique(tbl[[group_variable]])) == nrow(tbl)
+      length(unique(table[[group_variable]])) == nrow(table)
   ) {
     row_group <- NULL
   } else {
-    row_group <- list(dataSrc = which(names(tbl) == group_variable) - 1)
+    row_group <- list(dataSrc = which(names(table) == group_variable) - 1)
   }
 
   DT::datatable(
-    data = tbl,
+    data = table,
     escape = FALSE,
     extensions = "RowGroup",
     rownames = FALSE,
@@ -3764,7 +3773,7 @@ render_table_view <- function(table, colors, tab, inputs, units) {
         list(
           visible = ifelse(
             is.null(group_variable) ||
-              length(unique(tbl[[group_variable]])) == nrow(tbl),
+              length(unique(table[[group_variable]])) == nrow(table),
             TRUE,
             FALSE
           ),
@@ -3820,22 +3829,15 @@ render_table_view <- function(table, colors, tab, inputs, units) {
     )
 }
 
-# Rendering function of hits table
+# Selection and filtering of hits table
 #' @export
-render_hits_table <- function(
+filter_hits_table <- function(
   hits_table,
-  concentration_colors,
-  single_conc = NULL,
   selected_cols = NULL,
-  bar_chart = character(),
   compounds = NULL,
   samples = NULL,
-  colors = NULL,
-  color_variable = NULL,
   expand = TRUE,
   na_include = TRUE,
-  truncated = NULL,
-  clickable = FALSE,
   units
 ) {
   # Modify if samples are summarized instead of expanded
@@ -3850,23 +3852,6 @@ render_hits_table <- function(
         `truncSample_ID`
       )
   }
-
-  # if (length(bar_chart)) {
-  #   if (
-  #     "Total %-Binding" %in%
-  #       names(hits_table) &
-  #       any("Total %-Binding" %in% bar_chart)
-  #   ) {
-  #     hits_table$`Total %-Binding`[hits_table$`Total %-Binding` == "N/A"] <- NA
-  #   }
-  #   if (
-  #     "%-Binding" %in%
-  #       names(hits_table) &
-  #       any("%-Binding" %in% bar_chart)
-  #   ) {
-  #     hits_table$`%-Binding`[hits_table$`%-Binding` == "N/A"] <- NA
-  #   }
-  # }
 
   # Filter compounds
   if (!is.null(compounds) && na_include) {
@@ -3906,6 +3891,22 @@ render_hits_table <- function(
       all_of(selected_cols)
     )
 
+  return(hits_table)
+}
+
+# Rendering function of hits table
+#' @export
+render_hits_table <- function(
+  hits_table,
+  concentration_colors,
+  single_conc = NULL,
+  bar_chart = character(),
+  colors = NULL,
+  color_variable = NULL,
+  truncated = NULL,
+  clickable = FALSE,
+  units
+) {
   # Adapt table layout
   if (!is.null(single_conc)) {
     menu_length <- list(c(25, -1), c('25', 'All'))
@@ -4093,7 +4094,6 @@ new_sample_table <- function(
   compound_table,
   ki_kinact = FALSE
 ) {
-  result1 <<- result
   sample_names <- sort(paste0(
     result$samples %||% names(result$deconvolution),
     ".raw"
@@ -4455,9 +4455,9 @@ transform_hits <- function(hits_summary) {
     "Theor. Prot.",
     "Meas. Prot.",
     "Δ Prot.",
-    "Ⅰ Prot.",
+    "Int. Prot.",
     "Peak Signal",
-    "Ⅰ Cmp",
+    "Int. Cmp",
     "Cmp Name",
     "Theor. Cmp",
     "Δ Cmp",
@@ -5291,7 +5291,10 @@ smpl_compound_distribution <- function(
           xanchor = "center",
           yanchor = "middle",
           showarrow = FALSE,
-          font = list(size = 22, color = if (theme == "light") "black" else "white")
+          font = list(
+            size = 22,
+            color = if (theme == "light") "black" else "white"
+          )
         )
       )
     )
