@@ -853,7 +853,8 @@ spectrum_plot <- function(
     data_line_color <- color_cmp
   }
 
-  marker_border_color <- ifelse(!is.null(color_cmp), "#000000", "#7777f9")
+  marker_border_color <- if (tolower(theme) == "light") "#000000" else "#ffffff"
+  marker_fill_color   <- if (tolower(theme) == "light") "#e8cb97" else "#4a3a1a"
 
   # ggplot (non-interactive) section
   if (!interactive) {
@@ -1006,7 +1007,7 @@ spectrum_plot <- function(
           x = ~mass,
           y = ~intensity,
           marker = list(
-            color = "#e8cb97",
+            color = marker_fill_color,
             line = list(
               color = marker_border_color,
               width = 1.5,
@@ -1046,19 +1047,15 @@ spectrum_plot <- function(
             ),
             color = ifelse(
               name == plot_data$highlight_peaks$name[1],
-              "#ffffff",
-              "#000000"
+              marker_fill_color,
+              if (tolower(theme) == "light") "#e0e0e0" else "#333333"
             ),
-            linecolor = ifelse(
-              name == plot_data$highlight_peaks$name[1],
-              "#000000",
-              "#ffffff"
-            )
+            linecolor = marker_border_color
           )
 
           # Prepare marker colors
           if (color_variable == "Compounds") {
-            color_cmp <- c("#ffffff", color_cmp)
+            color_cmp <- c(marker_fill_color, color_cmp)
             names(color_cmp) <- c(
               plot_data$highlight_peaks$name[
                 !plot_data$highlight_peaks$name %in% names(color_cmp)
@@ -1086,7 +1083,7 @@ spectrum_plot <- function(
             color = if (!is.null(color_cmp)) {
               ~ I(color)
             } else {
-              "#e8cb97"
+              marker_fill_color
             },
             line = list(
               # color = marker_border_color,

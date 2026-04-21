@@ -13,60 +13,82 @@ box::use(
   rlang[`%||%`],
 )
 
+# Wraps a gear-icon popover in a "Settings" hover tooltip.
 #' @export
-plot_dl_popover <- function(ns, prefix) {
-  bslib::popover(
-    shiny::icon("arrow-up-from-bracket"),
+card_settings_popover <- function(content) {
+  bslib::tooltip(
     shiny::div(
-      class = "plot-dl-popover",
-      shiny::radioButtons(
-        ns(paste0(prefix, "_dl_theme")),
-        label = "Theme",
-        choices = c("Dark" = "light", "Light" = "dark"),
-        selected = "light",
-        inline = TRUE
-      ),
-      shiny::radioButtons(
-        ns(paste0(prefix, "_dl_quality")),
-        label = "Quality (PNG)",
-        choices = c("Low" = "low", "Normal" = "normal", "High" = "high"),
-        selected = "normal",
-        inline = TRUE
-      ),
-      shiny::radioButtons(
-        ns(paste0(prefix, "_dl_context")),
-        label = "Label Size",
-        choices = c(
-          "Small" = "small",
-          "Medium" = "normal",
-          "Large" = "large",
-          "Very Large" = "xlarge"
-        ),
-        selected = "normal",
-        inline = TRUE
-      ),
-      shiny::div(class = "plot-dl-label", "File Format"),
-      shiny::div(
-        class = "plot-dl-buttons",
-        shiny::downloadButton(
-          ns(paste0("dl_", prefix, "_html")),
-          "HTML",
-          class = "btn-sm btn-default",
-          icon = NULL
-        ),
-        shiny::actionButton(
-          ns(paste0("dl_", prefix, "_png")),
-          "PNG",
-          class = "btn-sm btn-default"
-        ),
-        shiny::actionButton(
-          ns(paste0("dl_", prefix, "_svg")),
-          "SVG",
-          class = "btn-sm btn-default"
-        )
+      bslib::popover(
+        shiny::icon("gear"),
+        content,
+        title = NULL
       )
     ),
-    title = "Export Plot"
+    "Settings",
+    placement = "top"
+  )
+}
+
+#' @export
+plot_dl_popover <- function(ns, prefix) {
+  bslib::tooltip(
+    shiny::div(
+      bslib::popover(
+        shiny::icon("arrow-up-from-bracket"),
+        shiny::div(
+          class = "plot-dl-popover",
+          shiny::radioButtons(
+            ns(paste0(prefix, "_dl_theme")),
+            label = "Theme",
+            choices = c("Dark" = "light", "Light" = "dark"),
+            selected = "light",
+            inline = TRUE
+          ),
+          shiny::radioButtons(
+            ns(paste0(prefix, "_dl_quality")),
+            label = "Quality (PNG)",
+            choices = c("Low" = "low", "Normal" = "normal", "High" = "high"),
+            selected = "normal",
+            inline = TRUE
+          ),
+          shiny::radioButtons(
+            ns(paste0(prefix, "_dl_context")),
+            label = "Label Size",
+            choices = c(
+              "Small" = "small",
+              "Medium" = "normal",
+              "Large" = "large",
+              "Very Large" = "xlarge"
+            ),
+            selected = "normal",
+            inline = TRUE
+          ),
+          shiny::div(class = "plot-dl-label", "File Format"),
+          shiny::div(
+            class = "plot-dl-buttons",
+            shiny::downloadButton(
+              ns(paste0("dl_", prefix, "_html")),
+              "HTML",
+              class = "btn-sm btn-default",
+              icon = NULL
+            ),
+            shiny::actionButton(
+              ns(paste0("dl_", prefix, "_png")),
+              "PNG",
+              class = "btn-sm btn-default"
+            ),
+            shiny::actionButton(
+              ns(paste0("dl_", prefix, "_svg")),
+              "SVG",
+              class = "btn-sm btn-default"
+            )
+          )
+        ),
+        title = "Export Plot"
+      )
+    ),
+    "Export",
+    placement = "top"
   )
 }
 
@@ -143,28 +165,34 @@ setup_plot_dl <- function(
 # Export popover for DT tables inside card headers (same icon as plot exports).
 #' @export
 table_dl_popover <- function(ns, prefix) {
-  bslib::popover(
-    shiny::icon("arrow-up-from-bracket"),
+  bslib::tooltip(
     shiny::div(
-      class = "plot-dl-popover",
-      shiny::div(class = "plot-dl-label", "File Format"),
-      shiny::div(
-        class = "plot-dl-buttons",
-        shiny::downloadButton(
-          ns(paste0("dl_", prefix, "_csv")),
-          "CSV",
-          class = "btn-sm btn-default",
-          icon = NULL
+      bslib::popover(
+        shiny::icon("arrow-up-from-bracket"),
+        shiny::div(
+          class = "plot-dl-popover",
+          shiny::div(class = "plot-dl-label", "File Format"),
+          shiny::div(
+            class = "plot-dl-buttons",
+            shiny::downloadButton(
+              ns(paste0("dl_", prefix, "_csv")),
+              "CSV",
+              class = "btn-sm btn-default",
+              icon = NULL
+            ),
+            shiny::downloadButton(
+              ns(paste0("dl_", prefix, "_xlsx")),
+              "Excel",
+              class = "btn-sm btn-default",
+              icon = NULL
+            )
+          )
         ),
-        shiny::downloadButton(
-          ns(paste0("dl_", prefix, "_xlsx")),
-          "Excel",
-          class = "btn-sm btn-default",
-          icon = NULL
-        )
+        title = "Export Table"
       )
     ),
-    title = "Export Table"
+    "Export",
+    placement = "top"
   )
 }
 
@@ -194,7 +222,9 @@ table_dl_buttons <- function(ns, prefix) {
 prepare_hits_export <- function(table) {
   table1 <<- table
   table[is.na(table)] <- "N/A"
-  table[, !names(table) %in% c("truncSample_ID", "label_color", "col_var")]
+  table[, !names(table) %in% c(
+    "truncSample_ID", "label_color", "col_var", "trunc_label"
+  )]
 }
 
 # Registers CSV/Excel download handlers for a DT table.

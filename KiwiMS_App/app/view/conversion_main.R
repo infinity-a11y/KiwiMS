@@ -1792,25 +1792,18 @@ server <- function(
                 ])
 
                 # Get protein signal
-                measured_protein_mw <- hits_summary$`Meas. Prot.`[
+                measured_protein_mw <- hits_summary$`Meas. Prot. [Da]`[
                   hits_summary$`Sample ID` == selected
                 ]
 
                 # Filter out NAs
                 measured_protein_mw <- measured_protein_mw[
-                  measured_protein_mw != "N/A"
+                  !is.na(measured_protein_mw)
                 ]
                 if (length(measured_protein_mw)) {
                   signal_average <- paste(
                     format(
-                      round(
-                        mean(as.numeric(gsub(
-                          " Da",
-                          "",
-                          measured_protein_mw
-                        ))),
-                        2
-                      ),
+                      round(mean(measured_protein_mw), 2),
                       big.mark = ",",
                       scientific = FALSE
                     ),
@@ -1820,7 +1813,7 @@ server <- function(
                   signal_average <- "No signal"
                 }
 
-                theor_protein_mw <- hits_summary$`Theor. Prot.`[
+                theor_protein_mw <- hits_summary$`Theor. Prot. [Da]`[
                   hits_summary$`Sample ID` == selected
                 ]
 
@@ -1836,11 +1829,7 @@ server <- function(
                       protein,
                       "<br>",
                       format(
-                        as.numeric(gsub(
-                          " Da",
-                          "",
-                          theor_protein_mw[1]
-                        )),
+                        theor_protein_mw[1],
                         big.mark = ",",
                         scientific = FALSE
                       ),
@@ -2290,6 +2279,18 @@ server <- function(
               manual_render_cmp_spectrum(manual_render_cmp_spectrum() + 1L)
             })
 
+            shiny::observeEvent(
+              list(input$truncate_names, input$color_variable, input$color_scale),
+              {
+                shiny::req(hits_summary, input$conversion_compound_picker)
+                n_samples <- length(unique(hits_summary$`Sample ID`[
+                  hits_summary$`Cmp Name` == input$conversion_compound_picker
+                ]))
+                if (n_samples >= 30) manual_render_cmp_spectrum(0L)
+              },
+              ignoreInit = TRUE
+            )
+
             output$cmp_annotated_spectrum_na <- shiny::renderText("N/A")
 
             output$cmp_annotated_spectrum_container <- shiny::renderUI({
@@ -2418,22 +2419,21 @@ server <- function(
               )
 
             ####### Show label input UI ----
-            output$compounds_spectrum_labels_ui <- shiny::renderUI({
+            shiny::observe({
               shiny::req(hits_summary, input$conversion_compound_picker)
 
               tbl <- hits_summary |>
                 dplyr::filter(`Cmp Name` == input$conversion_compound_picker)
 
               if (nrow(tbl) < 2) {
-                return(shinyjs::disabled(
-                  shinyWidgets::materialSwitch(
-                    ns("compounds_spectrum_labels"),
-                    label = "Show Labels",
-                    value = TRUE,
-                    right = TRUE
-                  )
-                ))
+                shinyWidgets::updateMaterialSwitch(
+                  session, "compounds_spectrum_labels", value = TRUE
+                )
+                shinyjs::disable("compounds_spectrum_labels")
+                return()
               }
+
+              shinyjs::enable("compounds_spectrum_labels")
 
               if (input$truncate_names) {
                 sample_ids <- tbl$`truncSample_ID`
@@ -2445,11 +2445,8 @@ server <- function(
                 max(nchar(as.character(sample_ids))) <= 20) |
                 isTRUE(run_ki_kinact)
 
-              shinyWidgets::materialSwitch(
-                ns("compounds_spectrum_labels"),
-                label = "Show Labels",
-                value = labels_show,
-                right = TRUE
+              shinyWidgets::updateMaterialSwitch(
+                session, "compounds_spectrum_labels", value = labels_show
               )
             })
 
@@ -2532,24 +2529,17 @@ server <- function(
                 selected <- input$conversion_protein_picker
 
                 # Get all protein signals
-                measured_protein_mw <- hits_summary$`Meas. Prot.`[
+                measured_protein_mw <- hits_summary$`Meas. Prot. [Da]`[
                   hits_summary$Protein == selected
                 ]
                 # Filter out NAs
                 measured_protein_mw <- measured_protein_mw[
-                  measured_protein_mw != "N/A"
+                  !is.na(measured_protein_mw)
                 ]
                 if (length(measured_protein_mw)) {
                   signal_average <- paste(
                     format(
-                      round(
-                        mean(as.numeric(gsub(
-                          " Da",
-                          "",
-                          measured_protein_mw
-                        ))),
-                        2
-                      ),
+                      round(mean(measured_protein_mw), 2),
                       big.mark = ",",
                       scientific = FALSE
                     ),
@@ -2560,7 +2550,7 @@ server <- function(
                 }
 
                 # Get theoretical protein mw
-                theor_protein_mw <- hits_summary$`Theor. Prot.`[
+                theor_protein_mw <- hits_summary$`Theor. Prot. [Da]`[
                   hits_summary$Protein == selected
                 ]
 
@@ -2576,11 +2566,7 @@ server <- function(
                       selected,
                       "<br>",
                       format(
-                        as.numeric(gsub(
-                          " Da",
-                          "",
-                          theor_protein_mw[1]
-                        )),
+                        theor_protein_mw[1],
                         big.mark = ",",
                         scientific = FALSE
                       ),
@@ -2590,14 +2576,7 @@ server <- function(
                         "±"
                       },
                       if (length(measured_protein_mw) > 1) {
-                        round(
-                          stats::sd(as.numeric(gsub(
-                            " Da",
-                            "",
-                            measured_protein_mw
-                          ))),
-                          2
-                        )
+                        round(stats::sd(measured_protein_mw), 2)
                       }
                     ))
                   )
@@ -2807,6 +2786,18 @@ server <- function(
             shiny::observeEvent(input$render_annotated_spectrum_btn, {
               manual_render_spectrum(manual_render_spectrum() + 1L)
             })
+
+            shiny::observeEvent(
+              list(input$truncate_names, input$color_variable, input$color_scale),
+              {
+                shiny::req(hits_summary, input$conversion_protein_picker)
+                n_samples <- length(unique(hits_summary$`Sample ID`[
+                  hits_summary$`Protein` == input$conversion_protein_picker
+                ]))
+                if (n_samples >= 30) manual_render_spectrum(0L)
+              },
+              ignoreInit = TRUE
+            )
 
             output$annotated_spectrum_container <- shiny::renderUI({
               shiny::req(hits_summary, input$conversion_protein_picker)
@@ -3614,7 +3605,7 @@ server <- function(
                   output,
                   session,
                   paste0(local_ui_id, "_hits"),
-                  data_fn = function() conc_tbl_raw(),
+                  data_fn = function() prepare_hits_export(conc_tbl_raw()),
                   filename_fn = function() {
                     paste0(
                       get_session_prefix(),
@@ -4286,8 +4277,8 @@ server <- function(
             shinyWidgets::updatePickerInput(
               session,
               "relbinding_hits_tab_col_select",
-              choices = c("Theor. Prot.", "Total %-Binding"),
-              selected = c("Theor. Prot.", "Total %-Binding")
+              choices = c("Theor. Prot. [Da]", "Total %-Binding"),
+              selected = c("Theor. Prot. [Da]", "Total %-Binding")
             )
           }
 
@@ -4295,8 +4286,8 @@ server <- function(
             shinyWidgets::updatePickerInput(
               session,
               "kikinact_hits_tab_col_select",
-              choices = c("Theor. Prot.", "Total %-Binding"),
-              selected = c("Theor. Prot.", "Total %-Binding")
+              choices = c("Theor. Prot. [Da]", "Total %-Binding"),
+              selected = c("Theor. Prot. [Da]", "Total %-Binding")
             )
           }
 
@@ -5011,11 +5002,11 @@ server <- function(
                       " – incubation time point"
                     ),
                     htmltools::tags$li(
-                      shiny::strong("Theor. Prot."),
+                      shiny::strong("Theor. Prot. [Da]"),
                       " – theoretical mass of the unmodified protein"
                     ),
                     htmltools::tags$li(
-                      shiny::strong("Meas. Prot."),
+                      shiny::strong("Meas. Prot. [Da]"),
                       " – measured deconvolved mass of the protein species"
                     ),
                     htmltools::tags$li(

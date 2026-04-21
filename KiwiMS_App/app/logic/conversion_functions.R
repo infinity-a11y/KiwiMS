@@ -3211,7 +3211,7 @@ multiple_spectra <- function(
 
   # Prepare hit marker symbols
   if (!all(is.na(peaks_data$mass))) {
-    prot_peaks <- hits_summary$`Meas. Prot.`[
+    prot_peaks <- hits_summary$`Meas. Prot. [Da]`[
       if (time) {
         hits_summary$`Sample ID` %in% samples
       } else if (!isFALSE(truncated)) {
@@ -3220,12 +3220,7 @@ multiple_spectra <- function(
         hits_summary$`Sample ID` %in% peaks_data$z
       }
     ]
-    prot_peaks <- prot_peaks[prot_peaks != "N/A"]
-    prot_peaks <- as.numeric(gsub(
-      " Da",
-      "",
-      prot_peaks
-    ))
+    prot_peaks <- prot_peaks[!is.na(prot_peaks)]
 
     prot_names <- unique(peaks_data$name[peaks_data$mass %in% prot_peaks])
 
@@ -3646,7 +3641,8 @@ filter_table_view <- function(table, colors, inputs, units) {
       `Total %` = `Total %-Binding`
     ) |>
     dplyr::mutate(
-      `Sample ID` = if (inputs$truncate_names) {
+      # Truncated label used only for color matching / display; original Sample ID kept
+      trunc_label = if (inputs$truncate_names) {
         table$`truncSample_ID`
       } else {
         `Sample ID`
@@ -3660,24 +3656,12 @@ filter_table_view <- function(table, colors, inputs, units) {
         } else if (inputs$color_variable == "Compounds") {
           `Cmp Name`
         } else if (inputs$color_variable == "Samples") {
-          `Sample ID`
+          trunc_label
         },
         names(colors)
       )]),
-      `%-Binding` = if (
-        is.null(inputs$binding_bar) || isTRUE(inputs$binding_bar)
-      ) {
-        round(`%-Binding`, 1)
-      } else {
-        as.character(round(`%-Binding`, 1))
-      },
-      `Total %` = if (
-        is.null(inputs$tot_binding_bar) || isTRUE(inputs$tot_binding_bar)
-      ) {
-        `Total %`
-      } else {
-        as.character(`Total %`)
-      },
+      `%-Binding` = round(`%-Binding`, 1),
+      `Total %` = `Total %`,
       col_var = !!rlang::sym(
         if (
           length(units) == 2 &&
@@ -3687,7 +3671,7 @@ filter_table_view <- function(table, colors, inputs, units) {
         } else if (inputs$color_variable == "Compounds") {
           "Cmp Name"
         } else if (inputs$color_variable == "Samples") {
-          "Sample ID"
+          "trunc_label"
         }
       )
     )
@@ -3745,7 +3729,17 @@ render_table_view <- function(table, colors, tab, inputs, units) {
     row_group <- list(dataSrc = which(names(table) == group_variable) - 1)
   }
 
-  # Format Mass Shift with stoichiometry subscript for display
+  # Display-only transforms: truncate Sample ID, format Mass Shift, coerce
+  # binding columns to character when bar renderer is off
+  if (isTRUE(inputs$truncate_names) && "trunc_label" %in% names(table)) {
+    table[["Sample ID"]] <- table[["trunc_label"]]
+  }
+  if (!is.null(inputs$binding_bar) && !isTRUE(inputs$binding_bar)) {
+    table[["%-Binding"]] <- as.character(table[["%-Binding"]])
+  }
+  if (!is.null(inputs$tot_binding_bar) && !isTRUE(inputs$tot_binding_bar)) {
+    table[["Total %"]] <- as.character(table[["Total %"]])
+  }
   table <- dplyr::mutate(
     table,
     `Mass Shift` = ifelse(
@@ -3787,6 +3781,7 @@ render_table_view <- function(table, colors, tab, inputs, units) {
             "col_var",
             "label_color",
             "Bind. Stoich.",
+            "trunc_label",
             if (tab == "Concentration") "Cmp Name"
           )
         ),
@@ -3850,7 +3845,7 @@ filter_hits_table <- function(
         `Sample ID`,
         `Protein`,
         `Cmp Name`,
-        `Theor. Prot.`,
+        `Theor. Prot. [Da]`,
         `Total %-Binding`,
         `truncSample_ID`
       )
@@ -4433,18 +4428,27 @@ transform_hits <- function(hits_summary) {
         c(`% Binding`, `Total % Binding`),
         ~ dplyr::if_else(is.na(.x), 0, round(.x * 100, 2))
       ),
-      # Format [Da] columns only if numeric
+      # Round protein mass columns (kept numeric for sorting/export)
       dplyr::across(
-        dplyr::ends_with("[Da]") & where(is.numeric),
+        dplyr::any_of(c("Mw Protein [Da]", "Measured Mw Protein [Da]")) & where(is.numeric),
+        ~ round(.x, 1)
+      ),
+      # Format remaining [Da] columns only if numeric
+      dplyr::across(
+        dplyr::ends_with("[Da]") & where(is.numeric) &
+          !dplyr::any_of(c("Mw Protein [Da]", "Measured Mw Protein [Da]")),
         ~ dplyr::if_else(
           is.na(.x),
           "N/A",
           paste(format(.x, nsmall = 1, trim = TRUE), "Da")
         )
       ),
-      # Global NA cleanup (convert to character)
+      # Global NA cleanup (convert to character, exclude numeric protein mass cols)
       dplyr::across(
-        !dplyr::any_of(c("Compound", "% Binding", "Total % Binding")),
+        !dplyr::any_of(c(
+          "Compound", "% Binding", "Total % Binding",
+          "Mw Protein [Da]", "Measured Mw Protein [Da]"
+        )),
         ~ tidyr::replace_na(as.character(.x), "N/A")
       )
     ) |>
@@ -4455,8 +4459,8 @@ transform_hits <- function(hits_summary) {
     "Well",
     "Sample ID",
     "Protein",
-    "Theor. Prot.",
-    "Meas. Prot.",
+    "Theor. Prot. [Da]",
+    "Meas. Prot. [Da]",
     "Δ Prot.",
     "Int. Prot.",
     "Peak Signal",
