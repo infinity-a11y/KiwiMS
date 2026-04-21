@@ -3348,7 +3348,7 @@ multiple_spectra <- function(
         marker_list <- list(
           size = 5,
           zindex = 100,
-          line = list(color = ~ I(linecolor), width = 2)
+          line = list(color = ~ I(linecolor), width = 3)
         )
       } else {
         marker_list <- list(
@@ -3356,7 +3356,7 @@ multiple_spectra <- function(
           symbol = ~ I(symbol),
           size = 5,
           zindex = 100,
-          line = list(color = ~ I(linecolor), width = 2)
+          line = list(color = ~ I(linecolor), width = 3)
         )
       }
 
@@ -3541,13 +3541,11 @@ multiple_spectra <- function(
       plotly::add_markers(
         data = dplyr::mutate(
           peaks_data,
-          # color = paste0(color, "50"),
           symbol = paste0(symbol, "-open")
         ),
         x = ~mass,
         y = ~intensity,
         split = ~ interaction(z, color),
-        # split = ~z, # Splitting by time
         legendgroup = ~z,
         mode = "markers",
         color = marker_color,
@@ -3746,8 +3744,12 @@ render_table_view <- function(table, colors, tab, inputs, units) {
       `Mass Shift` == "N/A",
       "N/A",
       paste0(
-        "[", `Mass Shift`, "]",
-        "&thinsp;<sub>", `Bind. Stoich.`, "</sub>"
+        "[",
+        `Mass Shift`,
+        "]",
+        "&thinsp;<sub>",
+        `Bind. Stoich.`,
+        "</sub>"
       )
     )
   )
@@ -4430,12 +4432,14 @@ transform_hits <- function(hits_summary) {
       ),
       # Round protein mass columns (kept numeric for sorting/export)
       dplyr::across(
-        dplyr::any_of(c("Mw Protein [Da]", "Measured Mw Protein [Da]")) & where(is.numeric),
+        dplyr::any_of(c("Mw Protein [Da]", "Measured Mw Protein [Da]")) &
+          where(is.numeric),
         ~ round(.x, 1)
       ),
       # Format remaining [Da] columns only if numeric
       dplyr::across(
-        dplyr::ends_with("[Da]") & where(is.numeric) &
+        dplyr::ends_with("[Da]") &
+          where(is.numeric) &
           !dplyr::any_of(c("Mw Protein [Da]", "Measured Mw Protein [Da]")),
         ~ dplyr::if_else(
           is.na(.x),
@@ -4446,8 +4450,11 @@ transform_hits <- function(hits_summary) {
       # Global NA cleanup (convert to character, exclude numeric protein mass cols)
       dplyr::across(
         !dplyr::any_of(c(
-          "Compound", "% Binding", "Total % Binding",
-          "Mw Protein [Da]", "Measured Mw Protein [Da]"
+          "Compound",
+          "% Binding",
+          "Total % Binding",
+          "Mw Protein [Da]",
+          "Measured Mw Protein [Da]"
         )),
         ~ tidyr::replace_na(as.character(.x), "N/A")
       )
@@ -5156,11 +5163,12 @@ cmp_compound_distribution <- function(
         showgrid = FALSE,
         zeroline = FALSE,
         color = axis_color,
-        showticklabels = ifelse(
-          !is.null(distribution_labels),
-          distribution_labels,
-          max(nchar(levels(tbl$`Sample ID`))) <= 22 | nrow(tbl) < 4
-        )
+        showticklabels = TRUE
+        #   ifelse(
+        #   !is.null(distribution_labels),
+        #   distribution_labels,
+        #   max(nchar(levels(tbl$`Sample ID`))) <= 22 | nrow(tbl) < 4
+        # )
       ),
       yaxis = list(
         range = range,

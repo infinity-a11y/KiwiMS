@@ -2349,7 +2349,6 @@ server <- function(
       delay(1000, show(selector = "#app-deconvolution_main-processing"))
 
       ### Render result spectrum
-
       setup_plot_dl(
         input,
         output,
@@ -2386,6 +2385,8 @@ server <- function(
             TRUE,
             input$spectrum_annotation
           )
+          theme333 <<- theme
+
           if (!is.null(plot_data)) {
             spectrum_plot(
               plot_data = plot_data,

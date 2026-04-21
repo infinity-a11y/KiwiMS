@@ -4556,10 +4556,7 @@ sample-file-row .form-group {
   background-color: rgba(0, 0, 0, 0.04);
   border: none;
   user-select: none;
-
-  &:first-of-type {
-    border-top: 2px solid rgba(0, 0, 0, 0.08);
-  }
+  margin-top: 2px;
 
   .settings-collapse-icon {
     transition: transform 0.2s ease;
