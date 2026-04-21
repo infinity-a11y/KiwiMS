@@ -89,22 +89,22 @@ ui <- function(id) {
                 trace[key].size = Math.round(trace[key].size * contextScale);
             });
           });
-          // Pad 3D scene axis titles to prevent overlap with scaled tick labels
-          if (contextScale > 1.0) {
-            var br = new Array(Math.ceil(contextScale) + 1).join('<br>');
-            Object.keys(fig.layout).forEach(function(key) {
-              if (!/^scene/.test(key)) return;
-              ['xaxis', 'yaxis', 'zaxis'].forEach(function(ax) {
-                var axis = fig.layout[key] && fig.layout[key][ax];
-                if (!axis) return;
-                if (typeof axis.title === 'string' && axis.title.length)
-                  axis.title = br + axis.title;
-                else if (axis.title && typeof axis.title.text === 'string' && axis.title.text.length)
-                  axis.title.text = br + axis.title.text;
-              });
-            });
-          }
         }
+        // For 3D scene axes: boost title font size so Plotly's layout engine
+        // places the title further from the tick labels (always applied for exports).
+        // Multiplier is context-dependent: both ticks and title scale with contextScale,
+        // so a flat multiplier keeps their ratio (and the overlap) constant. We need
+        // the title-to-tick ratio to grow at larger contexts to create real standoff.
+        var titleBoost3D = { small: 1.3, normal: 1.8, large: 2.5, xlarge: 3.5 }[msg.context] || 1.8;
+        Object.keys(fig.layout).forEach(function(key) {
+          if (!/^scene/.test(key)) return;
+          ['xaxis', 'yaxis', 'zaxis'].forEach(function(ax) {
+            var axis = fig.layout[key] && fig.layout[key][ax];
+            if (!axis) return;
+            if (!axis.titlefont) axis.titlefont = {};
+            axis.titlefont.size = Math.round((axis.titlefont.size || 14) * titleBoost3D);
+          });
+        });
         document.body.style.cursor = 'progress';
         var div = document.createElement('div');
         div.className = 'plotly-dl-offscreen';

@@ -1101,6 +1101,10 @@ td.listbox.htDimmed.current.highlight {
   background-color: hsl(0deg 0% 100% / 50%) !important;
 }
 
+.bslib-full-screen-enter:hover {
+  background-color: rgb(255 255 255 / 70%) !important;
+}
+
 .bslib-full-screen-enter > svg {
   fill: rgb(0 0 0) !important;
 }
@@ -2323,6 +2327,7 @@ div[data-value="Protein Conversion"] .tab-pane {
   justify-content: center;
   height: 300px;
   gap: 1rem;
+  padding: 1rem;
 
   p {
     font-size: 0.9em;
@@ -4549,8 +4554,7 @@ sample-file-row .form-group {
   letter-spacing: 0.06em;
   color: var(--bs-secondary);
   background-color: rgba(0, 0, 0, 0.04);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-bottom: none;
+  border: none;
   user-select: none;
 
   &:first-of-type {
@@ -4564,10 +4568,6 @@ sample-file-row .form-group {
   &.collapsed .settings-collapse-icon {
     transform: rotate(-90deg);
   }
-}
-
-.settings-collapse-header + .collapse > .settings-table {
-  border-top: none;
 }
 
 .settings-dest-row {

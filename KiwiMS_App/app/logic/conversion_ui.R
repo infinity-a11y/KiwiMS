@@ -13,7 +13,7 @@ box::use(
     ],
   app /
     logic /
-    plot_download[plot_dl_popover, table_dl_buttons, table_dl_popover],
+    plot_download[card_settings_popover, plot_dl_popover, table_dl_buttons, table_dl_popover],
 )
 
 # Ki/kinact results interface
@@ -29,8 +29,7 @@ ki_kinact_concentrations_tabs <- function(ns, local_ui_id, conc_result, units) {
           "Mass Spectra",
           shiny::div(
             class = "box-header-settings-help",
-            bslib::popover(
-              shiny::icon("gear"),
+            card_settings_popover(
               shiny::div(
                 shiny::div(
                   class = "spectrum-radio-button",
@@ -43,8 +42,7 @@ ki_kinact_concentrations_tabs <- function(ns, local_ui_id, conc_result, units) {
                   )
                 ),
                 style = "margin-right: 20px;"
-              ),
-              title = NULL
+              )
             ),
             plot_dl_popover(ns, paste0(local_ui_id, "_spectra")),
             bslib::tooltip(
@@ -210,8 +208,7 @@ ki_kinact_concentrations_tabs <- function(ns, local_ui_id, conc_result, units) {
           "Table View",
           shiny::div(
             class = "box-header-settings-help",
-            bslib::popover(
-              shiny::icon("gear"),
+            card_settings_popover(
               shiny::div(
                 shinyWidgets::materialSwitch(
                   ns(paste0(
@@ -232,8 +229,7 @@ ki_kinact_concentrations_tabs <- function(ns, local_ui_id, conc_result, units) {
                   right = TRUE
                 ),
                 style = "margin-right: 20px;"
-              ),
-              title = NULL
+              )
             ),
             table_dl_popover(ns, paste0(local_ui_id, "_hits")),
             bslib::tooltip(
@@ -962,8 +958,7 @@ binding_results_ui <- function(ns, hits_summary) {
                 "Table View",
                 shiny::div(
                   class = "box-header-settings-help",
-                  bslib::popover(
-                    shiny::icon("gear"),
+                  card_settings_popover(
                     shiny::div(
                       shinyWidgets::materialSwitch(
                         ns(
@@ -982,8 +977,7 @@ binding_results_ui <- function(ns, hits_summary) {
                         right = TRUE
                       ),
                       style = "margin-right: 20px;"
-                    ),
-                    title = NULL
+                    )
                   ),
                   table_dl_popover(ns, "samples_table_view"),
                   bslib::tooltip(
@@ -1059,8 +1053,7 @@ binding_results_ui <- function(ns, hits_summary) {
                 "Annotated Spectrum",
                 shiny::div(
                   class = "box-header-settings-help",
-                  bslib::popover(
-                    shiny::icon("gear"),
+                  card_settings_popover(
                     shiny::div(
                       shinyWidgets::materialSwitch(
                         ns("sample_view_spectrum_diff"),
@@ -1075,8 +1068,7 @@ binding_results_ui <- function(ns, hits_summary) {
                         right = TRUE
                       ),
                       style = "margin-right: 20px;"
-                    ),
-                    title = NULL
+                    )
                   ),
                   plot_dl_popover(ns, "samples_spectrum"),
                   bslib::tooltip(
@@ -1219,8 +1211,7 @@ binding_results_ui <- function(ns, hits_summary) {
                 "Table View",
                 shiny::div(
                   class = "box-header-settings-help",
-                  bslib::popover(
-                    shiny::icon("gear"),
+                  card_settings_popover(
                     shiny::div(
                       shinyWidgets::materialSwitch(
                         ns("compounds_table_view_binding_bar"),
@@ -1235,8 +1226,7 @@ binding_results_ui <- function(ns, hits_summary) {
                         right = TRUE
                       ),
                       style = "margin-right: 20px;"
-                    ),
-                    title = NULL
+                    )
                   ),
                   table_dl_popover(ns, "compounds_table_view"),
                   bslib::tooltip(
@@ -1275,8 +1265,7 @@ binding_results_ui <- function(ns, hits_summary) {
                 "Compound Distribution",
                 shiny::div(
                   class = "box-header-settings-help",
-                  bslib::popover(
-                    shiny::icon("gear"),
+                  card_settings_popover(
                     shiny::div(
                       shiny::radioButtons(
                         inputId = ns("cmp_distribution_scale"),
@@ -1290,8 +1279,7 @@ binding_results_ui <- function(ns, hits_summary) {
                         "compounds_distribution_labels_ui"
                       )),
                       style = "margin-right: 20px;"
-                    ),
-                    title = NULL
+                    )
                   ),
                   plot_dl_popover(ns, "compounds_cmp_dist"),
                   bslib::tooltip(
@@ -1324,15 +1312,16 @@ binding_results_ui <- function(ns, hits_summary) {
                 "Annotated Spectrum",
                 shiny::div(
                   class = "box-header-settings-help",
-                  bslib::popover(
-                    shiny::icon("gear"),
+                  card_settings_popover(
                     shiny::div(
-                      shiny::uiOutput(ns(
-                        "compounds_spectrum_labels_ui"
-                      )),
+                      shinyWidgets::materialSwitch(
+                        ns("compounds_spectrum_labels"),
+                        label = "Show Labels",
+                        value = TRUE,
+                        right = TRUE
+                      ),
                       style = "margin-right: 20px;"
-                    ),
-                    title = NULL
+                    )
                   ),
                   plot_dl_popover(ns, "compounds_spectrum"),
                   bslib::tooltip(
@@ -1428,15 +1417,13 @@ binding_results_ui <- function(ns, hits_summary) {
                     "Total %-Binding",
                     shiny::div(
                       class = "box-header-settings-help",
-                      bslib::popover(
-                        shiny::icon("gear"),
+                      card_settings_popover(
                         shiny::div(
                           shiny::uiOutput(ns(
                             "proteins_total_pct_binding"
                           )),
                           style = "margin-right: 20px;"
-                        ),
-                        title = NULL
+                        )
                       ),
                       bslib::tooltip(
                         shiny::div(
@@ -1476,8 +1463,7 @@ binding_results_ui <- function(ns, hits_summary) {
                 "Table View",
                 shiny::div(
                   class = "box-header-settings-help",
-                  bslib::popover(
-                    shiny::icon("gear"),
+                  card_settings_popover(
                     shiny::div(
                       shinyWidgets::materialSwitch(
                         ns("proteins_table_view_binding_bar"),
@@ -1492,8 +1478,7 @@ binding_results_ui <- function(ns, hits_summary) {
                         right = TRUE
                       ),
                       style = "margin-right: 20px;"
-                    ),
-                    title = NULL
+                    )
                   ),
                   table_dl_popover(ns, "proteins_table_view"),
                   bslib::tooltip(
@@ -1532,8 +1517,7 @@ binding_results_ui <- function(ns, hits_summary) {
                 "Compound Distribution",
                 shiny::div(
                   class = "box-header-settings-help",
-                  bslib::popover(
-                    shiny::icon("gear"),
+                  card_settings_popover(
                     shiny::div(
                       shiny::radioButtons(
                         inputId = ns("protein_distribution_scale"),
@@ -1547,8 +1531,7 @@ binding_results_ui <- function(ns, hits_summary) {
                         "proteins_distribution_labels_ui"
                       )),
                       style = "margin-right: 20px;"
-                    ),
-                    title = NULL
+                    )
                   ),
                   plot_dl_popover(ns, "proteins_cmp_dist"),
                   bslib::tooltip(
@@ -1587,15 +1570,13 @@ binding_results_ui <- function(ns, hits_summary) {
                 "Annotated Spectrum",
                 shiny::div(
                   class = "box-header-settings-help",
-                  bslib::popover(
-                    shiny::icon("gear"),
+                  card_settings_popover(
                     shiny::div(
                       shiny::uiOutput(ns(
                         "proteins_spectrum_labels_ui"
                       )),
                       style = "margin-right: 20px;"
-                    ),
-                    title = NULL
+                    )
                   ),
                   plot_dl_popover(ns, "proteins_spectrum"),
                   bslib::tooltip(

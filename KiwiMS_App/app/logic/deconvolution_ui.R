@@ -19,7 +19,9 @@ box::use(
 
 box::use(
   app / logic / user_settings[read_user_settings],
-  app / logic / plot_download[plot_dl_popover, table_dl_popover],
+  app /
+    logic /
+    plot_download[card_settings_popover, plot_dl_popover, table_dl_popover],
 )
 
 # Deconvolution initiation interface
@@ -138,8 +140,8 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                                   class = "btn-default"
                                 )
                               ),
-                              "Save setting",
-                              placement = "bottom"
+                              "Save Setting",
+                              placement = "top"
                             )
                           )
                         )
@@ -177,8 +179,8 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                                   class = "btn-default"
                                 )
                               ),
-                              "Save setting",
-                              placement = "bottom"
+                              "Save Setting",
+                              placement = "top"
                             )
                           )
                         )
@@ -231,8 +233,8 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                                   class = "btn-default"
                                 )
                               ),
-                              "Save setting",
-                              placement = "bottom"
+                              "Save Setting",
+                              placement = "top"
                             )
                           )
                         )
@@ -270,8 +272,8 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                                   class = "btn-default"
                                 )
                               ),
-                              "Save setting",
-                              placement = "bottom"
+                              "Save Setting",
+                              placement = "top"
                             )
                           )
                         )
@@ -339,8 +341,8 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                                   class = "btn-default"
                                 )
                               ),
-                              "Save setting",
-                              placement = "bottom"
+                              "Save Setting",
+                              placement = "top"
                             )
                           )
                         )
@@ -378,8 +380,8 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                                   class = "btn-default"
                                 )
                               ),
-                              "Save setting",
-                              placement = "bottom"
+                              "Save Setting",
+                              placement = "top"
                             )
                           )
                         )
@@ -432,8 +434,8 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                                   class = "btn-default"
                                 )
                               ),
-                              "Save setting",
-                              placement = "bottom"
+                              "Save Setting",
+                              placement = "top"
                             )
                           )
                         )
@@ -471,8 +473,8 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                                   class = "btn-default"
                                 )
                               ),
-                              "Save setting",
-                              placement = "bottom"
+                              "Save Setting",
+                              placement = "top"
                             )
                           )
                         )
@@ -547,8 +549,8 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                                   class = "btn-default"
                                 )
                               ),
-                              "Save setting",
-                              placement = "bottom"
+                              "Save Setting",
+                              placement = "top"
                             )
                           )
                         )
@@ -599,8 +601,8 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                                   class = "btn-default"
                                 )
                               ),
-                              "Save setting",
-                              placement = "bottom"
+                              "Save Setting",
+                              placement = "top"
                             )
                           )
                         )
@@ -643,8 +645,8 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                                   class = "btn-default"
                                 )
                               ),
-                              "Save setting",
-                              placement = "bottom"
+                              "Save Setting",
+                              placement = "top"
                             )
                           )
                         )
@@ -711,8 +713,8 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                                   class = "btn-default"
                                 )
                               ),
-                              "Save setting",
-                              placement = "bottom"
+                              "Save Setting",
+                              placement = "top"
                             )
                           )
                         )
@@ -855,20 +857,20 @@ deconvolution_status_controls <- function(ns) {
             ),
             shiny$column(
               width = 4,
-              shiny$div(
-                class = "decon-btn",
-                bslib::tooltip(
-                  disabled(
+              bslib::tooltip(
+                shiny$div(
+                  class = "decon-btn",
+                  shinyjs::disabled(
                     shiny$actionButton(
                       ns("deconvolution_report"),
                       "Report",
                       icon = shiny$icon("square-poll-vertical"),
                       width = "100%"
                     )
-                  ),
-                  "Report generation is temporarily unavailable",
-                  placement = "top"
-                )
+                  )
+                ),
+                "Report generation is temporarily unavailable",
+                placement = "top"
               )
             ),
             shiny$column(
@@ -907,8 +909,7 @@ deconvolution_results_ui <- function(ns, show_heatmap = FALSE) {
         "Spectrum",
         shiny::div(
           class = "box-header-settings-help",
-          bslib::popover(
-            shiny::icon("gear"),
+          card_settings_popover(
             shiny::div(
               shiny::div(
                 class = "spectrum-radio-button",
@@ -925,8 +926,7 @@ deconvolution_results_ui <- function(ns, show_heatmap = FALSE) {
                 right = TRUE
               ),
               style = "margin-right: 20px;"
-            ),
-            title = NULL
+            )
           ),
           plot_dl_popover(ns, "decon_spectrum"),
           tooltip(

@@ -103,8 +103,8 @@ server <- function(
                         class = "btn-default"
                       )
                     ),
-                    "Save setting",
-                    placement = "bottom"
+                    "Save Setting",
+                    placement = "top"
                   ),
                   tooltip(
                     shiny::div(
@@ -144,8 +144,8 @@ server <- function(
                         class = "btn-default"
                       )
                     ),
-                    "Save setting",
-                    placement = "bottom"
+                    "Save Setting",
+                    placement = "top"
                   ),
                   tooltip(
                     shiny::div(
@@ -232,13 +232,16 @@ server <- function(
                   )
                 )
               ),
+
               bslib::tooltip(
-                shinyjs::disabled(
-                  shiny::actionButton(
-                    ns("report_conversion_results"),
-                    "Report",
-                    icon = shiny::icon("square-poll-vertical"),
-                    width = "100%"
+                shiny$div(
+                  shinyjs::disabled(
+                    shiny::actionButton(
+                      ns("report_conversion_results"),
+                      "Report",
+                      icon = shiny::icon("square-poll-vertical"),
+                      width = "100%"
+                    )
                   )
                 ),
                 "Report generation is temporarily unavailable",

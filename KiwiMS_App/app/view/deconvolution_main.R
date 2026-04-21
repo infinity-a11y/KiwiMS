@@ -2350,31 +2350,58 @@ server <- function(
 
       ### Render result spectrum
 
-      setup_plot_dl(input, output, session, "decon_spectrum",
+      setup_plot_dl(
+        input,
+        output,
+        session,
+        "decon_spectrum",
         build_fn = function(theme) {
           shiny$req(result_files_sel())
           result_dir <- file.path(
             analysis_dest(),
             gsub(".raw", "_rawdata_unidecfiles", result_files_sel())
           )
-          sel_base <- gsub("\\.raw$", "", result_files_sel(), ignore.case = TRUE)
+          sel_base <- gsub(
+            "\\.raw$",
+            "",
+            result_files_sel(),
+            ignore.case = TRUE
+          )
           db_sp <- file.path(
             analysis_dest(),
             paste0(trimws(input$analysis_name), ".db")
           )
           is_raw_toggle <- as.logical(ifelse(
-            !is.null(input$toggle_result), input$toggle_result, FALSE
+            !is.null(input$toggle_result),
+            input$toggle_result,
+            FALSE
           ))
           plot_data <- if (file.exists(db_sp)) {
             process_plot_data_db(db_sp, sel_base, raw = is_raw_toggle)
           } else {
             NULL
           }
-          show_labels <- ifelse(is.null(input$spectrum_annotation), TRUE, input$spectrum_annotation)
+          show_labels <- ifelse(
+            is.null(input$spectrum_annotation),
+            TRUE,
+            input$spectrum_annotation
+          )
           if (!is.null(plot_data)) {
-            spectrum_plot(plot_data = plot_data, raw = is_raw_toggle, show_peak_labels = show_labels, show_mass_diff = FALSE, theme = theme)
+            spectrum_plot(
+              plot_data = plot_data,
+              raw = is_raw_toggle,
+              show_peak_labels = show_labels,
+              show_mass_diff = FALSE,
+              theme = theme
+            )
           } else if (dir.exists(result_dir)) {
-            spectrum_plot(result_path = result_dir, raw = is_raw_toggle, show_peak_labels = show_labels, show_mass_diff = FALSE, theme = theme)
+            spectrum_plot(
+              result_path = result_dir,
+              raw = is_raw_toggle,
+              show_peak_labels = show_labels,
+              show_mass_diff = FALSE,
+              theme = theme
+            )
           } else {
             shiny$req(FALSE)
           }
@@ -2530,23 +2557,18 @@ server <- function(
         }
 
         if (nrow(error_rows) > 0) {
-          units <- c("", "s", "", "", "m/z", "z", "", "")
           tbl <- data.frame(
             Parameter = c(
-              "Fitting error",
-              "Computation time",
-              "Iteration count",
+              "Fitting Error",
+              "Computation Time [s]",
+              "Iteration Count",
               "UniScore (Quality)",
-              "m/z sigma",
-              "z (Charge) sigma",
-              "beat (Suppression)",
-              "Point sigma"
+              "Sigma [m/z]",
+              "Charge Sigma [z]",
+              "Beat (Suppression)",
+              "Point Sigma"
             )[seq_len(nrow(error_rows))],
-            Value = paste(
-              round(error_rows$Value, 6),
-              units[seq_len(nrow(error_rows))],
-              sep = " "
-            )
+            Value = round(error_rows$Value, 6)
           )
 
           waiter_hide(id = ns("deconvolution_data"))
@@ -2587,7 +2609,9 @@ server <- function(
           paste0(trimws(input$analysis_name), ".db")
         )
 
-        if (file.exists(db_path) && sel_base %in% decon_failed_samples(db_path)) {
+        if (
+          file.exists(db_path) && sel_base %in% decon_failed_samples(db_path)
+        ) {
           return(data.frame())
         }
 
@@ -2628,29 +2652,30 @@ server <- function(
 
         shiny$req(nrow(error_rows) > 0)
 
-        units <- c("", "s", "", "", "m/z", "z", "", "")
         data.frame(
           Parameter = c(
             "Fitting error",
-            "Computation time",
+            "Computation time [s]",
             "Iteration count",
             "UniScore (Quality)",
-            "m/z sigma",
-            "z (Charge) sigma",
+            "m/z sigma [m/z]",
+            "z (Charge) sigma [z]",
             "beat (Suppression)",
             "Point sigma"
           )[seq_len(nrow(error_rows))],
-          Value = paste(
-            round(error_rows$Value, 6),
-            units[seq_len(nrow(error_rows))],
-            sep = " "
-          )
+          Value = round(error_rows$Value, 6)
         )
       })
 
-      setup_table_dl(input, output, session, "deconvolution_data",
+      setup_table_dl(
+        input,
+        output,
+        session,
+        "deconvolution_data",
         data_fn = function() deconvolution_metrics_raw(),
-        filename_fn = function() paste0(get_session_prefix(), "_Deconvolution_Metrics")
+        filename_fn = function() {
+          paste0(get_session_prefix(), "_Deconvolution_Metrics")
+        }
       )
 
       ### Failure overlay messages for Spectrum and Metrics cards

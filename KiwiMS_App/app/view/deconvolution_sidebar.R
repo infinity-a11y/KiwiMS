@@ -63,8 +63,8 @@ ui <- function(id) {
                   class = "btn-default"
                 )
               ),
-              "Save setting",
-              placement = "bottom"
+              "Save Setting",
+              placement = "top"
             )
           ),
           shiny::verbatimTextOutput(ns("path_selected"))
@@ -91,8 +91,8 @@ ui <- function(id) {
                   class = "btn-default"
                 )
               ),
-              "Save setting",
-              placement = "bottom"
+              "Save Setting",
+              placement = "top"
             )
           ),
           shiny::verbatimTextOutput(ns("targetpath_selected"))
