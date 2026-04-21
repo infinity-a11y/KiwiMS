@@ -63,7 +63,8 @@ ui <- function(id) {
       )
     ),
     shiny$div(id = "blocking-overlay"),
-    shiny$tags$script(shiny$HTML("
+    shiny$tags$script(shiny$HTML(
+      "
       Shiny.addCustomMessageHandler('downloadPlot', function(msg) {
         var qualityMap = {
           low:    { width: 1280, height: 720,  scale: 1 },
@@ -95,14 +96,15 @@ ui <- function(id) {
         // Multiplier is context-dependent: both ticks and title scale with contextScale,
         // so a flat multiplier keeps their ratio (and the overlap) constant. We need
         // the title-to-tick ratio to grow at larger contexts to create real standoff.
-        var titleBoost3D = { small: 1.3, normal: 1.8, large: 2.5, xlarge: 3.5 }[msg.context] || 1.8;
+        // var titleBoost3D = { small: 1.3, normal: 1.8, large: 2.5, xlarge: 3.5 }[msg.context] || 1.8;
         Object.keys(fig.layout).forEach(function(key) {
           if (!/^scene/.test(key)) return;
           ['xaxis', 'yaxis', 'zaxis'].forEach(function(ax) {
             var axis = fig.layout[key] && fig.layout[key][ax];
             if (!axis) return;
             if (!axis.titlefont) axis.titlefont = {};
-            axis.titlefont.size = Math.round((axis.titlefont.size || 14) * titleBoost3D);
+            // axis.titlefont.size = Math.round((axis.titlefont.size || 14) * titleBoost3D);
+            axis.titlefont.size = Math.round((axis.titlefont.size || 14));
           });
         });
         document.body.style.cursor = 'progress';
@@ -131,7 +133,8 @@ ui <- function(id) {
         if (document.body.style.cursor === 'progress')
           setTimeout(function() { document.body.style.cursor = ''; }, 300);
       });
-    ")),
+    "
+    )),
     useWaiter(),
     waiterShowOnLoad(
       html = shiny$tags$div(

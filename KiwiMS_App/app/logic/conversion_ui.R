@@ -13,7 +13,12 @@ box::use(
     ],
   app /
     logic /
-    plot_download[card_settings_popover, plot_dl_popover, table_dl_buttons, table_dl_popover],
+    plot_download[
+      card_settings_popover,
+      plot_dl_popover,
+      table_dl_buttons,
+      table_dl_popover
+    ],
 )
 
 # Ki/kinact results interface
@@ -1317,7 +1322,20 @@ binding_results_ui <- function(ns, hits_summary) {
                       shinyWidgets::materialSwitch(
                         ns("compounds_spectrum_labels"),
                         label = "Show Labels",
-                        value = TRUE,
+                        value = local({
+                          hits_summary1 <<- hits_summary
+                          cmp <- unique(hits_summary$`Cmp Name`)[1]
+                          tbl <- hits_summary[hits_summary$`Cmp Name` == cmp, ]
+                          if (is.na(cmp) || nrow(tbl) < 2) {
+                            return(TRUE)
+                          }
+                          ids <- tbl$`Sample ID`
+                          ids <- ids[!is.na(ids)]
+                          test <<- length(unique(ids)) <= 8 &
+                            max(nchar(as.character(ids))) <= 20
+                          length(unique(ids)) <= 8 &
+                            max(nchar(as.character(ids))) <= 20
+                        }),
                         right = TRUE
                       ),
                       style = "margin-right: 20px;"

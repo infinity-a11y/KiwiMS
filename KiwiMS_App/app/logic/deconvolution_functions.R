@@ -3,8 +3,12 @@
 box::use(
   data.table[fread, setnames, data.table, as.data.table],
   DBI[
-    dbConnect, dbDisconnect, dbExecute, dbWriteTable,
-    dbGetQuery, dbExistsTable
+    dbConnect,
+    dbDisconnect,
+    dbExecute,
+    dbWriteTable,
+    dbGetQuery,
+    dbExistsTable
   ],
   dplyr[left_join, mutate, n_distinct],
   ggplot2,
@@ -28,54 +32,69 @@ box::use(
 db_with_retry <- function(con, expr, max_wait_s = 300) {
   deadline <- proc.time()[["elapsed"]] + max_wait_s
   repeat {
-    ok <- tryCatch({
-      DBI::dbExecute(con, "BEGIN IMMEDIATE")
-      tryCatch(
-        {
-          force(expr)
-          DBI::dbExecute(con, "COMMIT")
-        },
-        error = function(e) {
-          tryCatch(DBI::dbExecute(con, "ROLLBACK"), error = function(e2) NULL)
+    ok <- tryCatch(
+      {
+        DBI::dbExecute(con, "BEGIN IMMEDIATE")
+        tryCatch(
+          {
+            force(expr)
+            DBI::dbExecute(con, "COMMIT")
+          },
+          error = function(e) {
+            tryCatch(DBI::dbExecute(con, "ROLLBACK"), error = function(e2) NULL)
+            stop(e)
+          }
+        )
+        TRUE
+      },
+      error = function(e) {
+        if (
+          grepl("locked|busy", e$message, ignore.case = TRUE) &&
+            proc.time()[["elapsed"]] < deadline
+        ) {
+          Sys.sleep(runif(1, 0.3, 1.2))
+          FALSE
+        } else {
           stop(e)
         }
-      )
-      TRUE
-    }, error = function(e) {
-      if (grepl("locked|busy", e$message, ignore.case = TRUE) &&
-          proc.time()[["elapsed"]] < deadline) {
-        Sys.sleep(runif(1, 0.3, 1.2))
-        FALSE
-      } else {
-        stop(e)
       }
-    })
+    )
     if (isTRUE(ok)) break
   }
 }
 
 # write_sample_status(): Write per-sample done/failed status to the shared DB ----
-write_sample_status <- function(db_path, sample_name, state,
-                                reason = NULL, error_msg = NULL) {
-  tryCatch({
-    con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
-    on.exit(DBI::dbDisconnect(con), add = TRUE)
-    DBI::dbExecute(con, "PRAGMA busy_timeout=300000")
-    db_with_retry(con, {
-      DBI::dbExecute(con,
-        "INSERT OR REPLACE INTO status(sample,state,reason,error_msg,timestamp)
+write_sample_status <- function(
+  db_path,
+  sample_name,
+  state,
+  reason = NULL,
+  error_msg = NULL
+) {
+  tryCatch(
+    {
+      con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+      on.exit(DBI::dbDisconnect(con), add = TRUE)
+      DBI::dbExecute(con, "PRAGMA busy_timeout=300000")
+      db_with_retry(con, {
+        DBI::dbExecute(
+          con,
+          "INSERT OR REPLACE INTO status(sample,state,reason,error_msg,timestamp)
          VALUES (?,?,?,?,?)",
-        params = list(
-          sample_name, state,
-          reason %||% NA_character_,
-          error_msg %||% NA_character_,
-          format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+          params = list(
+            sample_name,
+            state,
+            reason %||% NA_character_,
+            error_msg %||% NA_character_,
+            format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+          )
         )
-      )
-    })
-  }, error = function(e) {
-    message("Could not write status to DB for ", sample_name, ": ", e$message)
-  })
+      })
+    },
+    error = function(e) {
+      message("Could not write status to DB for ", sample_name, ": ", e$message)
+    }
+  )
 }
 
 `%||%` <- function(x, y) if (is.null(x)) y else x
@@ -104,7 +123,12 @@ process_single_dir <- function(
   result_dir <- gsub("\\\\", "/", result_dir)
 
   # Derive sample base name before tryCatch so it is available in the error handler
-  sample_basename <- gsub("\\.raw$", "", basename(input_path), ignore.case = TRUE)
+  sample_basename <- gsub(
+    "\\.raw$",
+    "",
+    basename(input_path),
+    ignore.case = TRUE
+  )
 
   # When discarding raw output, route UniDec intermediates to a per-sample
   # temp dir so the target directory stays clean throughout the run.
@@ -246,8 +270,13 @@ engine.pick_peaks()
       mass_file <- file.path(result, paste0(raw_name, "_mass.txt"))
       peaks_file <- file.path(result, paste0(raw_name, "_peaks.dat"))
 
-      if (dir.exists(result) && file.exists(mass_file) && file.exists(peaks_file)) {
-        conf_df <- read_file_safe(file.path(result, paste0(raw_name, "_conf.dat")))
+      if (
+        dir.exists(result) && file.exists(mass_file) && file.exists(peaks_file)
+      ) {
+        conf_df <- read_file_safe(file.path(
+          result,
+          paste0(raw_name, "_conf.dat")
+        ))
         if (nrow(conf_df) > 0) {
           conf_df <- conf_df[, 1:2]
           conf_df <- data.table::as.data.table(t(conf_df))
@@ -258,7 +287,10 @@ engine.pick_peaks()
           file.path(result, paste0(raw_name, "_peaks.dat")),
           c("mass", "intensity")
         )
-        error_df <- read_file_safe(file.path(result, paste0(raw_name, "_error.txt")))
+        error_df <- read_file_safe(file.path(
+          result,
+          paste0(raw_name, "_error.txt")
+        ))
         if (nrow(error_df) > 0) {
           error_df <- data.table::data.table(
             Key = as.character(error_df$V1),
@@ -275,7 +307,9 @@ engine.pick_peaks()
         DBI::dbExecute(con, "PRAGMA busy_timeout=300000")
 
         write_tbl <- function(tbl, df) {
-          if (is.null(df) || nrow(df) == 0) return(invisible(NULL))
+          if (is.null(df) || nrow(df) == 0) {
+            return(invisible(NULL))
+          }
           df <- as.data.frame(df)
           df$sample <- sample_basename
           DBI::dbWriteTable(con, tbl, df, append = TRUE)
@@ -284,9 +318,11 @@ engine.pick_peaks()
         db_with_retry(con, {
           for (tbl_name in c("peaks", "mass_data", "error", "config")) {
             if (DBI::dbExistsTable(con, tbl_name)) {
-              DBI::dbExecute(con,
+              DBI::dbExecute(
+                con,
                 sprintf("DELETE FROM %s WHERE sample = ?", tbl_name),
-                params = list(sample_basename))
+                params = list(sample_basename)
+              )
             }
           }
 
@@ -309,11 +345,17 @@ engine.pick_peaks()
             DBI::dbWriteTable(con, "config", config_long, append = TRUE)
           }
 
-          DBI::dbExecute(con,
+          DBI::dbExecute(
+            con,
             "INSERT OR REPLACE INTO status(sample,state,reason,error_msg,timestamp)
              VALUES (?,?,?,?,?)",
-            params = list(sample_basename, "done", NA_character_, NA_character_,
-                          format(Sys.time(), "%Y-%m-%d %H:%M:%S"))
+            params = list(
+              sample_basename,
+              "done",
+              NA_character_,
+              NA_character_,
+              format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+            )
           )
         })
       } else {
@@ -337,7 +379,13 @@ engine.pick_peaks()
         "\n"
       )
 
-      write_sample_status(db_path, sample_basename, "failed", "error", err_detail)
+      write_sample_status(
+        db_path,
+        sample_basename,
+        "failed",
+        "error",
+        err_detail
+      )
     }
   )
 }
@@ -502,7 +550,8 @@ deconvolute <- function(
     if (any(failed_idx)) {
       warning(
         "Errors occurred for ",
-        sum(failed_idx), " sample(s): ",
+        sum(failed_idx),
+        " sample(s): ",
         paste(basename(raw_dirs[failed_idx]), collapse = ", ")
       )
     }
@@ -833,6 +882,11 @@ spectrum_plot <- function(
   }
 
   # Theme Styling Logic
+
+  marker_fill_color <- "#ffa100"
+
+  theme666 <<- theme
+
   if (tolower(theme) == "light") {
     bg_color <- "rgba(0,0,0,0)"
     plot_bg_color <- "rgba(0,0,0,0)"
@@ -840,6 +894,7 @@ spectrum_plot <- function(
     grid_color <- "rgba(0, 0, 0, 0.1)"
     zeroline_color <- "rgba(0, 0, 0, 0.5)"
     data_line_color <- "black"
+    marker_border_color <- "#000000"
   } else {
     bg_color <- "rgba(0,0,0,0)"
     plot_bg_color <- "rgba(0,0,0,0)"
@@ -847,14 +902,12 @@ spectrum_plot <- function(
     grid_color <- "rgba(255, 255, 255, 0.2)"
     zeroline_color <- "rgba(255, 255, 255, 0.5)"
     data_line_color <- "white"
+    marker_border_color <- "#ffffff"
   }
 
   if (identical(color_variable, "Samples") && !is.null(color_cmp)) {
     data_line_color <- color_cmp
   }
-
-  marker_border_color <- if (tolower(theme) == "light") "#000000" else "#ffffff"
-  marker_fill_color   <- if (tolower(theme) == "light") "#e8cb97" else "#4a3a1a"
 
   # ggplot (non-interactive) section
   if (!interactive) {
@@ -1010,7 +1063,7 @@ spectrum_plot <- function(
             color = marker_fill_color,
             line = list(
               color = marker_border_color,
-              width = 1.5,
+              width = 1,
               zindex = 100
             ),
             symbol = "circle",
@@ -1577,91 +1630,151 @@ read_file_safe <- function(filename, col_names = NULL) {
 # pre-existing done records when extending an existing DB.
 #' @export
 decon_progress_count <- function(db_path, samples = NULL) {
-  tryCatch({
-    con <- DBI::dbConnect(RSQLite::SQLite(), db_path, flags = RSQLite::SQLITE_RO)
-    on.exit(DBI::dbDisconnect(con), add = TRUE)
-    if (!DBI::dbExistsTable(con, "status")) return(0L)
-    if (!is.null(samples) && length(samples) > 0) {
-      ph <- paste(rep("?", length(samples)), collapse = ",")
-      DBI::dbGetQuery(con,
-        sprintf("SELECT COUNT(*) AS n FROM status WHERE state='done' AND sample IN (%s)", ph),
-        params = as.list(samples))$n
-    } else {
-      DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM status WHERE state='done'")$n
-    }
-  }, error = function(e) 0L)
+  tryCatch(
+    {
+      con <- DBI::dbConnect(
+        RSQLite::SQLite(),
+        db_path,
+        flags = RSQLite::SQLITE_RO
+      )
+      on.exit(DBI::dbDisconnect(con), add = TRUE)
+      if (!DBI::dbExistsTable(con, "status")) {
+        return(0L)
+      }
+      if (!is.null(samples) && length(samples) > 0) {
+        ph <- paste(rep("?", length(samples)), collapse = ",")
+        DBI::dbGetQuery(
+          con,
+          sprintf(
+            "SELECT COUNT(*) AS n FROM status WHERE state='done' AND sample IN (%s)",
+            ph
+          ),
+          params = as.list(samples)
+        )$n
+      } else {
+        DBI::dbGetQuery(
+          con,
+          "SELECT COUNT(*) AS n FROM status WHERE state='done'"
+        )$n
+      }
+    },
+    error = function(e) 0L
+  )
 }
 
 # decon_is_complete(): TRUE when the 'completed' sentinel table exists ----
 #' @export
 decon_is_complete <- function(db_path) {
-  tryCatch({
-    con <- DBI::dbConnect(RSQLite::SQLite(), db_path, flags = RSQLite::SQLITE_RO)
-    on.exit(DBI::dbDisconnect(con), add = TRUE)
-    DBI::dbExistsTable(con, "completed")
-  }, error = function(e) FALSE)
+  tryCatch(
+    {
+      con <- DBI::dbConnect(
+        RSQLite::SQLite(),
+        db_path,
+        flags = RSQLite::SQLITE_RO
+      )
+      on.exit(DBI::dbDisconnect(con), add = TRUE)
+      DBI::dbExistsTable(con, "completed")
+    },
+    error = function(e) FALSE
+  )
 }
 
 # decon_failed_samples(): Return character vector of sample names that failed ----
 #' @export
 decon_failed_samples <- function(db_path) {
-  tryCatch({
-    con <- DBI::dbConnect(RSQLite::SQLite(), db_path, flags = RSQLite::SQLITE_RO)
-    on.exit(DBI::dbDisconnect(con), add = TRUE)
-    if (!DBI::dbExistsTable(con, "status")) return(character(0))
-    DBI::dbGetQuery(con, "SELECT sample FROM status WHERE state='failed'")$sample
-  }, error = function(e) character(0))
+  tryCatch(
+    {
+      con <- DBI::dbConnect(
+        RSQLite::SQLite(),
+        db_path,
+        flags = RSQLite::SQLITE_RO
+      )
+      on.exit(DBI::dbDisconnect(con), add = TRUE)
+      if (!DBI::dbExistsTable(con, "status")) {
+        return(character(0))
+      }
+      DBI::dbGetQuery(
+        con,
+        "SELECT sample FROM status WHERE state='failed'"
+      )$sample
+    },
+    error = function(e) character(0)
+  )
 }
 
 # process_plot_data_db(): Load spectrum data for a single sample from the DB ----
 #' @export
-process_plot_data_db <- function(db_path, sample_name, raw = FALSE, bin_width = 0.01) {
-  tryCatch({
-    con <- DBI::dbConnect(RSQLite::SQLite(), db_path, flags = RSQLite::SQLITE_RO)
-    on.exit(DBI::dbDisconnect(con), add = TRUE)
-
-    if (raw) {
-      if (!DBI::dbExistsTable(con, "rawdata")) return(NULL)
-      mass <- DBI::dbGetQuery(
-        con,
-        "SELECT mass, intensity FROM rawdata WHERE sample = ?",
-        params = list(sample_name)
+process_plot_data_db <- function(
+  db_path,
+  sample_name,
+  raw = FALSE,
+  bin_width = 0.01
+) {
+  tryCatch(
+    {
+      con <- DBI::dbConnect(
+        RSQLite::SQLite(),
+        db_path,
+        flags = RSQLite::SQLITE_RO
       )
-      if (nrow(mass) == 0) return(NULL)
-      mass <- as.data.table(mass)
-      mass[, bin := floor(mass / bin_width) * bin_width + bin_width / 2]
-      mass <- mass[, .(intensity = sum(intensity)), by = bin]
-      data.table::setnames(mass, "bin", "mass")
-      mass$intensity <- (mass$intensity - min(mass$intensity)) /
-        (max(mass$intensity) - min(mass$intensity)) * 100
-      return(list(mass = as.data.frame(mass), highlight_peaks = NULL))
-    } else {
-      if (!DBI::dbExistsTable(con, "mass_data")) return(NULL)
-      mass <- DBI::dbGetQuery(
-        con,
-        "SELECT mass, intensity FROM mass_data WHERE sample = ? AND intensity != 0",
-        params = list(sample_name)
-      )
-      if (nrow(mass) < 3) return(NULL)
-      mass <- mass[-c(1, nrow(mass)), ]
-      mass$intensity <- (mass$intensity - min(mass$intensity)) /
-        (max(mass$intensity) - min(mass$intensity)) * 100
+      on.exit(DBI::dbDisconnect(con), add = TRUE)
 
-      peaks <- if (DBI::dbExistsTable(con, "peaks")) {
-        DBI::dbGetQuery(
+      if (raw) {
+        if (!DBI::dbExistsTable(con, "rawdata")) {
+          return(NULL)
+        }
+        mass <- DBI::dbGetQuery(
           con,
-          "SELECT mass, intensity FROM peaks WHERE sample = ?",
+          "SELECT mass, intensity FROM rawdata WHERE sample = ?",
           params = list(sample_name)
         )
-      } else data.frame(mass = numeric(0), intensity = numeric(0))
+        if (nrow(mass) == 0) {
+          return(NULL)
+        }
+        mass <- as.data.table(mass)
+        mass[, bin := floor(mass / bin_width) * bin_width + bin_width / 2]
+        mass <- mass[, .(intensity = sum(intensity)), by = bin]
+        data.table::setnames(mass, "bin", "mass")
+        mass$intensity <- (mass$intensity - min(mass$intensity)) /
+          (max(mass$intensity) - min(mass$intensity)) *
+          100
+        return(list(mass = as.data.frame(mass), highlight_peaks = NULL))
+      } else {
+        if (!DBI::dbExistsTable(con, "mass_data")) {
+          return(NULL)
+        }
+        mass <- DBI::dbGetQuery(
+          con,
+          "SELECT mass, intensity FROM mass_data WHERE sample = ? AND intensity != 0",
+          params = list(sample_name)
+        )
+        if (nrow(mass) < 3) {
+          return(NULL)
+        }
+        mass <- mass[-c(1, nrow(mass)), ]
+        mass$intensity <- (mass$intensity - min(mass$intensity)) /
+          (max(mass$intensity) - min(mass$intensity)) *
+          100
 
-      highlight_peaks <- mass[mass$mass %in% peaks$mass, ]
-      return(list(mass = mass, highlight_peaks = highlight_peaks))
+        peaks <- if (DBI::dbExistsTable(con, "peaks")) {
+          DBI::dbGetQuery(
+            con,
+            "SELECT mass, intensity FROM peaks WHERE sample = ?",
+            params = list(sample_name)
+          )
+        } else {
+          data.frame(mass = numeric(0), intensity = numeric(0))
+        }
+
+        highlight_peaks <- mass[mass$mass %in% peaks$mass, ]
+        return(list(mass = mass, highlight_peaks = highlight_peaks))
+      }
+    },
+    error = function(e) {
+      message("process_plot_data_db error for ", sample_name, ": ", e$message)
+      NULL
     }
-  }, error = function(e) {
-    message("process_plot_data_db error for ", sample_name, ": ", e$message)
-    NULL
-  })
+  )
 }
 
 # generate_decon_rslt(): Finalise the SQLite DB after all workers complete ----
@@ -1694,11 +1807,23 @@ generate_decon_rslt <- function(
   )
 
   # Indexes for fast per-sample queries on large tables (idempotent)
-  for (tbl in c("rawdata", "input_dat", "peaks", "mass_data", "error", "config")) {
+  for (tbl in c(
+    "rawdata",
+    "input_dat",
+    "peaks",
+    "mass_data",
+    "error",
+    "config"
+  )) {
     if (DBI::dbExistsTable(con, tbl)) {
-      DBI::dbExecute(con, sprintf(
-        "CREATE INDEX IF NOT EXISTS idx_%s_sample ON %s(sample)", tbl, tbl
-      ))
+      DBI::dbExecute(
+        con,
+        sprintf(
+          "CREATE INDEX IF NOT EXISTS idx_%s_sample ON %s(sample)",
+          tbl,
+          tbl
+        )
+      )
     }
   }
 
@@ -1706,10 +1831,12 @@ generate_decon_rslt <- function(
   DBI::dbWriteTable(
     con,
     "completed",
-    data.frame(finished_at = format(Sys.time(), "%Y-%m-%d %H:%M:%S"), stringsAsFactors = FALSE),
+    data.frame(
+      finished_at = format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+      stringsAsFactors = FALSE
+    ),
     overwrite = TRUE
   )
 
   invisible(db_path)
 }
-

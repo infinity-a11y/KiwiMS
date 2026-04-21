@@ -220,11 +220,16 @@ table_dl_buttons <- function(ns, prefix) {
 # drops the internal truncSample_ID column.
 #' @export
 prepare_hits_export <- function(table) {
-  table1 <<- table
   table[is.na(table)] <- "N/A"
-  table[, !names(table) %in% c(
-    "truncSample_ID", "label_color", "col_var", "trunc_label"
-  )]
+  table[,
+    !names(table) %in%
+      c(
+        "truncSample_ID",
+        "label_color",
+        "col_var",
+        "trunc_label"
+      )
+  ]
 }
 
 # Registers CSV/Excel download handlers for a DT table.

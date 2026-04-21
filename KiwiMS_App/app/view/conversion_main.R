@@ -593,8 +593,6 @@ server <- function(
           return()
         }
         meta <- read_decon_metadata(file_path)
-        meta1 <<- meta
-        file_path1 <<- file_path
         declaration_vars$result <- c(meta, list(.db_path = file_path))
 
         # New table data
@@ -1262,7 +1260,6 @@ server <- function(
         ))
 
         result_list <- conversion_sidebar_vars$result_list()
-        result_list1 <<- result_list
 
         if (!is.null(result_list)) {
           # Show declaration interface
@@ -1489,7 +1486,6 @@ server <- function(
           output$kobs_result <- NULL
           output$binding_plot <- NULL
           output$kobs_plot <- NULL
-          conversion_vars_select_concentration <<- conversion_vars$select_concentration
 
           if (!is.null(conversion_vars$select_concentration)) {
             lapply(names(conversion_vars$select_concentration), function(id) {
@@ -2254,8 +2250,9 @@ server <- function(
                 sample_ids <- tbl$`Sample ID`
               }
 
-              condition <- max(nchar(unique(sample_ids))) <= 22 |
-                nrow(tbl) < 4
+              # condition <- max(nchar(unique(sample_ids))) <= 22 |
+              #   nrow(tbl) < 4
+              condition <- TRUE
 
               shinyWidgets::materialSwitch(
                 ns("cmp_distribution_labels"),
@@ -2266,6 +2263,18 @@ server <- function(
             })
 
             ###### Annotated spectrum ----
+
+            compounds_labels_val <- shiny::reactiveVal(local({
+              cmp <- unique(hits_summary$`Cmp Name`)[1]
+              tbl <- hits_summary[hits_summary$`Cmp Name` == cmp, ]
+              if (is.na(cmp) || nrow(tbl) < 2) {
+                return(TRUE)
+              }
+              ids <- tbl$`Sample ID`
+              test2 <<- length(unique(ids)) <= 8 &
+                max(nchar(as.character(ids))) <= 20
+              length(unique(ids)) <= 8 & max(nchar(as.character(ids))) <= 20
+            }))
 
             shiny::observeEvent(
               input$conversion_compound_picker,
@@ -2280,7 +2289,11 @@ server <- function(
             })
 
             shiny::observeEvent(
-              list(input$truncate_names, input$color_variable, input$color_scale),
+              list(
+                input$truncate_names,
+                input$color_variable,
+                input$color_scale
+              ),
               {
                 shiny::req(hits_summary, input$conversion_compound_picker)
                 n_samples <- length(unique(hits_summary$`Sample ID`[
@@ -2383,6 +2396,7 @@ server <- function(
                   show_mass_diff = FALSE
                 )
               } else {
+                compounds_labels_val2 <<- compounds_labels_val()
                 plot <- multiple_spectra(
                   results_list = result_list,
                   samples = unique(hits_summary$`Sample ID`[
@@ -2397,7 +2411,7 @@ server <- function(
                   truncated = if (truncate_names) mapping else FALSE,
                   color_variable = color_variable,
                   hits_summary = hits_summary,
-                  labels_show = input$compounds_spectrum_labels
+                  labels_show = compounds_labels_val()
                 )
               }
 
@@ -2414,7 +2428,7 @@ server <- function(
                 render_trigger(),
                 input$truncate_names,
                 input$color_scale,
-                input$compounds_spectrum_labels,
+                compounds_labels_val(),
                 manual_render_cmp_spectrum()
               )
 
@@ -2426,8 +2440,11 @@ server <- function(
                 dplyr::filter(`Cmp Name` == input$conversion_compound_picker)
 
               if (nrow(tbl) < 2) {
+                compounds_labels_val(TRUE)
                 shinyWidgets::updateMaterialSwitch(
-                  session, "compounds_spectrum_labels", value = TRUE
+                  session,
+                  "compounds_spectrum_labels",
+                  value = TRUE
                 )
                 shinyjs::disable("compounds_spectrum_labels")
                 return()
@@ -2442,13 +2459,25 @@ server <- function(
               }
 
               labels_show <- (length(unique(sample_ids)) <= 8 &
-                max(nchar(as.character(sample_ids))) <= 20) |
-                isTRUE(run_ki_kinact)
+                max(nchar(as.character(sample_ids))) <= 20)
 
+              labels_show3 <<- labels_show
+
+              compounds_labels_val(labels_show)
               shinyWidgets::updateMaterialSwitch(
-                session, "compounds_spectrum_labels", value = labels_show
+                session,
+                "compounds_spectrum_labels",
+                value = labels_show
               )
             })
+
+            shiny::observeEvent(
+              input$compounds_spectrum_labels,
+              {
+                compounds_labels_val(input$compounds_spectrum_labels)
+              },
+              ignoreInit = TRUE
+            )
 
             ###### Compounds view table ----
             output$compounds_table_view <- DT::renderDataTable(
@@ -2788,7 +2817,11 @@ server <- function(
             })
 
             shiny::observeEvent(
-              list(input$truncate_names, input$color_variable, input$color_scale),
+              list(
+                input$truncate_names,
+                input$color_variable,
+                input$color_scale
+              ),
               {
                 shiny::req(hits_summary, input$conversion_protein_picker)
                 n_samples <- length(unique(hits_summary$`Sample ID`[
