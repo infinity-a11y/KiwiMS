@@ -858,13 +858,13 @@ deconvolution_status_controls <- function(ns) {
             shiny$column(
               width = 4,
               bslib::tooltip(
-                shiny$div(
+                shiny::div(
                   class = "decon-btn",
                   shinyjs::disabled(
-                    shiny$actionButton(
+                    shiny::actionButton(
                       ns("deconvolution_report"),
                       "Report",
-                      icon = shiny$icon("square-poll-vertical"),
+                      icon = shiny::icon("square-poll-vertical"),
                       width = "100%"
                     )
                   )

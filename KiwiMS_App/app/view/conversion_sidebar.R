@@ -234,7 +234,7 @@ server <- function(
               ),
 
               bslib::tooltip(
-                shiny$div(
+                shiny::div(
                   shinyjs::disabled(
                     shiny::actionButton(
                       ns("report_conversion_results"),
