@@ -19,6 +19,9 @@ box::use(
 
 box::use(
   app / logic / user_settings[read_user_settings],
+  app /
+    logic /
+    plot_download[card_settings_popover, plot_dl_popover, table_dl_popover],
 )
 
 # Deconvolution initiation interface
@@ -91,13 +94,17 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                       "The number of charges the ionized molecule is expected to carry.",
                       placement = "bottom"
                     ),
-                    shiny$div(
-                      class = "tooltip-bttn",
-                      shiny$actionButton(
-                        ns("charge_range_tooltip_bttn"),
-                        label = NULL,
-                        icon = shiny$icon("circle-question")
-                      )
+                    tooltip(
+                      shiny$div(
+                        class = "tooltip-bttn",
+                        shiny$actionButton(
+                          ns("charge_range_tooltip_bttn"),
+                          label = NULL,
+                          icon = shiny$icon("circle-question")
+                        )
+                      ),
+                      "Help",
+                      placement = "top"
                     )
                   ),
                   card_body(
@@ -133,8 +140,8 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                                   class = "btn-default"
                                 )
                               ),
-                              "Save as default value",
-                              placement = "bottom"
+                              "Save Setting",
+                              placement = "top"
                             )
                           )
                         )
@@ -172,8 +179,8 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                                   class = "btn-default"
                                 )
                               ),
-                              "Save as default value",
-                              placement = "bottom"
+                              "Save Setting",
+                              placement = "top"
                             )
                           )
                         )
@@ -226,8 +233,8 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                                   class = "btn-default"
                                 )
                               ),
-                              "Save as default value",
-                              placement = "bottom"
+                              "Save Setting",
+                              placement = "top"
                             )
                           )
                         )
@@ -265,8 +272,8 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                                   class = "btn-default"
                                 )
                               ),
-                              "Save as default value",
-                              placement = "bottom"
+                              "Save Setting",
+                              placement = "top"
                             )
                           )
                         )
@@ -288,13 +295,17 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                       "The span of molecular weights to be deconvoluted.",
                       placement = "bottom"
                     ),
-                    shiny$div(
-                      class = "tooltip-bttn",
-                      shiny$actionButton(
-                        ns("mass_range_tooltip_bttn"),
-                        label = NULL,
-                        icon = shiny$icon("circle-question")
-                      )
+                    tooltip(
+                      shiny$div(
+                        class = "tooltip-bttn",
+                        shiny$actionButton(
+                          ns("mass_range_tooltip_bttn"),
+                          label = NULL,
+                          icon = shiny$icon("circle-question")
+                        )
+                      ),
+                      "Help",
+                      placement = "top"
                     )
                   ),
                   card_body(
@@ -330,8 +341,8 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                                   class = "btn-default"
                                 )
                               ),
-                              "Save as default value",
-                              placement = "bottom"
+                              "Save Setting",
+                              placement = "top"
                             )
                           )
                         )
@@ -369,8 +380,8 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                                   class = "btn-default"
                                 )
                               ),
-                              "Save as default value",
-                              placement = "bottom"
+                              "Save Setting",
+                              placement = "top"
                             )
                           )
                         )
@@ -423,8 +434,8 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                                   class = "btn-default"
                                 )
                               ),
-                              "Save as default value",
-                              placement = "bottom"
+                              "Save Setting",
+                              placement = "top"
                             )
                           )
                         )
@@ -462,8 +473,8 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                                   class = "btn-default"
                                 )
                               ),
-                              "Save as default value",
-                              placement = "bottom"
+                              "Save Setting",
+                              placement = "top"
                             )
                           )
                         )
@@ -486,13 +497,17 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                       "Expected characteristics of spectral peaks.",
                       placement = "bottom"
                     ),
-                    shiny$div(
-                      class = "tooltip-bttn",
-                      shiny$actionButton(
-                        ns("peak_parameter_tooltip_bttn"),
-                        label = NULL,
-                        icon = shiny$icon("circle-question")
-                      )
+                    tooltip(
+                      shiny$div(
+                        class = "tooltip-bttn",
+                        shiny$actionButton(
+                          ns("peak_parameter_tooltip_bttn"),
+                          label = NULL,
+                          icon = shiny$icon("circle-question")
+                        )
+                      ),
+                      "Help",
+                      placement = "top"
                     )
                   ),
                   card_body(
@@ -534,8 +549,8 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                                   class = "btn-default"
                                 )
                               ),
-                              "Save as default value",
-                              placement = "bottom"
+                              "Save Setting",
+                              placement = "top"
                             )
                           )
                         )
@@ -586,8 +601,8 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                                   class = "btn-default"
                                 )
                               ),
-                              "Save as default value",
-                              placement = "bottom"
+                              "Save Setting",
+                              placement = "top"
                             )
                           )
                         )
@@ -630,8 +645,8 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                                   class = "btn-default"
                                 )
                               ),
-                              "Save as default value",
-                              placement = "bottom"
+                              "Save Setting",
+                              placement = "top"
                             )
                           )
                         )
@@ -650,13 +665,17 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                       "Discrete intervals of mass values for the spectra.",
                       placement = "bottom"
                     ),
-                    shiny$div(
-                      class = "tooltip-bttn",
-                      shiny$actionButton(
-                        ns("sample_rate_tooltip_bttn"),
-                        label = NULL,
-                        icon = shiny$icon("circle-question")
-                      )
+                    tooltip(
+                      shiny$div(
+                        class = "tooltip-bttn",
+                        shiny$actionButton(
+                          ns("sample_rate_tooltip_bttn"),
+                          label = NULL,
+                          icon = shiny$icon("circle-question")
+                        )
+                      ),
+                      "Help",
+                      placement = "top"
                     )
                   ),
                   card_body(
@@ -694,8 +713,8 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                                   class = "btn-default"
                                 )
                               ),
-                              "Save as default value",
-                              placement = "bottom"
+                              "Save Setting",
+                              placement = "top"
                             )
                           )
                         )
@@ -838,20 +857,20 @@ deconvolution_status_controls <- function(ns) {
             ),
             shiny$column(
               width = 4,
-              shiny$div(
-                class = "decon-btn",
-                bslib::tooltip(
-                  disabled(
-                    shiny$actionButton(
+              bslib::tooltip(
+                shiny::div(
+                  class = "decon-btn",
+                  shinyjs::disabled(
+                    shiny::actionButton(
                       ns("deconvolution_report"),
                       "Report",
-                      icon = shiny$icon("square-poll-vertical"),
+                      icon = shiny::icon("square-poll-vertical"),
                       width = "100%"
                     )
-                  ),
-                  "Report generation is temporarily unavailable",
-                  placement = "top"
-                )
+                  )
+                ),
+                "Report generation is temporarily unavailable",
+                placement = "top"
               )
             ),
             shiny$column(
@@ -890,8 +909,7 @@ deconvolution_results_ui <- function(ns, show_heatmap = FALSE) {
         "Spectrum",
         shiny::div(
           class = "box-header-settings-help",
-          bslib::popover(
-            shiny::icon("gear"),
+          card_settings_popover(
             shiny::div(
               shiny::div(
                 class = "spectrum-radio-button",
@@ -908,16 +926,20 @@ deconvolution_results_ui <- function(ns, show_heatmap = FALSE) {
                 right = TRUE
               ),
               style = "margin-right: 20px;"
-            ),
-            title = NULL
-          ),
-          shiny::div(
-            class = "tooltip-bttn",
-            shiny::actionButton(
-              ns("mass_spectra_tooltip_bttn"),
-              label = NULL,
-              icon = shiny::icon("circle-question")
             )
+          ),
+          plot_dl_popover(ns, "decon_spectrum"),
+          tooltip(
+            shiny::div(
+              class = "tooltip-bttn",
+              shiny::actionButton(
+                ns("mass_spectra_tooltip_bttn"),
+                label = NULL,
+                icon = shiny::icon("circle-question")
+              )
+            ),
+            "Help",
+            placement = "top"
           )
         )
       ),
@@ -952,14 +974,22 @@ deconvolution_results_ui <- function(ns, show_heatmap = FALSE) {
               class = "card-custom",
               bslib::card(
                 bslib::card_header(
-                  class = "bg-dark help-header",
+                  class = "bg-dark help-header d-flex justify-content-between",
                   "Deconvolution Metrics",
                   shiny::div(
-                    class = "tooltip-bttn",
-                    shiny::actionButton(
-                      ns("conversion_samples_protein_tooltip_bttn"),
-                      label = NULL,
-                      icon = shiny::icon("circle-question")
+                    class = "box-header-settings-help",
+                    table_dl_popover(ns, "deconvolution_data"),
+                    tooltip(
+                      shiny::div(
+                        class = "tooltip-bttn",
+                        shiny::actionButton(
+                          ns("conversion_samples_protein_tooltip_bttn"),
+                          label = NULL,
+                          icon = shiny::icon("circle-question")
+                        )
+                      ),
+                      "Help",
+                      placement = "top"
                     )
                   )
                 ),

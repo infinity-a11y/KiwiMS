@@ -76,12 +76,12 @@ popover_autoclose <- shiny::HTML(
 #' @export
 hits_table_names <- c(
   "Well",
-  "Theor. Prot.",
-  "Meas. Prot.",
+  "Theor. Prot. [Da]",
+  "Meas. Prot. [Da]",
   "Δ Prot.",
-  "Ⅰ Prot.",
+  "Int. Prot.",
   "Peak Signal",
-  "Ⅰ Cmp",
+  "Int. Cmp",
   "Theor. Cmp",
   "Δ Cmp",
   "Bind. Stoich.",

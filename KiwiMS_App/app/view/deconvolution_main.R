@@ -39,7 +39,8 @@ box::use(
       process_plot_data_db
     ],
   app / logic / helper_functions[fill_empty, get_kiwims_version],
-  app / logic / logging[write_log, get_log],
+  app / logic / plot_download[setup_plot_dl, setup_table_dl],
+  app / logic / logging[write_log, get_log, get_session_prefix],
   app / logic / user_settings[update_user_setting, read_user_settings],
   app / logic / conversion_functions[read_decon_metadata, read_decon_peaks_max],
   app /
@@ -187,7 +188,7 @@ server <- function(
     # Locked destination — set once when deconvolute_start_conf fires
     analysis_dest <- shiny$reactiveVal(NULL)
 
-    # Update the text input when the destination folder changes
+    # Update the text input when the output path changes
     shiny$observeEvent(deconvolution_sidebar_vars$targetpath(), {
       suggested <- smart_analysis_name()
       shiny$updateTextInput(
@@ -210,17 +211,15 @@ server <- function(
     # Returns NULL when all conditions are met, otherwise the first failing message.
     deconv_validation_msg <- shiny$reactive({
       files_ok <-
-        (!is.null(deconvolution_sidebar_vars$file()) &&
-          length(deconvolution_sidebar_vars$file()) > 0) ||
-        (!is.null(deconvolution_sidebar_vars$dir()) &&
-          length(deconvolution_sidebar_vars$dir()) > 0)
+        !is.null(deconvolution_sidebar_vars$dir()) &&
+        length(deconvolution_sidebar_vars$dir()) > 0
       if (!files_ok) {
         return("Select target file(s) from the sidebar to start ...")
       }
 
       target <- deconvolution_sidebar_vars$targetpath()
       if (is.null(target) || length(target) == 0 || !nzchar(target)) {
-        return("Select a destination folder from the sidebar to start ...")
+        return("Select an output path from the sidebar to start ...")
       }
 
       if (!is.null(input$startz) && !is.null(input$endz)) {
@@ -316,17 +315,15 @@ server <- function(
 
       sel <- deconvolution_sidebar_vars$selected()
       if (!is.null(sel) && sel == "folder") {
-        if (
-          length(dir_ls(deconvolution_sidebar_vars$dir(), glob = "*.raw")) == 0
-        ) {
+        dir_path <- deconvolution_sidebar_vars$dir()
+        if (length(dir_path) == 0 || !nzchar(dir_path)) {
+          return("Select target file(s) from the sidebar to start ...")
+        }
+        is_raw_itself <- grepl("\\.raw$", dir_path, ignore.case = TRUE) &&
+          dir.exists(dir_path)
+        if (!is_raw_itself && length(dir_ls(dir_path, glob = "*.raw")) == 0) {
           return("No valid target folder selected ...")
         }
-      } else if (!is.null(sel) && sel == "file") {
-        f <- deconvolution_sidebar_vars$file()
-        valid_file <- length(f) > 0 &&
-          grepl("\\.raw$", f, ignore.case = TRUE) &&
-          dir.exists(f)
-        if (!valid_file) return("No valid target file selected ...")
       }
 
       NULL
@@ -349,7 +346,9 @@ server <- function(
 
       # All valid — show DB file path feedback
       target <- deconvolution_sidebar_vars$targetpath()
-      name <- trimws(input$analysis_name)
+      name <- trimws(
+        if (!is.null(input$analysis_name)) input$analysis_name else ""
+      )
       if (!nzchar(name)) {
         name <- smart_analysis_name()
       }
@@ -375,7 +374,7 @@ server <- function(
       )
     })
 
-    ### Running destination path display ----
+    ### Running output path display ----
     output$running_dest_ui <- shiny$renderUI({
       dest <- analysis_dest()
       if (is.null(dest)) {
@@ -398,7 +397,7 @@ server <- function(
 
       tooltip(
         shiny$div(
-          style = "cursor:pointer; margin-bottom: 5px; margin-left: 20px;",
+          style = "cursor:pointer; margin-bottom: 5px;",
           onclick = paste0(
             "Shiny.setInputValue('",
             ns("open_dest"),
@@ -823,27 +822,26 @@ server <- function(
       # ── Collect queried sample base names ──────────────────────────────────
       # Use target_selector_sel() (persisted) not input$target_selector which
       # may still be NULL while the picker inside the modal is rendering.
-      sample_bases <- if (deconvolution_sidebar_vars$selected() == "folder") {
-        raw_dirs_all <- dir_ls(deconvolution_sidebar_vars$dir(), glob = "*.raw")
-        if (
-          isTRUE(deconvolution_sidebar_vars$use_config()) &&
-            length(config_file())
-        ) {
-          samps <- config_file()[["Sample"]]
-          samps <- samps[samps %in% basename(raw_dirs_all)]
-          gsub("\\.raw$", "", samps, ignore.case = TRUE)
-        } else {
-          sel <- target_selector_sel()
-          bases <- if (length(sel) > 0) sel else basename(raw_dirs_all)
-          gsub("\\.raw$", "", bases, ignore.case = TRUE)
-        }
+      dir_path_modal <- deconvolution_sidebar_vars$dir()
+      raw_dirs_all <- if (
+        grepl("\\.raw$", dir_path_modal, ignore.case = TRUE) &&
+          dir.exists(dir_path_modal)
+      ) {
+        dir_path_modal
       } else {
-        gsub(
-          "\\.raw$",
-          "",
-          basename(deconvolution_sidebar_vars$file() %||% ""),
-          ignore.case = TRUE
-        )
+        dir_ls(dir_path_modal, glob = "*.raw")
+      }
+      sample_bases <- if (
+        isTRUE(deconvolution_sidebar_vars$use_config()) &&
+          length(config_file())
+      ) {
+        samps <- config_file()[["Sample"]]
+        samps <- samps[samps %in% basename(raw_dirs_all)]
+        gsub("\\.raw$", "", samps, ignore.case = TRUE)
+      } else {
+        sel <- target_selector_sel()
+        bases <- if (length(sel) > 0) sel else basename(raw_dirs_all)
+        gsub("\\.raw$", "", bases, ignore.case = TRUE)
       }
       if (length(sample_bases) == 0 || !nzchar(sample_bases[1])) {
         return(NULL)
@@ -879,7 +877,7 @@ server <- function(
               "<b>",
               n_aff,
               "</b> sample(s) have leftover UniDec output in the",
-              " destination folder. Continuing will delete these files before reprocessing."
+              " output path. Continuing will delete these files before reprocessing."
             ))))
           )
         }
@@ -991,7 +989,15 @@ server <- function(
       message <- NULL
 
       if (deconvolution_sidebar_vars$selected() == "folder") {
-        raw_dirs <- dir_ls(deconvolution_sidebar_vars$dir(), glob = "*.raw")
+        dir_path_msg <- deconvolution_sidebar_vars$dir()
+        raw_dirs <- if (
+          grepl("\\.raw$", dir_path_msg, ignore.case = TRUE) &&
+            dir.exists(dir_path_msg)
+        ) {
+          dir_path_msg
+        } else {
+          dir_ls(dir_path_msg, glob = "*.raw")
+        }
 
         if (
           isTRUE(deconvolution_sidebar_vars$use_config()) &&
@@ -1054,29 +1060,37 @@ server <- function(
 
           message <- shiny$p(shiny$HTML(html))
         } else {
-          num_targets <- length(input$target_selector) %||% 0
+          dir_path_msg <- deconvolution_sidebar_vars$dir()
+          if (
+            grepl("\\.raw$", dir_path_msg, ignore.case = TRUE) &&
+              dir.exists(dir_path_msg)
+          ) {
+            message <- shiny$p(shiny$HTML(paste0(
+              "<b>Single target file selected</b><br><br>",
+              "<span style='white-space:nowrap;'>",
+              basename(dir_path_msg),
+              "</span>",
+              " is queried for deconvolution."
+            )))
+          } else {
+            num_targets <- length(input$target_selector) %||% 0
 
-          if (num_targets == 0) {
-            disable(selector = "#app-deconvolution_main-deconvolute_start_conf")
+            if (num_targets == 0) {
+              disable(
+                selector = "#app-deconvolution_main-deconvolute_start_conf"
+              )
+            }
+
+            message <- shiny$p(shiny$HTML(paste0(
+              "<b>Multiple target file(s) selected</b><br><br>",
+              "<b>",
+              num_targets,
+              "</b> raw file(s) in the selected directory are currently",
+              " queried for deconvolution. If you wish to process only a subset select the",
+              " respective target files."
+            )))
           }
-
-          message <- shiny$p(shiny$HTML(paste0(
-            "<b>Multiple target file(s) selected</b><br><br>",
-            "<b>",
-            num_targets,
-            "</b> raw file(s) in the selected directory are currently",
-            " queried for deconvolution. If you wish to process only a subset select the",
-            " respective target files."
-          )))
         }
-      } else {
-        message <- shiny$p(shiny$HTML(paste0(
-          "<b>Individual target file selected</b><br><br>",
-          "<span style='white-space:nowrap;'>",
-          basename(deconvolution_sidebar_vars$file()),
-          "</span>",
-          " is queried for deconvolution."
-        )))
       }
 
       return(message)
@@ -1088,22 +1102,21 @@ server <- function(
 
       picker <- NULL
 
+      dir_sel <- deconvolution_sidebar_vars$dir()
+      is_raw_itself <- grepl("\\.raw$", dir_sel, ignore.case = TRUE) &&
+        dir.exists(dir_sel)
+
       if (
-        deconvolution_sidebar_vars$selected() == "folder" &&
+        !is_raw_itself &&
+          deconvolution_sidebar_vars$selected() == "folder" &&
           (isFALSE(deconvolution_sidebar_vars$use_config()) ||
             length(config_file()) == 0)
       ) {
         picker <- pickerInput(
           ns("target_selector"),
           "",
-          choices = basename(dir_ls(
-            deconvolution_sidebar_vars$dir(),
-            glob = "*.raw"
-          )),
-          selected = basename(dir_ls(
-            deconvolution_sidebar_vars$dir(),
-            glob = "*.raw"
-          )),
+          choices = basename(dir_ls(dir_sel, glob = "*.raw")),
+          selected = basename(dir_ls(dir_sel, glob = "*.raw")),
           options = list(
             `live-search` = TRUE,
             `actions-box` = TRUE,
@@ -1156,12 +1169,15 @@ server <- function(
 
       ##### Deconvolution init and mode ----
       if (deconvolution_sidebar_vars$selected() == "folder") {
-        raw_dirs <- list.dirs(
-          deconvolution_sidebar_vars$dir(),
-          full.names = TRUE,
-          recursive = FALSE
-        )
-        raw_dirs <- raw_dirs[grep("\\.raw$", raw_dirs)]
+        dir_path <- deconvolution_sidebar_vars$dir()
+        if (
+          grepl("\\.raw$", dir_path, ignore.case = TRUE) && dir.exists(dir_path)
+        ) {
+          raw_dirs <- dir_path
+        } else {
+          raw_dirs <- list.dirs(dir_path, full.names = TRUE, recursive = FALSE)
+          raw_dirs <- raw_dirs[grep("\\.raw$", raw_dirs)]
+        }
 
         if (
           isTRUE(deconvolution_sidebar_vars$use_config()) &&
@@ -1188,6 +1204,10 @@ server <- function(
             "",
             sub("^.*:", "", config_file()[["Well"]][present_in_folder])
           )
+        } else if (
+          grepl("\\.raw$", dir_path, ignore.case = TRUE) && dir.exists(dir_path)
+        ) {
+          write_log("Single target deconvolution mode")
         } else {
           write_log("Multiple target deconvolution mode (no config file)")
 
@@ -1199,13 +1219,9 @@ server <- function(
           "targets. Directory:",
           dirname(raw_dirs[1])
         ))
-      } else if (deconvolution_sidebar_vars$selected() == "file") {
-        write_log("Single target deconvolution mode")
-        raw_dirs <- deconvolution_sidebar_vars$file()
-        write_log(paste("Target:", deconvolution_sidebar_vars$file()))
       }
       write_log(paste(
-        "Destination path:",
+        "Output path:",
         analysis_dest()
       ))
 
@@ -1707,10 +1723,14 @@ server <- function(
                 }
               }
             } else {
-              selected_files <- file.path(
-                deconvolution_sidebar_vars$dir(),
-                target_selector_sel()
-              )
+              dir_sel_res <- deconvolution_sidebar_vars$dir()
+              is_raw_res <- grepl("\\.raw$", dir_sel_res, ignore.case = TRUE) &&
+                dir.exists(dir_sel_res)
+              selected_files <- if (is_raw_res) {
+                dir_sel_res
+              } else {
+                file.path(dir_sel_res, target_selector_sel())
+              }
               sel_base <- gsub(
                 "\\.raw$",
                 "",
@@ -2013,10 +2033,18 @@ server <- function(
                 }
               } else {
                 if (deconvolution_sidebar_vars$selected() == "folder") {
-                  selected_files <- file.path(
-                    deconvolution_sidebar_vars$dir(),
-                    target_selector_sel()
-                  )
+                  dir_sel_res2 <- deconvolution_sidebar_vars$dir()
+                  is_raw_res2 <- grepl(
+                    "\\.raw$",
+                    dir_sel_res2,
+                    ignore.case = TRUE
+                  ) &&
+                    dir.exists(dir_sel_res2)
+                  selected_files <- if (is_raw_res2) {
+                    dir_sel_res2
+                  } else {
+                    file.path(dir_sel_res2, target_selector_sel())
+                  }
                 } else {
                   selected_files <- raw_dirs
                 }
@@ -2321,26 +2349,74 @@ server <- function(
       delay(1000, show(selector = "#app-deconvolution_main-processing"))
 
       ### Render result spectrum
+      setup_plot_dl(
+        input,
+        output,
+        session,
+        "decon_spectrum",
+        build_fn = function(theme) {
+          shiny$req(result_files_sel())
+          result_dir <- file.path(
+            analysis_dest(),
+            gsub(".raw", "_rawdata_unidecfiles", result_files_sel())
+          )
+          sel_base <- gsub(
+            "\\.raw$",
+            "",
+            result_files_sel(),
+            ignore.case = TRUE
+          )
+          db_sp <- file.path(
+            analysis_dest(),
+            paste0(trimws(input$analysis_name), ".db")
+          )
+          is_raw_toggle <- as.logical(ifelse(
+            !is.null(input$toggle_result),
+            input$toggle_result,
+            FALSE
+          ))
+          plot_data <- if (file.exists(db_sp)) {
+            process_plot_data_db(db_sp, sel_base, raw = is_raw_toggle)
+          } else {
+            NULL
+          }
+          show_labels <- ifelse(
+            is.null(input$spectrum_annotation),
+            TRUE,
+            input$spectrum_annotation
+          )
+
+          if (!is.null(plot_data)) {
+            spectrum_plot(
+              plot_data = plot_data,
+              raw = is_raw_toggle,
+              show_peak_labels = show_labels,
+              show_mass_diff = FALSE,
+              theme = theme
+            )
+          } else if (dir.exists(result_dir)) {
+            spectrum_plot(
+              result_path = result_dir,
+              raw = is_raw_toggle,
+              show_peak_labels = show_labels,
+              show_mass_diff = FALSE,
+              theme = theme
+            )
+          } else {
+            shiny$req(FALSE)
+          }
+        },
+        filename_fn = function() paste0(get_session_prefix(), "_Spectrum")
+      )
 
       output$spectrum <- renderPlotly({
         shiny$req(result_files_sel())
         waiter_show(id = ns("spectrum"), html = spin_wave())
 
-        if (deconvolution_sidebar_vars$selected() == "folder") {
-          result_dir <- file.path(
-            analysis_dest(),
-            gsub(".raw", "_rawdata_unidecfiles", result_files_sel())
-          )
-        } else if (deconvolution_sidebar_vars$selected() == "file") {
-          result_dir <- file.path(
-            analysis_dest(),
-            basename(gsub(
-              ".raw",
-              "_rawdata_unidecfiles",
-              deconvolution_sidebar_vars$file()
-            ))
-          )
-        }
+        result_dir <- file.path(
+          analysis_dest(),
+          gsub(".raw", "_rawdata_unidecfiles", result_files_sel())
+        )
 
         # Check DB for failure / get plot data
         sel_base <- gsub("\\.raw$", "", result_files_sel(), ignore.case = TRUE)
@@ -2411,21 +2487,10 @@ server <- function(
 
         waiter_show(id = ns("deconvolution_data"), html = spin_wave())
 
-        if (deconvolution_sidebar_vars$selected() == "folder") {
-          result_dir <- file.path(
-            analysis_dest(),
-            gsub(".raw", "_rawdata_unidecfiles", result_files_sel())
-          )
-        } else if (deconvolution_sidebar_vars$selected() == "file") {
-          result_dir <- file.path(
-            analysis_dest(),
-            basename(gsub(
-              ".raw",
-              "_rawdata_unidecfiles",
-              deconvolution_sidebar_vars$file()
-            ))
-          )
-        }
+        result_dir <- file.path(
+          analysis_dest(),
+          gsub(".raw", "_rawdata_unidecfiles", result_files_sel())
+        )
 
         # Check DB for failure before rendering metrics
         sel_base_dt <- gsub(
@@ -2492,23 +2557,18 @@ server <- function(
         }
 
         if (nrow(error_rows) > 0) {
-          units <- c("", "s", "", "", "m/z", "z", "", "")
           tbl <- data.frame(
             Parameter = c(
-              "Fitting error",
-              "Computation time",
-              "Iteration count",
+              "Fitting Error",
+              "Computation Time [s]",
+              "Iteration Count",
               "UniScore (Quality)",
-              "m/z sigma",
-              "z (Charge) sigma",
-              "beat (Suppression)",
-              "Point sigma"
+              "Sigma [m/z]",
+              "Charge Sigma [z]",
+              "Beat (Suppression)",
+              "Point Sigma"
             )[seq_len(nrow(error_rows))],
-            Value = paste(
-              round(error_rows$Value, 6),
-              units[seq_len(nrow(error_rows))],
-              sep = " "
-            )
+            Value = round(error_rows$Value, 6)
           )
 
           waiter_hide(id = ns("deconvolution_data"))
@@ -2534,6 +2594,89 @@ server <- function(
             )
         }
       })
+
+      ### Deconvolution metrics export ----
+      deconvolution_metrics_raw <- shiny$reactive({
+        shiny$req(result_files_sel())
+
+        result_dir <- file.path(
+          analysis_dest(),
+          gsub(".raw", "_rawdata_unidecfiles", result_files_sel())
+        )
+        sel_base <- gsub("\\.raw$", "", result_files_sel(), ignore.case = TRUE)
+        db_path <- file.path(
+          analysis_dest(),
+          paste0(trimws(input$analysis_name), ".db")
+        )
+
+        if (
+          file.exists(db_path) && sel_base %in% decon_failed_samples(db_path)
+        ) {
+          return(data.frame())
+        }
+
+        error_rows <- if (file.exists(db_path)) {
+          tryCatch(
+            {
+              con_m <- dbConnect(SQLite(), db_path, flags = SQLITE_RO)
+              on.exit(dbDisconnect(con_m), add = TRUE)
+              if (dbExistsTable(con_m, "error")) {
+                dbGetQuery(
+                  con_m,
+                  "SELECT Key, Value FROM error WHERE sample = ?",
+                  params = list(sel_base)
+                )
+              } else {
+                data.frame()
+              }
+            },
+            error = function(e) data.frame()
+          )
+        } else {
+          data.frame()
+        }
+
+        if (nrow(error_rows) == 0) {
+          data_path <- file.path(
+            result_dir,
+            paste0(gsub("_unidecfiles", "", basename(result_dir)), "_error.txt")
+          )
+          if (dir.exists(result_dir) && file.exists(data_path)) {
+            raw_lines <- readLines(data_path)
+            error_rows <- data.frame(
+              Key = sub(" =.*", "", raw_lines),
+              Value = as.numeric(sub(".*= ([^ ]+).*", "\\1", raw_lines))
+            )
+          }
+        }
+
+        shiny$req(nrow(error_rows) > 0)
+
+        data.frame(
+          Parameter = c(
+            "Fitting error",
+            "Computation time [s]",
+            "Iteration count",
+            "UniScore (Quality)",
+            "m/z sigma [m/z]",
+            "z (Charge) sigma [z]",
+            "beat (Suppression)",
+            "Point sigma"
+          )[seq_len(nrow(error_rows))],
+          Value = round(error_rows$Value, 6)
+        )
+      })
+
+      setup_table_dl(
+        input,
+        output,
+        session,
+        "deconvolution_data",
+        data_fn = function() deconvolution_metrics_raw(),
+        filename_fn = function() {
+          paste0(get_session_prefix(), "_Deconvolution_Metrics")
+        }
+      )
 
       ### Failure overlay messages for Spectrum and Metrics cards
       failure_msg_ui <- function(output_id) {

@@ -103,16 +103,20 @@ server <- function(
                         class = "btn-default"
                       )
                     ),
-                    "Save as default value",
-                    placement = "bottom"
+                    "Save Setting",
+                    placement = "top"
                   ),
-                  shiny::div(
-                    class = "tooltip-bttn",
-                    shiny::actionButton(
-                      ns("peak_tol_tooltip_bttn"),
-                      label = NULL,
-                      icon = shiny::icon("circle-question")
-                    )
+                  tooltip(
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("peak_tol_tooltip_bttn"),
+                        label = NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    ),
+                    "Help",
+                    placement = "top"
                   )
                 )
               ),
@@ -140,16 +144,20 @@ server <- function(
                         class = "btn-default"
                       )
                     ),
-                    "Save as default value",
-                    placement = "bottom"
+                    "Save Setting",
+                    placement = "top"
                   ),
-                  shiny::div(
-                    class = "tooltip-bttn",
-                    shiny::actionButton(
-                      ns("max_mult_tooltip_bttn"),
-                      label = NULL,
-                      icon = shiny::icon("circle-question")
-                    )
+                  tooltip(
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("max_mult_tooltip_bttn"),
+                        label = NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    ),
+                    "Help",
+                    placement = "top"
                   )
                 )
               ),
@@ -214,7 +222,8 @@ server <- function(
                   class = "complex-picker-ui",
                   shiny::div(id = "complex-picker-connector"),
                   shiny::div(
-                    class = "complex-picker custom-disable",
+                    # class = "complex-picker custom-disable",
+                    class = "complex-picker",
                     shinyWidgets::pickerInput(
                       ns("complex"),
                       NULL,
@@ -223,13 +232,20 @@ server <- function(
                   )
                 )
               ),
-              shinyjs::disabled(
-                shiny::actionButton(
-                  ns("report_conversion_results"),
-                  "Report",
-                  icon = shiny::icon("square-poll-vertical"),
-                  width = "100%"
-                )
+
+              bslib::tooltip(
+                shiny::div(
+                  shinyjs::disabled(
+                    shiny::actionButton(
+                      ns("report_conversion_results"),
+                      "Report",
+                      icon = shiny::icon("square-poll-vertical"),
+                      width = "100%"
+                    )
+                  )
+                ),
+                "Report generation is temporarily unavailable",
+                placement = "top"
               )
             )
           )
