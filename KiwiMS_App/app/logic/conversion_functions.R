@@ -2231,7 +2231,7 @@ make_kobs_plot <- function(ki_kinact_result, colors, units, theme = "dark") {
       y = ~predicted_kobs,
       colors = colors,
       symbols = symbol_map,
-      line = list(width = 1.5, color = "white"),
+      line = list(width = 1.5, color = font_color),
       hovertemplate = paste(
         "<b>Predicted</b><br>",
         paste0(
@@ -2258,7 +2258,7 @@ make_kobs_plot <- function(ki_kinact_result, colors, units, theme = "dark") {
       marker = list(
         size = 12,
         opacity = 1,
-        line = list(width = 1, color = "white")
+        line = list(width = 1, color = font_color)
       ),
       name = ~conc,
       symbols = symbol_map,
@@ -3227,7 +3227,7 @@ multiple_spectra <- function(
     peaks_data <- dplyr::mutate(
       peaks_data,
       symbol = ifelse(mass %in% prot_peaks, "diamond", "circle"),
-      linecolor = ifelse(mass %in% prot_peaks, inv_color, font_color)
+      linecolor = font_color
     )
   }
 
@@ -3348,7 +3348,7 @@ multiple_spectra <- function(
         marker_list <- list(
           size = 5,
           zindex = 100,
-          line = list(color = ~ I(linecolor), width = 3)
+          line = list(color = font_color, width = 3)
         )
       } else {
         marker_list <- list(
@@ -3356,7 +3356,7 @@ multiple_spectra <- function(
           symbol = ~ I(symbol),
           size = 5,
           zindex = 100,
-          line = list(color = ~ I(linecolor), width = 3)
+          line = list(color = font_color, width = 3)
         )
       }
 
@@ -3554,7 +3554,7 @@ multiple_spectra <- function(
         marker = list(
           size = 10,
           zindex = 100,
-          color = "white"
+          color = font_color
         ),
         hoverinfo = "text",
         text = ~ paste0(

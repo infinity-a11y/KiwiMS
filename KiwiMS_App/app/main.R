@@ -91,22 +91,21 @@ ui <- function(id) {
             });
           });
         }
-        // For 3D scene axes: boost title font size so Plotly's layout engine
-        // places the title further from the tick labels (always applied for exports).
-        // Multiplier is context-dependent: both ticks and title scale with contextScale,
-        // so a flat multiplier keeps their ratio (and the overlap) constant. We need
-        // the title-to-tick ratio to grow at larger contexts to create real standoff.
-        // var titleBoost3D = { small: 1.3, normal: 1.8, large: 2.5, xlarge: 3.5 }[msg.context] || 1.8;
-        Object.keys(fig.layout).forEach(function(key) {
-          if (!/^scene/.test(key)) return;
-          ['xaxis', 'yaxis', 'zaxis'].forEach(function(ax) {
-            var axis = fig.layout[key] && fig.layout[key][ax];
-            if (!axis) return;
-            if (!axis.titlefont) axis.titlefont = {};
-            // axis.titlefont.size = Math.round((axis.titlefont.size || 14) * titleBoost3D);
-            axis.titlefont.size = Math.round((axis.titlefont.size || 14));
+        // For cubic multiple_spectra (scatter3d) at large/xlarge label sizes:
+        // scale tick labels less aggressively than axis titles so they stay
+        // closer to the plot and don't overlap the title.
+        var isCubicSpectra = fig.data.some(function(t) { return t.type === 'scatter3d'; });
+        var tickDampen3D = { small: 1.0, normal: 1.0, large: 0.75, xlarge: 0.6 }[msg.context] || 1.0;
+        if (isCubicSpectra && tickDampen3D !== 1.0) {
+          Object.keys(fig.layout).forEach(function(key) {
+            if (!/^scene/.test(key)) return;
+            ['xaxis', 'yaxis', 'zaxis'].forEach(function(ax) {
+              var axis = fig.layout[key] && fig.layout[key][ax];
+              if (!axis || !axis.tickfont || typeof axis.tickfont.size !== 'number') return;
+              axis.tickfont.size = Math.round(axis.tickfont.size * tickDampen3D);
+            });
           });
-        });
+        }
         document.body.style.cursor = 'progress';
         var div = document.createElement('div');
         div.className = 'plotly-dl-offscreen';

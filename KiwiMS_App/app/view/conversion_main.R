@@ -2402,11 +2402,7 @@ server <- function(
                   samples = unique(hits_summary$`Sample ID`[
                     hits_summary$`Cmp Name` == conversion_compound_picker
                   ]),
-                  cubic = ifelse(
-                    TRUE,
-                    TRUE,
-                    FALSE
-                  ),
+                  cubic = TRUE,
                   color_cmp = colors,
                   truncated = if (truncate_names) mapping else FALSE,
                   color_variable = color_variable,
@@ -2804,6 +2800,14 @@ server <- function(
 
             ###### Annotated spectrum ----
 
+            proteins_labels_val <- shiny::reactiveVal(local({
+              prot <- unique(hits_summary$`Protein`)[1]
+              tbl <- hits_summary[hits_summary$`Protein` == prot, ]
+              if (is.na(prot) || nrow(tbl) < 2) return(TRUE)
+              ids <- tbl$`Sample ID`
+              length(unique(ids)) <= 8 & max(nchar(as.character(ids))) <= 20
+            }))
+
             shiny::observeEvent(
               input$conversion_protein_picker,
               {
@@ -2940,7 +2944,7 @@ server <- function(
                   truncated = if (truncate_names) mapping else FALSE,
                   color_variable = color_variable,
                   hits_summary = hits_summary,
-                  labels_show = input$proteins_spectrum_labels
+                  labels_show = proteins_labels_val()
                 )
               }
 
@@ -2957,27 +2961,29 @@ server <- function(
                 input$color_scale,
                 input$conversion_protein_picker,
                 input$truncate_names,
-                input$proteins_spectrum_labels,
+                proteins_labels_val(),
                 manual_render_spectrum()
               )
 
             ####### Show label input UI ----
-            output$proteins_spectrum_labels_ui <- shiny::renderUI({
+            shiny::observe({
               shiny::req(hits_summary, input$conversion_protein_picker)
 
               tbl <- hits_summary |>
                 dplyr::filter(`Protein` == input$conversion_protein_picker)
 
               if (nrow(tbl) < 2) {
-                return(shinyjs::disabled(
-                  shinyWidgets::materialSwitch(
-                    ns("proteins_spectrum_labels"),
-                    label = "Show Labels",
-                    value = TRUE,
-                    right = TRUE
-                  )
-                ))
+                proteins_labels_val(TRUE)
+                shinyWidgets::updateMaterialSwitch(
+                  session,
+                  "proteins_spectrum_labels",
+                  value = TRUE
+                )
+                shinyjs::disable("proteins_spectrum_labels")
+                return()
               }
+
+              shinyjs::enable("proteins_spectrum_labels")
 
               if (input$truncate_names) {
                 sample_ids <- tbl$`truncSample_ID`
@@ -2986,16 +2992,23 @@ server <- function(
               }
 
               labels_show <- (length(unique(sample_ids)) <= 8 &
-                max(nchar(as.character(sample_ids))) <= 20) |
-                isTRUE(run_ki_kinact)
+                max(nchar(as.character(sample_ids))) <= 20)
 
-              shinyWidgets::materialSwitch(
-                ns("proteins_spectrum_labels"),
-                label = "Show Labels",
-                value = labels_show,
-                right = TRUE
+              proteins_labels_val(labels_show)
+              shinyWidgets::updateMaterialSwitch(
+                session,
+                "proteins_spectrum_labels",
+                value = labels_show
               )
             })
+
+            shiny::observeEvent(
+              input$proteins_spectrum_labels,
+              {
+                proteins_labels_val(input$proteins_spectrum_labels)
+              },
+              ignoreInit = TRUE
+            )
 
             ###### Proteins view table ----
             output$proteins_table_view <- DT::renderDataTable(
@@ -3978,7 +3991,7 @@ server <- function(
             truncated = if (input$truncate_names) id_mapping else FALSE,
             color_variable = input$color_variable,
             hits_summary = hits_summary,
-            labels_show = input$proteins_spectrum_labels,
+            labels_show = proteins_labels_val(),
             theme = theme
           )
         }
@@ -4097,9 +4110,8 @@ server <- function(
         shinyWidgets::updateMaterialSwitch(
           session = session,
           "compounds_spectrum_labels",
-          value = (length(unique(sample_ids)) <= 8 &
-            max(nchar(as.character(sample_ids))) <= 20) |
-            isTRUE(conversion_sidebar_vars$run_ki_kinact())
+          value = length(unique(sample_ids)) <= 8 &
+            max(nchar(as.character(sample_ids))) <= 20
         )
       }
     )
