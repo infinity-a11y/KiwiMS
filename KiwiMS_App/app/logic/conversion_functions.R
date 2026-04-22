@@ -87,21 +87,107 @@ process_uploaded_table <- function(df, type) {
   return(df)
 }
 
-# Read only metadata (sample names, session, output) from a result SQLite DB
+# Validate mandatory tables in a deconvolution result DB.
+# Returns NULL if valid, or a character error message.
+#' @export
+validate_decon_db <- function(db_path) {
+  if (!file.exists(db_path)) {
+    return("File not found.")
+  }
+
+  tryCatch(
+    {
+      con <- DBI::dbConnect(
+        RSQLite::SQLite(),
+        db_path,
+        flags = RSQLite::SQLITE_RO
+      )
+      on.exit(DBI::dbDisconnect(con), add = TRUE)
+
+      if (!DBI::dbExistsTable(con, "metadata")) {
+        return("Invalid result file: metadata table missing.")
+      }
+      if (DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM metadata")$n == 0L) {
+        return("Invalid result file: no samples in metadata.")
+      }
+
+      if (!DBI::dbExistsTable(con, "status")) {
+        return("Invalid result file: status table missing.")
+      }
+      n_done <- DBI::dbGetQuery(
+        con,
+        "SELECT COUNT(*) AS n FROM status WHERE state = 'done'"
+      )$n
+      if (n_done == 0L) {
+        return(
+          "Result file contains no completed samples (no entries with state = 'done')."
+        )
+      }
+
+      for (tbl in c("mass_data", "error", "config")) {
+        if (!DBI::dbExistsTable(con, tbl)) {
+          return(sprintf(
+            "Invalid result file: required table '%s' is missing.",
+            tbl
+          ))
+        }
+        if (
+          DBI::dbGetQuery(
+            con,
+            sprintf("SELECT COUNT(*) AS n FROM \"%s\"", tbl)
+          )$n ==
+            0L
+        ) {
+          return(sprintf("Invalid result file: table '%s' is empty.", tbl))
+        }
+      }
+
+      if (!DBI::dbExistsTable(con, "peaks")) {
+        return("Invalid result file: required table 'peaks' is missing.")
+      }
+
+      NULL
+    },
+    error = function(e) {
+      paste("Could not read result file:", conditionMessage(e))
+    }
+  )
+}
+
+# Helper: query done sample names from a status table
+.done_samples <- function(con) {
+  DBI::dbGetQuery(con, "SELECT sample FROM status WHERE state = 'done'")[[
+    "sample"
+  ]]
+}
+
+# Read only metadata (sample names, session, output) from a result SQLite DB.
+# Only samples with state = 'done' in the status table are returned.
+# session and output_log are written only on completed runs; older or interrupted
+# DBs may not have them.
 #' @export
 read_decon_metadata <- function(db_path) {
   con <- DBI::dbConnect(RSQLite::SQLite(), db_path, flags = RSQLite::SQLITE_RO)
   on.exit(DBI::dbDisconnect(con), add = TRUE)
+
+  read_if_exists <- function(tbl, query) {
+    if (DBI::dbExistsTable(con, tbl)) {
+      DBI::dbGetQuery(con, query)[[1L]]
+    } else {
+      NULL
+    }
+  }
+
   list(
-    samples = DBI::dbGetQuery(con, "SELECT sample FROM metadata")[["sample"]],
-    session = DBI::dbGetQuery(
-      con,
+    samples = .done_samples(con),
+    session = read_if_exists(
+      "session",
       "SELECT line FROM session ORDER BY line_num"
-    )[["line"]],
-    output = DBI::dbGetQuery(
-      con,
+    ),
+    output = read_if_exists(
+      "output_log",
       "SELECT line FROM output_log ORDER BY line_num"
-    )[["line"]]
+    )
   )
 }
 
@@ -127,19 +213,21 @@ read_decon_peaks_max <- function(db_path, samples = NULL) {
   )
 }
 
-# Read full result from a result SQLite DB, reconstructing the nested list structure
+# Read full result from a result SQLite DB, reconstructing the nested list structure.
+# Only samples with state = 'done' in the status table are included unless an
+# explicit samples vector is supplied (which is then intersected with done samples).
 #' @export
 read_decon_result <- function(db_path, samples = NULL) {
   con <- DBI::dbConnect(RSQLite::SQLite(), db_path, flags = RSQLite::SQLITE_RO)
   on.exit(DBI::dbDisconnect(con), add = TRUE)
 
-  all_samples <- DBI::dbGetQuery(con, "SELECT sample FROM metadata")[["sample"]]
-  if (!is.null(samples)) {
-    all_samples <- intersect(all_samples, samples)
-  }
+  done <- .done_samples(con)
+  all_samples <- if (!is.null(samples)) intersect(done, samples) else done
 
   q <- function(tbl, s) {
-    if (!DBI::dbExistsTable(con, tbl)) return(data.frame())
+    if (!DBI::dbExistsTable(con, tbl)) {
+      return(data.frame())
+    }
     DBI::dbGetQuery(
       con,
       sprintf("SELECT * FROM %s WHERE sample = ?", tbl),
@@ -183,16 +271,24 @@ read_decon_result <- function(db_path, samples = NULL) {
     }
   )
 
+  read_if_exists <- function(tbl, query) {
+    if (DBI::dbExistsTable(con, tbl)) {
+      DBI::dbGetQuery(con, query)[[1L]]
+    } else {
+      NULL
+    }
+  }
+
   list(
     deconvolution = deconvolution,
-    session = DBI::dbGetQuery(
-      con,
+    session = read_if_exists(
+      "session",
       "SELECT line FROM session ORDER BY line_num"
-    )[["line"]],
-    output = DBI::dbGetQuery(
-      con,
+    ),
+    output = read_if_exists(
+      "output_log",
       "SELECT line FROM output_log ORDER BY line_num"
-    )[["line"]]
+    )
   )
 }
 
@@ -1045,7 +1141,7 @@ get_peaks <- function(peak_file = NULL, result_sample, results) {
   names(peaks) <- c("mass", "intensity")
 
   # Message information
-  log_status(nrow(peaks), min(peaks$mass), max(peaks$mass))
+  log_status(nrow(peaks), peaks$mass)
 
   return(peaks)
 }
@@ -1443,13 +1539,17 @@ log_start <- function(sample_name) {
 }
 
 # Status: Peak Info
-log_status <- function(n_peaks, m_min, m_max) {
-  message(sprintf(
-    "  ├─ Status: %s peaks detected [%.2f - %.2f Da]",
-    n_peaks,
-    m_min,
-    m_max
-  ))
+log_status <- function(n_peaks, mass = NULL) {
+  if (n_peaks > 0 && length(mass) > 0) {
+    message(sprintf(
+      "  ├─ Status: %s peaks detected [%.2f - %.2f Da]",
+      n_peaks,
+      min(mass),
+      max(mass)
+    ))
+  } else {
+    message(sprintf("  ├─ Status: %s peaks detected", n_peaks))
+  }
   # Sys.sleep(0.05)
 }
 
@@ -1514,6 +1614,7 @@ log_err_binding <- function() {
 
 # Log hits summary
 log_hits_summary <- function(hits_summarized) {
+  hits_summarized1 <<- hits_summarized
   message(paste(
     "SUMMARIZING HITS\n  │\n",
     sprintf(
@@ -1713,7 +1814,7 @@ add_hits <- function(
     log_start(samples[i])
 
     st_key <- gsub("\\.raw$", "", sample_table$Sample, ignore.case = TRUE)
-    s_key  <- gsub("\\.raw$", "", samples[i],          ignore.case = TRUE)
+    s_key <- gsub("\\.raw$", "", samples[i], ignore.case = TRUE)
     present_protein <- sample_table$Protein[st_key == s_key]
     present_cmp <- sample_table[
       st_key == s_key,
@@ -1778,11 +1879,22 @@ summarize_hits <- function(result_list, sample_table) {
   ))]
 
   if (length(conc_time) == 2) {
+    sample_table_join <- sample_table[, c("Sample", conc_time)]
+    sample_table_join$Sample <- gsub(
+      "\\.raw$",
+      "",
+      sample_table_join$Sample,
+      ignore.case = TRUE
+    )
+    hits_summarized$Sample <- gsub(
+      "\\.raw$",
+      "",
+      hits_summarized$Sample,
+      ignore.case = TRUE
+    )
+
     hits_summarized <- hits_summarized |>
-      dplyr::left_join(
-        sample_table[, c("Sample", conc_time)],
-        by = "Sample"
-      ) |>
+      dplyr::left_join(sample_table_join, by = "Sample") |>
       dplyr::mutate(binding = `Total % Binding` * 100) |>
       dplyr::arrange(dplyr::across(all_of(conc_time)))
   }
@@ -1830,7 +1942,8 @@ check_filter_hits <- function(result_list) {
   conc_col <- names(tab)[1]
 
   # Check if >= 3 non-zero concentrations are present
-  if (sum(tab[[conc_col]] != 0) < 3) {
+  nonzero_conc <- !is.na(tab[[conc_col]]) & tab[[conc_col]] != 0
+  if (sum(nonzero_conc) < 3) {
     message(
       "  │  ├─ At least 3 different non-zero concentrations are required.\n",
       "  │  └─ Skipping binding kinetics analysis."
@@ -1840,7 +1953,7 @@ check_filter_hits <- function(result_list) {
 
   # Check if concentrations have enough data points
   # Requirement: At least 3 non-zero concentrations must have >= 3 hits
-  valid_concs <- sum(tab$count[tab[[conc_col]] != 0] >= 3)
+  valid_concs <- sum(tab$count[nonzero_conc] >= 3)
 
   if (valid_concs < 3) {
     message(
@@ -1935,7 +2048,8 @@ make_binding_plot <- function(
   kobs_result,
   filter_conc = NULL,
   colors = NULL,
-  units = NULL
+  units = NULL,
+  theme = "dark"
 ) {
   # Filter for specified concentration
   if (!is.null(filter_conc)) {
@@ -1956,6 +2070,18 @@ make_binding_plot <- function(
     symbols[1:length(levels(df_points$concentration))],
     levels(df_points$concentration)
   )
+
+  font_color <- if (theme == "light") "black" else "white"
+  grid_color <- if (theme == "light") {
+    "rgba(0,0,0,0.1)"
+  } else {
+    "rgba(255,255,255,0.2)"
+  }
+  zeroline_color <- if (theme == "light") {
+    "rgba(0,0,0,0.5)"
+  } else {
+    "rgba(255,255,255,0.5)"
+  }
 
   # Generate plot
   binding_plot <- plotly::plot_ly() |>
@@ -2024,7 +2150,7 @@ make_binding_plot <- function(
       hovermode = "closest",
       paper_bgcolor = "rgba(0,0,0,0)",
       plot_bgcolor = "rgba(0,0,0,0)",
-      font = list(size = 14, color = "white"),
+      font = list(size = 14, color = font_color),
       legend = list(
         title = list(
           text = paste0(
@@ -2032,25 +2158,25 @@ make_binding_plot <- function(
             gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
             "]"
           ),
-          font = list(color = "white")
+          font = list(color = font_color)
         ),
         bgcolor = "rgba(0,0,0,0)",
         bordercolor = "rgba(0,0,0,0)",
-        font = list(color = "white")
+        font = list(color = font_color)
       ),
       xaxis = list(
         title = "Time [min]",
-        color = "white",
+        color = font_color,
         showgrid = TRUE,
-        gridcolor = "rgba(255, 255, 255, 0.2)",
-        zerolinecolor = "rgba(255, 255, 255, 0.5)"
+        gridcolor = grid_color,
+        zerolinecolor = zeroline_color
       ),
       yaxis = list(
         title = "Binding [%]",
-        color = "white",
+        color = font_color,
         showgrid = TRUE,
-        gridcolor = "rgba(255, 255, 255, 0.2)",
-        zerolinecolor = "rgba(255, 255, 255, 0.5)"
+        gridcolor = grid_color,
+        zerolinecolor = zeroline_color
       )
     )
 
@@ -2060,7 +2186,7 @@ make_binding_plot <- function(
 
 # Function to generate and display kobs plot
 #' @export
-make_kobs_plot <- function(ki_kinact_result, colors, units) {
+make_kobs_plot <- function(ki_kinact_result, colors, units, theme = "dark") {
   # Get predicted/modeled kobs
   df <- ki_kinact_result$Kobs_Data[
     !is.na(ki_kinact_result$Kobs_Data$predicted_kobs),
@@ -2084,6 +2210,18 @@ make_kobs_plot <- function(ki_kinact_result, colors, units) {
     ordered_conc
   )
 
+  font_color <- if (theme == "light") "black" else "white"
+  grid_color <- if (theme == "light") {
+    "rgba(0,0,0,0.1)"
+  } else {
+    "rgba(255,255,255,0.2)"
+  }
+  zeroline_color <- if (theme == "light") {
+    "rgba(0,0,0,0.5)"
+  } else {
+    "rgba(255,255,255,0.5)"
+  }
+
   # Generate plot
   kobs_plot <- plotly::plot_ly() |>
     # Predicted / modeled kobs
@@ -2093,7 +2231,7 @@ make_kobs_plot <- function(ki_kinact_result, colors, units) {
       y = ~predicted_kobs,
       colors = colors,
       symbols = symbol_map,
-      line = list(width = 1.5, color = "white"),
+      line = list(width = 1.5, color = font_color),
       hovertemplate = paste(
         "<b>Predicted</b><br>",
         paste0(
@@ -2120,7 +2258,7 @@ make_kobs_plot <- function(ki_kinact_result, colors, units) {
       marker = list(
         size = 12,
         opacity = 1,
-        line = list(width = 1, color = "white")
+        line = list(width = 1, color = font_color)
       ),
       name = ~conc,
       symbols = symbol_map,
@@ -2144,8 +2282,7 @@ make_kobs_plot <- function(ki_kinact_result, colors, units) {
       hovermode = "closest",
       paper_bgcolor = "rgba(0,0,0,0)",
       plot_bgcolor = "rgba(0,0,0,0)",
-      # Global font settings (White)
-      font = list(size = 14, color = "white"),
+      font = list(size = 14, color = font_color),
       legend = list(
         title = list(
           text = paste0(
@@ -2153,31 +2290,29 @@ make_kobs_plot <- function(ki_kinact_result, colors, units) {
             gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
             "]"
           ),
-          font = list(color = "white")
+          font = list(color = font_color)
         ),
         bgcolor = "rgba(0,0,0,0)",
         bordercolor = "rgba(0,0,0,0)",
-        font = list(color = "white")
+        font = list(color = font_color)
       ),
-      # X-Axis Styling (White)
       xaxis = list(
         title = paste0(
           "Compound [",
           gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
           "]"
         ),
-        color = "white",
+        color = font_color,
         showgrid = TRUE,
-        gridcolor = "rgba(255, 255, 255, 0.2)",
-        zerolinecolor = "rgba(255, 255, 255, 0.5)"
+        gridcolor = grid_color,
+        zerolinecolor = zeroline_color
       ),
-      # Y-Axis Styling (White)
       yaxis = list(
         title = "k<sub>obs</sub> [s⁻¹]",
-        color = "white",
+        color = font_color,
         showgrid = TRUE,
-        gridcolor = "rgba(255, 255, 255, 0.2)",
-        zerolinecolor = "rgba(255, 255, 255, 0.5)"
+        gridcolor = grid_color,
+        zerolinecolor = zeroline_color
       )
     )
 
@@ -2984,7 +3119,8 @@ multiple_spectra <- function(
   truncated = FALSE,
   color_variable = NULL,
   hits_summary = NULL,
-  units = NULL
+  units = NULL,
+  theme = "dark"
 ) {
   # Omit NA in samples
   samples <- samples[!is.na(samples)]
@@ -3064,9 +3200,18 @@ multiple_spectra <- function(
     }
   )
 
+  font_color <- if (theme == "light") "black" else "white"
+  inv_color <- if (theme == "light") "white" else "black"
+  grid_color <- if (theme == "light") "rgba(0,0,0,0.1)" else "#7f7f7fff"
+  zeroline_color <- if (theme == "light") {
+    "rgba(0,0,0,0.5)"
+  } else {
+    "rgba(255,255,255,0.5)"
+  }
+
   # Prepare hit marker symbols
   if (!all(is.na(peaks_data$mass))) {
-    prot_peaks <- hits_summary$`Meas. Prot.`[
+    prot_peaks <- hits_summary$`Meas. Prot. [Da]`[
       if (time) {
         hits_summary$`Sample ID` %in% samples
       } else if (!isFALSE(truncated)) {
@@ -3075,19 +3220,14 @@ multiple_spectra <- function(
         hits_summary$`Sample ID` %in% peaks_data$z
       }
     ]
-    prot_peaks <- prot_peaks[prot_peaks != "N/A"]
-    prot_peaks <- as.numeric(gsub(
-      " Da",
-      "",
-      prot_peaks
-    ))
+    prot_peaks <- prot_peaks[!is.na(prot_peaks)]
 
     prot_names <- unique(peaks_data$name[peaks_data$mass %in% prot_peaks])
 
     peaks_data <- dplyr::mutate(
       peaks_data,
       symbol = ifelse(mass %in% prot_peaks, "diamond", "circle"),
-      linecolor = ifelse(mass %in% prot_peaks, "#000000", "#ffffff")
+      linecolor = font_color
     )
   }
 
@@ -3098,7 +3238,7 @@ multiple_spectra <- function(
     if (color_variable == "Compounds") {
       if (length(color_cmp)) {
         # Adding protein peak marker
-        prot_colors <- rep("#ffffff", length(prot_names))
+        prot_colors <- rep(font_color, length(prot_names))
         names(prot_colors) <- prot_names
         color_cmp <- c(prot_colors, color_cmp)
 
@@ -3110,13 +3250,13 @@ multiple_spectra <- function(
 
         marker_color <- ~ I(color)
       } else {
-        marker_color <- "#ffffff"
+        marker_color <- font_color
       }
 
       # Declare coloring variables for graph elements
       color <- NULL
-      line <- list(color = "white", width = 1)
-      z_linecolor <- list(color = "#ffffff")
+      line <- list(color = font_color, width = 1)
+      z_linecolor <- list(color = font_color)
     } else if (color_variable == "Samples") {
       # Match colors to peaks and spectrum data
       peaks_data$z_color <- color_cmp[match(peaks_data$z, names(color_cmp))]
@@ -3142,7 +3282,7 @@ multiple_spectra <- function(
     # Adding protein peak marker
     peaks_data <- dplyr::mutate(
       peaks_data,
-      color = ifelse(symbol == "diamond", "#ffffff", "#000000")
+      color = ifelse(symbol == "diamond", font_color, inv_color)
     )
     marker_color <- ~ I(color)
 
@@ -3208,7 +3348,7 @@ multiple_spectra <- function(
         marker_list <- list(
           size = 5,
           zindex = 100,
-          line = list(color = ~ I(linecolor), width = 2)
+          line = list(color = font_color, width = 3)
         )
       } else {
         marker_list <- list(
@@ -3216,7 +3356,7 @@ multiple_spectra <- function(
           symbol = ~ I(symbol),
           size = 5,
           zindex = 100,
-          line = list(color = ~ I(linecolor), width = 2)
+          line = list(color = font_color, width = 3)
         )
       }
 
@@ -3258,12 +3398,12 @@ multiple_spectra <- function(
     plot |>
       plotly::layout(
         paper_bgcolor = "rgba(0,0,0,0)",
-        paper_bgcolor = "rgba(255,255,255,0)",
-        font = list(color = "white"),
+        plot_bgcolor = "rgba(0,0,0,0)",
+        font = list(size = 14, color = font_color),
         legend = list(
           bgcolor = "rgba(0,0,0,0)",
           bordercolor = "rgba(0,0,0,0)",
-          font = list(color = "white"),
+          font = list(color = font_color),
           title = list(
             text = paste(
               "<b>",
@@ -3278,7 +3418,7 @@ multiple_spectra <- function(
               ),
               "</b>"
             ),
-            color = "white"
+            color = font_color
           )
         ),
         # 3D Scene Styling
@@ -3291,7 +3431,9 @@ multiple_spectra <- function(
           ),
           xaxis = list(
             title = "Mass [Da]",
-            gridcolor = "#7f7f7fff",
+            titlefont = list(size = 14, color = font_color),
+            tickfont = list(size = 12, color = font_color),
+            gridcolor = grid_color,
             showgrid = TRUE,
             showline = FALSE,
             showzeroline = FALSE,
@@ -3301,7 +3443,9 @@ multiple_spectra <- function(
           ),
           yaxis = list(
             title = "Intensity [%]",
-            gridcolor = "#7f7f7fff",
+            titlefont = list(size = 14, color = font_color),
+            tickfont = list(size = 12, color = font_color),
+            gridcolor = grid_color,
             showgrid = TRUE,
             showline = FALSE,
             showzeroline = FALSE,
@@ -3319,7 +3463,9 @@ multiple_spectra <- function(
               ),
               ""
             ),
-            gridcolor = "#7f7f7fff",
+            titlefont = list(size = 14, color = font_color),
+            tickfont = list(size = 12, color = font_color),
+            gridcolor = grid_color,
             showgrid = ifelse(time, TRUE, FALSE),
             showline = FALSE,
             showzeroline = FALSE,
@@ -3395,13 +3541,11 @@ multiple_spectra <- function(
       plotly::add_markers(
         data = dplyr::mutate(
           peaks_data,
-          # color = paste0(color, "50"),
           symbol = paste0(symbol, "-open")
         ),
         x = ~mass,
         y = ~intensity,
         split = ~ interaction(z, color),
-        # split = ~z, # Splitting by time
         legendgroup = ~z,
         mode = "markers",
         color = marker_color,
@@ -3410,7 +3554,7 @@ multiple_spectra <- function(
         marker = list(
           size = 10,
           zindex = 100,
-          color = "white"
+          color = font_color
         ),
         hoverinfo = "text",
         text = ~ paste0(
@@ -3439,58 +3583,41 @@ multiple_spectra <- function(
       plotly::layout(
         paper_bgcolor = "rgba(0,0,0,0)",
         plot_bgcolor = "rgba(0,0,0,0)",
-        font = list(color = "white"),
+        font = list(size = 14, color = font_color),
         xaxis = list(
           title = "Mass [Da]",
-          color = "white",
-          gridcolor = "rgba(255, 255, 255, 0.2)",
-          zerolinecolor = "rgba(255, 255, 255, 0.5)"
+          color = font_color,
+          gridcolor = grid_color,
+          zerolinecolor = zeroline_color
         ),
         yaxis = list(
           title = "Intensity [%]",
-          color = "white",
-          gridcolor = "rgba(255, 255, 255, 0.2)",
-          zerolinecolor = "rgba(255, 255, 255, 0.5)"
+          color = font_color,
+          gridcolor = grid_color,
+          zerolinecolor = zeroline_color
         ),
         legend = list(
           bgcolor = "rgba(0,0,0,0)",
           bordercolor = "rgba(0,0,0,0)",
-          font = list(color = "white"),
+          font = list(color = font_color),
           title = list(
             text = paste0(
               "<b>Time</b> [",
               gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
               "]"
             ),
-            color = "white"
+            color = font_color
           )
         )
       )
   }
 }
 
-# Rendering function for relative binding table view
+# Filter function for table view
 #' @export
-render_table_view <- function(table, colors, tab, inputs, units) {
-  # If table empty
-  if (!nrow(table)) {
-    return(DT::datatable(
-      data.frame(rep(list(as.character()), 5)) |>
-        stats::setNames(c(
-          "Sample ID",
-          "Cmp Name",
-          "Mass Shift",
-          "%-Binding",
-          "Total %"
-        )),
-      selection = "none",
-      class = "order-column",
-      options = list(
-        dom = 't',
-        paging = FALSE
-      )
-    ))
-  }
+filter_table_view <- function(table, colors, inputs, units) {
+  # Replace NA in color names
+  names(colors)[is.na(names(colors))] <- "N/A"
 
   # Get optional concentration and time cols
   optional_cols <- if (length(units) == 2) {
@@ -3498,9 +3625,6 @@ render_table_view <- function(table, colors, tab, inputs, units) {
   } else {
     NULL
   }
-
-  # Replace NA in color names
-  names(colors)[is.na(names(colors))] <- "N/A"
 
   # Prepate data frame for table
   tbl <- table |>
@@ -3510,28 +3634,18 @@ render_table_view <- function(table, colors, tab, inputs, units) {
       `Cmp Name` = `Cmp Name`,
       dplyr::any_of(optional_cols),
       `Mass Shift` = `Theor. Cmp`,
+      `Bind. Stoich.` = `Bind. Stoich.`,
       `%-Binding` = `%-Binding`,
       `Total %` = `Total %-Binding`
     ) |>
     dplyr::mutate(
-      `Sample ID` = if (inputs$truncate_names) {
+      # Truncated label used only for color matching / display; original Sample ID kept
+      trunc_label = if (inputs$truncate_names) {
         table$`truncSample_ID`
       } else {
         `Sample ID`
       },
       `Cmp Name` = ifelse(is.na(`Cmp Name`), "N/A", `Cmp Name`),
-      `Mass Shift` = ifelse(
-        `Mass Shift` == "N/A",
-        "N/A",
-        paste0(
-          "[",
-          `Mass Shift`,
-          "]",
-          "&thinsp;<sub>",
-          table$`Bind. Stoich.`,
-          "</sub>"
-        )
-      ),
       label_color = get_contrast_color(colors[match(
         if (
           length(units) == 2 && inputs$color_variable == units["Concentration"]
@@ -3540,24 +3654,12 @@ render_table_view <- function(table, colors, tab, inputs, units) {
         } else if (inputs$color_variable == "Compounds") {
           `Cmp Name`
         } else if (inputs$color_variable == "Samples") {
-          `Sample ID`
+          trunc_label
         },
         names(colors)
       )]),
-      `%-Binding` = if (
-        is.null(inputs$binding_bar) || isTRUE(inputs$binding_bar)
-      ) {
-        round(`%-Binding`, 1)
-      } else {
-        as.character(round(`%-Binding`, 1))
-      },
-      `Total %` = if (
-        is.null(inputs$tot_binding_bar) || isTRUE(inputs$tot_binding_bar)
-      ) {
-        `Total %`
-      } else {
-        as.character(`Total %`)
-      },
+      `%-Binding` = round(`%-Binding`, 1),
+      `Total %` = `Total %`,
       col_var = !!rlang::sym(
         if (
           length(units) == 2 &&
@@ -3567,10 +3669,19 @@ render_table_view <- function(table, colors, tab, inputs, units) {
         } else if (inputs$color_variable == "Compounds") {
           "Cmp Name"
         } else if (inputs$color_variable == "Samples") {
-          "Sample ID"
+          "trunc_label"
         }
       )
     )
+
+  return(tbl)
+}
+
+# Rendering function for relative binding table view
+#' @export
+render_table_view <- function(table, colors, tab, inputs, units) {
+  # Replace NA in color names
+  names(colors)[is.na(names(colors))] <- "N/A"
 
   # Apply bar renderer to binding column
   if (
@@ -3595,13 +3706,13 @@ render_table_view <- function(table, colors, tab, inputs, units) {
   # Determine grouped row variable
   if (tab == "Compounds") {
     group_variable <- "Sample ID"
-    if (length(unique(tbl[[group_variable]])) != nrow(tbl)) {
-      tbl$`Sample ID` <- paste("Sample ID:", tbl$`Sample ID`)
+    if (length(unique(table[[group_variable]])) != nrow(table)) {
+      table$`Sample ID` <- paste("Sample ID:", table$`Sample ID`)
     }
   } else if (any(tab %in% c("Samples", "Proteins"))) {
     group_variable <- "Cmp Name"
-    if (length(unique(tbl[[group_variable]])) != nrow(tbl)) {
-      tbl$`Cmp Name` <- paste("Compound:", tbl$`Cmp Name`)
+    if (length(unique(table[[group_variable]])) != nrow(table)) {
+      table$`Cmp Name` <- paste("Compound:", table$`Cmp Name`)
     }
   } else {
     group_variable <- NULL
@@ -3609,15 +3720,42 @@ render_table_view <- function(table, colors, tab, inputs, units) {
 
   if (
     is.null(group_variable) ||
-      length(unique(tbl[[group_variable]])) == nrow(tbl)
+      length(unique(table[[group_variable]])) == nrow(table)
   ) {
     row_group <- NULL
   } else {
-    row_group <- list(dataSrc = which(names(tbl) == group_variable) - 1)
+    row_group <- list(dataSrc = which(names(table) == group_variable) - 1)
   }
 
+  # Display-only transforms: truncate Sample ID, format Mass Shift, coerce
+  # binding columns to character when bar renderer is off
+  if (isTRUE(inputs$truncate_names) && "trunc_label" %in% names(table)) {
+    table[["Sample ID"]] <- table[["trunc_label"]]
+  }
+  if (!is.null(inputs$binding_bar) && !isTRUE(inputs$binding_bar)) {
+    table[["%-Binding"]] <- as.character(table[["%-Binding"]])
+  }
+  if (!is.null(inputs$tot_binding_bar) && !isTRUE(inputs$tot_binding_bar)) {
+    table[["Total %"]] <- as.character(table[["Total %"]])
+  }
+  table <- dplyr::mutate(
+    table,
+    `Mass Shift` = ifelse(
+      `Mass Shift` == "N/A",
+      "N/A",
+      paste0(
+        "[",
+        `Mass Shift`,
+        "]",
+        "&thinsp;<sub>",
+        `Bind. Stoich.`,
+        "</sub>"
+      )
+    )
+  )
+
   DT::datatable(
-    data = tbl,
+    data = table,
     escape = FALSE,
     extensions = "RowGroup",
     rownames = FALSE,
@@ -3633,7 +3771,7 @@ render_table_view <- function(table, colors, tab, inputs, units) {
         list(
           visible = ifelse(
             is.null(group_variable) ||
-              length(unique(tbl[[group_variable]])) == nrow(tbl),
+              length(unique(table[[group_variable]])) == nrow(table),
             TRUE,
             FALSE
           ),
@@ -3644,6 +3782,8 @@ render_table_view <- function(table, colors, tab, inputs, units) {
           targets = c(
             "col_var",
             "label_color",
+            "Bind. Stoich.",
+            "trunc_label",
             if (tab == "Concentration") "Cmp Name"
           )
         ),
@@ -3689,22 +3829,15 @@ render_table_view <- function(table, colors, tab, inputs, units) {
     )
 }
 
-# Rendering function of hits table
+# Selection and filtering of hits table
 #' @export
-render_hits_table <- function(
+filter_hits_table <- function(
   hits_table,
-  concentration_colors,
-  single_conc = NULL,
   selected_cols = NULL,
-  bar_chart = character(),
   compounds = NULL,
   samples = NULL,
-  colors = NULL,
-  color_variable = NULL,
   expand = TRUE,
   na_include = TRUE,
-  truncated = NULL,
-  clickable = FALSE,
   units
 ) {
   # Modify if samples are summarized instead of expanded
@@ -3714,28 +3847,11 @@ render_hits_table <- function(
         `Sample ID`,
         `Protein`,
         `Cmp Name`,
-        `Theor. Prot.`,
+        `Theor. Prot. [Da]`,
         `Total %-Binding`,
         `truncSample_ID`
       )
   }
-
-  # if (length(bar_chart)) {
-  #   if (
-  #     "Total %-Binding" %in%
-  #       names(hits_table) &
-  #       any("Total %-Binding" %in% bar_chart)
-  #   ) {
-  #     hits_table$`Total %-Binding`[hits_table$`Total %-Binding` == "N/A"] <- NA
-  #   }
-  #   if (
-  #     "%-Binding" %in%
-  #       names(hits_table) &
-  #       any("%-Binding" %in% bar_chart)
-  #   ) {
-  #     hits_table$`%-Binding`[hits_table$`%-Binding` == "N/A"] <- NA
-  #   }
-  # }
 
   # Filter compounds
   if (!is.null(compounds) && na_include) {
@@ -3775,6 +3891,22 @@ render_hits_table <- function(
       all_of(selected_cols)
     )
 
+  return(hits_table)
+}
+
+# Rendering function of hits table
+#' @export
+render_hits_table <- function(
+  hits_table,
+  concentration_colors,
+  single_conc = NULL,
+  bar_chart = character(),
+  colors = NULL,
+  color_variable = NULL,
+  truncated = NULL,
+  clickable = FALSE,
+  units
+) {
   # Adapt table layout
   if (!is.null(single_conc)) {
     menu_length <- list(c(25, -1), c('25', 'All'))
@@ -3962,9 +4094,12 @@ new_sample_table <- function(
   compound_table,
   ki_kinact = FALSE
 ) {
-  result1 <<- result
+  sample_names <- sort(paste0(
+    result$samples %||% names(result$deconvolution),
+    ".raw"
+  ))
   sample_tab <- data.frame(
-    Sample = paste0(result$samples %||% names(result$deconvolution), ".raw"),
+    Sample = sample_names,
     Protein = ifelse(
       length(protein_table$Protein) == 1,
       protein_table$Protein,
@@ -4295,18 +4430,32 @@ transform_hits <- function(hits_summary) {
         c(`% Binding`, `Total % Binding`),
         ~ dplyr::if_else(is.na(.x), 0, round(.x * 100, 2))
       ),
-      # Format [Da] columns only if numeric
+      # Round protein mass columns (kept numeric for sorting/export)
       dplyr::across(
-        dplyr::ends_with("[Da]") & where(is.numeric),
+        dplyr::any_of(c("Mw Protein [Da]", "Measured Mw Protein [Da]")) &
+          where(is.numeric),
+        ~ round(.x, 1)
+      ),
+      # Format remaining [Da] columns only if numeric
+      dplyr::across(
+        dplyr::ends_with("[Da]") &
+          where(is.numeric) &
+          !dplyr::any_of(c("Mw Protein [Da]", "Measured Mw Protein [Da]")),
         ~ dplyr::if_else(
           is.na(.x),
           "N/A",
           paste(format(.x, nsmall = 1, trim = TRUE), "Da")
         )
       ),
-      # Global NA cleanup (convert to character)
+      # Global NA cleanup (convert to character, exclude numeric protein mass cols)
       dplyr::across(
-        !dplyr::any_of(c("Compound", "% Binding", "Total % Binding")),
+        !dplyr::any_of(c(
+          "Compound",
+          "% Binding",
+          "Total % Binding",
+          "Mw Protein [Da]",
+          "Measured Mw Protein [Da]"
+        )),
         ~ tidyr::replace_na(as.character(.x), "N/A")
       )
     ) |>
@@ -4317,12 +4466,12 @@ transform_hits <- function(hits_summary) {
     "Well",
     "Sample ID",
     "Protein",
-    "Theor. Prot.",
-    "Meas. Prot.",
+    "Theor. Prot. [Da]",
+    "Meas. Prot. [Da]",
     "Δ Prot.",
-    "Ⅰ Prot.",
+    "Int. Prot.",
     "Peak Signal",
-    "Ⅰ Cmp",
+    "Int. Cmp",
     "Cmp Name",
     "Theor. Cmp",
     "Δ Cmp",
@@ -4539,4 +4688,629 @@ filter_color_list <- function(color_list, min_n) {
   })
 
   return(filtered_list)
+}
+
+# Make compound distribution plot for proteins tab
+#' @export
+prot_compound_distribution <- function(
+  hits_summary,
+  protein,
+  color_variable,
+  truncate_names,
+  color_scale,
+  distribution_scale,
+  distribution_labels = NULL,
+  theme = "dark"
+) {
+  tbl <- hits_summary |>
+    dplyr::filter(
+      `Protein` == protein &
+        !is.na(`Cmp Name`)
+    )
+
+  colors <- get_cmp_colorScale(
+    filtered_table = tbl,
+    scale = color_scale,
+    variable = color_variable,
+    trunc = truncate_names
+  )
+
+  if (color_variable == "Compounds") {
+    color <- ~`Cmp Name`
+  } else if (color_variable == "Samples") {
+    color <- ~`Sample ID`
+  }
+
+  tbl <- tbl |>
+    dplyr::group_by(`Cmp Name`) |>
+    dplyr::mutate(
+      `Sample ID` = if (truncate_names) {
+        `truncSample_ID`
+      } else {
+        `Sample ID`
+      },
+      mass_stoich = paste0(
+        "[",
+        `Theor. Cmp`,
+        "]",
+        sapply(`Bind. Stoich.`, function(x) {
+          as.character(htmltools::tags$sub(x))
+        })
+      ),
+      Group = match(`Sample ID`, unique(`Sample ID`)),
+      `Cmp Name` = factor(`Cmp Name`, levels = unique(`Cmp Name`)),
+      `Sample ID` = factor(
+        `Sample ID`,
+        levels = unique(`Sample ID`)
+      ),
+      `%-Binding` = factor(
+        `%-Binding`,
+        levels = unique(`%-Binding`)
+      ),
+      bg_hex = if (color_variable == "Compounds") {
+        colors[as.character(`Cmp Name`)]
+      } else if (color_variable == "Samples") {
+        colors[as.character(`Sample ID`)]
+      },
+      label_color = get_contrast_color(bg_hex),
+      mass_stoich = paste0(
+        "<span style='color:",
+        label_color,
+        "'>",
+        mass_stoich,
+        "</span>"
+      )
+    ) |>
+    dplyr::ungroup()
+
+  range <- c(
+    0,
+    max(tbl$`Total %-Binding`) + 10
+  )
+
+  if (!is.null(distribution_scale) && distribution_scale == "100") {
+    range <- c(0, 101)
+  }
+
+  condition <- ifelse(
+    length(levels(tbl$`Cmp Name`)) > 1,
+    max(nchar(levels(tbl$`Cmp Name`))) <= 22,
+    max(nchar(levels(tbl$`Sample ID`))) <= 22
+  )
+
+  showticklabels <- ifelse(
+    !is.null(distribution_labels),
+    distribution_labels,
+    condition
+  )
+
+  axis_color <- if (theme == "light") "black" else "#ffffff"
+  grid_color <- if (theme == "light") "rgba(0,0,0,0.2)" else "#7f7f7fff"
+
+  if (length(unique(tbl$`Cmp Name`)) > 1) {
+    layout_list <- list(
+      barmode = "relative",
+      font = list(size = 12, color = axis_color),
+      paper_bgcolor = 'rgba(0,0,0,0)',
+      plot_bgcolor = 'rgba(0,0,0,0)',
+      xaxis = list(
+        type = "category",
+        tickson = "boundaries",
+        categoryorder = "array",
+        categoryarray = levels(tbl$`Cmp Name`),
+        showgrid = FALSE,
+        zeroline = FALSE,
+        color = axis_color,
+        showticklabels = showticklabels
+      ),
+      yaxis = list(
+        range = range,
+        title = list(text = "%-Binding"),
+        zeroline = FALSE,
+        gridcolor = grid_color,
+        color = axis_color,
+        dtick = 20,
+        tick0 = 0
+      )
+    )
+
+    groups <- unique(tbl$Group)
+    n_groups <- length(groups)
+    group_map <- stats::setNames(0:(n_groups - 1), groups)
+
+    bar_width <- min(0.3, 0.85 / (n_groups + max(0, n_groups - 1) * 0.15))
+    group_gap <- bar_width * 0.15
+
+    compound_local_n <- tbl |>
+      dplyr::group_by(`Cmp Name`) |>
+      dplyr::summarize(local_n = dplyr::n_distinct(Group), .groups = "drop")
+    compound_local_n_map <- stats::setNames(
+      compound_local_n$local_n,
+      compound_local_n$`Cmp Name`
+    )
+
+    if (n_groups > 1) {
+      for (i in 2:n_groups) {
+        axis_name <- paste0("yaxis", i)
+        layout_list[[axis_name]] <- list(
+          visible = FALSE,
+          matches = "y",
+          overlaying = "y",
+          anchor = "x",
+          range = range,
+          dtick = 20,
+          tick0 = 0
+        )
+      }
+    }
+
+    bar_chart <- plotly::plot_ly(showlegend = FALSE)
+    bar_chart <- do.call(
+      plotly::layout,
+      c(list(bar_chart), layout_list)
+    )
+
+    for (i in 1:nrow(tbl)) {
+      row <- tbl[i, ]
+      g <- row$Group[[1]]
+      i_group <- group_map[[g]]
+      yax <- ifelse(i_group == 0, "y", paste0("y", i_group + 1))
+      local_n <- compound_local_n_map[[as.character(row$`Cmp Name`[[1]])]]
+      local_cluster_width <- local_n *
+        bar_width +
+        max(0, local_n - 1) * group_gap
+      off <- -local_cluster_width / 2 + i_group * (bar_width + group_gap)
+
+      if (color_variable == "Compounds") {
+        var <- as.character(row$`Cmp Name`[[1]])
+      } else if (color_variable == "Samples") {
+        var <- as.character(row$`Sample ID`[[1]])
+      }
+
+      col <- colors[[var]]
+      y_val <- row$`%-Binding`[[1]]
+
+      hover_text <- paste0(
+        "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
+        row$`Theor. Cmp`[[1]],
+        "</b><br>",
+        "<span style='opacity: 0.8'>Stoichiometry:</span> <b>",
+        row$`Bind. Stoich.`[[1]],
+        "</b><br>",
+        "<span style='opacity: 0.8'>%-Binding:</span> <b>",
+        row$`%-Binding`[[1]],
+        "</b>",
+        "<extra><div style='text-align: left;'>",
+        "<span style='opacity: 0.8;;'>Cmp Name: </span><b>",
+        row$`Cmp Name`[[1]],
+        "</b><br>",
+        "<span style='opacity: 0.8;'>Sample ID: </span><b>",
+        row$`Sample ID`[[1]],
+        "</b>",
+        "</div></extra>"
+      )
+
+      bar_chart <- plotly::add_bars(
+        bar_chart,
+        x = row$`Cmp Name`[[1]],
+        y = as.numeric(as.character(y_val)),
+        offsetgroup = i_group,
+        offset = off,
+        width = bar_width,
+        text = row$mass_stoich[[1]],
+        textposition = 'inside',
+        insidetextanchor = 'middle',
+        textfont = list(size = 12),
+        hovertemplate = hover_text,
+        hoverlabel = list(align = "left", valign = "middle"),
+        marker = list(
+          color = col,
+          line = list(color = 'black', width = 1)
+        ),
+        yaxis = yax,
+        showlegend = FALSE
+      )
+    }
+
+    bar_chart <- bar_chart |>
+      plotly::layout(
+        xaxis = list(title = list(text = NULL))
+      )
+  } else {
+    bar_chart <- plotly::plot_ly(data = tbl) |>
+      plotly::add_trace(
+        x = ~`Sample ID`,
+        y = ~ as.numeric(as.character(`%-Binding`)),
+        color = color,
+        colors = colors,
+        type = 'bar',
+        name = ~mass_stoich,
+        hovertemplate = ~ paste0(
+          "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
+          `Theor. Cmp`,
+          "</b><br>",
+          "<span style='opacity: 0.8'>Stoichiometry:</span> <b>",
+          `Bind. Stoich.`,
+          "</b><br>",
+          "<span style='opacity: 0.8'>%-Binding:</span> <b>",
+          `%-Binding`,
+          "</b>",
+          "<extra><div style='text-align: left;'>",
+          "<span style='opacity: 0.8;;'>Cmp Name: </span><b>",
+          `Cmp Name`,
+          "</b><br>",
+          "<span style='opacity: 0.8;'>Sample ID: </span><b>",
+          `Sample ID`,
+          "</b>",
+          "</div></extra>"
+        ),
+        hoverlabel = list(align = "left", valign = "middle"),
+        text = ~mass_stoich,
+        textposition = 'inside',
+        textfont = list(size = 12),
+        marker = list(line = list(color = 'white', width = 1)),
+        showlegend = FALSE
+      )
+
+    if (length(tbl$`Sample ID`) <= 20) {
+      totals <- dplyr::group_by(tbl, `Sample ID`) |>
+        dplyr::summarize(
+          total_val = sum(as.numeric(as.character(`%-Binding`)))
+        )
+      bar_chart <- bar_chart |>
+        plotly::add_trace(
+          data = totals,
+          x = ~`Sample ID`,
+          y = ~total_val,
+          type = 'scatter',
+          mode = 'text',
+          text = ~ paste0(total_val, "%"),
+          textposition = 'top center',
+          showlegend = FALSE,
+          hoverinfo = 'none',
+          inherit = FALSE,
+          textfont = list(
+            color = axis_color,
+            size = if (length(tbl$`Sample ID`) <= 8) {
+              16
+            } else if (length(tbl$`Sample ID`) <= 16) {
+              14
+            } else {
+              12
+            }
+          )
+        )
+    }
+
+    bar_chart <- bar_chart |>
+      plotly::layout(
+        barmode = 'stack',
+        bargap = 0.5,
+        font = list(size = 12, color = axis_color),
+        paper_bgcolor = 'rgba(0,0,0,0)',
+        plot_bgcolor = 'rgba(0,0,0,0)',
+        xaxis = list(
+          title = list(text = NULL),
+          showgrid = FALSE,
+          zeroline = FALSE,
+          color = axis_color,
+          showticklabels = showticklabels
+        ),
+        yaxis = list(
+          range = range,
+          title = list(text = "%-Binding"),
+          zeroline = FALSE,
+          gridcolor = grid_color,
+          color = axis_color
+        )
+      )
+  }
+
+  return(bar_chart)
+}
+
+# Make compound distribution plot for compounds tab
+#' @export
+cmp_compound_distribution <- function(
+  hits_summary,
+  compound,
+  color_variable,
+  truncate_names,
+  color_scale,
+  distribution_scale,
+  distribution_labels = NULL,
+  theme = "dark"
+) {
+  tbl <- hits_summary |>
+    dplyr::filter(`Cmp Name` == compound) |>
+    dplyr::mutate(
+      `Sample ID` = if (truncate_names) {
+        `truncSample_ID`
+      } else {
+        `Sample ID`
+      },
+      mass_stoich = paste0(
+        "[",
+        `Theor. Cmp`,
+        "]",
+        sapply(`Bind. Stoich.`, function(x) {
+          as.character(htmltools::tags$sub(x))
+        })
+      )
+    )
+
+  tbl$`Sample ID` <- factor(
+    tbl$`Sample ID`,
+    levels = unique(tbl$`Sample ID`)
+  )
+
+  colors <- get_cmp_colorScale(
+    filtered_table = tbl,
+    scale = color_scale,
+    variable = color_variable,
+    trunc = truncate_names
+  )
+
+  tbl <- tbl |>
+    dplyr::mutate(
+      bg_hex = if (color_variable == "Compounds") {
+        colors[as.character(`Cmp Name`)]
+      } else if (color_variable == "Samples") {
+        colors[as.character(`Sample ID`)]
+      },
+      label_color = get_contrast_color(bg_hex),
+      mass_stoich = paste0(
+        "<span style='color:",
+        label_color,
+        "'>",
+        mass_stoich,
+        "</span>"
+      )
+    )
+
+  if (color_variable == "Compounds") {
+    color <- ~`Cmp Name`
+  } else if (color_variable == "Samples") {
+    color <- ~`Sample ID`
+  }
+
+  axis_color <- if (theme == "light") "black" else "#ffffff"
+  grid_color <- if (theme == "light") "rgba(0,0,0,0.2)" else "#7f7f7fff"
+
+  bar_chart <- plotly::plot_ly(data = tbl) |>
+    plotly::add_trace(
+      x = ~`Sample ID`,
+      y = ~`%-Binding`,
+      color = color,
+      colors = colors,
+      type = 'bar',
+      name = ~mass_stoich,
+      hovertemplate = ~ paste0(
+        "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
+        `Theor. Cmp`,
+        "</b><br>",
+        "<span style='opacity: 0.8'>Stoichiometry:</span> <b>",
+        `Bind. Stoich.`,
+        "</b><br>",
+        "<span style='opacity: 0.8'>%-Binding:</span> <b>",
+        `%-Binding`,
+        "</b>",
+        "<extra><div style='text-align: left;'>",
+        "<span style='opacity: 0.8;;'>Cmp Name: </span><b>",
+        `Cmp Name`,
+        "</b><br>",
+        "<span style='opacity: 0.8;'>Sample ID: </span><b>",
+        `Sample ID`,
+        "</b>",
+        "</div></extra>"
+      ),
+      hoverlabel = list(align = "left", valign = "middle"),
+      text = ~mass_stoich,
+      textposition = 'inside',
+      textfont = list(size = 12),
+      marker = list(line = list(color = 'white', width = 1)),
+      showlegend = FALSE
+    )
+
+  if (length(tbl$`Sample ID`) <= 20) {
+    totals <- dplyr::group_by(tbl, `Sample ID`) |>
+      dplyr::summarize(
+        total_val = sum(`%-Binding`)
+      )
+    bar_chart <- bar_chart |>
+      plotly::add_trace(
+        data = totals,
+        x = ~`Sample ID`,
+        y = ~total_val,
+        type = 'scatter',
+        mode = 'text',
+        text = ~ paste0(total_val, "%"),
+        textposition = 'top center',
+        showlegend = FALSE,
+        hoverinfo = 'none',
+        inherit = FALSE,
+        textfont = list(
+          color = axis_color,
+          size = if (length(tbl$`Sample ID`) <= 8) {
+            16
+          } else if (length(tbl$`Sample ID`) <= 16) {
+            14
+          } else {
+            12
+          }
+        )
+      )
+  }
+
+  range <- c(
+    0,
+    max(tbl$`Total %-Binding`) + 10
+  )
+
+  if (!is.null(distribution_scale) && distribution_scale == "100") {
+    range <- c(0, 101)
+  }
+
+  bar_chart |>
+    plotly::layout(
+      barmode = 'stack',
+      bargap = 0.5,
+      font = list(size = 12, color = axis_color),
+      paper_bgcolor = 'rgba(0,0,0,0)',
+      plot_bgcolor = 'rgba(0,0,0,0)',
+      xaxis = list(
+        title = list(text = NULL),
+        showgrid = FALSE,
+        zeroline = FALSE,
+        color = axis_color,
+        showticklabels = TRUE
+        #   ifelse(
+        #   !is.null(distribution_labels),
+        #   distribution_labels,
+        #   max(nchar(levels(tbl$`Sample ID`))) <= 22 | nrow(tbl) < 4
+        # )
+      ),
+      yaxis = list(
+        range = range,
+        title = list(text = "%-Binding"),
+        zeroline = FALSE,
+        gridcolor = grid_color,
+        color = axis_color
+      )
+    )
+}
+
+# Make compound distribution pie chart for samples tab
+#' @export
+smpl_compound_distribution <- function(
+  hits_summary,
+  sample,
+  color_variable,
+  truncate_names,
+  color_scale,
+  theme = "dark"
+) {
+  tbl <- hits_summary |>
+    dplyr::filter(`Sample ID` == sample)
+
+  if (anyNA(tbl)) {
+    return(NULL)
+  }
+
+  cmp_table <- tbl |>
+    dplyr::group_by(`Cmp Name`) |>
+    dplyr::arrange(dplyr::desc(`Theor. Cmp`), `Bind. Stoich.`) |>
+    dplyr::reframe(
+      `Cmp Name` = `Cmp Name`,
+      `Sample ID` = if (truncate_names) `truncSample_ID` else `Sample ID`,
+      total_bind = `Total %-Binding`,
+      mass_shift = `Theor. Cmp`,
+      mass_stoich = paste0(
+        "[",
+        `Theor. Cmp`,
+        "]",
+        sapply(`Bind. Stoich.`, function(x) {
+          as.character(htmltools::tags$sub(x))
+        })
+      ),
+      relBinding = `%-Binding` / 100,
+      `%-Binding` = paste0(as.character(`%-Binding`), "%"),
+    ) |>
+    rbind(
+      data.frame(
+        "Unbound",
+        "Unbound",
+        100 - tbl$`Total %-Binding`[1],
+        "Unbound",
+        "Unbound",
+        1 - tbl$`Total %-Binding`[1] / 100,
+        "Unbound"
+      ) |>
+        stats::setNames(c(
+          "Sample ID",
+          "Cmp Name",
+          "total_bind",
+          "mass_shift",
+          "mass_stoich",
+          "relBinding",
+          "%-Binding"
+        )) |>
+        dplyr::select(c(
+          "Cmp Name",
+          "Sample ID",
+          "total_bind",
+          "mass_shift",
+          "mass_stoich",
+          "relBinding",
+          "%-Binding"
+        ))
+    )
+
+  colors <- c(
+    "#e5e5e5",
+    get_cmp_colorScale(
+      filtered_table = tbl,
+      scale = color_scale,
+      variable = color_variable,
+      trunc = truncate_names
+    )
+  )
+  names(colors) <- c("empty", names(colors)[-1])
+
+  if (color_variable == "Compounds") {
+    cmp_table$color <- colors[match(cmp_table$`Cmp Name`, names(colors))]
+  } else {
+    cmp_table$color <- colors[match(cmp_table$`Sample ID`, names(colors))]
+  }
+  cmp_table$color[cmp_table$mass_shift == "Unbound"] <- "#333338"
+
+  plotly::plot_ly(
+    data = cmp_table,
+    labels = ~mass_stoich,
+    values = ~relBinding,
+    sort = FALSE,
+    type = 'pie',
+    hole = 0.4,
+    textinfo = 'label+percent',
+    texttemplate = "%{label}<br>%{percent}",
+    textposition = 'auto',
+    hovertemplate = ~ paste0(
+      "<span style='opacity: 0.8'>Compound:</span> <b>",
+      `Cmp Name`,
+      "</b><br>",
+      "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
+      `mass_stoich`,
+      "</b><br>",
+      "<span style='opacity: 0.8'>%-Binding:</span> <b>",
+      `%-Binding`,
+      "<extra></extra>"
+    ),
+    insidetextfont = list(size = 14),
+    outsidetextfont = list(color = 'white', size = 14),
+    marker = list(
+      colors = ~ I(color),
+      line = list(color = '#e5e5e5', width = 1)
+    )
+  ) |>
+    plotly::layout(
+      showlegend = FALSE,
+      paper_bgcolor = "rgba(0,0,0,0)",
+      plot_bgcolor = "rgba(0,0,0,0)",
+      annotations = list(
+        list(
+          x = 0.5,
+          y = 0.5,
+          text = paste0("<b>", cmp_table$total_bind[1], "%</b><br>Bound"),
+          xref = "paper",
+          yref = "paper",
+          xanchor = "center",
+          yanchor = "middle",
+          showarrow = FALSE,
+          font = list(
+            size = 22,
+            color = if (theme == "light") "black" else "white"
+          )
+        )
+      )
+    )
 }
