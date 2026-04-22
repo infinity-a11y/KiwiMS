@@ -2385,7 +2385,6 @@ server <- function(
             TRUE,
             input$spectrum_annotation
           )
-          theme333 <<- theme
 
           if (!is.null(plot_data)) {
             spectrum_plot(

@@ -1590,9 +1590,20 @@ binding_results_ui <- function(ns, hits_summary) {
                   class = "box-header-settings-help",
                   card_settings_popover(
                     shiny::div(
-                      shiny::uiOutput(ns(
-                        "proteins_spectrum_labels_ui"
-                      )),
+                      shinyWidgets::materialSwitch(
+                        ns("proteins_spectrum_labels"),
+                        label = "Show Labels",
+                        value = local({
+                          prot <- unique(hits_summary$`Protein`)[1]
+                          tbl <- hits_summary[hits_summary$`Protein` == prot, ]
+                          if (is.na(prot) || nrow(tbl) < 2) return(TRUE)
+                          ids <- tbl$`Sample ID`
+                          ids <- ids[!is.na(ids)]
+                          length(unique(ids)) <= 8 &
+                            max(nchar(as.character(ids))) <= 20
+                        }),
+                        right = TRUE
+                      ),
                       style = "margin-right: 20px;"
                     )
                   ),

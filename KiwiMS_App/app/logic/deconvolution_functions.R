@@ -882,11 +882,7 @@ spectrum_plot <- function(
   }
 
   # Theme Styling Logic
-
   marker_fill_color <- "#ffa100"
-
-  theme666 <<- theme
-
   if (tolower(theme) == "light") {
     bg_color <- "rgba(0,0,0,0)"
     plot_bg_color <- "rgba(0,0,0,0)"
