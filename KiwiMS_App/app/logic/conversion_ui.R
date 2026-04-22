@@ -1319,6 +1319,13 @@ binding_results_ui <- function(ns, hits_summary) {
                   class = "box-header-settings-help",
                   card_settings_popover(
                     shiny::div(
+                      shiny::div(
+                        class = "spectrum-radio-button",
+                        shinyWidgets::radioGroupButtons(
+                          ns("compounds_spectrum_kind"),
+                          choices = c("3D", "Planar")
+                        )
+                      ),
                       shinyWidgets::materialSwitch(
                         ns("compounds_spectrum_labels"),
                         label = "Show Labels",
@@ -1590,6 +1597,13 @@ binding_results_ui <- function(ns, hits_summary) {
                   class = "box-header-settings-help",
                   card_settings_popover(
                     shiny::div(
+                      shiny::div(
+                        class = "spectrum-radio-button",
+                        shinyWidgets::radioGroupButtons(
+                          ns("proteins_spectrum_kind"),
+                          choices = c("3D", "Planar")
+                        )
+                      ),
                       shinyWidgets::materialSwitch(
                         ns("proteins_spectrum_labels"),
                         label = "Show Labels",

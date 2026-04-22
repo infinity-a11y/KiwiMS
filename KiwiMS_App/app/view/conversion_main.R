@@ -1864,7 +1864,7 @@ server <- function(
                   class = "conversion-sample-protein",
                   shiny::HTML(
                     paste0(
-                      length(unique(tbl$`Theor. Cmp`[!is.na(tbl$`Cmp Name`)])),
+                      length(unique(tbl$`Theor. Cmp [Da]`[!is.na(tbl$`Cmp Name`)])),
                       "<br>",
                       unique(tbl$`Cmp Name`[!is.na(tbl$`Cmp Name`)]),
                       "<br>",
@@ -2085,7 +2085,7 @@ server <- function(
                 hits_summary$`Cmp Name` %in% selected,
               ]
 
-              if (length(unique(theor_cmp_mw$`Theor. Cmp`))) {
+              if (length(unique(theor_cmp_mw$`Theor. Cmp [Da]`))) {
                 shiny::div(
                   class = "conversion-sample-protein-box",
                   shiny::div(
@@ -2097,21 +2097,21 @@ server <- function(
                     shiny::HTML(paste(
                       selected,
                       "<br>",
-                      length(unique(theor_cmp_mw$`Theor. Cmp`)),
+                      length(unique(theor_cmp_mw$`Theor. Cmp [Da]`)),
                       "<br>",
-                      if (length(unique(theor_cmp_mw$`Theor. Cmp`)) > 1) {
+                      if (length(unique(theor_cmp_mw$`Theor. Cmp [Da]`)) > 1) {
                         paste(
                           format(
                             c(
                               min(as.numeric(gsub(
                                 " Da",
                                 "",
-                                unique(theor_cmp_mw$`Theor. Cmp`)
+                                unique(theor_cmp_mw$`Theor. Cmp [Da]`)
                               ))),
                               max(as.numeric(gsub(
                                 " Da",
                                 "",
-                                unique(theor_cmp_mw$`Theor. Cmp`)
+                                unique(theor_cmp_mw$`Theor. Cmp [Da]`)
                               )))
                             ),
                             big.mark = ",",
@@ -2124,7 +2124,7 @@ server <- function(
                           as.numeric(gsub(
                             " Da",
                             "",
-                            unique(theor_cmp_mw$`Theor. Cmp`)
+                            unique(theor_cmp_mw$`Theor. Cmp [Da]`)
                           )),
                           big.mark = ",",
                           scientific = FALSE
@@ -2402,7 +2402,8 @@ server <- function(
                   samples = unique(hits_summary$`Sample ID`[
                     hits_summary$`Cmp Name` == conversion_compound_picker
                   ]),
-                  cubic = TRUE,
+                  cubic = is.null(input$compounds_spectrum_kind) ||
+                    input$compounds_spectrum_kind == "3D",
                   color_cmp = colors,
                   truncated = if (truncate_names) mapping else FALSE,
                   color_variable = color_variable,
@@ -2424,6 +2425,7 @@ server <- function(
                 render_trigger(),
                 input$truncate_names,
                 input$color_scale,
+                input$compounds_spectrum_kind,
                 compounds_labels_val(),
                 manual_render_cmp_spectrum()
               )
@@ -2935,11 +2937,8 @@ server <- function(
                     # &
                     #   hits_summary$`Meas. Prot.` != "N/A"
                   ]),
-                  cubic = ifelse(
-                    TRUE,
-                    TRUE,
-                    FALSE
-                  ),
+                  cubic = is.null(input$proteins_spectrum_kind) ||
+                    input$proteins_spectrum_kind == "3D",
                   color_cmp = colors,
                   truncated = if (truncate_names) mapping else FALSE,
                   color_variable = color_variable,
@@ -2961,6 +2960,7 @@ server <- function(
                 input$color_scale,
                 input$conversion_protein_picker,
                 input$truncate_names,
+                input$proteins_spectrum_kind,
                 proteins_labels_val(),
                 manual_render_spectrum()
               )
@@ -3893,7 +3893,8 @@ server <- function(
           multiple_spectra(
             results_list = result_list,
             samples = samples,
-            cubic = TRUE,
+            cubic = is.null(input$compounds_spectrum_kind) ||
+              input$compounds_spectrum_kind == "3D",
             color_cmp = colors,
             truncated = if (input$truncate_names) id_mapping else FALSE,
             color_variable = input$color_variable,
@@ -3986,12 +3987,13 @@ server <- function(
           multiple_spectra(
             results_list = result_list,
             samples = samples,
-            cubic = TRUE,
+            cubic = is.null(input$proteins_spectrum_kind) ||
+              input$proteins_spectrum_kind == "3D",
             color_cmp = colors,
             truncated = if (input$truncate_names) id_mapping else FALSE,
             color_variable = input$color_variable,
             hits_summary = hits_summary,
-            labels_show = proteins_labels_val(),
+            labels_show = input$proteins_spectrum_labels,
             theme = theme
           )
         }
@@ -5055,7 +5057,7 @@ server <- function(
                       " – measured deconvolved mass of the protein species"
                     ),
                     htmltools::tags$li(
-                      shiny::strong("Δ Prot."),
+                      shiny::strong("Δ Prot. [Da]"),
                       " – difference between theoretical and measured deconvolved protein mass"
                     ),
                     htmltools::tags$li(
@@ -5063,8 +5065,8 @@ server <- function(
                       " – relative intensity of the unmodified protein peak [%]"
                     ),
                     htmltools::tags$li(
-                      shiny::strong("Peak Signal"),
-                      " – raw signal intensity for present peak"
+                      shiny::strong("Peak Signal [Da]"),
+                      " – measured peak mass of the compound"
                     ),
                     htmltools::tags$li(
                       shiny::strong("Int. Cmp"),
@@ -5075,12 +5077,12 @@ server <- function(
                       " – compound name or ID of the bound compound"
                     ),
                     htmltools::tags$li(
-                      shiny::strong("Theor. Cmp"),
+                      shiny::strong("Theor. Cmp [Da]"),
                       " – theoretical mass of the bound compound"
                     ),
                     htmltools::tags$li(
-                      shiny::strong("Δ Cmp"),
-                      " – difference between theoretical complex and the obtained deconvolved mass [Da]"
+                      shiny::strong("Δ Cmp [Da]"),
+                      " – difference between theoretical complex and the obtained deconvolved mass"
                     ),
                     htmltools::tags$li(
                       shiny::strong("Bind. Stoich."),

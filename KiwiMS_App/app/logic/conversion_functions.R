@@ -3503,17 +3503,25 @@ multiple_spectra <- function(
         )
       )
   } else {
+    planar_colors <- if (!is.null(color_variable) && color_variable == "Samples") {
+      color_cmp
+    } else if (!is.null(color_variable) && color_variable == "Compounds") {
+      # Lines all same color; compound markers handle the coloring
+      z_levels <- levels(spectrum_data$z)
+      stats::setNames(rep(font_color, length(z_levels)), z_levels)
+    } else {
+      brighten_hex(
+        viridisLite::viridis(length(unique(peaks_data$z))),
+        factor = 1.33
+      )
+    }
+
     plotly::plot_ly(
       data = spectrum_data,
       x = ~mass,
       y = ~intensity,
       color = ~z,
-      colors = brighten_hex(
-        viridisLite::viridis(
-          length(unique(peaks_data$z))
-        ),
-        factor = 1.33
-      ),
+      colors = planar_colors,
       legendgroup = ~z,
       type = "scatter",
       mode = "lines",
@@ -3545,16 +3553,15 @@ multiple_spectra <- function(
         ),
         x = ~mass,
         y = ~intensity,
-        split = ~ interaction(z, color),
+        split = ~ interaction(z, name),
         legendgroup = ~z,
         mode = "markers",
         color = marker_color,
         symbol = ~ I(symbol),
         inherit = FALSE,
-        marker = list(
-          size = 10,
-          zindex = 100,
-          color = font_color
+        marker = c(
+          list(size = 10, zindex = 100, line = list(color = font_color, width = 1.5)),
+          if (is.null(color_variable)) list(color = font_color) else list()
         ),
         hoverinfo = "text",
         text = ~ paste0(
@@ -3601,10 +3608,18 @@ multiple_spectra <- function(
           bordercolor = "rgba(0,0,0,0)",
           font = list(color = font_color),
           title = list(
-            text = paste0(
-              "<b>Time</b> [",
-              gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
-              "]"
+            text = paste(
+              "<b>",
+              ifelse(
+                time,
+                paste0(
+                  "Time [",
+                  gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+                  "]"
+                ),
+                "Sample ID"
+              ),
+              "</b>"
             ),
             color = font_color
           )
@@ -3633,7 +3648,7 @@ filter_table_view <- function(table, colors, inputs, units) {
       `Sample ID` = `Sample ID`,
       `Cmp Name` = `Cmp Name`,
       dplyr::any_of(optional_cols),
-      `Mass Shift` = `Theor. Cmp`,
+      `Mass Shift` = `Theor. Cmp [Da]`,
       `Bind. Stoich.` = `Bind. Stoich.`,
       `%-Binding` = `%-Binding`,
       `Total %` = `Total %-Binding`
@@ -3970,7 +3985,8 @@ render_hits_table <- function(
         if (length(bar_chart) > 0 & any(bar_chart %in% names(hits_table))) {
           list(
             targets = bar_chart[bar_chart %in% names(hits_table)],
-            render = htmlwidgets::JS(chart_js)
+            render = htmlwidgets::JS(chart_js),
+            type = "num"
           )
         } else {
           list()
@@ -4444,7 +4460,7 @@ transform_hits <- function(hits_summary) {
         ~ dplyr::if_else(
           is.na(.x),
           "N/A",
-          paste(format(.x, nsmall = 1, trim = TRUE), "Da")
+          format(.x, nsmall = 1, trim = TRUE)
         )
       ),
       # Global NA cleanup (convert to character, exclude numeric protein mass cols)
@@ -4468,13 +4484,13 @@ transform_hits <- function(hits_summary) {
     "Protein",
     "Theor. Prot. [Da]",
     "Meas. Prot. [Da]",
-    "Δ Prot.",
+    "Δ Prot. [Da]",
     "Int. Prot.",
-    "Peak Signal",
+    "Peak Signal [Da]",
     "Int. Cmp",
     "Cmp Name",
-    "Theor. Cmp",
-    "Δ Cmp",
+    "Theor. Cmp [Da]",
+    "Δ Cmp [Da]",
     "Bind. Stoich.",
     "%-Binding",
     "Total %-Binding"
@@ -4731,7 +4747,7 @@ prot_compound_distribution <- function(
       },
       mass_stoich = paste0(
         "[",
-        `Theor. Cmp`,
+        `Theor. Cmp [Da]`,
         "]",
         sapply(`Bind. Stoich.`, function(x) {
           as.character(htmltools::tags$sub(x))
@@ -4872,7 +4888,7 @@ prot_compound_distribution <- function(
 
       hover_text <- paste0(
         "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
-        row$`Theor. Cmp`[[1]],
+        row$`Theor. Cmp [Da]`[[1]],
         "</b><br>",
         "<span style='opacity: 0.8'>Stoichiometry:</span> <b>",
         row$`Bind. Stoich.`[[1]],
@@ -4927,7 +4943,7 @@ prot_compound_distribution <- function(
         name = ~mass_stoich,
         hovertemplate = ~ paste0(
           "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
-          `Theor. Cmp`,
+          `Theor. Cmp [Da]`,
           "</b><br>",
           "<span style='opacity: 0.8'>Stoichiometry:</span> <b>",
           `Bind. Stoich.`,
@@ -5031,7 +5047,7 @@ cmp_compound_distribution <- function(
       },
       mass_stoich = paste0(
         "[",
-        `Theor. Cmp`,
+        `Theor. Cmp [Da]`,
         "]",
         sapply(`Bind. Stoich.`, function(x) {
           as.character(htmltools::tags$sub(x))
@@ -5087,7 +5103,7 @@ cmp_compound_distribution <- function(
       name = ~mass_stoich,
       hovertemplate = ~ paste0(
         "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
-        `Theor. Cmp`,
+        `Theor. Cmp [Da]`,
         "</b><br>",
         "<span style='opacity: 0.8'>Stoichiometry:</span> <b>",
         `Bind. Stoich.`,
@@ -5199,15 +5215,15 @@ smpl_compound_distribution <- function(
 
   cmp_table <- tbl |>
     dplyr::group_by(`Cmp Name`) |>
-    dplyr::arrange(dplyr::desc(`Theor. Cmp`), `Bind. Stoich.`) |>
+    dplyr::arrange(dplyr::desc(`Theor. Cmp [Da]`), `Bind. Stoich.`) |>
     dplyr::reframe(
       `Cmp Name` = `Cmp Name`,
       `Sample ID` = if (truncate_names) `truncSample_ID` else `Sample ID`,
       total_bind = `Total %-Binding`,
-      mass_shift = `Theor. Cmp`,
+      mass_shift = `Theor. Cmp [Da]`,
       mass_stoich = paste0(
         "[",
-        `Theor. Cmp`,
+        `Theor. Cmp [Da]`,
         "]",
         sapply(`Bind. Stoich.`, function(x) {
           as.character(htmltools::tags$sub(x))
