@@ -39,7 +39,7 @@ Source: "setup\functional_test.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\deconvolution_test.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "setup\make_config.R"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "KiwiMS_App\KiwiMS.exe"; DestDir: "{app}";
-Source: "KiwiMS_App\update.exe"; DestDir: "{app}";
+Source: "KiwiMS_App\.Rprofile"; DestDir: "{app}";
 Source: "KiwiMS_App\app.R"; DestDir: "{app}";
 Source: "KiwiMS_App\config.yml"; DestDir: "{app}";
 Source: "KiwiMS_App\renv.lock"; DestDir: "{app}";
@@ -176,8 +176,8 @@ begin
   begin
   
     RunStep(CustomMessage('StatusMsg_Configuring'),       'config.ps1', 5);
-    //RunStep(CustomMessage('StatusMsg_InstallMiniconda'),  'miniforge_installer.ps1', 15);
-    //RunStep(CustomMessage('StatusMsg_SetupCondaEnv'),     'conda_env.ps1', 35);
+    RunStep(CustomMessage('StatusMsg_InstallMiniconda'),  'miniforge_installer.ps1', 15);
+    RunStep(CustomMessage('StatusMsg_SetupCondaEnv'),     'conda_env.ps1', 35);
     //RunStep(CustomMessage('StatusMsg_SetupRtools'),       'rtools_setup.ps1', 50);
     //RunStep(CustomMessage('StatusMsg_InstallRenv'),       'renv_install.ps1', 55);
     //RunStep(CustomMessage('StatusMsg_RestoreRenv'),       'renv_setup.ps1', 70);

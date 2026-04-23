@@ -81,7 +81,7 @@ if (-not $condaCmd) {
     exit 1
 }
 
-# Define the path to your bundled R relative to where the EXE is sitting
+# Define the path to R executables
 $RPortablePath = ".\R-Portable\bin\Rscript.exe"
 
 # Verification check to see if the files are actually there
@@ -97,8 +97,6 @@ Write-Host "Starting application in default browser..." -ForegroundColor Yellow
 try {
     "$(Get-Date) - INFO: Launching via R-Portable: $RPortablePath" | Add-Content $logFile
 
-    # IMPORTANT: We remove --vanilla so R reads your .Rprofile and activates renv
-    # We use the explicit path to your bundled R instead of a generic 'Rscript.exe'
     $shinyCmd = "shiny::runApp('app.R', launch.browser = $(if ($Headless) { 'FALSE' } else { 'TRUE' }))"
     
     & $condaCmd run -n kiwims "$RPortablePath" --no-save --no-restore -e "$shinyCmd" *> $logFile 2>&1

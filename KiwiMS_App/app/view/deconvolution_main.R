@@ -1407,8 +1407,11 @@ server <- function(
       )
       tryCatch(
         {
+          #TODO
+          message(file.path(R.home("bin"), "Rscript.exe"))
+
           rx_process <- process$new(
-            "Rscript.exe",
+            file.path(R.home("bin"), "Rscript.exe"),
             args = c(
               "app/logic/deconvolution_execute.R",
               temp,
