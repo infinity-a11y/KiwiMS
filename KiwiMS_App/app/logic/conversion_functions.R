@@ -492,6 +492,20 @@ sample_handsontable <- function(
   # Identify Concentration/Time columns (grepl to handle unit-suffixed names)
   conc_time_idx <- grep("^Concentration|^Time", colnames(tab))
 
+  # Identify Replicate column (read-only, excluded from validation)
+  replicate_idx <- grep("^Replicate$", colnames(tab))
+  has_replicate <- length(replicate_idx) > 0
+
+  # All columns that must be skipped by the JS renderer (no validation/duplicate check)
+  skip_cols <- c(
+    conc_time_idx,
+    if (has_replicate) replicate_idx else integer(0)
+  )
+
+  # Protein and compound column 0-indexed JS positions shift when Replicate is present
+  protein_col_js <- if (has_replicate) 2L else 1L
+  compound_col_js <- if (has_replicate) 3L else 2L
+
   # Allowed protein and compound values
   if (!is.null(proteins) && !is.null(compounds)) {
     allowed_per_col <- list(
@@ -507,7 +521,7 @@ sample_handsontable <- function(
 
     td.style.background = ''; // Clear existing background for new rendering
 
-    // Concentration/Time columns: skip validity and duplication checks
+    // Skipped columns: Concentration, Time, and Replicate
     var concTimeCols = %s;
     if (concTimeCols.indexOf(col) !== -1) { return; }
 
@@ -515,9 +529,9 @@ sample_handsontable <- function(
     var normalizedValue = value == null ? '' : String(value).trim();
 
     var allowedRaw;
-    if (col === 1) {
+    if (col === %d) {
       allowedRaw = allowedPerCol ? allowedPerCol[1] : null;
-    } else if (col >= 2) {
+    } else if (col >= %d) {
       allowedRaw = allowedPerCol ? allowedPerCol[2] : null;
     } else {
       return;
@@ -540,7 +554,7 @@ sample_handsontable <- function(
     }
 
     // --- 3. Check Duplication (Orange Highlight Logic) ---
-    // Exclude col 0 (Sample) and Concentration/Time columns from duplicate scan
+    // Exclude col 0 (Sample) and skipped columns from duplicate scan
     var isDuplicated = false;
     if (normalizedValue !== '') {
       var rowData = instance.getDataAtRow(row);
@@ -565,7 +579,9 @@ sample_handsontable <- function(
       td.style.background = 'orange';
     }
   }",
-      paste0("[", paste(conc_time_idx - 1L, collapse = ","), "]")
+      paste0("[", paste(skip_cols - 1L, collapse = ","), "]"),
+      protein_col_js,
+      compound_col_js
     )
   } else {
     allowed_per_col <- list(NULL)
@@ -580,7 +596,7 @@ sample_handsontable <- function(
     stretchH = "all"
   ) |>
     rhandsontable::hot_cols(
-      fixedColumnsLeft = 2,
+      fixedColumnsLeft = if (has_replicate) 3L else 2L,
       type = "text",
       readOnly = ifelse(disabled, TRUE, FALSE)
     ) |>
@@ -603,6 +619,14 @@ sample_handsontable <- function(
       stretchH = "all"
     )
 
+  if (has_replicate) {
+    handsontable <- rhandsontable::hot_col(
+      handsontable,
+      "Replicate",
+      readOnly = TRUE
+    )
+  }
+
   if (length(conc_time_idx) == 2) {
     handsontable <- rhandsontable::hot_col(
       handsontable,
@@ -623,6 +647,16 @@ sample_handsontable <- function(
 # Function to fill missing columns in sample table
 #' @export
 fill_sample_table <- function(sample_table, ki_kinact) {
+  # Stash Replicate (not part of the 7-col standard) to avoid count mismatch
+  has_rep <- "Replicate" %in% names(sample_table)
+  rep_col <- if (has_rep) sample_table[["Replicate"]] else NULL
+  if (has_rep) {
+    sample_table <- sample_table[,
+      names(sample_table) != "Replicate",
+      drop = FALSE
+    ]
+  }
+
   if (ki_kinact) {
     conc_time <- sample_table[, sapply(
       c("Concentration", "Time"),
@@ -661,6 +695,15 @@ fill_sample_table <- function(sample_table, ki_kinact) {
     )
   }
 
+  # Reattach Replicate right after Sample
+  if (has_rep) {
+    sample_table <- cbind(
+      sample_table[, "Sample", drop = FALSE],
+      Replicate = rep_col,
+      sample_table[, setdiff(names(sample_table), "Sample"), drop = FALSE]
+    )
+  }
+
   return(sample_table)
 }
 
@@ -673,7 +716,7 @@ clean_sample_table <- function(sample_table, units = NULL) {
   time_col <- grep("^Time", names(sample_table), value = TRUE)
   has_conc_time <- length(conc_col) == 1 && length(time_col) == 1
 
-  no_cmp_cols <- grepl("^Sample$|^Protein$", names(sample_table)) |
+  no_cmp_cols <- grepl("^Sample$|^Protein$|^Replicate$", names(sample_table)) |
     (has_conc_time & names(sample_table) %in% c(conc_col, time_col))
 
   extra_cmp_section <- sample_table[,
@@ -718,17 +761,24 @@ clean_sample_table <- function(sample_table, units = NULL) {
     df <- as.data.frame(apply(df, c(1, 2), as.character))
   }
 
-  # Reattach sample, protein, compound columns
-  df <- cbind(sample_table[, 1:2, drop = FALSE], df)
+  # Reattach Sample, Replicate (if present), and Protein; then compound columns
+  header_cols <- intersect(
+    c("Sample", "Replicate", "Protein"),
+    names(sample_table)
+  )
+  df <- cbind(sample_table[, header_cols, drop = FALSE], df)
   if (has_conc_time) {
     df <- cbind(df, sample_table[, c(conc_col, time_col), drop = FALSE])
   }
 
+  # Number of compound columns: total minus header cols and optional Conc/Time
+  n_header <- length(header_cols)
+  n_cmp <- ncol(df) - n_header - ifelse(has_conc_time, 2L, 0L)
+
   # Rename columns — preserve or apply units to Conc/Time names
   names(df) <- c(
-    "Sample",
-    "Protein",
-    paste("Compound", 1:(ncol(df) - ifelse(has_conc_time, 4, 2))),
+    header_cols,
+    paste("Compound", 1:n_cmp),
     if (has_conc_time) {
       c(
         paste0(
@@ -873,6 +923,12 @@ check_sample_table <- function(sample_table, proteins, compounds) {
       drop = FALSE
     ]
   }
+
+  # Strip Replicate so positional checks below remain Sample | Protein | Compounds
+  sample_table <- sample_table[,
+    names(sample_table) != "Replicate",
+    drop = FALSE
+  ]
 
   # Check if protein and compound names present
   if (is.null(proteins) || is.null(compounds)) {
@@ -1897,6 +1953,17 @@ summarize_hits <- function(result_list, sample_table) {
       dplyr::left_join(sample_table_join, by = "Sample") |>
       dplyr::mutate(binding = `Total % Binding` * 100) |>
       dplyr::arrange(dplyr::across(all_of(conc_time)))
+  }
+
+  # Join Replicate from sample_table if available
+  if ("Replicate" %in% names(sample_table)) {
+    rep_join <- sample_table[, c("Sample", "Replicate"), drop = FALSE]
+    rep_join$Sample <- gsub("\\.raw$", "", rep_join$Sample, ignore.case = TRUE)
+    hs_key <- gsub("\\.raw$", "", hits_summarized$Sample, ignore.case = TRUE)
+    hits_summarized$Replicate <- rep_join$Replicate[match(
+      hs_key,
+      rep_join$Sample
+    )]
   }
 
   # Log hits summary
@@ -3503,7 +3570,9 @@ multiple_spectra <- function(
         )
       )
   } else {
-    planar_colors <- if (!is.null(color_variable) && color_variable == "Samples") {
+    planar_colors <- if (
+      !is.null(color_variable) && color_variable == "Samples"
+    ) {
       color_cmp
     } else if (!is.null(color_variable) && color_variable == "Compounds") {
       # Lines all same color; compound markers handle the coloring
@@ -3560,7 +3629,11 @@ multiple_spectra <- function(
         symbol = ~ I(symbol),
         inherit = FALSE,
         marker = c(
-          list(size = 10, zindex = 100, line = list(color = font_color, width = 1.5)),
+          list(
+            size = 10,
+            zindex = 100,
+            line = list(color = font_color, width = 1.5)
+          ),
           if (is.null(color_variable)) list(color = font_color) else list()
         ),
         hoverinfo = "text",
@@ -3857,15 +3930,28 @@ filter_hits_table <- function(
 ) {
   # Modify if samples are summarized instead of expanded
   if (!expand) {
-    hits_table <- hits_table |>
-      dplyr::distinct(
-        `Sample ID`,
-        `Protein`,
-        `Cmp Name`,
-        `Theor. Prot. [Da]`,
-        `Total %-Binding`,
-        `truncSample_ID`
-      )
+    if ("Replicate" %in% names(hits_table)) {
+      hits_table <- hits_table |>
+        dplyr::distinct(
+          `Sample ID`,
+          Replicate,
+          `Protein`,
+          `Cmp Name`,
+          `Theor. Prot. [Da]`,
+          `Total %-Binding`,
+          `truncSample_ID`
+        )
+    } else {
+      hits_table <- hits_table |>
+        dplyr::distinct(
+          `Sample ID`,
+          `Protein`,
+          `Cmp Name`,
+          `Theor. Prot. [Da]`,
+          `Total %-Binding`,
+          `truncSample_ID`
+        )
+    }
   }
 
   # Filter compounds
@@ -3895,6 +3981,7 @@ filter_hits_table <- function(
     "Sample ID",
     "Protein",
     "Cmp Name",
+    if ("Replicate" %in% names(hits_table)) "Replicate" else NULL,
     if ("Concentration" %in% names(units)) units[["Concentration"]] else NULL,
     if ("Time" %in% names(units)) units[["Time"]] else NULL,
     "truncSample_ID"
@@ -3902,7 +3989,7 @@ filter_hits_table <- function(
 
   hits_table <- hits_table |>
     dplyr::select(
-      all_of(std_cols),
+      dplyr::any_of(std_cols),
       all_of(selected_cols)
     )
 
@@ -4100,6 +4187,57 @@ checkboxColumn <- function(len, col, ...) {
     ))
   }
   inputs
+}
+
+# Compute replicate group labels for a vector of sample names.
+# Priority: (1) config Replicate column, (2) _R<n> filename suffix detection,
+# (3) unique _R<n> placeholders for samples without a detected group.
+#' @export
+compute_replicate_labels <- function(sample_names, config = NULL) {
+  labels <- rep(NA_character_, length(sample_names))
+  config_mode <- FALSE
+
+  # Priority 1: config supplies at least one non-empty Replicate value
+  if (!is.null(config) && "Replicate" %in% names(config)) {
+    cfg_key <- gsub("\\.raw$", "", config$Sample, ignore.case = TRUE)
+    samp_key <- gsub("\\.raw$", "", sample_names, ignore.case = TRUE)
+    matched <- config$Replicate[match(samp_key, cfg_key)]
+    non_empty <- !is.na(matched) & trimws(matched) != ""
+    if (any(non_empty)) {
+      config_mode <- TRUE
+      labels[non_empty] <- trimws(matched[non_empty])
+    }
+  }
+
+  # Priority 2: filename suffix detection (_R<n> before optional .raw)
+  if (!config_mode) {
+    has_rn <- grepl("_[Rr]\\d+(\\.raw)?$", sample_names)
+    base_names <- gsub("_[Rr]\\d+(\\.raw)?$", "", sample_names)
+    base_names <- gsub("\\.raw$", "", base_names, ignore.case = TRUE)
+    for (base in unique(base_names[has_rn])) {
+      idx <- which(has_rn & base_names == base)
+      if (length(idx) >= 2L) labels[idx] <- base
+    }
+  }
+
+  # Fill remaining NAs with _R<n>, avoiding clashes with existing _R<n> labels
+  existing <- labels[!is.na(labels)]
+  used_ints <- suppressWarnings(stats::na.omit(as.integer(
+    regmatches(
+      existing,
+      regexpr("(?<=_[Rr])\\d+$", existing, perl = TRUE)
+    )
+  )))
+  ctr <- 1L
+  for (i in which(is.na(labels))) {
+    while (ctr %in% used_ints) {
+      ctr <- ctr + 1L
+    }
+    labels[i] <- paste0("_R", ctr)
+    used_ints <- c(used_ints, ctr)
+    ctr <- ctr + 1L
+  }
+  labels
 }
 
 # Empty sample declaration table generator function
@@ -4433,6 +4571,18 @@ handle_file_upload <- function(
 # Transform summarized hits into readable table
 #' @export
 transform_hits <- function(hits_summary) {
+  # Stash Replicate before the positional colnames() assignment
+  replicate_col <- if ("Replicate" %in% names(hits_summary)) {
+    tmp <- hits_summary[["Replicate"]]
+    hits_summary <- hits_summary[,
+      names(hits_summary) != "Replicate",
+      drop = FALSE
+    ]
+    tmp
+  } else {
+    NULL
+  }
+
   # Shared transformations
   summary_table <- hits_summary |>
     dplyr::mutate(
@@ -4529,6 +4679,20 @@ transform_hits <- function(hits_summary) {
   }
 
   colnames(summary_table) <- col_names
+
+  # Reattach Replicate right after "Sample ID" with consistent NA handling
+  if (!is.null(replicate_col)) {
+    summary_table[["Replicate"]] <- tidyr::replace_na(
+      as.character(replicate_col),
+      "N/A"
+    )
+    summary_table <- dplyr::relocate(
+      summary_table,
+      "Replicate",
+      .after = "Sample ID"
+    )
+  }
+
   return(summary_table)
 }
 

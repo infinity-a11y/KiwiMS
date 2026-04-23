@@ -35,6 +35,7 @@ box::use(
       checkboxColumn,
       js_code_gen,
       new_sample_table,
+      compute_replicate_labels,
       confirm_ui_changes,
       edit_ui_changes,
       table_observe,
@@ -216,6 +217,12 @@ server <- function(
       type = "Compound"
     ))
     sample_table_data <- shiny::reactiveVal()
+
+    # Helper: compute and inject Replicate column (right after Sample)
+    add_replicate_col <- function(tbl, config = NULL) {
+      tbl$Replicate <- compute_replicate_labels(tbl$Sample, config)
+      tbl[, c("Sample", "Replicate", setdiff(names(tbl), c("Sample", "Replicate")))]
+    }
 
     # Helper: auto-fill sample table columns from config file
     apply_config_autofill <- function(tbl, cfg) {
@@ -505,12 +512,12 @@ server <- function(
       event_expr = input$clear_samples,
       observer_name = "Clear Sample Table",
       handler_fn = function() {
-        sample_table_data(new_sample_table(
+        sample_table_data(add_replicate_col(new_sample_table(
           result = declaration_vars$result,
           protein_table = declaration_vars$protein_table,
           compound_table = declaration_vars$compound_table,
           ki_kinact = conversion_sidebar_vars$run_ki_kinact()
-        ))
+        ), config_file()))
         sample_table_trigger(sample_table_trigger() + 1)
       }
     )
@@ -596,12 +603,12 @@ server <- function(
         declaration_vars$result <- c(meta, list(.db_path = file_path))
 
         # New table data
-        sample_table_data(new_sample_table(
+        sample_table_data(add_replicate_col(new_sample_table(
           result = declaration_vars$result,
           protein_table = declaration_vars$protein_table,
           compound_table = declaration_vars$compound_table,
           ki_kinact = conversion_sidebar_vars$run_ki_kinact()
-        ))
+        ), config_file()))
         sample_table_trigger(sample_table_trigger() + 1)
       }
     )
@@ -634,7 +641,8 @@ server <- function(
 
         cfg <- config_file()
         cleared_tbl <- sample_table_data()
-        non_sample_cols <- setdiff(names(cleared_tbl), "Sample")
+        # Exclude Replicate from clearing — it is auto-computed, not user-entered
+        non_sample_cols <- setdiff(names(cleared_tbl), c("Sample", "Replicate"))
         for (col in non_sample_cols) {
           cleared_tbl[[col]] <- if (is.numeric(cleared_tbl[[col]])) {
             NA_real_
@@ -661,6 +669,7 @@ server <- function(
         }
 
         new_tbl <- apply_config_autofill(cleared_tbl, cfg)
+        new_tbl <- add_replicate_col(new_tbl, cfg)
 
         if (!identical(new_tbl, sample_table_data())) {
           sample_table_data(new_tbl)
@@ -676,6 +685,21 @@ server <- function(
         }
       },
       priority = -5
+    )
+
+    ## Replicate column — refresh when config changes ----
+    safe_observe(
+      event_expr = config_file(),
+      observer_name = "Replicate Column — Config Change",
+      handler_fn = function() {
+        tbl <- sample_table_data()
+        if (is.null(tbl) || nrow(tbl) == 0) return()
+        updated <- add_replicate_col(tbl, config_file())
+        if (!identical(updated$Replicate, tbl$Replicate)) {
+          sample_table_data(updated)
+          sample_table_trigger(sample_table_trigger() + 1)
+        }
+      }
     )
 
     ## Table status observer ----
@@ -1027,14 +1051,15 @@ server <- function(
 
           # Render sample table with new input
           if (!is.null(input$samples_table)) {
-            sample_table_data(
+            sample_table_data(add_replicate_col(
               new_sample_table(
                 result = declaration_vars$result,
                 protein_table = protein_table,
                 compound_table = declaration_vars$compound_table,
                 ki_kinact = conversion_sidebar_vars$run_ki_kinact()
-              )
-            )
+              ),
+              config_file()
+            ))
             sample_table_trigger(sample_table_trigger() + 1)
           }
 
@@ -1069,14 +1094,15 @@ server <- function(
 
           # Render sample table with new input
           if (!is.null(input$samples_table)) {
-            sample_table_data(
+            sample_table_data(add_replicate_col(
               new_sample_table(
                 result = declaration_vars$result,
                 protein_table = declaration_vars$protein_table,
                 compound_table = compound_table,
                 ki_kinact = conversion_sidebar_vars$run_ki_kinact()
-              )
-            )
+              ),
+              config_file()
+            ))
             sample_table_trigger(sample_table_trigger() + 1)
           }
 
@@ -1223,12 +1249,12 @@ server <- function(
           declaration_vars$result <- c(meta, list(.db_path = db_path))
 
           # New table data
-          sample_table_data(new_sample_table(
+          sample_table_data(add_replicate_col(new_sample_table(
             result = declaration_vars$result,
             protein_table = declaration_vars$protein_table,
             compound_table = declaration_vars$compound_table,
             ki_kinact = conversion_sidebar_vars$run_ki_kinact()
-          ))
+          ), config_file()))
           sample_table_trigger(sample_table_trigger() + 1)
         }
 
@@ -1290,12 +1316,12 @@ server <- function(
         declaration_vars$result <- c(meta, list(.db_path = db_path))
 
         # New table data
-        sample_table_data(new_sample_table(
+        sample_table_data(add_replicate_col(new_sample_table(
           result = declaration_vars$result,
           protein_table = declaration_vars$protein_table,
           compound_table = declaration_vars$compound_table,
           ki_kinact = conversion_sidebar_vars$run_ki_kinact()
-        ))
+        ), config_file()))
         sample_table_trigger(sample_table_trigger() + 1)
 
         protein_table_active <- declaration_vars$protein_table_active
