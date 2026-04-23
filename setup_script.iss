@@ -43,8 +43,9 @@ Source: "KiwiMS_App\update.exe"; DestDir: "{app}";
 Source: "KiwiMS_App\app.R"; DestDir: "{app}";
 Source: "KiwiMS_App\config.yml"; DestDir: "{app}";
 Source: "KiwiMS_App\renv.lock"; DestDir: "{app}";
-Source: "KiwiMS_App\renv\activate.R"; DestDir: "{app}\renv";
+Source: "KiwiMS_App\renv\*"; DestDir: "{app}\renv"; Flags: recursesubdirs createallsubdirs
 Source: "KiwiMS_App\rhino.yml"; DestDir: "{app}";
+Source: "KiwiMS_App\R-Portable\*"; DestDir: "{app}\R-Portable"; Flags: recursesubdirs createallsubdirs
 Source: "KiwiMS_App\app\*"; DestDir: "{app}\app"; Flags: recursesubdirs createallsubdirs;
 Source: "KiwiMS_App\dev\*"; DestDir: "{app}\dev"; Flags: recursesubdirs createallsubdirs;
 Source: "KiwiMS_App\resources\*"; DestDir: "{app}\resources"; Flags: recursesubdirs createallsubdirs;

@@ -63,11 +63,6 @@ function Find-CondaExecutable {
 }
 
 #-----------------------------#
-# Port Selection
-#-----------------------------#
-# Port selection is handled by Shiny automatically (httpuv::randomPort).
-
-#-----------------------------#
 # Path & Log Configuration
 #-----------------------------#
 $condaCmd = Find-CondaExecutable
@@ -89,17 +84,19 @@ if (-not $condaCmd) {
 Write-Host "Starting application in default browser..." -ForegroundColor Yellow
 
 try {
-    # Extract the base directory to find the 'kiwims' environment
-    # Moving up from Scripts/conda.exe to the root prefix
+    # Path to portable R engine
+    $RPortablePath = Join-Path $PSScriptRoot "R-Portable\bin\Rscript.exe"
+
+    # Extract conda base directory
     $condaPrefix = Split-Path (Split-Path $condaCmd -Parent) -Parent
 
+    "$(Get-Date) - INFO: Using Portable R: $RPortablePath" | Add-Content $logFile
     "$(Get-Date) - INFO: Conda Command: $condaCmd" | Add-Content $logFile
-    "$(Get-Date) - INFO: Conda Prefix: $condaPrefix" | Add-Content $logFile
 
     # Launch the App
-    # Use --no-capture-output to ensure logs flow into our file correctly
     $shinyCmd = "shiny::runApp('app.R', launch.browser = $(if ($Headless) { 'FALSE' } else { 'TRUE' }))"
-    & $condaCmd run -n kiwims Rscript.exe -e "$shinyCmd" --vanilla *> $logFile 2>&1
+    
+    & $condaCmd run -n kiwims "$RPortablePath" --no-save --no-restore -e "$shinyCmd" *> $logFile 2>&1
 
     if ($LASTEXITCODE -ne 0) {
         throw "R Process exited with code $LASTEXITCODE"
