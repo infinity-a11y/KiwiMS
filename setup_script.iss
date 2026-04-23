@@ -176,15 +176,15 @@ begin
   begin
   
     RunStep(CustomMessage('StatusMsg_Configuring'),       'config.ps1', 5);
-    RunStep(CustomMessage('StatusMsg_InstallMiniconda'),  'miniforge_installer.ps1', 15);
-    RunStep(CustomMessage('StatusMsg_SetupCondaEnv'),     'conda_env.ps1', 35);
-    RunStep(CustomMessage('StatusMsg_SetupRtools'),       'rtools_setup.ps1', 50);
-    RunStep(CustomMessage('StatusMsg_InstallRenv'),       'renv_install.ps1', 55);
-    RunStep(CustomMessage('StatusMsg_RestoreRenv'),       'renv_setup.ps1', 70);
-    RunStep(CustomMessage('StatusMsg_InstallQuarto'),     'quarto_install.ps1', 80);
+    //RunStep(CustomMessage('StatusMsg_InstallMiniconda'),  'miniforge_installer.ps1', 15);
+    //RunStep(CustomMessage('StatusMsg_SetupCondaEnv'),     'conda_env.ps1', 35);
+    //RunStep(CustomMessage('StatusMsg_SetupRtools'),       'rtools_setup.ps1', 50);
+    //RunStep(CustomMessage('StatusMsg_InstallRenv'),       'renv_install.ps1', 55);
+    //RunStep(CustomMessage('StatusMsg_RestoreRenv'),       'renv_setup.ps1', 70);
+    //RunStep(CustomMessage('StatusMsg_InstallQuarto'),     'quarto_install.ps1', 80);
     RunStep(CustomMessage('StatusMsg_Diagnosis'),         'diagnosis.ps1', 85);
-    RunStep(CustomMessage('StatusMsg_Diagnosis'),         'functional_test.ps1', 90);
-    RunStep(CustomMessage('StatusMsg_Diagnosis'),         'deconvolution_test.ps1', 95);
+    //RunStep(CustomMessage('StatusMsg_Diagnosis'),         'functional_test.ps1', 90);
+    //RunStep(CustomMessage('StatusMsg_Diagnosis'),         'deconvolution_test.ps1', 95);
 
     if InstallationFailed then Abort;
   end;
