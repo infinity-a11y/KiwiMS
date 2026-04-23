@@ -15,5 +15,5 @@ KiwiMS_App/R-Portable/
 KiwiMS_App/renv/library/
 
 # Ignore the installer output
-KiwiMS-Windows-x86_64.exe
+# KiwiMS-Windows-x86_64.exe
 Output/
