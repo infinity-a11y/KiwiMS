@@ -3316,21 +3316,13 @@ server <- function(
               temp
             )
 
-            # Construct the system command
-            cmd <- paste(
-              "conda activate kiwims &&",
-              "cd",
-              script_dir,
-              "&& Rscript",
-              paste(args, collapse = " ")
-            )
-
             # Start external report generation process
             tryCatch(
               {
                 rep_process <- process$new(
-                  command = "cmd.exe",
-                  args = c("/c", cmd),
+                  command = file.path(R.home("bin"), "Rscript.exe"),
+                  args = args,
+                  wd = script_dir,
                   stdout = reactVars$decon_rep_process_out,
                   stderr = reactVars$decon_rep_process_out
                 )

@@ -1,28 +1,28 @@
 # app/logic/deconvolution_execute.R
 
 # Enable conda DLL search
-Sys.setenv(CONDA_DLL_SEARCH_MODIFICATION_ENABLE = "1")
+# Sys.setenv(CONDA_DLL_SEARCH_MODIFICATION_ENABLE = "1")
 
 # Checking library Paths
 message(paste("Current library paths: \n", paste(.libPaths(), collapse = "\n")))
 
 # In dev mode manually add library paths
-if (commandArgs(trailingOnly = TRUE)[5] == "TRUE") {
-  .libPaths(c(
-    normalizePath(file.path(
-      Sys.getenv("LOCALAPPDATA"),
-      "R",
-      "win-library",
-      "4.5"
-    )),
-    .libPaths()
-  ))
+# if (commandArgs(trailingOnly = TRUE)[5] == "TRUE") {
+#   .libPaths(c(
+#     normalizePath(file.path(
+#       Sys.getenv("LOCALAPPDATA"),
+#       "R",
+#       "win-library",
+#       "4.5"
+#     )),
+#     .libPaths()
+#   ))
 
-  message(paste(
-    "Modified library paths: \n",
-    paste(.libPaths(), collapse = "\n")
-  ))
-}
+#   message(paste(
+#     "Modified library paths: \n",
+#     paste(.libPaths(), collapse = "\n")
+#   ))
+# }
 
 # Sourcing deconvolution functions
 source_file <- file.path(
@@ -84,10 +84,11 @@ tryCatch(
 
     # run_info: always overwrite (records this run's start time)
     DBI::dbWriteTable(
-      con_init, "run_info",
+      con_init,
+      "run_info",
       data.frame(
         started_at = format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-        n_samples   = length(conf$dirs),
+        n_samples = length(conf$dirs),
         stringsAsFactors = FALSE
       ),
       overwrite = TRUE
@@ -99,25 +100,31 @@ tryCatch(
     # Using delete+insert rather than INSERT OR IGNORE avoids the need for a
     # UNIQUE constraint, which dbWriteTable does not create.
     if (!DBI::dbExistsTable(con_init, "metadata")) {
-      DBI::dbExecute(con_init,
-        "CREATE TABLE metadata (sample TEXT)")
+      DBI::dbExecute(con_init, "CREATE TABLE metadata (sample TEXT)")
     }
     for (s in sample_bases) {
-      DBI::dbExecute(con_init,
-        "DELETE FROM metadata WHERE sample = ?", params = list(s))
-      DBI::dbExecute(con_init,
-        "INSERT INTO metadata(sample) VALUES (?)", params = list(s))
+      DBI::dbExecute(
+        con_init,
+        "DELETE FROM metadata WHERE sample = ?",
+        params = list(s)
+      )
+      DBI::dbExecute(
+        con_init,
+        "INSERT INTO metadata(sample) VALUES (?)",
+        params = list(s)
+      )
     }
 
     # status: create if new; otherwise delete only the samples being processed
     # so prior done/failed records for skipped samples are untouched.
     if (!DBI::dbExistsTable(con_init, "status")) {
       DBI::dbWriteTable(
-        con_init, "status",
+        con_init,
+        "status",
         data.frame(
-          sample    = character(0),
-          state     = character(0),
-          reason    = character(0),
+          sample = character(0),
+          state = character(0),
+          reason = character(0),
           error_msg = character(0),
           timestamp = character(0),
           stringsAsFactors = FALSE
@@ -125,19 +132,32 @@ tryCatch(
       )
     } else {
       for (s in sample_bases) {
-        DBI::dbExecute(con_init,
-          "DELETE FROM status WHERE sample = ?", params = list(s))
+        DBI::dbExecute(
+          con_init,
+          "DELETE FROM status WHERE sample = ?",
+          params = list(s)
+        )
       }
     }
 
     # For samples being (re)processed: clear any existing per-sample data rows
     # so a clean overwrite is written (avoids duplicate rows in peaks/mass_data/etc.)
-    per_sample_tbls <- c("peaks", "mass_data", "error", "config", "rawdata", "input_dat")
+    per_sample_tbls <- c(
+      "peaks",
+      "mass_data",
+      "error",
+      "config",
+      "rawdata",
+      "input_dat"
+    )
     for (tbl in per_sample_tbls) {
       if (DBI::dbExistsTable(con_init, tbl)) {
         for (s in sample_bases) {
-          DBI::dbExecute(con_init,
-            sprintf("DELETE FROM %s WHERE sample = ?", tbl), params = list(s))
+          DBI::dbExecute(
+            con_init,
+            sprintf("DELETE FROM %s WHERE sample = ?", tbl),
+            params = list(s)
+          )
         }
       }
     }
@@ -228,5 +248,4 @@ if (commandArgs(trailingOnly = TRUE)[5] != "testing") {
       stop("Error finalising SQLite database.")
     }
   )
-
 }

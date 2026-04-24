@@ -14,11 +14,6 @@ $ErrorActionPreference = "Continue"
 # Start logging
 Start-Transcript -Path $logFile -Append | Out-Null
 
-# Source helper functions
-if (Test-Path "$basePath\functions.ps1") {
-    . "$basePath\functions.ps1"
-}
-
 Write-Output "=========================================="
 Write-Output "    KiwiMS Post-Installation Diagnosis    "
 Write-Output "=========================================="
@@ -27,6 +22,7 @@ Write-Output "Project Root: $basePath"
 # Define Portable Paths
 $RPortablePath = Join-Path $basePath "R-Portable\bin\Rscript.exe"
 $RenvLibrary = Join-Path $basePath "renv\library"
+$localPython = Join-Path $basePath "env_kiwims\python.exe"
 
 #-----------------------------#
 # 1. System Settings Retrieval
@@ -37,22 +33,20 @@ Write-Output "Run as Admin:  $isElevated"
 Write-Output "OS Version:    $((Get-CimInstance Win32_OperatingSystem).Caption)"
 
 #-----------------------------#
-# 2. Conda Environment Diagnosis
+# 2. Portable Engine Integrity
 #-----------------------------#
-Write-Output "`n[2/6] Conda Environment Health"
-$condaCmd = Find-CondaExecutable
+Write-Output "`n[2/6] Portable Engine Integrity"
 
-if ($condaCmd) {
-    $envs = & $condaCmd env list
-    if ($envs -like "*$envName*") {
-        Write-Output "[OK] Conda environment '$envName' found."
-    }
-    else {
-        Write-Output "[FAIL] ERROR: Conda environment '$envName' NOT found."
-    }
+if (Test-Path $localPython) {
+    Write-Output "[OK] Python env found: $localPython"
+} else {
+    Write-Output "[FAIL] Python env MISSING at $localPython"
 }
-else {
-    Write-Output "[FAIL] ERROR: Conda executable not found."
+
+if (Test-Path $RPortablePath) {
+    Write-Output "[OK] R-Portable found: $RPortablePath"
+} else {
+    Write-Output "[FAIL] R-Portable MISSING at $RPortablePath"
 }
 
 #-----------------------------#
@@ -107,7 +101,7 @@ if ((Test-Path $RPortablePath) -and (Test-Path (Join-Path $basePath "renv.lock")
             cat('\n[ERROR] Some packages failed to load. Check for missing system DLLs.\n');
         }
 "@
-        & $condaCmd run -n $envName "$RPortablePath" --no-save --no-restore -e $verifyScript 2>&1 | Out-String | Write-Output
+        & "$RPortablePath" --no-save --no-restore -e $verifyScript 2>&1 | Out-String | Write-Output
     }
     catch {
         Write-Output "Failed to execute package health check: $($_.Exception.Message)"

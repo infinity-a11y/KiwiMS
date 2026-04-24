@@ -24,21 +24,8 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 Name: "de"; MessagesFile: "compiler:Languages\German.isl"
 
 [Files]
-Source: "setup\config.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "setup\functions.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "setup\miniforge_installer.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "setup\conda_env.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "setup\rtools_setup.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "setup\install_renv.R"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "setup\renv_install.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "setup\setup_renv.R"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "setup\renv_setup.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "setup\quarto_install.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "setup\diagnosis.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "setup\functional_test.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "setup\deconvolution_test.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
-Source: "setup\make_config.R"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "KiwiMS_App\KiwiMS.exe"; DestDir: "{app}";
+Source: "KiwiMS_App\env_kiwims\*"; DestDir: "{app}\env_kiwims"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "KiwiMS_App\.Rprofile"; DestDir: "{app}";
 Source: "KiwiMS_App\app.R"; DestDir: "{app}";
 Source: "KiwiMS_App\config.yml"; DestDir: "{app}";
@@ -47,26 +34,19 @@ Source: "KiwiMS_App\renv\*"; DestDir: "{app}\renv"; Flags: recursesubdirs create
 Source: "KiwiMS_App\rhino.yml"; DestDir: "{app}";
 Source: "KiwiMS_App\R-Portable\*"; DestDir: "{app}\R-Portable"; Flags: recursesubdirs createallsubdirs
 Source: "KiwiMS_App\app\*"; DestDir: "{app}\app"; Flags: recursesubdirs createallsubdirs;
-Source: "KiwiMS_App\dev\*"; DestDir: "{app}\dev"; Flags: recursesubdirs createallsubdirs;
+; dev/ excluded — developer tooling only, not needed at runtime
 Source: "KiwiMS_App\resources\*"; DestDir: "{app}\resources"; Flags: recursesubdirs createallsubdirs;
 Source: "setup\favicon.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "setup\config.ps1"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "LICENSE"; DestDir: "{app}";
 
 [CustomMessages]
-StatusMsg_Configuring=Configuring setup...
-StatusMsg_InstallMiniconda=Installing Miniconda...
-StatusMsg_SetupCondaEnv=Setting up Conda Environment...
-StatusMsg_Diagnosis=Concluding...
 Description_Launch=Launch KiwiMS
 ScopeTitle=Select Installation Type
 ScopeSub=Who should this application be installed for?
 ScopeDesc=Choose how you want to install KiwiMS.
 ScopeAllUsers=System-wide for all users (requires admin)
 ScopeCurrUser=Current user only
-de.StatusMsg_Configuring=Setup wird konfiguriert...
-de.StatusMsg_InstallMiniconda=Miniconda wird installiert...
-de.StatusMsg_SetupCondaEnv=Conda Umgebung wird eingerichtet...
-de.StatusMsg_Diagnosis=Fertigstellen...
 de.Description_Launch=KiwiMS starten
 de.ScopeTitle=Installationstyp auswählen
 de.ScopeSub=Für wen soll diese Anwendung installiert werden?
@@ -138,46 +118,47 @@ begin
   end;
 end;
 
-procedure RunStep(CaptionMsg: string; ScriptName: string; ProgressPos: Integer);
+procedure CurStepChanged(CurStep: TSetupStep);
 var
   ResultCode: Integer;
-  PSArgs: string;
+  LogFile, PsArgs, UnpackCmd: string;
 begin
-  if InstallationFailed then Exit;
+  LogFile := ExpandConstant('{#KiwiMSLogFile}');
 
-  UpdateStatus(CaptionMsg);
-  UpdateProgress(ProgressPos);
-  
-  PSArgs := Format('-ExecutionPolicy Bypass -File "%s" -basePath "%s" -userDataPath "%s" -envName "kiwims" -logFile "%s" -installScope "%s"', [ExpandConstant('{app}\') + ScriptName, ExpandConstant('{app}'), ExpandConstant('{localappdata}\KiwiMS'), ExpandConstant('{#KiwiMSLogFile}'), GetInstallScope('')]);
-
-  if Exec('powershell.exe', PSArgs, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-  begin
-    if ResultCode <> 0 then
-    begin
-      Log('FATAL: ' + ScriptName + ' failed with code ' + IntToStr(ResultCode));
-      InstallationFailed := True;
-      if not WizardSilent then
-        MsgBox(ScriptName + ' failed. See log: ' + ExpandConstant('{#KiwiMSLogFile}'), mbError, MB_OK);
-    end;
-  end;
-end;
-
-procedure CurStepChanged(CurStep: TSetupStep);
-begin
   if CurStep = ssPostInstall then
   begin
-  
-    RunStep(CustomMessage('StatusMsg_Configuring'),       'config.ps1', 5);
-    RunStep(CustomMessage('StatusMsg_InstallMiniconda'),  'miniforge_installer.ps1', 15);
-    RunStep(CustomMessage('StatusMsg_SetupCondaEnv'),     'conda_env.ps1', 35);
-    //RunStep(CustomMessage('StatusMsg_SetupRtools'),       'rtools_setup.ps1', 50);
-    //RunStep(CustomMessage('StatusMsg_InstallRenv'),       'renv_install.ps1', 55);
-    //RunStep(CustomMessage('StatusMsg_RestoreRenv'),       'renv_setup.ps1', 70);
-    //RunStep(CustomMessage('StatusMsg_InstallQuarto'),     'quarto_install.ps1', 80);
-    RunStep(CustomMessage('StatusMsg_Diagnosis'),         'diagnosis.ps1', 85);
-    //RunStep(CustomMessage('StatusMsg_Diagnosis'),         'functional_test.ps1', 90);
-    //RunStep(CustomMessage('StatusMsg_Diagnosis'),         'deconvolution_test.ps1', 95);
+    // Step 1: Run config.ps1 — initialises the log file and user data directory
+    UpdateStatus('Configuring KiwiMS...');
+    UpdateProgress(80);
+    PsArgs := '-NonInteractive -ExecutionPolicy Bypass -File "' + ExpandConstant('{tmp}\config.ps1') + '"'
+            + ' -basePath "' + ExpandConstant('{app}') + '"'
+            + ' -userDataPath "' + ExpandConstant('{localappdata}\KiwiMS') + '"'
+            + ' -envName "kiwims"'
+            + ' -logFile "' + LogFile + '"'
+            + ' -installScope "' + SelectedScope + '"';
+    Exec('powershell.exe', PsArgs, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
+    // Step 2: Run conda-unpack.exe via PowerShell so output is captured in the log
+    UpdateStatus('Finalizing portable environment (this may take a minute)...');
+    UpdateProgress(90);
+    UnpackCmd := '& ' + Chr(39) + ExpandConstant('{app}\env_kiwims\Scripts\conda-unpack.exe') + Chr(39)
+               + ' *>&1 | Add-Content -Path ' + Chr(39) + LogFile + Chr(39)
+               + '; exit $LASTEXITCODE';
+    PsArgs := '-NonInteractive -ExecutionPolicy Bypass -Command ' + Chr(34) + UnpackCmd + Chr(34);
+
+    if not Exec('powershell.exe', PsArgs, ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode)
+       or (ResultCode <> 0) then
+    begin
+      SaveStringToFile(LogFile,
+        '[ERROR] conda-unpack.exe failed with exit code: ' + IntToStr(ResultCode) + #13#10, True);
+      MsgBox('Failed to finalize the environment. Please check write permissions.', mbError, MB_OK);
+      InstallationFailed := True;
+    end else
+    begin
+      SaveStringToFile(LogFile, '[OK] conda-unpack.exe completed successfully.' + #13#10, True);
+    end;
+
+    UpdateProgress(100);
     if InstallationFailed then Abort;
   end;
 end;

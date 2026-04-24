@@ -17,7 +17,7 @@ licence_modal_body <- function() {
         " width: fit-content; margin: 0; justify-self: center;"
       ),
       if (Sys.getenv("KIWIMS_DEV_MODE") != "TRUE") {
-        readLines("LICENSE")
+        paste(readLines("LICENSE"), collapse = "\n")
       }
     )
   )

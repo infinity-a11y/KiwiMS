@@ -21,7 +21,7 @@ box::use(
     stopCluster
   ],
   plotly[config, event_register, layout],
-  reticulate[use_condaenv, use_python, py_config, py_run_string],
+  reticulate[use_python, py_config, py_run_string],
   RSQLite[SQLite, SQLITE_RO],
   scales[percent_format],
   utils[read.delim, read.table],
@@ -415,14 +415,12 @@ deconvolute <- function(
   if (length(raw_dirs) > 20 && num_cores > 1) {
     message("Initiating ", num_cores, " cores for parallel processing ...")
 
-    # Validate Conda environment
-    library(reticulate)
-    if (!"kiwims" %in% conda_list()$name) {
-      stop(
-        "Conda environment 'kiwims' not found. Create it with conda_create('kiwims')."
-      )
+    # Validate portable Python environment
+    python_exe <- Sys.getenv("RETICULATE_PYTHON")
+    if (!nzchar(python_exe) || !file.exists(python_exe)) {
+      stop("Python interpreter not found. RETICULATE_PYTHON is not set or points to a missing file.")
     } else {
-      message("Conda environment 'kiwims' found.")
+      message("Python found: ", python_exe)
     }
 
     # Create log directory and define outfile
@@ -453,21 +451,9 @@ deconvolute <- function(
           library(RSQLite)
           library(data.table)
 
-          # Set the key env var for conda DLL resolution
-          Sys.setenv(CONDA_DLL_SEARCH_MODIFICATION_ENABLE = "1")
-
-          # Create and set a unique temp dir for this worker to avoid Conda file conflicts
-          unique_temp_dir <- file.path(
-            tempdir(),
-            paste0("conda_worker_", Sys.getpid())
-          )
-          dir.create(unique_temp_dir, showWarnings = FALSE, recursive = TRUE)
-          Sys.setenv(TEMP = unique_temp_dir)
-          Sys.setenv(TMP = unique_temp_dir)
-
           tryCatch(
             {
-              use_condaenv("kiwims", required = TRUE)
+              reticulate::use_python(Sys.getenv("RETICULATE_PYTHON"), required = TRUE)
               NULL
             },
             error = function(e) {
@@ -556,22 +542,20 @@ deconvolute <- function(
       )
     }
   } else {
-    # Validate Conda environment
-    library(reticulate)
-    if (!"kiwims" %in% conda_list()$name) {
-      stop(
-        "Conda environment 'kiwims' not found. Create it with conda_create('kiwims')."
-      )
+    # Validate portable Python environment
+    python_exe <- Sys.getenv("RETICULATE_PYTHON")
+    if (!nzchar(python_exe) || !file.exists(python_exe)) {
+      stop("Python interpreter not found. RETICULATE_PYTHON is not set or points to a missing file.")
     } else {
-      message("Conda environment 'kiwims' found.")
+      message("Python found: ", python_exe)
     }
 
     tryCatch(
       {
-        use_condaenv("kiwims", required = TRUE)
+        use_python(python_exe, required = TRUE)
       },
       error = function(e) {
-        message("Error activating 'kiwims' environment: ", e$message)
+        message("Error initialising Python: ", e$message)
         return(NULL)
       }
     )

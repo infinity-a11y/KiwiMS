@@ -1,10 +1,14 @@
-﻿# KiwiMS.ps1 - Launcher
-#-----------------------------#
+﻿#-----------------------------#
 # Script Initialization
 #-----------------------------#
 
+# Get the directory where the .exe is running
+$appRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+Set-Location $appRoot
+
 # Get version info
-$versionFile = if (Test-Path "resources\version.txt") { Get-Content -Path "resources\version.txt" | Select-Object -First 1 }
+$versionPath = Join-Path $appRoot "resources\version.txt"
+$versionFile = if (Test-Path $versionPath) { Get-Content -Path $versionPath | Select-Object -First 1 } else { "0.5.1" }
 
 # Headless check
 $Headless = $args -contains "--headless"
@@ -22,84 +26,49 @@ Write-Host "         Welcome to KiwiMS ($versionFile)          " -ForegroundColo
 Write-Host "---------------------------------------------------" -ForegroundColor DarkGray
 
 #-----------------------------#
-# Conda Discovery Function
-#-----------------------------#
-function Find-CondaExecutable {
-    $searchPaths = @(
-        # Miniconda - System Wide
-        "$env:ProgramData\miniconda3\Scripts\conda.exe",
-        "$env:ProgramData\miniconda3\Library\bin\conda.exe",
-        "$env:ProgramData\miniconda3\condabin\conda.bat",
-
-        # Miniconda - User Specific
-        "$env:LOCALAPPDATA\miniconda3\Scripts\conda.exe",
-        "$env:LOCALAPPDATA\miniconda3\Library\bin\conda.exe",
-        "$env:LOCALAPPDATA\miniconda3\condabin\conda.bat"
-    )
-
-    # Search through hardcoded common paths
-    foreach ($path in $searchPaths) {
-        if (Test-Path $path) {
-            Write-Host "Found conda at: $path" -ForegroundColor Cyan
-            return $path
-        }
-    }
-
-    # Check if conda.exe is in the system PATH
-    $condaInPath = Get-Command conda.exe, conda.bat -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($condaInPath) {
-        Write-Host "Found conda in system PATH: $($condaInPath.Path)" -ForegroundColor Cyan
-        return $condaInPath.Path
-    }
-
-    # Check Environment Variables
-    if ($env:CONDA_EXE -and (Test-Path $env:CONDA_EXE)) {
-        Write-Host "Found conda via CONDA_EXE: $env:CONDA_EXE" -ForegroundColor Cyan
-        return $env:CONDA_EXE
-    }
-
-    Write-Host "ERROR: conda.exe not found." -ForegroundColor Red
-    return $null
-}
-
-#-----------------------------#
 # Path & Log Configuration
 #-----------------------------#
-$condaCmd = Find-CondaExecutable
 $logDirectory = "$env:LOCALAPPDATA\KiwiMS"
 $logFile = Join-Path $logDirectory "launch.log"
 
 if (-Not (Test-Path $logDirectory)) { New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null }
 
 # Clear previous logs
-"$(Get-Date) - INFO: Launcher Initialized." | Out-File $logFile
+"$(Get-Date) - INFO: Launcher Initialized (Portable)." | Out-File $logFile
 
-if (-not $condaCmd) {
-    Write-Host "ERROR: Conda not found! Please reinstall KiwiMS." -ForegroundColor Red
-    "$(Get-Date) - ERROR: Conda executable not found in system or user paths." | Add-Content $logFile
-    if (-not $Headless) { pause }
-    exit 1
-}
+# Define Local Engine Paths
+$RPortablePath = Join-Path $appRoot "R-Portable\bin\Rscript.exe"
+$localPython = Join-Path $appRoot "env_kiwims\python.exe"
 
-# Define the path to R executables
-$RPortablePath = ".\R-Portable\bin\Rscript.exe"
-
-# Verification check to see if the files are actually there
+# Verification checks
 if (-not (Test-Path $RPortablePath)) {
-    "$(Get-Date) - ERROR: R-Portable not found at $RPortablePath" | Add-Content $logFile
-    Write-Host "ERROR: R-Portable not found!" -ForegroundColor Red
+    $errorMsg = "ERROR: R-Portable not found at $RPortablePath"
+    $errorMsg | Add-Content $logFile
+    Write-Host $errorMsg -ForegroundColor Red
     if (-not $Headless) { pause }
     exit 1
 }
 
-Write-Host "Starting application in default browser..." -ForegroundColor Yellow
-# --- Launch the App ---
+#-----------------------------#
+# Environment Setup & Launch
+#-----------------------------#
+Write-Host "Initializing environment..." -ForegroundColor Yellow
+
 try {
     "$(Get-Date) - INFO: Launching via R-Portable: $RPortablePath" | Add-Content $logFile
 
+    # Set Critical Environment Variables to force isolation
+    $env:R_HOME = Join-Path $appRoot "R-Portable"
+    $env:PYTHONHOME = Join-Path $appRoot "env_kiwims"
+    $env:RETICULATE_PYTHON = Join-Path $appRoot "env_kiwims\python.exe"
+    
+    # Define the Shiny launch command
     $shinyCmd = "shiny::runApp('app.R', launch.browser = $(if ($Headless) { 'FALSE' } else { 'TRUE' }))"
     
-    & $condaCmd run -n kiwims "$RPortablePath" --no-save --no-restore -e "$shinyCmd" *> $logFile 2>&1
+    Write-Host "Starting application in browser..." -ForegroundColor Green
+
+    # Execute Rscript directly
+    & "$RPortablePath" --no-save --no-restore -e "$shinyCmd" *> $logFile 2>&1
 
     if ($LASTEXITCODE -ne 0) {
         throw "R Process exited with code $LASTEXITCODE"
