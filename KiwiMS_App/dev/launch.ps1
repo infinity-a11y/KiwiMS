@@ -2,8 +2,14 @@
 # Script Initialization
 #-----------------------------#
 
-# Get the directory where the .exe is running
-$appRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+# Get the directory where the .exe (or .ps1) is running.
+# $PSScriptRoot is set correctly by both PowerShell (for .ps1) and ps2exe (for .exe).
+# $MyInvocation.MyCommand.Path is null in compiled exes, so it cannot be used alone.
+$appRoot = if ($PSScriptRoot) {
+    $PSScriptRoot
+} else {
+    Split-Path -Parent ([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+}
 Set-Location $appRoot
 
 # Get version info

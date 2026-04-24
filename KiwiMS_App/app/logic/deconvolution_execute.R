@@ -1,8 +1,5 @@
 # app/logic/deconvolution_execute.R
 
-# Enable conda DLL search
-# Sys.setenv(CONDA_DLL_SEARCH_MODIFICATION_ENABLE = "1")
-
 # Checking library Paths
 message(paste("Current library paths: \n", paste(.libPaths(), collapse = "\n")))
 

@@ -441,30 +441,39 @@ deconvolute <- function(
     # Initialize reticulate and Conda environment in each worker
     message("Setting python environment for each worker ...")
     worker_lib_paths <- .libPaths()
-    invisible(capture.output(
-      {
-        clusterExport(cl, "worker_lib_paths", envir = environment())
-        clusterEvalQ(cl, .libPaths(worker_lib_paths))
-        clusterEvalQ(cl, {
-          library(reticulate)
-          library(DBI)
-          library(RSQLite)
-          library(data.table)
+    clusterExport(cl, "worker_lib_paths", envir = environment())
+    clusterEvalQ(cl, .libPaths(worker_lib_paths))
+    clusterEvalQ(cl, {
+      library(reticulate)
+      library(DBI)
+      library(RSQLite)
+      library(data.table)
+    })
 
-          tryCatch(
-            {
-              reticulate::use_python(Sys.getenv("RETICULATE_PYTHON"), required = TRUE)
-              NULL
-            },
-            error = function(e) {
-              message("Error in worker ", Sys.getpid(), ": ", e$message)
-              return(NULL)
-            }
-          )
-        })
-      },
-      type = "output"
-    ))
+    # Initialize Python fully in each worker, one at a time.
+    #
+    # Two Windows-specific problems occur when multiple workers initialize
+    # Python simultaneously:
+    #   (a) use_python() → system2(python.exe config.py) → Error 127 /
+    #       GetTempFileName collisions in the stdout-capture temp file.
+    #   (b) py_run_string() → PyInitialize() → conda DLL hooks create
+    #       __conda_tmp_*.txt temp files that clash across workers.
+    #
+    # clusterEvalQ on a single-worker subset (cl[i]) is synchronous: the loop
+    # blocks until worker i fully completes before moving to worker i+1.
+    # Both the probe AND the embedding therefore happen sequentially, with no
+    # concurrent system2() or DLL-hook calls.
+    #
+    # Without tryCatch, any Python init failure propagates to the master
+    # immediately rather than letting broken workers silently enter parLapply.
+    worker_python <- python_exe
+    clusterExport(cl, "worker_python", envir = environment())
+    for (i in seq_along(cl)) {
+      clusterEvalQ(cl[i], {
+        reticulate::use_python(worker_python, required = TRUE)
+        reticulate::py_run_string("None")  # force PyInitialize() now, not lazily
+      })
+    }
 
     # Create wrapper function that includes all parameters
     process_wrapper <- function(dir, params) {

@@ -1414,6 +1414,19 @@ server <- function(
           }
           message("Launching subprocess: ", rscript_path)
 
+          # Store pre-launch diagnostics in a reactive variable so they survive
+          # processx truncating the log file when the subprocess starts.
+          reactVars$decon_prelaunch_info <- paste(c(
+            sprintf("[%s] === Deconvolution subprocess launch ===", format(Sys.time(), "%H:%M:%S")),
+            sprintf("  Rscript          : %s", rscript_path),
+            sprintf("  R_HOME           : %s", Sys.getenv("R_HOME",            unset = "(not set)")),
+            sprintf("  PYTHONHOME       : %s", Sys.getenv("PYTHONHOME",        unset = "(not set)")),
+            sprintf("  RETICULATE_PYTHON: %s", Sys.getenv("RETICULATE_PYTHON", unset = "(not set)")),
+            sprintf("  KIWIMS_RSCRIPT   : %s", Sys.getenv("KIWIMS_RSCRIPT",   unset = "(not set)")),
+            sprintf("  Working dir      : %s", getwd()),
+            "---"
+          ), collapse = "\n")
+
           rx_process <- process$new(
             rscript_path,
             args = c(
@@ -2959,16 +2972,20 @@ server <- function(
       output$logtext <- shiny$renderText({
         shiny$invalidateLater(2000)
 
-        if (
+        file_content <- if (
           !is.null(reactVars$decon_process_out) &&
             file.exists(reactVars$decon_process_out)
         ) {
-          reactVars$deconvolution_log <- paste(
-            readLines(reactVars$decon_process_out, warn = FALSE),
-            collapse = "\n"
-          )
+          paste(readLines(reactVars$decon_process_out, warn = FALSE), collapse = "\n")
         } else {
-          reactVars$deconvolution_log <- "Log file not found."
+          "(log file not found)"
+        }
+
+        prelaunch <- reactVars$decon_prelaunch_info
+        reactVars$deconvolution_log <- if (!is.null(prelaunch) && nzchar(prelaunch)) {
+          paste0(prelaunch, "\n", file_content)
+        } else {
+          file_content
         }
 
         reactVars$deconvolution_log
