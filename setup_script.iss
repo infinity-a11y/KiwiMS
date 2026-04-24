@@ -12,6 +12,7 @@ SolidCompression=yes
 OutputDir=.
 OutputBaseFilename=KiwiMS-Windows-x86_64
 SetupIconFile=setup\favicon.ico
+UninstallDisplayIcon={app}\favicon.ico
 WizardImageFile=setup\kiwims_banner.bmp
 WizardSmallImageFile=setup\kiwims_small.bmp
 PrivilegesRequired=none
@@ -34,7 +35,6 @@ Source: "KiwiMS_App\renv\*"; DestDir: "{app}\renv"; Flags: recursesubdirs create
 Source: "KiwiMS_App\rhino.yml"; DestDir: "{app}";
 Source: "KiwiMS_App\R-Portable\*"; DestDir: "{app}\R-Portable"; Flags: recursesubdirs createallsubdirs
 Source: "KiwiMS_App\app\*"; DestDir: "{app}\app"; Flags: recursesubdirs createallsubdirs;
-; dev/ excluded — developer tooling only, not needed at runtime
 Source: "KiwiMS_App\resources\*"; DestDir: "{app}\resources"; Flags: recursesubdirs createallsubdirs;
 Source: "setup\favicon.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "setup\config.ps1"; DestDir: "{tmp}"; Flags: deleteafterinstall

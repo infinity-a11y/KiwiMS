@@ -1351,6 +1351,7 @@ server <- function(
         "KiwiMS",
         "deconvolution.log"
       )
+      dir.create(dirname(output_path), showWarnings = FALSE, recursive = TRUE)
       file.create(output_path)
       reactVars$decon_process_out <- output_path
       write("", reactVars$decon_process_out)
@@ -1407,11 +1408,14 @@ server <- function(
       )
       tryCatch(
         {
-          #TODO
-          message(file.path(R.home("bin"), "Rscript.exe"))
+          rscript_path <- Sys.getenv("KIWIMS_RSCRIPT")
+          if (!nzchar(rscript_path) || !file.exists(rscript_path)) {
+            rscript_path <- file.path(R.home("bin"), "Rscript.exe")
+          }
+          message("Launching subprocess: ", rscript_path)
 
           rx_process <- process$new(
-            file.path(R.home("bin"), "Rscript.exe"),
+            rscript_path,
             args = c(
               "app/logic/deconvolution_execute.R",
               temp,

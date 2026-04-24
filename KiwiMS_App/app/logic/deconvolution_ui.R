@@ -824,7 +824,7 @@ deconvolution_status_controls <- function(ns) {
               display_pct = TRUE
             )
           ),
-          shiny$column(
+          if (Sys.getenv("KIWIMS_DEV_MODE") == "TRUE") shiny$column(
             width = 1,
             shiny$div(
               class = "decon-btn",
