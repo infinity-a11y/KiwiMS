@@ -4195,6 +4195,10 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   border: none !important;
 }
 
+.deconvolution-sample-picker .selectize-dropdown {
+  width: fit-content !important;
+}
+
 .deconvolution-init-ui-wrapper .selectize-input {
   background-color: #d5d5d5;
 }

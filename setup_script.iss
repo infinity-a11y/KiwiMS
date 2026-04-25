@@ -28,6 +28,7 @@ Name: "de"; MessagesFile: "compiler:Languages\German.isl"
 Source: "KiwiMS_App\KiwiMS.exe"; DestDir: "{app}";
 Source: "KiwiMS_App\env_kiwims\*"; DestDir: "{app}\env_kiwims"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "KiwiMS_App\.Rprofile"; DestDir: "{app}";
+Source: "KiwiMS_App\.renvignore"; DestDir: "{app}";
 Source: "KiwiMS_App\app.R"; DestDir: "{app}";
 Source: "KiwiMS_App\config.yml"; DestDir: "{app}";
 Source: "KiwiMS_App\renv.lock"; DestDir: "{app}";
