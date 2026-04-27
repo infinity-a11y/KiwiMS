@@ -5,22 +5,14 @@ KiwiMS is an interactive pipeline with graphical user interface to perform prote
 ![Windows](https://img.shields.io/badge/Windows-339033?style=flat&logo=windows&logoColor=white) [![Version](https://img.shields.io/badge/Version-0.6.0-E8CB98)](https://github.com/infinity-a11y/KiwiMS/releases/tag/0.6.0) [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-659DA3.svg)](https://www.gnu.org/licenses/gpl-3.0) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.16575977.svg)](https://doi.org/10.5281/zenodo.16575976)
 
 <sup>*KiwiMS is supposed to be used for research and academic purposes only.*</sup>
-
-<br><br><hr><br>
-
-### Current Version: KiwiMS 0.6.0
-
-<i> 2026-02-09 </i> <br> <b>KiwiMS 0.6.0</b> <br> <https://github.com/infinity-a11y/KiwiMS/releases/tag/0.6.0>
-
-<br><hr><br>
-
-### Citation
-
+<br><br>
+## Current Version
+<b>KiwiMS 0.6.0</b> <br> <https://github.com/infinity-a11y/KiwiMS/releases/tag/0.6.0>
+<br><br>
+## Citation
 Please cite both **KiwiMS** and **UniDec** if you used this software in your work.
-
-<br>
+<br><br>
 Marian Freisleben. (2026). infinity-a11y/KiwiMS: KiwiMS 0.6.0. Zenodo. DOI: https://doi.org/10.5281/zenodo.16575976
-
 ```    
 @software{marian_freisleben_2026_18552188,
   author       = {Marian Freisleben},
@@ -33,7 +25,6 @@ Marian Freisleben. (2026). infinity-a11y/KiwiMS: KiwiMS 0.6.0. Zenodo. DOI: http
   url          = {https://doi.org/10.5281/zenodo.16575976},
 }
 ```
-
 <br>
 Marty, M. T.; Baldwin, A. J.; Marklund, E. G.; Hochberg, G. K.; Benesch, J. L.; Robinson, C. V. Bayesian deconvolution of mass and ion mobility spectra: from binary interactions to polydisperse ensembles. Analytical chemistry 2015, 87 (8), 4370– 6. DOI: https://doi.org/10.1021/acs.analchem.5b00140
 
@@ -56,13 +47,3 @@ Marty, M. T.; Baldwin, A. J.; Marklund, E. G.; Hochberg, G. K.; Benesch, J. L.; 
 	pages = {4370--4376}
 }
 ```
-
-<br><hr><br>
-
-<p align="center">
-  <a href="https://liora-bioinformatics.com/"><picture><source media="(prefers-color-scheme: dark)" srcset="media/Liora_rect_white.png"><img alt="Liora Logo" src="media/Liora_Rect.png" height="130px"></picture></a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://github.com/michaelmarty/UniDec"><img alt="UniDec Logo" src="media/unidec.png" height="130px"></a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://www.hs-furtwangen.de/en/"><img alt="HFU Logo" src="media/hfu_logo.png" height="130px"></a>
-</p>
-
-<br><hr>
-
-Developed by Marian Freisleben. <br>
