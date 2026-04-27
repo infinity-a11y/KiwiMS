@@ -38,6 +38,7 @@ Source: "KiwiMS_App\R-Portable\*"; DestDir: "{app}\R-Portable"; Flags: recursesu
 Source: "KiwiMS_App\app\*"; DestDir: "{app}\app"; Flags: recursesubdirs createallsubdirs;
 Source: "KiwiMS_App\resources\*"; DestDir: "{app}\resources"; Flags: recursesubdirs createallsubdirs;
 Source: "setup\favicon.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "setup\VC_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "setup\config.ps1"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "LICENSE"; DestDir: "{app}";
 
@@ -139,8 +140,17 @@ begin
             + ' -installScope "' + SelectedScope + '"';
     Exec('powershell.exe', PsArgs, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
+    // Step 1.5: Install VC++ 2015-2022 Redistributable — required by Python and
+    // conda-unpack.exe (VCRUNTIME140.dll). Exit code 1638 means already installed.
+    UpdateStatus('Installing Visual C++ runtime...');
+    UpdateProgress(82);
+    Exec(ExpandConstant('{tmp}\VC_redist.x64.exe'),
+         '/quiet /norestart', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    SaveStringToFile(LogFile,
+      '[INFO] VC++ redistributable exit code: ' + IntToStr(ResultCode) + #13#10, True);
+
     // Step 2: Run conda-unpack.exe via PowerShell so output is captured in the log
-    UpdateStatus('Finalizing portable environment (this may take a minute)...');
+    UpdateStatus('Finalizing portable environment ...');
     UpdateProgress(90);
     UnpackCmd := '& ' + Chr(39) + ExpandConstant('{app}\env_kiwims\Scripts\conda-unpack.exe') + Chr(39)
                + ' *>&1 | Add-Content -Path ' + Chr(39) + LogFile + Chr(39)
@@ -158,6 +168,11 @@ begin
     begin
       SaveStringToFile(LogFile, '[OK] conda-unpack.exe completed successfully.' + #13#10, True);
     end;
+
+    // Remove conda-meta/ so reticulate does not detect env_kiwims as a conda environment
+    UpdateStatus('Cleaning up environment metadata ...');
+    DelTree(ExpandConstant('{app}\env_kiwims\conda-meta'), True, True, True);
+    SaveStringToFile(LogFile, '[OK] conda-meta removed.' + #13#10, True);
 
     UpdateProgress(100);
     if InstallationFailed then Abort;

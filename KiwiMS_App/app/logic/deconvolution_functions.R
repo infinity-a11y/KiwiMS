@@ -412,23 +412,23 @@ deconvolute <- function(
   time_end = ""
 ) {
   # Evaluate processing mode: parallel or sequential
-  if (length(raw_dirs) > 20 && num_cores > 1) {
+  if (length(raw_dirs) > 40 && num_cores > 1) {
     message("Initiating ", num_cores, " cores for parallel processing ...")
 
     # Validate portable Python environment
     python_exe <- Sys.getenv("RETICULATE_PYTHON")
     if (!nzchar(python_exe) || !file.exists(python_exe)) {
-      stop("Python interpreter not found. RETICULATE_PYTHON is not set or points to a missing file.")
+      stop(
+        "Python interpreter not found. RETICULATE_PYTHON is not set or points to a missing file."
+      )
     } else {
       message("Python found: ", python_exe)
     }
 
     # Create log directory and define outfile
     outfile <- file.path(
-      Sys.getenv("USERPROFILE"),
-      "Documents",
+      Sys.getenv("LOCALAPPDATA"),
       "KiwiMS",
-      "logs",
       "last_cluster_log.txt"
     )
     writeLines(paste("Deconvolution Cluster Output", Sys.time()), outfile)
@@ -452,26 +452,20 @@ deconvolute <- function(
 
     # Initialize Python fully in each worker, one at a time.
     #
-    # Two Windows-specific problems occur when multiple workers initialize
-    # Python simultaneously:
-    #   (a) use_python() → system2(python.exe config.py) → Error 127 /
-    #       GetTempFileName collisions in the stdout-capture temp file.
-    #   (b) py_run_string() → PyInitialize() → conda DLL hooks create
-    #       __conda_tmp_*.txt temp files that clash across workers.
+    # Python initialization across workers.
     #
-    # clusterEvalQ on a single-worker subset (cl[i]) is synchronous: the loop
-    # blocks until worker i fully completes before moving to worker i+1.
-    # Both the probe AND the embedding therefore happen sequentially, with no
-    # concurrent system2() or DLL-hook calls.
-    #
-    # Without tryCatch, any Python init failure propagates to the master
-    # immediately rather than letting broken workers silently enter parLapply.
+    # conda DLL activation hooks write __conda_tmp_*.txt on every PyInitialize().
+    # Simultaneous init across workers causes GetTempFileName collisions (Error 127).
+    # The hook fires inside the DLL load itself and cannot be suppressed via env vars.
+    # Workers must be initialized one at a time: clusterEvalQ on a single-node
+    # cluster subset is synchronous and blocks until that worker finishes before
+    # moving to the next.
     worker_python <- python_exe
     clusterExport(cl, "worker_python", envir = environment())
     for (i in seq_along(cl)) {
       clusterEvalQ(cl[i], {
         reticulate::use_python(worker_python, required = TRUE)
-        reticulate::py_run_string("None")  # force PyInitialize() now, not lazily
+        reticulate::py_run_string("None") # force PyInitialize() now, not lazily
       })
     }
 
@@ -554,7 +548,9 @@ deconvolute <- function(
     # Validate portable Python environment
     python_exe <- Sys.getenv("RETICULATE_PYTHON")
     if (!nzchar(python_exe) || !file.exists(python_exe)) {
-      stop("Python interpreter not found. RETICULATE_PYTHON is not set or points to a missing file.")
+      stop(
+        "Python interpreter not found. RETICULATE_PYTHON is not set or points to a missing file."
+      )
     } else {
       message("Python found: ", python_exe)
     }

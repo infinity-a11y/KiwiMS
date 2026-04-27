@@ -1323,7 +1323,6 @@ binding_results_ui <- function(ns, hits_summary) {
                         ns("compounds_spectrum_labels"),
                         label = "Show Labels",
                         value = local({
-                          hits_summary1 <<- hits_summary
                           cmp <- unique(hits_summary$`Cmp Name`)[1]
                           tbl <- hits_summary[hits_summary$`Cmp Name` == cmp, ]
                           if (is.na(cmp) || nrow(tbl) < 2) {
@@ -1331,8 +1330,6 @@ binding_results_ui <- function(ns, hits_summary) {
                           }
                           ids <- tbl$`Sample ID`
                           ids <- ids[!is.na(ids)]
-                          test <<- length(unique(ids)) <= 8 &
-                            max(nchar(as.character(ids))) <= 20
                           length(unique(ids)) <= 8 &
                             max(nchar(as.character(ids))) <= 20
                         }),

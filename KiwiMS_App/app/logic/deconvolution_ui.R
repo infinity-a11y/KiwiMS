@@ -824,18 +824,20 @@ deconvolution_status_controls <- function(ns) {
               display_pct = TRUE
             )
           ),
-          if (Sys.getenv("KIWIMS_DEV_MODE") == "TRUE") shiny$column(
-            width = 1,
-            shiny$div(
-              class = "decon-btn",
-              shiny$actionButton(
-                ns("show_log"),
-                "",
-                icon = shiny$icon("code"),
-                width = "100%"
+          if (Sys.getenv("KIWIMS_DEV_MODE") == "TRUE") {
+            shiny$column(
+              width = 1,
+              shiny$div(
+                class = "decon-btn",
+                shiny$actionButton(
+                  ns("show_log"),
+                  "",
+                  icon = shiny$icon("code"),
+                  width = "100%"
+                )
               )
             )
-          )
+          }
         )
       )
     ),
