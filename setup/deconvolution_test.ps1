@@ -13,9 +13,6 @@ Write-Output "=========================================="
 Write-Output "   Deconvolution Functional Test          "
 Write-Output "=========================================="
 
-. "$basePath\functions.ps1"
-
-$condaCmd = Find-CondaExecutable
 $RPortablePath = Join-Path $basePath "R-Portable\bin\Rscript.exe"
 
 $guid = [guid]::NewGuid().ToString().Substring(0, 8)
@@ -26,7 +23,7 @@ New-Item -ItemType Directory -Path $testTempDir -Force | Out-Null
 
 try {
     Write-Output "Writing configuration file ..."
-    & $condaCmd run -n $envName "$RPortablePath" "$basePath\make_config.R" "$basePath"
+    & "$RPortablePath" "$basePath\make_config.R" "$basePath"
 
     if (Test-Path "$basePath\resources\config.rds") {
         Copy-Item -Path "$basePath\resources\config.rds" -Destination (Join-Path $testTempDir "config.rds")
@@ -44,7 +41,7 @@ try {
     $normPath = $basePath.Replace("\", "/")
     $rExpression = "source('$normPath/renv/activate.R'); source('$normPath/app/logic/deconvolution_execute.R')"
 
-    & $condaCmd run -n $envName --no-capture-output "$RPortablePath" --vanilla -e "$rExpression" --args "$testTempDir" "$testTempDir" "$basePath" "$testTempDir" "testing" "$dbPath" "FALSE"
+    & "$RPortablePath" --vanilla -e "$rExpression" --args "$testTempDir" "$testTempDir" "$basePath" "$testTempDir" "testing" "$dbPath" "FALSE"
     
     Remove-Item -Path "$basePath\resources\config.rds", (Join-Path $testTempDir "config.rds") -Force -ErrorAction SilentlyContinue
 

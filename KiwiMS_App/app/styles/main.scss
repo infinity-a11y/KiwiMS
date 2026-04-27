@@ -1311,8 +1311,7 @@ td.listbox.htDimmed.current.highlight {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  min-width: fit-content;
-  width: 35%;
+  min-width: 450px;
 }
 
 .deconvolution-result-controls .card,
@@ -4193,6 +4192,10 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 
 .selectize-dropdown {
   border: none !important;
+}
+
+.deconvolution-sample-picker .selectize-dropdown {
+  width: fit-content !important;
 }
 
 .deconvolution-init-ui-wrapper .selectize-input {

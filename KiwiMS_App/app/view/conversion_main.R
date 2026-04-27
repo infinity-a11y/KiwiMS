@@ -2271,8 +2271,6 @@ server <- function(
                 return(TRUE)
               }
               ids <- tbl$`Sample ID`
-              test2 <<- length(unique(ids)) <= 8 &
-                max(nchar(as.character(ids))) <= 20
               length(unique(ids)) <= 8 & max(nchar(as.character(ids))) <= 20
             }))
 
@@ -2396,7 +2394,6 @@ server <- function(
                   show_mass_diff = FALSE
                 )
               } else {
-                compounds_labels_val2 <<- compounds_labels_val()
                 plot <- multiple_spectra(
                   results_list = result_list,
                   samples = unique(hits_summary$`Sample ID`[
@@ -2456,8 +2453,6 @@ server <- function(
 
               labels_show <- (length(unique(sample_ids)) <= 8 &
                 max(nchar(as.character(sample_ids))) <= 20)
-
-              labels_show3 <<- labels_show
 
               compounds_labels_val(labels_show)
               shinyWidgets::updateMaterialSwitch(

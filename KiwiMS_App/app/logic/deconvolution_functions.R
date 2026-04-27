@@ -21,7 +21,7 @@ box::use(
     stopCluster
   ],
   plotly[config, event_register, layout],
-  reticulate[use_condaenv, use_python, py_config, py_run_string],
+  reticulate[use_python, py_config, py_run_string],
   RSQLite[SQLite, SQLITE_RO],
   scales[percent_format],
   utils[read.delim, read.table],
@@ -412,25 +412,23 @@ deconvolute <- function(
   time_end = ""
 ) {
   # Evaluate processing mode: parallel or sequential
-  if (length(raw_dirs) > 20 && num_cores > 1) {
+  if (length(raw_dirs) > 40 && num_cores > 1) {
     message("Initiating ", num_cores, " cores for parallel processing ...")
 
-    # Validate Conda environment
-    library(reticulate)
-    if (!"kiwims" %in% conda_list()$name) {
+    # Validate portable Python environment
+    python_exe <- Sys.getenv("RETICULATE_PYTHON")
+    if (!nzchar(python_exe) || !file.exists(python_exe)) {
       stop(
-        "Conda environment 'kiwims' not found. Create it with conda_create('kiwims')."
+        "Python interpreter not found. RETICULATE_PYTHON is not set or points to a missing file."
       )
     } else {
-      message("Conda environment 'kiwims' found.")
+      message("Python found: ", python_exe)
     }
 
     # Create log directory and define outfile
     outfile <- file.path(
-      Sys.getenv("USERPROFILE"),
-      "Documents",
+      Sys.getenv("LOCALAPPDATA"),
       "KiwiMS",
-      "logs",
       "last_cluster_log.txt"
     )
     writeLines(paste("Deconvolution Cluster Output", Sys.time()), outfile)
@@ -443,42 +441,33 @@ deconvolute <- function(
     # Initialize reticulate and Conda environment in each worker
     message("Setting python environment for each worker ...")
     worker_lib_paths <- .libPaths()
-    invisible(capture.output(
-      {
-        clusterExport(cl, "worker_lib_paths", envir = environment())
-        clusterEvalQ(cl, .libPaths(worker_lib_paths))
-        clusterEvalQ(cl, {
-          library(reticulate)
-          library(DBI)
-          library(RSQLite)
-          library(data.table)
+    clusterExport(cl, "worker_lib_paths", envir = environment())
+    clusterEvalQ(cl, .libPaths(worker_lib_paths))
+    clusterEvalQ(cl, {
+      library(reticulate)
+      library(DBI)
+      library(RSQLite)
+      library(data.table)
+    })
 
-          # Set the key env var for conda DLL resolution
-          Sys.setenv(CONDA_DLL_SEARCH_MODIFICATION_ENABLE = "1")
-
-          # Create and set a unique temp dir for this worker to avoid Conda file conflicts
-          unique_temp_dir <- file.path(
-            tempdir(),
-            paste0("conda_worker_", Sys.getpid())
-          )
-          dir.create(unique_temp_dir, showWarnings = FALSE, recursive = TRUE)
-          Sys.setenv(TEMP = unique_temp_dir)
-          Sys.setenv(TMP = unique_temp_dir)
-
-          tryCatch(
-            {
-              use_condaenv("kiwims", required = TRUE)
-              NULL
-            },
-            error = function(e) {
-              message("Error in worker ", Sys.getpid(), ": ", e$message)
-              return(NULL)
-            }
-          )
-        })
-      },
-      type = "output"
-    ))
+    # Initialize Python fully in each worker, one at a time.
+    #
+    # Python initialization across workers.
+    #
+    # conda DLL activation hooks write __conda_tmp_*.txt on every PyInitialize().
+    # Simultaneous init across workers causes GetTempFileName collisions (Error 127).
+    # The hook fires inside the DLL load itself and cannot be suppressed via env vars.
+    # Workers must be initialized one at a time: clusterEvalQ on a single-node
+    # cluster subset is synchronous and blocks until that worker finishes before
+    # moving to the next.
+    worker_python <- python_exe
+    clusterExport(cl, "worker_python", envir = environment())
+    for (i in seq_along(cl)) {
+      clusterEvalQ(cl[i], {
+        reticulate::use_python(worker_python, required = TRUE)
+        reticulate::py_run_string("None") # force PyInitialize() now, not lazily
+      })
+    }
 
     # Create wrapper function that includes all parameters
     process_wrapper <- function(dir, params) {
@@ -556,22 +545,22 @@ deconvolute <- function(
       )
     }
   } else {
-    # Validate Conda environment
-    library(reticulate)
-    if (!"kiwims" %in% conda_list()$name) {
+    # Validate portable Python environment
+    python_exe <- Sys.getenv("RETICULATE_PYTHON")
+    if (!nzchar(python_exe) || !file.exists(python_exe)) {
       stop(
-        "Conda environment 'kiwims' not found. Create it with conda_create('kiwims')."
+        "Python interpreter not found. RETICULATE_PYTHON is not set or points to a missing file."
       )
     } else {
-      message("Conda environment 'kiwims' found.")
+      message("Python found: ", python_exe)
     }
 
     tryCatch(
       {
-        use_condaenv("kiwims", required = TRUE)
+        use_python(python_exe, required = TRUE)
       },
       error = function(e) {
-        message("Error activating 'kiwims' environment: ", e$message)
+        message("Error initialising Python: ", e$message)
         return(NULL)
       }
     )

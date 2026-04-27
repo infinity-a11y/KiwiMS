@@ -12,9 +12,14 @@ KiwiMS_App/.rhino
 
 # Ignore R ecosystem
 KiwiMS_App/R-Portable/
+KiwiMS_App/R-Portable.zip
 KiwiMS_App/renv/library/
+KiwiMS_App/renv.zip
+
+# Ignore conda environment
+KiwiMS_App/env_kiwims/
+KiwiMS_App/env_kiwims.zip
 
 # Ignore the installer output
 KiwiMS-Windows-x86_64.exe
-kiwims_env.zip
 Output/

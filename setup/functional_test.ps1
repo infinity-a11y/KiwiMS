@@ -19,12 +19,10 @@ Write-Output "=========================================="
 #-----------------------------#
 # 3. Execution Prep
 #-----------------------------#
-if (Test-Path "$basePath\functions.ps1") { . "$basePath\functions.ps1" }
-$condaCmd = Find-CondaExecutable
+$RPortablePath = Join-Path $basePath "R-Portable\bin\Rscript.exe"
 
 $rSafePath = $basePath.Replace('\', '/')
 $shinyCmd = "shiny::runApp('$rSafePath/app.R', launch.browser = FALSE)"
-$processArgs = @("run", "-n", $envName, "--no-capture-output", "Rscript.exe", "-e", "`"$shinyCmd`"", "--vanilla")
 
 #-----------------------------#
 # 4. Launch and Monitor
@@ -32,7 +30,7 @@ $processArgs = @("run", "-n", $envName, "--no-capture-output", "Rscript.exe", "-
 Write-Output "[Step 2] Running Functional Smoke Test..."
 Write-Output "Monitoring app stability for 15s..."
 
-$appProcess = Start-Process -FilePath $condaCmd -ArgumentList $processArgs -PassThru -NoNewWindow
+$appProcess = Start-Process -FilePath $RPortablePath -ArgumentList "--no-save", "--no-restore", "-e", "`"$shinyCmd`"" -PassThru -NoNewWindow
 
 for ($i = 0; $i -lt 15; $i++) {
     Write-Output "." -NoNewline
