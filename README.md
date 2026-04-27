@@ -8,38 +8,9 @@ KiwiMS is an interactive pipeline with graphical user interface to perform prote
 
 <br><br><hr><br>
 
-### Installation
-
-1.  Download the KiwiMS installer from the latest release: <br>
-
-| OS | Version | Download |
-|------------------|------------------|------------------|
-| Windows 10/11 | 0.6.0 | [KiwiMS-Windows-x86_64.exe](https://github.com/infinity-a11y/KiwiMS/releases/download/0.6.0/KiwiMS-Windows-x86_64.exe) |
-
-2.  Run the installer to set KiwiMS up.
-
-> [!NOTE]
-> <i>You may see a security warning from Windows Defender SmartScreen. This is a standard notification that appears because the installer is new and does not yet have a widely recognized digital signature.</i>
-
-3.  Launching the installer, a blue window titled "Windows protected your PC" may appear.
-4.  On this window, click the small text link that says "More info."
-5.  The window will expand to show more details. You will see that the "Publisher" is listed as "Unknown publisher."
-6.  Below this information, a new button will appear. Click the "Run anyway" button to start the installation.
-
-<br><hr><br>
-
 ### Current Version: KiwiMS 0.6.0
 
 <i> 2026-02-09 </i> <br> <b>KiwiMS 0.6.0</b> <br> <https://github.com/infinity-a11y/KiwiMS/releases/tag/0.6.0>
-
-<br><hr><br>
-
-### System Requirements
-
--   **Operating System**: Windows 10/11.
--   **Browser**: KiwiMS is running in the default browser.
--   **Administrative Privileges**: Required for setup and updates. A UAC prompt will appear.
--   **Internet Connection**: Required to download Miniconda, updates, and packages.
 
 <br><hr><br>
 
