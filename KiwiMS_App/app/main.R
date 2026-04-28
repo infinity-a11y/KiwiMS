@@ -91,9 +91,6 @@ ui <- function(id) {
             });
           });
         }
-        // For cubic multiple_spectra (scatter3d) at large/xlarge label sizes:
-        // scale tick labels less aggressively than axis titles so they stay
-        // closer to the plot and don't overlap the title.
         var isCubicSpectra = fig.data.some(function(t) { return t.type === 'scatter3d'; });
         var tickDampen3D = { small: 1.0, normal: 1.0, large: 0.75, xlarge: 0.6 }[msg.context] || 1.0;
         if (isCubicSpectra && tickDampen3D !== 1.0) {
@@ -123,8 +120,7 @@ ui <- function(id) {
         });
       });
 
-      // Set loading cursor immediately on plot export button click, before the
-      // R round-trip. PNG/SVG reset via downloadPlot above; HTML resets on focus.
+      // Set loading cursor immediately on plot export button click
       $(document).on('click', '.plot-dl-buttons button, .plot-dl-buttons a', function() {
         document.body.style.cursor = 'progress';
       });
@@ -1456,6 +1452,7 @@ server <- function(id) {
       content = function(file) {
         example <- data.frame(
           Sample = c("sample_1.raw", "sample_2.raw", "sample_3.raw"),
+          Replicate = c("Rep1", "Rep1", "Rep2"),
           Well = c("A1", "A2", "A3"),
           Compound_Concentration = c(100, 200, 100),
           Incubation_Time = c(120, 120, 60),
@@ -1499,6 +1496,11 @@ server <- function(id) {
                 shiny$tags$td(shiny$tags$code("Sample")),
                 shiny$tags$td(class = "config-col-required", "Yes"),
                 shiny$tags$td("Unique identifier per row, no duplicates")
+              ),
+              shiny$tags$tr(
+                shiny$tags$td(shiny$tags$code("Replicate")),
+                shiny$tags$td(class = "config-col-optional", "Optional"),
+                shiny$tags$td("Replicate group label \u00b7 free text \u00b7 partial fill allowed")
               ),
               shiny$tags$tr(
                 shiny$tags$td(shiny$tags$code("Protein")),

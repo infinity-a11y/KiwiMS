@@ -980,6 +980,8 @@ validate_config <- function(df) {
     }
   }
 
+  # Replicate: optional free-text group label; partial fill is allowed.
+
   issues
 }
 

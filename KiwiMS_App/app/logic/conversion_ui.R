@@ -387,11 +387,11 @@ ki_kinact_results_ui <- function(
                 label = "Select Columns",
                 choices = names(hits_summary)[
                   !names(hits_summary) %in%
-                    c("Sample ID", "Cmp Name", "truncSample_ID")
+                    c("Sample ID", "Cmp Name", "truncSample_ID", "Replicate")
                 ],
                 selected = names(hits_summary)[
                   !names(hits_summary) %in%
-                    c("Sample ID", "Cmp Name", "truncSample_ID")
+                    c("Sample ID", "Cmp Name", "truncSample_ID", "Replicate")
                 ][-c(1:2, 4:5, 7, 9)],
                 multiple = TRUE,
                 options = list(
@@ -782,7 +782,8 @@ binding_results_ui <- function(ns, hits_summary) {
                       if (length(units) == 2) {
                         c(units[["Concentration"]], units[["Time"]])
                       },
-                      "truncSample_ID"
+                      "truncSample_ID",
+                      "Replicate"
                     )
                 ],
                 selected = names(hits_summary)[
@@ -793,7 +794,8 @@ binding_results_ui <- function(ns, hits_summary) {
                       if (length(units) == 2) {
                         c(units[["Concentration"]], units[["Time"]])
                       },
-                      "truncSample_ID"
+                      "truncSample_ID",
+                      "Replicate"
                     )
                 ][-c(1:2, 4:5, 7, 9)],
                 multiple = TRUE,
@@ -1319,6 +1321,13 @@ binding_results_ui <- function(ns, hits_summary) {
                   class = "box-header-settings-help",
                   card_settings_popover(
                     shiny::div(
+                      shiny::div(
+                        class = "spectrum-radio-button",
+                        shinyWidgets::radioGroupButtons(
+                          ns("compounds_spectrum_kind"),
+                          choices = c("3D", "Planar")
+                        )
+                      ),
                       shinyWidgets::materialSwitch(
                         ns("compounds_spectrum_labels"),
                         label = "Show Labels",
@@ -1587,6 +1596,13 @@ binding_results_ui <- function(ns, hits_summary) {
                   class = "box-header-settings-help",
                   card_settings_popover(
                     shiny::div(
+                      shiny::div(
+                        class = "spectrum-radio-button",
+                        shinyWidgets::radioGroupButtons(
+                          ns("proteins_spectrum_kind"),
+                          choices = c("3D", "Planar")
+                        )
+                      ),
                       shinyWidgets::materialSwitch(
                         ns("proteins_spectrum_labels"),
                         label = "Show Labels",
