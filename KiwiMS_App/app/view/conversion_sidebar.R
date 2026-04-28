@@ -734,6 +734,7 @@ server <- function(
             class = "checkbox-disable"
           )
 
+          # Disable result interface radio buttons
           shinyjs::addClass(
             selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(1)",
             class = "custom-disable"
@@ -744,6 +745,8 @@ server <- function(
               class = "custom-disable"
             )
           }
+
+          # Disable complex picker
           shinyjs::addClass(
             selector = ".complex-picker .form-group .bootstrap-select",
             class = "custom-disable"
@@ -754,8 +757,10 @@ server <- function(
             asis = TRUE
           )
 
+          # Reset analysis interface selection to Binding Analysis
           shiny::updateRadioButtons(session, "analysis_select", selected = 1)
 
+          # Reenable conversion parameter inputs
           shinyjs::enable("peak_tolerance")
           shinyjs::enable("max_multiples")
 
