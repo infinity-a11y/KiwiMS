@@ -1351,6 +1351,7 @@ server <- function(
         "KiwiMS",
         "deconvolution.log"
       )
+      dir.create(dirname(output_path), showWarnings = FALSE, recursive = TRUE)
       file.create(output_path)
       reactVars$decon_process_out <- output_path
       write("", reactVars$decon_process_out)
@@ -1407,11 +1408,27 @@ server <- function(
       )
       tryCatch(
         {
-          #TODO
-          message(file.path(R.home("bin"), "Rscript.exe"))
+          rscript_path <- Sys.getenv("KIWIMS_RSCRIPT")
+          if (!nzchar(rscript_path) || !file.exists(rscript_path)) {
+            rscript_path <- file.path(R.home("bin"), "Rscript.exe")
+          }
+          message("Launching subprocess: ", rscript_path)
+
+          # Store pre-launch diagnostics in a reactive variable so they survive
+          # processx truncating the log file when the subprocess starts.
+          reactVars$decon_prelaunch_info <- paste(c(
+            sprintf("[%s] === Deconvolution subprocess launch ===", format(Sys.time(), "%H:%M:%S")),
+            sprintf("  Rscript          : %s", rscript_path),
+            sprintf("  R_HOME           : %s", Sys.getenv("R_HOME",            unset = "(not set)")),
+            sprintf("  PYTHONHOME       : %s", Sys.getenv("PYTHONHOME",        unset = "(not set)")),
+            sprintf("  RETICULATE_PYTHON: %s", Sys.getenv("RETICULATE_PYTHON", unset = "(not set)")),
+            sprintf("  KIWIMS_RSCRIPT   : %s", Sys.getenv("KIWIMS_RSCRIPT",   unset = "(not set)")),
+            sprintf("  Working dir      : %s", getwd()),
+            "---"
+          ), collapse = "\n")
 
           rx_process <- process$new(
-            file.path(R.home("bin"), "Rscript.exe"),
+            rscript_path,
             args = c(
               "app/logic/deconvolution_execute.R",
               temp,
@@ -2955,16 +2972,20 @@ server <- function(
       output$logtext <- shiny$renderText({
         shiny$invalidateLater(2000)
 
-        if (
+        file_content <- if (
           !is.null(reactVars$decon_process_out) &&
             file.exists(reactVars$decon_process_out)
         ) {
-          reactVars$deconvolution_log <- paste(
-            readLines(reactVars$decon_process_out, warn = FALSE),
-            collapse = "\n"
-          )
+          paste(readLines(reactVars$decon_process_out, warn = FALSE), collapse = "\n")
         } else {
-          reactVars$deconvolution_log <- "Log file not found."
+          "(log file not found)"
+        }
+
+        prelaunch <- reactVars$decon_prelaunch_info
+        reactVars$deconvolution_log <- if (!is.null(prelaunch) && nzchar(prelaunch)) {
+          paste0(prelaunch, "\n", file_content)
+        } else {
+          file_content
         }
 
         reactVars$deconvolution_log
@@ -3316,21 +3337,13 @@ server <- function(
               temp
             )
 
-            # Construct the system command
-            cmd <- paste(
-              "conda activate kiwims &&",
-              "cd",
-              script_dir,
-              "&& Rscript",
-              paste(args, collapse = " ")
-            )
-
             # Start external report generation process
             tryCatch(
               {
                 rep_process <- process$new(
-                  command = "cmd.exe",
-                  args = c("/c", cmd),
+                  command = file.path(R.home("bin"), "Rscript.exe"),
+                  args = args,
+                  wd = script_dir,
                   stdout = reactVars$decon_rep_process_out,
                   stderr = reactVars$decon_rep_process_out
                 )

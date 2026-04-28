@@ -1670,7 +1670,6 @@ log_err_binding <- function() {
 
 # Log hits summary
 log_hits_summary <- function(hits_summarized) {
-  hits_summarized1 <<- hits_summarized
   message(paste(
     "SUMMARIZING HITS\n  │\n",
     sprintf(
