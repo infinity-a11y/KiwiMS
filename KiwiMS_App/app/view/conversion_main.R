@@ -3187,11 +3187,11 @@ server <- function(
 
               hits_table <- filter_hits_table(
                 hits_table,
-                selected_cols = input$relbinding_hits_tab_col_select,
-                compounds = input$relbinding_hits_tab_compound_select,
-                samples = input$relbinding_hits_tab_sample_select,
-                expand = input$relbinding_hits_tab_expand,
-                na_include = input$relbinding_hits_tab_na,
+                selected_cols = input$kikinact_hits_tab_col_select,
+                compounds = input$kikinact_hits_tab_compound_select,
+                samples = input$kikinact_hits_tab_sample_select,
+                expand = input$kikinact_hits_tab_expand,
+                na_include = input$kikinact_hits_tab_na,
                 units = units
               )
 

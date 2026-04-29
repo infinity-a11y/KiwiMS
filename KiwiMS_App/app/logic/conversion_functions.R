@@ -1683,7 +1683,7 @@ log_hits_summary <- function(hits_summarized) {
       " ├─ %s sample(s) screened\n",
       length(unique(hits_summarized$Sample))
     ),
-    sprintf(" └─ %s hit(s) detected in total\n", nrow(hits_summarized))
+    sprintf(" └─ %s hit(s) detected in total\n", sum(!is.na(hits_summarized$Compound)))
   ))
 }
 
