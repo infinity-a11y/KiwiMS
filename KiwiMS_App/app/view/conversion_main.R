@@ -1658,6 +1658,7 @@ server <- function(
                 shiny::req(
                   hits_summary,
                   input$relbinding_hits_tab_sample_select,
+                  input$relbinding_hits_tab_compound_select,
                   input$color_variable,
                   !is.null(input$truncate_names),
                   input$color_scale
@@ -3171,7 +3172,9 @@ server <- function(
             output$kikinact_hits_tab <- DT::renderDT({
               shiny::req(
                 conversion_vars$formatted_hits,
-                conversion_vars$conc_colors
+                conversion_vars$conc_colors,
+                input$relbinding_hits_tab_sample_select,
+                input$relbinding_hits_tab_compound_select
               )
 
               # Arrange table

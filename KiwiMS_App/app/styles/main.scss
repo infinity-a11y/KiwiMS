@@ -76,6 +76,7 @@ th {
 .bs-actionsbox .btn-group button {
   width: unset !important;
   border-color: white !important;
+  white-space: nowrap;
   background: #0000001c;
 }
 
@@ -246,6 +247,7 @@ th {
 .nav-tabs .nav-link,
 .nav-tabs>li>a {
   color: white !important;
+  margin-bottom: 0px;
 }
 
 .tab-content>.active {
@@ -258,6 +260,14 @@ th {
   border-top: 1px solid #e5e5e5;
   border-left: 1px solid #e5e5e5;
   border-right: 1px solid #e5e5e5;
+  border-bottom: none;
+}
+
+.card-header-tabs .nav-link:not(.active) {
+  background-color: rgb(255 255 255 / 3%);
+  border-top: 1px solid #e5e5e529;
+  border-left: 1px solid #e5e5e529;
+  border-right: 1px solid #e5e5e529;
   border-bottom: none;
 }
 
@@ -2288,6 +2298,10 @@ div[data-value="Protein Conversion"] .tab-pane {
   font-weight: normal;
 }
 
+#app-conversion_main-conversion_ui .bslib-card .card-header {
+  border-bottom: none;
+}
+
 .binding-analysis-tab .card-custom .card .card-body,
 .result-conc-tab .card-custom .card .card-body,
 .conversion-samples-wrapper .card-custom .card .card-body {
@@ -2905,9 +2919,9 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   min-height: 0;
   overflow: hidden;
 
-  > .shiny-spinner-output-container,
-  > .shiny-spinner-output-container > .shinycssloaders-container,
-  > .shiny-spinner-output-container > .shiny-html-output {
+  >.shiny-spinner-output-container,
+  >.shiny-spinner-output-container>.shinycssloaders-container,
+  >.shiny-spinner-output-container>.shiny-html-output {
     height: 100%;
   }
 }
