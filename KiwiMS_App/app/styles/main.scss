@@ -1806,6 +1806,9 @@ decon-report-modal .btn-default {
   font-weight: 400;
   margin-right: 5px;
   color: #6c757d;
+  display: inline-block;
+  vertical-align: middle;
+  line-height: 1;
 }
 
 div[data-value="Protein Conversion"] .collapse-toggle {
