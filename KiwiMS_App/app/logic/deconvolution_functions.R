@@ -1825,3 +1825,28 @@ generate_decon_rslt <- function(
 
   invisible(db_path)
 }
+
+# Checkpoint WAL into the main DB and remove sidecar files.
+# Call after kill_tree() (with a preceding Sys.sleep for handle release).
+# WAL is only deleted when already empty; SHM is always safe to remove.
+#' @export
+cleanup_wal <- function(db_path) {
+  if (!file.exists(db_path)) return(invisible(NULL))
+  tryCatch(
+    {
+      con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+      DBI::dbExecute(con, "PRAGMA busy_timeout=8000")
+      DBI::dbExecute(con, "PRAGMA wal_checkpoint(TRUNCATE)")
+      DBI::dbExecute(con, "PRAGMA journal_mode=DELETE")
+      DBI::dbDisconnect(con)
+    },
+    error = function(e) NULL
+  )
+  wal <- paste0(db_path, "-wal")
+  shm <- paste0(db_path, "-shm")
+  if (file.exists(wal) && file.size(wal) == 0)
+    tryCatch(file.remove(wal), error = function(e) NULL)
+  if (file.exists(shm))
+    tryCatch(file.remove(shm), error = function(e) NULL)
+  invisible(NULL)
+}
