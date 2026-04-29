@@ -3800,14 +3800,8 @@ render_table_view <- function(table, colors, tab, inputs, units) {
   # Determine grouped row variable
   if (tab == "Compounds") {
     group_variable <- "Sample ID"
-    if (length(unique(table[[group_variable]])) != nrow(table)) {
-      table$`Sample ID` <- paste("Sample ID:", table$`Sample ID`)
-    }
   } else if (any(tab %in% c("Samples", "Proteins"))) {
     group_variable <- "Cmp Name"
-    if (length(unique(table[[group_variable]])) != nrow(table)) {
-      table$`Cmp Name` <- paste("Compound:", table$`Cmp Name`)
-    }
   } else {
     group_variable <- NULL
   }
@@ -3825,6 +3819,15 @@ render_table_view <- function(table, colors, tab, inputs, units) {
   # binding columns to character when bar renderer is off
   if (isTRUE(inputs$truncate_names) && "trunc_label" %in% names(table)) {
     table[["Sample ID"]] <- table[["trunc_label"]]
+  }
+
+  # Add human-readable prefix to group rows (after truncation so it isn't overwritten)
+  if (!is.null(row_group)) {
+    if (tab == "Compounds") {
+      table$`Sample ID` <- paste("Sample:", table$`Sample ID`)
+    } else if (any(tab %in% c("Samples", "Proteins"))) {
+      table$`Cmp Name` <- paste("Compound:", table$`Cmp Name`)
+    }
   }
   if (!is.null(inputs$binding_bar) && !isTRUE(inputs$binding_bar)) {
     table[["%-Binding"]] <- as.character(table[["%-Binding"]])
@@ -3858,6 +3861,7 @@ render_table_view <- function(table, colors, tab, inputs, units) {
     options = list(
       dom = 't',
       paging = FALSE,
+      ordering = FALSE,
       scrollY = TRUE,
       scrollCollapse = TRUE,
       rowGroup = row_group,
