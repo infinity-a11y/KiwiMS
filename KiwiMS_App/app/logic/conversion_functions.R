@@ -993,12 +993,19 @@ check_sample_table <- function(sample_table, proteins, compounds) {
       return("Fill Time")
     }
 
-    # At least 3 distinct non-zero concentrations required
-    # (zero is allowed but does not count toward the 3)
+    # At least 3 and at most 10 distinct non-zero concentrations required
+    # (zero is allowed but does not count toward these limits)
     n_conc <- length(unique(conc_vals[!is.na(conc_vals) & conc_vals != 0]))
     if (n_conc < 3) {
       return(paste0(
         "At least 3 different non-zero concentrations required (",
+        n_conc,
+        " present)"
+      ))
+    }
+    if (n_conc > 10) {
+      return(paste0(
+        "At most 10 different non-zero concentrations allowed (",
         n_conc,
         " present)"
       ))
