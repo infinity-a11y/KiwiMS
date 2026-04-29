@@ -2453,7 +2453,7 @@ server <- function(
         if (file.exists(db_sp) && sel_base %in% decon_failed_samples(db_sp)) {
           waiter_hide(id = ns("spectrum"))
           return(
-            plotly::plot_ly() |>
+            plotly::plot_ly(type = "scatter", mode = "markers") |>
               plotly::layout(
                 paper_bgcolor = "rgba(0,0,0,0)",
                 plot_bgcolor = "rgba(0,0,0,0)",
