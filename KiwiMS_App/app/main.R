@@ -90,6 +90,13 @@ ui <- function(id) {
                 trace[key].size = Math.round(trace[key].size * contextScale);
             });
           });
+          if (fig.layout.margin && typeof fig.layout.margin === 'object') {
+            ['l', 'r', 't', 'b', 'pad'].forEach(function(side) {
+              if (typeof fig.layout.margin[side] === 'number')
+                fig.layout.margin[side] = Math.round(fig.layout.margin[side] * contextScale);
+            });
+          }
+
         }
         var isCubicSpectra = fig.data.some(function(t) { return t.type === 'scatter3d'; });
         var tickDampen3D = { small: 1.0, normal: 1.0, large: 0.75, xlarge: 0.6 }[msg.context] || 1.0;

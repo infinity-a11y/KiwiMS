@@ -5450,6 +5450,8 @@ smpl_compound_distribution <- function(
   }
   cmp_table$color[cmp_table$mass_shift == "Unbound"] <- "#333338"
 
+  font_color <- if (theme == "light") "black" else "white"
+
   plotly::plot_ly(
     data = cmp_table,
     labels = ~mass_stoich,
@@ -5459,7 +5461,7 @@ smpl_compound_distribution <- function(
     hole = 0.4,
     textinfo = 'label+percent',
     texttemplate = "%{label}<br>%{percent}",
-    textposition = 'auto',
+    textposition = 'outside',
     hovertemplate = ~ paste0(
       "<span style='opacity: 0.8'>Compound:</span> <b>",
       `Cmp Name`,
@@ -5471,8 +5473,7 @@ smpl_compound_distribution <- function(
       `%-Binding`,
       "<extra></extra>"
     ),
-    insidetextfont = list(size = 14),
-    outsidetextfont = list(color = 'white', size = 14),
+    outsidetextfont = list(color = font_color, size = 12),
     marker = list(
       colors = ~ I(color),
       line = list(color = '#e5e5e5', width = 1)
@@ -5480,8 +5481,11 @@ smpl_compound_distribution <- function(
   ) |>
     plotly::layout(
       showlegend = FALSE,
+      autosize = TRUE,
       paper_bgcolor = "rgba(0,0,0,0)",
       plot_bgcolor = "rgba(0,0,0,0)",
+      uniformtext = list(minsize = 8, mode = "hide"),
+      margin = list(l = 90, r = 90, t = 60, b = 60),
       annotations = list(
         list(
           x = 0.5,
@@ -5493,8 +5497,8 @@ smpl_compound_distribution <- function(
           yanchor = "middle",
           showarrow = FALSE,
           font = list(
-            size = 22,
-            color = if (theme == "light") "black" else "white"
+            size = 15,
+            color = font_color
           )
         )
       )
