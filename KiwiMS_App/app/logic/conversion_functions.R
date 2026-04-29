@@ -2222,7 +2222,7 @@ make_binding_plot <- function(
           text = paste0(
             "Concentration [",
             gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
-            "]"
+"]  "
           ),
           font = list(color = font_color)
         ),
@@ -2354,7 +2354,7 @@ make_kobs_plot <- function(ki_kinact_result, colors, units, theme = "dark") {
           text = paste0(
             "Concentration [",
             gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
-            "]"
+"]  "
           ),
           font = list(color = font_color)
         ),
@@ -3478,7 +3478,7 @@ multiple_spectra <- function(
                 paste0(
                   "Time [",
                   gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
-                  "]"
+                  "]  "
                 ),
                 "Sample ID"
               ),
@@ -3687,7 +3687,7 @@ multiple_spectra <- function(
                 paste0(
                   "Time [",
                   gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
-                  "]"
+                  "]  "
                 ),
                 "Sample ID"
               ),
