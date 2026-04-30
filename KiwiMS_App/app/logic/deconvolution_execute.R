@@ -73,6 +73,12 @@ tryCatch(
     sample_bases <- gsub("\\.raw$", "", basename(conf$dirs), ignore.case = TRUE)
 
     con_init <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+    on.exit(
+      if (exists("con_init") && DBI::dbIsValid(con_init)) {
+        DBI::dbDisconnect(con_init)
+      },
+      add = TRUE
+    )
     DBI::dbExecute(con_init, "PRAGMA journal_mode=WAL")
     DBI::dbExecute(con_init, "PRAGMA busy_timeout=5000")
     # Checkpoint + truncate any stale WAL left by a prior aborted run.
@@ -164,8 +170,6 @@ tryCatch(
     if (DBI::dbExistsTable(con_init, "completed")) {
       DBI::dbExecute(con_init, "DROP TABLE completed")
     }
-
-    DBI::dbDisconnect(con_init)
   },
   error = function(e) {
     message("Error initialising SQLite database: ", e$message)
@@ -246,3 +250,20 @@ if (commandArgs(trailingOnly = TRUE)[5] != "testing") {
     }
   )
 }
+
+# Force a full WAL checkpoint and explicitly remove WAL/SHM files
+tryCatch(
+  {
+    con_wal <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+    DBI::dbExecute(con_wal, "PRAGMA wal_checkpoint(TRUNCATE)")
+    DBI::dbExecute(con_wal, "PRAGMA journal_mode=DELETE")
+    DBI::dbDisconnect(con_wal)
+    for (f in paste0(db_path, c("-wal", "-shm"))) {
+      if (file.exists(f)) file.remove(f)
+    }
+    message("WAL cleanup complete.")
+  },
+  error = function(e) {
+    message("Note: WAL cleanup skipped: ", e$message)
+  }
+)

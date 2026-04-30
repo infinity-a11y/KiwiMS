@@ -29,6 +29,7 @@ box::use(
       read_user_settings,
       save_user_settings,
       update_user_setting,
+      get_default_user_settings,
     ],
   app /
     logic /
@@ -90,6 +91,13 @@ ui <- function(id) {
                 trace[key].size = Math.round(trace[key].size * contextScale);
             });
           });
+          if (fig.layout.margin && typeof fig.layout.margin === 'object') {
+            ['l', 'r', 't', 'b', 'pad'].forEach(function(side) {
+              if (typeof fig.layout.margin[side] === 'number')
+                fig.layout.margin[side] = Math.round(fig.layout.margin[side] * contextScale);
+            });
+          }
+
         }
         var isCubicSpectra = fig.data.some(function(t) { return t.type === 'scatter3d'; });
         var tickDampen3D = { small: 1.0, normal: 1.0, large: 0.75, xlarge: 0.6 }[msg.context] || 1.0;
@@ -367,7 +375,7 @@ server <- function(id) {
                           ns("settings_input_path"),
                           label = NULL,
                           value = us$deconv_input_dir,
-                          placeholder = "Paste or type an absolute folder path",
+                          placeholder = "Absolute folder path",
                           width = "100%"
                         )
                       ),
@@ -386,7 +394,7 @@ server <- function(id) {
                           ns("settings_dest_path"),
                           label = NULL,
                           value = base,
-                          placeholder = "Paste or type an absolute folder path",
+                          placeholder = "Absolute folder path",
                           width = "100%"
                         )
                       ),
@@ -412,6 +420,18 @@ server <- function(id) {
                         )
                       ),
                       shiny$tags$td(class = "settings-table-feedback")
+                    ),
+                    shiny$tags$tr(
+                      shiny$tags$td(class = "settings-table-label"),
+                      shiny$tags$td(
+                        colspan = "2",
+                        shiny$actionButton(
+                          ns("reset_general"),
+                          "Reset Section",
+                          icon = shiny$icon("rotate-left"),
+                          width = "100%"
+                        )
+                      )
                     )
                   )
                 )
@@ -666,6 +686,18 @@ server <- function(id) {
                         class = "settings-table-feedback",
                         shiny$uiOutput(ns("settings_peakthresh_feedback"))
                       )
+                    ),
+                    shiny$tags$tr(
+                      shiny$tags$td(class = "settings-table-label"),
+                      shiny$tags$td(
+                        colspan = "2",
+                        shiny$actionButton(
+                          ns("reset_deconv"),
+                          "Reset Section",
+                          icon = shiny$icon("rotate-left"),
+                          width = "100%"
+                        )
+                      )
                     )
                   )
                 )
@@ -732,13 +764,25 @@ server <- function(id) {
                       shiny$tags$td(
                         colspan = "2",
                         shiny$actionButton(
-                          ns("reset_default"),
-                          "Reset All",
+                          ns("reset_conv"),
+                          "Reset Section",
+                          icon = shiny$icon("rotate-left"),
                           width = "100%"
                         )
                       )
                     )
                   )
+                )
+              ),
+
+              # --- Reset All ---
+              shiny$div(
+                class = "settings-reset-all",
+                shiny$actionButton(
+                  ns("reset_default"),
+                  "Reset All Settings",
+                  icon = shiny$icon("rotate-left"),
+                  width = "100%"
                 )
               )
             ),
@@ -756,91 +800,41 @@ server <- function(id) {
       )
     }
 
+    d <- get_default_user_settings()
+
+    do_reset_general <- function() {
+      shiny::updateTextInput(session, "settings_input_path", value = d$deconv_input_dir)
+      shiny::updateTextInput(session, "settings_dest_path", value = "")
+      shiny::updateCheckboxInput(session, "settings_keep_raw_output", value = d$deconv_keep_raw_output)
+    }
+
+    do_reset_deconv <- function() {
+      shiny::updateNumericInput(session, "settings_startz", value = d$deconv_startz)
+      shiny::updateNumericInput(session, "settings_endz", value = d$deconv_endz)
+      shiny::updateNumericInput(session, "settings_minmz", value = d$deconv_minmz)
+      shiny::updateNumericInput(session, "settings_maxmz", value = d$deconv_maxmz)
+      shiny::updateNumericInput(session, "settings_masslb", value = d$deconv_masslb)
+      shiny::updateNumericInput(session, "settings_massub", value = d$deconv_massub)
+      shiny::updateNumericInput(session, "settings_time_start", value = d$deconv_time_start)
+      shiny::updateNumericInput(session, "settings_time_end", value = d$deconv_time_end)
+      shiny::updateNumericInput(session, "settings_peakwindow", value = d$deconv_peakwindow)
+      shiny::updateSelectInput(session, "settings_peaknorm", selected = d$deconv_peaknorm)
+      shiny::updateNumericInput(session, "settings_peakthresh", value = d$deconv_peakthresh)
+      shiny::updateNumericInput(session, "settings_massbins", value = d$deconv_massbins)
+    }
+
+    do_reset_conv <- function() {
+      shiny::updateNumericInput(session, "settings_peak_tol", value = d$peak_tolerance)
+      shiny::updateNumericInput(session, "settings_max_mult", value = d$max_multiples)
+    }
+
+    shiny$observeEvent(input$reset_general, do_reset_general())
+    shiny$observeEvent(input$reset_deconv,  do_reset_deconv())
+    shiny$observeEvent(input$reset_conv,    do_reset_conv())
     shiny$observeEvent(input$reset_default, {
-      # Reset default deconvolution values
-      shiny::updateNumericInput(
-        session = session,
-        "settings_startz",
-        value = 1
-      )
-      shiny::updateNumericInput(
-        session = session,
-        "settings_endz",
-        value = 50
-      )
-      shiny::updateNumericInput(
-        session = session,
-        "settings_minmz",
-        value = 710
-      )
-      shiny::updateNumericInput(
-        session = session,
-        "settings_maxmz",
-        value = 1100
-      )
-      shiny::updateNumericInput(
-        session = session,
-        "settings_masslb",
-        value = 10000
-      )
-      shiny::updateNumericInput(
-        session = session,
-        "settings_massub",
-        value = 60000
-      )
-      shiny::updateNumericInput(
-        session = session,
-        "settings_peak_tol",
-        value = 3
-      )
-      shiny::updateNumericInput(
-        session = session,
-        "settings_time_start",
-        value = 0.5
-      )
-      shiny::updateNumericInput(
-        session = session,
-        "settings_time_end",
-        value = 1.5
-      )
-      shiny::updateNumericInput(
-        session = session,
-        "settings_peakwindow",
-        value = 40
-      )
-      shiny::updateSelectInput(
-        session = session,
-        "settings_peaknorm",
-        selected = 2
-      )
-      shiny::updateNumericInput(
-        session = session,
-        "settings_peakthresh",
-        value = 0.07
-      )
-      shiny::updateNumericInput(
-        session = session,
-        "settings_massbins",
-        value = 0.5
-      )
-
-      # Reset default conversion values
-      shiny::updateNumericInput(
-        session = session,
-        "settings_peak_tol",
-        value = 3
-      )
-      shiny::updateNumericInput(
-        session = session,
-        "settings_max_mult",
-        value = 4
-      )
-
-      shiny::updateCheckboxInput(
-        session = session,
-        "settings_keep_raw_output",
-        value = FALSE
-      )
+      do_reset_general()
+      do_reset_deconv()
+      do_reset_conv()
     })
 
     # Resolve typed/pasted path from the text input

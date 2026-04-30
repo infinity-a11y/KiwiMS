@@ -148,8 +148,6 @@ symbols <- c(
   "triangle-up",
   "square",
   "star-triangle-down",
-  "square-x-open",
-  "asterisk-open",
   "diamond",
   "triangle-down",
   "square",

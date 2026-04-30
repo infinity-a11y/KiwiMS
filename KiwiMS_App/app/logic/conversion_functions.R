@@ -993,12 +993,19 @@ check_sample_table <- function(sample_table, proteins, compounds) {
       return("Fill Time")
     }
 
-    # At least 3 distinct non-zero concentrations required
-    # (zero is allowed but does not count toward the 3)
+    # At least 3 and at most 10 distinct non-zero concentrations required
+    # (zero is allowed but does not count toward these limits)
     n_conc <- length(unique(conc_vals[!is.na(conc_vals) & conc_vals != 0]))
     if (n_conc < 3) {
       return(paste0(
         "At least 3 different non-zero concentrations required (",
+        n_conc,
+        " present)"
+      ))
+    }
+    if (n_conc > 10) {
+      return(paste0(
+        "At most 10 different non-zero concentrations allowed (",
         n_conc,
         " present)"
       ))
@@ -1676,7 +1683,7 @@ log_hits_summary <- function(hits_summarized) {
       " ├─ %s sample(s) screened\n",
       length(unique(hits_summarized$Sample))
     ),
-    sprintf(" └─ %s hit(s) detected in total\n", nrow(hits_summarized))
+    sprintf(" └─ %s hit(s) detected in total\n", sum(!is.na(hits_summarized$Compound)))
   ))
 }
 
@@ -2222,7 +2229,7 @@ make_binding_plot <- function(
           text = paste0(
             "Concentration [",
             gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
-            "]"
+"]  "
           ),
           font = list(color = font_color)
         ),
@@ -2354,7 +2361,7 @@ make_kobs_plot <- function(ki_kinact_result, colors, units, theme = "dark") {
           text = paste0(
             "Concentration [",
             gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
-            "]"
+"]  "
           ),
           font = list(color = font_color)
         ),
@@ -3478,7 +3485,7 @@ multiple_spectra <- function(
                 paste0(
                   "Time [",
                   gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
-                  "]"
+                  "]  "
                 ),
                 "Sample ID"
               ),
@@ -3502,7 +3509,9 @@ multiple_spectra <- function(
             gridcolor = grid_color,
             showgrid = TRUE,
             showline = FALSE,
+            linecolor = "rgba(0,0,0,0)",
             showzeroline = FALSE,
+            zerolinecolor = "rgba(0,0,0,0)",
             showticklabels = TRUE,
             showspikes = FALSE,
             showbackground = FALSE
@@ -3514,7 +3523,9 @@ multiple_spectra <- function(
             gridcolor = grid_color,
             showgrid = TRUE,
             showline = FALSE,
+            linecolor = "rgba(0,0,0,0)",
             showzeroline = FALSE,
+            zerolinecolor = "rgba(0,0,0,0)",
             showticklabels = TRUE,
             showspikes = FALSE,
             showbackground = FALSE
@@ -3534,7 +3545,9 @@ multiple_spectra <- function(
             gridcolor = grid_color,
             showgrid = ifelse(time, TRUE, FALSE),
             showline = FALSE,
+            linecolor = "rgba(0,0,0,0)",
             showzeroline = FALSE,
+            zerolinecolor = "rgba(0,0,0,0)",
             showticklabels = labels_show,
             showspikes = FALSE,
             showbackground = FALSE,
@@ -3687,7 +3700,7 @@ multiple_spectra <- function(
                 paste0(
                   "Time [",
                   gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
-                  "]"
+                  "]  "
                 ),
                 "Sample ID"
               ),
@@ -3793,14 +3806,8 @@ render_table_view <- function(table, colors, tab, inputs, units) {
   # Determine grouped row variable
   if (tab == "Compounds") {
     group_variable <- "Sample ID"
-    if (length(unique(table[[group_variable]])) != nrow(table)) {
-      table$`Sample ID` <- paste("Sample ID:", table$`Sample ID`)
-    }
   } else if (any(tab %in% c("Samples", "Proteins"))) {
     group_variable <- "Cmp Name"
-    if (length(unique(table[[group_variable]])) != nrow(table)) {
-      table$`Cmp Name` <- paste("Compound:", table$`Cmp Name`)
-    }
   } else {
     group_variable <- NULL
   }
@@ -3818,6 +3825,15 @@ render_table_view <- function(table, colors, tab, inputs, units) {
   # binding columns to character when bar renderer is off
   if (isTRUE(inputs$truncate_names) && "trunc_label" %in% names(table)) {
     table[["Sample ID"]] <- table[["trunc_label"]]
+  }
+
+  # Add human-readable prefix to group rows (after truncation so it isn't overwritten)
+  if (!is.null(row_group)) {
+    if (tab == "Compounds") {
+      table$`Sample ID` <- paste("Sample:", table$`Sample ID`)
+    } else if (any(tab %in% c("Samples", "Proteins"))) {
+      table$`Cmp Name` <- paste("Compound:", table$`Cmp Name`)
+    }
   }
   if (!is.null(inputs$binding_bar) && !isTRUE(inputs$binding_bar)) {
     table[["%-Binding"]] <- as.character(table[["%-Binding"]])
@@ -3851,6 +3867,7 @@ render_table_view <- function(table, colors, tab, inputs, units) {
     options = list(
       dom = 't',
       paging = FALSE,
+      ordering = FALSE,
       scrollY = TRUE,
       scrollCollapse = TRUE,
       rowGroup = row_group,
@@ -5443,6 +5460,8 @@ smpl_compound_distribution <- function(
   }
   cmp_table$color[cmp_table$mass_shift == "Unbound"] <- "#333338"
 
+  font_color <- if (theme == "light") "black" else "white"
+
   plotly::plot_ly(
     data = cmp_table,
     labels = ~mass_stoich,
@@ -5452,7 +5471,7 @@ smpl_compound_distribution <- function(
     hole = 0.4,
     textinfo = 'label+percent',
     texttemplate = "%{label}<br>%{percent}",
-    textposition = 'auto',
+    textposition = 'outside',
     hovertemplate = ~ paste0(
       "<span style='opacity: 0.8'>Compound:</span> <b>",
       `Cmp Name`,
@@ -5464,8 +5483,7 @@ smpl_compound_distribution <- function(
       `%-Binding`,
       "<extra></extra>"
     ),
-    insidetextfont = list(size = 14),
-    outsidetextfont = list(color = 'white', size = 14),
+    outsidetextfont = list(color = font_color, size = 12),
     marker = list(
       colors = ~ I(color),
       line = list(color = '#e5e5e5', width = 1)
@@ -5473,8 +5491,11 @@ smpl_compound_distribution <- function(
   ) |>
     plotly::layout(
       showlegend = FALSE,
+      autosize = TRUE,
       paper_bgcolor = "rgba(0,0,0,0)",
       plot_bgcolor = "rgba(0,0,0,0)",
+      uniformtext = list(minsize = 8, mode = "hide"),
+      margin = list(l = 90, r = 90, t = 60, b = 60),
       annotations = list(
         list(
           x = 0.5,
@@ -5486,8 +5507,8 @@ smpl_compound_distribution <- function(
           yanchor = "middle",
           showarrow = FALSE,
           font = list(
-            size = 22,
-            color = if (theme == "light") "black" else "white"
+            size = 15,
+            color = font_color
           )
         )
       )

@@ -36,7 +36,8 @@ box::use(
       decon_progress_count,
       decon_is_complete,
       decon_failed_samples,
-      process_plot_data_db
+      process_plot_data_db,
+      cleanup_wal
     ],
   app / logic / helper_functions[fill_empty, get_kiwims_version],
   app / logic / plot_download[setup_plot_dl, setup_table_dl],
@@ -1594,20 +1595,9 @@ server <- function(
               "target(s) completed"
             ))
             proc$kill_tree()
+            Sys.sleep(0.75)  # let the OS release file handles before connecting
           }
-          # Checkpoint any WAL left by an aborted run so sidecar files are removed
-          if (file.exists(db_snap)) {
-            tryCatch(
-              {
-                con_end <- DBI::dbConnect(RSQLite::SQLite(), db_snap)
-                DBI::dbExecute(con_end, "PRAGMA busy_timeout=3000")
-                DBI::dbExecute(con_end, "PRAGMA wal_checkpoint(TRUNCATE)")
-                DBI::dbExecute(con_end, "PRAGMA journal_mode=DELETE")
-                DBI::dbDisconnect(con_end)
-              },
-              error = function(e) NULL
-            )
-          }
+          cleanup_wal(db_snap)
         })
       })
 
@@ -2453,7 +2443,7 @@ server <- function(
         if (file.exists(db_sp) && sel_base %in% decon_failed_samples(db_sp)) {
           waiter_hide(id = ns("spectrum"))
           return(
-            plotly::plot_ly() |>
+            plotly::plot_ly(type = "scatter", mode = "markers") |>
               plotly::layout(
                 paper_bgcolor = "rgba(0,0,0,0)",
                 plot_bgcolor = "rgba(0,0,0,0)",
@@ -2813,23 +2803,10 @@ server <- function(
           reactVars$results_observer$destroy()
         }
 
-        # Checkpoint any WAL sidecar files left by an aborted run
-        db_reset <- file.path(
+        cleanup_wal(file.path(
           analysis_dest(),
           paste0(trimws(input$analysis_name), ".db")
-        )
-        if (file.exists(db_reset)) {
-          tryCatch(
-            {
-              con_reset <- DBI::dbConnect(RSQLite::SQLite(), db_reset)
-              DBI::dbExecute(con_reset, "PRAGMA busy_timeout=3000")
-              DBI::dbExecute(con_reset, "PRAGMA wal_checkpoint(TRUNCATE)")
-              DBI::dbExecute(con_reset, "PRAGMA journal_mode=DELETE")
-              DBI::dbDisconnect(con_reset)
-            },
-            error = function(e) NULL
-          )
-        }
+        ))
 
         # Reset reactive status variables
         reset_progress()
@@ -2892,25 +2869,13 @@ server <- function(
       proc <- decon_process_data()
       if (!is.null(proc) && proc$is_alive()) {
         proc$kill_tree()
+        Sys.sleep(0.75)  # let OS release file handles before connecting
       }
 
-      # Checkpoint WAL sidecar files left by the aborted worker
-      db_abort <- file.path(
+      cleanup_wal(file.path(
         analysis_dest(),
         paste0(trimws(input$analysis_name), ".db")
-      )
-      if (file.exists(db_abort)) {
-        tryCatch(
-          {
-            con_abort <- DBI::dbConnect(RSQLite::SQLite(), db_abort)
-            DBI::dbExecute(con_abort, "PRAGMA busy_timeout=3000")
-            DBI::dbExecute(con_abort, "PRAGMA wal_checkpoint(TRUNCATE)")
-            DBI::dbExecute(con_abort, "PRAGMA journal_mode=DELETE")
-            DBI::dbDisconnect(con_abort)
-          },
-          error = function(e) NULL
-        )
-      }
+      ))
 
       # Update progress bar to show cancellation
       updateProgressBar(

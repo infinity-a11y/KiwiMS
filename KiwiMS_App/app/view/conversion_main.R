@@ -1658,6 +1658,7 @@ server <- function(
                 shiny::req(
                   hits_summary,
                   input$relbinding_hits_tab_sample_select,
+                  input$relbinding_hits_tab_compound_select,
                   input$color_variable,
                   !is.null(input$truncate_names),
                   input$color_scale
@@ -3171,7 +3172,9 @@ server <- function(
             output$kikinact_hits_tab <- DT::renderDT({
               shiny::req(
                 conversion_vars$formatted_hits,
-                conversion_vars$conc_colors
+                conversion_vars$conc_colors,
+                input$relbinding_hits_tab_sample_select,
+                input$relbinding_hits_tab_compound_select
               )
 
               # Arrange table
@@ -3184,11 +3187,11 @@ server <- function(
 
               hits_table <- filter_hits_table(
                 hits_table,
-                selected_cols = input$relbinding_hits_tab_col_select,
-                compounds = input$relbinding_hits_tab_compound_select,
-                samples = input$relbinding_hits_tab_sample_select,
-                expand = input$relbinding_hits_tab_expand,
-                na_include = input$relbinding_hits_tab_na,
+                selected_cols = input$kikinact_hits_tab_col_select,
+                compounds = input$kikinact_hits_tab_compound_select,
+                samples = input$kikinact_hits_tab_sample_select,
+                expand = input$kikinact_hits_tab_expand,
+                na_include = input$kikinact_hits_tab_na,
                 units = units
               )
 
