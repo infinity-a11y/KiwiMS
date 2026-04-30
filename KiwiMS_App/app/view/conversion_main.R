@@ -805,8 +805,11 @@ server <- function(
             class = "custom-disable"
           )
 
-          # Disable confirm button
+          # Disable confirm button, clear button, and unit selectors
           shinyjs::disable("confirm_samples")
+          shinyjs::disable("clear_samples")
+          shinyjs::disable("conc_unit")
+          shinyjs::disable("time_unit")
         } else if (is.null(samples_table_input)) {
           # if protein/compound declaration confirmed
 
@@ -825,8 +828,11 @@ server <- function(
             class = "custom-disable"
           )
 
-          # Disable confirm button
+          # Disable confirm button, clear button, and unit selectors
           shinyjs::disable("confirm_samples")
+          shinyjs::disable("clear_samples")
+          shinyjs::disable("conc_unit")
+          shinyjs::disable("time_unit")
         } else if (isTRUE(declaration_vars$sample_table_active)) {
           # Enable file upload
           shinyjs::enable("samples_fileinput")
@@ -838,6 +844,11 @@ server <- function(
             selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
             class = "custom-disable"
           )
+
+          # Enable clear button and unit selectors while table is active
+          shinyjs::enable("clear_samples")
+          shinyjs::enable("conc_unit")
+          shinyjs::enable("time_unit")
 
           declaration_vars$sample_table_status <- table_observe(
             tab = "samples",
@@ -1131,6 +1142,11 @@ server <- function(
           # Trigger re-rendering of sample table
           declaration_vars$samples_confirmed <- TRUE
           sample_table_trigger(sample_table_trigger() + 1)
+
+          # Disable clear button and unit selectors once table is confirmed
+          shinyjs::disable("clear_samples")
+          shinyjs::disable("conc_unit")
+          shinyjs::disable("time_unit")
 
           # Mark UI as done
           confirm_ui_changes(

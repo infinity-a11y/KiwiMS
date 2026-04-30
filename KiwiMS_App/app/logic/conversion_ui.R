@@ -1852,12 +1852,12 @@ conversion_declaration_ui <- function(
       bslib::tooltip(
         shiny::div(
           style = "width: 100%;",
-          shiny::actionButton(
+          shinyjs::disabled(shiny::actionButton(
             ns("clear_samples"),
             label = NULL,
             icon = shiny::icon("eraser"),
             width = "100%"
-          )
+          ))
         ),
         "Clear Sample Table",
         placement = "top"
