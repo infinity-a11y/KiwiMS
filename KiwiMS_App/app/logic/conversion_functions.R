@@ -4080,8 +4080,13 @@ render_hits_table <- function(
       scrollX = TRUE,
       scrollY = TRUE,
       scrollCollapse = TRUE,
-      fixedHeader = TRUE,
       stripe = FALSE,
+      initComplete = htmlwidgets::JS(
+        "function(settings, json) {",
+        "  var api = this.api();",
+        "  setTimeout(function() { api.columns.adjust(); }, 50);",
+        "}"
+      ),
       dom = dom_value,
       paging = ifelse(!is.null(single_conc), TRUE, FALSE),
       columnDefs = list(
