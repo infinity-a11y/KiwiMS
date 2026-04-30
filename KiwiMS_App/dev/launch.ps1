@@ -12,7 +12,7 @@ Set-Location $appRoot
 
 # Get version info
 $versionPath = Join-Path $appRoot "resources\version.txt"
-$versionFile = if (Test-Path $versionPath) { Get-Content -Path $versionPath | Select-Object -First 1 } else { "0.6.0" }
+$versionFile = if (Test-Path $versionPath) { Get-Content -Path $versionPath | Select-Object -First 1 } else { "0.6.1" }
 
 # Headless check
 $Headless = $args -contains "--headless"
