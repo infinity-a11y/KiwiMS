@@ -2686,6 +2686,8 @@ th.sorting {
   font-size: 1.25rem;
   line-height: 1.25;
   padding: 12px;
+  border-bottom: 1px solid white;
+  margin-bottom: 1rem;
 }
 
 .analysis-init-wrapper {
@@ -4614,6 +4616,12 @@ sample-file-row .form-group {
   vertical-align: middle !important;
   word-break: break-word;
   overflow-wrap: anywhere;
+}
+
+.settings-reset-all {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e5e5e529;
 }
 
 .settings-feedback {
