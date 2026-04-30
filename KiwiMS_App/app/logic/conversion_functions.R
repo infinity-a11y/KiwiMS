@@ -4435,10 +4435,14 @@ table_observe <- function(
   compounds,
   tolerance = 3
 ) {
-  # Show waiter with 0.25 seconds minimum runtime
+  # Show waiter with 0.25 seconds minimum runtime; on.exit ensures hide always runs
   waiter::waiter_show(
     id = ns(paste0(tab, "_table_info")),
     html = waiter::spin_throbber()
+  )
+  on.exit(
+    waiter::waiter_hide(id = ns(paste0(tab, "_table_info"))),
+    add = TRUE
   )
   Sys.sleep(0.25)
 
@@ -4535,9 +4539,6 @@ table_observe <- function(
       table_status <- FALSE
     }
   }
-
-  # Hide waiter
-  waiter::waiter_hide(id = ns(paste0(tab, "_table_info")))
 
   return(table_status)
 }

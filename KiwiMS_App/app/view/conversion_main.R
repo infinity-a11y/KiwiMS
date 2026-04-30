@@ -602,6 +602,11 @@ server <- function(
         meta <- read_decon_metadata(file_path)
         declaration_vars$result <- c(meta, list(.db_path = file_path))
 
+        # Reset confirmation state — a new file always needs re-confirmation,
+        # and ensures the status observer fires even when re-uploading the same file
+        declaration_vars$samples_confirmed <- FALSE
+        declaration_vars$sample_table_active <- TRUE
+
         # New table data
         sample_table_data(add_replicate_col(new_sample_table(
           result = declaration_vars$result,
@@ -610,6 +615,31 @@ server <- function(
           ki_kinact = conversion_sidebar_vars$run_ki_kinact()
         ), config_file()))
         sample_table_trigger(sample_table_trigger() + 1)
+
+        # Unblock UI and restore file input directly — the rhandsontable →
+        # input$samples_table → observer chain is not reliable when the rendered
+        # data is identical to the previous render
+        shinyjs::runjs(paste0(
+          'document.getElementById("blocking-overlay").style.display ',
+          '= "none";'
+        ))
+        shinyjs::enable("samples_fileinput")
+        shinyjs::removeClass(
+          selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
+          class = "custom-disable"
+        )
+        shinyjs::removeClass(
+          selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
+          class = "custom-disable"
+        )
+        declaration_vars$sample_table_status <- table_observe(
+          tab = "samples",
+          table = clean_sample_table(sample_table_data()),
+          output = output,
+          ns = ns,
+          proteins = declaration_vars$protein_table$Protein,
+          compounds = declaration_vars$compound_table$Compound
+        )
       }
     )
 
@@ -1600,6 +1630,17 @@ server <- function(
               'document.querySelector(".nav-link[data-value=\'Samples\']").classList.add("done");'
             )
           })
+
+          session$onFlushed(function() {
+            shinyjs::addClass(
+              selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
+              class = "custom-disable"
+            )
+            shinyjs::addClass(
+              selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
+              class = "custom-disable"
+            )
+          }, once = TRUE)
 
           # Unblock UI
           shinyjs::runjs(paste0(
