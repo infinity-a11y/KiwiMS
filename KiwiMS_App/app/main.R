@@ -313,6 +313,11 @@ server <- function(id) {
     log_buttons <- log_sidebar$server("log_sidebar")
     log_view$server("logs", active_tab_reactive, log_buttons)
 
+    # Gear button in log sidebar opens Settings modal scrolled to Logs section
+    shiny$observeEvent(log_buttons$open_settings(), {
+      open_settings_modal(open_section = "logs")
+    }, ignoreInit = TRUE)
+
     reset_button <- shiny$reactiveVal(0)
     configfile <- shiny$reactiveVal(NULL)
     pending_config <- shiny$reactiveVal(NULL)
@@ -332,7 +337,7 @@ server <- function(id) {
 
     # Reusable function to open the settings modal
     # initial_path: pre-fill dest folder from caller (e.g. currently active path)
-    open_settings_modal <- function(initial_path = NULL) {
+    open_settings_modal <- function(initial_path = NULL, open_section = NULL) {
       s <- dest_settings()
       base <- if (length(initial_path) == 1L && nzchar(initial_path)) {
         initial_path
@@ -361,7 +366,7 @@ server <- function(id) {
               ),
               shiny$div(
                 id = ns("settings_general_body"),
-                class = "collapse show",
+                class = if (identical(open_section, "general")) "collapse show" else "collapse",
                 shiny$tags$table(
                   class = "table table-sm table-bordered settings-table",
                   shiny$tags$tbody(
@@ -447,7 +452,7 @@ server <- function(id) {
               ),
               shiny$div(
                 id = ns("settings_deconv_body"),
-                class = "collapse show",
+                class = if (identical(open_section, "deconv")) "collapse show" else "collapse",
                 shiny$tags$table(
                   class = "table table-sm table-bordered settings-table",
                   shiny$tags$tbody(
@@ -713,7 +718,7 @@ server <- function(id) {
               ),
               shiny$div(
                 id = ns("settings_conv_body"),
-                class = "collapse show",
+                class = if (identical(open_section, "conv")) "collapse show" else "collapse",
                 shiny$tags$table(
                   class = "table table-sm table-bordered settings-table",
                   shiny$tags$tbody(
@@ -765,6 +770,62 @@ server <- function(id) {
                         colspan = "2",
                         shiny$actionButton(
                           ns("reset_conv"),
+                          "Reset Section",
+                          icon = shiny$icon("rotate-left"),
+                          width = "100%"
+                        )
+                      )
+                    )
+                  )
+                )
+              ),
+
+              # --- Logs ---
+              shiny$div(
+                class = "settings-collapse-header settings-logs-section",
+                `data-bs-toggle` = "collapse",
+                `data-bs-target` = paste0("#", ns("settings_logs_body")),
+                "Logs",
+                shiny$icon("chevron-down", class = "settings-collapse-icon")
+              ),
+              shiny$div(
+                id = ns("settings_logs_body"),
+                class = if (identical(open_section, "logs")) "collapse show" else "collapse",
+                shiny$tags$table(
+                  class = "table table-sm table-bordered settings-table",
+                  shiny$tags$tbody(
+                    shiny$tags$tr(
+                      shiny$tags$td(
+                        class = "settings-table-label",
+                        shiny$tags$span(
+                          "Log Directory",
+                          class = "settings-label-tooltip",
+                          `data-tooltip` = "Parent folder for daily log sub-folders. Takes effect on next app start."
+                        )
+                      ),
+                      shiny$tags$td(
+                        shiny$textInput(
+                          ns("settings_log_dir"),
+                          label = NULL,
+                          value = if (nzchar(us$log_dir)) us$log_dir else "",
+                          placeholder = paste0(
+                            Sys.getenv("USERPROFILE"),
+                            "\\Documents\\KiwiMS\\logs  (default)"
+                          ),
+                          width = "100%"
+                        )
+                      ),
+                      shiny$tags$td(
+                        class = "settings-table-feedback",
+                        shiny$uiOutput(ns("settings_log_dir_display"))
+                      )
+                    ),
+                    shiny$tags$tr(
+                      shiny$tags$td(class = "settings-table-label"),
+                      shiny$tags$td(
+                        colspan = "2",
+                        shiny$actionButton(
+                          ns("reset_logs"),
                           "Reset Section",
                           icon = shiny$icon("rotate-left"),
                           width = "100%"
@@ -828,13 +889,19 @@ server <- function(id) {
       shiny::updateNumericInput(session, "settings_max_mult", value = d$max_multiples)
     }
 
+    do_reset_logs <- function() {
+      shiny::updateTextInput(session, "settings_log_dir", value = d$log_dir)
+    }
+
     shiny$observeEvent(input$reset_general, do_reset_general())
     shiny$observeEvent(input$reset_deconv,  do_reset_deconv())
     shiny$observeEvent(input$reset_conv,    do_reset_conv())
+    shiny$observeEvent(input$reset_logs,    do_reset_logs())
     shiny$observeEvent(input$reset_default, {
       do_reset_general()
       do_reset_deconv()
       do_reset_conv()
+      do_reset_logs()
     })
 
     # Resolve typed/pasted path from the text input
@@ -846,6 +913,11 @@ server <- function(id) {
     settings_input_path_picked <- shiny$reactive({
       p <- input$settings_input_path
       trimws(if (!is.null(p)) p else read_user_settings()$deconv_input_dir)
+    })
+
+    settings_log_dir_picked <- shiny$reactive({
+      p <- input$settings_log_dir
+      trimws(if (!is.null(p)) p else "")
     })
 
     # Settings opened from nav button
@@ -895,6 +967,31 @@ server <- function(id) {
           " Cannot use a .raw folder as default input"
         )
       } else if (dir.exists(path)) {
+        shiny$div(
+          class = "settings-dest-feedback settings-dest-feedback--valid",
+          shiny$icon("circle-check"),
+          " Folder exists"
+        )
+      } else {
+        shiny$div(
+          class = "settings-dest-feedback settings-dest-feedback--invalid",
+          shiny$icon("triangle-exclamation"),
+          " Folder not found"
+        )
+      }
+    })
+
+    # Live feedback for log directory path inside modal
+    output$settings_log_dir_display <- shiny$renderUI({
+      path <- settings_log_dir_picked()
+      if (!nzchar(path)) {
+        return(shiny$div(
+          class = "settings-dest-feedback",
+          shiny$icon("circle-minus"),
+          " Using default"
+        ))
+      }
+      if (dir.exists(path)) {
         shiny$div(
           class = "settings-dest-feedback settings-dest-feedback--valid",
           shiny$icon("circle-check"),
@@ -1246,6 +1343,10 @@ server <- function(id) {
       )
       current$deconv_input_dir <- inp
 
+      current$log_dir <- trimws(
+        if (!is.null(input$settings_log_dir)) input$settings_log_dir else ""
+      )
+
       save_user_settings(current)
 
       shiny$removeModal()
@@ -1311,7 +1412,8 @@ server <- function(id) {
       deconvolution_sidebar_vars$open_settings_clicked(),
       {
         open_settings_modal(
-          initial_path = deconvolution_sidebar_vars$targetpath()
+          initial_path = deconvolution_sidebar_vars$targetpath(),
+          open_section = "general"
         )
       },
       ignoreNULL = TRUE,

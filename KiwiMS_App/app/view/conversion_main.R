@@ -68,7 +68,7 @@ box::use(
   app /
     logic /
     plot_download[setup_plot_dl, setup_table_dl, prepare_hits_export],
-  app / logic / logging[get_session_prefix],
+  app / logic / logging[get_session_prefix, write_log],
   app /
     logic /
     conversion_constants[
@@ -492,6 +492,7 @@ server <- function(
       event_expr = input$clear_proteins,
       observer_name = "Clear Protein Table",
       handler_fn = function() {
+        write_log("Protein table cleared")
         protein_table_data(empty_prot_comp_tbl(type = "Protein"))
 
         protein_table_trigger(protein_table_trigger() + 1)
@@ -502,6 +503,7 @@ server <- function(
       event_expr = input$clear_compounds,
       observer_name = "Clear Compound Table",
       handler_fn = function() {
+        write_log("Compound table cleared")
         compound_table_data(empty_prot_comp_tbl(type = "Compound"))
 
         compound_table_trigger(compound_table_trigger() + 1)
@@ -512,6 +514,7 @@ server <- function(
       event_expr = input$clear_samples,
       observer_name = "Clear Sample Table",
       handler_fn = function() {
+        write_log("Sample table cleared")
         sample_table_data(add_replicate_col(new_sample_table(
           result = declaration_vars$result,
           protein_table = declaration_vars$protein_table,
@@ -536,6 +539,7 @@ server <- function(
         )
 
         if (!is.null(protein_table_input)) {
+          write_log(paste("Protein table loaded from file:", input$proteins_fileinput$name))
           # Assign new table data to reactive variable and mark table status as TRUE to trigger table observer
           protein_table_data(protein_table_input)
           declaration_vars$protein_table_status <- TRUE
@@ -555,6 +559,7 @@ server <- function(
       event_expr = input$compounds_fileinput,
       observer_name = "Compound Table File Upload",
       handler_fn = function() {
+        write_log(paste("Compound table loaded from file:", input$compounds_fileinput$name))
         compound_table_data(handle_file_upload(
           file_input = input$compounds_fileinput,
           type = "compound",
@@ -601,6 +606,10 @@ server <- function(
         }
         meta <- read_decon_metadata(file_path)
         declaration_vars$result <- c(meta, list(.db_path = file_path))
+        write_log(paste(
+          "Deconvolution results loaded from file:", input$samples_fileinput$name,
+          "—", length(meta$samples), "sample(s)"
+        ))
 
         # Reset confirmation state — a new file always needs re-confirmation,
         # and ensures the status observer fires even when re-uploading the same file
@@ -702,6 +711,7 @@ server <- function(
         new_tbl <- add_replicate_col(new_tbl, cfg)
 
         if (!identical(new_tbl, sample_table_data())) {
+          write_log("Config autofill applied to sample table")
           sample_table_data(new_tbl)
           sample_table_trigger(sample_table_trigger() + 1)
         }
@@ -988,6 +998,7 @@ server <- function(
 
         # If edit applied always activate edit mode for sample table if present
         if (!is.null(input$samples_table)) {
+          if (input$tabs == "Samples") write_log("Sample table reopened for editing")
           # Make UI changes
           edit_ui_changes(
             tab = "Samples",
@@ -1009,6 +1020,7 @@ server <- function(
 
         # Edit Protein/Compound
         if (input$tabs == "Proteins") {
+          write_log("Protein table reopened for editing")
           # Make UI changes
           edit_ui_changes(
             tab = input$tabs,
@@ -1028,6 +1040,7 @@ server <- function(
           # Make table observer active
           declaration_vars$protein_table_active <- TRUE
         } else if (input$tabs == "Compounds") {
+          write_log("Compound table reopened for editing")
           # Make UI changes
           edit_ui_changes(
             tab = input$tabs,
@@ -1078,6 +1091,7 @@ server <- function(
             table = protein_table_input(),
             full = FALSE
           )
+          write_log(paste("Protein table confirmed:", nrow(protein_table), "protein(s)"))
           declaration_vars$protein_table <- protein_table
           protein_table_data(protein_table)
           declaration_vars$protein_table_disabled <- TRUE
@@ -1121,6 +1135,7 @@ server <- function(
             table = compound_table_input(),
             full = FALSE
           )
+          write_log(paste("Compound table confirmed:", nrow(compound_table), "compound(s)"))
           declaration_vars$compound_table <- compound_table
           compound_table_data(compound_table)
           declaration_vars$compound_table_disabled <- TRUE
@@ -1164,6 +1179,7 @@ server <- function(
             sample_table_input(),
             units = list(conc = input$conc_unit, time = input$time_unit)
           )
+          write_log(paste("Sample table confirmed:", nrow(sample_table), "sample(s)"))
 
           # Assign table to reactive variables
           declaration_vars$sample_table <- sample_table
@@ -1293,6 +1309,10 @@ server <- function(
           }
           meta <- read_decon_metadata(db_path)
           declaration_vars$result <- c(meta, list(.db_path = db_path))
+          write_log(paste(
+            "Deconvolution results transferred:", basename(db_path),
+            "—", length(meta$samples), "sample(s)"
+          ))
 
           # New table data
           sample_table_data(add_replicate_col(new_sample_table(
@@ -1360,6 +1380,10 @@ server <- function(
         db_path <- deconvolution_main_vars$continue_conversion()
         meta <- read_decon_metadata(db_path)
         declaration_vars$result <- c(meta, list(.db_path = db_path))
+        write_log(paste(
+          "Deconvolution results transferred (overwrite):", basename(db_path),
+          "—", length(meta$samples), "sample(s)"
+        ))
 
         # New table data
         sample_table_data(add_replicate_col(new_sample_table(

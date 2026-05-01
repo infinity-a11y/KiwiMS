@@ -415,6 +415,7 @@ button .sF-modal {
 #app-config_modal_body .load-container {
   position: relative;
   -webkit-transform: unset;
+  transform: unset;
 }
 
 #app-config_modal_body code {
@@ -1286,7 +1287,7 @@ td.listbox.htDimmed.current.highlight {
   width: 100%;
 }
 
-.peaknorm-selector {}
+/* .peaknorm-selector */
 
 .settings-peaknorm .selectize-input {
   border: 1px solid #e5e5e5 !important;
@@ -1423,7 +1424,7 @@ code {
   font-size: 0.7em;
 }
 
-.deconvolution-ui-interface+card {}
+/* .deconvolution-ui-interface + card */
 
 #app-deconvolution_main-deconvolute_start:hover {
   background: var(--bs-btn-hover-bg) !important;
@@ -1538,11 +1539,11 @@ code {
   min-height: 36.1px;
 }
 
-#app-deconvolution_pars-path_selected,
-#app-deconvolution_pars-targetpath_selected {}
+/* #app-deconvolution_pars-path_selected, #app-deconvolution_pars-targetpath_selected */
 
 #app-deconvolution_pars-dir_check,
-#app-deconvolution_pars-targetpath_check {
+#app-deconvolution_pars-targetpath_check,
+.sidebar-desc-label {
   font-style: italic;
   font-size: 14px;
   color: #000;
@@ -2506,6 +2507,48 @@ th.sorting {
 
 .log-button .btn {
   width: 100%;
+}
+
+.log-dir-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.4em;
+  width: 100%;
+  margin-top: 15px;
+}
+
+#app-log_sidebar-log_dir_display {
+  flex: 1;
+  min-width: 0;
+  min-height: 36.1px;
+  padding: 5px;
+  font-size: 0.7em;
+  overflow-x: scroll;
+  margin-bottom: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.session-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.session-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 1em;
+}
+
+.session-info-label {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.session-info-value {
+  font-family: monospace;
 }
 
 .modal-button .btn {
@@ -4461,8 +4504,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   position: relative !important;
 }
 
-/* Output path row (dir button + gear) */
-.dest-folder-row {}
+/* Output path row (dir button + gear) — .dest-folder-row */
 
 .dest-folder-row>div,
 .sample-file-row>div,

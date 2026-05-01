@@ -466,6 +466,15 @@ server <- function(
       observer_name = "Conversion Processing",
       handler_fn = function() {
         if (analysis_status() == "pending") {
+          write_log("Conversion initiated")
+          write_log(paste(
+            "Conversion parameters:\n",
+            paste(c(
+              paste("Ki/kinact =", isTRUE(input$run_ki_kinact)),
+              paste("Peak Tolerance =", input$peak_tolerance, "Da"),
+              paste("Max. Stoichiometry =", input$max_multiples)
+            ), collapse = "\n ")
+          ))
           # Disable ki/kinact analysis checkbox
           shinyjs::disable("run_ki_kinact")
           shinyjs::addClass(selector = ".checkbox", class = "checkbox-disable")
@@ -667,6 +676,10 @@ server <- function(
           # )
 
           # Assign result list and hits table to reactive vars
+          write_log(paste(
+            "Conversion finalized —",
+            nrow(result_with_hits$hits_summary), "hit(s)"
+          ))
           result_list(result_with_hits)
 
           # Save distinct protein - compound combinations/complexes
@@ -724,6 +737,7 @@ server <- function(
 
           analysis_status("done")
         } else {
+          write_log("Conversion reset")
           result_list(NULL)
           analysis_status("pending")
 

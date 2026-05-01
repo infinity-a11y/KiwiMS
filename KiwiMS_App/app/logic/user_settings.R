@@ -26,7 +26,8 @@ get_default_user_settings <- function() {
     deconv_peakthresh = 0.07,
     deconv_massbins = 0.5,
     deconv_keep_raw_output = FALSE,
-    deconv_input_dir = ""
+    deconv_input_dir = "",
+    log_dir = ""
   )
 }
 
