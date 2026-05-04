@@ -387,12 +387,16 @@ ki_kinact_results_ui <- function(
                 label = "Select Columns",
                 choices = names(hits_summary)[
                   !names(hits_summary) %in%
-                    c("Sample ID", "Cmp Name", "truncSample_ID", "Replicate")
+                    c("Sample ID", "Cmp Name", "truncSample_ID")
                 ],
                 selected = names(hits_summary)[
                   !names(hits_summary) %in%
-                    c("Sample ID", "Cmp Name", "truncSample_ID", "Replicate")
-                ][-c(1:2, 4:5, 7, 9)],
+                    c(
+                      "Sample ID", "Cmp Name", "truncSample_ID",
+                      "Well", "Theor. Prot. [Da]", "Δ Prot. [Da]",
+                      "Int. Prot.", "Int. Cmp", "Δ Cmp [Da]"
+                    )
+                ],
                 multiple = TRUE,
                 options = list(
                   `actions-box` = TRUE
@@ -782,8 +786,7 @@ binding_results_ui <- function(ns, hits_summary) {
                       if (length(units) == 2) {
                         c(units[["Concentration"]], units[["Time"]])
                       },
-                      "truncSample_ID",
-                      "Replicate"
+                      "truncSample_ID"
                     )
                 ],
                 selected = names(hits_summary)[
@@ -795,9 +798,14 @@ binding_results_ui <- function(ns, hits_summary) {
                         c(units[["Concentration"]], units[["Time"]])
                       },
                       "truncSample_ID",
-                      "Replicate"
+                      "Well",
+                      "Theor. Prot. [Da]",
+                      "Δ Prot. [Da]",
+                      "Int. Prot.",
+                      "Int. Cmp",
+                      "Δ Cmp [Da]"
                     )
-                ][-c(1:2, 4:5, 7, 9)],
+                ],
                 multiple = TRUE,
                 options = list(
                   `actions-box` = TRUE
@@ -1443,9 +1451,13 @@ binding_results_ui <- function(ns, hits_summary) {
                       class = "box-header-settings-help",
                       card_settings_popover(
                         shiny::div(
-                          shiny::uiOutput(ns(
-                            "proteins_total_pct_binding"
-                          )),
+                          shiny::selectInput(
+                            ns("total_pct_prot_binding_select"),
+                            "Select Compound",
+                            choices = unique(hits_summary$`Cmp Name`[
+                              !is.na(hits_summary$`Cmp Name`)
+                            ])
+                          ),
                           style = "margin-right: 20px;"
                         )
                       ),
@@ -1609,7 +1621,9 @@ binding_results_ui <- function(ns, hits_summary) {
                         value = local({
                           prot <- unique(hits_summary$`Protein`)[1]
                           tbl <- hits_summary[hits_summary$`Protein` == prot, ]
-                          if (is.na(prot) || nrow(tbl) < 2) return(TRUE)
+                          if (is.na(prot) || nrow(tbl) < 2) {
+                            return(TRUE)
+                          }
                           ids <- tbl$`Sample ID`
                           ids <- ids[!is.na(ids)]
                           length(unique(ids)) <= 8 &
@@ -1667,10 +1681,15 @@ binding_results_ui <- function(ns, hits_summary) {
           )
         ),
         shiny::uiOutput(ns("color_variable_ui")),
-        shiny::selectInput(
-          ns("color_scale"),
-          label = NULL,
-          choices = NULL
+        bslib::tooltip(
+          shiny::selectInput(
+            ns("color_scale"),
+            label = NULL,
+            choices = NULL,
+            width = "120px"
+          ),
+          "Color palette",
+          placement = "top"
         ),
         bslib::tooltip(
           shiny::div(

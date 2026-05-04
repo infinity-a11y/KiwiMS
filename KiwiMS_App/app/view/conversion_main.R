@@ -68,7 +68,7 @@ box::use(
   app /
     logic /
     plot_download[setup_plot_dl, setup_table_dl, prepare_hits_export],
-  app / logic / logging[get_session_prefix],
+  app / logic / logging[get_session_prefix, write_log],
   app /
     logic /
     conversion_constants[
@@ -221,7 +221,11 @@ server <- function(
     # Helper: compute and inject Replicate column (right after Sample)
     add_replicate_col <- function(tbl, config = NULL) {
       tbl$Replicate <- compute_replicate_labels(tbl$Sample, config)
-      tbl[, c("Sample", "Replicate", setdiff(names(tbl), c("Sample", "Replicate")))]
+      tbl[, c(
+        "Sample",
+        "Replicate",
+        setdiff(names(tbl), c("Sample", "Replicate"))
+      )]
     }
 
     # Helper: auto-fill sample table columns from config file
@@ -492,6 +496,7 @@ server <- function(
       event_expr = input$clear_proteins,
       observer_name = "Clear Protein Table",
       handler_fn = function() {
+        write_log("Protein table cleared")
         protein_table_data(empty_prot_comp_tbl(type = "Protein"))
 
         protein_table_trigger(protein_table_trigger() + 1)
@@ -502,6 +507,7 @@ server <- function(
       event_expr = input$clear_compounds,
       observer_name = "Clear Compound Table",
       handler_fn = function() {
+        write_log("Compound table cleared")
         compound_table_data(empty_prot_comp_tbl(type = "Compound"))
 
         compound_table_trigger(compound_table_trigger() + 1)
@@ -512,12 +518,16 @@ server <- function(
       event_expr = input$clear_samples,
       observer_name = "Clear Sample Table",
       handler_fn = function() {
-        sample_table_data(add_replicate_col(new_sample_table(
-          result = declaration_vars$result,
-          protein_table = declaration_vars$protein_table,
-          compound_table = declaration_vars$compound_table,
-          ki_kinact = conversion_sidebar_vars$run_ki_kinact()
-        ), config_file()))
+        write_log("Sample table cleared")
+        sample_table_data(add_replicate_col(
+          new_sample_table(
+            result = declaration_vars$result,
+            protein_table = declaration_vars$protein_table,
+            compound_table = declaration_vars$compound_table,
+            ki_kinact = conversion_sidebar_vars$run_ki_kinact()
+          ),
+          config_file()
+        ))
         sample_table_trigger(sample_table_trigger() + 1)
       }
     )
@@ -536,6 +546,10 @@ server <- function(
         )
 
         if (!is.null(protein_table_input)) {
+          write_log(paste(
+            "Protein table loaded from file:",
+            input$proteins_fileinput$name
+          ))
           # Assign new table data to reactive variable and mark table status as TRUE to trigger table observer
           protein_table_data(protein_table_input)
           declaration_vars$protein_table_status <- TRUE
@@ -555,6 +569,10 @@ server <- function(
       event_expr = input$compounds_fileinput,
       observer_name = "Compound Table File Upload",
       handler_fn = function() {
+        write_log(paste(
+          "Compound table loaded from file:",
+          input$compounds_fileinput$name
+        ))
         compound_table_data(handle_file_upload(
           file_input = input$compounds_fileinput,
           type = "compound",
@@ -601,6 +619,13 @@ server <- function(
         }
         meta <- read_decon_metadata(file_path)
         declaration_vars$result <- c(meta, list(.db_path = file_path))
+        write_log(paste(
+          "Deconvolution results loaded from file:",
+          input$samples_fileinput$name,
+          "—",
+          length(meta$samples),
+          "sample(s)"
+        ))
 
         # Reset confirmation state — a new file always needs re-confirmation,
         # and ensures the status observer fires even when re-uploading the same file
@@ -608,12 +633,15 @@ server <- function(
         declaration_vars$sample_table_active <- TRUE
 
         # New table data
-        sample_table_data(add_replicate_col(new_sample_table(
-          result = declaration_vars$result,
-          protein_table = declaration_vars$protein_table,
-          compound_table = declaration_vars$compound_table,
-          ki_kinact = conversion_sidebar_vars$run_ki_kinact()
-        ), config_file()))
+        sample_table_data(add_replicate_col(
+          new_sample_table(
+            result = declaration_vars$result,
+            protein_table = declaration_vars$protein_table,
+            compound_table = declaration_vars$compound_table,
+            ki_kinact = conversion_sidebar_vars$run_ki_kinact()
+          ),
+          config_file()
+        ))
         sample_table_trigger(sample_table_trigger() + 1)
 
         # Unblock UI and restore file input directly — the rhandsontable →
@@ -702,6 +730,7 @@ server <- function(
         new_tbl <- add_replicate_col(new_tbl, cfg)
 
         if (!identical(new_tbl, sample_table_data())) {
+          write_log("Config autofill applied to sample table")
           sample_table_data(new_tbl)
           sample_table_trigger(sample_table_trigger() + 1)
         }
@@ -723,7 +752,9 @@ server <- function(
       observer_name = "Replicate Column — Config Change",
       handler_fn = function() {
         tbl <- sample_table_data()
-        if (is.null(tbl) || nrow(tbl) == 0) return()
+        if (is.null(tbl) || nrow(tbl) == 0) {
+          return()
+        }
         updated <- add_replicate_col(tbl, config_file())
         if (!identical(updated$Replicate, tbl$Replicate)) {
           sample_table_data(updated)
@@ -988,6 +1019,9 @@ server <- function(
 
         # If edit applied always activate edit mode for sample table if present
         if (!is.null(input$samples_table)) {
+          if (input$tabs == "Samples") {
+            write_log("Sample table reopened for editing")
+          }
           # Make UI changes
           edit_ui_changes(
             tab = "Samples",
@@ -1009,6 +1043,7 @@ server <- function(
 
         # Edit Protein/Compound
         if (input$tabs == "Proteins") {
+          write_log("Protein table reopened for editing")
           # Make UI changes
           edit_ui_changes(
             tab = input$tabs,
@@ -1028,6 +1063,7 @@ server <- function(
           # Make table observer active
           declaration_vars$protein_table_active <- TRUE
         } else if (input$tabs == "Compounds") {
+          write_log("Compound table reopened for editing")
           # Make UI changes
           edit_ui_changes(
             tab = input$tabs,
@@ -1078,6 +1114,11 @@ server <- function(
             table = protein_table_input(),
             full = FALSE
           )
+          write_log(paste(
+            "Protein table confirmed:",
+            nrow(protein_table),
+            "protein(s)"
+          ))
           declaration_vars$protein_table <- protein_table
           protein_table_data(protein_table)
           declaration_vars$protein_table_disabled <- TRUE
@@ -1121,6 +1162,11 @@ server <- function(
             table = compound_table_input(),
             full = FALSE
           )
+          write_log(paste(
+            "Compound table confirmed:",
+            nrow(compound_table),
+            "compound(s)"
+          ))
           declaration_vars$compound_table <- compound_table
           compound_table_data(compound_table)
           declaration_vars$compound_table_disabled <- TRUE
@@ -1164,6 +1210,11 @@ server <- function(
             sample_table_input(),
             units = list(conc = input$conc_unit, time = input$time_unit)
           )
+          write_log(paste(
+            "Sample table confirmed:",
+            nrow(sample_table),
+            "sample(s)"
+          ))
 
           # Assign table to reactive variables
           declaration_vars$sample_table <- sample_table
@@ -1293,14 +1344,24 @@ server <- function(
           }
           meta <- read_decon_metadata(db_path)
           declaration_vars$result <- c(meta, list(.db_path = db_path))
+          write_log(paste(
+            "Deconvolution results transferred:",
+            basename(db_path),
+            "—",
+            length(meta$samples),
+            "sample(s)"
+          ))
 
           # New table data
-          sample_table_data(add_replicate_col(new_sample_table(
-            result = declaration_vars$result,
-            protein_table = declaration_vars$protein_table,
-            compound_table = declaration_vars$compound_table,
-            ki_kinact = conversion_sidebar_vars$run_ki_kinact()
-          ), config_file()))
+          sample_table_data(add_replicate_col(
+            new_sample_table(
+              result = declaration_vars$result,
+              protein_table = declaration_vars$protein_table,
+              compound_table = declaration_vars$compound_table,
+              ki_kinact = conversion_sidebar_vars$run_ki_kinact()
+            ),
+            config_file()
+          ))
           sample_table_trigger(sample_table_trigger() + 1)
         }
 
@@ -1360,14 +1421,24 @@ server <- function(
         db_path <- deconvolution_main_vars$continue_conversion()
         meta <- read_decon_metadata(db_path)
         declaration_vars$result <- c(meta, list(.db_path = db_path))
+        write_log(paste(
+          "Deconvolution results transferred (overwrite):",
+          basename(db_path),
+          "—",
+          length(meta$samples),
+          "sample(s)"
+        ))
 
         # New table data
-        sample_table_data(add_replicate_col(new_sample_table(
-          result = declaration_vars$result,
-          protein_table = declaration_vars$protein_table,
-          compound_table = declaration_vars$compound_table,
-          ki_kinact = conversion_sidebar_vars$run_ki_kinact()
-        ), config_file()))
+        sample_table_data(add_replicate_col(
+          new_sample_table(
+            result = declaration_vars$result,
+            protein_table = declaration_vars$protein_table,
+            compound_table = declaration_vars$compound_table,
+            ki_kinact = conversion_sidebar_vars$run_ki_kinact()
+          ),
+          config_file()
+        ))
         sample_table_trigger(sample_table_trigger() + 1)
 
         protein_table_active <- declaration_vars$protein_table_active
@@ -1631,16 +1702,19 @@ server <- function(
             )
           })
 
-          session$onFlushed(function() {
-            shinyjs::addClass(
-              selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
-              class = "custom-disable"
-            )
-            shinyjs::addClass(
-              selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
-              class = "custom-disable"
-            )
-          }, once = TRUE)
+          session$onFlushed(
+            function() {
+              shinyjs::addClass(
+                selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
+                class = "custom-disable"
+              )
+              shinyjs::addClass(
+                selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
+                class = "custom-disable"
+              )
+            },
+            once = TRUE
+          )
 
           # Unblock UI
           shinyjs::runjs(paste0(
@@ -1948,7 +2022,9 @@ server <- function(
                   class = "conversion-sample-protein",
                   shiny::HTML(
                     paste0(
-                      length(unique(tbl$`Theor. Cmp [Da]`[!is.na(tbl$`Cmp Name`)])),
+                      length(unique(tbl$`Theor. Cmp [Da]`[
+                        !is.na(tbl$`Cmp Name`)
+                      ])),
                       "<br>",
                       unique(tbl$`Cmp Name`[!is.na(tbl$`Cmp Name`)]),
                       "<br>",
@@ -2691,28 +2767,16 @@ server <- function(
             )
 
             ###### Total %-binding for one compound across samples ----
-            output$proteins_total_pct_binding <- shiny::renderUI({
-              shiny::req(
-                hits_summary,
-                input$conversion_sample_picker
-              )
-
+            shiny::observeEvent(input$conversion_protein_picker, {
               choices <- unique(hits_summary$`Cmp Name`[
                 hits_summary$`Protein` == input$conversion_protein_picker &
                   !is.na(hits_summary$`Cmp Name`)
               ])
-
-              if (!length(choices)) {
-                choices <- NULL
-              }
-
-              shiny::div(
-                class = "prot-binding-ui",
-                shiny::selectInput(
-                  ns("total_pct_prot_binding_select"),
-                  "Select Compound",
-                  choices = choices
-                )
+              if (!length(choices)) choices <- character(0)
+              shiny::updateSelectInput(
+                session,
+                "total_pct_prot_binding_select",
+                choices = choices
               )
             })
 
@@ -2884,7 +2948,9 @@ server <- function(
             proteins_labels_val <- shiny::reactiveVal(local({
               prot <- unique(hits_summary$`Protein`)[1]
               tbl <- hits_summary[hits_summary$`Protein` == prot, ]
-              if (is.na(prot) || nrow(tbl) < 2) return(TRUE)
+              if (is.na(prot) || nrow(tbl) < 2) {
+                return(TRUE)
+              }
               ids <- tbl$`Sample ID`
               length(unique(ids)) <= 8 & max(nchar(as.character(ids))) <= 20
             }))
@@ -3154,18 +3220,23 @@ server <- function(
             output$color_variable_ui <- shiny::renderUI({
               shiny::req(hits_summary)
 
-              shiny::selectInput(
-                ns("color_variable"),
-                label = NULL,
-                choices = c("Samples", "Compounds"),
-                selected = ifelse(
-                  length(unique(hits_summary$`Cmp Name`[
-                    !is.na(hits_summary$`Cmp Name`)
-                  ])) ==
-                    1,
-                  "Samples",
-                  "Compounds"
-                )
+              bslib::tooltip(
+                shiny::selectInput(
+                  ns("color_variable"),
+                  label = NULL,
+                  choices = c("Samples", "Compounds"),
+                  selected = ifelse(
+                    length(unique(hits_summary$`Cmp Name`[
+                      !is.na(hits_summary$`Cmp Name`)
+                    ])) ==
+                      1,
+                    "Samples",
+                    "Compounds"
+                  ),
+                  width = "120px"
+                ),
+                "Color mapping",
+                placement = "top"
               )
             })
 
@@ -4328,8 +4399,9 @@ server <- function(
             class = "custom-disable"
           )
 
-          choices <- hits_table_names[
-            !hits_table_names %in%
+          col_names <- names(conversion_vars$hits_summary)
+          choices <- col_names[
+            !col_names %in%
               c(
                 "Sample ID",
                 "Cmp Name",
@@ -4343,20 +4415,17 @@ server <- function(
               )
           ]
 
-          selected <- hits_table_names[
-            !hits_table_names %in%
+          selected <- choices[
+            !choices %in%
               c(
-                "Sample ID",
-                "Cmp Name",
-                if (length(units) == 2) {
-                  c(
-                    conversion_vars$units[["Concentration"]],
-                    conversion_vars$units[["Time"]]
-                  )
-                },
-                "truncSample_ID"
+                "Well",
+                "Theor. Prot. [Da]",
+                "Δ Prot. [Da]",
+                "Int. Prot.",
+                "Int. Cmp",
+                "Δ Cmp [Da]"
               )
-          ][-c(1:2, 4:5, 7, 9)]
+          ]
 
           if (!is.null(input$relbinding_hits_tab_col_select)) {
             shinyWidgets::updatePickerInput(
@@ -4401,12 +4470,15 @@ server <- function(
             class = "custom-disable"
           )
 
+          rep_col <- if ("Replicate" %in% names(conversion_vars$hits_summary)) "Replicate" else NULL
+          collapsed_choices <- c(rep_col, "Theor. Prot. [Da]", "Total %-Binding")
+
           if (!is.null(input$relbinding_hits_tab_col_select)) {
             shinyWidgets::updatePickerInput(
               session,
               "relbinding_hits_tab_col_select",
-              choices = c("Theor. Prot. [Da]", "Total %-Binding"),
-              selected = c("Theor. Prot. [Da]", "Total %-Binding")
+              choices = collapsed_choices,
+              selected = collapsed_choices
             )
           }
 
@@ -4414,8 +4486,8 @@ server <- function(
             shinyWidgets::updatePickerInput(
               session,
               "kikinact_hits_tab_col_select",
-              choices = c("Theor. Prot. [Da]", "Total %-Binding"),
-              selected = c("Theor. Prot. [Da]", "Total %-Binding")
+              choices = collapsed_choices,
+              selected = collapsed_choices
             )
           }
 

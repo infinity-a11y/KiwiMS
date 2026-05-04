@@ -4,9 +4,22 @@ box::use(
   logr[log_open, log_print, log_close, log_warning, log_error]
 )
 
-documents_path <- Sys.getenv("USERPROFILE")
-log_dir <- file.path(documents_path, "Documents", "KiwiMS", "logs")
+# Resolve log directory: use stored setting if available, otherwise default to
+# %USERPROFILE%\Documents\KiwiMS\logs (applied at app load; change takes effect on restart).
+log_dir <- local({
+  stored <- tryCatch({
+    s <- readRDS(file.path(
+      Sys.getenv("LOCALAPPDATA"), "KiwiMS", "settings", "user_settings.rds"
+    ))
+    d <- s[["log_dir"]]
+    if (!is.null(d) && nzchar(trimws(d))) trimws(d) else NULL
+  }, error = function(e) NULL)
+  if (!is.null(stored)) stored else {
+    file.path(Sys.getenv("USERPROFILE"), "Documents", "KiwiMS", "logs")
+  }
+})
 log_daily <- file.path(log_dir, Sys.Date())
+session_start_time <- Sys.time()
 
 # Get new session id return log path
 new_session_path <- function() {
@@ -69,10 +82,22 @@ close_logging <- function() {
   log_close()
 }
 
-# Get log directory
+# Get current session log file path
 #' @export
 get_log <- function() {
   return(log_path)
+}
+
+# Get base log directory (the parent that holds daily sub-folders)
+#' @export
+get_log_dir <- function() {
+  return(log_dir)
+}
+
+# Get session start time
+#' @export
+get_session_start <- function() {
+  return(session_start_time)
 }
 
 # Format log

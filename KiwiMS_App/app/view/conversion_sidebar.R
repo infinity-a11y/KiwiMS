@@ -466,6 +466,15 @@ server <- function(
       observer_name = "Conversion Processing",
       handler_fn = function() {
         if (analysis_status() == "pending") {
+          write_log("Conversion initiated")
+          write_log(paste(
+            "Conversion parameters:\n",
+            paste(c(
+              paste("Ki/kinact =", isTRUE(input$run_ki_kinact)),
+              paste("Peak Tolerance =", input$peak_tolerance, "Da"),
+              paste("Max. Stoichiometry =", input$max_multiples)
+            ), collapse = "\n ")
+          ))
           # Disable ki/kinact analysis checkbox
           shinyjs::disable("run_ki_kinact")
           shinyjs::addClass(selector = ".checkbox", class = "checkbox-disable")
@@ -473,8 +482,9 @@ server <- function(
           # Delay conversion start
           Sys.sleep(1)
 
-          # Preset logical ki_kinact_check
+          # Preset logical flags
           ki_kinact_check <- FALSE
+          no_hits_found <- FALSE
 
           # Activate JS function for conversion process tracking
           shinyjs::runjs(sprintf(
@@ -502,8 +512,13 @@ server <- function(
                 sample_table = conversion_main_vars$input_list()$Samples_Table
               )
 
+              if (sum(!is.na(result_with_hits$hits_summary$Compound)) == 0) {
+                no_hits_found <- TRUE
+                message("No hits detected — result interface will not be loaded.\n")
+              }
+
               # If Ki/kinact analysis is set to be performed
-              if (input$run_ki_kinact) {
+              if (!no_hits_found && input$run_ki_kinact) {
                 message(paste("COMPUTING BINDING KINETICS\n  │"))
 
                 # Get concentration and time units
@@ -666,64 +681,91 @@ server <- function(
           #   "C:\\Users\\marian\\Desktop\\KF_Testing\\test.rds"
           # )
 
-          # Assign result list and hits table to reactive vars
-          result_list(result_with_hits)
+          if (no_hits_found) {
+            # No hits — log, re-enable inputs, let user dismiss and stay in declaration
+            write_log("Conversion finalized — no hits detected")
 
-          # Save distinct protein - compound combinations/complexes
-          complex_df <- dplyr::distinct(
-            result_with_hits$hits_summary,
-            Protein,
-            Compound
-          ) |>
-            dplyr::filter(!is.na(Compound))
-
-          choice_values <- stats::setNames(
-            complex_df$Compound,
-            complex_df$Compound
-          )
-
-          complexes <- split(choice_values, complex_df$Protein)
-
-          complexes(complexes)
-
-          # Update sidebar control inputs
-          shiny::updateActionButton(
-            session = session,
-            "run_binding_analysis",
-            label = "Reset",
-            icon = shiny::icon("repeat")
-          )
-          shinyjs::disable("peak_tolerance")
-          shinyjs::disable("max_multiples")
-
-          # Enable modal window buttons
-          shinyjs::enable("save_conversion_log")
-          shinyjs::enable("copy_conversion_log")
-          shinyjs::enable("dismiss_conversion")
-          shinyjs::addClass(
-            id = "dismiss_conversion",
-            class = "btn-highlight"
-          )
-
-          shinyjs::delay(
-            500,
-            shinyjs::removeClass(
-              selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(1)",
-              class = "custom-disable"
+            shinyjs::enable("run_ki_kinact")
+            shinyjs::removeClass(selector = ".checkbox", class = "checkbox-disable")
+            shinyjs::enable("peak_tolerance")
+            shinyjs::enable("max_multiples")
+            shiny::updateActionButton(
+              session = session,
+              "run_binding_analysis",
+              label = "Start",
+              icon = shiny::icon("play"),
+              disabled = FALSE
             )
-          )
-          if (ki_kinact_check) {
+
+            shinyjs::enable("save_conversion_log")
+            shinyjs::enable("copy_conversion_log")
+            shinyjs::enable("dismiss_conversion")
+            shinyjs::addClass(id = "dismiss_conversion", class = "btn-highlight")
+          } else {
+            # Assign result list and hits table to reactive vars
+            write_log(paste(
+              "Conversion finalized —",
+              sum(!is.na(result_with_hits$hits_summary$Compound)), "hit(s)"
+            ))
+            result_list(result_with_hits)
+
+            # Save distinct protein - compound combinations/complexes
+            complex_df <- dplyr::distinct(
+              result_with_hits$hits_summary,
+              Protein,
+              Compound
+            ) |>
+              dplyr::filter(!is.na(Compound))
+
+            choice_values <- stats::setNames(
+              complex_df$Compound,
+              complex_df$Compound
+            )
+
+            complexes <- split(choice_values, complex_df$Protein)
+
+            complexes(complexes)
+
+            # Update sidebar control inputs
+            shiny::updateActionButton(
+              session = session,
+              "run_binding_analysis",
+              label = "Reset",
+              icon = shiny::icon("repeat")
+            )
+            shinyjs::disable("peak_tolerance")
+            shinyjs::disable("max_multiples")
+
+            # Enable modal window buttons
+            shinyjs::enable("save_conversion_log")
+            shinyjs::enable("copy_conversion_log")
+            shinyjs::enable("dismiss_conversion")
+            shinyjs::addClass(
+              id = "dismiss_conversion",
+              class = "btn-highlight"
+            )
+
             shinyjs::delay(
               500,
               shinyjs::removeClass(
-                selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(2)",
+                selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(1)",
                 class = "custom-disable"
               )
             )
-          }
+            if (ki_kinact_check) {
+              shinyjs::delay(
+                500,
+                shinyjs::removeClass(
+                  selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(2)",
+                  class = "custom-disable"
+                )
+              )
+            }
 
-          analysis_status("done")
+            analysis_status("done")
+          }
         } else {
+          write_log("Conversion reset")
           result_list(NULL)
           analysis_status("pending")
 

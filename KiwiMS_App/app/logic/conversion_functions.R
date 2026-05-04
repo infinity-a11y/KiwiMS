@@ -725,15 +725,15 @@ clean_sample_table <- function(sample_table, units = NULL) {
   ]
 
   df <- extra_cmp_section[,
-    colSums(is.na(extra_cmp_section) | extra_cmp_section == "") !=
+    colSums(as.matrix(is.na(extra_cmp_section) | extra_cmp_section == "")) !=
       nrow(extra_cmp_section),
     drop = FALSE
   ]
 
   # Rebuild data frame with consecutive values
-  if (ncol(extra_cmp_section)) {
+  if (isTRUE(ncol(extra_cmp_section) > 0)) {
     df <- data.frame()
-    for (i in 1:nrow(extra_cmp_section)) {
+    for (i in seq_len(nrow(extra_cmp_section))) {
       # Extract vector from input table
       row_noNA <- unlist(extra_cmp_section[i, ])[
         !is.na(unlist(extra_cmp_section[i, ])) &
@@ -778,7 +778,7 @@ clean_sample_table <- function(sample_table, units = NULL) {
   # Rename columns — preserve or apply units to Conc/Time names
   names(df) <- c(
     header_cols,
-    paste("Compound", 1:n_cmp),
+    if (n_cmp > 0) paste("Compound", seq_len(n_cmp)) else character(0),
     if (has_conc_time) {
       c(
         paste0(
@@ -3971,12 +3971,12 @@ filter_hits_table <- function(
   }
 
   # Filter compounds
-  if (!is.null(compounds) && na_include) {
+  if (!is.null(compounds) && length(compounds) > 0 && na_include) {
     hits_table <- dplyr::filter(
       hits_table,
       `Cmp Name` %in% compounds | is.na(`Cmp Name`)
     )
-  } else if (!is.null(compounds)) {
+  } else if (!is.null(compounds) && length(compounds) > 0) {
     hits_table <- dplyr::filter(
       hits_table,
       `Cmp Name` %in% compounds
@@ -3984,7 +3984,7 @@ filter_hits_table <- function(
   }
 
   # Filter samples
-  if (!is.null(samples)) {
+  if (!is.null(samples) && length(samples) > 0) {
     hits_table <- dplyr::filter(hits_table, `Sample ID` %in% samples)
   }
 
@@ -3997,7 +3997,6 @@ filter_hits_table <- function(
     "Sample ID",
     "Protein",
     "Cmp Name",
-    if ("Replicate" %in% names(hits_table)) "Replicate" else NULL,
     if ("Concentration" %in% names(units)) units[["Concentration"]] else NULL,
     if ("Time" %in% names(units)) units[["Time"]] else NULL,
     "truncSample_ID"
@@ -4241,12 +4240,12 @@ compute_replicate_labels <- function(sample_names, config = NULL) {
     }
   }
 
-  # Fill remaining NAs with _R<n>, avoiding clashes with existing _R<n> labels
+  # Fill remaining NAs with R<n>, avoiding clashes with existing R<n> labels
   existing <- labels[!is.na(labels)]
   used_ints <- suppressWarnings(stats::na.omit(as.integer(
     regmatches(
       existing,
-      regexpr("(?<=_[Rr])\\d+$", existing, perl = TRUE)
+      regexpr("(?<=[Rr])\\d+$", existing, perl = TRUE)
     )
   )))
   ctr <- 1L
@@ -4254,7 +4253,7 @@ compute_replicate_labels <- function(sample_names, config = NULL) {
     while (ctr %in% used_ints) {
       ctr <- ctr + 1L
     }
-    labels[i] <- paste0("_R", ctr)
+    labels[i] <- paste0("R", ctr)
     used_ints <- c(used_ints, ctr)
     ctr <- ctr + 1L
   }
