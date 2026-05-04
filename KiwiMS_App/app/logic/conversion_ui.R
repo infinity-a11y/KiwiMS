@@ -1609,7 +1609,9 @@ binding_results_ui <- function(ns, hits_summary) {
                         value = local({
                           prot <- unique(hits_summary$`Protein`)[1]
                           tbl <- hits_summary[hits_summary$`Protein` == prot, ]
-                          if (is.na(prot) || nrow(tbl) < 2) return(TRUE)
+                          if (is.na(prot) || nrow(tbl) < 2) {
+                            return(TRUE)
+                          }
                           ids <- tbl$`Sample ID`
                           ids <- ids[!is.na(ids)]
                           length(unique(ids)) <= 8 &
@@ -1667,10 +1669,15 @@ binding_results_ui <- function(ns, hits_summary) {
           )
         ),
         shiny::uiOutput(ns("color_variable_ui")),
-        shiny::selectInput(
-          ns("color_scale"),
-          label = NULL,
-          choices = NULL
+        bslib::tooltip(
+          shiny::selectInput(
+            ns("color_scale"),
+            label = NULL,
+            choices = NULL,
+            width = "120px"
+          ),
+          "Color palette",
+          placement = "top"
         ),
         bslib::tooltip(
           shiny::div(
