@@ -469,11 +469,14 @@ server <- function(
           write_log("Conversion initiated")
           write_log(paste(
             "Conversion parameters:\n",
-            paste(c(
-              paste("Ki/kinact =", isTRUE(input$run_ki_kinact)),
-              paste("Peak Tolerance =", input$peak_tolerance, "Da"),
-              paste("Max. Stoichiometry =", input$max_multiples)
-            ), collapse = "\n ")
+            paste(
+              c(
+                paste("Ki/kinact =", isTRUE(input$run_ki_kinact)),
+                paste("Peak Tolerance =", input$peak_tolerance, "Da"),
+                paste("Max. Stoichiometry =", input$max_multiples)
+              ),
+              collapse = "\n "
+            )
           ))
           # Disable ki/kinact analysis checkbox
           shinyjs::disable("run_ki_kinact")
@@ -514,7 +517,9 @@ server <- function(
 
               if (sum(!is.na(result_with_hits$hits_summary$Compound)) == 0) {
                 no_hits_found <- TRUE
-                message("No hits detected — result interface will not be loaded.\n")
+                message(
+                  "No hits detected — result interface will not be loaded.\n"
+                )
               }
 
               # If Ki/kinact analysis is set to be performed
@@ -596,97 +601,15 @@ server <- function(
             }
           )
 
-          # # TODO
-          # # Dev Mode
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_TEST.rds"
-          # )
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits1.rds"
-          # )
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_7.rds"
-          # )
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_13.rds"
-          # )
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_19.rds"
-          # )
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_25.rds"
-          # )
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_33.rds"
-          # )
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_42.rds"
-          # )
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_55.rds"
-          # )
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_61.rds"
-          # )
-
-          ## TESTING
-
-          # # Single entry
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\one_entry.rds"
-          # )
-
-          # # NA entry
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\one_entryNA.rds"
-          # )
-
-          # # Two NA entries
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\two_entryNA.rds"
-          # )
-
-          # # NA diff
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\NA_diff.rds"
-          # )
-
-          # # NA diff2
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\NA_diff2.rds"
-          # )
-
-          # # HiDrive-kinact-K
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\HiDrive-kinact-K.rds"
-          # )
-
-          # # 2025-12-10_MS_in-house_protein
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\2025-12-10_MS_in-house_protein.rds"
-          # )
-
-          # # HiDrive-kinact-KI Testdaten
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results.rds"
-          # )
-
-          # # HiDrive-2025-09-04_New-Test-data
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results_conversion.rds"
-          # )
-
-          # # Test
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\marian\\Desktop\\KF_Testing\\test.rds"
-          # )
-
           if (no_hits_found) {
             # No hits — log, re-enable inputs, let user dismiss and stay in declaration
             write_log("Conversion finalized — no hits detected")
 
             shinyjs::enable("run_ki_kinact")
-            shinyjs::removeClass(selector = ".checkbox", class = "checkbox-disable")
+            shinyjs::removeClass(
+              selector = ".checkbox",
+              class = "checkbox-disable"
+            )
             shinyjs::enable("peak_tolerance")
             shinyjs::enable("max_multiples")
             shiny::updateActionButton(
@@ -700,12 +623,16 @@ server <- function(
             shinyjs::enable("save_conversion_log")
             shinyjs::enable("copy_conversion_log")
             shinyjs::enable("dismiss_conversion")
-            shinyjs::addClass(id = "dismiss_conversion", class = "btn-highlight")
+            shinyjs::addClass(
+              id = "dismiss_conversion",
+              class = "btn-highlight"
+            )
           } else {
             # Assign result list and hits table to reactive vars
             write_log(paste(
               "Conversion finalized —",
-              sum(!is.na(result_with_hits$hits_summary$Compound)), "hit(s)"
+              sum(!is.na(result_with_hits$hits_summary$Compound)),
+              "hit(s)"
             ))
             result_list(result_with_hits)
 

@@ -1371,15 +1371,12 @@ check_hits <- function(
       compound = NA,
       cmp_mass = NA,
       delta_cmp = NA,
-      multiple = NA
+      multiple = NA,
+      preferred = NA
     )
 
     return(hits_df)
   }
-
-  # Remove peak intensity normalization
-  # Normalize peak intensity
-  # peaks$intensity <- peaks$intensity / max(peaks$intensity) * 100
 
   # Keep only peaks above protein mw
   peaks_valid <- peaks$mass >= protein_mw[, -1] - peak_tolerance
@@ -1403,7 +1400,8 @@ check_hits <- function(
       compound = NA,
       cmp_mass = NA,
       delta_cmp = NA,
-      multiple = NA
+      multiple = NA,
+      preferred = NA
     )
 
     return(hits_df)
@@ -1441,6 +1439,8 @@ check_hits <- function(
     if (any(hits, na.rm = TRUE)) {
       indices <- which(hits, arr.ind = TRUE)
 
+      hits_add <- data.frame()
+
       for (k in 1:nrow(indices)) {
         # Retrieve compound mass from hit on complex
         multiple <- as.integer(sub(".*\\*", "", colnames(hits)[indices[k, 2]]))
@@ -1450,7 +1450,7 @@ check_hits <- function(
         ]
 
         # Construct new entry for hits_df data frame
-        hits_add <- data.frame(
+        hit <- data.frame(
           well = "A1",
           sample = sample,
           protein = protein_mw[, 1],
@@ -1471,11 +1471,27 @@ check_hits <- function(
             (as.numeric(cmp_mass) * multiple) -
               (peaks_filtered[j, "mass"] - as.numeric(protein_mw[, -1]))
           ),
-          multiple = multiple
+          multiple = multiple,
+          preferred = TRUE
         )
 
-        hits_df <- rbind(hits_df, hits_add)
+        hits_add <- rbind(hits_add, hit)
       }
+
+      # Case multiple matching
+      if (nrow(hits_add) > 1) {
+        # Hit with highest compound mass is preferred to add to total binding
+        hits_add <- hits_add |>
+          dplyr::group_by(compound) |>
+          dplyr::mutate(
+            preferred = dplyr::row_number() == 1
+          )
+
+        # Log duplication event
+        log_duplicated_hits(hits_add)
+      }
+
+      hits_df <- rbind(hits_df, hits_add)
     }
   }
 
@@ -1516,11 +1532,13 @@ check_hits <- function(
 # Compound MW = 10|11
 
 conversion <- function(hits) {
+  hits1 <<- hits
+
   # Check 'hits' argument validity
   if (!is.data.frame(hits) || nrow(hits) < 1) {
     log_err_no_df()
     return(NULL)
-  } else if (ncol(hits) != 13) {
+  } else if (ncol(hits) != 14) {
     log_err_cols()
     return(NULL)
   } else if (anyNA(hits)) {
@@ -1544,28 +1562,31 @@ conversion <- function(hits) {
 
     # %BinIB = IB / Itotal * 100
     # %BinIC = IC / Itotal * 100
-    # usw ....
+    # usw ...
 
     # %Bintotal = %BinIB + %BinIC + %BinID  (alles was nicht freies Prot ist)
 
     # Adding %Binding values to hit data frame
-    hits <- hits |>
-      dplyr::mutate(
-        `%binding` = intensity / I_total
-      )
-    hits <- hits |>
-      dplyr::mutate(
-        `%binding_tot` = sum(unique(hits$`%binding`)),
-        .before = peak
-      )
+    hits <- dplyr::mutate(hits, `%binding` = intensity / I_total)
+    hits <- dplyr::mutate(
+      hits,
+      `%binding_tot` = sum(unique(hits$`%binding`)),
+      .before = peak
+    )
 
-    # Plausibilitätscheck check result < 100 - richtig so?
+    # Plausibility check
     total_relBinding <- hits$`%binding_tot`[1] + perc_bind_prot
-    if (!all.equal(total_relBinding, 1)) {
+    if (!isTRUE(all.equal(total_relBinding, 1))) {
       log_err_binding()
       return(NULL)
     }
 
+    # Normalize peak intensity
+    max_intensity <- max(c(hits$intensity, hits$prot_intensity))
+    hits$intensity <- hits$intensity / max_intensity
+    hits$prot_intensity <- hits$prot_intensity / max_intensity
+
+    # Log computed relative binding values
     log_intensities(
       I_total,
       unique(hits$prot_intensity),
@@ -1613,13 +1634,27 @@ log_status <- function(n_peaks, mass = NULL) {
   } else {
     message(sprintf("  ├─ Status: %s peaks detected", n_peaks))
   }
-  # Sys.sleep(0.05)
 }
 
-# 3. The hit count
+log_duplicated_hits <- function(hits_add) {
+  message(sprintf(
+    "  ├─ %s Hit duplicates at %s Da",
+    warning_sym,
+    hits_add[1, "peak"]
+  ))
+  for (i in 1:nrow(hits_add)) {
+    message(sprintf(
+      "  │  └─ Compound %s - %s%s",
+      hits_add[i, "compound"],
+      paste0("[", hits_add[i, "cmp_mass"], "]x", hits_add[i, "multiple"]),
+      paste0(" - Preferred: ", hits_add[i, "preferred"])
+    ))
+  }
+}
+
+# The hit count
 log_hits_count <- function(n_hits) {
   message(sprintf("  ├─ Result: %s hits detected", n_hits))
-  # Sys.sleep(0.05)
 }
 
 log_intensities <- function(total, unbound, binding) {
@@ -1632,19 +1667,16 @@ log_intensities <- function(total, unbound, binding) {
     sprintf("  │  ├─ Unbound Protein: %.2f (%.1f%%)\n", unbound, perc_unbound),
     sprintf("  │  └─ Total Binding:   %.2f (%.1f%%)", binding, perc_binding)
   ))
-  # Sys.sleep(0.05)
 }
 
 # Alert: No Peaks
 log_alert <- function(msg = "No protein peak detected") {
   message(sprintf("  ├─ ⚠️ %s.  ", msg))
-  # Sys.sleep(0.05)
 }
 
 # Footer: Closing a successful sample
 log_done <- function() {
   message(paste0("  │\n", "  └─ ☑ Sample completed.\n  "))
-  # Sys.sleep(0.05)
 }
 
 # Alert: empty hits argument
@@ -1683,7 +1715,10 @@ log_hits_summary <- function(hits_summarized) {
       " ├─ %s sample(s) screened\n",
       length(unique(hits_summarized$Sample))
     ),
-    sprintf(" └─ %s hit(s) detected in total\n", sum(!is.na(hits_summarized$Compound)))
+    sprintf(
+      " └─ %s hit(s) detected in total\n",
+      sum(!is.na(hits_summarized$Compound))
+    )
   ))
 }
 
@@ -1857,6 +1892,17 @@ add_hits <- function(
   protein_mw <- protein_table$`Mass 1`
   compound_mw <- as.matrix(compound_table[, -1])
   rownames(compound_mw) <- compound_table[, 1]
+
+  #TODO
+  results <<- results
+  sample_table <<- sample_table
+  protein_table <<- protein_table
+  compound_table <<- compound_table
+  peak_tolerance <<- peak_tolerance
+  max_multiples <<- max_multiples
+  samples <<- samples
+  protein_mw <<- protein_mw
+  compound_mw <<- compound_mw
 
   for (i in seq_along(samples)) {
     shinyWidgets::updateProgressBar(
@@ -2229,7 +2275,7 @@ make_binding_plot <- function(
           text = paste0(
             "Concentration [",
             gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
-"]  "
+            "]  "
           ),
           font = list(color = font_color)
         ),
@@ -2361,7 +2407,7 @@ make_kobs_plot <- function(ki_kinact_result, colors, units, theme = "dark") {
           text = paste0(
             "Concentration [",
             gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
-"]  "
+            "]  "
           ),
           font = list(color = font_color)
         ),
