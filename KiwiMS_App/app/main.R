@@ -64,6 +64,28 @@ ui <- function(id) {
       )
     ),
     shiny$div(id = "blocking-overlay"),
+    shiny$tags$script(shiny$HTML("
+      (function() {
+        var map = new Map();
+        $(document).on('shiny:recalculating', function(event) {
+          var el = event.target;
+          if (el.closest && el.closest('.conversion-main-spinner')) {
+            el.classList.add('kiwi-rendering');
+            map.set(el.id, el);
+          }
+        });
+        $(document).on('shiny:value shiny:error', function(event) {
+          var el = map.get(event.name);
+          if (!el) return;
+          map.delete(event.name);
+          requestAnimationFrame(function() {
+            requestAnimationFrame(function() {
+              el.classList.remove('kiwi-rendering');
+            });
+          });
+        });
+      })();
+    ")),
     shiny$tags$script(shiny$HTML(
       "
       Shiny.addCustomMessageHandler('downloadPlot', function(msg) {
