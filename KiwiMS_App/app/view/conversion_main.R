@@ -2767,28 +2767,16 @@ server <- function(
             )
 
             ###### Total %-binding for one compound across samples ----
-            output$proteins_total_pct_binding <- shiny::renderUI({
-              shiny::req(
-                hits_summary,
-                input$conversion_sample_picker
-              )
-
+            shiny::observeEvent(input$conversion_protein_picker, {
               choices <- unique(hits_summary$`Cmp Name`[
                 hits_summary$`Protein` == input$conversion_protein_picker &
                   !is.na(hits_summary$`Cmp Name`)
               ])
-
-              if (!length(choices)) {
-                choices <- NULL
-              }
-
-              shiny::div(
-                class = "prot-binding-ui",
-                shiny::selectInput(
-                  ns("total_pct_prot_binding_select"),
-                  "Select Compound",
-                  choices = choices
-                )
+              if (!length(choices)) choices <- character(0)
+              shiny::updateSelectInput(
+                session,
+                "total_pct_prot_binding_select",
+                choices = choices
               )
             })
 
@@ -4411,8 +4399,9 @@ server <- function(
             class = "custom-disable"
           )
 
-          choices <- hits_table_names[
-            !hits_table_names %in%
+          col_names <- names(conversion_vars$hits_summary)
+          choices <- col_names[
+            !col_names %in%
               c(
                 "Sample ID",
                 "Cmp Name",
@@ -4426,20 +4415,17 @@ server <- function(
               )
           ]
 
-          selected <- hits_table_names[
-            !hits_table_names %in%
+          selected <- choices[
+            !choices %in%
               c(
-                "Sample ID",
-                "Cmp Name",
-                if (length(units) == 2) {
-                  c(
-                    conversion_vars$units[["Concentration"]],
-                    conversion_vars$units[["Time"]]
-                  )
-                },
-                "truncSample_ID"
+                "Well",
+                "Theor. Prot. [Da]",
+                "Δ Prot. [Da]",
+                "Int. Prot.",
+                "Int. Cmp",
+                "Δ Cmp [Da]"
               )
-          ][-c(1:2, 4:5, 7, 9)]
+          ]
 
           if (!is.null(input$relbinding_hits_tab_col_select)) {
             shinyWidgets::updatePickerInput(
@@ -4484,12 +4470,15 @@ server <- function(
             class = "custom-disable"
           )
 
+          rep_col <- if ("Replicate" %in% names(conversion_vars$hits_summary)) "Replicate" else NULL
+          collapsed_choices <- c(rep_col, "Theor. Prot. [Da]", "Total %-Binding")
+
           if (!is.null(input$relbinding_hits_tab_col_select)) {
             shinyWidgets::updatePickerInput(
               session,
               "relbinding_hits_tab_col_select",
-              choices = c("Theor. Prot. [Da]", "Total %-Binding"),
-              selected = c("Theor. Prot. [Da]", "Total %-Binding")
+              choices = collapsed_choices,
+              selected = collapsed_choices
             )
           }
 
@@ -4497,8 +4486,8 @@ server <- function(
             shinyWidgets::updatePickerInput(
               session,
               "kikinact_hits_tab_col_select",
-              choices = c("Theor. Prot. [Da]", "Total %-Binding"),
-              selected = c("Theor. Prot. [Da]", "Total %-Binding")
+              choices = collapsed_choices,
+              selected = collapsed_choices
             )
           }
 

@@ -3997,7 +3997,6 @@ filter_hits_table <- function(
     "Sample ID",
     "Protein",
     "Cmp Name",
-    if ("Replicate" %in% names(hits_table)) "Replicate" else NULL,
     if ("Concentration" %in% names(units)) units[["Concentration"]] else NULL,
     if ("Time" %in% names(units)) units[["Time"]] else NULL,
     "truncSample_ID"
