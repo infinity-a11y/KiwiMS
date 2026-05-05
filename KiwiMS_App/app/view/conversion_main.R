@@ -2028,7 +2028,7 @@ server <- function(
                       "<br>",
                       unique(tbl$`Cmp Name`[!is.na(tbl$`Cmp Name`)]),
                       "<br>",
-                      round(mean(tbl$`Total %-Binding`), 2),
+                      sprintf("%.2f", mean(tbl$`Total %-Binding`)),
                       "%"
                     )
                   )
@@ -2311,7 +2311,7 @@ server <- function(
               ]
 
               if (length(total_bind) == 1) {
-                msg <- paste0(total_bind, "%")
+                msg <- paste0(sprintf("%.2f", total_bind), "%")
               } else {
                 msg <- shiny::div(
                   class = "conversion-sample-protein-box",
@@ -2326,16 +2326,16 @@ server <- function(
                     class = "conversion-sample-protein",
                     shiny::HTML(
                       paste0(
-                        round(min(total_bind), 2),
+                        sprintf("%.2f", min(total_bind)),
                         "% - ",
-                        round(max(total_bind), 2),
+                        sprintf("%.2f", max(total_bind)),
                         "%<br>",
-                        round(mean(total_bind), 2),
+                        sprintf("%.2f", mean(total_bind)),
                         "%",
                         if (length(total_bind) > 1) {
                           paste0(
                             " ± ",
-                            round(stats::sd(total_bind), 2)
+                            sprintf("%.2f", stats::sd(total_bind))
                           )
                         }
                       )
@@ -2831,18 +2831,18 @@ server <- function(
                       "<br>",
                       if (length(total_bind$`Total %-Binding`) > 1) {
                         paste0(
-                          round(min(total_bind$`Total %-Binding`), 2),
+                          sprintf("%.2f", min(total_bind$`Total %-Binding`)),
                           "% - ",
-                          round(max(total_bind$`Total %-Binding`), 2),
+                          sprintf("%.2f", max(total_bind$`Total %-Binding`)),
                           "%<br>"
                         )
                       },
-                      round(mean(total_bind$`Total %-Binding`), 2),
+                      sprintf("%.2f", mean(total_bind$`Total %-Binding`)),
                       "%",
                       if (length(total_bind$`Total %-Binding`) > 1) {
                         paste0(
                           " ± ",
-                          round(stats::sd(total_bind$`Total %-Binding`), 2)
+                          sprintf("%.2f", stats::sd(total_bind$`Total %-Binding`))
                         )
                       }
                     )
