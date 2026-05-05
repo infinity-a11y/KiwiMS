@@ -414,7 +414,7 @@ server <- function(
       #     "The 'Hits' tab shows all signals assigned to the currently selected complex and respectively inferred parameters."
       #   )
       # } else {
-      #   hints <- "%-Binding inferred from time series measurements of a single concentration."
+      #   hints <- "Binding [%] inferred from time series measurements of a single concentration."
       # }
 
       shiny::HTML(paste(
@@ -1754,8 +1754,8 @@ server <- function(
               dplyr::arrange(
                 `Protein`,
                 `Cmp Name`,
-                `Total %-Binding`,
-                `%-Binding`
+                `Tot. Binding [%]`,
+                `Binding [%]`
               )
           }
 
@@ -1995,7 +1995,7 @@ server <- function(
               }
             )
 
-            ###### Total %-binding ----
+            ###### Tot. Binding [%] ----
             output$samples_total_pct_binding <- shiny::renderUI({
               shiny::req(
                 hits_summary,
@@ -2028,7 +2028,7 @@ server <- function(
                       "<br>",
                       unique(tbl$`Cmp Name`[!is.na(tbl$`Cmp Name`)]),
                       "<br>",
-                      sprintf("%.2f", mean(tbl$`Total %-Binding`)),
+                      sprintf("%.2f", mean(tbl$`Tot. Binding [%]`)),
                       "%"
                     )
                   )
@@ -2090,6 +2090,69 @@ server <- function(
                 input$truncate_names
               )
 
+            # Settings-menu inputs are inside bslib::popover (display:none until opened).
+            # Shiny suspends hidden outputs, so their inputs fire NULL→value on first
+            # open. Using observeEvent(ignoreInit=TRUE) + reactiveVal ensures those
+            # initialization events never trigger a re-render.
+            smpl_spectrum_settings <- shiny::reactiveVal(0L)
+            smpl_table_settings <- shiny::reactiveVal(0L)
+            cmp_dist_settings <- shiny::reactiveVal(0L)
+            cmp_table_settings <- shiny::reactiveVal(0L)
+            prot_dist_settings <- shiny::reactiveVal(0L)
+            prot_table_settings <- shiny::reactiveVal(0L)
+
+            shiny::observeEvent(
+              list(
+                input$sample_view_spectrum_annotation,
+                input$sample_view_spectrum_diff
+              ),
+              smpl_spectrum_settings(smpl_spectrum_settings() + 1L),
+              ignoreInit = TRUE,
+              ignoreNULL = TRUE
+            )
+            shiny::observeEvent(
+              list(
+                input$samples_table_view_binding_bar,
+                input$samples_table_view_tot_binding_bar
+              ),
+              smpl_table_settings(smpl_table_settings() + 1L),
+              ignoreInit = TRUE,
+              ignoreNULL = TRUE
+            )
+            shiny::observeEvent(
+              list(input$cmp_distribution_labels, input$cmp_distribution_scale),
+              cmp_dist_settings(cmp_dist_settings() + 1L),
+              ignoreInit = TRUE,
+              ignoreNULL = TRUE
+            )
+            shiny::observeEvent(
+              list(
+                input$compounds_table_view_binding_bar,
+                input$compounds_table_view_tot_binding_bar
+              ),
+              cmp_table_settings(cmp_table_settings() + 1L),
+              ignoreInit = TRUE,
+              ignoreNULL = TRUE
+            )
+            shiny::observeEvent(
+              list(
+                input$protein_distribution_labels,
+                input$protein_distribution_scale
+              ),
+              prot_dist_settings(prot_dist_settings() + 1L),
+              ignoreInit = TRUE,
+              ignoreNULL = TRUE
+            )
+            shiny::observeEvent(
+              list(
+                input$proteins_table_view_binding_bar,
+                input$proteins_table_view_tot_binding_bar
+              ),
+              prot_table_settings(prot_table_settings() + 1L),
+              ignoreInit = TRUE,
+              ignoreNULL = TRUE
+            )
+
             ###### Annotated spectrum ----
             output$samples_annotated_spectrum <- plotly::renderPlotly({
               shiny::req(
@@ -2138,8 +2201,7 @@ server <- function(
                 input$conversion_sample_picker,
                 input$truncate_names,
                 input$color_scale,
-                input$sample_view_spectrum_annotation,
-                input$sample_view_spectrum_diff
+                smpl_spectrum_settings()
               )
 
             ###### Samples view table ----
@@ -2165,7 +2227,7 @@ server <- function(
                       "Sample ID",
                       "Cmp Name",
                       "Mass Shift",
-                      "%-Binding",
+                      "Binding [%]",
                       "Total %"
                     ))
 
@@ -2228,8 +2290,7 @@ server <- function(
                 render_trigger(),
                 input$truncate_names,
                 input$color_scale,
-                input$samples_table_view_binding_bar,
-                input$samples_table_view_tot_binding_bar
+                smpl_table_settings()
               )
 
             ##### Compound View tab ----
@@ -2297,7 +2358,7 @@ server <- function(
               }
             })
 
-            ###### Total %-binding ----
+            ###### Tot. Binding [%] ----
             output$compounds_total_pct_binding <- shiny::renderUI({
               shiny::req(hits_summary)
 
@@ -2305,7 +2366,7 @@ server <- function(
                 return(shiny::div("N/A", class = "na-placeholder"))
               }
 
-              total_bind <- hits_summary$`Total %-Binding`[
+              total_bind <- hits_summary$`Tot. Binding [%]`[
                 hits_summary$`Cmp Name` == input$conversion_compound_picker &
                   !is.na(hits_summary$`Cmp Name`)
               ]
@@ -2393,8 +2454,7 @@ server <- function(
                 render_trigger(),
                 input$truncate_names,
                 input$color_scale,
-                input$cmp_distribution_labels,
-                input$cmp_distribution_scale
+                cmp_dist_settings()
               )
 
             ####### Show label input UI ----
@@ -2694,8 +2754,7 @@ server <- function(
                 render_trigger(),
                 input$truncate_names,
                 input$color_scale,
-                input$compounds_table_view_binding_bar,
-                input$compounds_table_view_tot_binding_bar
+                cmp_table_settings()
               )
 
             ##### Protein View tab ----
@@ -2766,13 +2825,15 @@ server <- function(
               }
             )
 
-            ###### Total %-binding for one compound across samples ----
+            ###### Tot. Binding [%] for one compound across samples ----
             shiny::observeEvent(input$conversion_protein_picker, {
               choices <- unique(hits_summary$`Cmp Name`[
                 hits_summary$`Protein` == input$conversion_protein_picker &
                   !is.na(hits_summary$`Cmp Name`)
               ])
-              if (!length(choices)) choices <- character(0)
+              if (!length(choices)) {
+                choices <- character(0)
+              }
               shiny::updateSelectInput(
                 session,
                 "total_pct_prot_binding_select",
@@ -2814,9 +2875,9 @@ server <- function(
                   class = "conversion-sample-protein-names",
                   shiny::HTML(paste(
                     "No. Compounds<br>Selected<br>",
-                    if (length(total_bind$`Total %-Binding`) > 1) "Range<br>",
+                    if (length(total_bind$`Tot. Binding [%]`) > 1) "Range<br>",
                     "Mean",
-                    if (length(total_bind$`Total %-Binding`) > 1) "± SD"
+                    if (length(total_bind$`Tot. Binding [%]`) > 1) "± SD"
                   ))
                 ),
                 shiny::div(
@@ -2829,20 +2890,23 @@ server <- function(
                       "<br>",
                       total_pct_prot_binding_select,
                       "<br>",
-                      if (length(total_bind$`Total %-Binding`) > 1) {
+                      if (length(total_bind$`Tot. Binding [%]`) > 1) {
                         paste0(
-                          sprintf("%.2f", min(total_bind$`Total %-Binding`)),
+                          sprintf("%.2f", min(total_bind$`Tot. Binding [%]`)),
                           "% - ",
-                          sprintf("%.2f", max(total_bind$`Total %-Binding`)),
+                          sprintf("%.2f", max(total_bind$`Tot. Binding [%]`)),
                           "%<br>"
                         )
                       },
-                      sprintf("%.2f", mean(total_bind$`Total %-Binding`)),
+                      sprintf("%.2f", mean(total_bind$`Tot. Binding [%]`)),
                       "%",
-                      if (length(total_bind$`Total %-Binding`) > 1) {
+                      if (length(total_bind$`Tot. Binding [%]`) > 1) {
                         paste0(
                           " ± ",
-                          sprintf("%.2f", stats::sd(total_bind$`Total %-Binding`))
+                          sprintf(
+                            "%.2f",
+                            stats::sd(total_bind$`Tot. Binding [%]`)
+                          )
                         )
                       }
                     )
@@ -2908,8 +2972,7 @@ server <- function(
                 input$color_scale,
                 input$conversion_protein_picker,
                 input$truncate_names,
-                input$protein_distribution_scale,
-                input$protein_distribution_labels
+                prot_dist_settings()
               )
 
             ####### Show label input UI ----
@@ -3212,8 +3275,7 @@ server <- function(
                 input$color_scale,
                 input$conversion_protein_picker,
                 input$truncate_names,
-                input$proteins_table_view_binding_bar,
-                input$proteins_table_view_tot_binding_bar
+                prot_table_settings()
               )
 
             ##### Color variable UI ----
@@ -4421,8 +4483,8 @@ server <- function(
                 "Well",
                 "Theor. Prot. [Da]",
                 "Δ Prot. [Da]",
-                "Int. Prot.",
-                "Int. Cmp",
+                "Int. Prot. [%]",
+                "Int. Cmp [%]",
                 "Δ Cmp [Da]"
               )
           ]
@@ -4449,8 +4511,8 @@ server <- function(
             shinyWidgets::updatePickerInput(
               session,
               "relbinding_binding_chart",
-              choices = c("%-Binding", "Total %-Binding"),
-              selected = "Total %-Binding",
+              choices = c("Binding [%]", "Tot. Binding [%]"),
+              selected = "Tot. Binding [%]",
             )
           }
 
@@ -4458,8 +4520,8 @@ server <- function(
             shinyWidgets::updatePickerInput(
               session,
               "kikinact_binding_chart",
-              choices = c("%-Binding", "Total %-Binding"),
-              selected = "Total %-Binding",
+              choices = c("Binding [%]", "Tot. Binding [%]"),
+              selected = "Tot. Binding [%]",
             )
           }
 
@@ -4470,8 +4532,16 @@ server <- function(
             class = "custom-disable"
           )
 
-          rep_col <- if ("Replicate" %in% names(conversion_vars$hits_summary)) "Replicate" else NULL
-          collapsed_choices <- c(rep_col, "Theor. Prot. [Da]", "Total %-Binding")
+          rep_col <- if ("Replicate" %in% names(conversion_vars$hits_summary)) {
+            "Replicate"
+          } else {
+            NULL
+          }
+          collapsed_choices <- c(
+            rep_col,
+            "Theor. Prot. [Da]",
+            "Tot. Binding [%]"
+          )
 
           if (!is.null(input$relbinding_hits_tab_col_select)) {
             shinyWidgets::updatePickerInput(
@@ -4495,8 +4565,8 @@ server <- function(
             shinyWidgets::updatePickerInput(
               session,
               "relbinding_binding_chart",
-              choices = "Total %-Binding",
-              selected = "Total %-Binding"
+              choices = "Tot. Binding [%]",
+              selected = "Tot. Binding [%]"
             )
           }
 
@@ -4504,8 +4574,8 @@ server <- function(
             shinyWidgets::updatePickerInput(
               session,
               "kikinact_binding_chart",
-              choices = "Total %-Binding",
-              selected = "Total %-Binding"
+              choices = "Tot. Binding [%]",
+              selected = "Tot. Binding [%]"
             )
           }
 
@@ -4722,7 +4792,7 @@ server <- function(
         #             " – difference between theoretical and measured deconvolved protein mass"
         #           ),
         #           htmltools::tags$li(
-        #             shiny::strong("Int. Prot."),
+        #             shiny::strong("Int. Prot. [%]"),
         #             " – relative intensity of the unmodified protein peak [%]"
         #           ),
         #           htmltools::tags$li(
@@ -4730,7 +4800,7 @@ server <- function(
         #             " – raw signal intensity for present peak"
         #           ),
         #           htmltools::tags$li(
-        #             shiny::strong("Int. Cmp"),
+        #             shiny::strong("Int. Cmp [%]"),
         #             " – intensity of the peak representing the protein together with a compound adduct [%]"
         #           ),
         #           htmltools::tags$li(
@@ -4750,19 +4820,19 @@ server <- function(
         #             " – detected binding stoichiometry (no. of bound compounds)"
         #           ),
         #           htmltools::tags$li(
-        #             shiny::strong("%-Binding"),
+        #             shiny::strong("Binding [%]"),
         #             " – percentage of protein that has formed the covalent adduct at this time point"
         #           ),
         #           htmltools::tags$li(
-        #             shiny::strong("Total %-Binding"),
-        #             " – cumulative %-binding (identical to %-Binding when only one adduct is present)"
+        #             shiny::strong("Tot. Binding [%]"),
+        #             " – cumulative Binding [%] (identical to Binding [%] when only one adduct is present)"
         #           )
         #         ),
         #         shiny::p(
         #           "The ",
-        #           shiny::strong("%-Binding"),
+        #           shiny::strong("Binding [%]"),
         #           " (or ",
-        #           shiny::strong("Total %-Binding"),
+        #           shiny::strong("Tot. Binding [%]"),
         #           ") values are used to construct the binding curve and to derive ",
         #           shiny::strong("k", htmltools::tags$sub("obs")),
         #           ", plateau, and initial velocity (v)."
@@ -5214,7 +5284,7 @@ server <- function(
                       " – difference between theoretical and measured deconvolved protein mass"
                     ),
                     htmltools::tags$li(
-                      shiny::strong("Int. Prot."),
+                      shiny::strong("Int. Prot. [%]"),
                       " – relative intensity of the unmodified protein peak [%]"
                     ),
                     htmltools::tags$li(
@@ -5222,7 +5292,7 @@ server <- function(
                       " – measured peak mass of the compound"
                     ),
                     htmltools::tags$li(
-                      shiny::strong("Int. Cmp"),
+                      shiny::strong("Int. Cmp [%]"),
                       " – intensity of the peak representing the protein together with a compound adduct [%]"
                     ),
                     htmltools::tags$li(
@@ -5242,19 +5312,19 @@ server <- function(
                       " – detected binding stoichiometry (no. of bound compounds)"
                     ),
                     htmltools::tags$li(
-                      shiny::strong("%-Binding"),
+                      shiny::strong("Binding [%]"),
                       " – percentage of protein that has formed the covalent adduct at this time point"
                     ),
                     htmltools::tags$li(
-                      shiny::strong("Total %-Binding"),
-                      " – cumulative %-binding (identical to %-Binding when only one adduct is present)"
+                      shiny::strong("Tot. Binding [%]"),
+                      " – cumulative Binding [%] (identical to Binding [%] when only one adduct is present)"
                     )
                   ),
                   shiny::p(
                     "The ",
-                    shiny::strong("%-Binding"),
+                    shiny::strong("Binding [%]"),
                     " (or ",
-                    shiny::strong("Total %-Binding"),
+                    shiny::strong("Tot. Binding [%]"),
                     ") values are used to construct the binding curve and to derive ",
                     shiny::strong("k", htmltools::tags$sub("obs")),
                     ", plateau, and initial velocity (v)."

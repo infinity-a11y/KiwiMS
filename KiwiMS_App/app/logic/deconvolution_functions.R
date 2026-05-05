@@ -1,4 +1,4 @@
-# app/logic/deconvolution_functions.R
+﻿# app/logic/deconvolution_functions.R
 
 box::use(
   data.table[fread, setnames, data.table, as.data.table],
@@ -795,25 +795,30 @@ process_plot_data <- function(
       (max(mass$intensity) - min(mass$intensity)) *
       100
 
-    # Read peaks
-    peaks <- c(
-      unique(
-        sample$hits$`Measured Mw Protein [Da]`
-      ),
-      sample$hits$`Peak [Da]`
-    )
-
-    # If duplicated peaks throw message
-    if (any(duplicated(peaks))) {
-      message(
-        "\u26A0",
-        " ",
-        sample$hits$Sample[1],
-        " has multiple hits for ",
-        sum(duplicated(peaks)),
-        " compound(s)."
+    # Merge non-preferred hits per peak: sort preferred first, then collapse
+    # multiple interpretations of the same peak into a single combined label.
+    compound_hits <- sample$hits |>
+      dplyr::arrange(
+        `Peak [Da]`,
+        dplyr::desc(Preferred == "TRUE"),
+        dplyr::desc(suppressWarnings(as.numeric(`Compound Mw [Da]`)))
+      ) |>
+      dplyr::group_by(`Peak [Da]`) |>
+      dplyr::reframe(
+        Compound                = Compound[Preferred == "TRUE"][1],
+        `Compound Mw [Da]`      = `Compound Mw [Da]`[Preferred == "TRUE"][1],
+        `Binding Stoichiometry` = `Binding Stoichiometry`[Preferred == "TRUE"][1],
+        mass_stoich_label       = paste(
+          paste0("[", `Compound Mw [Da]`, "] x", `Binding Stoichiometry`),
+          collapse = " + "
+        )
       )
-    }
+
+    # Peaks: protein + one entry per unique compound peak
+    peaks <- c(
+      unique(sample$hits$`Measured Mw Protein [Da]`),
+      compound_hits$`Peak [Da]`
+    )
 
     # Match peaks to mass spectrum
     indices <- match(peaks, mass$mass)
@@ -821,25 +826,24 @@ process_plot_data <- function(
 
     # Get protein and compound names
     name <- c(
-      unique(
-        sample$hits$Protein
-      ),
-      sample$hits$Compound
+      unique(sample$hits$Protein),
+      compound_hits$Compound
     )
 
-    # Get molecular weights
+    # Get molecular weights (preferred hit's theoretical mass)
     mw <- c(
-      unique(
-        sample$hits$`Mw Protein [Da]`
-      ),
-      sample$hits$`Compound Mw [Da]`
+      unique(sample$hits$`Mw Protein [Da]`),
+      compound_hits$`Compound Mw [Da]`
     )
 
-    # Get stoichiometry values
-    multiple <- c(1, sample$hits$`Binding Stoichiometry`)
+    # Get stoichiometry values (preferred hit)
+    multiple <- c(1, compound_hits$`Binding Stoichiometry`)
 
-    # Summarize in data frame
-    highlight_peaks <- cbind(peak_df, name, mw, multiple) |>
+    # Combined mass-shift label for hover; NA for the protein peak
+    mass_stoich_label <- c(NA_character_, compound_hits$mass_stoich_label)
+
+    # Summarize in data frame - one row per unique peak
+    highlight_peaks <- cbind(peak_df, name, mw, multiple, mass_stoich_label) |>
       dplyr::filter(!is.na(name))
   }
 
@@ -1066,14 +1070,6 @@ spectrum_plot <- function(
           showlegend = FALSE
         )
       } else {
-        dupl <- duplicated(plot_data$highlight_peaks$mass)
-        if (any(dupl)) {
-          plot_data$highlight_peaks$intensity[
-            dupl
-          ] <- plot_data$highlight_peaks$intensity[dupl] +
-            1
-        }
-
         if (!is.null(color_cmp)) {
           # Prepare marker symbols
           plot_data$highlight_peaks <- dplyr::mutate(
@@ -1134,15 +1130,14 @@ spectrum_plot <- function(
           ),
           hoverinfo = "text",
           text = ~ paste0(
-            "Name: ",
-            name,
-            "\nMeasured: ",
-            mass,
-            " Da\nIntensity: ",
-            round(intensity, 2),
-            "%\n",
-            "Theor. Mw: ",
-            mw
+            "Name: ", name,
+            "\nMeasured: ", mass, " Da",
+            "\nIntensity: ", round(intensity, 2), "%\n",
+            ifelse(
+              is.na(mass_stoich_label),
+              paste0("Theor. Mw: ", mw),
+              paste0("Mass Shifts: ", mass_stoich_label)
+            )
           ),
           showlegend = FALSE
         )

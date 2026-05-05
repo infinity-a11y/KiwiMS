@@ -79,14 +79,14 @@ hits_table_names <- c(
   "Theor. Prot. [Da]",
   "Meas. Prot. [Da]",
   "Δ Prot. [Da]",
-  "Int. Prot.",
+  "Int. Prot. [%]",
   "Peak Signal [Da]",
-  "Int. Cmp",
+  "Int. Cmp [%]",
   "Theor. Cmp [Da]",
   "Δ Cmp [Da]",
   "Bind. Stoich.",
-  "%-Binding",
-  "Total %-Binding"
+  "Binding [%]",
+  "Tot. Binding [%]"
 )
 
 # Sequential color scales

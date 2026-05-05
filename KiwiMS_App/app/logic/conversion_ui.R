@@ -220,7 +220,7 @@ ki_kinact_concentrations_tabs <- function(ns, local_ui_id, conc_result, units) {
                     local_ui_id,
                     "concentrations_table_view_binding_bar"
                   )),
-                  label = "%-Binding Bar",
+                  label = "Binding [%] Bar",
                   value = TRUE,
                   right = TRUE
                 ),
@@ -229,7 +229,7 @@ ki_kinact_concentrations_tabs <- function(ns, local_ui_id, conc_result, units) {
                     local_ui_id,
                     "concentrations_table_view_tot_binding_bar"
                   )),
-                  label = "Total %-Binding Bar",
+                  label = "Tot. Binding [%] Bar",
                   value = FALSE,
                   right = TRUE
                 ),
@@ -392,9 +392,15 @@ ki_kinact_results_ui <- function(
                 selected = names(hits_summary)[
                   !names(hits_summary) %in%
                     c(
-                      "Sample ID", "Cmp Name", "truncSample_ID",
-                      "Well", "Theor. Prot. [Da]", "Δ Prot. [Da]",
-                      "Int. Prot.", "Int. Cmp", "Δ Cmp [Da]"
+                      "Sample ID",
+                      "Cmp Name",
+                      "truncSample_ID",
+                      "Well",
+                      "Theor. Prot. [Da]",
+                      "Δ Prot. [Da]",
+                      "Int. Prot. [%]",
+                      "Int. Cmp [%]",
+                      "Δ Cmp [Da]"
                     )
                 ],
                 multiple = TRUE,
@@ -412,8 +418,8 @@ ki_kinact_results_ui <- function(
               shinyWidgets::pickerInput(
                 ns("kikinact_binding_chart"),
                 label = "Show Binding Bars",
-                choices = c("%-Binding", "Total %-Binding"),
-                selected = "Total %-Binding",
+                choices = c("Binding [%]", "Tot. Binding [%]"),
+                selected = "Tot. Binding [%]",
                 multiple = TRUE,
                 options = list(
                   `actions-box` = TRUE
@@ -801,8 +807,8 @@ binding_results_ui <- function(ns, hits_summary) {
                       "Well",
                       "Theor. Prot. [Da]",
                       "Δ Prot. [Da]",
-                      "Int. Prot.",
-                      "Int. Cmp",
+                      "Int. Prot. [%]",
+                      "Int. Cmp [%]",
                       "Δ Cmp [Da]"
                     )
                 ],
@@ -821,8 +827,8 @@ binding_results_ui <- function(ns, hits_summary) {
               shinyWidgets::pickerInput(
                 ns("relbinding_binding_chart"),
                 label = "Show Binding Bars",
-                choices = c("%-Binding", "Total %-Binding"),
-                selected = "Total %-Binding",
+                choices = c("Binding [%]", "Tot. Binding [%]"),
+                selected = "Tot. Binding [%]",
                 multiple = TRUE,
                 options = list(
                   `actions-box` = TRUE
@@ -932,7 +938,7 @@ binding_results_ui <- function(ns, hits_summary) {
                 bslib::card(
                   bslib::card_header(
                     class = "bg-dark help-header",
-                    "Total %-Binding",
+                    "Tot. Binding [%]",
                     bslib::tooltip(
                       shiny::div(
                         class = "tooltip-bttn",
@@ -979,7 +985,7 @@ binding_results_ui <- function(ns, hits_summary) {
                         ns(
                           "samples_table_view_binding_bar"
                         ),
-                        label = "%-Binding Bar",
+                        label = "Binding [%] Bar",
                         value = TRUE,
                         right = TRUE
                       ),
@@ -987,7 +993,7 @@ binding_results_ui <- function(ns, hits_summary) {
                         ns(
                           "samples_table_view_tot_binding_bar"
                         ),
-                        label = "Total %-Binding Bar",
+                        label = "Tot. Binding [%] Bar",
                         value = FALSE,
                         right = TRUE
                       ),
@@ -1185,7 +1191,7 @@ binding_results_ui <- function(ns, hits_summary) {
                 bslib::card(
                   bslib::card_header(
                     class = "bg-dark help-header",
-                    "Total %-Binding",
+                    "Tot. Binding [%]",
                     bslib::tooltip(
                       shiny::div(
                         class = "tooltip-bttn",
@@ -1230,13 +1236,13 @@ binding_results_ui <- function(ns, hits_summary) {
                     shiny::div(
                       shinyWidgets::materialSwitch(
                         ns("compounds_table_view_binding_bar"),
-                        label = "%-Binding Bar",
+                        label = "Binding [%] Bar",
                         value = TRUE,
                         right = TRUE
                       ),
                       shinyWidgets::materialSwitch(
                         ns("compounds_table_view_tot_binding_bar"),
-                        label = "Total %-Binding Bar",
+                        label = "Tot. Binding [%] Bar",
                         value = FALSE,
                         right = TRUE
                       ),
@@ -1446,7 +1452,7 @@ binding_results_ui <- function(ns, hits_summary) {
                 bslib::card(
                   bslib::card_header(
                     class = "bg-dark help-header d-flex justify-content-between",
-                    "Total %-Binding",
+                    "Tot. Binding [%]",
                     shiny::div(
                       class = "box-header-settings-help",
                       card_settings_popover(
@@ -1503,13 +1509,13 @@ binding_results_ui <- function(ns, hits_summary) {
                     shiny::div(
                       shinyWidgets::materialSwitch(
                         ns("proteins_table_view_binding_bar"),
-                        label = "%-Binding Bar",
+                        label = "Binding [%] Bar",
                         value = TRUE,
                         right = TRUE
                       ),
                       shinyWidgets::materialSwitch(
                         ns("proteins_table_view_tot_binding_bar"),
-                        label = "Total %-Binding Bar",
+                        label = "Tot. Binding [%] Bar",
                         value = FALSE,
                         right = TRUE
                       ),

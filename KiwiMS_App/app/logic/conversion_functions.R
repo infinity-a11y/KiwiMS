@@ -1700,7 +1700,7 @@ log_err_cols <- function(current_cols) {
   message(msg)
 }
 
-# Alert: 100% Total %-Binding plausibility check
+# Alert: 100% Tot. Binding [%] plausibility check
 log_err_binding <- function() {
   msg <- sprintf(
     "  │  └─ %s ALERT: Total relative binding is not 100%%. Check data integrity.\n",
@@ -1941,7 +1941,7 @@ add_hits <- function(
       sample = samples[i]
     )
 
-    # Conversion of relative intensities to %-Binding
+    # Conversion of relative intensities to Binding [%]
     # Add resulting hits data frame to sample
     results$deconvolution[[samples[i]]][[
       "hits"
@@ -2223,7 +2223,7 @@ make_binding_plot <- function(
           gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
           "<br>"
         ),
-        "%-Binding: %{y:.2f}<br>",
+        "Binding [%]: %{y:.2f}<br>",
         paste0(
           "K<sub>obs</sub>: %{customdata:.2f} ",
           gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
@@ -2256,7 +2256,7 @@ make_binding_plot <- function(
           gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
           "<br>"
         ),
-        "%-Binding: %{y:.2f}<br>",
+        "Binding [%]: %{y:.2f}<br>",
         paste0(
           "K<sub>obs</sub>: %{customdata:.2f} ",
           gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
@@ -3777,14 +3777,16 @@ filter_table_view <- function(table, colors, inputs, units) {
   # Merge non-preferred hits per peak into their preferred counterpart
   table <- table |>
     dplyr::arrange(
-      `Sample ID`, `Cmp Name`, `Peak Signal [Da]`,
+      `Sample ID`,
+      `Cmp Name`,
+      `Peak Signal [Da]`,
       dplyr::desc(Preferred == "TRUE"),
       dplyr::desc(suppressWarnings(as.numeric(`Theor. Cmp [Da]`)))
     ) |>
     dplyr::group_by(`Sample ID`, `Cmp Name`, `Peak Signal [Da]`) |>
     dplyr::reframe(
       truncSample_ID = `truncSample_ID`[1],
-      dplyr::across(dplyr::any_of(optional_cols), ~.x[1]),
+      dplyr::across(dplyr::any_of(optional_cols), ~ .x[1]),
       mass_stoich_html = {
         theor <- `Theor. Cmp [Da]`
         stoich <- `Bind. Stoich.`
@@ -3793,18 +3795,23 @@ filter_table_view <- function(table, colors, inputs, units) {
           "N/A"
         } else {
           paste(
-            paste0("[", theor[valid], "]&thinsp;",
-              sapply(stoich[valid], function(x) as.character(htmltools::tags$sub(x)))
+            paste0(
+              "[",
+              theor[valid],
+              "]&thinsp;",
+              sapply(stoich[valid], function(x) {
+                as.character(htmltools::tags$sub(x))
+              })
             ),
             collapse = " + "
           )
         }
       },
-      `%-Binding` = {
-        pref <- `%-Binding`[Preferred == "TRUE"]
-        if (length(pref) > 0) pref[1] else `%-Binding`[1]
+      `Binding [%]` = {
+        pref <- `Binding [%]`[Preferred == "TRUE"]
+        if (length(pref) > 0) pref[1] else `Binding [%]`[1]
       },
-      `Total %-Binding` = `Total %-Binding`[1]
+      `Tot. Binding [%]` = `Tot. Binding [%]`[1]
     ) |>
     dplyr::select(-`Peak Signal [Da]`)
 
@@ -3816,8 +3823,8 @@ filter_table_view <- function(table, colors, inputs, units) {
       `Cmp Name` = `Cmp Name`,
       dplyr::any_of(optional_cols),
       `Mass Shift` = mass_stoich_html,
-      `%-Binding` = `%-Binding`,
-      `Total %` = `Total %-Binding`
+      `Binding [%]` = `Binding [%]`,
+      `Total %` = `Tot. Binding [%]`
     ) |>
     dplyr::mutate(
       # Truncated label used only for color matching / display; original Sample ID kept
@@ -3839,7 +3846,7 @@ filter_table_view <- function(table, colors, inputs, units) {
         },
         names(colors)
       )]),
-      `%-Binding` = `%-Binding`,
+      `Binding [%]` = `Binding [%]`,
       `Total %` = `Total %`,
       col_var = !!rlang::sym(
         if (
@@ -3917,7 +3924,7 @@ render_table_view <- function(table, colors, tab, inputs, units) {
     }
   }
   if (!is.null(inputs$binding_bar) && !isTRUE(inputs$binding_bar)) {
-    table[["%-Binding"]] <- sprintf("%.2f", table[["%-Binding"]])
+    table[["Binding [%]"]] <- sprintf("%.2f", table[["Binding [%]"]])
   }
   if (!is.null(inputs$tot_binding_bar) && !isTRUE(inputs$tot_binding_bar)) {
     table[["Total %"]] <- sprintf("%.2f", table[["Total %"]])
@@ -3958,7 +3965,7 @@ render_table_view <- function(table, colors, tab, inputs, units) {
         ),
         list(className = 'dt-center', targets = "_all"),
         list(
-          targets = "%-Binding",
+          targets = "Binding [%]",
           render = render_binding
         ),
         list(
@@ -3973,7 +3980,7 @@ render_table_view <- function(table, colors, tab, inputs, units) {
     )
   ) |>
     DT::formatRound(
-      columns = intersect(c("%-Binding", "Total %"), names(table)),
+      columns = intersect(c("Binding [%]", "Total %"), names(table)),
       digits = 2
     ) |>
     DT::formatStyle(
@@ -4023,7 +4030,7 @@ filter_hits_table <- function(
           `Protein`,
           `Cmp Name`,
           `Theor. Prot. [Da]`,
-          `Total %-Binding`,
+          `Tot. Binding [%]`,
           `truncSample_ID`
         )
     } else {
@@ -4033,7 +4040,7 @@ filter_hits_table <- function(
           `Protein`,
           `Cmp Name`,
           `Theor. Prot. [Da]`,
-          `Total %-Binding`,
+          `Tot. Binding [%]`,
           `truncSample_ID`
         )
     }
@@ -4186,7 +4193,7 @@ render_hits_table <- function(
 
   # Format binding columns to consistent 2 decimal places
   binding_fmt_cols <- intersect(
-    c("%-Binding", "Total %-Binding"),
+    c("Binding [%]", "Tot. Binding [%]"),
     names(hits_table)
   )
   if (length(binding_fmt_cols) > 0) {
@@ -4739,16 +4746,16 @@ transform_hits <- function(hits_summary) {
     "Theor. Prot. [Da]",
     "Meas. Prot. [Da]",
     "Δ Prot. [Da]",
-    "Int. Prot.",
+    "Int. Prot. [%]",
     "Peak Signal [Da]",
-    "Int. Cmp",
+    "Int. Cmp [%]",
     "Cmp Name",
     "Theor. Cmp [Da]",
     "Δ Cmp [Da]",
     "Bind. Stoich.",
     "Preferred",
-    "%-Binding",
-    "Total %-Binding"
+    "Binding [%]",
+    "Tot. Binding [%]"
   )
 
   # Interface dependent logic
@@ -5018,20 +5025,24 @@ prot_compound_distribution <- function(
     dplyr::group_by(`Cmp Name`, `Sample ID`, `Peak Signal [Da]`) |>
     dplyr::reframe(
       `Protein` = `Protein`[1],
-      `Total %-Binding` = `Total %-Binding`[1],
+      `Tot. Binding [%]` = `Tot. Binding [%]`[1],
       `truncSample_ID` = `truncSample_ID`[1],
       mass_stoich_raw = paste(
         paste0(
-          "[", `Theor. Cmp [Da]`, "]",
-          sapply(`Bind. Stoich.`, function(x) as.character(htmltools::tags$sub(x)))
+          "[",
+          `Theor. Cmp [Da]`,
+          "]",
+          sapply(`Bind. Stoich.`, function(x) {
+            as.character(htmltools::tags$sub(x))
+          })
         ),
         collapse = " + "
       ),
       `Theor. Cmp [Da]` = `Theor. Cmp [Da]`[Preferred == "TRUE"][1],
       `Bind. Stoich.` = `Bind. Stoich.`[Preferred == "TRUE"][1],
-      `%-Binding` = {
-        pref <- `%-Binding`[Preferred == "TRUE"]
-        if (length(pref) > 0) pref[1] else `%-Binding`[1]
+      `Binding [%]` = {
+        pref <- `Binding [%]`[Preferred == "TRUE"]
+        if (length(pref) > 0) pref[1] else `Binding [%]`[1]
       }
     ) |>
     dplyr::select(-`Peak Signal [Da]`)
@@ -5050,9 +5061,9 @@ prot_compound_distribution <- function(
         `Sample ID`,
         levels = unique(`Sample ID`)
       ),
-      `%-Binding` = factor(
-        `%-Binding`,
-        levels = unique(`%-Binding`)
+      `Binding [%]` = factor(
+        `Binding [%]`,
+        levels = unique(`Binding [%]`)
       ),
       bg_hex = if (color_variable == "Compounds") {
         colors[as.character(`Cmp Name`)]
@@ -5072,7 +5083,7 @@ prot_compound_distribution <- function(
 
   range <- c(
     0,
-    max(tbl$`Total %-Binding`) + 10
+    max(tbl$`Tot. Binding [%]`) + 10
   )
 
   if (!is.null(distribution_scale) && distribution_scale == "100") {
@@ -5112,7 +5123,7 @@ prot_compound_distribution <- function(
       ),
       yaxis = list(
         range = range,
-        title = list(text = "%-Binding"),
+        title = list(text = "Binding [%]"),
         zeroline = FALSE,
         gridcolor = grid_color,
         color = axis_color,
@@ -5175,14 +5186,14 @@ prot_compound_distribution <- function(
       }
 
       col <- colors[[var]]
-      y_val <- row$`%-Binding`[[1]]
+      y_val <- row$`Binding [%]`[[1]]
 
       hover_text <- paste0(
         "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
         row$mass_stoich_raw[[1]],
         "</b><br>",
-        "<span style='opacity: 0.8'>%-Binding:</span> <b>",
-        sprintf("%.2f", as.numeric(as.character(row$`%-Binding`[[1]]))),
+        "<span style='opacity: 0.8'>Binding [%]:</span> <b>",
+        sprintf("%.2f", as.numeric(as.character(row$`Binding [%]`[[1]]))),
         "%</b>",
         "<extra><div style='text-align: left;'>",
         "<span style='opacity: 0.8;;'>Cmp Name: </span><b>",
@@ -5220,7 +5231,7 @@ prot_compound_distribution <- function(
     totals_cmp_grp <- tbl |>
       dplyr::group_by(`Cmp Name`, Group) |>
       dplyr::summarize(
-        total_val = sum(as.numeric(as.character(`%-Binding`))),
+        total_val = sum(as.numeric(as.character(`Binding [%]`))),
         .groups = "drop"
       )
 
@@ -5231,7 +5242,9 @@ prot_compound_distribution <- function(
       g <- tot_row$Group[[1]]
       i_group <- group_map[[g]]
       local_n <- compound_local_n_map[[as.character(tot_row$`Cmp Name`[[1]])]]
-      local_cluster_width <- local_n * bar_width + max(0, local_n - 1) * group_gap
+      local_cluster_width <- local_n *
+        bar_width +
+        max(0, local_n - 1) * group_gap
       off <- -local_cluster_width / 2 + i_group * (bar_width + group_gap)
       cmp_idx <- which(cmp_levels == as.character(tot_row$`Cmp Name`[[1]])) - 1L
       annots[[j]] <- list(
@@ -5257,7 +5270,7 @@ prot_compound_distribution <- function(
     bar_chart <- plotly::plot_ly(data = tbl) |>
       plotly::add_trace(
         x = ~`Sample ID`,
-        y = ~ as.numeric(as.character(`%-Binding`)),
+        y = ~ as.numeric(as.character(`Binding [%]`)),
         color = color,
         colors = colors,
         type = 'bar',
@@ -5266,8 +5279,8 @@ prot_compound_distribution <- function(
           "<span style='opacity: 0.8'>Mass Shift / Stoich.:</span> <b>",
           mass_stoich_raw,
           "</b><br>",
-          "<span style='opacity: 0.8'>%-Binding:</span> <b>",
-          sprintf("%.2f", as.numeric(as.character(`%-Binding`))),
+          "<span style='opacity: 0.8'>Binding [%]:</span> <b>",
+          sprintf("%.2f", as.numeric(as.character(`Binding [%]`))),
           "%</b>",
           "<extra><div style='text-align: left;'>",
           "<span style='opacity: 0.8;;'>Cmp Name: </span><b>",
@@ -5289,7 +5302,7 @@ prot_compound_distribution <- function(
     if (length(tbl$`Sample ID`) <= 20) {
       totals <- dplyr::group_by(tbl, `Sample ID`) |>
         dplyr::summarize(
-          total_val = sum(as.numeric(as.character(`%-Binding`)))
+          total_val = sum(as.numeric(as.character(`Binding [%]`)))
         )
       bar_chart <- bar_chart |>
         plotly::add_trace(
@@ -5332,7 +5345,7 @@ prot_compound_distribution <- function(
         ),
         yaxis = list(
           range = range,
-          title = list(text = "%-Binding"),
+          title = list(text = "Binding [%]"),
           zeroline = FALSE,
           gridcolor = grid_color,
           color = axis_color
@@ -5369,20 +5382,24 @@ cmp_compound_distribution <- function(
     dplyr::group_by(`Sample ID`, `Peak Signal [Da]`) |>
     dplyr::reframe(
       `Cmp Name` = `Cmp Name`[1],
-      `Total %-Binding` = `Total %-Binding`[1],
+      `Tot. Binding [%]` = `Tot. Binding [%]`[1],
       `truncSample_ID` = `truncSample_ID`[1],
       mass_stoich_raw = paste(
         paste0(
-          "[", `Theor. Cmp [Da]`, "]",
-          sapply(`Bind. Stoich.`, function(x) as.character(htmltools::tags$sub(x)))
+          "[",
+          `Theor. Cmp [Da]`,
+          "]",
+          sapply(`Bind. Stoich.`, function(x) {
+            as.character(htmltools::tags$sub(x))
+          })
         ),
         collapse = " + "
       ),
       `Theor. Cmp [Da]` = `Theor. Cmp [Da]`[Preferred == "TRUE"][1],
       `Bind. Stoich.` = `Bind. Stoich.`[Preferred == "TRUE"][1],
-      `%-Binding` = {
-        pref <- `%-Binding`[Preferred == "TRUE"]
-        if (length(pref) > 0) pref[1] else `%-Binding`[1]
+      `Binding [%]` = {
+        pref <- `Binding [%]`[Preferred == "TRUE"]
+        if (length(pref) > 0) pref[1] else `Binding [%]`[1]
       }
     ) |>
     dplyr::select(-`Peak Signal [Da]`) |>
@@ -5431,7 +5448,7 @@ cmp_compound_distribution <- function(
   bar_chart <- plotly::plot_ly(data = tbl) |>
     plotly::add_trace(
       x = ~`Sample ID`,
-      y = ~`%-Binding`,
+      y = ~`Binding [%]`,
       color = color,
       colors = colors,
       type = 'bar',
@@ -5440,8 +5457,8 @@ cmp_compound_distribution <- function(
         "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
         mass_stoich_raw,
         "</b><br>",
-        "<span style='opacity: 0.8'>%-Binding:</span> <b>",
-        sprintf("%.2f", `%-Binding`),
+        "<span style='opacity: 0.8'>Binding [%]:</span> <b>",
+        sprintf("%.2f", `Binding [%]`),
         "%</b>",
         "<extra><div style='text-align: left;'>",
         "<span style='opacity: 0.8;;'>Cmp Name: </span><b>",
@@ -5463,7 +5480,7 @@ cmp_compound_distribution <- function(
   if (length(tbl$`Sample ID`) <= 20) {
     totals <- dplyr::group_by(tbl, `Sample ID`) |>
       dplyr::summarize(
-        total_val = sum(`%-Binding`)
+        total_val = sum(`Binding [%]`)
       )
     bar_chart <- bar_chart |>
       plotly::add_trace(
@@ -5492,7 +5509,7 @@ cmp_compound_distribution <- function(
 
   range <- c(
     0,
-    max(tbl$`Total %-Binding`) + 10
+    max(tbl$`Tot. Binding [%]`) + 10
   )
 
   if (!is.null(distribution_scale) && distribution_scale == "100") {
@@ -5520,7 +5537,7 @@ cmp_compound_distribution <- function(
       ),
       yaxis = list(
         range = range,
-        title = list(text = "%-Binding"),
+        title = list(text = "Binding [%]"),
         zeroline = FALSE,
         gridcolor = grid_color,
         color = axis_color
@@ -5559,7 +5576,7 @@ smpl_compound_distribution <- function(
     dplyr::reframe(
       `Cmp Name` = `Cmp Name`[1],
       `Sample ID` = if (truncate_names) `truncSample_ID`[1] else `Sample ID`[1],
-      total_bind = `Total %-Binding`[1],
+      total_bind = `Tot. Binding [%]`[1],
       mass_stoich = paste(
         paste0(
           "[",
@@ -5572,23 +5589,24 @@ smpl_compound_distribution <- function(
         collapse = " + "
       ),
       relBinding = {
-        pref <- `%-Binding`[Preferred == "TRUE"]
-        (if (length(pref) > 0) pref[1] else `%-Binding`[1]) / 100
+        pref <- `Binding [%]`[Preferred == "TRUE"]
+        (if (length(pref) > 0) pref[1] else `Binding [%]`[1]) / 100
       }
     ) |>
     dplyr::select(-`Peak Signal [Da]`) |>
     dplyr::mutate(
-      `%-Binding` = paste0(sprintf("%.2f", relBinding * 100), "%")
+      `Binding [%]` = paste0(sprintf("%.2f", relBinding * 100), "%")
     ) |>
     rbind(
       data.frame(
         "Cmp Name" = "Unbound",
         "Sample ID" = "Unbound",
-        total_bind = 100 - tbl$`Total %-Binding`[1],
+        total_bind = 100 - tbl$`Tot. Binding [%]`[1],
         mass_stoich = "Unbound Protein",
-        relBinding = 1 - tbl$`Total %-Binding`[1] / 100,
-        "%-Binding" = paste0(
-          sprintf("%.2f", 100 - tbl$`Total %-Binding`[1]), "%"
+        relBinding = 1 - tbl$`Tot. Binding [%]`[1] / 100,
+        "Binding [%]" = paste0(
+          sprintf("%.2f", 100 - tbl$`Tot. Binding [%]`[1]),
+          "%"
         ),
         check.names = FALSE
       )
@@ -5621,7 +5639,7 @@ smpl_compound_distribution <- function(
     sort = FALSE,
     type = 'pie',
     hole = 0.4,
-    text = ~`%-Binding`,
+    text = ~`Binding [%]`,
     texttemplate = "%{label}<br>%{text}",
     textposition = 'outside',
     hovertemplate = ~ paste0(
@@ -5631,8 +5649,8 @@ smpl_compound_distribution <- function(
       "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
       `mass_stoich`,
       "</b><br>",
-      "<span style='opacity: 0.8'>%-Binding:</span> <b>",
-      `%-Binding`,
+      "<span style='opacity: 0.8'>Binding [%]:</span> <b>",
+      `Binding [%]`,
       "<extra></extra>"
     ),
     outsidetextfont = list(color = font_color, size = 12),
@@ -5653,7 +5671,9 @@ smpl_compound_distribution <- function(
           x = 0.5,
           y = 0.5,
           text = paste0(
-            "<b>", sprintf("%.2f", cmp_table$total_bind[1]), "%</b><br>Bound"
+            "<b>",
+            sprintf("%.2f", cmp_table$total_bind[1]),
+            "%</b><br>Bound"
           ),
           xref = "paper",
           yref = "paper",
