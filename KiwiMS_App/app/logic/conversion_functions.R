@@ -1372,7 +1372,9 @@ check_hits <- function(
       cmp_mass = NA,
       delta_cmp = NA,
       multiple = NA,
-      preferred = NA
+      preferred = NA,
+      unmatched = NA,
+      correct = NA
     )
 
     return(hits_df)
@@ -1401,7 +1403,9 @@ check_hits <- function(
       cmp_mass = NA,
       delta_cmp = NA,
       multiple = NA,
-      preferred = NA
+      preferred = NA,
+      unmatched = 100,
+      correct = 0
     )
 
     return(hits_df)
@@ -1472,7 +1476,9 @@ check_hits <- function(
               (peaks_filtered[j, "mass"] - as.numeric(protein_mw[, -1]))
           ),
           multiple = multiple,
-          preferred = TRUE
+          preferred = TRUE,
+          unmatched = NA,
+          correct = NA
         )
 
         hits_add <- rbind(hits_add, hit)
@@ -1513,9 +1519,17 @@ check_hits <- function(
       cmp_mass = NA,
       delta_cmp = NA,
       multiple = NA,
-      preferred = NA
+      preferred = NA,
+      unmatched = NA,
+      correct = NA
     )
   }
+
+  # Calculate % unmatched and % correct
+  hits_df$unmatched <- unmatched <- sum(!peaks$mass %in% hits_df$peak) /
+    nrow(peaks) *
+    100
+  hits_df$correct <- 100 - unmatched
 
   log_hits_count(nrow(hits_df))
   return(hits_df)
@@ -1539,7 +1553,7 @@ conversion <- function(hits) {
   if (!is.data.frame(hits) || nrow(hits) < 1) {
     log_err_no_df()
     return(NULL)
-  } else if (ncol(hits) != 14) {
+  } else if (ncol(hits) != 16) {
     log_err_cols(ncol(hits))
     return(NULL)
   } else if (anyNA(hits)) {
@@ -1612,6 +1626,8 @@ conversion <- function(hits) {
     "Delta Mw Compound [Da]",
     "Binding Stoichiometry",
     "Preferred",
+    "% Unmatched",
+    "% Correct",
     "% Binding"
   )
 
@@ -1693,7 +1709,7 @@ log_err_no_df <- function() {
 # Alert: discrepancy in expected hits columns
 log_err_cols <- function(current_cols) {
   msg <- sprintf(
-    "  │  └─ %s ALERT: 'hits' data frame has %s columns, but 14 are required.\n",
+    "  │  └─ %s ALERT: 'hits' data frame has %s columns, but 16 are required.\n",
     warning_sym,
     current_cols
   )
@@ -4193,7 +4209,7 @@ render_hits_table <- function(
 
   # Format binding columns to consistent 2 decimal places
   binding_fmt_cols <- intersect(
-    c("Binding [%]", "Tot. Binding [%]"),
+    c("Binding [%]", "Tot. Binding [%]", "Unmatched [%]", "Correct [%]"),
     names(hits_table)
   )
   if (length(binding_fmt_cols) > 0) {
@@ -4736,7 +4752,11 @@ transform_hits <- function(hits_summary) {
         ~ tidyr::replace_na(as.character(.x), "N/A")
       )
     ) |>
-    dplyr::relocate(dplyr::any_of("Total % Binding"), .after = "% Binding")
+    dplyr::relocate(dplyr::any_of("Total % Binding"), .after = "% Binding") |>
+    dplyr::relocate(
+      dplyr::any_of(c("% Unmatched", "% Correct")),
+      .after = "Total % Binding"
+    )
 
   # Define column names
   col_names <- c(
@@ -4755,7 +4775,9 @@ transform_hits <- function(hits_summary) {
     "Bind. Stoich.",
     "Preferred",
     "Binding [%]",
-    "Tot. Binding [%]"
+    "Tot. Binding [%]",
+    "Unmatched [%]",
+    "Correct [%]"
   )
 
   # Interface dependent logic

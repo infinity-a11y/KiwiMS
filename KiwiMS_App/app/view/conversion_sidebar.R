@@ -565,6 +565,10 @@ server <- function(
                     conc_time = conc_time
                   )
 
+                  result_with_hits <<- result_with_hits
+                  conc_time <<- conc_time
+                  units1 <<- units
+
                   # Add binding/kobs results to result list
                   result_with_hits$binding_kobs_result <- add_kobs_binding_result(
                     hits_summary_filtered,
