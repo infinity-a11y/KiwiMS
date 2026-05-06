@@ -3394,6 +3394,7 @@ server <- function(
                 bar_chart = input$kikinact_binding_chart,
                 truncated = input$truncate_names,
                 clickable = conversion_vars$units[["Concentration"]],
+                valid_concentrations = conversion_vars$concentrations,
                 units = units
               )
 

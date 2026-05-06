@@ -4170,6 +4170,7 @@ render_hits_table <- function(
   color_variable = NULL,
   truncated = NULL,
   clickable = FALSE,
+  valid_concentrations = NULL,
   units
 ) {
   # Adapt table layout
@@ -4193,17 +4194,23 @@ render_hits_table <- function(
       ) -
         1
 
+      valid_conc_js <- if (!is.null(valid_concentrations)) {
+        jsonlite::toJSON(as.numeric(valid_concentrations))
+      } else {
+        "null"
+      }
+
       rowCallback <- c(
         "function(row, data){",
-        "  var targets = ",
-        jsonlite::toJSON(clickable_targets),
-        ";",
+        "  var targets = ", jsonlite::toJSON(clickable_targets), ";",
+        "  var validConc = ", valid_conc_js, ";",
         "  for(var i=0; i<data.length; i++){",
         "    if(data[i] === null){",
         "      $('td:eq('+i+')', row).html('N/A').css({'color': 'inherit'});",
         "    }",
         "    if(targets.includes(i) && data[i] !== null){",
-        "      $('td:eq('+i+')', row).addClass('clickable-column');",
+        "      var isValid = validConc === null || validConc.includes(parseFloat(data[i]));",
+        "      if(isValid) $('td:eq('+i+')', row).addClass('clickable-column');",
         "    }",
         "  }",
         "}"
