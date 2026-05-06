@@ -805,10 +805,12 @@ process_plot_data <- function(
       ) |>
       dplyr::group_by(`Peak [Da]`) |>
       dplyr::reframe(
-        Compound                = Compound[Preferred == "TRUE"][1],
-        `Compound Mw [Da]`      = `Compound Mw [Da]`[Preferred == "TRUE"][1],
-        `Binding Stoichiometry` = `Binding Stoichiometry`[Preferred == "TRUE"][1],
-        mass_stoich_label       = paste(
+        Compound = Compound[Preferred == "TRUE"][1],
+        `Compound Mw [Da]` = `Compound Mw [Da]`[Preferred == "TRUE"][1],
+        `Binding Stoichiometry` = `Binding Stoichiometry`[Preferred == "TRUE"][
+          1
+        ],
+        mass_stoich_label = paste(
           paste0("[", `Compound Mw [Da]`, "] x", `Binding Stoichiometry`),
           collapse = " + "
         )
@@ -865,6 +867,12 @@ spectrum_plot <- function(
   show_peak_labels = TRUE,
   show_mass_diff = TRUE
 ) {
+  result_path <<- result_path
+  sample1 <<- sample
+  plot_data <<- plot_data
+  color_cmp <<- color_cmp
+  color_variable <<- color_variable
+
   if (is.null(plot_data)) {
     plot_data <- process_plot_data(
       sample,
@@ -1022,7 +1030,8 @@ spectrum_plot <- function(
       zeroline = FALSE,
       zerolinecolor = zeroline_color,
       ticks = "outside",
-      tickcolor = "transparent"
+      tickcolor = "transparent",
+      range = list(0, 105)
     )
 
     # Prepare xaxis list
@@ -1036,11 +1045,7 @@ spectrum_plot <- function(
     )
 
     # If annotated peaks present add markers
-    if (
-      isFALSE(
-        nrow(plot_data$highlight_peaks) == 1 & anyNA(plot_data$highlight_peaks)
-      )
-    ) {
+    if (!all(is.na(plot_data$highlight_peaks$mass))) {
       if (is.null(sample)) {
         # Simple peaks from file or DB — no compound annotation columns
         plot <- plotly::add_markers(
@@ -1130,9 +1135,14 @@ spectrum_plot <- function(
           ),
           hoverinfo = "text",
           text = ~ paste0(
-            "Name: ", name,
-            "\nMeasured: ", mass, " Da",
-            "\nIntensity: ", round(intensity, 2), "%\n",
+            "Name: ",
+            name,
+            "\nMeasured: ",
+            mass,
+            " Da",
+            "\nIntensity: ",
+            round(intensity, 2),
+            "%\n",
             ifelse(
               is.na(mass_stoich_label),
               paste0("Theor. Mw: ", mw),
@@ -1143,218 +1153,6 @@ spectrum_plot <- function(
         )
       }
 
-      #   # Annotation logic for mass difference + per-peak labels
-      #   shapes <- NULL
-      #   annotations <- NULL
-      #   unique_masses <- unique(plot_data$highlight_peaks$mass)
-
-      #   # Mass difference connector (if enabled and exactly two unique masses)
-      #   if (show_mass_diff && length(unique_masses) == 2) {
-      #     x1 <- min(unique_masses)
-      #     x2 <- max(unique_masses)
-      #     diff <- x2 - x1
-      #     i1 <- plot_data$highlight_peaks$intensity[
-      #       plot_data$highlight_peaks$mass == x1
-      #     ][1]
-      #     i2 <- plot_data$highlight_peaks$intensity[
-      #       plot_data$highlight_peaks$mass == x2
-      #     ][1]
-      #     y_max_peak <- max(i1, i2, na.rm = TRUE)
-      #     y_offset <- 5
-      #     y_line <- y_max_peak + y_offset
-      #     y_text <- y_line + (y_offset / 2)
-      #     mid_x <- (x1 + x2) / 2
-      #     diff_text <- sprintf("%.2f Da", diff)
-
-      #     shapes <- list(
-      #       list(
-      #         type = "line",
-      #         x0 = x1,
-      #         y0 = i1,
-      #         x1 = x1,
-      #         y1 = y_line,
-      #         line = list(color = font_color, width = 1, dash = "dot")
-      #       ),
-      #       list(
-      #         type = "line",
-      #         x0 = x2,
-      #         y0 = i2,
-      #         x1 = x2,
-      #         y1 = y_line,
-      #         line = list(color = font_color, width = 1, dash = "dot")
-      #       ),
-      #       list(
-      #         type = "line",
-      #         x0 = x1,
-      #         y0 = y_line,
-      #         x1 = x2,
-      #         y1 = y_line,
-      #         line = list(color = font_color, width = 1, dash = "dot")
-      #       )
-      #     )
-
-      #     annotations <- list(
-      #       list(
-      #         x = mid_x,
-      #         y = y_text,
-      #         text = diff_text,
-      #         showarrow = FALSE,
-      #         font = list(color = font_color, size = 12)
-      #       )
-      #     )
-      #   }
-
-      #   # Add diagonal leader and text label for each peak
-      #   peak_labels <- list()
-      #   leader_lines <- list()
-
-      #   if (show_peak_labels) {
-      #     # Compute ranges
-      #     if (nrow(plot_data$mass) > 0) {
-      #       x_min <- min(plot_data$mass$mass, na.rm = TRUE)
-      #       x_max <- max(plot_data$mass$mass, na.rm = TRUE)
-      #       x_range <- x_max - x_min
-      #     } else {
-      #       x_range <- 1000 # fallback reasonable default
-      #     }
-
-      #     # Temporary y_range estimate (will finalize later)
-      #     temp_y_range <- 100 + 20 # rough estimate including buffers
-
-      #     # Assumed plot aspect ratio (width / height) - adjust if your typical plot size differs
-      #     assumed_aspect <- 1.8 # Typical for wide plots; e.g., 900x500 => 1.8
-
-      #     # Desired vertical rise in y-data units (reduced for shorter lines)
-      #     delta_y <- 2 # % units; reduced from 4
-
-      #     # Compute delta_x for ~45-degree visual angle
-      #     delta_x <- delta_y * x_range / (assumed_aspect * temp_y_range)
-
-      #     # Fallback if ranges are zero/invalid
-      #     if (!is.finite(delta_x) || delta_x <= 0) {
-      #       delta_x <- 25 # reduced fallback in Da
-      #     }
-
-      #     for (i in seq_len(nrow(plot_data$highlight_peaks))) {
-      #       px <- plot_data$highlight_peaks$mass[i]
-      #       py <- plot_data$highlight_peaks$intensity[i]
-
-      #       # Diagonal end point: up and right
-      #       end_x <- px + delta_x
-      #       end_y <- py + delta_y
-
-      #       # Leader line (short segment + arrowhead at END for pointing up-right)
-      #       leader_lines[[length(leader_lines) + 1]] <- list(
-      #         type = "line",
-      #         x0 = px,
-      #         y0 = py,
-      #         x1 = end_x,
-      #         y1 = end_y,
-      #         line = list(color = font_color, width = 1.5),
-      #         arrowhead = 2, # arrow at end
-      #         arrowsize = 0.9,
-      #         arrowwidth = 1.3,
-      #         standoff = 3, # small gap at start
-      #         layer = "below" # <-- KEY CHANGE: place behind markers
-      #       )
-
-      #       # Text label slightly right and above the arrow end
-      #       label_x <- end_x + (delta_x * 0.02)
-      #       label_y <- end_y
-
-      #       # Format mass nicely
-      #       label_text <- sprintf("%.1f Da", px)
-
-      #       peak_labels[[length(peak_labels) + 1]] <- list(
-      #         x = label_x,
-      #         y = label_y,
-      #         text = label_text,
-      #         showarrow = FALSE,
-      #         font = list(color = font_color, size = 11),
-      #         xanchor = "left",
-      #         yanchor = "bottom"
-      #       )
-      #     }
-      #   }
-
-      #   # Combine all shapes and annotations
-      #   all_shapes <- c(shapes, leader_lines)
-      #   all_annotations <- c(annotations, peak_labels)
-
-      #   # Precisely calculate the minimum required max_y_needed
-      #   max_peak_y <- if (nrow(plot_data$highlight_peaks) > 0) {
-      #     max(plot_data$highlight_peaks$intensity, na.rm = TRUE)
-      #   } else {
-      #     0
-      #   }
-
-      #   max_shape_y <- if (length(all_shapes) > 0) {
-      #     max(
-      #       sapply(all_shapes, function(s) max(c(s$y0, s$y1), na.rm = TRUE)),
-      #       na.rm = TRUE
-      #     )
-      #   } else {
-      #     0
-      #   }
-
-      #   max_anno_y <- if (length(all_annotations) > 0) {
-      #     max(
-      #       sapply(all_annotations, function(a) if (!is.null(a$y)) a$y else 0),
-      #       na.rm = TRUE
-      #     )
-      #   } else {
-      #     0
-      #   }
-
-      #   overall_max_y <- max(
-      #     c(100, max_peak_y, max_shape_y, max_anno_y),
-      #     na.rm = TRUE
-      #   )
-
-      #   # Add buffer depending on whether annotations are present
-      #   if (show_peak_labels && nrow(plot_data$highlight_peaks) > 0) {
-      #     # When peak labels are active → need more headroom for text above the highest peak
-      #     text_buffer <- 5 # increased to prevent clipping of highest label
-      #   } else if (show_mass_diff && length(unique_masses) == 2) {
-      #     # When only mass diff is active → smaller buffer is usually enough
-      #     text_buffer <- 3
-      #   } else {
-      #     # No annotations → minimal or no extra buffer needed
-      #     text_buffer <- 2
-      #   }
-
-      #   max_y_needed <- overall_max_y + text_buffer
-
-      #   yaxis_list$range <- c(0, max_y_needed)
-      # } else {
-      #   all_shapes <- NULL
-      #   all_annotations <- NULL
-      # }
-
-      # plot <- plotly::layout(
-      #   plot,
-      #   hovermode = "closest",
-      #   paper_bgcolor = bg_color,
-      #   plot_bgcolor = plot_bg_color,
-      #   font = list(size = 14, color = font_color),
-      #   yaxis = yaxis_list,
-      #   xaxis = xaxis_list,
-      #   shapes = all_shapes,
-      #   annotations = all_annotations,
-      #   margin = list(t = 0, r = 0, b = 0, l = 50)
-      # ) |>
-      #   plotly::config(
-      #     displayModeBar = "hover",
-      #     scrollZoom = FALSE,
-      #     modeBarButtons = list(list(
-      #       "zoom2d",
-      #       "toImage",
-      #       "autoScale2d",
-      #       "resetScale2d",
-      #       "zoomIn2d",
-      #       "zoomOut2d"
-      #     ))
-      #   )
       # Annotation logic for mass difference + per-peak labels
       shapes <- NULL
       annotations <- NULL
@@ -1551,7 +1349,7 @@ spectrum_plot <- function(
 
       max_y_needed <- overall_max_y + text_buffer
 
-      yaxis_list$range <- c(0, max_y_needed)
+      yaxis_list$range <- c(0, max(max_y_needed, 105))
     } else {
       all_shapes <- NULL
       all_annotations <- NULL
@@ -1826,7 +1624,9 @@ generate_decon_rslt <- function(
 # WAL is only deleted when already empty; SHM is always safe to remove.
 #' @export
 cleanup_wal <- function(db_path) {
-  if (!file.exists(db_path)) return(invisible(NULL))
+  if (!file.exists(db_path)) {
+    return(invisible(NULL))
+  }
   tryCatch(
     {
       con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
@@ -1839,9 +1639,11 @@ cleanup_wal <- function(db_path) {
   )
   wal <- paste0(db_path, "-wal")
   shm <- paste0(db_path, "-shm")
-  if (file.exists(wal) && file.size(wal) == 0)
+  if (file.exists(wal) && file.size(wal) == 0) {
     tryCatch(file.remove(wal), error = function(e) NULL)
-  if (file.exists(shm))
+  }
+  if (file.exists(shm)) {
     tryCatch(file.remove(shm), error = function(e) NULL)
+  }
   invisible(NULL)
 }

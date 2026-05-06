@@ -1951,10 +1951,9 @@ server <- function(
                   hits_summary$`Sample ID` == selected
                 ]
 
-                # Filter out NAs
-                measured_protein_mw <- measured_protein_mw[
-                  !is.na(measured_protein_mw)
-                ]
+                # Convert to numeric (column may be character after display formatting)
+                measured_protein_mw <- suppressWarnings(as.numeric(measured_protein_mw))
+                measured_protein_mw <- measured_protein_mw[!is.na(measured_protein_mw)]
                 if (length(measured_protein_mw)) {
                   signal_average <- paste(
                     format(
@@ -2774,10 +2773,9 @@ server <- function(
                 measured_protein_mw <- hits_summary$`Meas. Prot. [Da]`[
                   hits_summary$Protein == selected
                 ]
-                # Filter out NAs
-                measured_protein_mw <- measured_protein_mw[
-                  !is.na(measured_protein_mw)
-                ]
+                # Convert to numeric (column may be character after display formatting)
+                measured_protein_mw <- suppressWarnings(as.numeric(measured_protein_mw))
+                measured_protein_mw <- measured_protein_mw[!is.na(measured_protein_mw)]
                 if (length(measured_protein_mw)) {
                   signal_average <- paste(
                     format(
