@@ -693,6 +693,78 @@ ki_kinact_results_ui <- function(
   )
 }
 
+# Summary interface
+#' @export
+summary_results_ui <- function(ns) {
+  bslib::navset_card_tab(
+    id = ns("summary_tabs"),
+    bslib::nav_panel(
+      title = "Protocol",
+      shiny::div(
+        class = "conversion-result-wrapper",
+        shiny::div(
+          class = "console-container",
+          style = "height: calc(100% - 46px); overflow-y: auto;",
+          shiny::uiOutput(ns("summary_protocol"))
+        ),
+        shiny::div(
+          class = "conversion-footer",
+          style = "padding: 6px 0 0 0;",
+          shiny::div(
+            class = "conversion-save-button",
+            shiny::div(
+              class = "modal-button",
+              shiny::actionButton(
+                ns("copy_protocol_log"),
+                "Clip",
+                icon = shiny::icon("clipboard")
+              )
+            ),
+            shiny::div(
+              class = "modal-button",
+              shiny::actionButton(
+                ns("save_protocol_log"),
+                "Save",
+                icon = shiny::icon("download")
+              )
+            )
+          )
+        )
+      )
+    ),
+    bslib::nav_panel(
+      title = "QA Overview",
+      shiny::div(
+        class = "conversion-result-wrapper",
+        shiny::div(
+          class = "na-placeholder",
+          "Coming soon."
+        )
+      )
+    ),
+    bslib::nav_panel(
+      title = "Statistics",
+      shiny::div(
+        class = "conversion-result-wrapper",
+        shiny::div(
+          class = "na-placeholder",
+          "Coming soon."
+        )
+      )
+    ),
+    bslib::nav_panel(
+      title = "Export",
+      shiny::div(
+        class = "conversion-result-wrapper",
+        shiny::div(
+          class = "na-placeholder",
+          "Coming soon."
+        )
+      )
+    )
+  )
+}
+
 # Binding results interface
 #' @export
 binding_results_ui <- function(ns, hits_summary) {

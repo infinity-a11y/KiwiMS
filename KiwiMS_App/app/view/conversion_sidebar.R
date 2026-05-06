@@ -61,6 +61,11 @@ server <- function(
     result_list <- shiny::reactiveVal(NULL)
     complexes <- shiny::reactiveVal(NULL)
     analysis_status <- shiny::reactiveVal("pending")
+    console_log_snapshot <- shiny::reactiveVal(NULL)
+
+    shiny::observeEvent(input$console_log_snapshot, {
+      console_log_snapshot(input$console_log_snapshot)
+    })
 
     # Render sidebar UI ----
     output$conversion_sidebar_ui <- shiny::renderUI({
@@ -231,22 +236,22 @@ server <- function(
                     )
                   )
                 )
-              ),
-
-              bslib::tooltip(
-                shiny::div(
-                  shinyjs::disabled(
-                    shiny::actionButton(
-                      ns("report_conversion_results"),
-                      "Report",
-                      icon = shiny::icon("square-poll-vertical"),
-                      width = "100%"
-                    )
-                  )
-                ),
-                "Report generation is temporarily unavailable",
-                placement = "top"
               )
+              # ,
+              # bslib::tooltip(
+              #   shiny::div(
+              #     shinyjs::disabled(
+              #       shiny::actionButton(
+              #         ns("report_conversion_results"),
+              #         "Report",
+              #         icon = shiny::icon("square-poll-vertical"),
+              #         width = "100%"
+              #       )
+              #     )
+              #   ),
+              #   "Report generation is temporarily unavailable",
+              #   placement = "top"
+              # )
             )
           )
         )
@@ -698,7 +703,10 @@ server <- function(
             shinyjs::delay(
               500,
               shinyjs::removeClass(
-                selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(1)",
+                selector = paste(
+                  "#app-conversion_sidebar-analysis_select .radio:nth-child(1),",
+                  "#app-conversion_sidebar-analysis_select .radio:nth-child(2)"
+                ),
                 class = "custom-disable"
               )
             )
@@ -706,17 +714,27 @@ server <- function(
               shinyjs::delay(
                 500,
                 shinyjs::removeClass(
-                  selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(2)",
+                  selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(3)",
                   class = "custom-disable"
                 )
               )
             }
+
+            shinyjs::runjs(paste0(
+              "var el = document.getElementById('",
+              ns("console_log"),
+              "');",
+              "if (el) Shiny.setInputValue('",
+              ns("console_log_snapshot"),
+              "', el.innerHTML);"
+            ))
 
             analysis_status("done")
           }
         } else {
           write_log("Conversion reset")
           result_list(NULL)
+          console_log_snapshot(NULL)
           analysis_status("pending")
 
           # Enable ki/kinact analysis checkbox
@@ -728,12 +746,15 @@ server <- function(
 
           # Disable result interface radio buttons
           shinyjs::addClass(
-            selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(1)",
+            selector = paste(
+              "#app-conversion_sidebar-analysis_select .radio:nth-child(1),",
+              "#app-conversion_sidebar-analysis_select .radio:nth-child(2)"
+            ),
             class = "custom-disable"
           )
           if (input$run_ki_kinact) {
             shinyjs::addClass(
-              selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(2)",
+              selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(3)",
               class = "custom-disable"
             )
           }
@@ -749,8 +770,8 @@ server <- function(
             asis = TRUE
           )
 
-          # Reset analysis interface selection to Binding Analysis
-          shiny::updateRadioButtons(session, "analysis_select", selected = 1)
+          # Reset analysis interface selection to Relative Binding
+          shiny::updateRadioButtons(session, "analysis_select", selected = 2)
 
           # Reenable conversion parameter inputs
           shinyjs::enable("peak_tolerance")
@@ -774,6 +795,7 @@ server <- function(
           inputId = ns("analysis_select"),
           label = NULL,
           choiceNames = list(
+            "Summary",
             "Relative Binding",
             shiny::span(
               "K",
@@ -782,7 +804,7 @@ server <- function(
               htmltools::tags$sub("inact")
             )
           ),
-          choiceValues = list(1, 2)
+          choiceValues = list(1, 2, 3)
         ),
         shiny::tags$script(paste0(
           "
@@ -791,7 +813,9 @@ server <- function(
           ns("analysis_select"),
           " .radio:nth-child(1), #",
           ns("analysis_select"),
-          " .radio:nth-child(2)';
+          " .radio:nth-child(2), #",
+          ns("analysis_select"),
+          " .radio:nth-child(3)';
         $(selector).addClass('custom-disable');
       })();
     "
@@ -858,9 +882,7 @@ server <- function(
         #   '= "block";'
         # ))
 
-        if (input$analysis_select == 1) {
-          shiny::updateRadioButtons(session, "analysis_select", selected = 1)
-
+        if (input$analysis_select %in% c(1, 2)) {
           shinyjs::addClass(
             selector = ".complex-picker .form-group .bootstrap-select",
             class = "custom-disable"
@@ -1073,7 +1095,8 @@ server <- function(
         peak_tolerance = shiny::reactive(input$peak_tolerance),
         run_ki_kinact = shiny::reactive(input$run_ki_kinact),
         analysis_select = shiny::reactive(input$analysis_select),
-        open_config_clicked = shiny::reactive(input$open_config_btn)
+        open_config_clicked = shiny::reactive(input$open_config_btn),
+        console_log_snapshot = shiny::reactive(console_log_snapshot())
       )
     )
   })

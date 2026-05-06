@@ -18,6 +18,7 @@ box::use(
       binding_results_ui,
       ki_kinact_results_ui,
       ki_kinact_concentrations_tabs,
+      summary_results_ui,
     ],
   app /
     logic /
@@ -1777,7 +1778,7 @@ server <- function(
           conversion_vars$hits_summary <- hits_summary
 
           ### Render result interfaces ----
-          if (analysis_select == 1) {
+          if (analysis_select == 2) {
             #### Render relative binding interface ----
             output$conversion_ui <- shiny::renderUI({
               binding_results_ui(ns, hits_summary)
@@ -3303,7 +3304,7 @@ server <- function(
 
             # Switch to Hits tab
             set_selected_tab("Hits", session)
-          } else if (analysis_select == 2) {
+          } else if (analysis_select == 3) {
             #### Render Ki/kinact interface ----
             # Assign formatted hits to reactive variable
             conversion_vars$formatted_hits <- hits_summary
@@ -3991,6 +3992,23 @@ server <- function(
 
             # Select binding results tab
             set_selected_tab("Hits", session)
+          } else if (analysis_select == 1) {
+            output$conversion_ui <- shiny::renderUI({
+              summary_results_ui(ns)
+            })
+
+            output$summary_protocol <- shiny::renderUI({
+              snapshot <- conversion_sidebar_vars$console_log_snapshot()
+              shiny::req(!is.null(snapshot))
+              shiny::tags$pre(
+                id = ns("protocol_log"),
+                class = "console-log-readonly",
+                style = "margin: 0; padding: 10px; font-size: 12px;",
+                shiny::HTML(snapshot)
+              )
+            })
+
+            set_selected_tab("Protocol", session)
           }
         }
 
@@ -4001,6 +4019,37 @@ server <- function(
         ))
       },
       suspended = TRUE
+    )
+
+    ## Protocol log Copy/Save handlers ----
+    shiny::observeEvent(input$copy_protocol_log, {
+      shinyjs::runjs(sprintf(
+        "var el = document.getElementById('%s');
+         if (el) navigator.clipboard.writeText(el.innerText);",
+        ns("protocol_log")
+      ))
+    })
+
+    safe_observe(
+      event_expr = input$save_protocol_log,
+      observer_name = "Protocol Log Saver",
+      handler_fn = function() {
+        fname <- paste0(get_session_prefix(), "_Protocol.txt")
+        shinyjs::runjs(sprintf(
+          "var el = document.getElementById('%s');
+           if (el) {
+             var a = document.createElement('a');
+             a.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(el.innerText));
+             a.setAttribute('download', '%s');
+             a.style.display = 'none';
+             document.body.appendChild(a);
+             a.click();
+             document.body.removeChild(a);
+           }",
+          ns("protocol_log"),
+          fname
+        ))
+      }
     )
 
     ## Plot download handlers ----
@@ -4412,7 +4461,7 @@ server <- function(
         shiny::req(
           conversion_vars$hits_summary,
           input$color_variable,
-          conversion_sidebar_vars$analysis_select() == 1
+          conversion_sidebar_vars$analysis_select() == 2
         )
 
         color_scale <- input$color_scale
