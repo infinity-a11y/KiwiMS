@@ -103,6 +103,7 @@ get_session_start <- function() {
 # Format log
 #' @export
 format_log <- function(log_text) {
+  log_text <- gsub("\033\\[[0-9;]*m", "", log_text)
   lines <- strsplit(log_text, "\n")[[1]]
   formatted_lines <- c()
 

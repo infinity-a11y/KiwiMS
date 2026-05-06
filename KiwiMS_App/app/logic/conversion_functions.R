@@ -1373,8 +1373,8 @@ check_hits <- function(
       delta_cmp = NA,
       multiple = NA,
       preferred = NA,
-      unmatched = NA,
-      correct = NA
+      unmatched = 100,
+      correct = 0
     )
 
     return(hits_df)
@@ -1404,9 +1404,14 @@ check_hits <- function(
       delta_cmp = NA,
       multiple = NA,
       preferred = NA,
-      unmatched = 100,
-      correct = 0
+      unmatched = NA,
+      correct = NA
     )
+
+    hits_df$unmatched <- unmatched <- sum(!peaks$mass %in% hits_df$peak) /
+      nrow(peaks) *
+      100
+    hits_df$correct <- 100 - unmatched
 
     return(hits_df)
   }
@@ -1529,9 +1534,9 @@ check_hits <- function(
   hits_df$unmatched <- unmatched <- sum(!peaks$mass %in% hits_df$peak) /
     nrow(peaks) *
     100
-  hits_df$correct <- 100 - unmatched
+  hits_df$correct <- correct <- 100 - unmatched
 
-  log_hits_count(nrow(hits_df))
+  log_result(nrow(hits_df), unmatched, correct)
   return(hits_df)
 }
 
@@ -1596,7 +1601,7 @@ conversion <- function(hits) {
       return(NULL)
     }
 
-    # Log computed relative binding values (must be before normalization)
+    # Log computed relative binding values
     log_intensities(
       I_total,
       unique(hits$prot_intensity),
@@ -1657,7 +1662,7 @@ log_status <- function(n_peaks, mass = NULL) {
 log_duplicated_hits <- function(hits_add) {
   message(sprintf(
     "  ├─ %s Hit duplicates at %s Da",
-    warning_sym,
+    .col_warn(warning_sym),
     hits_add[1, "peak"]
   ))
   for (i in 1:nrow(hits_add)) {
@@ -1670,9 +1675,36 @@ log_duplicated_hits <- function(hits_add) {
   }
 }
 
-# The hit count
-log_hits_count <- function(n_hits) {
+.col_warn <- function(x) {
+  if (!is.null(shiny::getDefaultReactiveDomain())) {
+    paste0('<span style="color: darkorange; font-weight: bold;">', x, "</span>")
+  } else {
+    paste0("\033[33m", x, "\033[39m")
+  }
+}
+.col_err <- function(x) {
+  if (!is.null(shiny::getDefaultReactiveDomain())) {
+    paste0('<span style="color: #e53935; font-weight: bold;">', x, "</span>")
+  } else {
+    paste0("\033[31m", x, "\033[39m")
+  }
+}
+
+# Log conversion result per sample
+log_result <- function(n_hits, unmatched, correct) {
   message(sprintf("  ├─ Result: %s hits detected", n_hits))
+  prefix_unmatched <- if (!is.na(unmatched) && unmatched > 50) {
+    paste0(.col_warn(warning_sym), " ")
+  } else {
+    ""
+  }
+  prefix_correct <- if (!is.na(correct) && correct < 50) {
+    paste0(.col_warn(warning_sym), " ")
+  } else {
+    ""
+  }
+  message(sprintf("  │  ├─ %sUnmatched: %.2f%%", prefix_unmatched, unmatched))
+  message(sprintf("  │  ├─ %sCorrect: %.2f%%", prefix_correct, correct))
 }
 
 log_intensities <- function(total, unbound, binding) {
@@ -1689,7 +1721,7 @@ log_intensities <- function(total, unbound, binding) {
 
 # Alert: No Peaks
 log_alert <- function(msg = "No protein peak detected") {
-  message(sprintf("  ├─ ⚠️ %s.  ", msg))
+  message(sprintf("  ├─ %s %s.  ", .col_err(warning_sym), msg))
 }
 
 # Footer: Closing a successful sample
@@ -1701,7 +1733,7 @@ log_done <- function() {
 log_err_no_df <- function() {
   msg <- sprintf(
     "  │  └─ %s ALERT: 'hits' argument must be a data frame with at least one row. Skipping.\n",
-    warning_sym
+    .col_err(warning_sym)
   )
   message(msg)
 }
@@ -1710,7 +1742,7 @@ log_err_no_df <- function() {
 log_err_cols <- function(current_cols) {
   msg <- sprintf(
     "  │  └─ %s ALERT: 'hits' data frame has %s columns, but 16 are required.\n",
-    warning_sym,
+    .col_err(warning_sym),
     current_cols
   )
   message(msg)
@@ -1720,23 +1752,41 @@ log_err_cols <- function(current_cols) {
 log_err_binding <- function() {
   msg <- sprintf(
     "  │  └─ %s ALERT: Total relative binding is not 100%%. Check data integrity.\n",
-    warning_sym
+    .col_err(warning_sym)
   )
   message(msg)
 }
 
 # Log hits summary
 log_hits_summary <- function(hits_summarized) {
-  message(paste(
-    "SUMMARIZING HITS\n  │\n",
-    sprintf(
-      " ├─ %s sample(s) screened\n",
-      length(unique(hits_summarized$Sample))
-    ),
-    sprintf(
-      " └─ %s hit(s) detected in total\n",
-      sum(!is.na(hits_summarized$Compound))
-    )
+  unmatched_vals <- as.numeric(hits_summarized[["% Unmatched"]])
+  correct_vals <- as.numeric(hits_summarized[["% Correct"]])
+  mean_unmatched <- mean(unmatched_vals, na.rm = TRUE)
+  sd_unmatched <- stats::sd(unmatched_vals, na.rm = TRUE)
+  mean_correct <- mean(correct_vals, na.rm = TRUE)
+  sd_correct <- stats::sd(correct_vals, na.rm = TRUE)
+
+  prefix_unmatched <- if (!is.na(mean_unmatched) && mean_unmatched > 50) {
+    paste0(.col_warn(warning_sym), " ")
+  } else {
+    ""
+  }
+  prefix_correct <- if (!is.na(mean_correct) && mean_correct < 50) {
+    paste0(.col_warn(warning_sym), " ")
+  } else {
+    ""
+  }
+
+  message(sprintf(
+    "SUMMARIZING HITS\n  │\n  ├─ %s sample(s) screened\n  ├─ %s hit(s) detected in total\n  ├─ %sUnmatched: %.2f%% (SD: %.2f%%)\n  └─ %sCorrect:   %.2f%% (SD: %.2f%%)\n",
+    length(unique(hits_summarized$Sample)),
+    sum(!is.na(hits_summarized$Compound)),
+    prefix_unmatched,
+    mean_unmatched,
+    sd_unmatched,
+    prefix_correct,
+    mean_correct,
+    sd_correct
   ))
 }
 
@@ -1768,7 +1818,8 @@ log_filtered_samples <- function(diff) {
   if (diff > 0) {
     message(paste(
       sprintf(
-        "  │  ├─ %s sample(s) ignored due to missing hits",
+        "  │  ├─ %s %s sample(s) ignored due to missing hits",
+        .col_warn(warning_sym),
         diff
       )
     ))
@@ -1786,7 +1837,8 @@ log_filtered_concentrations <- function(initial_tbl, filtered_tbl, conc_time) {
   if (length(not_present_conc)) {
     message(paste(
       sprintf(
-        "  │  ├─ Concentrations %s are omitted after filtering\n",
+        "  │  ├─ %s Concentrations %s are omitted after filtering\n",
+        .col_warn(warning_sym),
         paste(not_present_conc, collapse = "; ")
       ),
       " │  │"
@@ -1830,7 +1882,7 @@ log_timepoints <- function(data, unit, last) {
           "\n  │     └─ %s ≥ 3 time points required for nonlinear fit",
           "\n  │  │  └─ %s ≥ 3 time points required for nonlinear fit"
         ),
-        warning_sym
+        .col_warn(warning_sym)
       )
     }
   ))
@@ -1904,7 +1956,8 @@ add_hits <- function(
   peak_tolerance,
   max_multiples,
   session,
-  ns
+  ns,
+  ki_kinact = FALSE
 ) {
   samples <- names(results$deconvolution)
   protein_mw <- protein_table$`Mass 1`
@@ -1922,11 +1975,13 @@ add_hits <- function(
   protein_mw <<- protein_mw
   compound_mw <<- compound_mw
 
+  hits_max <- if (ki_kinact) 80 else 100
+
   for (i in seq_along(samples)) {
     shinyWidgets::updateProgressBar(
       session = session,
       id = ns("conversion_progress"),
-      value = ifelse(i == 1, 0, (i - 1) / length(samples) * 100),
+      value = ifelse(i == 1, 0, (i - 1) / length(samples) * hits_max),
       title = paste(
         "[",
         i,
@@ -1971,11 +2026,12 @@ add_hits <- function(
   shinyWidgets::updateProgressBar(
     session = session,
     id = ns("conversion_progress"),
-    value = 100,
+    value = hits_max,
     title = paste0(
-      "Search for hits in ",
+      "Hit screening completed for ",
       length(samples),
-      " samples completed."
+      " sample(s).",
+      if (ki_kinact) " Computing binding kinetics..." else ""
     )
   )
 
@@ -2059,10 +2115,10 @@ check_filter_hits <- function(result_list) {
   if (
     is.null(result_list$hits_summary) || nrow(result_list$hits_summary) == 0
   ) {
-    # Log no hits detected
-    message(
-      "  └─ No hits detected in any sample. Skipping binding kinetics analysis."
-    )
+    message(sprintf(
+      "  └─ %s No hits detected in any sample. Skipping binding kinetics analysis.",
+      .col_err(warning_sym)
+    ))
     return(NULL)
   }
 
@@ -4740,14 +4796,13 @@ transform_hits <- function(hits_summary) {
           format(.x, nsmall = 1, trim = TRUE)
         )
       ),
-      # Global NA cleanup (convert to character, exclude numeric protein mass cols)
+      # Global NA cleanup (convert to character, exclude compound and binding cols)
       dplyr::across(
         !dplyr::any_of(c(
           "Compound",
           "% Binding",
           "Total % Binding",
-          "Mw Protein [Da]",
-          "Measured Mw Protein [Da]"
+          "Mw Protein [Da]"
         )),
         ~ tidyr::replace_na(as.character(.x), "N/A")
       )

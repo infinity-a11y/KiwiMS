@@ -507,7 +507,8 @@ server <- function(
                 peak_tolerance = input$peak_tolerance,
                 max_multiples = input$max_multiples,
                 session = session,
-                ns = ns
+                ns = ns,
+                ki_kinact = isTRUE(input$run_ki_kinact)
               )
 
               result_with_hits$hits_summary <- summarize_hits(
@@ -570,6 +571,12 @@ server <- function(
                   units1 <<- units
 
                   # Add binding/kobs results to result list
+                  shinyWidgets::updateProgressBar(
+                    session = session,
+                    id = ns("conversion_progress"),
+                    value = 85,
+                    title = "Computing kobs / binding curves..."
+                  )
                   result_with_hits$binding_kobs_result <- add_kobs_binding_result(
                     hits_summary_filtered,
                     conc_time = conc_time,
@@ -577,9 +584,21 @@ server <- function(
                   )
 
                   # Add Ki/kinact results to result list
+                  shinyWidgets::updateProgressBar(
+                    session = session,
+                    id = ns("conversion_progress"),
+                    value = 93,
+                    title = "Computing Ki / kinact..."
+                  )
                   result_with_hits$ki_kinact_result <- add_ki_kinact_result(
                     result_with_hits,
                     units = units
+                  )
+                  shinyWidgets::updateProgressBar(
+                    session = session,
+                    id = ns("conversion_progress"),
+                    value = 100,
+                    title = "Binding kinetics analysis complete."
                   )
                 }
               }

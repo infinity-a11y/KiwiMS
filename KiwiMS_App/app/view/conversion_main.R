@@ -1206,6 +1206,7 @@ server <- function(
           input$tabs == "Samples" && declaration_vars$sample_table_status
         ) {
           # Get clean non-NA sample table
+          shiny::req(sample_table_input())
           sample_table <- clean_sample_table(
             sample_table_input(),
             units = list(conc = input$conc_unit, time = input$time_unit)
