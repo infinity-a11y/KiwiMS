@@ -1,4 +1,4 @@
-﻿# app/logic/deconvolution_functions.R
+# app/logic/deconvolution_functions.R
 
 box::use(
   data.table[fread, setnames, data.table, as.data.table],

@@ -1643,7 +1643,7 @@ conversion <- function(hits) {
 # Header: The Sample Name
 log_start <- function(sample_name) {
   message(sprintf("Hit Screening: %s\n  │", sample_name))
-  Sys.sleep(0.05)
+  # Sys.sleep(0.05)
 }
 
 # Status: Peak Info
