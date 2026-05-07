@@ -1094,6 +1094,7 @@ server <- function(
         complex = shiny::reactive(input$complex),
         run_analysis = shiny::reactive(input$run_binding_analysis),
         peak_tolerance = shiny::reactive(input$peak_tolerance),
+        max_multiples = shiny::reactive(input$max_multiples),
         run_ki_kinact = shiny::reactive(input$run_ki_kinact),
         analysis_select = shiny::reactive(input$analysis_select),
         open_config_clicked = shiny::reactive(input$open_config_btn),

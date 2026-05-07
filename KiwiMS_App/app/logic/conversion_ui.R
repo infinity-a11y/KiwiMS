@@ -892,24 +892,90 @@ summary_results_ui <- function(ns) {
       shiny::div(
         class = "protocol-tab",
         shiny::div(
-          class = "conversion-result-wrapper",
-          shiny::div(
-            class = "console-container",
-            style = "height: calc(100% - 46px); overflow-y: auto;",
-            shiny::uiOutput(ns("summary_protocol"))
-          ),
-          shiny::div(
-            class = "conversion-footer",
-            style = "padding: 6px 0 0 0;",
-            shiny::actionButton(
-              ns("copy_protocol_log"),
-              "Clip",
-              icon = shiny::icon("clipboard")
+          class = "card-custom protocol-log-card",
+          bslib::card(
+            bslib::card_header(
+              class = "bg-dark help-header d-flex justify-content-between",
+              "Protocol Log",
+              shiny::div(
+                class = "box-header-settings-help",
+                bslib::tooltip(
+                  shiny::div(
+                    bslib::popover(
+                      shiny::icon("arrow-up-from-bracket"),
+                      shiny::div(
+                        class = "plot-dl-popover",
+                        shiny::div(class = "plot-dl-label", "Export"),
+                        shiny::div(
+                          class = "plot-dl-buttons",
+                          shiny::actionButton(
+                            ns("copy_protocol_log"),
+                            "Clip",
+                            icon = shiny::icon("clipboard"),
+                            class = "btn-sm btn-default"
+                          ),
+                          shiny::actionButton(
+                            ns("save_protocol_log"),
+                            "Save",
+                            icon = shiny::icon("download"),
+                            class = "btn-sm btn-default"
+                          )
+                        )
+                      ),
+                      title = "Export Log"
+                    )
+                  ),
+                  "Export",
+                  placement = "top"
+                )
+              )
             ),
-            shiny::actionButton(
-              ns("save_protocol_log"),
-              "Save",
-              icon = shiny::icon("download")
+            bslib::card_body(
+              shiny::div(
+                class = "protocol-log-wrapper",
+                shiny::div(
+                  id = ns("protocol_log_body"),
+                  class = "protocol-log-body",
+                  shiny::uiOutput(ns("summary_protocol"))
+                ),
+                shiny::actionButton(
+                  ns("protocol_scroll_top"),
+                  NULL,
+                  icon = shiny::icon("arrow-up"),
+                  title = "Jump to top"
+                ),
+                shiny::actionButton(
+                  ns("protocol_scroll_bot"),
+                  NULL,
+                  icon = shiny::icon("arrow-down"),
+                  title = "Jump to bottom"
+                ),
+                shiny::tags$script(shiny::HTML(sprintf("
+                  (function() {
+                    var cId = '%s', tId = '%s', bId = '%s';
+                    function setup() {
+                      var c = document.getElementById(cId);
+                      var t = document.getElementById(tId);
+                      var b = document.getElementById(bId);
+                      if (!c || !t || !b) { setTimeout(setup, 100); return; }
+                      function update() {
+                        t.disabled = c.scrollTop <= 10;
+                        b.disabled = (c.scrollHeight - c.scrollTop - c.clientHeight) <= 10;
+                      }
+                      c.addEventListener('scroll', update);
+                      new MutationObserver(update).observe(c, { childList: true, subtree: true });
+                      t.addEventListener('click', function() {
+                        c.scrollTo({ top: 0, behavior: 'smooth' });
+                      });
+                      b.addEventListener('click', function() {
+                        c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
+                      });
+                      update();
+                    }
+                    setup();
+                  })();
+                ", ns("protocol_log_body"), ns("protocol_scroll_top"), ns("protocol_scroll_bot"))))
+              )
             )
           )
         ),
@@ -918,61 +984,171 @@ summary_results_ui <- function(ns) {
           shiny::div(
             class = "card-custom",
             bslib::card(
-              bslib::card_header(class = "bg-dark", "Screened Samples"),
-              bslib::card_body(
-                class = "protocol-stat-body",
-                shiny::uiOutput(ns("pstat_n_samples"))
-              )
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Screened Samples",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  bslib::tooltip(
+                    shiny::div(class = "tooltip-bttn", shiny::actionButton(ns("pstat_n_samples_help"), NULL, icon = shiny::icon("circle-question"))),
+                    "Help", placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(class = "protocol-stat-body", shiny::uiOutput(ns("pstat_n_samples")))
             )
           ),
           shiny::div(
             class = "card-custom",
             bslib::card(
-              bslib::card_header(class = "bg-dark", "Hits Detected"),
-              bslib::card_body(
-                class = "protocol-stat-body",
-                shiny::uiOutput(ns("pstat_n_hits"))
-              )
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Hits Detected",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  bslib::tooltip(
+                    shiny::div(class = "tooltip-bttn", shiny::actionButton(ns("pstat_n_hits_help"), NULL, icon = shiny::icon("circle-question"))),
+                    "Help", placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(class = "protocol-stat-body", shiny::uiOutput(ns("pstat_n_hits")))
             )
           ),
           shiny::div(
             class = "card-custom",
             bslib::card(
-              bslib::card_header(class = "bg-dark", "Correct [%]"),
-              bslib::card_body(
-                class = "protocol-stat-body",
-                shiny::uiOutput(ns("pstat_correct"))
-              )
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Correct [%]",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  bslib::tooltip(
+                    shiny::div(class = "tooltip-bttn", shiny::actionButton(ns("pstat_correct_help"), NULL, icon = shiny::icon("circle-question"))),
+                    "Help", placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(class = "protocol-stat-body", shiny::uiOutput(ns("pstat_correct")))
             )
           ),
           shiny::div(
             class = "card-custom",
             bslib::card(
-              bslib::card_header(class = "bg-dark", "Unmatched [%]"),
-              bslib::card_body(
-                class = "protocol-stat-body",
-                shiny::uiOutput(ns("pstat_unmatched"))
-              )
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Unmatched [%]",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  bslib::tooltip(
+                    shiny::div(class = "tooltip-bttn", shiny::actionButton(ns("pstat_unmatched_help"), NULL, icon = shiny::icon("circle-question"))),
+                    "Help", placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(class = "protocol-stat-body", shiny::uiOutput(ns("pstat_unmatched")))
             )
           ),
           shiny::div(
             class = "card-custom",
             bslib::card(
-              bslib::card_header(class = "bg-dark", "No Protein Peak"),
-              bslib::card_body(
-                class = "protocol-stat-body",
-                shiny::uiOutput(ns("pstat_no_protein"))
-              )
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "No Protein Peak",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  bslib::tooltip(
+                    shiny::div(class = "tooltip-bttn", shiny::actionButton(ns("no_protein_help_bttn"), NULL, icon = shiny::icon("circle-question"))),
+                    "Help", placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(class = "protocol-stat-body", shiny::uiOutput(ns("pstat_no_protein")))
             )
           ),
           shiny::div(
             class = "card-custom",
             bslib::card(
-              bslib::card_header(class = "bg-dark", "Warnings"),
-              bslib::card_body(
-                class = "protocol-stat-body",
-                shiny::uiOutput(ns("pstat_warnings"))
-              )
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Warnings",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  bslib::tooltip(
+                    shiny::div(class = "tooltip-bttn", shiny::actionButton(ns("pstat_warnings_help"), NULL, icon = shiny::icon("circle-question"))),
+                    "Help", placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(class = "protocol-stat-body", shiny::uiOutput(ns("pstat_warnings")))
+            )
+          ),
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Peak Tolerance",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  bslib::tooltip(
+                    shiny::div(class = "tooltip-bttn", shiny::actionButton(ns("pstat_peak_tol_help"), NULL, icon = shiny::icon("circle-question"))),
+                    "Help", placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(class = "protocol-stat-body", shiny::uiOutput(ns("pstat_peak_tol")))
+            )
+          ),
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Max. Stoichiometry",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  bslib::tooltip(
+                    shiny::div(class = "tooltip-bttn", shiny::actionButton(ns("pstat_max_stoich_help"), NULL, icon = shiny::icon("circle-question"))),
+                    "Help", placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(class = "protocol-stat-body", shiny::uiOutput(ns("pstat_max_stoich")))
+            )
+          ),
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Proteins Detected",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  bslib::tooltip(
+                    shiny::div(class = "tooltip-bttn", shiny::actionButton(ns("pstat_n_proteins_help"), NULL, icon = shiny::icon("circle-question"))),
+                    "Help", placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(class = "protocol-stat-body", shiny::uiOutput(ns("pstat_n_proteins")))
+            )
+          ),
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Compounds Detected",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  bslib::tooltip(
+                    shiny::div(class = "tooltip-bttn", shiny::actionButton(ns("pstat_n_compounds_help"), NULL, icon = shiny::icon("circle-question"))),
+                    "Help", placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(class = "protocol-stat-body", shiny::uiOutput(ns("pstat_n_compounds")))
             )
           )
         )

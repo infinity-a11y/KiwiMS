@@ -6064,16 +6064,24 @@ stats_scatter <- function(
   p <- plotly::plot_ly()
   for (grp in groups) {
     sub_df <- dplyr::filter(df, .data[[group_by]] == grp)
+    # Collapse overlapping points: aggregate by exact (x, y) coordinate
+    agg_df <- sub_df |>
+      dplyr::group_by(`Total % Binding`, `% Correct`) |>
+      dplyr::summarise(
+        n = dplyr::n(),
+        samples = paste(Sample, collapse = "<br>"),
+        .groups = "drop"
+      )
     p <- plotly::add_markers(
       p,
-      data = sub_df,
+      data = agg_df,
       x = ~`Total % Binding`,
       y = ~`% Correct`,
       name = grp,
       showlegend = TRUE,
       marker = list(
         color = color_map[[grp]],
-        size = 8,
+        size = ~ (8 + (n - 1) * 4),
         opacity = 0.8,
         line = list(color = dot_border_color, width = 1)
       ),
@@ -6082,7 +6090,7 @@ stats_scatter <- function(
         "Tot. Binding [%]: %{x:.2f}<br>",
         "Correct [%]: %{y:.2f}<extra></extra>"
       ),
-      customdata = ~Sample
+      customdata = ~ ifelse(n > 1, paste0("n = ", n, "<br>", samples), samples)
     )
   }
 
@@ -6236,8 +6244,7 @@ stats_violin <- function(
     sub_df <- dplyr::filter(df, .data[[group_by]] == grp)
     col <- hex_to_rgba(color_map[[grp]], 1)
     col_f <- hex_to_rgba(color_map[[grp]], 0.2)
-    col_b <- hex_to_rgba(color_map[[grp]], 0.85)
-    col_m <- hex_to_rgba(color_map[[grp]], 0.7)
+    col_b <- hex_to_rgba(color_map[[grp]], 0.25)
     p <- plotly::add_trace(
       p,
       data = sub_df,
@@ -6250,9 +6257,9 @@ stats_violin <- function(
       box = list(
         visible = show_box,
         fillcolor = col_b,
-        line = list(color = font_color, width = 1.5)
+        line = list(color = font_color, width = 1)
       ),
-      meanline = list(visible = show_box, color = col),
+      meanline = list(visible = show_box, color = font_color, width = 1),
       points = if (show_points) "all" else FALSE,
       pointpos = 0,
       jitter = 0.3,

@@ -2287,7 +2287,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 .protocol-stats-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: repeat(3, 1fr);
+  grid-template-rows: repeat(5, 1fr);
   gap: 1%;
   min-height: 0;
 }
@@ -2316,6 +2316,69 @@ div[data-value="Protein Conversion"] .tab-pane {
 }
 
 .protocol-stat-warn { color: darkorange; }
+.protocol-stat-err  { color: #e53935; }
+
+.protocol-log-card .card-body {
+  padding: 0 !important;
+  overflow: hidden;
+  height: 100%;
+}
+
+.protocol-log-wrapper {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+}
+
+.protocol-log-body {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.protocol-log-body pre {
+  background: transparent;
+  color: white;
+  border: none;
+  margin: 0;
+  padding: 10px;
+  padding-right: 30px;
+  font-size: 12px;
+  line-height: 1.2;
+  word-wrap: break-word;
+  white-space: pre;
+}
+
+#app-conversion_main-protocol_scroll_top,
+#app-conversion_main-protocol_scroll_bot {
+  position: absolute;
+  right: 10px;
+  z-index: 9999;
+  opacity: 0.5;
+  border-radius: 5px;
+  background: rgb(0 0 0 / 75%);
+  color: white;
+  border: none;
+  padding: 4px 8px;
+}
+
+#app-conversion_main-protocol_scroll_top {
+  top: 10px;
+}
+
+#app-conversion_main-protocol_scroll_bot {
+  bottom: 10px;
+}
+
+#app-conversion_main-protocol_scroll_top:hover,
+#app-conversion_main-protocol_scroll_bot:hover {
+  opacity: 1;
+}
+
+#app-conversion_main-protocol_scroll_top:disabled,
+#app-conversion_main-protocol_scroll_bot:disabled {
+  opacity: 0.2;
+  cursor: default;
+}
 
 .result-conc-tab {
   height: 100%;
