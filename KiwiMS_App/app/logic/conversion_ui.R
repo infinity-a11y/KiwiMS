@@ -890,24 +890,90 @@ summary_results_ui <- function(ns) {
     bslib::nav_panel(
       title = "Protocol",
       shiny::div(
-        class = "conversion-result-wrapper",
+        class = "protocol-tab",
         shiny::div(
-          class = "console-container",
-          style = "height: calc(100% - 46px); overflow-y: auto;",
-          shiny::uiOutput(ns("summary_protocol"))
+          class = "conversion-result-wrapper",
+          shiny::div(
+            class = "console-container",
+            style = "height: calc(100% - 46px); overflow-y: auto;",
+            shiny::uiOutput(ns("summary_protocol"))
+          ),
+          shiny::div(
+            class = "conversion-footer",
+            style = "padding: 6px 0 0 0;",
+            shiny::actionButton(
+              ns("copy_protocol_log"),
+              "Clip",
+              icon = shiny::icon("clipboard")
+            ),
+            shiny::actionButton(
+              ns("save_protocol_log"),
+              "Save",
+              icon = shiny::icon("download")
+            )
+          )
         ),
         shiny::div(
-          class = "conversion-footer",
-          style = "padding: 6px 0 0 0;",
-          shiny::actionButton(
-            ns("copy_protocol_log"),
-            "Clip",
-            icon = shiny::icon("clipboard")
+          class = "protocol-stats-grid",
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              bslib::card_header(class = "bg-dark", "Screened Samples"),
+              bslib::card_body(
+                class = "protocol-stat-body",
+                shiny::uiOutput(ns("pstat_n_samples"))
+              )
+            )
           ),
-          shiny::actionButton(
-            ns("save_protocol_log"),
-            "Save",
-            icon = shiny::icon("download")
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              bslib::card_header(class = "bg-dark", "Hits Detected"),
+              bslib::card_body(
+                class = "protocol-stat-body",
+                shiny::uiOutput(ns("pstat_n_hits"))
+              )
+            )
+          ),
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              bslib::card_header(class = "bg-dark", "Correct [%]"),
+              bslib::card_body(
+                class = "protocol-stat-body",
+                shiny::uiOutput(ns("pstat_correct"))
+              )
+            )
+          ),
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              bslib::card_header(class = "bg-dark", "Unmatched [%]"),
+              bslib::card_body(
+                class = "protocol-stat-body",
+                shiny::uiOutput(ns("pstat_unmatched"))
+              )
+            )
+          ),
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              bslib::card_header(class = "bg-dark", "No Protein Peak"),
+              bslib::card_body(
+                class = "protocol-stat-body",
+                shiny::uiOutput(ns("pstat_no_protein"))
+              )
+            )
+          ),
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              bslib::card_header(class = "bg-dark", "Warnings"),
+              bslib::card_body(
+                class = "protocol-stat-body",
+                shiny::uiOutput(ns("pstat_warnings"))
+              )
+            )
           )
         )
       )

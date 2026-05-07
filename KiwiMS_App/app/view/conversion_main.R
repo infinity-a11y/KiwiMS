@@ -4045,6 +4045,82 @@ server <- function(
               stats_violin(rl$hits_summary, group_by = grp, full_scale = fs, theme = "dark", color_scale = stats_cs(), inner = if (is.null(input$stats_violin_inner)) "Box" else input$stats_violin_inner)
             })
 
+            protocol_hs <- shiny::reactive({
+              rl <- conversion_sidebar_vars$result_list()
+              shiny::req(rl, rl$hits_summary)
+              dplyr::distinct(rl$hits_summary, Sample, .keep_all = TRUE)
+            })
+
+            output$pstat_n_samples <- shiny::renderUI({
+              hs <- protocol_hs()
+              shiny::div(
+                shiny::div(class = "protocol-stat-value", nrow(hs))
+              )
+            })
+
+            output$pstat_n_hits <- shiny::renderUI({
+              rl <- conversion_sidebar_vars$result_list()
+              shiny::req(rl, rl$hits_summary)
+              n <- sum(!is.na(rl$hits_summary$Compound) & nzchar(trimws(as.character(rl$hits_summary$Compound))))
+              shiny::div(
+                shiny::div(class = "protocol-stat-value", n)
+              )
+            })
+
+            output$pstat_correct <- shiny::renderUI({
+              hs  <- protocol_hs()
+              vals <- as.numeric(hs[["% Correct"]])
+              m   <- mean(vals, na.rm = TRUE)
+              s   <- stats::sd(vals, na.rm = TRUE)
+              cls <- if (!is.na(m) && m < 50) "protocol-stat-value protocol-stat-warn" else "protocol-stat-value"
+              shiny::div(
+                shiny::div(class = cls, sprintf("%.2f%%", m)),
+                shiny::div(class = "protocol-stat-sub", sprintf("± %.2f%% SD", s))
+              )
+            })
+
+            output$pstat_unmatched <- shiny::renderUI({
+              hs  <- protocol_hs()
+              vals <- as.numeric(hs[["% Unmatched"]])
+              m   <- mean(vals, na.rm = TRUE)
+              s   <- stats::sd(vals, na.rm = TRUE)
+              cls <- if (!is.na(m) && m > 50) "protocol-stat-value protocol-stat-warn" else "protocol-stat-value"
+              shiny::div(
+                shiny::div(class = cls, sprintf("%.2f%%", m)),
+                shiny::div(class = "protocol-stat-sub", sprintf("± %.2f%% SD", s))
+              )
+            })
+
+            output$pstat_no_protein <- shiny::renderUI({
+              hs  <- protocol_hs()
+              n   <- sum(is.na(hs[["Meas. Prot. [Da]"]]) | as.numeric(hs[["Meas. Prot. [Da]"]]) == 0)
+              cls <- if (n > 0) "protocol-stat-value protocol-stat-warn" else "protocol-stat-value"
+              total <- nrow(hs)
+              shiny::div(
+                shiny::div(class = cls, n),
+                shiny::div(class = "protocol-stat-sub", sprintf("of %d sample(s)", total))
+              )
+            })
+
+            output$pstat_warnings <- shiny::renderUI({
+              hs      <- protocol_hs()
+              correct <- as.numeric(hs[["% Correct"]])
+              unmatched <- as.numeric(hs[["% Unmatched"]])
+              n_low_correct   <- sum(!is.na(correct)   & correct   < 50)
+              n_high_unmatched <- sum(!is.na(unmatched) & unmatched > 50)
+              total <- n_low_correct + n_high_unmatched
+              cls   <- if (total > 0) "protocol-stat-value protocol-stat-warn" else "protocol-stat-value"
+              shiny::div(
+                shiny::div(class = cls, total),
+                shiny::div(
+                  class = "protocol-stat-sub",
+                  sprintf("Correct < 50%%: %d", n_low_correct),
+                  shiny::br(),
+                  sprintf("Unmatched > 50%%: %d", n_high_unmatched)
+                )
+              )
+            })
+
             shiny::observe({
               rl <- conversion_sidebar_vars$result_list()
               shiny::req(rl, rl$hits_summary)
@@ -4081,8 +4157,10 @@ server <- function(
               )
               scales[["Gradient"]] <- gradient_scales
 
-              cs  <- input$stats_color_scale
-              sel <- if (!is.null(cs) && cs %in% unlist(scales)) cs else "plasma"
+              cs            <- input$stats_color_scale
+              set1_max      <- RColorBrewer::brewer.pal.info["Set1", "maxcolors"]
+              default_scale <- if (max_n <= set1_max && "Set1" %in% unlist(scales)) "Set1" else "plasma"
+              sel <- if (!is.null(cs) && cs %in% unlist(scales)) cs else default_scale
               shiny::updateSelectInput(session, "stats_color_scale", choices = scales, selected = sel)
             })
 

@@ -2271,6 +2271,52 @@ div[data-value="Protein Conversion"] .tab-pane {
   grid-template-rows: 1fr 1fr;
 }
 
+.protocol-tab {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr;
+  gap: 1%;
+  overflow: hidden;
+}
+
+.protocol-tab > * {
+  min-height: 0;
+}
+
+.protocol-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: repeat(3, 1fr);
+  gap: 1%;
+  min-height: 0;
+}
+
+.protocol-stat-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  height: 100%;
+  padding: 6px !important;
+}
+
+.protocol-stat-value {
+  font-size: 1.9rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.protocol-stat-sub {
+  font-size: 0.72rem;
+  opacity: 0.65;
+  margin-top: 3px;
+  line-height: 1.4;
+}
+
+.protocol-stat-warn { color: darkorange; }
+
 .result-conc-tab {
   height: 100%;
   display: grid;
@@ -2308,6 +2354,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 /* Card Styling in Analysis */
 .binding-analysis-tab .card-custom .card,
 .statistics-tab .card-custom .card,
+.protocol-tab .card-custom .card,
 .result-conc-tab .card-custom .card,
 .conversion-samples-wrapper .card-custom .card {
   height: 100%;
@@ -2316,6 +2363,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 
 .binding-analysis-tab .card-custom .bslib-card .card-header,
 .statistics-tab .card-custom .bslib-card .card-header,
+.protocol-tab .card-custom .bslib-card .card-header,
 .result-conc-tab .card-custom .bslib-card .card-header,
 .conversion-samples-wrapper .card-custom .bslib-card .card-header {
   border-top-left-radius: 4px;
@@ -2332,6 +2380,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 
 .binding-analysis-tab .card-custom .card .card-body,
 .statistics-tab .card-custom .card .card-body,
+.protocol-tab .card-custom .card .card-body,
 .result-conc-tab .card-custom .card .card-body,
 .conversion-samples-wrapper .card-custom .card .card-body {
   padding: 1%;
