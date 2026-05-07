@@ -1348,7 +1348,8 @@ check_hits <- function(
   peaks,
   peak_tolerance,
   max_multiples,
-  sample
+  sample,
+  well = "A1"
 ) {
   # Find protein peak
   protein_peak <- peaks$mass >= protein_mw[, -1] - peak_tolerance &
@@ -1359,7 +1360,7 @@ check_hits <- function(
     log_alert()
 
     hits_df <- data.frame(
-      well = "A1",
+      well = well,
       sample = sample,
       protein = protein_mw[, 1],
       theor_prot = as.numeric(protein_mw[, -1]),
@@ -1388,7 +1389,7 @@ check_hits <- function(
     log_alert()
 
     hits_df <- data.frame(
-      well = "A1",
+      well = well,
       sample = sample,
       protein = protein_mw[, 1],
       theor_prot = as.numeric(protein_mw[, -1]),
@@ -1509,7 +1510,7 @@ check_hits <- function(
   # If no hits detected in peaks
   if (nrow(hits_df) == 0) {
     hits_df <- data.frame(
-      well = "A1",
+      well = well,
       sample = sample,
       protein = protein_mw[, 1],
       theor_prot = as.numeric(protein_mw[, -1]),
@@ -1835,13 +1836,16 @@ log_filtered_concentrations <- function(initial_tbl, filtered_tbl, conc_time) {
   not_present_conc <- unique(initial_tbl[[conc_time[1]]])[!conc_diff]
 
   if (length(not_present_conc)) {
-    message(paste(
-      sprintf(
-        "  │  ├─ %s Concentrations %s are omitted after filtering\n",
-        .col_warn(warning_sym),
-        paste(not_present_conc, collapse = "; ")
-      ),
-      " │  │"
+    n <- length(not_present_conc)
+    connectors <- c(rep("├─", max(n - 1, 0)), "└─")
+    sub_lines <- paste0(
+      sprintf("  │  │  %s %s\n", connectors, not_present_conc),
+      collapse = ""
+    )
+    message(sprintf(
+      "  │  ├─ %s Omitted concentrations after filtering\n%s  │  │",
+      .col_warn(warning_sym),
+      sub_lines
     ))
   }
 }
@@ -1957,7 +1961,8 @@ add_hits <- function(
   max_multiples,
   session,
   ns,
-  ki_kinact = FALSE
+  ki_kinact = FALSE,
+  config = NULL
 ) {
   samples <- names(results$deconvolution)
   protein_mw <- protein_table$`Mass 1`
@@ -2002,6 +2007,22 @@ add_hits <- function(
       grep("Compound", names(sample_table))
     ]
 
+    sample_well <- "A1"
+    if (
+      !is.null(config) &&
+        "Well" %in% names(config) &&
+        "Sample" %in% names(config)
+    ) {
+      cfg_key <- gsub("\\.raw$", "", config[["Sample"]], ignore.case = TRUE)
+      idx <- match(s_key, cfg_key)
+      if (!is.na(idx)) {
+        raw_well <- as.character(config[["Well"]][idx])
+        if (!is.na(raw_well) && nzchar(trimws(raw_well))) {
+          sample_well <- sub("^.*:", "", raw_well)
+        }
+      }
+    }
+
     results$deconvolution[[samples[i]]][["hits"]] <- check_hits(
       sample_table = sample_table,
       protein_mw = protein_table[protein_table$Protein == present_protein, ],
@@ -2009,7 +2030,8 @@ add_hits <- function(
       peaks = get_peaks(result_sample = samples[i], results = results),
       peak_tolerance = peak_tolerance,
       max_multiples = max_multiples,
-      sample = samples[i]
+      sample = samples[i],
+      well = sample_well
     )
 
     # Conversion of relative intensities to Binding [%]
@@ -5769,6 +5791,339 @@ smpl_compound_distribution <- function(
             color = font_color
           )
         )
+      )
+    )
+}
+
+stats_palette <- function(n, scale) {
+  if (scale %in% unlist(c(qualitative_scales, sequential_scales))) {
+    max_colors <- RColorBrewer::brewer.pal.info[scale, "maxcolors"]
+    if (n > max_colors) {
+      viridisLite::viridis(n)
+    } else {
+      n_req <- max(n, 3)
+      raw <- RColorBrewer::brewer.pal(n_req, scale)
+      if (n == 1) raw[1] else if (n == 2) raw[c(1, 3)] else raw[seq_len(n)]
+    }
+  } else {
+    vir_func <- tryCatch(
+      getExportedValue("viridisLite", scale),
+      error = function(e) viridisLite::viridis
+    )
+    vir_func(n)
+  }
+}
+
+hex_to_rgba <- function(hex, alpha) {
+  rgb <- grDevices::col2rgb(hex)
+  sprintf("rgba(%d,%d,%d,%.2f)", rgb[1], rgb[2], rgb[3], alpha)
+}
+
+#' @export
+stats_histogram <- function(hits_summary, theme = "dark", color_scale = "plasma") {
+  df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
+
+  font_color <- if (theme == "light") "black" else "white"
+  grid_color <- if (theme == "light") "rgba(0,0,0,0.1)" else "rgba(255,255,255,0.2)"
+  zeroline_color <- if (theme == "light") "rgba(0,0,0,0.5)" else "rgba(255,255,255,0.5)"
+
+  pal   <- stats_palette(2, color_scale)
+  col1  <- hex_to_rgba(pal[1], 0.7)
+  col1b <- hex_to_rgba(pal[1], 1)
+  col2  <- hex_to_rgba(pal[2], 0.7)
+  col2b <- hex_to_rgba(pal[2], 1)
+
+  plotly::plot_ly() |>
+    plotly::add_histogram(
+      data = df,
+      x = ~`% Correct`,
+      name = "Correct [%]",
+      marker = list(color = col1, line = list(color = col1b, width = 0.5)),
+      xbins = list(start = 0, end = 100, size = 1)
+    ) |>
+    plotly::add_histogram(
+      data = df,
+      x = ~`% Unmatched`,
+      name = "Unmatched [%]",
+      marker = list(color = col2, line = list(color = col2b, width = 0.5)),
+      xbins = list(start = 0, end = 100, size = 1)
+    ) |>
+    plotly::layout(
+      barmode = "overlay",
+      paper_bgcolor = "rgba(0,0,0,0)",
+      plot_bgcolor = "rgba(0,0,0,0)",
+      font = list(size = 14, color = font_color),
+      legend = list(bgcolor = "rgba(0,0,0,0.3)", font = list(color = font_color), xanchor = "right", x = 0.99, yanchor = "top", y = 0.99),
+      margin = list(r = 20),
+      xaxis = list(
+        title = "Value [%]",
+        range = c(-2, 102),
+        color = font_color,
+        gridcolor = grid_color,
+        zerolinecolor = zeroline_color
+      ),
+      yaxis = list(
+        title = "Count",
+        color = font_color,
+        gridcolor = grid_color,
+        zerolinecolor = zeroline_color
+      )
+    )
+}
+
+#' @export
+stats_boxplot <- function(hits_summary, theme = "dark", color_scale = "plasma", show_points = TRUE) {
+  df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
+
+  font_color       <- if (theme == "light") "black" else "white"
+  grid_color       <- if (theme == "light") "rgba(0,0,0,0.1)" else "rgba(255,255,255,0.2)"
+  zeroline_color   <- if (theme == "light") "rgba(0,0,0,0.5)" else "rgba(255,255,255,0.5)"
+  dot_border_color <- if (theme == "light") "rgba(0,0,0,0.35)" else "rgba(255,255,255,0.35)"
+
+  pal   <- stats_palette(2, color_scale)
+  col1  <- hex_to_rgba(pal[1], 0.7)
+  col1b <- hex_to_rgba(pal[1], 1)
+  col1f <- hex_to_rgba(pal[1], 0.15)
+  col2  <- hex_to_rgba(pal[2], 0.7)
+  col2b <- hex_to_rgba(pal[2], 1)
+  col2f <- hex_to_rgba(pal[2], 0.15)
+
+  plotly::plot_ly() |>
+    plotly::add_trace(
+      data = df,
+      y = ~`% Correct`,
+      text = ~Sample,
+      name = "Correct [%]",
+      type = "box",
+      boxpoints = if (show_points) "all" else FALSE,
+      jitter = 0.4,
+      pointpos = 0,
+      hovertemplate = "<b>%{text}</b><br>Correct [%]: %{y:.1f}<extra></extra>",
+      marker = list(color = "rgba(0,0,0,0)", size = 7, line = list(color = dot_border_color, width = 2.5)),
+      line = list(color = col1b),
+      fillcolor = col1f
+    ) |>
+    plotly::add_trace(
+      data = df,
+      y = ~`% Unmatched`,
+      text = ~Sample,
+      name = "Unmatched [%]",
+      type = "box",
+      boxpoints = if (show_points) "all" else FALSE,
+      jitter = 0.4,
+      pointpos = 0,
+      hovertemplate = "<b>%{text}</b><br>Unmatched [%]: %{y:.1f}<extra></extra>",
+      marker = list(color = "rgba(0,0,0,0)", size = 7, line = list(color = dot_border_color, width = 2.5)),
+      line = list(color = col2b),
+      fillcolor = col2f
+    ) |>
+    plotly::layout(
+      paper_bgcolor = "rgba(0,0,0,0)",
+      plot_bgcolor = "rgba(0,0,0,0)",
+      font = list(size = 14, color = font_color),
+      legend = list(bgcolor = "rgba(0,0,0,0.3)", font = list(color = font_color), xanchor = "right", x = 0.99, yanchor = "top", y = 0.99),
+      margin = list(r = 20),
+      xaxis = list(
+        color = font_color,
+        gridcolor = "rgba(0,0,0,0)",
+        zerolinecolor = "rgba(0,0,0,0)"
+      ),
+      yaxis = list(
+        title = "Value [%]",
+        range = c(-5, 105),
+        color = font_color,
+        gridcolor = grid_color,
+        zerolinecolor = zeroline_color
+      )
+    )
+}
+
+#' @export
+stats_scatter <- function(hits_summary, full_scale = FALSE, group_by = NULL, color_scale = "plasma", theme = "dark") {
+  df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
+  df$`Total % Binding` <- ifelse(is.na(df$`Total % Binding`), 0, df$`Total % Binding`) * 100
+
+  font_color <- if (theme == "light") "black" else "white"
+  grid_color <- if (theme == "light") "rgba(0,0,0,0.1)" else "rgba(255,255,255,0.2)"
+  zeroline_color <- if (theme == "light") "rgba(0,0,0,0.5)" else "rgba(255,255,255,0.5)"
+
+  correct_vals <- df$`% Correct`
+  correct_mean <- mean(correct_vals, na.rm = TRUE)
+  correct_sd   <- stats::sd(correct_vals, na.rm = TRUE)
+  correct_upper <- correct_mean + correct_sd
+  correct_lower <- correct_mean - correct_sd
+
+  y_range <- if (full_scale) {
+    c(-5, 105)
+  } else {
+    pad <- max((max(correct_vals, na.rm = TRUE) - min(correct_vals, na.rm = TRUE)) * 0.08, 3)
+    c(
+      max(-5,  floor(min(correct_vals, na.rm = TRUE) - pad)),
+      min(105, ceiling(max(correct_vals, na.rm = TRUE) + pad))
+    )
+  }
+
+  group_by <- if (is.null(group_by) || !nzchar(group_by) || !group_by %in% names(df)) {
+    if ("Protein" %in% names(df)) "Protein" else names(df)[1]
+  } else {
+    group_by
+  }
+
+  df <- df[!is.na(df[[group_by]]), ]
+  groups <- as.character(unique(df[[group_by]]))
+  df[[group_by]] <- as.character(df[[group_by]])
+  color_map <- stats::setNames(stats_palette(length(groups), color_scale), groups)
+
+  p <- plotly::plot_ly()
+  for (grp in groups) {
+    sub_df <- dplyr::filter(df, .data[[group_by]] == grp)
+    p <- plotly::add_markers(
+      p,
+      data = sub_df,
+      x = ~`Total % Binding`,
+      y = ~`% Correct`,
+      name = grp,
+      showlegend = TRUE,
+      marker = list(color = color_map[[grp]], size = 8, opacity = 0.8),
+      hovertemplate = paste0(
+        "<b>%{customdata}</b><br>",
+        "Tot. Binding [%]: %{x:.1f}<br>",
+        "Correct [%]: %{y:.1f}<extra></extra>"
+      ),
+      customdata = ~Sample
+    )
+  }
+
+  ref_color <- if (theme == "light") "rgba(0,0,0,0.5)" else "rgba(255,255,255,0.5)"
+  sd_color  <- if (theme == "light") "rgba(0,0,0,0.3)" else "rgba(255,255,255,0.3)"
+
+  p |>
+    plotly::layout(
+      paper_bgcolor = "rgba(0,0,0,0)",
+      plot_bgcolor  = "rgba(0,0,0,0)",
+      font       = list(size = 14, color = font_color),
+      showlegend = TRUE,
+      legend     = list(bgcolor = "rgba(0,0,0,0)", font = list(color = font_color), xanchor = "left", x = 1.02),
+      margin     = list(r = 20),
+      xaxis  = list(
+        title = "Tot. Binding [%]",
+        color = font_color,
+        gridcolor = grid_color,
+        zerolinecolor = zeroline_color
+      ),
+      yaxis = list(
+        title = "Correct [%]",
+        range = y_range,
+        color = font_color,
+        gridcolor = grid_color,
+        zerolinecolor = zeroline_color
+      ),
+      shapes = list(
+        list(
+          type = "line", x0 = 0, x1 = 1, xref = "paper",
+          y0 = correct_mean, y1 = correct_mean,
+          line = list(color = ref_color, width = 1.5, dash = "dash")
+        ),
+        list(
+          type = "line", x0 = 0, x1 = 1, xref = "paper",
+          y0 = correct_upper, y1 = correct_upper,
+          line = list(color = sd_color, width = 1, dash = "dot")
+        ),
+        list(
+          type = "line", x0 = 0, x1 = 1, xref = "paper",
+          y0 = correct_lower, y1 = correct_lower,
+          line = list(color = sd_color, width = 1, dash = "dot")
+        )
+      ),
+      annotations = list(
+        list(
+          x = 1, xref = "paper", y = correct_mean, yref = "y",
+          text = sprintf("<b>Mean</b> %.1f%%", correct_mean),
+          showarrow = FALSE, xanchor = "right", yanchor = "bottom",
+          font = list(color = font_color, size = 11)
+        ),
+        list(
+          x = 1, xref = "paper", y = correct_upper, yref = "y",
+          text = sprintf("+1 SD  %.1f%%", correct_upper),
+          showarrow = FALSE, xanchor = "right", yanchor = "bottom",
+          font = list(color = font_color, size = 10)
+        ),
+        list(
+          x = 1, xref = "paper", y = correct_lower, yref = "y",
+          text = sprintf("− 1 SD  %.1f%%", correct_lower),
+          showarrow = FALSE, xanchor = "right", yanchor = "top",
+          font = list(color = font_color, size = 10)
+        )
+      )
+    )
+}
+
+#' @export
+stats_violin <- function(hits_summary, group_by = "Protein", full_scale = FALSE, theme = "dark", color_scale = "plasma", inner = "box") {
+  df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
+  df[[group_by]] <- ifelse(is.na(df[[group_by]]), "Unknown", as.character(df[[group_by]]))
+
+  font_color       <- if (theme == "light") "black" else "white"
+  grid_color       <- if (theme == "light") "rgba(0,0,0,0.1)" else "rgba(255,255,255,0.2)"
+  zeroline_color   <- if (theme == "light") "rgba(0,0,0,0.5)" else "rgba(255,255,255,0.5)"
+  dot_border_color <- if (theme == "light") "rgba(0,0,0,0.35)" else "rgba(255,255,255,0.35)"
+
+  show_box    <- inner != "Points"
+  show_points <- inner == "Points"
+
+  y_range <- if (full_scale) c(-5, 105) else NULL
+
+  groups <- unique(df[[group_by]])
+  pal <- stats_palette(length(groups), color_scale)
+  color_map <- stats::setNames(pal, groups)
+
+  p <- plotly::plot_ly()
+  for (grp in groups) {
+    sub_df <- dplyr::filter(df, .data[[group_by]] == grp)
+    col   <- hex_to_rgba(color_map[[grp]], 1)
+    col_f <- hex_to_rgba(color_map[[grp]], 0.2)
+    col_b <- hex_to_rgba(color_map[[grp]], 0.85)
+    col_m <- hex_to_rgba(color_map[[grp]], 0.7)
+    p <- plotly::add_trace(
+      p,
+      data = sub_df,
+      type = "violin",
+      x = grp,
+      y = ~`% Correct`,
+      name = grp,
+      fillcolor = col_f,
+      line = list(color = col, width = 1),
+      box = list(
+        visible = show_box,
+        fillcolor = col_b,
+        line = list(color = font_color, width = 1.5)
+      ),
+      meanline = list(visible = show_box, color = col),
+      points = if (show_points) "all" else FALSE,
+      pointpos = 0,
+      jitter = 0.3,
+      marker = list(color = "rgba(0,0,0,0)", size = 7, line = list(color = dot_border_color, width = 2.5)),
+      showlegend = FALSE
+    )
+  }
+
+  p |>
+    plotly::layout(
+      paper_bgcolor = "rgba(0,0,0,0)",
+      plot_bgcolor  = "rgba(0,0,0,0)",
+      font = list(size = 14, color = font_color),
+      xaxis = list(
+        title = group_by,
+        color = font_color,
+        gridcolor = grid_color,
+        zerolinecolor = zeroline_color
+      ),
+      yaxis = list(
+        title = "Correct [%]",
+        range = y_range,
+        color = font_color,
+        gridcolor = grid_color,
+        zerolinecolor = zeroline_color
       )
     )
 }

@@ -59,6 +59,10 @@ box::use(
       cmp_compound_distribution,
       prot_compound_distribution,
       smpl_compound_distribution,
+      stats_histogram,
+      stats_boxplot,
+      stats_scatter,
+      stats_violin,
     ],
   app /
     logic /
@@ -4008,6 +4012,92 @@ server <- function(
               )
             })
 
+            stats_cs <- shiny::reactive({
+              cs <- input$stats_color_scale
+              if (is.null(cs) || !nzchar(cs)) "plasma" else cs
+            })
+
+            output$stats_histogram <- plotly::renderPlotly({
+              rl <- conversion_sidebar_vars$result_list()
+              shiny::req(rl, rl$hits_summary)
+              stats_histogram(rl$hits_summary, theme = "dark", color_scale = stats_cs())
+            })
+
+            output$stats_boxplot <- plotly::renderPlotly({
+              rl <- conversion_sidebar_vars$result_list()
+              shiny::req(rl, rl$hits_summary)
+              stats_boxplot(rl$hits_summary, theme = "dark", color_scale = stats_cs(), show_points = isTRUE(input$stats_boxplot_show_points))
+            })
+
+            output$stats_scatter <- plotly::renderPlotly({
+              rl <- conversion_sidebar_vars$result_list()
+              shiny::req(rl, rl$hits_summary)
+              fs  <- isTRUE(input$stats_scatter_full_scale)
+              grp <- if (is.null(input$stats_scatter_groupby)) "Protein" else input$stats_scatter_groupby
+              stats_scatter(rl$hits_summary, full_scale = fs, group_by = grp, color_scale = stats_cs(), theme = "dark")
+            })
+
+            output$stats_violin <- plotly::renderPlotly({
+              rl <- conversion_sidebar_vars$result_list()
+              shiny::req(rl, rl$hits_summary)
+              grp <- if (is.null(input$stats_violin_groupby)) "Protein" else input$stats_violin_groupby
+              fs  <- isTRUE(input$stats_violin_full_scale)
+              stats_violin(rl$hits_summary, group_by = grp, full_scale = fs, theme = "dark", color_scale = stats_cs(), inner = if (is.null(input$stats_violin_inner)) "Box" else input$stats_violin_inner)
+            })
+
+            shiny::observe({
+              rl <- conversion_sidebar_vars$result_list()
+              shiny::req(rl, rl$hits_summary)
+              hs <- rl$hits_summary
+              conc_col <- grep("^Concentration", names(hs), value = TRUE)
+              base_choices <- c("Protein", "Compound")
+              extra <- if (length(conc_col) == 1) c("Concentration" = conc_col) else character(0)
+              choices <- c(base_choices, extra)
+
+              smart_default <- function() {
+                if (length(conc_col) == 1) return(conc_col)
+                n_prot <- length(unique(stats::na.omit(hs[["protein"]])))
+                if (is.null(n_prot) || n_prot == 0) n_prot <- length(unique(stats::na.omit(hs[["Protein"]])))
+                if (n_prot > 1) return("Protein")
+                return("Compound")
+              }
+
+              default_grp <- smart_default()
+              cur_violin  <- input$stats_violin_groupby
+              cur_scatter <- input$stats_scatter_groupby
+              sel_violin  <- if (!is.null(cur_violin)  && cur_violin  %in% choices) cur_violin  else default_grp
+              sel_scatter <- if (!is.null(cur_scatter) && cur_scatter %in% choices) cur_scatter else default_grp
+
+              shiny::updateSelectInput(session, "stats_violin_groupby",  choices = choices, selected = sel_violin)
+              shiny::updateSelectInput(session, "stats_scatter_groupby", choices = choices, selected = sel_scatter)
+
+              n_violin  <- if (sel_violin  %in% names(hs)) length(unique(stats::na.omit(hs[[sel_violin]])))  else 1L
+              n_scatter <- if (sel_scatter %in% names(hs)) length(unique(stats::na.omit(hs[[sel_scatter]]))) else 1L
+              max_n <- max(2L, n_violin, n_scatter)
+
+              scales <- filter_color_list(
+                list(Qualitative = qualitative_scales, Sequential = sequential_scales),
+                max_n
+              )
+              scales[["Gradient"]] <- gradient_scales
+
+              cs  <- input$stats_color_scale
+              sel <- if (!is.null(cs) && cs %in% unlist(scales)) cs else "plasma"
+              shiny::updateSelectInput(session, "stats_color_scale", choices = scales, selected = sel)
+            })
+
+            shiny::observe({
+              rl <- conversion_sidebar_vars$result_list()
+              shiny::req(rl, rl$hits_summary)
+              has_well <- "well" %in% names(rl$hits_summary) &&
+                any(!is.na(rl$hits_summary$well) & nzchar(trimws(as.character(rl$hits_summary$well))))
+              if (has_well) {
+                bslib::nav_show("summary_tabs", "Batch Control", session = session)
+              } else {
+                bslib::nav_hide("summary_tabs", "Batch Control", session = session)
+              }
+            })
+
             set_selected_tab("Protocol", session)
           }
         }
@@ -4028,6 +4118,13 @@ server <- function(
          if (el) navigator.clipboard.writeText(el.innerText);",
         ns("protocol_log")
       ))
+      shinyWidgets::show_toast(
+        "Protocol copied to clipboard",
+        text = NULL,
+        type = "success",
+        timer = 3000,
+        timerProgressBar = TRUE
+      )
     })
 
     safe_observe(
@@ -4293,6 +4390,66 @@ server <- function(
       filename_fn = function() {
         paste0(get_session_prefix(), "_Compound_Distribution")
       }
+    )
+
+    setup_plot_dl(
+      input,
+      output,
+      session,
+      "stats_histogram",
+      build_fn = function(theme) {
+        rl <- conversion_sidebar_vars$result_list()
+        shiny::req(rl, rl$hits_summary)
+        cs <- if (is.null(input$stats_color_scale) || !nzchar(input$stats_color_scale)) "plasma" else input$stats_color_scale
+        stats_histogram(rl$hits_summary, theme = theme, color_scale = cs)
+      },
+      filename_fn = function() paste0(get_session_prefix(), "_Statistics_Histogram")
+    )
+
+    setup_plot_dl(
+      input,
+      output,
+      session,
+      "stats_boxplot",
+      build_fn = function(theme) {
+        rl <- conversion_sidebar_vars$result_list()
+        shiny::req(rl, rl$hits_summary)
+        cs <- if (is.null(input$stats_color_scale) || !nzchar(input$stats_color_scale)) "plasma" else input$stats_color_scale
+        stats_boxplot(rl$hits_summary, theme = theme, color_scale = cs, show_points = isTRUE(input$stats_boxplot_show_points))
+      },
+      filename_fn = function() paste0(get_session_prefix(), "_Statistics_BoxPlot")
+    )
+
+    setup_plot_dl(
+      input,
+      output,
+      session,
+      "stats_scatter",
+      build_fn = function(theme) {
+        rl <- conversion_sidebar_vars$result_list()
+        shiny::req(rl, rl$hits_summary)
+        fs  <- isTRUE(input$stats_scatter_full_scale)
+        grp <- if (is.null(input$stats_scatter_groupby)) "Protein" else input$stats_scatter_groupby
+        cs  <- if (is.null(input$stats_color_scale) || !nzchar(input$stats_color_scale)) "plasma" else input$stats_color_scale
+        stats_scatter(rl$hits_summary, full_scale = fs, group_by = grp, color_scale = cs, theme = theme)
+      },
+      filename_fn = function() paste0(get_session_prefix(), "_Statistics_Scatter")
+    )
+
+    setup_plot_dl(
+      input,
+      output,
+      session,
+      "stats_violin",
+      build_fn = function(theme) {
+        rl <- conversion_sidebar_vars$result_list()
+        shiny::req(rl, rl$hits_summary)
+        grp <- if (is.null(input$stats_violin_groupby)) "Protein" else input$stats_violin_groupby
+        fs  <- isTRUE(input$stats_violin_full_scale)
+        cs  <- if (is.null(input$stats_color_scale) || !nzchar(input$stats_color_scale)) "plasma" else input$stats_color_scale
+        stats_violin(rl$hits_summary, group_by = grp, full_scale = fs, theme = theme, color_scale = cs, inner = if (is.null(input$stats_violin_inner)) "Box" else input$stats_violin_inner)
+      },
+      filename_fn = function() paste0(get_session_prefix(), "_Statistics_Violin")
     )
 
     setup_table_dl(

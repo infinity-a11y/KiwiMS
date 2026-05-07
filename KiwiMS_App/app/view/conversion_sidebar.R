@@ -513,7 +513,8 @@ server <- function(
                 max_multiples = input$max_multiples,
                 session = session,
                 ns = ns,
-                ki_kinact = isTRUE(input$run_ki_kinact)
+                ki_kinact = isTRUE(input$run_ki_kinact),
+                config = config_file()
               )
 
               result_with_hits$hits_summary <- summarize_hits(

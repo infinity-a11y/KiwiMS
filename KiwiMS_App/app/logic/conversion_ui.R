@@ -10,6 +10,10 @@ box::use(
     logic /
     conversion_functions[
       format_scientific,
+      stats_histogram,
+      stats_boxplot,
+      stats_scatter,
+      stats_violin,
     ],
   app /
     logic /
@@ -699,6 +703,191 @@ summary_results_ui <- function(ns) {
   bslib::navset_card_tab(
     id = ns("summary_tabs"),
     bslib::nav_panel(
+      title = "Statistics",
+      shiny::div(
+        class = "conversion-result-wrapper",
+        shiny::div(
+          class = "statistics-tab",
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              full_screen = TRUE,
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Hit Rate Distribution",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  plot_dl_popover(ns, "stats_histogram"),
+                  bslib::tooltip(
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("stats_histogram_help_bttn"),
+                        NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    ),
+                    "Help",
+                    placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(shinycssloaders::withSpinner(
+                plotly::plotlyOutput(ns("stats_histogram"), height = "100%"),
+                type = 1,
+                color = "#7777f9"
+              ))
+            )
+          ),
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              full_screen = TRUE,
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Hit Rate Summary Statistics",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  card_settings_popover(shiny::div(
+                    shinyWidgets::materialSwitch(
+                      ns("stats_boxplot_show_points"),
+                      label = "Show Points",
+                      value = TRUE,
+                      right = TRUE
+                    ),
+                    style = "margin-right:20px;"
+                  )),
+                  plot_dl_popover(ns, "stats_boxplot"),
+                  bslib::tooltip(
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("stats_boxplot_help_bttn"),
+                        NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    ),
+                    "Help",
+                    placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(shinycssloaders::withSpinner(
+                plotly::plotlyOutput(ns("stats_boxplot"), height = "100%"),
+                type = 1,
+                color = "#7777f9"
+              ))
+            )
+          ),
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              full_screen = TRUE,
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Binding vs. Hit Rate",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  card_settings_popover(shiny::div(
+                    shiny::selectInput(
+                      ns("stats_scatter_groupby"),
+                      label = "Color By",
+                      choices = c("Protein", "Compound"),
+                      selected = "Protein",
+                      width = "140px"
+                    ),
+                    shinyWidgets::materialSwitch(
+                      ns("stats_scatter_full_scale"),
+                      label = "Full Scale (0–100%)",
+                      value = FALSE,
+                      right = TRUE
+                    ),
+                    style = "margin-right:20px;"
+                  )),
+                  plot_dl_popover(ns, "stats_scatter"),
+                  bslib::tooltip(
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("stats_scatter_help_bttn"),
+                        NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    ),
+                    "Help",
+                    placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(shinycssloaders::withSpinner(
+                plotly::plotlyOutput(ns("stats_scatter"), height = "100%"),
+                type = 1,
+                color = "#7777f9"
+              ))
+            )
+          ),
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              full_screen = TRUE,
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Correct [%] Distribution by Group",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  card_settings_popover(shiny::div(
+                    shiny::selectInput(
+                      ns("stats_violin_groupby"),
+                      label = "Group By",
+                      choices = c("Protein", "Compound"),
+                      selected = "Protein",
+                      width = "140px"
+                    ),
+                    shinyWidgets::materialSwitch(
+                      ns("stats_violin_full_scale"),
+                      label = "Full Scale (0–100%)",
+                      value = FALSE,
+                      right = TRUE
+                    ),
+                    shiny::div(
+                      class = "conversion-tab-items-label",
+                      shiny::HTML("Inner")
+                    ),
+                    shinyWidgets::radioGroupButtons(
+                      ns("stats_violin_inner"),
+                      label = NULL,
+                      choices = c("Box", "Points"),
+                      selected = "Box",
+                      size = "sm"
+                    ),
+                    style = "margin-right:20px;"
+                  )),
+                  plot_dl_popover(ns, "stats_violin"),
+                  bslib::tooltip(
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("stats_violin_help_bttn"),
+                        NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    ),
+                    "Help",
+                    placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(shinycssloaders::withSpinner(
+                plotly::plotlyOutput(ns("stats_violin"), height = "100%"),
+                type = 1,
+                color = "#7777f9"
+              ))
+            )
+          )
+        )
+      )
+    ),
+    bslib::nav_panel(
       title = "Protocol",
       shiny::div(
         class = "conversion-result-wrapper",
@@ -710,55 +899,51 @@ summary_results_ui <- function(ns) {
         shiny::div(
           class = "conversion-footer",
           style = "padding: 6px 0 0 0;",
-          shiny::div(
-            class = "conversion-save-button",
-            shiny::div(
-              class = "modal-button",
-              shiny::actionButton(
-                ns("copy_protocol_log"),
-                "Clip",
-                icon = shiny::icon("clipboard")
-              )
-            ),
-            shiny::div(
-              class = "modal-button",
-              shiny::actionButton(
-                ns("save_protocol_log"),
-                "Save",
-                icon = shiny::icon("download")
-              )
-            )
+          shiny::actionButton(
+            ns("copy_protocol_log"),
+            "Clip",
+            icon = shiny::icon("clipboard")
+          ),
+          shiny::actionButton(
+            ns("save_protocol_log"),
+            "Save",
+            icon = shiny::icon("download")
           )
         )
       )
     ),
     bslib::nav_panel(
-      title = "QA Overview",
+      title = "Batch Control",
       shiny::div(
-        class = "conversion-result-wrapper",
-        shiny::div(
-          class = "na-placeholder",
-          "Coming soon."
-        )
+        class = "conversion-result-wrapper"
       )
     ),
-    bslib::nav_panel(
-      title = "Statistics",
+    bslib::nav_item(
+      id = ns("summary_tab_items"),
+      class = "conversion-tab-item-wrapper",
       shiny::div(
-        class = "conversion-result-wrapper",
-        shiny::div(
-          class = "na-placeholder",
-          "Coming soon."
-        )
-      )
-    ),
-    bslib::nav_panel(
-      title = "Export",
-      shiny::div(
-        class = "conversion-result-wrapper",
-        shiny::div(
-          class = "na-placeholder",
-          "Coming soon."
+        class = "conversion-tab-items",
+        bslib::tooltip(
+          shiny::selectInput(
+            ns("stats_color_scale"),
+            label = NULL,
+            choices = NULL,
+            width = "120px"
+          ),
+          "Color palette",
+          placement = "top"
+        ),
+        bslib::tooltip(
+          shiny::div(
+            class = "tooltip-bttn",
+            shiny::actionButton(
+              ns("summary_tooltip_bttn"),
+              label = NULL,
+              icon = shiny::icon("circle-question")
+            )
+          ),
+          "Help",
+          placement = "top"
         )
       )
     )
