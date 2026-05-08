@@ -61,6 +61,7 @@ server <- function(
     result_list <- shiny::reactiveVal(NULL)
     complexes <- shiny::reactiveVal(NULL)
     analysis_status <- shiny::reactiveVal("pending")
+    ki_kinact_available <- shiny::reactiveVal(FALSE)
     console_log_snapshot <- shiny::reactiveVal(NULL)
 
     shiny::observeEvent(input$console_log_snapshot, {
@@ -557,6 +558,7 @@ server <- function(
                 )
 
                 ki_kinact_check <- is.data.frame(hits_summary_filtered)
+                ki_kinact_available(ki_kinact_check)
 
                 if (ki_kinact_check) {
                   # Log filtered samples
@@ -701,33 +703,13 @@ server <- function(
               class = "btn-highlight"
             )
 
-            shinyjs::delay(
-              500,
-              shinyjs::removeClass(
-                selector = paste(
-                  "#app-conversion_sidebar-analysis_select .radio:nth-child(1),",
-                  "#app-conversion_sidebar-analysis_select .radio:nth-child(2)"
-                ),
-                class = "custom-disable"
-              )
-            )
-            if (ki_kinact_check) {
-              shinyjs::delay(
-                500,
-                shinyjs::removeClass(
-                  selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(3)",
-                  class = "custom-disable"
-                )
-              )
-            }
-
             shinyjs::runjs(paste0(
               "var el = document.getElementById('",
               ns("console_log"),
               "');",
               "if (el) Shiny.setInputValue('",
               ns("console_log_snapshot"),
-              "', el.innerHTML);"
+              "', el.innerHTML, {priority: 'event'});"
             ))
 
             analysis_status("done")
@@ -736,6 +718,7 @@ server <- function(
           write_log("Conversion reset")
           result_list(NULL)
           console_log_snapshot(NULL)
+          ki_kinact_available(FALSE)
           analysis_status("pending")
 
           # Enable ki/kinact analysis checkbox
@@ -791,6 +774,7 @@ server <- function(
 
     ## Render analysis select input element ----
     output$analysis_select_ui <- shiny::renderUI({
+      ki <- ki_kinact_available()
       shiny::tagList(
         shiny::radioButtons(
           inputId = ns("analysis_select"),
@@ -807,20 +791,14 @@ server <- function(
           ),
           choiceValues = list(1, 2, 3)
         ),
-        shiny::tags$script(paste0(
-          "
-      (function() {
-        var selector = '#",
-          ns("analysis_select"),
-          " .radio:nth-child(1), #",
-          ns("analysis_select"),
-          " .radio:nth-child(2), #",
-          ns("analysis_select"),
-          " .radio:nth-child(3)';
-        $(selector).addClass('custom-disable');
-      })();
-    "
-        ))
+        if (!ki) {
+          shiny::tags$script(shiny::HTML(paste0(
+            "(function() {",
+            "  $('#", ns("analysis_select"), " .radio:nth-child(3)')",
+            "    .addClass('custom-disable');",
+            "})()"
+          )))
+        }
       )
     })
 

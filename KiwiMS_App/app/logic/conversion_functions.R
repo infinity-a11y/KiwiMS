@@ -677,22 +677,17 @@ fill_sample_table <- function(sample_table, ki_kinact) {
   col_diff <- abs(ncol(sample_table) - 7)
 
   if (col_diff != 0) {
-    # Get concentration, time columns if ki_kinact active
     sample_table <- cbind(
       sample_table,
       (data.frame(rep(list(rep("", nrow(sample_table))), col_diff)))
     )
+    names(sample_table) <- c("Sample", "Protein", paste("Compound", 1:5))
+  }
 
-    if (ki_kinact) {
-      sample_table <- cbind(sample_table, conc_time)
-    }
-
-    names(sample_table) <- c(
-      "Sample",
-      "Protein",
-      paste("Compound", 1:5),
-      if (ki_kinact) c("Concentration", "Time")
-    )
+  # Re-attach Concentration/Time outside the col_diff block so they are
+  # preserved regardless of whether padding was needed.
+  if (ki_kinact) {
+    sample_table <- cbind(sample_table, conc_time)
   }
 
   # Reattach Replicate right after Sample
@@ -1349,7 +1344,7 @@ check_hits <- function(
   peak_tolerance,
   max_multiples,
   sample,
-  well = "A1"
+  well = NA
 ) {
   # Find protein peak
   protein_peak <- peaks$mass >= protein_mw[, -1] - peak_tolerance &
@@ -1386,8 +1381,6 @@ check_hits <- function(
   if (any(peaks_valid) && sum(peaks_valid) > 1) {
     peaks_filtered <- as.data.frame(peaks[peaks_valid, ])
   } else {
-    log_alert()
-
     hits_df <- data.frame(
       well = well,
       sample = sample,
@@ -1461,7 +1454,7 @@ check_hits <- function(
 
         # Construct new entry for hits_df data frame
         hit <- data.frame(
-          well = "A1",
+          well = well,
           sample = sample,
           protein = protein_mw[, 1],
           theor_prot = as.numeric(protein_mw[, -1]),
@@ -1562,7 +1555,7 @@ conversion <- function(hits) {
   } else if (ncol(hits) != 16) {
     log_err_cols(ncol(hits))
     return(NULL)
-  } else if (anyNA(hits)) {
+  } else if (anyNA(hits[, names(hits) != "well"])) {
     hits <- hits |>
       dplyr::mutate(
         `%binding` = NA
@@ -1643,7 +1636,6 @@ conversion <- function(hits) {
 # Header: The Sample Name
 log_start <- function(sample_name) {
   message(sprintf("Hit Screening: %s\n  │", sample_name))
-  # Sys.sleep(0.05)
 }
 
 # Status: Peak Info
@@ -1694,18 +1686,8 @@ log_duplicated_hits <- function(hits_add) {
 # Log conversion result per sample
 log_result <- function(n_hits, unmatched, correct) {
   message(sprintf("  ├─ Result: %s hits detected", n_hits))
-  prefix_unmatched <- if (!is.na(unmatched) && unmatched > 50) {
-    paste0(.col_warn(warning_sym), " ")
-  } else {
-    ""
-  }
-  prefix_correct <- if (!is.na(correct) && correct < 50) {
-    paste0(.col_warn(warning_sym), " ")
-  } else {
-    ""
-  }
-  message(sprintf("  │  ├─ %sUnmatched: %.2f%%", prefix_unmatched, unmatched))
-  message(sprintf("  │  ├─ %sCorrect: %.2f%%", prefix_correct, correct))
+  message(sprintf("  │  ├─ Unmatched: %.2f%%", unmatched))
+  message(sprintf("  │  ├─ Correct: %.2f%%", correct))
 }
 
 log_intensities <- function(total, unbound, binding) {
@@ -1720,9 +1702,9 @@ log_intensities <- function(total, unbound, binding) {
   ))
 }
 
-# Alert: No Peaks
+# No Peaks
 log_alert <- function(msg = "No protein peak detected") {
-  message(sprintf("  ├─ %s %s.  ", .col_err(warning_sym), msg))
+  message(sprintf("  ├─ %s %s.  ", .col_warn(warning_sym), msg))
 }
 
 # Footer: Closing a successful sample
@@ -1767,25 +1749,12 @@ log_hits_summary <- function(hits_summarized) {
   mean_correct <- mean(correct_vals, na.rm = TRUE)
   sd_correct <- stats::sd(correct_vals, na.rm = TRUE)
 
-  prefix_unmatched <- if (!is.na(mean_unmatched) && mean_unmatched > 50) {
-    paste0(.col_warn(warning_sym), " ")
-  } else {
-    ""
-  }
-  prefix_correct <- if (!is.na(mean_correct) && mean_correct < 50) {
-    paste0(.col_warn(warning_sym), " ")
-  } else {
-    ""
-  }
-
   message(sprintf(
-    "SUMMARIZING HITS\n  │\n  ├─ %s sample(s) screened\n  ├─ %s hit(s) detected in total\n  ├─ %sUnmatched: %.2f%% (SD: %.2f%%)\n  └─ %sCorrect:   %.2f%% (SD: %.2f%%)\n",
+    "SUMMARIZING HITS\n  │\n  ├─ %s sample(s) screened\n  ├─ %s hit(s) detected in total\n  ├─ Unmatched: %.2f%% (SD: %.2f%%)\n  └─ Correct:   %.2f%% (SD: %.2f%%)\n",
     length(unique(hits_summarized$Sample)),
     sum(!is.na(hits_summarized$Compound)),
-    prefix_unmatched,
     mean_unmatched,
     sd_unmatched,
-    prefix_correct,
     mean_correct,
     sd_correct
   ))
@@ -1979,6 +1948,7 @@ add_hits <- function(
   samples <<- samples
   protein_mw <<- protein_mw
   compound_mw <<- compound_mw
+  config1 <<- config
 
   hits_max <- if (ki_kinact) 80 else 100
 
@@ -2007,7 +1977,8 @@ add_hits <- function(
       grep("Compound", names(sample_table))
     ]
 
-    sample_well <- "A1"
+    # Determine well position if config is present
+    sample_well <- NA
     if (
       !is.null(config) &&
         "Well" %in% names(config) &&
@@ -4500,6 +4471,30 @@ new_sample_table <- function(
   return(sample_tab)
 }
 
+# Re-apply Concentration/Time values from an old sample table into a newly
+# rebuilt one, matched by Sample name. Rows not present in the old table keep
+# their NA values.
+#' @export
+restore_conc_time <- function(new_table, old_table) {
+  if (is.null(old_table)) {
+    return(new_table)
+  }
+  conc_col_old <- grep("^Concentration", names(old_table), value = TRUE)
+  time_col_old <- grep("^Time", names(old_table), value = TRUE)
+  if (length(conc_col_old) != 1 || length(time_col_old) != 1) {
+    return(new_table)
+  }
+  conc_col_new <- grep("^Concentration", names(new_table), value = TRUE)
+  time_col_new <- grep("^Time", names(new_table), value = TRUE)
+  if (length(conc_col_new) != 1 || length(time_col_new) != 1) {
+    return(new_table)
+  }
+  idx <- match(new_table$Sample, old_table$Sample)
+  new_table[[conc_col_new]] <- old_table[[conc_col_old]][idx]
+  new_table[[time_col_new]] <- old_table[[time_col_old]][idx]
+  new_table
+}
+
 # UI changes when conversion declaration tab is confirmed
 #' @export
 confirm_ui_changes <- function(
@@ -5931,43 +5926,77 @@ stats_boxplot <- function(
   col2b <- hex_to_rgba(pal[2], 1)
   col2f <- hex_to_rgba(pal[2], 0.15)
 
-  plotly::plot_ly() |>
+  p <- plotly::plot_ly() |>
+    # Box shape — no points, default box hover shows statistics
     plotly::add_trace(
       data = df,
       y = ~`% Correct`,
-      text = ~Sample,
       name = "Correct [%]",
       type = "box",
-      boxpoints = if (show_points) "all" else FALSE,
-      jitter = 0.4,
-      pointpos = 0,
-      hovertemplate = "<b>%{text}</b><br>Correct [%]: %{y:.2f}<extra></extra>",
-      marker = list(
-        color = "rgba(0,0,0,0)",
-        size = 7,
-        line = list(color = dot_border_color, width = 1)
-      ),
+      boxpoints = FALSE,
       line = list(color = col1b),
-      fillcolor = col1f
+      fillcolor = col1f,
+      showlegend = TRUE
     ) |>
     plotly::add_trace(
       data = df,
       y = ~`% Unmatched`,
-      text = ~Sample,
       name = "Unmatched [%]",
       type = "box",
-      boxpoints = if (show_points) "all" else FALSE,
-      jitter = 0.4,
-      pointpos = 0,
-      hovertemplate = "<b>%{text}</b><br>Unmatched [%]: %{y:.2f}<extra></extra>",
-      marker = list(
-        color = "rgba(0,0,0,0)",
-        size = 7,
-        line = list(color = dot_border_color, width = 1)
-      ),
+      boxpoints = FALSE,
       line = list(color = col2b),
-      fillcolor = col2f
-    ) |>
+      fillcolor = col2f,
+      showlegend = TRUE
+    )
+
+  if (show_points) {
+    p <- p |>
+      # Points-only overlay: invisible box shape on top so points capture hover
+      plotly::add_trace(
+        data = df,
+        y = ~`% Correct`,
+        text = ~Sample,
+        name = "Correct [%]",
+        type = "box",
+        boxpoints = "all",
+        jitter = 0.4,
+        pointpos = 0,
+        hoveron = "points",
+        hovertemplate = "<b>%{text}</b><br>Correct [%]: %{y:.2f}<extra></extra>",
+        whiskerwidth = 0,
+        line = list(color = "rgba(0,0,0,0)", width = 0),
+        fillcolor = "rgba(0,0,0,0)",
+        showlegend = FALSE,
+        marker = list(
+          color = "rgba(0,0,0,0)",
+          size = 8,
+          line = list(color = dot_border_color, width = 1.5)
+        )
+      ) |>
+      plotly::add_trace(
+        data = df,
+        y = ~`% Unmatched`,
+        text = ~Sample,
+        name = "Unmatched [%]",
+        type = "box",
+        boxpoints = "all",
+        jitter = 0.4,
+        pointpos = 0,
+        hoveron = "points",
+        hovertemplate = "<b>%{text}</b><br>Unmatched [%]: %{y:.2f}<extra></extra>",
+        whiskerwidth = 0,
+        line = list(color = "rgba(0,0,0,0)", width = 0),
+        fillcolor = "rgba(0,0,0,0)",
+        showlegend = FALSE,
+        marker = list(
+          color = "rgba(0,0,0,0)",
+          size = 8,
+          line = list(color = dot_border_color, width = 1.5)
+        )
+      )
+  }
+
+  p |>
     plotly::layout(
       paper_bgcolor = "rgba(0,0,0,0)",
       plot_bgcolor = "rgba(0,0,0,0)",
@@ -6064,33 +6093,35 @@ stats_scatter <- function(
   p <- plotly::plot_ly()
   for (grp in groups) {
     sub_df <- dplyr::filter(df, .data[[group_by]] == grp)
-    # Collapse overlapping points: aggregate by exact (x, y) coordinate
-    agg_df <- sub_df |>
-      dplyr::group_by(`Total % Binding`, `% Correct`) |>
-      dplyr::summarise(
-        n = dplyr::n(),
-        samples = paste(Sample, collapse = "<br>"),
-        .groups = "drop"
+    sub_df <- sub_df |>
+      dplyr::mutate(
+        x_plot = `Total % Binding` + stats::runif(dplyr::n(), -0.6, 0.6),
+        y_plot = `% Correct` + stats::runif(dplyr::n(), -0.6, 0.6),
+        tooltip = paste0(
+          Sample,
+          "<br>",
+          "Tot. Binding [%]: ",
+          round(`Total % Binding`, 2),
+          "<br>",
+          "Correct [%]: ",
+          round(`% Correct`, 2)
+        )
       )
     p <- plotly::add_markers(
       p,
-      data = agg_df,
-      x = ~`Total % Binding`,
-      y = ~`% Correct`,
+      data = sub_df,
+      x = ~x_plot,
+      y = ~y_plot,
       name = grp,
       showlegend = TRUE,
+      customdata = ~tooltip,
+      hovertemplate = "%{customdata}<extra></extra>",
       marker = list(
         color = color_map[[grp]],
-        size = ~ (8 + (n - 1) * 4),
+        size = 8,
         opacity = 0.8,
         line = list(color = dot_border_color, width = 1)
-      ),
-      hovertemplate = paste0(
-        "<b>%{customdata}</b><br>",
-        "Tot. Binding [%]: %{x:.2f}<br>",
-        "Correct [%]: %{y:.2f}<extra></extra>"
-      ),
-      customdata = ~ ifelse(n > 1, paste0("n = ", n, "<br>", samples), samples)
+      )
     )
   }
 
@@ -6245,7 +6276,7 @@ stats_violin <- function(
     col <- hex_to_rgba(color_map[[grp]], 1)
     col_f <- hex_to_rgba(color_map[[grp]], 0.2)
     col_b <- hex_to_rgba(color_map[[grp]], 0.25)
-    p <- plotly::add_trace(
+    p <- suppressWarnings(plotly::add_trace(
       p,
       data = sub_df,
       type = "violin",
@@ -6259,6 +6290,7 @@ stats_violin <- function(
         fillcolor = col_b,
         line = list(color = font_color, width = 1)
       ),
+      # whiskerwidth = 0.5,
       meanline = list(visible = show_box, color = font_color, width = 1),
       points = if (show_points) "all" else FALSE,
       pointpos = 0,
@@ -6269,7 +6301,7 @@ stats_violin <- function(
         line = list(color = dot_border_color, width = 1)
       ),
       showlegend = FALSE
-    )
+    ))
   }
 
   p |>
@@ -6290,6 +6322,228 @@ stats_violin <- function(
         gridcolor = grid_color,
         zerolinecolor = zeroline_color,
         hoverformat = ".2f"
+      )
+    )
+}
+
+# batch_plate_heatmap(): Interactive 384-well plate heatmap for batch control ----
+#' @export
+batch_plate_heatmap <- function(
+  hits_summary,
+  variable = "Total % Binding",
+  color_scale = "plasma",
+  scale_mode = "minmax",
+  theme = "dark"
+) {
+  # Only Total % Binding is stored as 0-1 fraction; % Correct / % Unmatched are 0-100
+  fraction_vars <- c("Total % Binding")
+  pct_vars <- c("Total % Binding", "% Correct", "% Unmatched")
+  numeric_vars <- c(
+    "Total % Binding",
+    "% Correct",
+    "% Unmatched",
+    "Concentration"
+  )
+
+  font_color <- if (theme == "light") "black" else "white"
+
+  df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
+  if (!variable %in% names(df)) {
+    return(plotly::plotly_empty())
+  }
+
+  raw_vals <- df[[variable]]
+  is_numeric_var <- variable %in% numeric_vars
+
+  cat_levels <- NULL
+  if (!is_numeric_var) {
+    cat_levels <- sort(unique(stats::na.omit(as.character(raw_vals))))
+    values <- as.numeric(factor(as.character(raw_vals), levels = cat_levels))
+    display_vals <- as.character(raw_vals)
+  } else {
+    values <- as.numeric(raw_vals)
+    if (variable %in% fraction_vars) {
+      values <- values * 100
+    }
+    display_vals <- if (variable %in% pct_vars) {
+      sprintf("%.1f%%", values)
+    } else {
+      sprintf("%.2f", values)
+    }
+  }
+
+  # Normalize well IDs: "A01" → "A1", "B12" → "B12"
+  raw_wells <- toupper(as.character(df[["Well"]]))
+  norm_wells <- gsub("^([A-Z]+)0*(\\d+)$", "\\1\\2", raw_wells)
+
+  data <- data.frame(
+    well_id = norm_wells,
+    value = values,
+    display = display_vals,
+    sample = df[["Sample"]],
+    stringsAsFactors = FALSE
+  )
+
+  rows <- LETTERS[1:16]
+  cols <- 1:24
+  plate_layout <- expand.grid(
+    row = rows,
+    col = cols,
+    stringsAsFactors = FALSE
+  ) |>
+    dplyr::mutate(well_id = paste0(row, col))
+  plate_data <- dplyr::left_join(plate_layout, data, by = "well_id")
+
+  z_mat <- matrix(
+    NA_real_,
+    nrow = 16,
+    ncol = 24,
+    dimnames = list(rows, as.character(cols))
+  )
+  text_mat <- matrix(
+    "",
+    nrow = 16,
+    ncol = 24,
+    dimnames = list(rows, as.character(cols))
+  )
+
+  for (r in rows) {
+    for (c in cols) {
+      wid <- paste0(r, c)
+      d <- plate_data[plate_data$well_id == wid, ]
+      if (nrow(d) > 0 && !is.na(d$value[1])) {
+        z_mat[r, as.character(c)] <- d$value[1]
+        text_mat[r, as.character(c)] <- paste0(
+          "Well: ",
+          wid,
+          "<br>Sample: ",
+          d$sample[1],
+          "<br>",
+          variable,
+          ": ",
+          d$display[1]
+        )
+      } else {
+        text_mat[r, as.character(c)] <- paste0("Well: ", wid, "<br>Empty")
+      }
+    }
+  }
+
+  tick_vals <- NULL
+  tick_text <- NULL
+
+  if (is_numeric_var) {
+    full_scale <- variable %in% pct_vars && scale_mode == "min100"
+    zmin <- if (full_scale) 0 else min(z_mat, na.rm = TRUE)
+    zmax <- if (full_scale) 100 else max(z_mat, na.rm = TRUE)
+    if (!is.finite(zmin) || !is.finite(zmax) || zmin == zmax) {
+      zmin <- 0
+      zmax <- 1
+    }
+    n_stops <- 9
+    pal <- stats_palette(n_stops, color_scale)
+    cs <- lapply(seq_len(n_stops), function(i) {
+      list((i - 1) / (n_stops - 1), pal[i])
+    })
+    show_scale <- TRUE
+    cb_title <- variable
+  } else {
+    n_cats <- length(cat_levels)
+    pal <- stats_palette(max(n_cats, 2), color_scale)
+    if (n_cats <= 1) {
+      cs <- list(list(0, pal[1]), list(1, pal[1]))
+      tick_vals <- list(1.5)
+      tick_text <- list(if (n_cats == 1) cat_levels[1] else "")
+    } else {
+      cs <- lapply(seq_len(n_cats), function(i) {
+        list((i - 1) / (n_cats - 1), pal[i])
+      })
+      tick_vals <- as.list(seq_len(n_cats))
+      tick_text <- as.list(cat_levels)
+    }
+    zmin <- 1
+    zmax <- max(n_cats, 2)
+    show_scale <- TRUE
+    cb_title <- variable
+  }
+
+  plotly::plot_ly(
+    z = z_mat,
+    x = cols,
+    y = rows,
+    type = "heatmap",
+    colorscale = cs,
+    showscale = show_scale,
+    zmin = zmin,
+    zmax = zmax,
+    xgap = 2,
+    ygap = 2,
+    text = text_mat,
+    hovertemplate = "%{text}<extra></extra>",
+    colorbar = c(
+      list(
+        title = list(text = cb_title, font = list(color = font_color)),
+        tickfont = list(color = font_color),
+        outlinecolor = font_color
+      ),
+      if (!is.null(tick_vals)) {
+        list(
+          tickmode = "array",
+          tickvals = tick_vals,
+          ticktext = tick_text
+        )
+      }
+    )
+  ) |>
+    plotly::layout(
+      dragmode = FALSE,
+      showlegend = FALSE,
+      hoverlabel = list(
+        bgcolor = "#38387Cdb",
+        font = list(size = 14, color = "white"),
+        bordercolor = "white"
+      ),
+      xaxis = list(
+        side = "top",
+        tickmode = "array",
+        tickvals = cols,
+        ticktext = as.character(cols),
+        tickfont = list(color = font_color, size = 12),
+        tickangle = 0,
+        ticklen = 0,
+        showgrid = FALSE,
+        zeroline = FALSE,
+        automargin = FALSE,
+        scaleanchor = "y",
+        scaleratio = 1
+      ),
+      yaxis = list(
+        autorange = "reversed",
+        tickfont = list(color = font_color, size = 12),
+        ticklen = 0,
+        showgrid = FALSE,
+        zeroline = FALSE,
+        scaleanchor = "x",
+        scaleratio = 1,
+        automargin = FALSE
+      ),
+      margin = list(t = 25, r = 0, b = 0, l = 30),
+      plot_bgcolor = "rgba(160,160,170,0.25)",
+      paper_bgcolor = "rgba(0,0,0,0)"
+    ) |>
+    plotly::config(
+      displayModeBar = "hover",
+      scrollZoom = FALSE,
+      modeBarButtons = list(list(
+        "zoom2d",
+        "toImage",
+        "autoScale2d",
+        "resetScale2d",
+        "zoomIn2d",
+        "zoomOut2d"
+      )),
+      toImageButtonOptions = list(
+        filename = paste0(Sys.Date(), "_Batch_Heatmap")
       )
     )
 }

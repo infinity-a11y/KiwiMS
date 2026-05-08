@@ -36,6 +36,7 @@ box::use(
       checkboxColumn,
       js_code_gen,
       new_sample_table,
+      restore_conc_time,
       compute_replicate_labels,
       confirm_ui_changes,
       edit_ui_changes,
@@ -63,6 +64,7 @@ box::use(
       stats_boxplot,
       stats_scatter,
       stats_violin,
+      batch_plate_heatmap,
     ],
   app /
     logic /
@@ -1138,7 +1140,8 @@ server <- function(
 
           # Render sample table with new input
           if (!is.null(input$samples_table)) {
-            sample_table_data(add_replicate_col(
+            old_table <- sample_table_data()
+            new_table <- add_replicate_col(
               new_sample_table(
                 result = declaration_vars$result,
                 protein_table = protein_table,
@@ -1146,7 +1149,9 @@ server <- function(
                 ki_kinact = conversion_sidebar_vars$run_ki_kinact()
               ),
               config_file()
-            ))
+            )
+            new_table <- restore_conc_time(new_table, old_table)
+            sample_table_data(new_table)
             sample_table_trigger(sample_table_trigger() + 1)
           }
 
@@ -1186,7 +1191,8 @@ server <- function(
 
           # Render sample table with new input
           if (!is.null(input$samples_table)) {
-            sample_table_data(add_replicate_col(
+            old_table <- sample_table_data()
+            new_table <- add_replicate_col(
               new_sample_table(
                 result = declaration_vars$result,
                 protein_table = declaration_vars$protein_table,
@@ -1194,7 +1200,9 @@ server <- function(
                 ki_kinact = conversion_sidebar_vars$run_ki_kinact()
               ),
               config_file()
-            ))
+            )
+            new_table <- restore_conc_time(new_table, old_table)
+            sample_table_data(new_table)
             sample_table_trigger(sample_table_trigger() + 1)
           }
 
@@ -4008,7 +4016,10 @@ server <- function(
             set_selected_tab("Hits", session)
           } else if (analysis_select == 1) {
             output$conversion_ui <- shiny::renderUI({
-              summary_results_ui(ns)
+              summary_results_ui(
+                ns,
+                batch_control = all(hits_summary$Well != "N/A")
+              )
             })
 
             output$summary_protocol <- shiny::renderUI({
@@ -4064,11 +4075,25 @@ server <- function(
               )
             })
 
+            filter_extremes <- function(hs) {
+              samples_out <- dplyr::distinct(hs, Sample, .keep_all = TRUE) |>
+                dplyr::filter(
+                  `% Correct` == 0 & `% Unmatched` == 100
+                ) |>
+                dplyr::pull(Sample)
+              dplyr::filter(hs, !Sample %in% samples_out)
+            }
+
             output$stats_boxplot <- plotly::renderPlotly({
               rl <- conversion_sidebar_vars$result_list()
               shiny::req(rl, rl$hits_summary)
+              hs <- if (isTRUE(input$stats_boxplot_exclude_extremes)) {
+                filter_extremes(rl$hits_summary)
+              } else {
+                rl$hits_summary
+              }
               stats_boxplot(
-                rl$hits_summary,
+                hs,
                 theme = "dark",
                 color_scale = stats_cs(),
                 show_points = isTRUE(input$stats_boxplot_show_points)
@@ -4078,6 +4103,11 @@ server <- function(
             output$stats_scatter <- plotly::renderPlotly({
               rl <- conversion_sidebar_vars$result_list()
               shiny::req(rl, rl$hits_summary)
+              hs <- if (isTRUE(input$stats_scatter_exclude_extremes)) {
+                filter_extremes(rl$hits_summary)
+              } else {
+                rl$hits_summary
+              }
               fs <- isTRUE(input$stats_scatter_full_scale)
               grp <- if (is.null(input$stats_scatter_groupby)) {
                 "Protein"
@@ -4085,7 +4115,7 @@ server <- function(
                 input$stats_scatter_groupby
               }
               stats_scatter(
-                rl$hits_summary,
+                hs,
                 full_scale = fs,
                 group_by = grp,
                 color_scale = stats_cs(),
@@ -4096,6 +4126,11 @@ server <- function(
             output$stats_violin <- plotly::renderPlotly({
               rl <- conversion_sidebar_vars$result_list()
               shiny::req(rl, rl$hits_summary)
+              hs <- if (isTRUE(input$stats_violin_exclude_extremes)) {
+                filter_extremes(rl$hits_summary)
+              } else {
+                rl$hits_summary
+              }
               grp <- if (is.null(input$stats_violin_groupby)) {
                 "Protein"
               } else {
@@ -4103,7 +4138,7 @@ server <- function(
               }
               fs <- isTRUE(input$stats_violin_full_scale)
               stats_violin(
-                rl$hits_summary,
+                hs,
                 group_by = grp,
                 full_scale = fs,
                 theme = "dark",
@@ -4116,24 +4151,89 @@ server <- function(
               )
             })
 
-            protocol_hs <- shiny::reactive({
+            output$batch_heatmap <- plotly::renderPlotly({
+              rl <- conversion_sidebar_vars$result_list()
+              shiny::req(
+                rl,
+                rl$hits_summary,
+                rl$hits_summary,
+                all(hits_summary$Well != "N/A")
+              )
+              v <- if (is.null(input$batch_variable)) {
+                "Total % Binding"
+              } else {
+                input$batch_variable
+              }
+              sm <- if (isTRUE(input$batch_pct_scale_100)) {
+                "min100"
+              } else {
+                "minmax"
+              }
+              batch_plate_heatmap(
+                rl$hits_summary,
+                variable = v,
+                color_scale = stats_cs(),
+                scale_mode = sm,
+                theme = "dark"
+              )
+            })
+
+            shiny::observe({
               rl <- conversion_sidebar_vars$result_list()
               shiny::req(rl, rl$hits_summary)
+              hs <- rl$hits_summary
+              base_choices <- c(
+                "Total % Binding",
+                "Correct %" = "% Correct",
+                "Unmatched %" = "% Unmatched",
+                "Compound",
+                "Protein"
+              )
+              extra <- character(0)
+              if ("Concentration" %in% names(hs)) {
+                extra <- c(extra, "Concentration")
+              }
+              if ("Time" %in% names(hs)) {
+                extra <- c(extra, "Time")
+              }
+              choices <- c(base_choices, extra)
+              cur <- input$batch_variable
+              sel <- if (!is.null(cur) && cur %in% choices) {
+                cur
+              } else {
+                "Total % Binding"
+              }
+              shiny::updateSelectInput(
+                session,
+                "batch_variable",
+                choices = choices,
+                selected = sel
+              )
+            })
 
-              test <<- rl$hits_summary
-              dplyr::distinct(rl$hits_summary, Sample, .keep_all = TRUE)
+            shiny::observe({
+              pct_vars <- c("Total % Binding", "% Correct", "% Unmatched")
+              v <- input$batch_variable
+              if (is.null(v)) {
+                return()
+              }
+              shinyjs::toggle(
+                "batch_pct_scale_100_wrapper",
+                condition = v %in% pct_vars
+              )
             })
 
             output$pstat_n_samples <- shiny::renderUI({
-              hs <- protocol_hs()
               shiny::div(
-                shiny::div(class = "protocol-stat-value", nrow(hs))
+                shiny::div(class = "protocol-stat-value", nrow(hits_summary))
               )
             })
 
             output$pstat_n_hits <- shiny::renderUI({
               rl <- conversion_sidebar_vars$result_list()
               shiny::req(rl, rl$hits_summary)
+
+              rl1 <<- rl
               n <- sum(
                 !is.na(rl$hits_summary$Compound) &
                   nzchar(trimws(as.character(rl$hits_summary$Compound)))
@@ -4144,12 +4244,13 @@ server <- function(
             })
 
             output$pstat_correct <- shiny::renderUI({
-              hs <- protocol_hs()
-              vals <- as.numeric(hs[["% Correct"]])
+              vals <- suppressWarnings(as.numeric(hits_summary[["Correct [%]"]]))
               m <- mean(vals, na.rm = TRUE)
               s <- stats::sd(vals, na.rm = TRUE)
               cls <- if (!is.na(m) && m < 10) {
                 "protocol-stat-value protocol-stat-err"
+              } else if (!is.na(m) && m < 50) {
+                "protocol-stat-value protocol-stat-warn"
               } else {
                 "protocol-stat-value"
               }
@@ -4163,12 +4264,13 @@ server <- function(
             })
 
             output$pstat_unmatched <- shiny::renderUI({
-              hs <- protocol_hs()
-              vals <- as.numeric(hs[["% Unmatched"]])
+              vals <- suppressWarnings(as.numeric(hits_summary[["Unmatched [%]"]]))
               m <- mean(vals, na.rm = TRUE)
               s <- stats::sd(vals, na.rm = TRUE)
               cls <- if (!is.na(m) && m > 90) {
                 "protocol-stat-value protocol-stat-err"
+              } else if (!is.na(m) && m > 50) {
+                "protocol-stat-value protocol-stat-warn"
               } else {
                 "protocol-stat-value"
               }
@@ -4181,53 +4283,107 @@ server <- function(
               )
             })
 
-            output$pstat_no_protein <- shiny::renderUI({
-              hs <- protocol_hs()
-              hs1 <<- hs
-              n <- sum(is.na(hs[["Measured Mw Protein [Da]"]]))
-              cls <- if (n > 0) {
-                "protocol-stat-value protocol-stat-warn"
-              } else {
-                "protocol-stat-value"
+            # Shared helpers for Alerts / Warnings cards
+            clean_log_msg <- function(x) {
+              x <- gsub("<[^>]+>", "", x)
+              x <- gsub("&amp;", "&", x, fixed = TRUE)
+              x <- gsub("&lt;", "<", x, fixed = TRUE)
+              x <- gsub("&gt;", ">", x, fixed = TRUE)
+              x <- sub("^.*?⚠\\s*", "", x)
+              x <- trimws(x)
+              x <- sub("^Hit duplicates at .+$", "Hit duplicates", x)
+              x
+            }
+
+            make_pstat_items <- function(msgs, item_cls) {
+              if (length(msgs) == 0) return(NULL)
+              tbl <- sort(table(msgs), decreasing = TRUE)
+              max_show <- 4L
+              shown <- seq_len(min(length(tbl), max_show))
+              items <- lapply(shown, function(i) {
+                txt <- names(tbl)[i]
+                cnt <- as.integer(tbl[[i]])
+                label <- if (cnt > 1) sprintf("%s ×%d", txt, cnt) else txt
+                shiny::div(class = paste("pstat-msg-item", item_cls), title = txt, label)
+              })
+              if (length(tbl) > max_show) {
+                items <- c(items, list(shiny::div(
+                  class = "pstat-msg-more",
+                  sprintf("+%d more", length(tbl) - max_show)
+                )))
               }
-              total <- nrow(hs)
+              items
+            }
+
+            parse_log_lines <- function(snapshot) {
+              n_err <- 0L
+              n_warn <- 0L
+              err_msgs <- character(0)
+              warn_msgs <- character(0)
+              lines <- character(0)
+              if (!is.null(snapshot) && nzchar(snapshot)) {
+                lines <- strsplit(snapshot, "<br>", fixed = TRUE)[[1]]
+                err_idx <- grep("color: #e53935", lines, fixed = TRUE)
+                warn_idx <- grep("color: darkorange", lines, fixed = TRUE)
+                excl_idx <- grep("Unmatched:|Correct:", lines)
+                warn_idx <- setdiff(warn_idx, excl_idx)
+                n_err <- length(err_idx)
+                n_warn <- length(warn_idx)
+                if (n_err > 0) err_msgs <- clean_log_msg(lines[err_idx])
+                if (n_warn > 0) {
+                  omit_label <- "Omitted concentrations after filtering"
+                  warn_msgs <- vapply(warn_idx, function(wi) {
+                    msg <- clean_log_msg(lines[wi])
+                    if (msg == omit_label) {
+                      cnt <- 0L
+                      j <- wi + 1L
+                      while (j <= length(lines)) {
+                        plain <- gsub("<[^>]+>", "", lines[j])
+                        if (grepl("[├└]─\\s*\\S", plain)) {
+                          cnt <- cnt + 1L
+                        } else {
+                          break
+                        }
+                        j <- j + 1L
+                      }
+                      if (cnt > 0L) sprintf("%s ×%d", omit_label, cnt) else msg
+                    } else {
+                      msg
+                    }
+                  }, character(1))
+                }
+              }
+              list(n_err = n_err, n_warn = n_warn,
+                   err_msgs = err_msgs, warn_msgs = warn_msgs)
+            }
+
+            output$pstat_alerts <- shiny::renderUI({
+              shiny::req(conversion_sidebar_vars$console_log_snapshot())
+              parsed <- parse_log_lines(conversion_sidebar_vars$console_log_snapshot())
+              n <- parsed$n_err
+              cls <- if (n > 0) "protocol-stat-value protocol-stat-warn" else "protocol-stat-value"
               shiny::div(
                 shiny::div(class = cls, n),
-                shiny::div(
+                if (n == 0) shiny::div(
                   class = "protocol-stat-sub",
-                  sprintf("of %d sample(s)", total)
+                  "No alerts"
+                ) else shiny::div(
+                  class = "pstat-msg-list",
+                  make_pstat_items(parsed$err_msgs, "pstat-msg-err")
                 )
               )
             })
 
             output$pstat_warnings <- shiny::renderUI({
-              snapshot <- conversion_sidebar_vars$console_log_snapshot()
-              n_err <- 0L
-              n_warn <- 0L
-              if (!is.null(snapshot) && nzchar(snapshot)) {
-                lines <- strsplit(snapshot, "\n", fixed = TRUE)[[1]]
-                err_lines <- grep("color: #e53935", lines, fixed = TRUE)
-                warn_lines <- grep("color: darkorange", lines, fixed = TRUE)
-                excl_lines <- grep("Unmatched:|Correct:", lines, fixed = TRUE)
-                n_err <- length(err_lines)
-                n_warn <- length(setdiff(warn_lines, excl_lines))
-              }
-              total <- n_err + n_warn
-              cls <- if (total > 0) {
-                "protocol-stat-value protocol-stat-warn"
-              } else {
-                "protocol-stat-value"
-              }
+              shiny::req(conversion_sidebar_vars$console_log_snapshot())
+              parsed <- parse_log_lines(conversion_sidebar_vars$console_log_snapshot())
+              n <- parsed$n_warn
+              cls <- if (n > 0) "protocol-stat-value protocol-stat-warn" else "protocol-stat-value"
               shiny::div(
-                shiny::div(class = cls, total),
-                shiny::div(
-                  class = "protocol-stat-sub",
-                  if (n_err > 0) {
-                    shiny::tagList(sprintf("Alerts: %d", n_err), shiny::br())
-                  } else {
-                    NULL
-                  },
-                  if (n_warn > 0) sprintf("Warnings: %d", n_warn) else NULL
+                shiny::div(class = cls, n),
+                if (n > 0) shiny::div(
+                  class = "pstat-msg-list",
+                  make_pstat_items(parsed$warn_msgs, "pstat-msg-warn")
                 )
               )
             })
@@ -4253,8 +4409,9 @@ server <- function(
             })
 
             output$pstat_n_proteins <- shiny::renderUI({
-              hs <- protocol_hs()
-              detected <- length(unique(stats::na.omit(hs[["Protein"]])))
+              detected <- length(unique(stats::na.omit(hits_summary[[
+                "Protein"
+              ]])))
               declared <- sum(
                 !is.na(protein_table_data()$Protein) &
                   nzchar(trimws(as.character(protein_table_data()$Protein)))
@@ -4274,8 +4431,9 @@ server <- function(
             })
 
             output$pstat_n_compounds <- shiny::renderUI({
-              hs <- protocol_hs()
-              cmp_vals <- as.character(stats::na.omit(hs[["Compound"]]))
+              cmp_vals <- as.character(stats::na.omit(hits_summary[[
+                "Cmp Name"
+              ]]))
               detected <- length(unique(cmp_vals[nzchar(trimws(cmp_vals))]))
               declared <- sum(
                 !is.na(compound_table_data()$Compound) &
@@ -4433,7 +4591,7 @@ server <- function(
       suspended = TRUE
     )
 
-    ## Protocol log Copy/Save handlers ----
+    ## Conversion Log Copy/Save handlers ----
     shiny::observeEvent(input$copy_protocol_log, {
       shinyjs::runjs(sprintf(
         "var el = document.getElementById('%s');
@@ -4451,7 +4609,7 @@ server <- function(
 
     safe_observe(
       event_expr = input$save_protocol_log,
-      observer_name = "Protocol Log Saver",
+      observer_name = "Conversion Log Saver",
       handler_fn = function() {
         fname <- paste0(get_session_prefix(), "_Protocol.txt")
         shinyjs::runjs(sprintf(
@@ -4833,6 +4991,40 @@ server <- function(
       },
       filename_fn = function() {
         paste0(get_session_prefix(), "_Statistics_Violin")
+      }
+    )
+
+    setup_plot_dl(
+      input,
+      output,
+      session,
+      "batch_heatmap",
+      build_fn = function(theme) {
+        rl <- conversion_sidebar_vars$result_list()
+        shiny::req(rl, rl$hits_summary)
+        v <- if (is.null(input$batch_variable)) {
+          "Total % Binding"
+        } else {
+          input$batch_variable
+        }
+        sm <- if (isTRUE(input$batch_pct_scale_100)) "min100" else "minmax"
+        cs <- if (
+          is.null(input$stats_color_scale) || !nzchar(input$stats_color_scale)
+        ) {
+          "plasma"
+        } else {
+          input$stats_color_scale
+        }
+        batch_plate_heatmap(
+          rl$hits_summary,
+          variable = v,
+          color_scale = cs,
+          scale_mode = sm,
+          theme = theme
+        )
+      },
+      filename_fn = function() {
+        paste0(get_session_prefix(), "_Batch_Heatmap")
       }
     )
 
@@ -6014,6 +6206,93 @@ server <- function(
                     "/K",
                     htmltools::tags$sub("i"),
                     " analysis."
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    })
+
+    ## Conversion Log tooltip ----
+    shiny::observeEvent(input$protocol_log_help_bttn, {
+      shiny::showModal(
+        shiny::div(
+          class = "conversion-modal",
+          shiny::modalDialog(
+            title = "Conversion Log",
+            easyClose = TRUE,
+            footer = shiny::modalButton("Dismiss"),
+            shiny::fluidRow(
+              shiny::br(),
+              shiny::column(
+                width = 11,
+                shiny::div(
+                  class = "tooltip-text",
+                  shiny::p(
+                    "A timestamped record of all processing steps performed during the current conversion session."
+                  ),
+                  shiny::p(
+                    "Entries include sample-by-sample peak assignment results, warnings, and any errors encountered. The log can be copied to the clipboard or saved as a text file using the export button."
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    })
+
+    ## Alerts tooltip ----
+    shiny::observeEvent(input$pstat_alerts_help, {
+      shiny::showModal(
+        shiny::div(
+          class = "conversion-modal",
+          shiny::modalDialog(
+            title = "Alerts",
+            easyClose = TRUE,
+            footer = shiny::modalButton("Dismiss"),
+            shiny::fluidRow(
+              shiny::br(),
+              shiny::column(
+                width = 11,
+                shiny::div(
+                  class = "tooltip-text",
+                  shiny::p(
+                    "Number of processing errors (alerts) encountered during the conversion run."
+                  ),
+                  shiny::p(
+                    "Alerts indicate samples where a critical issue prevented normal peak assignment, such as a missing deconvolution result or an unresolvable data conflict. The most frequent alert types are listed below the count."
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    })
+
+    ## Warnings tooltip ----
+    shiny::observeEvent(input$pstat_warnings_help, {
+      shiny::showModal(
+        shiny::div(
+          class = "conversion-modal",
+          shiny::modalDialog(
+            title = "Warnings",
+            easyClose = TRUE,
+            footer = shiny::modalButton("Dismiss"),
+            shiny::fluidRow(
+              shiny::br(),
+              shiny::column(
+                width = 11,
+                shiny::div(
+                  class = "tooltip-text",
+                  shiny::p(
+                    "Number of non-critical warnings raised during the conversion run."
+                  ),
+                  shiny::p(
+                    "Warnings flag conditions that may affect result quality but do not stop processing — for example, samples ignored due to missing hits, or concentrations omitted after filtering. The most frequent warning types are listed below the count."
                   )
                 )
               )
