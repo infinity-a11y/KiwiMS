@@ -5934,6 +5934,7 @@ stats_boxplot <- function(
       name = "Correct [%]",
       type = "box",
       boxpoints = FALSE,
+      boxmean = TRUE,
       line = list(color = col1b),
       fillcolor = col1f,
       showlegend = TRUE
@@ -5944,6 +5945,7 @@ stats_boxplot <- function(
       name = "Unmatched [%]",
       type = "box",
       boxpoints = FALSE,
+      boxmean = TRUE,
       line = list(color = col2b),
       fillcolor = col2f,
       showlegend = TRUE
@@ -6260,6 +6262,7 @@ stats_violin <- function(
   } else {
     "rgba(255,255,255,0.5)"
   }
+  box_line_color <- if (theme == "light") "rgba(0,0,0,1)" else "rgba(255,255,255,1)"
 
   show_box <- inner != "Points"
   show_points <- inner == "Points"
@@ -6288,10 +6291,10 @@ stats_violin <- function(
       box = list(
         visible = show_box,
         fillcolor = col_b,
-        line = list(color = font_color, width = 1)
+        line = list(color = box_line_color, width = 1)
       ),
       # whiskerwidth = 0.5,
-      meanline = list(visible = show_box, color = font_color, width = 1),
+      meanline = list(visible = show_box, color = box_line_color, width = 1),
       points = if (show_points) "all" else FALSE,
       pointpos = 0,
       jitter = 0.3,

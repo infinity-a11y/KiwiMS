@@ -1109,6 +1109,86 @@ summary_results_ui <- function(ns, batch_control) {
         shiny::div(
           class = "statistics-tab",
           shiny::div(
+            class = "input-stat-panel",
+            shiny::div(
+              class = "input-panel color-scale-ui",
+              bslib::tooltip(
+                shiny::selectInput(
+                  ns("stats_color_scale"),
+                  label = NULL,
+                  choices = NULL
+                ),
+                "Color palette",
+                placement = "top"
+              ),
+              shinyWidgets::materialSwitch(
+                ns("stats_exclude_extremes"),
+                label = "Include only hits",
+                value = FALSE,
+                right = TRUE
+              )
+            ),
+            shiny::div(
+              class = "statistics-correct-unmatched-cards",
+              shiny::div(
+                class = "card-custom",
+                bslib::card(
+                  bslib::card_header(
+                    class = "bg-dark help-header d-flex justify-content-between",
+                    "Correct [%]",
+                    shiny::div(
+                      class = "box-header-settings-help",
+                      bslib::tooltip(
+                        shiny::div(
+                          class = "tooltip-bttn",
+                          shiny::actionButton(
+                            ns("pstat_correct_help"),
+                            NULL,
+                            icon = shiny::icon("circle-question")
+                          )
+                        ),
+                        "Help",
+                        placement = "top"
+                      )
+                    )
+                  ),
+                  bslib::card_body(
+                    class = "protocol-stat-body",
+                    shiny::uiOutput(ns("pstat_correct_stat"))
+                  )
+                )
+              ),
+              shiny::div(
+                class = "card-custom",
+                bslib::card(
+                  bslib::card_header(
+                    class = "bg-dark help-header d-flex justify-content-between",
+                    "Unmatched [%]",
+                    shiny::div(
+                      class = "box-header-settings-help",
+                      bslib::tooltip(
+                        shiny::div(
+                          class = "tooltip-bttn",
+                          shiny::actionButton(
+                            ns("pstat_unmatched_help"),
+                            NULL,
+                            icon = shiny::icon("circle-question")
+                          )
+                        ),
+                        "Help",
+                        placement = "top"
+                      )
+                    )
+                  ),
+                  bslib::card_body(
+                    class = "protocol-stat-body",
+                    shiny::uiOutput(ns("pstat_unmatched_stat"))
+                  )
+                )
+              )
+            )
+          ),
+          shiny::div(
             class = "card-custom",
             bslib::card(
               full_screen = TRUE,
@@ -1155,12 +1235,6 @@ summary_results_ui <- function(ns, batch_control) {
                       value = TRUE,
                       right = TRUE
                     ),
-                    shinyWidgets::materialSwitch(
-                      ns("stats_boxplot_exclude_extremes"),
-                      label = "Exclude 0% Correct / 100% Unmatched",
-                      value = FALSE,
-                      right = TRUE
-                    ),
                     style = "margin-right:20px;"
                   )),
                   plot_dl_popover(ns, "stats_boxplot"),
@@ -1205,12 +1279,6 @@ summary_results_ui <- function(ns, batch_control) {
                     shinyWidgets::materialSwitch(
                       ns("stats_scatter_full_scale"),
                       label = "Full Scale (0–100%)",
-                      value = FALSE,
-                      right = TRUE
-                    ),
-                    shinyWidgets::materialSwitch(
-                      ns("stats_scatter_exclude_extremes"),
-                      label = "Exclude 0% Correct / 100% Unmatched",
                       value = FALSE,
                       right = TRUE
                     ),
@@ -1261,12 +1329,6 @@ summary_results_ui <- function(ns, batch_control) {
                       value = FALSE,
                       right = TRUE
                     ),
-                    shinyWidgets::materialSwitch(
-                      ns("stats_violin_exclude_extremes"),
-                      label = "Exclude 0% Correct / 100% Unmatched",
-                      value = FALSE,
-                      right = TRUE
-                    ),
                     shiny::div(
                       class = "conversion-tab-items-label",
                       shiny::HTML("Inner")
@@ -1312,62 +1374,7 @@ summary_results_ui <- function(ns, batch_control) {
           class = "conversion-result-wrapper",
           shiny::div(
             class = "batch-control-tab",
-            shiny::div(
-              class = "card-custom",
-              bslib::card(
-                full_screen = TRUE,
-                bslib::card_header(
-                  class = "bg-dark help-header d-flex justify-content-between",
-                  "Plate Heatmap",
-                  shiny::div(
-                    class = "box-header-settings-help",
-                    card_settings_popover(shiny::div(
-                      shiny::selectInput(
-                        ns("batch_variable"),
-                        label = "Color By",
-                        choices = c(
-                          "Total % Binding",
-                          "Correct %" = "% Correct",
-                          "Unmatched %" = "% Unmatched",
-                          "Compound",
-                          "Protein"
-                        ),
-                        selected = "Total % Binding",
-                        width = "160px"
-                      ),
-                      shiny::div(
-                        id = ns("batch_pct_scale_100_wrapper"),
-                        shinyWidgets::materialSwitch(
-                          ns("batch_pct_scale_100"),
-                          label = "Scale to 100%",
-                          value = FALSE,
-                          right = TRUE
-                        )
-                      ),
-                      style = "margin-right:20px;"
-                    )),
-                    plot_dl_popover(ns, "batch_heatmap"),
-                    bslib::tooltip(
-                      shiny::div(
-                        class = "tooltip-bttn",
-                        shiny::actionButton(
-                          ns("batch_heatmap_help"),
-                          NULL,
-                          icon = shiny::icon("circle-question")
-                        )
-                      ),
-                      "Help",
-                      placement = "top"
-                    )
-                  )
-                ),
-                bslib::card_body(shinycssloaders::withSpinner(
-                  plotly::plotlyOutput(ns("batch_heatmap"), height = "100%"),
-                  type = 1,
-                  color = "#7777f9"
-                ))
-              )
-            )
+            shiny::uiOutput(ns("batch_heatmap_cards"))
           )
         )
       )
@@ -1376,17 +1383,7 @@ summary_results_ui <- function(ns, batch_control) {
       id = ns("summary_tab_items"),
       class = "conversion-tab-item-wrapper",
       shiny::div(
-        class = "conversion-tab-items color-scale-ui",
-        bslib::tooltip(
-          shiny::selectInput(
-            ns("stats_color_scale"),
-            label = NULL,
-            choices = NULL,
-            width = "120px"
-          ),
-          "Color palette",
-          placement = "top"
-        ),
+        class = "conversion-tab-items",
         bslib::tooltip(
           shiny::div(
             class = "tooltip-bttn",
