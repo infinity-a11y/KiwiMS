@@ -78,7 +78,8 @@ box::use(
       setup_plot_dl,
       setup_table_dl,
       prepare_hits_export,
-      plot_dl_popover
+      plot_dl_popover,
+      card_settings_popover
     ],
   app / logic / logging[get_session_prefix, write_log],
   app /
@@ -3388,10 +3389,9 @@ server <- function(
             ###### Hits table ----
             output$kikinact_hits_tab <- DT::renderDT({
               shiny::req(
-                conversion_vars$formatted_hits,
                 conversion_vars$conc_colors,
-                input$relbinding_hits_tab_sample_select,
-                input$relbinding_hits_tab_compound_select
+                input$kikinact_hits_tab_sample_select,
+                input$kikinact_hits_tab_compound_select
               )
 
               # Arrange table
@@ -4160,34 +4160,73 @@ server <- function(
               list(
                 value = "Total % Binding",
                 label = "Total % Binding",
-                id = "batch_heatmap_total_pct"
+                id = "batch_heatmap_total_pct",
+                is_pct = TRUE,
+                is_combined = FALSE,
+                default_scale = "Blues",
+                seq_only = TRUE
               ),
               list(
-                value = "% Correct",
-                label = "Correct [%]",
-                id = "batch_heatmap_pct_correct"
-              ),
-              list(
-                value = "% Unmatched",
-                label = "Unmatched [%]",
-                id = "batch_heatmap_pct_unmatched"
+                value = NULL,
+                values = c("% Correct", "% Unmatched"),
+                var_labels = c(
+                  "Correct" = "% Correct",
+                  "Unmatched" = "% Unmatched"
+                ),
+                var_defaults = list(
+                  "% Correct" = "Greens",
+                  "% Unmatched" = "Reds"
+                ),
+                label = "Correct / Unmatched",
+                id = "batch_heatmap_pct_cmp",
+                is_pct = TRUE,
+                is_combined = TRUE,
+                default_scale = "Greens",
+                seq_only = TRUE
               ),
               list(
                 value = "Compound",
                 label = "Compound",
-                id = "batch_heatmap_compound"
+                id = "batch_heatmap_compound",
+                is_pct = FALSE,
+                is_combined = FALSE,
+                default_scale = "plasma",
+                seq_only = FALSE
               ),
               list(
                 value = "Protein",
                 label = "Protein",
-                id = "batch_heatmap_protein"
+                id = "batch_heatmap_protein",
+                is_pct = FALSE,
+                is_combined = FALSE,
+                default_scale = "Set3",
+                seq_only = FALSE
               ),
               list(
                 value = "Concentration",
                 label = "Concentration",
-                id = "batch_heatmap_concentration"
+                id = "batch_heatmap_concentration",
+                is_pct = FALSE,
+                is_combined = FALSE,
+                default_scale = "plasma",
+                seq_only = FALSE
               ),
-              list(value = "Time", label = "Time", id = "batch_heatmap_time")
+              list(
+                value = "Time",
+                label = "Time",
+                id = "batch_heatmap_time",
+                is_pct = FALSE,
+                is_combined = FALSE,
+                default_scale = "plasma",
+                seq_only = FALSE
+              )
+            )
+            batch_heatmap_scale_choices_seq <- list(
+              Sequential = sequential_scales
+            )
+            batch_heatmap_scale_choices_all <- list(
+              Qualitative = qualitative_scales,
+              Gradient = gradient_scales
             )
 
             output$batch_heatmap_cards <- shiny::renderUI({
@@ -4209,9 +4248,49 @@ server <- function(
               }
 
               cards <- lapply(batch_heatmap_var_map, function(vm) {
-                if (!vm$value %in% available) {
+                is_avail <- if (isTRUE(vm$is_combined)) {
+                  any(vm$values %in% available)
+                } else {
+                  vm$value %in% available
+                }
+                if (!is_avail) {
                   return(NULL)
                 }
+
+                scale_choices <- if (isTRUE(vm$seq_only)) {
+                  batch_heatmap_scale_choices_seq
+                } else {
+                  batch_heatmap_scale_choices_all
+                }
+                settings_content <- shiny::div(
+                  shiny::selectInput(
+                    ns(paste0(vm$id, "_color_scale")),
+                    label = "Color Palette",
+                    choices = scale_choices,
+                    selected = vm$default_scale,
+                    width = "150px"
+                  ) |>
+                    shiny::tagAppendAttributes(class = "palette-select"),
+                  if (isTRUE(vm$is_combined)) {
+                    shinyWidgets::radioGroupButtons(
+                      ns(paste0(vm$id, "_var_select")),
+                      label = NULL,
+                      choices = vm$var_labels[vm$var_labels %in% available],
+                      selected = vm$values[1],
+                      size = "sm"
+                    )
+                  },
+                  if (isTRUE(vm$is_pct)) {
+                    shinyWidgets::materialSwitch(
+                      ns(paste0(vm$id, "_pct_scale_100")),
+                      label = "Scale to 100%",
+                      value = FALSE,
+                      right = TRUE
+                    )
+                  },
+                  style = "margin-right:20px;"
+                )
+                settings <- card_settings_popover(settings_content)
                 shiny::div(
                   class = "card-custom",
                   bslib::card(
@@ -4221,7 +4300,20 @@ server <- function(
                       vm$label,
                       shiny::div(
                         class = "box-header-settings-help",
-                        plot_dl_popover(ns, vm$id)
+                        settings,
+                        plot_dl_popover(ns, vm$id),
+                        bslib::tooltip(
+                          shiny::div(
+                            class = "tooltip-bttn",
+                            shiny::actionButton(
+                              ns(paste0(vm$id, "_help")),
+                              NULL,
+                              icon = shiny::icon("circle-question")
+                            )
+                          ),
+                          "Help",
+                          placement = "top"
+                        )
                       )
                     ),
                     bslib::card_body(shinycssloaders::withSpinner(
@@ -4241,23 +4333,90 @@ server <- function(
             lapply(batch_heatmap_var_map, function(vm) {
               local({
                 v <- vm$value
+                combined_values <- vm$values
+                var_defaults <- vm$var_defaults
                 plot_id <- vm$id
-                output[[plot_id]] <- plotly::renderPlotly({
+                pct <- isTRUE(vm$is_pct)
+                is_combined <- isTRUE(vm$is_combined)
+                default_cs <- vm$default_scale
+
+                build_heatmap <- function(theme) {
                   rl <- conversion_sidebar_vars$result_list()
                   shiny::req(rl, rl$hits_summary)
                   hs <- rl$hits_summary
-                  if (v %in% c("Concentration", "Time")) {
-                    shiny::req(v %in% names(hs))
+                  active_v <- if (is_combined) {
+                    radio_val <- input[[paste0(plot_id, "_var_select")]]
+                    if (is.null(radio_val)) combined_values[1] else radio_val
+                  } else {
+                    v
+                  }
+                  if (active_v %in% c("Concentration", "Time")) {
+                    shiny::req(active_v %in% names(hs))
+                  }
+                  sm <- if (
+                    pct && isTRUE(input[[paste0(plot_id, "_pct_scale_100")]])
+                  ) {
+                    "min100"
+                  } else {
+                    "minmax"
+                  }
+                  cs_input <- input[[paste0(plot_id, "_color_scale")]]
+                  active_default <- if (is_combined) {
+                    vd <- var_defaults[[active_v]]
+                    if (is.null(vd)) default_cs else vd
+                  } else {
+                    default_cs
+                  }
+                  cs <- if (!is.null(cs_input) && nzchar(cs_input)) {
+                    cs_input
+                  } else {
+                    active_default
                   }
                   batch_plate_heatmap(
                     hs,
-                    variable = v,
-                    color_scale = stats_cs(),
-                    scale_mode = "minmax",
-                    theme = "dark"
+                    variable = active_v,
+                    color_scale = cs,
+                    scale_mode = sm,
+                    theme = theme
                   )
-                })
+                }
+
+                output[[plot_id]] <- plotly::renderPlotly(build_heatmap("dark"))
+
+                setup_plot_dl(
+                  input,
+                  output,
+                  session,
+                  plot_id,
+                  build_fn = build_heatmap,
+                  filename_fn = function() {
+                    active_v <- if (is_combined) {
+                      radio_val <- input[[paste0(plot_id, "_var_select")]]
+                      if (is.null(radio_val)) combined_values[1] else radio_val
+                    } else {
+                      v
+                    }
+                    paste0(
+                      get_session_prefix(),
+                      "_Batch_Heatmap_",
+                      gsub("[^A-Za-z0-9]", "_", active_v)
+                    )
+                  }
+                )
               })
+            })
+
+            shiny::observe({
+              var_sel <- input$batch_heatmap_pct_cmp_var_select
+              if (is.null(var_sel)) {
+                return()
+              }
+              new_cs <- if (var_sel == "% Correct") "Greens" else "Reds"
+              shiny::updateSelectInput(
+                session,
+                "batch_heatmap_pct_cmp_color_scale",
+                selected = new_cs
+              )
             })
 
             output$pstat_n_samples <- shiny::renderUI({

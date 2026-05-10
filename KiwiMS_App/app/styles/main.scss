@@ -2301,7 +2301,7 @@ div[data-value="Protein Conversion"] .tab-pane {
   height: 100%;
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: 1fr 1fr;
   grid-auto-rows: 1fr;
 }
 
@@ -2553,18 +2553,21 @@ div[data-value="Protein Conversion"] .tab-pane {
   background: #ddddde !important;
 }
 
-.deconvolution-spectrum-card .plotly #scene,
-.deconvolution-spectrum-card .plot-container .plotly,
-.deconvolution-spectrum-card .plotly .gl-container,
-.deconvolution-heatmap-card .plotly #scene,
-.deconvolution-heatmap-card .plot-container .plotly,
-.deconvolution-heatmap-card .plotly .gl-container,
-.result-conc-tab .plotly #scene,
-.result-conc-tab .plot-container .plotly,
-.result-conc-tab .plotly .gl-container,
-.conversion-samples-wrapper .plotly #scene,
-.conversion-samples-wrapper .plot-container .plotly,
-.conversion-samples-wrapper .plotly .gl-container .conversion-samples-wrapper .plotly #scene {
+// .deconvolution-spectrum-card .plotly #scene,
+// .deconvolution-spectrum-card .plot-container .plotly,
+// .deconvolution-spectrum-card .plotly .gl-container,
+// .deconvolution-heatmap-card .plotly #scene,
+// .deconvolution-heatmap-card .plot-container .plotly,
+// .deconvolution-heatmap-card .plotly .gl-container,
+// .result-conc-tab .plotly #scene,
+// .result-conc-tab .plot-container .plotly,
+// .result-conc-tab .plotly .gl-container,
+// .conversion-samples-wrapper .plotly #scene,
+// .conversion-samples-wrapper .plot-container .plotly,
+// .conversion-samples-wrapper .plotly .gl-container .conversion-samples-wrapper .plotly #scene,
+.plotly #scene,
+.plot-container .plotly,
+.plotly .gl-container .conversion-samples-wrapper .plotly #scene {
   top: unset !important;
   left: unset !important;
   height: 100% !important;
@@ -2639,18 +2642,21 @@ div[data-value="Protein Conversion"] .tab-pane {
   text-align: left;
 }
 
-.deconvolution-spectrum-card .plotly,
-.deconvolution-spectrum-card .js-plotly-plot .plotly,
-.deconvolution-spectrum-card .js-plotly-plot .plotly .user-select-none,
-.deconvolution-heatmap-card .plotly,
-.deconvolution-heatmap-card .js-plotly-plot .plotly,
-.deconvolution-heatmap-card .js-plotly-plot .plotly .user-select-none,
-.result-conc-tab .plotly,
-.result-conc-tab .js-plotly-plot .plotly,
-.result-conc-tab .js-plotly-plot .plotly .user-select-none,
-.conversion-samples-wrapper .plotly,
-.conversion-samples-wrapper .js-plotly-plot .plotly,
-.conversion-samples-wrapper .js-plotly-plot .plotly .user-select-none {
+// .deconvolution-spectrum-card .plotly,
+// .deconvolution-spectrum-card .js-plotly-plot .plotly,
+// .deconvolution-spectrum-card .js-plotly-plot .plotly .user-select-none,
+// .deconvolution-heatmap-card .plotly,
+// .deconvolution-heatmap-card .js-plotly-plot .plotly,
+// .deconvolution-heatmap-card .js-plotly-plot .plotly .user-select-none,
+// .result-conc-tab .plotly,
+// .result-conc-tab .js-plotly-plot .plotly,
+// .result-conc-tab .js-plotly-plot .plotly .user-select-none,
+// .conversion-samples-wrapper .plotly,
+// .conversion-samples-wrapper .js-plotly-plot .plotly,
+// .conversion-samples-wrapper .js-plotly-plot .plotly .user-select-none
+.plotly,
+.js-plotly-plot .plotly,
+.js-plotly-plot .plotly .user-select-none {
   width: 99% !important;
   height: 99% !important;
 }
@@ -3359,12 +3365,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 /* Set1 */
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Set1"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Set1"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Set1"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="Set1"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="Set1"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="Set1"]) {
+.palette-select .selectize-dropdown .option[data-value="Set1"],
+.palette-select .selectize-input:has(> .item[data-value="Set1"]) {
   background: linear-gradient(
     to right,
     #e41a1c 0%,
@@ -3391,12 +3393,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 /* Set2 */
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Set2"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Set2"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Set2"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="Set2"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="Set2"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="Set2"]) {
+.palette-select .selectize-dropdown .option[data-value="Set2"],
+.palette-select .selectize-input:has(> .item[data-value="Set2"]) {
   background: linear-gradient(
     to right,
     #66c2a5 0%,
@@ -3421,12 +3419,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 /* Set3 */
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Set3"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Set3"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Set3"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="Set3"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="Set3"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="Set3"]) {
+.palette-select .selectize-dropdown .option[data-value="Set3"],
+.palette-select .selectize-input:has(> .item[data-value="Set3"]) {
   background: linear-gradient(
     to right,
     #8dd3c7 0%,
@@ -3459,12 +3453,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 /* Pastel1 */
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Pastel1"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Pastel1"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Pastel1"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="Pastel1"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="Pastel1"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="Pastel1"]) {
+.palette-select .selectize-dropdown .option[data-value="Pastel1"],
+.palette-select .selectize-input:has(> .item[data-value="Pastel1"]) {
   background: linear-gradient(
     to right,
     #fbb4ae 0%,
@@ -3490,12 +3480,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Pastel2"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Pastel2"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Pastel2"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="Pastel2"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="Pastel2"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="Pastel2"]) {
+.palette-select .selectize-dropdown .option[data-value="Pastel2"],
+.palette-select .selectize-input:has(> .item[data-value="Pastel2"]) {
   background: linear-gradient(
     to right,
     #b3e2cd 0%,
@@ -3519,12 +3505,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Dark2"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Dark2"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Dark2"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="Dark2"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="Dark2"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="Dark2"]) {
+.palette-select .selectize-dropdown .option[data-value="Dark2"],
+.palette-select .selectize-input:has(> .item[data-value="Dark2"]) {
   background: linear-gradient(
     to right,
     #1b9e77 0%,
@@ -3548,12 +3530,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Accent"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Accent"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Accent"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="Accent"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="Accent"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="Accent"]) {
+.palette-select .selectize-dropdown .option[data-value="Accent"],
+.palette-select .selectize-input:has(> .item[data-value="Accent"]) {
   background: linear-gradient(
     to right,
     #7fc97f 0%,
@@ -3577,12 +3555,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="YlOrRd"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="YlOrRd"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="YlOrRd"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="YlOrRd"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="YlOrRd"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="YlOrRd"]) {
+.palette-select .selectize-dropdown .option[data-value="YlOrRd"],
+.palette-select .selectize-input:has(> .item[data-value="YlOrRd"]) {
   background: linear-gradient(
     to right,
     #ffffcc 0%,
@@ -3608,12 +3582,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="YlOrBr"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="YlOrBr"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="YlOrBr"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="YlOrBr"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="YlOrBr"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="YlOrBr"]) {
+.palette-select .selectize-dropdown .option[data-value="YlOrBr"],
+.palette-select .selectize-input:has(> .item[data-value="YlOrBr"]) {
   background: linear-gradient(
     to right,
     #ffffe5 0%,
@@ -3639,12 +3609,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="YlGnBu"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="YlGnBu"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="YlGnBu"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="YlGnBu"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="YlGnBu"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="YlGnBu"]) {
+.palette-select .selectize-dropdown .option[data-value="YlGnBu"],
+.palette-select .selectize-input:has(> .item[data-value="YlGnBu"]) {
   background: linear-gradient(
     to right,
     #ffffd9 0%,
@@ -3670,12 +3636,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="YlGn"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="YlGn"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="YlGn"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="YlGn"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="YlGn"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="YlGn"]) {
+.palette-select .selectize-dropdown .option[data-value="YlGn"],
+.palette-select .selectize-input:has(> .item[data-value="YlGn"]) {
   background: linear-gradient(
     to right,
     #ffffe5 0%,
@@ -3701,12 +3663,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Reds"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Reds"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Reds"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="Reds"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="Reds"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="Reds"]) {
+.palette-select .selectize-dropdown .option[data-value="Reds"],
+.palette-select .selectize-input:has(> .item[data-value="Reds"]) {
   background: linear-gradient(
     to right,
     #fff5f0 0%,
@@ -3732,12 +3690,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="RdPu"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="RdPu"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="RdPu"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="RdPu"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="RdPu"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="RdPu"]) {
+.palette-select .selectize-dropdown .option[data-value="RdPu"],
+.palette-select .selectize-input:has(> .item[data-value="RdPu"]) {
   background: linear-gradient(
     to right,
     #fff7f3 0%,
@@ -3763,12 +3717,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Purples"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Purples"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Purples"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="Purples"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="Purples"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="Purples"]) {
+.palette-select .selectize-dropdown .option[data-value="Purples"],
+.palette-select .selectize-input:has(> .item[data-value="Purples"]) {
   background: linear-gradient(
     to right,
     #fcfbfd 0%,
@@ -3794,12 +3744,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="PuRd"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="PuRd"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="PuRd"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="PuRd"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="PuRd"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="PuRd"]) {
+.palette-select .selectize-dropdown .option[data-value="PuRd"],
+.palette-select .selectize-input:has(> .item[data-value="PuRd"]) {
   background: linear-gradient(
     to right,
     #f7f4f9 0%,
@@ -3825,12 +3771,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="PuBuGn"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="PuBuGn"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="PuBuGn"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="PuBuGn"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="PuBuGn"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="PuBuGn"]) {
+.palette-select .selectize-dropdown .option[data-value="PuBuGn"],
+.palette-select .selectize-input:has(> .item[data-value="PuBuGn"]) {
   background: linear-gradient(
     to right,
     #fff7fb 0%,
@@ -3856,12 +3798,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="PuBu"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="PuBu"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="PuBu"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="PuBu"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="PuBu"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="PuBu"]) {
+.palette-select .selectize-dropdown .option[data-value="PuBu"],
+.palette-select .selectize-input:has(> .item[data-value="PuBu"]) {
   background: linear-gradient(
     to right,
     #fff7fb 0%,
@@ -3887,12 +3825,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="OrRd"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="OrRd"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="OrRd"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="OrRd"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="OrRd"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="OrRd"]) {
+.palette-select .selectize-dropdown .option[data-value="OrRd"],
+.palette-select .selectize-input:has(> .item[data-value="OrRd"]) {
   background: linear-gradient(
     to right,
     #fff7ec 0%,
@@ -3918,12 +3852,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Oranges"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Oranges"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Oranges"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="Oranges"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="Oranges"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="Oranges"]) {
+.palette-select .selectize-dropdown .option[data-value="Oranges"],
+.palette-select .selectize-input:has(> .item[data-value="Oranges"]) {
   background: linear-gradient(
     to right,
     #fff7ec 0%,
@@ -3949,12 +3879,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Greys"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Greys"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Greys"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="Greys"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="Greys"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="Greys"]) {
+.palette-select .selectize-dropdown .option[data-value="Greys"],
+.palette-select .selectize-input:has(> .item[data-value="Greys"]) {
   background: linear-gradient(
     to right,
     #ffffff 0%,
@@ -3980,12 +3906,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Greens"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Greens"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Greens"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="Greens"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="Greens"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="Greens"]) {
+.palette-select .selectize-dropdown .option[data-value="Greens"],
+.palette-select .selectize-input:has(> .item[data-value="Greens"]) {
   background: linear-gradient(
     to right,
     #f7fcf5 0%,
@@ -4011,12 +3933,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="GnBu"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="GnBu"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="GnBu"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="GnBu"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="GnBu"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="GnBu"]) {
+.palette-select .selectize-dropdown .option[data-value="GnBu"],
+.palette-select .selectize-input:has(> .item[data-value="GnBu"]) {
   background: linear-gradient(
     to right,
     #f7fcf5 0%,
@@ -4042,12 +3960,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="BuPu"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="BuPu"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="BuPu"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="BuPu"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="BuPu"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="BuPu"]) {
+.palette-select .selectize-dropdown .option[data-value="BuPu"],
+.palette-select .selectize-input:has(> .item[data-value="BuPu"]) {
   background: linear-gradient(
     to right,
     #f7fcfd 0%,
@@ -4073,12 +3987,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="BuGn"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="BuGn"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="BuGn"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="BuGn"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="BuGn"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="BuGn"]) {
+.palette-select .selectize-dropdown .option[data-value="BuGn"],
+.palette-select .selectize-input:has(> .item[data-value="BuGn"]) {
   background: linear-gradient(
     to right,
     #f7fcfd 0%,
@@ -4104,12 +4014,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="Blues"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="Blues"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="Blues"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="Blues"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="Blues"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="Blues"]) {
+.palette-select .selectize-dropdown .option[data-value="Blues"],
+.palette-select .selectize-input:has(> .item[data-value="Blues"]) {
   background: linear-gradient(
     to right,
     #f7fbff 0%,
@@ -4137,45 +4043,37 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 
 /* Viridis */
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="inferno"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="inferno"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="inferno"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="inferno"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="inferno"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="inferno"]) {
+.palette-select .selectize-dropdown .option[data-value="inferno"],
+.palette-select .selectize-input:has(> .item[data-value="inferno"]) {
   background: linear-gradient(
     to right,
-    #000004ff,
-    #08051eff,
-    #190c3eff,
-    #300a5bff,
-    #460b6aff,
-    #5c126eff,
-    #711a6eff,
-    #87216bff,
-    #9c2964ff,
-    #b1325aff,
-    #c43c4eff,
-    #d64b40ff,
-    #e55c30ff,
-    #f17020ff,
-    #f8870eff,
-    #fca007ff,
-    #fbb91fff,
-    #f7d340ff,
-    #f1ed6fff,
+    #2c0b57ff,
+    #3f0a67ff,
+    #520e6dff,
+    #65156eff,
+    #771c6dff,
+    #88226aff,
+    #9b2964ff,
+    #ad305dff,
+    #be3852ff,
+    #ce4347ff,
+    #dc503bff,
+    #e8602dff,
+    #f1711fff,
+    #f8850fff,
+    #fb9906ff,
+    #fcaf13ff,
+    #fac62cff,
+    #f5db4dff,
+    #f1f077ff,
     #fcffa4ff
   );
   color: white;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="plasma"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="plasma"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="plasma"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="plasma"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="plasma"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="plasma"]) {
+.palette-select .selectize-dropdown .option[data-value="plasma"],
+.palette-select .selectize-input:has(> .item[data-value="plasma"]) {
   background: linear-gradient(
     to right,
     #0d0887ff,
@@ -4203,12 +4101,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="viridis"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="viridis"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="viridis"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="viridis"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="viridis"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="viridis"]) {
+.palette-select .selectize-dropdown .option[data-value="viridis"],
+.palette-select .selectize-input:has(> .item[data-value="viridis"]) {
   background: linear-gradient(
     to right,
     #440154ff,
@@ -4236,12 +4130,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="cividis"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="cividis"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="cividis"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="cividis"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="cividis"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="cividis"]) {
+.palette-select .selectize-dropdown .option[data-value="cividis"],
+.palette-select .selectize-input:has(> .item[data-value="cividis"]) {
   background: linear-gradient(
     to right,
     #00204dff,
@@ -4269,66 +4159,58 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="rocket"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="rocket"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="rocket"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="rocket"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="rocket"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="rocket"]) {
+.palette-select .selectize-dropdown .option[data-value="rocket"],
+.palette-select .selectize-input:has(> .item[data-value="rocket"]) {
   background: linear-gradient(
     to right,
-    #03051aff,
-    #150e26ff,
-    #281535ff,
-    #3c1a42ff,
-    #511e4dff,
-    #661f54ff,
-    #7c1f5aff,
-    #931c5bff,
-    #aa185aff,
-    #c11754ff,
-    #d3214bff,
-    #e33541ff,
-    #ed4e3eff,
-    #f26847ff,
-    #f4815aff,
-    #f5986fff,
-    #f6ae86ff,
-    #f7c2a2ff,
-    #f8d7bfff,
+    #381a40ff,
+    #4a1d4aff,
+    #5c1e51ff,
+    #6f1f57ff,
+    #821e5aff,
+    #961c5bff,
+    #a9185aff,
+    #bc1656ff,
+    #ce1d4eff,
+    #dc2b46ff,
+    #e73e3fff,
+    #ee533fff,
+    #f26948ff,
+    #f47e58ff,
+    #f59269ff,
+    #f6a57dff,
+    #f6b893ff,
+    #f7c9aaff,
+    #f8dac4ff,
     #faebddff
   );
   color: white;
   text-align: left;
 }
 
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="mako"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="mako"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="mako"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="mako"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="mako"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="mako"]) {
+.palette-select .selectize-dropdown .option[data-value="mako"],
+.palette-select .selectize-input:has(> .item[data-value="mako"]) {
   background: linear-gradient(
     to right,
-    #0b0405ff,
-    #190e19ff,
-    #27182dff,
-    #312142ff,
-    #3a2c59ff,
-    #3f3770ff,
-    #414388ff,
-    #3c5397ff,
+    #30203eff,
+    #382952ff,
+    #3d3266ff,
+    #403c7aff,
+    #40488dff,
+    #3c5598ff,
     #38639dff,
-    #3573a1ff,
-    #3482a4ff,
-    #3491a8ff,
-    #35a0abff,
-    #3aaeadff,
-    #46beadff,
-    #5accadff,
-    #7ed7afff,
-    #a4e0bbff,
-    #c3e9ceff,
+    #3670a0ff,
+    #357da3ff,
+    #3489a6ff,
+    #3496a9ff,
+    #36a3abff,
+    #3bafadff,
+    #45bdadff,
+    #53c9adff,
+    #6ed3adff,
+    #90dbb4ff,
+    #aee3c0ff,
+    #c7ecd2ff,
     #def5e5ff
   );
   color: white;
@@ -4336,33 +4218,29 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 /* Magma */
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="magma"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="magma"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="magma"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="magma"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="magma"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="magma"]) {
+.palette-select .selectize-dropdown .option[data-value="magma"],
+.palette-select .selectize-input:has(> .item[data-value="magma"]) {
   background: linear-gradient(
     to right,
-    #000004ff,
-    #07071dff,
-    #160f3bff,
-    #29115aff,
-    #400f73ff,
-    #56147dff,
-    #6b1d81ff,
-    #802582ff,
-    #952c80ff,
-    #ab337cff,
-    #c03a76ff,
-    #d6456cff,
-    #e85362ff,
-    #f4685cff,
-    #fa815fff,
-    #fd9a6aff,
-    #feb37bff,
-    #fecc8fff,
-    #fde4a6ff,
+    #251256ff,
+    #390f6dff,
+    #4c117aff,
+    #5e187fff,
+    #701f81ff,
+    #822581ff,
+    #942c80ff,
+    #a6317dff,
+    #b93778ff,
+    #cc3f71ff,
+    #dd4869ff,
+    #eb5760ff,
+    #f4695cff,
+    #fa7e5eff,
+    #fd9467ff,
+    #fea973ff,
+    #febf84ff,
+    #fed395ff,
+    #fde8aaff,
     #fcfdbfff
   );
   color: white;
@@ -4370,12 +4248,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 /* Turbo */
-#app-conversion_main-color_scale + .selectize-control .selectize-dropdown .option[data-value="turbo"],
-.selectize-dropdown.app-conversion_main-color_scale .option[data-value="turbo"],
-#app-conversion_main-color_scale + .selectize-control .selectize-input:has(> .item[data-value="turbo"]),
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-dropdown .option[data-value="turbo"],
-.selectize-dropdown.app-conversion_main-stats_color_scale .option[data-value="turbo"],
-#app-conversion_main-stats_color_scale + .selectize-control .selectize-input:has(> .item[data-value="turbo"]) {
+.palette-select .selectize-dropdown .option[data-value="turbo"],
+.palette-select .selectize-input:has(> .item[data-value="turbo"]) {
   background: linear-gradient(
     to right,
     #30123bff,
@@ -4449,6 +4323,11 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   height: 20px !important;
   width: 20px !important;
   top: -0.15vw !important;
+}
+
+.input-stat-panel .material-switch > label.switch:after,
+.input-stat-panel .material-switch > label.switch:before {
+  margin-top: -13px;
 }
 
 .material-switch > input[type="checkbox"]:checked + label.switch:after {
@@ -5195,9 +5074,6 @@ sample-file-row .form-group {
   margin-bottom: unset;
 }
 
-.conversion-result-wrapper .material-switch label {
-  padding-left: 5px;
-  top: 0.25vw;
-  position: absolute;
-  left: 3rem;
+.input-panel .color-scale-ui {
+  justify-content: center;
 }

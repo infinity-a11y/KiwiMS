@@ -4998,7 +4998,9 @@ get_cmp_colorScale <- function(filtered_table, scale, variable, trunc) {
       # ViridisLite Scales
     } else if (scale %in% gradient_scales) {
       vir_func <- getExportedValue("viridisLite", scale)
-      colors <- vir_func(n)
+      dark_begin_scales <- c("magma", "inferno", "rocket", "mako")
+      begin <- if (scale %in% dark_begin_scales) 0.15 else 0
+      colors <- vir_func(n, begin = begin)
     } else {
       stop(paste("Scale", scale, "not recognized in provided lists."))
     }
@@ -5815,7 +5817,9 @@ stats_palette <- function(n, scale) {
       getExportedValue("viridisLite", scale),
       error = function(e) viridisLite::viridis
     )
-    brighten_hex(vir_func(n), factor = 1.5)
+    dark_begin_scales <- c("magma", "inferno", "rocket", "mako")
+    begin <- if (scale %in% dark_begin_scales) 0.15 else 0
+    brighten_hex(vir_func(n, begin = begin), factor = 1.5)
   }
 }
 
@@ -6455,22 +6459,18 @@ batch_plate_heatmap <- function(
     pal <- stats_palette(max(n_cats, 2), color_scale)
     if (n_cats <= 1) {
       cs <- list(list(0, pal[1]), list(1, pal[1]))
-      tick_vals <- list(1.5)
-      tick_text <- list(if (n_cats == 1) cat_levels[1] else "")
     } else {
       cs <- lapply(seq_len(n_cats), function(i) {
         list((i - 1) / (n_cats - 1), pal[i])
       })
-      tick_vals <- as.list(seq_len(n_cats))
-      tick_text <- as.list(cat_levels)
     }
     zmin <- 1
     zmax <- max(n_cats, 2)
-    show_scale <- TRUE
+    show_scale <- FALSE
     cb_title <- variable
   }
 
-  plotly::plot_ly(
+  p <- plotly::plot_ly(
     z = z_mat,
     x = cols,
     y = rows,
@@ -6483,24 +6483,62 @@ batch_plate_heatmap <- function(
     ygap = 2,
     text = text_mat,
     hovertemplate = "%{text}<extra></extra>",
-    colorbar = c(
-      list(
-        title = list(text = cb_title, font = list(color = font_color)),
-        tickfont = list(color = font_color),
-        outlinecolor = font_color
-      ),
-      if (!is.null(tick_vals)) {
-        list(
-          tickmode = "array",
-          tickvals = tick_vals,
-          ticktext = tick_text
-        )
-      }
+    colorbar = list(
+      title = list(text = cb_title, font = list(color = font_color)),
+      tickfont = list(color = font_color),
+      outlinecolor = font_color
     )
-  ) |>
+  )
+
+  if (!is_numeric_var && !is.null(cat_levels) && length(cat_levels) > 0) {
+    n_cats <- length(cat_levels)
+    pal <- stats_palette(max(n_cats, 2), color_scale)
+    for (i in seq_len(n_cats)) {
+      p <- p |> plotly::add_trace(
+        type = "scatter",
+        x = 0,
+        y = 0,
+        mode = "markers",
+        xaxis = "x2",
+        yaxis = "y2",
+        marker = list(
+          symbol = "square",
+          color = pal[i],
+          size = 10,
+          opacity = 0,
+          line = list(width = 0)
+        ),
+        name = cat_levels[i],
+        showlegend = TRUE,
+        inherit = FALSE,
+        hoverinfo = "skip"
+      )
+    }
+  }
+
+  p |>
     plotly::layout(
       dragmode = FALSE,
-      showlegend = FALSE,
+      showlegend = !is_numeric_var,
+      legend = list(
+        font = list(color = font_color),
+        bgcolor = "rgba(0,0,0,0)",
+        title = list(text = cb_title, font = list(color = font_color))
+      ),
+      xaxis2 = list(
+        visible = FALSE,
+        showgrid = FALSE,
+        zeroline = FALSE,
+        range = c(-1, 1),
+        fixedrange = TRUE
+      ),
+      yaxis2 = list(
+        visible = FALSE,
+        showgrid = FALSE,
+        zeroline = FALSE,
+        range = c(-1, 1),
+        fixedrange = TRUE
+      ),
       hoverlabel = list(
         bgcolor = "#38387Cdb",
         font = list(size = 14, color = "white"),
@@ -6530,7 +6568,7 @@ batch_plate_heatmap <- function(
         scaleratio = 1,
         automargin = FALSE
       ),
-      margin = list(t = 25, r = 0, b = 0, l = 30),
+      margin = list(t = 25, r = if (is_numeric_var) 0 else 10, b = 0, l = 30),
       plot_bgcolor = "rgba(160,160,170,0.25)",
       paper_bgcolor = "rgba(0,0,0,0)"
     ) |>
