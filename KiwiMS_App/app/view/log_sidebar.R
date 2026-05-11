@@ -29,7 +29,7 @@ ui <- function(id) {
   sidebar(
     class = "deconvolution-sidebar",
     # width = "23rem",
-    width = "17%",
+    width = "18%",
     div(
       class = "deconvolution-sidebar-ui",
       div(

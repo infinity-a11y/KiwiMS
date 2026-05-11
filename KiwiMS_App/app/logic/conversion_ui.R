@@ -1111,13 +1111,14 @@ summary_results_ui <- function(ns, batch_control) {
           shiny::div(
             class = "input-stat-panel",
             shiny::div(
-              class = "input-panel color-scale-ui",
+              class = "input-panel palette-select",
               bslib::tooltip(
                 shiny::selectInput(
                   ns("stats_color_scale"),
                   label = NULL,
                   choices = NULL
-                ) |> shiny::tagAppendAttributes(class = "palette-select"),
+                ) |>
+                  shiny::tagAppendAttributes(class = "palette-select"),
                 "Color palette",
                 placement = "top"
               ),
@@ -2401,7 +2402,8 @@ binding_results_ui <- function(ns, hits_summary) {
             label = NULL,
             choices = NULL,
             width = "120px"
-          ) |> shiny::tagAppendAttributes(class = "palette-select"),
+          ) |>
+            shiny::tagAppendAttributes(class = "palette-select"),
           "Color palette",
           placement = "top"
         ),

@@ -31,7 +31,7 @@ box::use(
   app /
     logic /
     deconvolution_functions[
-      create_384_plate_heatmap,
+      plate_heatmap,
       spectrum_plot,
       decon_progress_count,
       decon_is_complete,
@@ -2038,7 +2038,7 @@ server <- function(
 
                 # Save heatmap
                 if (!file.exists(file.path(temp, "heatmap.rds"))) {
-                  heatmap <- create_384_plate_heatmap(reactVars$rslt_df)
+                  heatmap <- plate_heatmap(reactVars$rslt_df, all_wells = config_file()[["Well"]])
                   saveRDS(heatmap, file.path(temp, "heatmap.rds"))
                 }
               } else {
@@ -2725,7 +2725,7 @@ server <- function(
           shiny$req(nrow(reactVars$rslt_df) > 0)
           waiter_show(id = ns("heatmap"), html = spin_wave())
 
-          heatmap <- create_384_plate_heatmap(reactVars$rslt_df) |>
+          heatmap <- plate_heatmap(reactVars$rslt_df, all_wells = config_file()[["Well"]]) |>
             event_register("plotly_click")
 
           waiter_hide(id = ns("heatmap"))

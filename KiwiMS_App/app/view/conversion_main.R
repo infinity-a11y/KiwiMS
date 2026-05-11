@@ -4023,7 +4023,9 @@ server <- function(
             output$conversion_ui <- shiny::renderUI({
               summary_results_ui(
                 ns,
-                batch_control = all(hits_summary$Well != "N/A")
+                batch_control = "Well" %in% names(hits_summary) &&
+                  !all(is.na(hits_summary$Well)) &&
+                  !all(trimws(as.character(hits_summary$Well)) %in% c("", "NA", "N/A"))
               )
             })
 
@@ -4073,8 +4075,13 @@ server <- function(
             output$stats_histogram <- plotly::renderPlotly({
               rl <- conversion_sidebar_vars$result_list()
               shiny::req(rl, rl$hits_summary)
+              hs <- if (isTRUE(input$stats_exclude_extremes)) {
+                filter_extremes(rl$hits_summary)
+              } else {
+                rl$hits_summary
+              }
               stats_histogram(
-                rl$hits_summary,
+                hs,
                 theme = "dark",
                 color_scale = stats_cs()
               )
@@ -4190,7 +4197,7 @@ server <- function(
                 id = "batch_heatmap_compound",
                 is_pct = FALSE,
                 is_combined = FALSE,
-                default_scale = "plasma",
+                default_scale = "viridis",
                 seq_only = FALSE
               ),
               list(
@@ -4399,7 +4406,7 @@ server <- function(
                     paste0(
                       get_session_prefix(),
                       "_Batch_Heatmap_",
-                      gsub("[^A-Za-z0-9]", "_", active_v)
+                      gsub("_+", "_", gsub("[^A-Za-z0-9]+", "_", trimws(active_v)))
                     )
                   }
                 )
@@ -4581,9 +4588,28 @@ server <- function(
                   )
                 }
               }
+              # Sum true event counts: messages with embedded ×N contribute N,
+              # plain messages contribute 1 each.
+              n_warn_total <- if (length(warn_msgs) == 0L) {
+                0L
+              } else {
+                sum(vapply(
+                  warn_msgs,
+                  function(msg) {
+                    m <- regmatches(msg, regexpr("×(\\d+)$", msg))
+                    if (length(m) > 0L && nzchar(m)) {
+                      as.integer(sub("^×", "", m))
+                    } else {
+                      1L
+                    }
+                  },
+                  integer(1)
+                ))
+              }
               list(
                 n_err = n_err,
                 n_warn = n_warn,
+                n_warn_total = n_warn_total,
                 err_msgs = err_msgs,
                 warn_msgs = warn_msgs
               )
@@ -4617,7 +4643,7 @@ server <- function(
             output$pstat_warnings <- shiny::renderUI({
               shiny::req(conversion_sidebar_vars$console_log_snapshot())
               parsed <- parse_log_lines(conversion_sidebar_vars$console_log_snapshot())
-              n <- parsed$n_warn
+              n <- parsed$n_warn_total
               cls <- if (n > 0) {
                 "protocol-stat-value protocol-stat-warn"
               } else {
@@ -5126,6 +5152,11 @@ server <- function(
       build_fn = function(theme) {
         rl <- conversion_sidebar_vars$result_list()
         shiny::req(rl, rl$hits_summary)
+        hs <- if (isTRUE(input$stats_exclude_extremes)) {
+          filter_extremes(rl$hits_summary)
+        } else {
+          rl$hits_summary
+        }
         cs <- if (
           is.null(input$stats_color_scale) || !nzchar(input$stats_color_scale)
         ) {
@@ -5133,7 +5164,7 @@ server <- function(
         } else {
           input$stats_color_scale
         }
-        stats_histogram(rl$hits_summary, theme = theme, color_scale = cs)
+        stats_histogram(hs, theme = theme, color_scale = cs)
       },
       filename_fn = function() {
         paste0(get_session_prefix(), "_Statistics_Histogram")

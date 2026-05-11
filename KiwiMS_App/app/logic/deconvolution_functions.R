@@ -599,22 +599,46 @@ deconvolute <- function(
   }
 }
 
-# create_384_plate_heatmap(): Make 384 well plate layout ----
+# plate_heatmap(): Well plate occupancy heatmap ----
 #' @export
-create_384_plate_heatmap <- function(data) {
-  # A at top (index 1), P at bottom (index 16) — yaxis autorange="reversed"
-  # maps them so A appears at the top of the plot
-  rows <- LETTERS[1:16]
-  cols <- 1:24
+plate_heatmap <- function(data, all_wells = NULL, theme = "dark") {
+  font_color  <- if (theme == "light") "black" else "white"
+  empty_color <- if (theme == "light") "rgba(195,197,205,1)" else "rgba(42,44,52,1)"
+  tile_bg     <- if (theme == "light") "rgba(148,150,158,0.35)" else "rgba(118,120,128,0.55)"
+
+  all_rows <- LETTERS[1:16]
+  all_cols <- 1:24
+
+  # Normalize well IDs ("A01" → "A1")
+  norm_well_id <- function(w) gsub("^([A-Za-z]+)0*(\\d+)$", "\\1\\2", toupper(trimws(w)))
+
+  # Determine bounding rectangle from all_wells if provided, else from data
+  if (!is.null(all_wells) && length(all_wells) > 0) {
+    nw <- norm_well_id(stats::na.omit(as.character(all_wells)))
+    nw <- nw[nzchar(nw)]
+    row_letters <- sub("\\d+$", "", nw)
+    col_nums    <- as.integer(sub("^[A-Za-z]+", "", nw))
+    used_row_idx <- range(match(row_letters, all_rows, nomatch = NA_integer_), na.rm = TRUE)
+    used_col_idx <- range(col_nums, na.rm = TRUE)
+    row_range <- seq(used_row_idx[1], used_row_idx[2])
+    col_range <- seq(used_col_idx[1], used_col_idx[2])
+  } else {
+    row_range <- seq_len(16)
+    col_range <- seq_len(24)
+  }
+
+  rows <- all_rows[row_range]
+  cols <- all_cols[col_range]
+  nr   <- length(rows)
+  nc   <- length(cols)
 
   plate_layout <- expand.grid(row = rows, col = cols) |>
-    mutate(well_id = paste0(row, col))
+    dplyr::mutate(well_id = paste0(row, col))
 
-  plate_data <- left_join(plate_layout, data, by = "well_id")
+  plate_data <- dplyr::left_join(plate_layout, data, by = "well_id")
 
-  # Build z matrix (rows = A..P, cols = 1..24) and tooltip text matrix
-  z_mat <- matrix(0, nrow = 16, ncol = 24, dimnames = list(rows, cols))
-  text_mat <- matrix("", nrow = 16, ncol = 24, dimnames = list(rows, cols))
+  z_mat    <- matrix(0,  nrow = nr, ncol = nc, dimnames = list(rows, as.character(cols)))
+  text_mat <- matrix("", nrow = nr, ncol = nc, dimnames = list(rows, as.character(cols)))
 
   for (r in rows) {
     for (c in cols) {
@@ -622,22 +646,14 @@ create_384_plate_heatmap <- function(data) {
       d <- plate_data[plate_data$well_id == wid, ]
       if (nrow(d) > 0 && !is.na(d$value[1])) {
         z_mat[r, as.character(c)] <- 1
-        text_mat[r, as.character(c)] <- paste0(
-          "Well: ",
-          wid,
-          "<br>Sample: ",
-          d$sample[1]
-        )
+        text_mat[r, as.character(c)] <- paste0("Well: ", wid, "<br>Sample: ", d$sample[1])
       } else {
         text_mat[r, as.character(c)] <- paste0("Well: ", wid, "<br>Empty")
       }
     }
   }
 
-  # Colorscale:
-  #   0 = empty well  — solid dark fill so xgap/ygap border is visible
-  #   1 = occupied    — white
-  colorscale <- list(c(0, "rgba(42,44,52,1)"), c(1, "white"))
+  colorscale <- list(c(0, empty_color), c(1, "white"))
 
   plotly::plot_ly(
     z = z_mat,
@@ -648,8 +664,8 @@ create_384_plate_heatmap <- function(data) {
     showscale = FALSE,
     zmin = 0,
     zmax = 1,
-    xgap = 2,
-    ygap = 2,
+    xgap = 3,
+    ygap = 3,
     text = text_mat,
     hovertemplate = "%{text}<extra></extra>"
   ) |>
@@ -666,18 +682,19 @@ create_384_plate_heatmap <- function(data) {
         tickmode = "array",
         tickvals = cols,
         ticktext = as.character(cols),
-        tickfont = list(color = "white", size = 12),
+        tickfont = list(color = font_color, size = 12),
         tickangle = 0,
         ticklen = 0,
         showgrid = FALSE,
         zeroline = FALSE,
         automargin = FALSE,
+        range = c(min(cols) - 0.5, max(cols) + 0.5),
         scaleanchor = "y",
         scaleratio = 1
       ),
       yaxis = list(
         autorange = "reversed",
-        tickfont = list(color = "white", size = 12),
+        tickfont = list(color = font_color, size = 12),
         ticklen = 0,
         showgrid = FALSE,
         zeroline = FALSE,
@@ -686,7 +703,7 @@ create_384_plate_heatmap <- function(data) {
         automargin = FALSE
       ),
       margin = list(t = 25, r = 0, b = 0, l = 30),
-      plot_bgcolor = "rgba(160,160,170,0.25)",
+      plot_bgcolor = tile_bg,
       paper_bgcolor = "rgba(0,0,0,0)"
     ) |>
     config(

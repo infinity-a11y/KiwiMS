@@ -1322,6 +1322,8 @@ td.listbox.htDimmed.current.highlight {
   width: 100%;
   min-width: max-content;
   background: unset !important;
+  padding-left: 2%;
+  padding-right: 2%;
 }
 
 #app-deconvolution_pars-folder:hover,
@@ -4821,6 +4823,8 @@ sample-file-row .form-group {
 
 #app-deconvolution_pars-target_folder {
   width: 100%;
+  padding-left: 2%;
+  padding-right: 2%;
 }
 
 .save-button {
@@ -5033,9 +5037,11 @@ sample-file-row .form-group {
   gap: 4px;
 }
 
-.color-scale-ui .selectize-control .item {
-  background: #00000080;
-  color: white;
+.palette-select .selectize-control .item {
+  background: rgba(0, 0, 0, 0.5019607843);
+  color: #fff;
+  font-size: 11px;
+  padding: 2px;
 }
 
 .input-panel {
@@ -5074,6 +5080,6 @@ sample-file-row .form-group {
   margin-bottom: unset;
 }
 
-.input-panel .color-scale-ui {
+.input-panel .palette-select {
   justify-content: center;
 }

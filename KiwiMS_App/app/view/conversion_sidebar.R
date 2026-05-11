@@ -40,7 +40,7 @@ ui <- function(id) {
 
   bslib::sidebar(
     class = "conversion-sidebar",
-    width = "17%",
+    width = "18%",
     shinyjs::useShinyjs(),
     shiny::uiOutput(ns("conversion_sidebar_ui"))
   )
@@ -794,7 +794,9 @@ server <- function(
         if (!ki) {
           shiny::tags$script(shiny::HTML(paste0(
             "(function() {",
-            "  $('#", ns("analysis_select"), " .radio:nth-child(3)')",
+            "  $('#",
+            ns("analysis_select"),
+            " .radio:nth-child(3)')",
             "    .addClass('custom-disable');",
             "})()"
           )))

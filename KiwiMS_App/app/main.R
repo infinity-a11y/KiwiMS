@@ -112,6 +112,16 @@ ui <- function(id) {
               if (trace[key] && typeof trace[key].size === 'number')
                 trace[key].size = Math.round(trace[key].size * contextScale);
             });
+            if (trace.legendgrouptitle && trace.legendgrouptitle.font &&
+                typeof trace.legendgrouptitle.font.size === 'number')
+              trace.legendgrouptitle.font.size = Math.round(trace.legendgrouptitle.font.size * contextScale);
+            if (trace.colorbar) {
+              if (trace.colorbar.title && trace.colorbar.title.font &&
+                  typeof trace.colorbar.title.font.size === 'number')
+                trace.colorbar.title.font.size = Math.round(trace.colorbar.title.font.size * contextScale);
+              if (trace.colorbar.tickfont && typeof trace.colorbar.tickfont.size === 'number')
+                trace.colorbar.tickfont.size = Math.round(trace.colorbar.tickfont.size * contextScale);
+            }
           });
           if (fig.layout.margin && typeof fig.layout.margin === 'object') {
             ['l', 'r', 't', 'b', 'pad'].forEach(function(side) {

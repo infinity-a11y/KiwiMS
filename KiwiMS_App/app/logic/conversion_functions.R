@@ -5000,7 +5000,7 @@ get_cmp_colorScale <- function(filtered_table, scale, variable, trunc) {
       vir_func <- getExportedValue("viridisLite", scale)
       dark_begin_scales <- c("magma", "inferno", "rocket", "mako")
       begin <- if (scale %in% dark_begin_scales) 0.15 else 0
-      colors <- vir_func(n, begin = begin)
+      colors <- vir_func(n, begin = begin, end = 0.9)
     } else {
       stop(paste("Scale", scale, "not recognized in provided lists."))
     }
@@ -6266,7 +6266,11 @@ stats_violin <- function(
   } else {
     "rgba(255,255,255,0.5)"
   }
-  box_line_color <- if (theme == "light") "rgba(0,0,0,1)" else "rgba(255,255,255,1)"
+  box_line_color <- if (theme == "light") {
+    "rgba(0,0,0,1)"
+  } else {
+    "rgba(255,255,255,1)"
+  }
 
   show_box <- inner != "Points"
   show_points <- inner == "Points"
@@ -6333,7 +6337,7 @@ stats_violin <- function(
     )
 }
 
-# batch_plate_heatmap(): Interactive 384-well plate heatmap for batch control ----
+# batch_plate_heatmap(): Interactive well plate heatmap for batch control ----
 #' @export
 batch_plate_heatmap <- function(
   hits_summary,
@@ -6342,6 +6346,8 @@ batch_plate_heatmap <- function(
   scale_mode = "minmax",
   theme = "dark"
 ) {
+  hits_summary3 <<- hits_summary
+
   # Only Total % Binding is stored as 0-1 fraction; % Correct / % Unmatched are 0-100
   fraction_vars <- c("Total % Binding")
   pct_vars <- c("Total % Binding", "% Correct", "% Unmatched")
@@ -6353,11 +6359,29 @@ batch_plate_heatmap <- function(
   )
 
   font_color <- if (theme == "light") "black" else "white"
+  paper_bg <- if (theme == "light") "#f0f0f5" else "#23252e"
+  tile_bg <- "rgba(190,192,200,0.38)"
 
   df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
   if (!variable %in% names(df)) {
     return(plotly::plotly_empty())
   }
+
+  if (!"Well" %in% names(df) ||
+      all(is.na(df[["Well"]])) ||
+      all(trimws(as.character(df[["Well"]])) %in% c("", "NA", "N/A"))) {
+    return(plotly::plotly_empty())
+  }
+
+  # Classify each sample's well state
+  no_prot_flag <- is.na(hits_summary$`Measured Mw Protein [Da]`)
+  no_hit_flag <- !is.na(hits_summary$`Measured Mw Protein [Da]`) &
+    is.na(hits_summary$Compound)
+  well_state <- dplyr::case_when(
+    no_prot_flag ~ "no_prot",
+    no_hit_flag ~ "no_hit",
+    TRUE ~ "normal"
+  )
 
   raw_vals <- df[[variable]]
   is_numeric_var <- variable %in% numeric_vars
@@ -6372,6 +6396,8 @@ batch_plate_heatmap <- function(
     if (variable %in% fraction_vars) {
       values <- values * 100
     }
+    # No-hit wells have 0 binding for numeric variables
+    values[no_hit_flag & is.na(values)] <- 0
     display_vals <- if (variable %in% pct_vars) {
       sprintf("%.1f%%", values)
     } else {
@@ -6388,6 +6414,7 @@ batch_plate_heatmap <- function(
     value = values,
     display = display_vals,
     sample = df[["Sample"]],
+    well_state = well_state,
     stringsAsFactors = FALSE
   )
 
@@ -6413,14 +6440,30 @@ batch_plate_heatmap <- function(
     ncol = 24,
     dimnames = list(rows, as.character(cols))
   )
+  presence_mat <- matrix(
+    FALSE,
+    nrow = 16,
+    ncol = 24,
+    dimnames = list(rows, as.character(cols))
+  )
+  no_prot_col_vals <- integer(0)
+  no_prot_row_vals <- character(0)
+  no_hit_col_vals <- integer(0)
+  no_hit_row_vals <- character(0)
 
   for (r in rows) {
     for (c in cols) {
       wid <- paste0(r, c)
       d <- plate_data[plate_data$well_id == wid, ]
-      if (nrow(d) > 0 && !is.na(d$value[1])) {
-        z_mat[r, as.character(c)] <- d$value[1]
-        text_mat[r, as.character(c)] <- paste0(
+      ws <- if (!is.na(d$well_state[1])) d$well_state[1] else "empty"
+
+      if (ws != "empty") {
+        presence_mat[r, as.character(c)] <- TRUE
+      }
+
+      if (!is.na(d$value[1])) {
+        if (ws != "no_prot") z_mat[r, as.character(c)] <- d$value[1]
+        hover_txt <- paste0(
           "Well: ",
           wid,
           "<br>Sample: ",
@@ -6430,10 +6473,68 @@ batch_plate_heatmap <- function(
           ": ",
           d$display[1]
         )
+        if (ws == "no_prot") {
+          hover_txt <- paste0(hover_txt, "<br>No protein peak detected")
+          no_prot_col_vals <- c(no_prot_col_vals, c)
+          no_prot_row_vals <- c(no_prot_row_vals, r)
+        } else if (ws == "no_hit") {
+          hover_txt <- paste0(hover_txt, "<br>No compound binding")
+          no_hit_col_vals <- c(no_hit_col_vals, c)
+          no_hit_row_vals <- c(no_hit_row_vals, r)
+        }
+        text_mat[r, as.character(c)] <- hover_txt
+      } else if (ws == "no_prot") {
+        hover_txt <- paste0(
+          "Well: ",
+          wid,
+          "<br>Sample: ",
+          d$sample[1],
+          "<br>No protein peak detected"
+        )
+        text_mat[r, as.character(c)] <- hover_txt
+        no_prot_col_vals <- c(no_prot_col_vals, c)
+        no_prot_row_vals <- c(no_prot_row_vals, r)
+      } else if (ws == "no_hit") {
+        hover_txt <- paste0(
+          "Well: ",
+          wid,
+          "<br>Sample: ",
+          d$sample[1],
+          "<br>No compound binding"
+        )
+        text_mat[r, as.character(c)] <- hover_txt
+        no_hit_col_vals <- c(no_hit_col_vals, c)
+        no_hit_row_vals <- c(no_hit_row_vals, r)
       } else {
         text_mat[r, as.character(c)] <- paste0("Well: ", wid, "<br>Empty")
       }
     }
+  }
+
+  # Trim to bounding rectangle of all wells present in dataset
+  has_empty_in_rect <- FALSE
+  used_row_idx <- which(rowSums(presence_mat) > 0)
+  used_col_idx <- which(colSums(presence_mat) > 0)
+  if (length(used_row_idx) > 0 && length(used_col_idx) > 0) {
+    row_range <- seq(min(used_row_idx), max(used_row_idx))
+    col_range <- seq(min(used_col_idx), max(used_col_idx))
+    display_rows <- rows[row_range]
+    display_cols <- cols[col_range]
+    z_mat <- z_mat[row_range, col_range, drop = FALSE]
+    text_mat <- text_mat[row_range, col_range, drop = FALSE]
+    has_empty_in_rect <- any(!presence_mat[row_range, col_range])
+    keep_np <- no_prot_row_vals %in%
+      display_rows &
+      no_prot_col_vals %in% display_cols
+    no_prot_row_vals <- no_prot_row_vals[keep_np]
+    no_prot_col_vals <- no_prot_col_vals[keep_np]
+    keep_nh <- no_hit_row_vals %in%
+      display_rows &
+      no_hit_col_vals %in% display_cols
+    no_hit_row_vals <- no_hit_row_vals[keep_nh]
+    no_hit_col_vals <- no_hit_col_vals[keep_nh]
+    rows <- display_rows
+    cols <- display_cols
   }
 
   tick_vals <- NULL
@@ -6470,6 +6571,16 @@ batch_plate_heatmap <- function(
     cb_title <- variable
   }
 
+  # Position colorbar below the Well States legend group when it has entries
+  n_ws_items <- as.integer(length(no_prot_row_vals) > 0) +
+    as.integer(length(no_hit_row_vals) > 0) +
+    as.integer(has_empty_in_rect)
+  cb_y <- if (is_numeric_var && n_ws_items > 0L) {
+    max(0.05, 1.0 - (n_ws_items + 1L) * 0.08 - 0.04)
+  } else {
+    0.5
+  }
+
   p <- plotly::plot_ly(
     z = z_mat,
     x = cols,
@@ -6479,14 +6590,16 @@ batch_plate_heatmap <- function(
     showscale = show_scale,
     zmin = zmin,
     zmax = zmax,
-    xgap = 2,
-    ygap = 2,
+    xgap = 3,
+    ygap = 3,
     text = text_mat,
-    hovertemplate = "%{text}<extra></extra>",
+    hoverinfo = "text",
     colorbar = list(
-      title = list(text = cb_title, font = list(color = font_color)),
-      tickfont = list(color = font_color),
-      outlinecolor = font_color
+      title = list(text = cb_title, font = list(color = font_color, size = 13)),
+      tickfont = list(color = font_color, size = 11),
+      outlinecolor = font_color,
+      y = cb_y,
+      yanchor = "top"
     )
   )
 
@@ -6494,53 +6607,186 @@ batch_plate_heatmap <- function(
     n_cats <- length(cat_levels)
     pal <- stats_palette(max(n_cats, 2), color_scale)
     for (i in seq_len(n_cats)) {
-      p <- p |> plotly::add_trace(
-        type = "scatter",
-        x = 0,
-        y = 0,
-        mode = "markers",
-        xaxis = "x2",
-        yaxis = "y2",
-        marker = list(
-          symbol = "square",
-          color = pal[i],
-          size = 10,
-          opacity = 0,
-          line = list(width = 0)
-        ),
-        name = cat_levels[i],
-        showlegend = TRUE,
-        inherit = FALSE,
-        hoverinfo = "skip"
-      )
+      p <- p |>
+        plotly::add_trace(
+          type = "scatter",
+          x = min(cols) - 10000,
+          y = rows[1],
+          mode = "markers",
+          visible = TRUE,
+          marker = list(
+            symbol = "square",
+            color = pal[i],
+            size = 10,
+            line = list(width = 0)
+          ),
+          name = cat_levels[i],
+          showlegend = TRUE,
+          inherit = FALSE,
+          hoverinfo = "skip",
+          legendrank = 200,
+          legendgroup = "categories",
+          legendgrouptitle = list(
+            text = cb_title,
+            font = list(color = font_color, size = 13)
+          )
+        )
     }
   }
 
+  has_no_prot <- length(no_prot_row_vals) > 0
+  tile_px_est <- min(480 / length(cols), 360 / length(rows))
+  d_np <- as.integer(max(4L, min(11L, round(tile_px_est * 0.24))))
+  d_nh <- as.integer(max(4L, min(12L, round(tile_px_est * 0.27))))
+  np_shapes <- if (has_no_prot) {
+    d <- d_np
+    unlist(
+      lapply(seq_along(no_prot_col_vals), function(i) {
+        cx <- no_prot_col_vals[i]
+        cy <- which(rows == no_prot_row_vals[i]) - 1L
+        list(
+          list(
+            type = "line",
+            xref = "x", yref = "y",
+            xsizemode = "pixel", ysizemode = "pixel",
+            xanchor = cx, yanchor = cy,
+            x0 = -d, y0 = -d, x1 = d, y1 = d,
+            line = list(color = "black", width = 2.5)
+          ),
+          list(
+            type = "line",
+            xref = "x", yref = "y",
+            xsizemode = "pixel", ysizemode = "pixel",
+            xanchor = cx, yanchor = cy,
+            x0 = -d, y0 = d, x1 = d, y1 = -d,
+            line = list(color = "black", width = 2.5)
+          )
+        )
+      }),
+      recursive = FALSE
+    )
+  } else {
+    list()
+  }
+  if (has_no_prot) {
+    p <- p |>
+      plotly::add_trace(
+        type = "scatter",
+        mode = "markers",
+        x = min(cols) - 10000,
+        y = rows[1],
+        visible = TRUE,
+        marker = list(
+          symbol = "x-thin",
+          size = 10,
+          color = "rgba(0,0,0,0)",
+          line = list(color = font_color, width = 2.5)
+        ),
+        name = "No Protein Peak",
+        showlegend = TRUE,
+        inherit = FALSE,
+        hoverinfo = "skip",
+        legendrank = 100,
+        legendgroup = "well_states",
+        legendgrouptitle = list(
+          text = "Well States",
+          font = list(color = font_color, size = 13)
+        )
+      )
+  }
+
+  has_no_hit <- length(no_hit_col_vals) > 0
+  nh_shapes <- if (has_no_hit) {
+    d <- d_nh
+    lapply(seq_along(no_hit_col_vals), function(i) {
+      cx <- no_hit_col_vals[i]
+      cy <- which(rows == no_hit_row_vals[i]) - 1L
+      list(
+        type = "circle",
+        xref = "x", yref = "y",
+        xsizemode = "pixel", ysizemode = "pixel",
+        xanchor = cx, yanchor = cy,
+        x0 = -d, y0 = -d, x1 = d, y1 = d,
+        fillcolor = "rgba(0,0,0,0)",
+        line = list(color = "black", width = 2)
+      )
+    })
+  } else {
+    list()
+  }
+  if (has_no_hit) {
+    p <- p |>
+      plotly::add_trace(
+        type = "scatter",
+        mode = "markers",
+        x = min(cols) - 10000,
+        y = rows[1],
+        visible = TRUE,
+        marker = list(
+          symbol = "circle-open",
+          size = 10,
+          color = font_color,
+          line = list(color = font_color, width = 2)
+        ),
+        name = "No Compound Binding",
+        showlegend = TRUE,
+        inherit = FALSE,
+        hoverinfo = "skip",
+        legendrank = 100,
+        legendgroup = "well_states",
+        legendgrouptitle = list(
+          text = "Well States",
+          font = list(color = font_color, size = 13)
+        )
+      )
+  }
+
+  # Empty well: legend swatch
+  if (has_empty_in_rect) {
+    p <- p |>
+      plotly::add_trace(
+        type = "scatter",
+        mode = "markers",
+        x = min(cols) - 10000,
+        y = rows[1],
+        visible = TRUE,
+        marker = list(
+          symbol = "square",
+          size = 10,
+          color = tile_bg,
+          line = list(color = "rgba(130,132,140,0.6)", width = 1)
+        ),
+        name = "Empty",
+        showlegend = TRUE,
+        inherit = FALSE,
+        hoverinfo = "skip",
+        legendrank = 100,
+        legendgroup = "well_states",
+        legendgrouptitle = list(
+          text = "Well States",
+          font = list(color = font_color, size = 13)
+        )
+      )
+  }
+
+  show_legend_any <- !is_numeric_var ||
+    has_no_prot ||
+    has_no_hit ||
+    has_empty_in_rect
+
   p |>
     plotly::layout(
-      dragmode = FALSE,
-      showlegend = !is_numeric_var,
+      shapes = c(np_shapes, nh_shapes),
+      dragmode = "zoom",
+      showlegend = show_legend_any,
       legend = list(
-        font = list(color = font_color),
+        font = list(color = font_color, size = 11),
         bgcolor = "rgba(0,0,0,0)",
-        title = list(text = cb_title, font = list(color = font_color))
-      ),
-      xaxis2 = list(
-        visible = FALSE,
-        showgrid = FALSE,
-        zeroline = FALSE,
-        range = c(-1, 1),
-        fixedrange = TRUE
-      ),
-      yaxis2 = list(
-        visible = FALSE,
-        showgrid = FALSE,
-        zeroline = FALSE,
-        range = c(-1, 1),
-        fixedrange = TRUE
+        y = 1,
+        yanchor = "top"
       ),
       hoverlabel = list(
-        bgcolor = "#38387Cdb",
+        bgcolor = "rgba(56, 56, 124, 0.86)",
         font = list(size = 14, color = "white"),
         bordercolor = "white"
       ),
@@ -6555,11 +6801,10 @@ batch_plate_heatmap <- function(
         showgrid = FALSE,
         zeroline = FALSE,
         automargin = FALSE,
-        scaleanchor = "y",
-        scaleratio = 1
+        range = c(min(cols) - 0.5, max(cols) + 0.5)
       ),
       yaxis = list(
-        autorange = "reversed",
+        range = c(length(rows) - 0.5, -0.5),
         tickfont = list(color = font_color, size = 12),
         ticklen = 0,
         showgrid = FALSE,
@@ -6569,7 +6814,7 @@ batch_plate_heatmap <- function(
         automargin = FALSE
       ),
       margin = list(t = 25, r = if (is_numeric_var) 0 else 10, b = 0, l = 30),
-      plot_bgcolor = "rgba(160,160,170,0.25)",
+      plot_bgcolor = tile_bg,
       paper_bgcolor = "rgba(0,0,0,0)"
     ) |>
     plotly::config(
