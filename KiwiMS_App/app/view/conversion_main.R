@@ -3372,15 +3372,23 @@ server <- function(
             names(conc_selected) <- concentrations
             conversion_vars$select_concentration <- conc_selected
 
+            # All concentrations for tab display (includes those excluded from fitting)
+            all_concentrations <- dplyr::filter(hits_summary, `Cmp Name` != "N/A") |>
+              dplyr::count(!!rlang::sym(units[["Concentration"]])) |>
+              dplyr::select(1) |>
+              unlist() |>
+              unname() |>
+              as.character()
+
             # Define a set of IDs for the dynamic concentration tabs
-            dynamic_ui_ids <- paste0("concentration_tab_", concentrations)
+            dynamic_ui_ids <- paste0("concentration_tab_", all_concentrations)
 
             # Call function to render Ki/kinact results interface
             output$conversion_ui <- shiny::renderUI({
               ki_kinact_results_ui(
                 ns,
                 hits_summary,
-                concentrations,
+                all_concentrations,
                 dynamic_ui_ids
               )
             })
@@ -3811,8 +3819,8 @@ server <- function(
               }
             })
 
-            for (i in seq_along(concentrations)) {
-              concentration <- concentrations[[i]]
+            for (i in seq_along(all_concentrations)) {
+              concentration <- all_concentrations[[i]]
               ui_id <- dynamic_ui_ids[[i]]
 
               local({
@@ -3823,6 +3831,52 @@ server <- function(
                 conc_result <- result_list$binding_kobs_result[[
                   local_concentration
                 ]]
+
+                # Excluded concentration: insufficient time points for nonlinear fit
+                if (is.null(conc_result)) {
+                  time_col <- names(hits_summary)[grep("Time", names(hits_summary))][1]
+                  conc_rows <- dplyr::filter(
+                    hits_summary,
+                    !!rlang::sym(units[["Concentration"]]) == local_concentration
+                  )
+                  n_na <- nrow(dplyr::filter(
+                    conc_rows,
+                    is.na(`Cmp Name`) | `Cmp Name` == "N/A"
+                  ))
+                  n_tp <- conc_rows |>
+                    dplyr::filter(!is.na(`Cmp Name`), `Cmp Name` != "N/A") |>
+                    dplyr::distinct(!!rlang::sym(time_col)) |>
+                    dplyr::filter(!is.na(!!rlang::sym(time_col))) |>
+                    nrow()
+                  output[[local_ui_id]] <- shiny::renderUI({
+                    shiny::div(
+                      style = "height: 100%; min-height: 300px; display: flex; align-items: center; justify-content: center;",
+                      shiny::div(
+                        style = "text-align: center; color: white;",
+                        shiny::icon("triangle-exclamation", style = "font-size: 2em; margin-bottom: 0.5em; display: block;"),
+                        shiny::p(
+                          style = "font-size: 1.05em; margin-bottom: 0.25em;",
+                          "Concentration excluded due to insufficient time points for nonlinear fit."
+                        ),
+                        shiny::p(
+                          style = "font-size: 0.95em; margin-bottom: 0.1em;",
+                          sprintf(
+                            "%d distinct compound time point(s) available (≥ 3 required).",
+                            n_tp
+                          )
+                        ),
+                        if (n_na > 0) shiny::p(
+                          style = "font-size: 0.9em; opacity: 0.75;",
+                          sprintf(
+                            "%d control/N/A sample(s) excluded from time point count.",
+                            n_na
+                          )
+                        )
+                      )
+                    )
+                  })
+                  return(invisible(NULL))
+                }
 
                 ###### Render concentration interface UI ----
                 output[[local_ui_id]] <- shiny::renderUI({
@@ -4023,9 +4077,13 @@ server <- function(
             output$conversion_ui <- shiny::renderUI({
               summary_results_ui(
                 ns,
-                batch_control = "Well" %in% names(hits_summary) &&
+                batch_control = "Well" %in%
+                  names(hits_summary) &&
                   !all(is.na(hits_summary$Well)) &&
-                  !all(trimws(as.character(hits_summary$Well)) %in% c("", "NA", "N/A"))
+                  !all(
+                    trimws(as.character(hits_summary$Well)) %in%
+                      c("", "NA", "N/A")
+                  )
               )
             })
 
@@ -4088,12 +4146,17 @@ server <- function(
             })
 
             filter_extremes <- function(hs) {
-              samples_out <- dplyr::distinct(hs, Sample, .keep_all = TRUE) |>
+              sample_col    <- intersect(c("Sample", "Sample ID"), names(hs))[1]
+              correct_col   <- intersect(c("% Correct", "Correct [%]"), names(hs))[1]
+              unmatched_col <- intersect(c("% Unmatched", "Unmatched [%]"), names(hs))[1]
+              if (is.na(sample_col) || is.na(correct_col) || is.na(unmatched_col)) return(hs)
+              samples_out <- dplyr::distinct(hs, !!rlang::sym(sample_col), .keep_all = TRUE) |>
                 dplyr::filter(
-                  `% Correct` == 0 & `% Unmatched` == 100
+                  suppressWarnings(as.numeric(!!rlang::sym(correct_col))) == 0 &
+                  suppressWarnings(as.numeric(!!rlang::sym(unmatched_col))) == 100
                 ) |>
-                dplyr::pull(Sample)
-              dplyr::filter(hs, !Sample %in% samples_out)
+                dplyr::pull(!!rlang::sym(sample_col))
+              dplyr::filter(hs, !(!!rlang::sym(sample_col)) %in% samples_out)
             }
 
             output$stats_boxplot <- plotly::renderPlotly({
@@ -4406,7 +4469,11 @@ server <- function(
                     paste0(
                       get_session_prefix(),
                       "_Batch_Heatmap_",
-                      gsub("_+", "_", gsub("[^A-Za-z0-9]+", "_", trimws(active_v)))
+                      gsub(
+                        "_+",
+                        "_",
+                        gsub("[^A-Za-z0-9]+", "_", trimws(active_v))
+                      )
                     )
                   }
                 )
@@ -4446,53 +4513,101 @@ server <- function(
               )
             })
 
-            output$pstat_correct <- output$pstat_correct_stat <- shiny::renderUI(
-              {
-                vals <- suppressWarnings(as.numeric(hits_summary[[
-                  "Correct [%]"
-                ]]))
-                m <- mean(vals, na.rm = TRUE)
-                s <- stats::sd(vals, na.rm = TRUE)
-                cls <- if (!is.na(m) && m < 10) {
-                  "protocol-stat-value protocol-stat-err"
-                } else if (!is.na(m) && m < 50) {
-                  "protocol-stat-value protocol-stat-warn"
-                } else {
-                  "protocol-stat-value"
-                }
-                shiny::div(
-                  shiny::div(class = cls, sprintf("%.2f%%", m)),
-                  shiny::div(
-                    class = "protocol-stat-sub",
-                    sprintf("± %.2f%% SD", s)
-                  )
-                )
+            # Protocol tab cards - use captured hits_summary, no filtering
+            output$pstat_correct <- shiny::renderUI({
+              vals <- suppressWarnings(as.numeric(hits_summary[[
+                "Correct [%]"
+              ]]))
+              m <- mean(vals, na.rm = TRUE)
+              s <- stats::sd(vals, na.rm = TRUE)
+              cls <- if (!is.na(m) && m < 10) {
+                "protocol-stat-value protocol-stat-err"
+              } else if (!is.na(m) && m < 50) {
+                "protocol-stat-value protocol-stat-warn"
+              } else {
+                "protocol-stat-value"
               }
-            )
+              shiny::div(
+                shiny::div(class = cls, sprintf("%.2f%%", m)),
+                shiny::div(
+                  class = "protocol-stat-sub",
+                  sprintf("+/- %.2f%% SD", s)
+                )
+              )
+            })
 
-            output$pstat_unmatched <- output$pstat_unmatched_stat <- shiny::renderUI(
-              {
-                vals <- suppressWarnings(as.numeric(hits_summary[[
-                  "Unmatched [%]"
-                ]]))
-                m <- mean(vals, na.rm = TRUE)
-                s <- stats::sd(vals, na.rm = TRUE)
-                cls <- if (!is.na(m) && m > 90) {
-                  "protocol-stat-value protocol-stat-err"
-                } else if (!is.na(m) && m > 50) {
-                  "protocol-stat-value protocol-stat-warn"
-                } else {
-                  "protocol-stat-value"
-                }
-                shiny::div(
-                  shiny::div(class = cls, sprintf("%.2f%%", m)),
-                  shiny::div(
-                    class = "protocol-stat-sub",
-                    sprintf("± %.2f%% SD", s)
-                  )
-                )
+            output$pstat_unmatched <- shiny::renderUI({
+              vals <- suppressWarnings(as.numeric(hits_summary[[
+                "Unmatched [%]"
+              ]]))
+              m <- mean(vals, na.rm = TRUE)
+              s <- stats::sd(vals, na.rm = TRUE)
+              cls <- if (!is.na(m) && m > 90) {
+                "protocol-stat-value protocol-stat-err"
+              } else if (!is.na(m) && m > 50) {
+                "protocol-stat-value protocol-stat-warn"
+              } else {
+                "protocol-stat-value"
               }
-            )
+              shiny::div(
+                shiny::div(class = cls, sprintf("%.2f%%", m)),
+                shiny::div(
+                  class = "protocol-stat-sub",
+                  sprintf("+/- %.2f%% SD", s)
+                )
+              )
+            })
+
+            # Statistics tab cards - reactive, respects stats_exclude_extremes
+            output$pstat_correct_stat <- shiny::renderUI({
+              hs <- if (isTRUE(input$stats_exclude_extremes)) {
+                filter_extremes(hits_summary)
+              } else {
+                hits_summary
+              }
+              vals <- suppressWarnings(as.numeric(hs[["Correct [%]"]]))
+              m <- mean(vals, na.rm = TRUE)
+              s <- stats::sd(vals, na.rm = TRUE)
+              cls <- if (!is.na(m) && m < 10) {
+                "protocol-stat-value protocol-stat-err"
+              } else if (!is.na(m) && m < 50) {
+                "protocol-stat-value protocol-stat-warn"
+              } else {
+                "protocol-stat-value"
+              }
+              shiny::div(
+                shiny::div(class = cls, sprintf("%.2f%%", m)),
+                shiny::div(
+                  class = "protocol-stat-sub",
+                  sprintf("+/- %.2f%% SD", s)
+                )
+              )
+            })
+
+            output$pstat_unmatched_stat <- shiny::renderUI({
+              hs <- if (isTRUE(input$stats_exclude_extremes)) {
+                filter_extremes(hits_summary)
+              } else {
+                hits_summary
+              }
+              vals <- suppressWarnings(as.numeric(hs[["Unmatched [%]"]]))
+              m <- mean(vals, na.rm = TRUE)
+              s <- stats::sd(vals, na.rm = TRUE)
+              cls <- if (!is.na(m) && m > 90) {
+                "protocol-stat-value protocol-stat-err"
+              } else if (!is.na(m) && m > 50) {
+                "protocol-stat-value protocol-stat-warn"
+              } else {
+                "protocol-stat-value"
+              }
+              shiny::div(
+                shiny::div(class = cls, sprintf("%.2f%%", m)),
+                shiny::div(
+                  class = "protocol-stat-sub",
+                  sprintf("+/- %.2f%% SD", s)
+                )
+              )
+            })
 
             # Shared helpers for Alerts / Warnings cards
             clean_log_msg <- function(x) {
@@ -5540,6 +5655,8 @@ server <- function(
             !choices %in%
               c(
                 "Well",
+                "Replicate",
+                "Unmatched [%]",
                 "Theor. Prot. [Da]",
                 "Δ Prot. [Da]",
                 "Int. Prot. [%]",
@@ -5648,15 +5765,21 @@ server <- function(
       event_expr = input[["kobs_result_cell_edit"]],
       observer_name = "Deconvolution Results Transfer",
       handler_fn = function() {
-        # Apply changes to included concentrations
-        conversion_vars$select_concentration[
-          input[["kobs_result_cell_edit"]]$row
-        ] <- input[[
-          "kobs_result_cell_edit"
-        ]]$value
+        # DT.cellInfo adds +1 to convert JS 0-based to R 1-based, but our
+        # checkbox IDs are already 1-based — subtract 1 to get the true row.
+        row_idx <- input[["kobs_result_cell_edit"]]$row - 1L
+        new_val <- isTRUE(input[["kobs_result_cell_edit"]]$value)
+
+        # Resolve the concentration name from the kobs table row (order-safe).
+        krt <- conversion_sidebar_vars$result_list()$binding_kobs_result$kobs_result_table
+        conc_name <- rownames(krt)[row_idx]
+        shiny::req(!is.null(conc_name), !is.na(conc_name))
+
+        # Apply change by name so display sort order doesn't matter.
+        conversion_vars$select_concentration[conc_name] <- new_val
 
         # Check number of selected concentrations
-        if (sum(conversion_vars$select_concentration) < 3) {
+        if (sum(conversion_vars$select_concentration, na.rm = TRUE) < 3) {
           shinyWidgets::show_toast(
             "≥ 3 concentrations needed",
             type = "warning",

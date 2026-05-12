@@ -1836,19 +1836,27 @@ log_concentration <- function(concentration, unit, last) {
 
 # Log timepoints
 log_timepoints <- function(data, unit, last) {
+  n <- nrow(data)
+  tmin <- min(data$time)
+  tmax <- max(data$time)
+  tp_label <- if (n == 1) "time point" else "time points"
+  range_str <- if (tmin == tmax) {
+    sprintf("%s %s", tmin, unit)
+  } else {
+    sprintf("%s - %s %s", tmin, tmax, unit)
+  }
   message(paste(
     sprintf(
       ifelse(
         last,
-        "  │     ├─ %s time points included (%s - %s %s)",
-        "  │  │  ├─ %s time points included (%s - %s %s)"
+        "  │     ├─ %s %s included (%s)",
+        "  │  │  ├─ %s %s included (%s)"
       ),
-      nrow(data),
-      min(data$time),
-      max(data$time),
-      unit
+      n,
+      tp_label,
+      range_str
     ),
-    if (nrow(data) < 3) {
+    if (n < 3) {
       sprintf(
         ifelse(
           last,
@@ -2314,6 +2322,13 @@ make_binding_plot <- function(
         line = list(width = 1, color = "white")
       ),
       legendgroup = ~concentration,
+      error_y = list(
+        type = "data",
+        array = ~binding_sd,
+        visible = TRUE,
+        thickness = 1.5,
+        width = 4
+      ),
       hovertemplate = ~ paste(
         "<b>Observed</b><br>",
         paste(
@@ -2449,6 +2464,14 @@ make_kobs_plot <- function(ki_kinact_result, colors, units, theme = "dark") {
       name = ~conc,
       symbols = symbol_map,
       symbol = ~ as.character(conc),
+      error_y = list(
+        type = "data",
+        array = ~kobs_se,
+        visible = TRUE,
+        thickness = 1.5,
+        width = 4,
+        color = font_color
+      ),
       hovertemplate = paste(
         "<b>Calculated</b><br>",
         paste0(
@@ -2457,7 +2480,7 @@ make_kobs_plot <- function(ki_kinact_result, colors, units, theme = "dark") {
           "<br>"
         ),
         paste0(
-          "K<sub>obs</sub>: %{y:.2f} ",
+          "K<sub>obs</sub>: %{y:.2f} ± %{error_y.array:.4f} ",
           gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
           "⁻¹"
         ),
@@ -2567,11 +2590,23 @@ compute_kobs <- function(hits, units) {
       last = last
     )
 
-    # TODO
-    # Currently no duplicates/triplicates considered
-    data <- hits |>
-      dplyr::filter(!!rlang::sym(conc) == i) |>
-      dplyr::distinct(time, .keep_all = TRUE)
+    # Filter rows for this concentration
+    raw_data <- hits |>
+      dplyr::filter(!!rlang::sym(conc) == i)
+
+    # Average technical replicates grouped by Replicate column; fall back to
+    # distinct-by-time when the column is absent
+    if ("Replicate" %in% names(raw_data) && !all(is.na(raw_data$Replicate))) {
+      data <- raw_data |>
+        dplyr::group_by(Replicate) |>
+        dplyr::summarise(
+          time = dplyr::first(time),
+          binding = mean(binding, na.rm = TRUE),
+          .groups = "drop"
+        )
+    } else {
+      data <- dplyr::distinct(raw_data, time, .keep_all = TRUE)
+    }
 
     # Log timepoints
     log_timepoints(data = data, unit = units["Time"], last = last)
@@ -2603,6 +2638,7 @@ compute_kobs <- function(hits, units) {
     params <- summary(nonlin_mod)$parameters
     result <- list(
       kobs = params[2, 1],
+      kobs_se = params[2, 2],
       v = params[1, 1],
       plateau = 100 * (params[1, 1] / params[2, 1]),
       nlm = nonlin_mod
@@ -2620,6 +2656,18 @@ compute_kobs <- function(hits, units) {
       max = max(hits$time)
     )
 
+    # Per-time-point SD from raw replicates (NA when no Replicate column)
+    if ("Replicate" %in% names(raw_data) && !all(is.na(raw_data$Replicate))) {
+      tp_sd <- raw_data |>
+        dplyr::group_by(time) |>
+        dplyr::summarise(
+          binding_sd = stats::sd(binding, na.rm = TRUE),
+          .groups = "drop"
+        )
+    } else {
+      tp_sd <- data.frame(time = unique(raw_data$time), binding_sd = NA_real_)
+    }
+
     # Append predictions to predictions data frame
     binding_table <- rbind(
       binding_table,
@@ -2628,14 +2676,20 @@ compute_kobs <- function(hits, units) {
         dplyr::select(data, c("time", "binding")),
         by = "time"
       ) |>
-        dplyr::mutate(concentration = i, kobs = result$kobs)
+        dplyr::left_join(tp_sd, by = "time") |>
+        dplyr::mutate(
+          concentration = i,
+          kobs = result$kobs,
+          kobs_se = result$kobs_se
+        )
     )
 
     # Add predictions specific for concentration
     concentration_list[[i]][["predictions"]] <- predictions
 
-    # Save hits for concentration
+    # Save hits for concentration (averaged) and raw replicates for scatter plots
     concentration_list[[i]][["hits"]] <- data
+    concentration_list[[i]][["hits_raw"]] <- raw_data
 
     # Log kobs result
     log_kobs_result(
@@ -2661,11 +2715,12 @@ compute_kobs <- function(hits, units) {
 }
 
 compute_ki_kinact <- function(kobs_result, units = units) {
-  # Get kobs subset
+  # Get kobs subset (one row per concentration; include SE if available)
+  has_kobs_se <- "kobs_se" %in% names(kobs_result$binding_table)
   kobs <- kobs_result$binding_table |>
     dplyr::filter(!duplicated(kobs_result$binding_table$kobs)) |>
     dplyr::mutate(conc = as.numeric(as.character(concentration))) |>
-    dplyr::select(conc, kobs)
+    dplyr::select(conc, kobs, dplyr::any_of("kobs_se"))
 
   # Adjust start values to units
   if (units["Concentration"] == "M" & units["Time"] == "s") {
@@ -6002,6 +6057,43 @@ stats_boxplot <- function(
       )
   }
 
+  correct_sd_bp <- stats::sd(df$`% Correct`, na.rm = TRUE)
+  unmatched_sd_bp <- stats::sd(df$`% Unmatched`, na.rm = TRUE)
+  correct_mean_bp <- mean(df$`% Correct`, na.rm = TRUE)
+  unmatched_mean_bp <- mean(df$`% Unmatched`, na.rm = TRUE)
+
+  bp_annots <- list()
+  if (!is.na(correct_sd_bp) && correct_sd_bp < 0.005) {
+    bp_annots <- c(
+      bp_annots,
+      list(list(
+        x = "Correct [%]",
+        xref = "x",
+        y = correct_mean_bp - 4,
+        yref = "y",
+        text = sprintf("All values: %.2f%%", correct_mean_bp),
+        showarrow = FALSE,
+        yanchor = "top",
+        font = list(color = font_color, size = 11)
+      ))
+    )
+  }
+  if (!is.na(unmatched_sd_bp) && unmatched_sd_bp < 0.005) {
+    bp_annots <- c(
+      bp_annots,
+      list(list(
+        x = "Unmatched [%]",
+        xref = "x",
+        y = unmatched_mean_bp - 4,
+        yref = "y",
+        text = sprintf("All values: %.2f%%", unmatched_mean_bp),
+        showarrow = FALSE,
+        yanchor = "top",
+        font = list(color = font_color, size = 11)
+      ))
+    )
+  }
+
   p |>
     plotly::layout(
       paper_bgcolor = "rgba(0,0,0,0)",
@@ -6023,7 +6115,8 @@ stats_boxplot <- function(
         gridcolor = grid_color,
         zerolinecolor = zeroline_color,
         hoverformat = ".2f"
-      )
+      ),
+      annotations = if (length(bp_annots) > 0) bp_annots else NULL
     )
 }
 
@@ -6065,6 +6158,7 @@ stats_scatter <- function(
   correct_sd <- stats::sd(correct_vals, na.rm = TRUE)
   correct_upper <- correct_mean + correct_sd
   correct_lower <- correct_mean - correct_sd
+  show_sd <- !is.na(correct_sd) && correct_sd >= 0.005
 
   y_range <- if (full_scale) {
     c(-5, 105)
@@ -6167,8 +6261,8 @@ stats_scatter <- function(
         zerolinecolor = zeroline_color,
         hoverformat = ".2f"
       ),
-      shapes = list(
-        list(
+      shapes = c(
+        list(list(
           type = "line",
           x0 = 0,
           x1 = 1,
@@ -6176,28 +6270,34 @@ stats_scatter <- function(
           y0 = correct_mean,
           y1 = correct_mean,
           line = list(color = ref_color, width = 1.5, dash = "dash")
-        ),
-        list(
-          type = "line",
-          x0 = 0,
-          x1 = 1,
-          xref = "paper",
-          y0 = correct_upper,
-          y1 = correct_upper,
-          line = list(color = sd_color, width = 1, dash = "dot")
-        ),
-        list(
-          type = "line",
-          x0 = 0,
-          x1 = 1,
-          xref = "paper",
-          y0 = correct_lower,
-          y1 = correct_lower,
-          line = list(color = sd_color, width = 1, dash = "dot")
-        )
+        )),
+        if (show_sd) {
+          list(
+            list(
+              type = "line",
+              x0 = 0,
+              x1 = 1,
+              xref = "paper",
+              y0 = correct_upper,
+              y1 = correct_upper,
+              line = list(color = sd_color, width = 1, dash = "dot")
+            ),
+            list(
+              type = "line",
+              x0 = 0,
+              x1 = 1,
+              xref = "paper",
+              y0 = correct_lower,
+              y1 = correct_lower,
+              line = list(color = sd_color, width = 1, dash = "dot")
+            )
+          )
+        } else {
+          list()
+        }
       ),
-      annotations = list(
-        list(
+      annotations = c(
+        list(list(
           x = 1,
           xref = "paper",
           y = correct_mean,
@@ -6207,29 +6307,35 @@ stats_scatter <- function(
           xanchor = "right",
           yanchor = "bottom",
           font = list(color = font_color, size = 11)
-        ),
-        list(
-          x = 1,
-          xref = "paper",
-          y = correct_upper,
-          yref = "y",
-          text = sprintf("+1 SD  %.2f%%", correct_upper),
-          showarrow = FALSE,
-          xanchor = "right",
-          yanchor = "bottom",
-          font = list(color = font_color, size = 10)
-        ),
-        list(
-          x = 1,
-          xref = "paper",
-          y = correct_lower,
-          yref = "y",
-          text = sprintf("− 1 SD  %.2f%%", correct_lower),
-          showarrow = FALSE,
-          xanchor = "right",
-          yanchor = "top",
-          font = list(color = font_color, size = 10)
-        )
+        )),
+        if (show_sd) {
+          list(
+            list(
+              x = 1,
+              xref = "paper",
+              y = correct_upper,
+              yref = "y",
+              text = sprintf("+1 SD  %.2f%%", correct_upper),
+              showarrow = FALSE,
+              xanchor = "right",
+              yanchor = "bottom",
+              font = list(color = font_color, size = 10)
+            ),
+            list(
+              x = 1,
+              xref = "paper",
+              y = correct_lower,
+              yref = "y",
+              text = sprintf("− 1 SD  %.2f%%", correct_lower),
+              showarrow = FALSE,
+              xanchor = "right",
+              yanchor = "top",
+              font = list(color = font_color, size = 10)
+            )
+          )
+        } else {
+          list()
+        }
       )
     )
 }
@@ -6287,32 +6393,61 @@ stats_violin <- function(
     col <- hex_to_rgba(color_map[[grp]], 1)
     col_f <- hex_to_rgba(color_map[[grp]], 0.2)
     col_b <- hex_to_rgba(color_map[[grp]], 0.25)
-    p <- suppressWarnings(plotly::add_trace(
-      p,
-      data = sub_df,
-      type = "violin",
-      x = grp,
-      y = ~`% Correct`,
-      name = grp,
-      fillcolor = col_f,
-      line = list(color = col, width = 1),
-      box = list(
-        visible = show_box,
-        fillcolor = col_b,
-        line = list(color = box_line_color, width = 1)
-      ),
-      # whiskerwidth = 0.5,
-      meanline = list(visible = show_box, color = box_line_color, width = 1),
-      points = if (show_points) "all" else FALSE,
-      pointpos = 0,
-      jitter = 0.3,
-      marker = list(
-        color = "rgba(0,0,0,0)",
-        size = 7,
-        line = list(color = dot_border_color, width = 1)
-      ),
-      showlegend = FALSE
-    ))
+    grp_sd <- stats::sd(sub_df$`% Correct`, na.rm = TRUE)
+    is_degenerate <- is.na(grp_sd) || grp_sd < 0.005
+    if (is_degenerate) {
+      # Degenerate group: strip chart (invisible box carrying jittered points)
+      p <- plotly::add_trace(
+        p,
+        data = sub_df,
+        type = "box",
+        x = grp,
+        y = ~`% Correct`,
+        name = grp,
+        text = ~Sample,
+        boxpoints = "all",
+        jitter = 0.5,
+        pointpos = 0,
+        hoveron = "points",
+        hovertemplate = "<b>%{text}</b><br>Correct [%]: %{y:.2f}<extra></extra>",
+        whiskerwidth = 0,
+        line = list(color = "rgba(0,0,0,0)", width = 0),
+        fillcolor = "rgba(0,0,0,0)",
+        showlegend = FALSE,
+        marker = list(
+          color = col,
+          size = 8,
+          opacity = 0.9,
+          line = list(color = dot_border_color, width = 1)
+        )
+      )
+    } else {
+      p <- suppressWarnings(plotly::add_trace(
+        p,
+        data = sub_df,
+        type = "violin",
+        x = grp,
+        y = ~`% Correct`,
+        name = grp,
+        fillcolor = col_f,
+        line = list(color = col, width = 1),
+        box = list(
+          visible = show_box,
+          fillcolor = col_b,
+          line = list(color = box_line_color, width = 1)
+        ),
+        meanline = list(visible = show_box, color = box_line_color, width = 1),
+        points = if (show_points) "all" else FALSE,
+        pointpos = 0,
+        jitter = 0.3,
+        marker = list(
+          color = "rgba(0,0,0,0)",
+          size = 7,
+          line = list(color = dot_border_color, width = 1)
+        ),
+        showlegend = FALSE
+      ))
+    }
   }
 
   p |>
@@ -6367,9 +6502,11 @@ batch_plate_heatmap <- function(
     return(plotly::plotly_empty())
   }
 
-  if (!"Well" %in% names(df) ||
+  if (
+    !"Well" %in% names(df) ||
       all(is.na(df[["Well"]])) ||
-      all(trimws(as.character(df[["Well"]])) %in% c("", "NA", "N/A"))) {
+      all(trimws(as.character(df[["Well"]])) %in% c("", "NA", "N/A"))
+  ) {
     return(plotly::plotly_empty())
   }
 
@@ -6462,7 +6599,9 @@ batch_plate_heatmap <- function(
       }
 
       if (!is.na(d$value[1])) {
-        if (ws != "no_prot") z_mat[r, as.character(c)] <- d$value[1]
+        if (ws != "no_prot") {
+          z_mat[r, as.character(c)] <- d$value[1]
+        }
         hover_txt <- paste0(
           "Well: ",
           wid,
@@ -6647,18 +6786,30 @@ batch_plate_heatmap <- function(
         list(
           list(
             type = "line",
-            xref = "x", yref = "y",
-            xsizemode = "pixel", ysizemode = "pixel",
-            xanchor = cx, yanchor = cy,
-            x0 = -d, y0 = -d, x1 = d, y1 = d,
+            xref = "x",
+            yref = "y",
+            xsizemode = "pixel",
+            ysizemode = "pixel",
+            xanchor = cx,
+            yanchor = cy,
+            x0 = -d,
+            y0 = -d,
+            x1 = d,
+            y1 = d,
             line = list(color = "black", width = 2.5)
           ),
           list(
             type = "line",
-            xref = "x", yref = "y",
-            xsizemode = "pixel", ysizemode = "pixel",
-            xanchor = cx, yanchor = cy,
-            x0 = -d, y0 = d, x1 = d, y1 = -d,
+            xref = "x",
+            yref = "y",
+            xsizemode = "pixel",
+            ysizemode = "pixel",
+            xanchor = cx,
+            yanchor = cy,
+            x0 = -d,
+            y0 = d,
+            x1 = d,
+            y1 = -d,
             line = list(color = "black", width = 2.5)
           )
         )
@@ -6703,10 +6854,16 @@ batch_plate_heatmap <- function(
       cy <- which(rows == no_hit_row_vals[i]) - 1L
       list(
         type = "circle",
-        xref = "x", yref = "y",
-        xsizemode = "pixel", ysizemode = "pixel",
-        xanchor = cx, yanchor = cy,
-        x0 = -d, y0 = -d, x1 = d, y1 = d,
+        xref = "x",
+        yref = "y",
+        xsizemode = "pixel",
+        ysizemode = "pixel",
+        xanchor = cx,
+        yanchor = cy,
+        x0 = -d,
+        y0 = -d,
+        x1 = d,
+        y1 = d,
         fillcolor = "rgba(0,0,0,0)",
         line = list(color = "black", width = 2)
       )

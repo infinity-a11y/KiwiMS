@@ -598,10 +598,12 @@ server <- function(
                     value = 93,
                     title = "Computing Ki / kinact..."
                   )
+
                   result_with_hits$ki_kinact_result <- add_ki_kinact_result(
                     result_with_hits,
                     units = units
                   )
+
                   shinyWidgets::updateProgressBar(
                     session = session,
                     id = ns("conversion_progress"),
