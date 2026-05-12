@@ -1198,6 +1198,9 @@ get_peaks <- function(peak_file = NULL, result_sample, results) {
   # Set names
   names(peaks) <- c("mass", "intensity")
 
+  # Normalize peaks
+  peaks$intensity <- peaks$intensity / max(peaks$intensity) * 100
+
   # Message information
   log_status(nrow(peaks), peaks$mass)
 
@@ -1346,51 +1349,34 @@ check_hits <- function(
   sample,
   well = NA
 ) {
+  # Get protein name and mass
+  prot_name <- as.character(protein_mw[, 1])
+  prot_mass <- as.numeric(protein_mw[, 2])
+
   # Find protein peak
-  protein_peak <- peaks$mass >= protein_mw[, -1] - peak_tolerance &
-    peaks$mass <= protein_mw[, -1] + peak_tolerance
+  protein_peak <- peaks$mass >= prot_mass - peak_tolerance &
+    peaks$mass <= prot_mass + peak_tolerance
 
-  # Abort if peaks show invalid peaks
-  if (!any(protein_peak)) {
-    log_alert()
-
-    hits_df <- data.frame(
-      well = well,
-      sample = sample,
-      protein = protein_mw[, 1],
-      theor_prot = as.numeric(protein_mw[, -1]),
-      measured_prot = NA,
-      delta_prot = NA,
-      prot_intensity = NA,
-      peak = NA,
-      intensity = NA,
-      compound = NA,
-      cmp_mass = NA,
-      delta_cmp = NA,
-      multiple = NA,
-      preferred = NA,
-      unmatched = 100,
-      correct = 0
-    )
-
-    return(hits_df)
-  }
+  prot_intensity <- ifelse(
+    !any(protein_peak),
+    0,
+    peaks$intensity[which(protein_peak)]
+  )
 
   # Keep only peaks above protein mw
-  peaks_valid <- peaks$mass >= protein_mw[, -1] - peak_tolerance
-  if (any(peaks_valid) && sum(peaks_valid) > 1) {
+  peaks_valid <- peaks$mass >= prot_mass - peak_tolerance
+
+  if (any(peaks_valid)) {
     peaks_filtered <- as.data.frame(peaks[peaks_valid, ])
   } else {
     hits_df <- data.frame(
       well = well,
       sample = sample,
-      protein = protein_mw[, 1],
-      theor_prot = as.numeric(protein_mw[, -1]),
-      measured_prot = peaks$mass[which(protein_peak)],
-      delta_prot = abs(
-        as.numeric(protein_mw[, -1]) - peaks$mass[which(protein_peak)]
-      ),
-      prot_intensity = peaks$intensity[which(protein_peak)],
+      protein = prot_name,
+      theor_prot = prot_mass,
+      measured_prot = NA,
+      delta_prot = NA,
+      prot_intensity = NA,
       peak = NA,
       intensity = NA,
       compound = NA,
@@ -1427,7 +1413,7 @@ check_hits <- function(
   }
 
   # Addition of protein mw with multiples matrix
-  complex_mat <- mat + protein_mw[, -1]
+  complex_mat <- mat + prot_mass
 
   # Initiate empty hits data frame
   hits_df <- data.frame()
@@ -1456,23 +1442,28 @@ check_hits <- function(
         hit <- data.frame(
           well = well,
           sample = sample,
-          protein = protein_mw[, 1],
-          theor_prot = as.numeric(protein_mw[, -1]),
-          measured_prot = peaks$mass[which(protein_peak)],
-          delta_prot = round(
+          protein = prot_name,
+          theor_prot = prot_mass,
+          measured_prot = if (any(protein_peak)) {
+            peaks$mass[which(protein_peak)]
+          } else {
+            NA
+          },
+          delta_prot = if (any(protein_peak)) {
             abs(
-              as.numeric(protein_mw[, -1]) - peaks$mass[which(protein_peak)]
-            ),
-            2
-          ),
-          prot_intensity = peaks$intensity[which(protein_peak)],
+              prot_mass - peaks$mass[which(protein_peak)]
+            )
+          } else {
+            NA
+          },
+          prot_intensity = prot_intensity,
           peak = peaks_filtered[j, "mass"],
           intensity = peaks_filtered[j, "intensity"],
           compound = rownames(hits)[indices[1]],
           cmp_mass = cmp_mass,
           delta_cmp = abs(
             (as.numeric(cmp_mass) * multiple) -
-              (peaks_filtered[j, "mass"] - as.numeric(protein_mw[, -1]))
+              (peaks_filtered[j, "mass"] - prot_mass)
           ),
           multiple = multiple,
           preferred = TRUE,
@@ -1505,14 +1496,26 @@ check_hits <- function(
     hits_df <- data.frame(
       well = well,
       sample = sample,
-      protein = protein_mw[, 1],
-      theor_prot = as.numeric(protein_mw[, -1]),
-      measured_prot = peaks$mass[which(protein_peak)],
-      delta_prot = abs(
-        as.numeric(protein_mw[, -1]) - peaks$mass[which(protein_peak)]
-      ),
-      prot_intensity = peaks$intensity[which(protein_peak)],
-      peak = NA,
+      protein = prot_name,
+      theor_prot = prot_mass,
+      measured_prot = if (any(protein_peak)) {
+        peaks$mass[which(protein_peak)]
+      } else {
+        NA
+      },
+      delta_prot = if (any(protein_peak)) {
+        abs(
+          prot_mass - peaks$mass[which(protein_peak)]
+        )
+      } else {
+        NA
+      },
+      prot_intensity = if (any(protein_peak)) prot_intensity else NA,
+      peak = if (any(protein_peak)) {
+        peaks$mass[which(protein_peak)]
+      } else {
+        NA
+      },
       intensity = NA,
       compound = NA,
       cmp_mass = NA,
@@ -1555,30 +1558,26 @@ conversion <- function(hits) {
   } else if (ncol(hits) != 16) {
     log_err_cols(ncol(hits))
     return(NULL)
-  } else if (anyNA(hits[, names(hits) != "well"])) {
-    hits <- hits |>
-      dplyr::mutate(
-        `%binding` = NA
-      ) |>
-      dplyr::mutate(
-        `%binding_tot` = NA,
-        .before = peak
-      )
+  } else if (nrow(hits) == 1 && is.na(hits$intensity)) {
+    # Case only protein detected no hits
+    I_total <- hits$prot_intensity # Total intensity
+    hits <- dplyr::mutate(hits, `%binding` = 0)
+    hits <- dplyr::mutate(
+      hits,
+      `%binding_tot` = 0,
+      .before = peak
+    )
   } else {
-    # Peaks: 1000(IA), 1010(IB), 1020(IC), 1011(ID)
-    # Peaks are in hits data frame
+    # Total intensity (only preferred)
+    I_total <- sum(hits$intensity[hits$preferred]) +
+      ifelse(anyNA(hits$prot_intensity), 0, unique(hits$prot_intensity))
 
-    # Gesamtintensität: IA + IB + IC + ID = Itotal
-    I_total <- sum(unique(hits$intensity)) + unique(hits$prot_intensity)
-    perc_bind_prot <- unique(hits$prot_intensity) / I_total
-
-    # nicht umgesetztes / ungebundenes Protein: IA / Itotal * 100
-
-    # %BinIB = IB / Itotal * 100
-    # %BinIC = IC / Itotal * 100
-    # usw ...
-
-    # %Bintotal = %BinIB + %BinIC + %BinID  (alles was nicht freies Prot ist)
+    # Protein only binding
+    perc_bind_prot <- ifelse(
+      anyNA(hits$prot_intensity),
+      0,
+      unique(hits$prot_intensity) / I_total
+    )
 
     # Adding %Binding values to hit data frame
     hits <- dplyr::mutate(hits, `%binding` = intensity / I_total)
@@ -1603,9 +1602,9 @@ conversion <- function(hits) {
     )
 
     # Normalize peak intensity
-    max_intensity <- max(c(hits$intensity, hits$prot_intensity))
-    hits$intensity <- hits$intensity / max_intensity * 100
-    hits$prot_intensity <- hits$prot_intensity / max_intensity * 100
+    # max_intensity <- max(c(hits$intensity, hits$prot_intensity))
+    # hits$intensity <- hits$intensity / max_intensity * 100
+    # hits$prot_intensity <- hits$prot_intensity / max_intensity * 100
   }
 
   # Change column names
@@ -1696,9 +1695,9 @@ log_intensities <- function(total, unbound, binding) {
   perc_binding <- (binding / total) * 100
 
   message(paste0(
-    sprintf("  │  ├─ Total Intensity: %.2f (100%%)\n", total),
-    sprintf("  │  ├─ Unbound Protein: %.2f (%.1f%%)\n", unbound, perc_unbound),
-    sprintf("  │  └─ Total Binding:   %.2f (%.1f%%)", binding, perc_binding)
+    "  │  ├─ Total Intensity: 100%%\n",
+    sprintf("  │  ├─ Unbound Protein: %.2f%%\n", perc_unbound),
+    sprintf("  │  └─ Total Binding:   %.2f%%", perc_binding)
   ))
 }
 
@@ -1961,19 +1960,19 @@ add_hits <- function(
   hits_max <- if (ki_kinact) 80 else 100
 
   for (i in seq_along(samples)) {
-    shinyWidgets::updateProgressBar(
-      session = session,
-      id = ns("conversion_progress"),
-      value = ifelse(i == 1, 0, (i - 1) / length(samples) * hits_max),
-      title = paste(
-        "[",
-        i,
-        "/",
-        length(samples),
-        "] Checking hits for",
-        samples[i]
-      )
-    )
+    # shinyWidgets::updateProgressBar(
+    #   session = session,
+    #   id = ns("conversion_progress"),
+    #   value = ifelse(i == 1, 0, (i - 1) / length(samples) * hits_max),
+    #   title = paste(
+    #     "[",
+    #     i,
+    #     "/",
+    #     length(samples),
+    #     "] Checking hits for",
+    #     samples[i]
+    #   )
+    # )
 
     log_start(samples[i])
 
@@ -2024,17 +2023,17 @@ add_hits <- function(
     log_done()
   }
 
-  shinyWidgets::updateProgressBar(
-    session = session,
-    id = ns("conversion_progress"),
-    value = hits_max,
-    title = paste0(
-      "Hit screening completed for ",
-      length(samples),
-      " sample(s).",
-      if (ki_kinact) " Computing binding kinetics..." else ""
-    )
-  )
+  # shinyWidgets::updateProgressBar(
+  #   session = session,
+  #   id = ns("conversion_progress"),
+  #   value = hits_max,
+  #   title = paste0(
+  #     "Hit screening completed for ",
+  #     length(samples),
+  #     " sample(s).",
+  #     if (ki_kinact) " Computing binding kinetics..." else ""
+  #   )
+  # )
 
   return(results)
 }
@@ -6510,10 +6509,10 @@ batch_plate_heatmap <- function(
     return(plotly::plotly_empty())
   }
 
-  # Classify each sample's well state
-  no_prot_flag <- is.na(hits_summary$`Measured Mw Protein [Da]`)
-  no_hit_flag <- !is.na(hits_summary$`Measured Mw Protein [Da]`) &
-    is.na(hits_summary$Compound)
+  # Classify each sample's well state (use df = one row per sample)
+  no_prot_flag <- is.na(df$`Measured Mw Protein [Da]`)
+  no_hit_flag <- !is.na(df$`Measured Mw Protein [Da]`) &
+    is.na(df$Compound)
   well_state <- dplyr::case_when(
     no_prot_flag ~ "no_prot",
     no_hit_flag ~ "no_hit",
