@@ -147,13 +147,27 @@ ki_kinact_concentrations_tabs <- function(ns, local_ui_id, conc_result, units) {
             )
           ),
           shiny::div(
-            class = "kobs-val",
-            paste(
-              format_scientific(conc_result$kobs),
-              paste0(
-                gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
-                "⁻¹"
-              )
+            class = "result-card-content",
+            shiny::div(
+              class = "main-result",
+              shiny::HTML(paste(
+                format_scientific(conc_result$kobs),
+                paste0(
+                  gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+                  "⁻¹"
+                )
+              ))
+            ),
+            shiny::div(
+              class = "error-result",
+              shiny::HTML(paste(
+                "±",
+                if (is.na(conc_result$kobs_se)) {
+                  "n.a."
+                } else {
+                  format_scientific(conc_result$kobs_se)
+                }
+              ))
             )
           )
         )

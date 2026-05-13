@@ -2232,6 +2232,16 @@ div[data-value="Protein Conversion"] .tab-pane {
   align-content: center;
 }
 
+#app-conversion_main-kobs_result .dataTables_scrollHead th {
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+
+#app-conversion_main-kobs_result tbody td {
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+
 #app-conversion_main-relbinding_hits_tab thead th:first-child,
 #app-conversion_main-kikinact_hits_tab thead th:first-child,
 #app-conversion_main-samples_table_view thead th:first-child,

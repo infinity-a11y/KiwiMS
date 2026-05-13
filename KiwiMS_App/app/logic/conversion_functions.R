@@ -1833,6 +1833,43 @@ log_concentration <- function(concentration, unit, last) {
   ))
 }
 
+# Log nonlinear fit failure
+log_fit_failed <- function(last, reason) {
+  message(sprintf(
+    ifelse(
+      last,
+      "  │     └─ %s Skipped: %s",
+      "  │  │  └─ %s Skipped: %s"
+    ),
+    .col_warn(warning_sym),
+    reason
+  ))
+}
+
+# Pre-flight check: returns NULL if data is suitable for nlsLM, or a reason string if not
+can_fit_kobs <- function(data) {
+  real <- data[data$time > 0 & !is.na(data$binding), ]
+  n <- nrow(real)
+  if (n < 2) {
+    tp_label <- if (n == 1) "1 time point" else "0 time points"
+    return(sprintf("only %s available (minimum 2 required)", tp_label))
+  }
+  if (length(unique(real$binding)) < 2) {
+    vals <- real$binding
+    if (all(vals == 0)) {
+      return("no response detected (binding = 0% at all time points)")
+    }
+    if (all(vals >= 100)) {
+      return("immediate saturation (binding = 100% at all time points)")
+    }
+    return(sprintf(
+      "flat response (binding = %s%% at all time points)",
+      round(vals[1], 1)
+    ))
+  }
+  NULL
+}
+
 # Log timepoints
 log_timepoints <- function(data, unit, last) {
   n <- nrow(data)
@@ -1854,50 +1891,27 @@ log_timepoints <- function(data, unit, last) {
       n,
       tp_label,
       range_str
-    ),
-    if (n < 3) {
-      sprintf(
-        ifelse(
-          last,
-          "\n  │     └─ %s ≥ 3 time points required for nonlinear fit",
-          "\n  │  │  └─ %s ≥ 3 time points required for nonlinear fit"
-        ),
-        .col_warn(warning_sym)
-      )
-    }
+    )
   ))
 }
 
 # Log kobs result
 log_kobs_result <- function(result, last, unit) {
-  message(
-    if (last) {
-      paste(
-        "  │     ├─ Nonlinear regression model fitted\n",
-        sprintf(
-          " │     ├─ k_obs = %s %s⁻¹\n",
-          round(result$kobs, 4),
-          unit
-        ),
-        sprintf(" │     ├─ v = %s\n", round(result$v, 4)),
-        sprintf(" │     └─ Plateau = %s\n  │", round(result$kobs, 4))
-      )
-    } else {
-      paste(
-        "  │  │  ├─ Nonlinear regression model fitted.\n",
-        sprintf(" │  │  ├─ k_obs = %s %s⁻¹\n", round(result$kobs, 4), unit),
-        sprintf(" │  │  ├─ v = %s\n", round(result$v, 4)),
-        sprintf(" │  │  └─ Plateau = %s\n  │  │", round(result$kobs, 4))
-      )
-    }
-  )
+  p <- if (last) "  │     " else "  │  │  "
+  message(sprintf("%s├─ Nonlinear regression model fitted", p))
+  message(sprintf("%s├─ k_obs   = %s %s⁻¹", p, round(result$kobs, 4), unit))
+  message(sprintf("%s├─ v       = %s", p, round(result$v, 4)))
+  message(sprintf("%s└─ Plateau = %s%%", p, round(result$plateau, 2)))
+}
+
+# Log Ki/kinact warning
+log_ki_kinact_warning <- function(msg) {
+  message(sprintf("     └─ %s %s", .col_warn(warning_sym), msg))
 }
 
 # Log (Kᵢ/kᵢₙₐ꜀ₜ) analysis initiation
 log_ki_kinact_analysis <- function() {
-  message(paste(
-    "  └─ Infer second-order rate constant Kᵢ/kᵢₙₐ꜀ₜ"
-  ))
+  message(paste("  │\n", " └─ Infer second-order rate constant Kᵢ/kᵢₙₐ꜀ₜ"))
 }
 
 # Log Ki/kinact results
@@ -1960,19 +1974,19 @@ add_hits <- function(
   hits_max <- if (ki_kinact) 80 else 100
 
   for (i in seq_along(samples)) {
-    # shinyWidgets::updateProgressBar(
-    #   session = session,
-    #   id = ns("conversion_progress"),
-    #   value = ifelse(i == 1, 0, (i - 1) / length(samples) * hits_max),
-    #   title = paste(
-    #     "[",
-    #     i,
-    #     "/",
-    #     length(samples),
-    #     "] Checking hits for",
-    #     samples[i]
-    #   )
-    # )
+    shinyWidgets::updateProgressBar(
+      session = session,
+      id = ns("conversion_progress"),
+      value = ifelse(i == 1, 0, (i - 1) / length(samples) * hits_max),
+      title = paste(
+        "[",
+        i,
+        "/",
+        length(samples),
+        "] Checking hits for",
+        samples[i]
+      )
+    )
 
     log_start(samples[i])
 
@@ -2023,17 +2037,17 @@ add_hits <- function(
     log_done()
   }
 
-  # shinyWidgets::updateProgressBar(
-  #   session = session,
-  #   id = ns("conversion_progress"),
-  #   value = hits_max,
-  #   title = paste0(
-  #     "Hit screening completed for ",
-  #     length(samples),
-  #     " sample(s).",
-  #     if (ki_kinact) " Computing binding kinetics..." else ""
-  #   )
-  # )
+  shinyWidgets::updateProgressBar(
+    session = session,
+    id = ns("conversion_progress"),
+    value = hits_max,
+    title = paste0(
+      "Hit screening completed for ",
+      length(samples),
+      " sample(s).",
+      if (ki_kinact) " Computing binding kinetics..." else ""
+    )
+  )
 
   return(results)
 }
@@ -2203,13 +2217,14 @@ add_kobs_binding_result <- function(
       kobs_result_table,
       data.frame(
         binding_kobs_result[[i]]$kobs,
+        binding_kobs_result[[i]]$kobs_se,
         binding_kobs_result[[i]]$v,
         binding_kobs_result[[i]]$plateau
       )
     )
   }
   rownames(kobs_result_table) <- conc_names
-  colnames(kobs_result_table) <- c("kobs", "v", "plateau")
+  colnames(kobs_result_table) <- c("kobs", "kobs_se", "v", "plateau")
 
   # Add kobs result table
   binding_kobs_result$kobs_result_table <- kobs_result_table
@@ -2230,7 +2245,9 @@ add_ki_kinact_result <- function(result_list, units) {
   )
 
   # Log Ki/kinact results
-  log_ki_kinact_results(results = ki_kinact_result, units = units)
+  if (!is.null(ki_kinact_result)) {
+    log_ki_kinact_results(results = ki_kinact_result, units = units)
+  }
 
   return(ki_kinact_result)
 }
@@ -2252,16 +2269,29 @@ make_binding_plot <- function(
     )
   }
 
-  # Keep only non-zero observed data points
+  # Keep observed data points at t > 0 (excludes dummy t=0 anchor rows)
   df_points <- kobs_result$binding_table[
-    !(kobs_result$binding_table$time == 0 |
-      kobs_result$binding_table$binding == 0),
+    kobs_result$binding_table$time > 0 &
+      !is.na(kobs_result$binding_table$binding),
   ]
 
-  # Set symbols to corresponding concentration
+  # Identify concentrations with no observed data (e.g. kobs=0 no-response)
+  all_conc_chr <- unique(as.character(kobs_result$binding_table$concentration))
+  obs_conc_chr <- unique(as.character(df_points$concentration))
+  missing_conc <- setdiff(all_conc_chr, obs_conc_chr)
+
+  # Sort df_points so legend order follows descending concentration
+  all_conc_sorted <- sort(as.numeric(all_conc_chr), decreasing = TRUE)
+  df_points$concentration <- factor(
+    as.character(df_points$concentration),
+    levels = as.character(all_conc_sorted)
+  )
+  df_points <- df_points[order(df_points$concentration), ]
+
+  # Set symbols to corresponding concentration (descending)
   symbol_map <- stats::setNames(
-    symbols[1:length(levels(df_points$concentration))],
-    levels(df_points$concentration)
+    symbols[seq_along(all_conc_sorted)],
+    as.character(all_conc_sorted)
   )
 
   font_color <- if (theme == "light") "black" else "white"
@@ -2345,7 +2375,35 @@ make_binding_plot <- function(
       ),
       customdata = ~kobs,
       showlegend = ifelse(is.null(filter_conc), TRUE, FALSE)
-    ) |>
+    )
+
+  # Add explicit legend-only entries for no-response concentrations (no observed points)
+  if (is.null(filter_conc) && length(missing_conc) > 0) {
+    for (conc_name in as.character(sort(
+      as.numeric(missing_conc),
+      decreasing = TRUE
+    ))) {
+      binding_plot <- binding_plot |>
+        plotly::add_markers(
+          x = 0,
+          y = 0,
+          name = conc_name,
+          legendgroup = conc_name,
+          marker = list(
+            size = 12,
+            color = unname(colors[conc_name]),
+            symbol = unname(symbol_map[conc_name]),
+            opacity = 0,
+            line = list(width = 0)
+          ),
+          showlegend = TRUE,
+          hoverinfo = "skip",
+          inherit = FALSE
+        )
+    }
+  }
+
+  binding_plot <- binding_plot |>
     plotly::layout(
       hovermode = "closest",
       paper_bgcolor = "rgba(0,0,0,0)",
@@ -2392,18 +2450,29 @@ make_kobs_plot <- function(ki_kinact_result, colors, units, theme = "dark") {
     !is.na(ki_kinact_result$Kobs_Data$predicted_kobs),
   ]
 
-  # Get observed kobs data points
+  # Get observed kobs data points (include kobs=0 for no-response; exclude dummy anchor at conc=0)
   df_points <- ki_kinact_result$Kobs_Data[
     !is.na(ki_kinact_result$Kobs_Data$kobs) &
-      ki_kinact_result$Kobs_Data$kobs != 0,
+      ki_kinact_result$Kobs_Data$conc > 0,
   ]
-  df_points$conc <- factor(df_points$conc, levels = sort(df_points$conc))
+  ordered_levels <- sort(
+    unique(as.numeric(as.character(df_points$conc))),
+    decreasing = TRUE
+  )
+  df_points$conc <- factor(
+    as.character(df_points$conc),
+    levels = as.character(ordered_levels)
+  )
+  # Sort so legend order matches factor level order (first appearance drives plotly legend)
+  df_points <- df_points[order(df_points$conc), ]
+  df_points$kobs_se_label <- ifelse(
+    is.na(df_points$kobs_se),
+    "N/A",
+    sprintf("%.4f", df_points$kobs_se)
+  )
 
-  # Set symbols to corresponding concentration
-  ordered_conc <- df_points |>
-    dplyr::arrange(dplyr::desc(conc)) |>
-    dplyr::reframe(conc) |>
-    unlist()
+  # Set symbols to corresponding concentration (descending, matching binding curve)
+  ordered_conc <- as.character(ordered_levels)
 
   symbol_map <- stats::setNames(
     symbols[1:length(ordered_conc)],
@@ -2435,34 +2504,40 @@ make_kobs_plot <- function(ki_kinact_result, colors, units, theme = "dark") {
       hovertemplate = paste(
         "<b>Predicted</b><br>",
         paste0(
-          "Concentration: %{x:.2f} ",
+          "Concentration: %{x} ",
           gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
           "<br>"
         ),
         paste0(
-          "K<sub>obs</sub>: %{y:.2f} ",
+          "K<sub>obs</sub>: %{y:.4f} ",
           gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
           "⁻¹"
         ),
         "<extra></extra>"
       ),
       showlegend = FALSE
-    ) |>
-    # Calculated kobs
-    plotly::add_markers(
-      data = df_points,
+    )
+
+  conc_unit <- gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]])
+  time_unit <- gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])
+
+  for (conc_name in ordered_conc) {
+    sub <- df_points[as.character(df_points$conc) == conc_name, , drop = FALSE]
+    kobs_plot <- plotly::add_markers(
+      kobs_plot,
+      data = sub,
       x = ~ as.numeric(as.character(conc)),
       y = ~kobs,
-      type = "scatter",
-      color = ~conc,
+      name = conc_name,
+      legendgroup = conc_name,
       marker = list(
         size = 12,
         opacity = 1,
+        color = unname(colors[conc_name]),
+        symbol = unname(symbol_map[conc_name]),
         line = list(width = 1, color = font_color)
       ),
-      name = ~conc,
-      symbols = symbol_map,
-      symbol = ~ as.character(conc),
+      customdata = ~kobs_se_label,
       error_y = list(
         type = "data",
         array = ~kobs_se,
@@ -2471,21 +2546,24 @@ make_kobs_plot <- function(ki_kinact_result, colors, units, theme = "dark") {
         width = 4,
         color = font_color
       ),
-      hovertemplate = paste(
+      hovertemplate = paste0(
         "<b>Calculated</b><br>",
-        paste0(
-          "Concentration: %{x:.2f} ",
-          gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
-          "<br>"
-        ),
-        paste0(
-          "K<sub>obs</sub>: %{y:.2f} ± %{error_y.array:.4f} ",
-          gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
-          "⁻¹"
-        ),
+        "Concentration: ",
+        conc_name,
+        " ",
+        conc_unit,
+        "<br>",
+        "K<sub>obs</sub>: %{y:.4f} ± %{customdata} ",
+        time_unit,
+        "⁻¹",
         "<extra></extra>"
       ),
-    ) |>
+      showlegend = TRUE,
+      inherit = FALSE
+    )
+  }
+
+  kobs_plot <- kobs_plot |>
     plotly::layout(
       hovermode = "closest",
       paper_bgcolor = "rgba(0,0,0,0)",
@@ -2557,6 +2635,9 @@ predict_values <- function(
 }
 
 compute_kobs <- function(hits, units) {
+  hits2 <<- hits
+  units2 <<- units
+
   # Prepare empty objects
   concentration_list <- list()
   binding_table <- data.frame()
@@ -2582,13 +2663,6 @@ compute_kobs <- function(hits, units) {
       FALSE
     )
 
-    # Log concentrations
-    log_concentration(
-      concentration = i,
-      unit = units["Concentration"],
-      last = last
-    )
-
     # Filter rows for this concentration
     raw_data <- hits |>
       dplyr::filter(!!rlang::sym(conc) == i)
@@ -2607,14 +2681,6 @@ compute_kobs <- function(hits, units) {
       data <- dplyr::distinct(raw_data, time, .keep_all = TRUE)
     }
 
-    # Log timepoints
-    log_timepoints(data = data, unit = units["Time"], last = last)
-
-    # If less than 3 entries abort and continue with next iteration
-    if (sum(!is.na(data$binding)) < 3) {
-      next
-    }
-
     # Make dummy row to anchor fitting at 0
     dummy_row <- data[1, ]
     dummy_row$binding <- 0.0
@@ -2626,12 +2692,92 @@ compute_kobs <- function(hits, units) {
     }
     data <- rbind(data, dummy_row)
 
-    # Nonlinear regression with customized minpack.lm::nlsLM() function
-    nonlin_mod <- nlsLM_fixed(
-      formula = binding ~ 100 * (v / kobs * (1 - exp(-kobs * time))),
-      start = start_vals,
-      data = data
+    # Pre-flight: verify data is identifiable before attempting fit
+    # Check before logging so skipped concentrations emit a single compact line
+    fit_check <- can_fit_kobs(data)
+    if (!is.null(fit_check)) {
+      branch <- if (last) "└─" else "├─"
+      if (grepl("^no response", fit_check)) {
+        message(sprintf(
+          "  │  %s %s %s %s: no response → k_obs = 0",
+          branch, .col_warn(warning_sym), i, units["Concentration"]
+        ))
+        concentration_list[[i]] <- list(
+          kobs = 0,
+          kobs_se = NA_real_,
+          v = 0,
+          plateau = 0,
+          nlm = NULL
+        )
+
+        # Build per-timepoint SD the same way as the normal case
+        if (
+          "Replicate" %in% names(raw_data) && !all(is.na(raw_data$Replicate))
+        ) {
+          tp_sd_zero <- raw_data |>
+            dplyr::group_by(time) |>
+            dplyr::summarise(
+              binding_sd = stats::sd(binding, na.rm = TRUE),
+              .groups = "drop"
+            )
+        } else {
+          tp_sd_zero <- data.frame(
+            time = unique(raw_data$time),
+            binding_sd = NA_real_
+          )
+        }
+
+        predictions_zero <- data.frame(
+          time = seq(0, max(hits$time), by = 1),
+          predicted_binding = 0
+        )
+
+        binding_table <- rbind(
+          binding_table,
+          dplyr::left_join(
+            predictions_zero,
+            dplyr::select(data, c("time", "binding")),
+            by = "time"
+          ) |>
+            dplyr::left_join(tp_sd_zero, by = "time") |>
+            dplyr::mutate(
+              concentration = i,
+              kobs = 0,
+              kobs_se = NA_real_
+            )
+        )
+      } else {
+        message(sprintf(
+          "  │  %s %s %s %s: skipped (%s)",
+          branch, .col_warn(warning_sym), i, units["Concentration"], fit_check
+        ))
+      }
+      next
+    }
+
+    # Only log the verbose header + timepoints when actually fitting
+    log_concentration(
+      concentration = i,
+      unit = units["Concentration"],
+      last = last
     )
+    log_timepoints(data = data, unit = units["Time"], last = last)
+
+    # Nonlinear regression with customized minpack.lm::nlsLM() function
+    nonlin_mod <- tryCatch(
+      nlsLM_fixed(
+        formula = binding ~ 100 * (v / kobs * (1 - exp(-kobs * time))),
+        start = start_vals,
+        data = data
+      ),
+      error = function(e) {
+        log_fit_failed(last, conditionMessage(e))
+        NULL
+      }
+    )
+    if (is.null(nonlin_mod)) {
+      next
+    }
 
     # Extract parameters
     params <- summary(nonlin_mod)$parameters
@@ -2714,12 +2860,11 @@ compute_kobs <- function(hits, units) {
 }
 
 compute_ki_kinact <- function(kobs_result, units = units) {
-  # Get kobs subset (one row per concentration; include SE if available)
-  has_kobs_se <- "kobs_se" %in% names(kobs_result$binding_table)
-  kobs <- kobs_result$binding_table |>
-    dplyr::filter(!duplicated(kobs_result$binding_table$kobs)) |>
-    dplyr::mutate(conc = as.numeric(as.character(concentration))) |>
-    dplyr::select(conc, kobs, dplyr::any_of("kobs_se"))
+  # One row per concentration from kobs_result_table (avoids deduplication by value)
+  kobs <- kobs_result$kobs_result_table
+  kobs$conc <- as.numeric(rownames(kobs))
+  kobs <- kobs[, c("conc", "kobs", "kobs_se")]
+  kobs <- kobs[order(kobs$conc), ]
 
   # Adjust start values to units
   if (units["Concentration"] == "M" & units["Time"] == "s") {
@@ -2728,19 +2873,48 @@ compute_ki_kinact <- function(kobs_result, units = units) {
     start_values <- c(kinact = 1000, KI = 10)
   }
 
-  # Add dummy row x,y = 0
+  # Add dummy row at origin
   kobs_dummy <- kobs[1, ]
   kobs_dummy$kobs <- 0
   kobs_dummy$conc <- 0
   kobs <- rbind(kobs, kobs_dummy)
   kobs <- kobs[order(kobs$conc), ]
 
+  # Pre-flight: warn if fewer than 3 real data points (0 or negative DOF)
+  n_real <- nrow(kobs) - 1
+  if (n_real < 3) {
+    log_ki_kinact_warning(sprintf(
+      "only %d kobs value(s) available — parameter estimates will have 0 or negative degrees of freedom",
+      n_real
+    ))
+  }
+
   # Nonlinear regression
-  nonlin_mod <- nlsLM_fixed(
-    formula = kobs ~ (kinact * conc) / (KI + conc),
-    data = kobs,
-    start = start_values
+  nonlin_mod <- tryCatch(
+    nlsLM_fixed(
+      formula = kobs ~ (kinact * conc) / (KI + conc),
+      data = kobs,
+      start = start_values
+    ),
+    error = function(e) {
+      log_ki_kinact_warning(paste("Fit failed:", conditionMessage(e)))
+      NULL
+    }
   )
+  if (is.null(nonlin_mod)) {
+    return(NULL)
+  }
+
+  # Post-fit: warn if the saturating region was never observed
+  fitted_kinact <- summary(nonlin_mod)$parameters[1, 1]
+  max_kobs_real <- max(kobs$kobs[kobs$conc > 0], na.rm = TRUE)
+  if (max_kobs_real < 0.5 * fitted_kinact) {
+    log_ki_kinact_warning(sprintf(
+      "highest observed k_obs (%.4f) is < 50%% of fitted kᵢₙₐ꜀ₜ (%.4f) — saturating region not observed, kᵢₙₐ꜀ₜ is extrapolated",
+      max_kobs_real,
+      fitted_kinact
+    ))
+  }
 
   # Predict kobs values with NLM
   kobs_predicted <- predict_values(
@@ -3373,6 +3547,8 @@ multiple_spectra <- function(
       result_path = NULL
     )$mass
 
+    if (is.null(add_df) || nrow(add_df) == 0) next
+
     if (time) {
       add_df <- dplyr::mutate(add_df, z = extract_minutes(samples[i]))
     } else {
@@ -3380,6 +3556,20 @@ multiple_spectra <- function(
     }
 
     spectrum_data <- rbind(spectrum_data, add_df)
+  }
+
+  if (nrow(spectrum_data) == 0 || !("mass" %in% names(spectrum_data))) {
+    return(plotly::plot_ly() |>
+      plotly::layout(
+        annotations = list(list(
+          text = "No spectrum data available",
+          xref = "paper", yref = "paper",
+          x = 0.5, y = 0.5, showarrow = FALSE,
+          font = list(size = 14, color = if (theme == "light") "black" else "white")
+        )),
+        paper_bgcolor = if (theme == "light") "white" else "rgba(0,0,0,0)",
+        plot_bgcolor = if (theme == "light") "white" else "rgba(0,0,0,0)"
+      ))
   }
 
   # If truncated active adapt z variable
@@ -3412,6 +3602,8 @@ multiple_spectra <- function(
       results_list$deconvolution[[samples[i]]],
       result_path = NULL
     )$highlight_peaks
+
+    if (is.null(add_df) || nrow(add_df) == 0) next
 
     if (time) {
       add_df <- dplyr::mutate(add_df, z = extract_minutes(samples[i]))
@@ -3467,6 +3659,12 @@ multiple_spectra <- function(
     peaks_data <- dplyr::mutate(
       peaks_data,
       symbol = ifelse(mass %in% prot_peaks, "diamond", "circle"),
+      linecolor = font_color
+    )
+  } else {
+    peaks_data <- dplyr::mutate(
+      peaks_data,
+      symbol = "circle",
       linecolor = font_color
     )
   }
@@ -3540,8 +3738,9 @@ multiple_spectra <- function(
 
   # Condition on data size
   if (is.null(labels_show)) {
-    labels_show <- (length(unique(peaks_data$z)) <= 8 &
-      max(nchar(as.character(peaks_data$z))) <= 20) |
+    z_chr <- as.character(peaks_data$z)
+    labels_show <- (length(unique(z_chr)) <= 8 &
+      (length(z_chr) == 0 || max(nchar(z_chr)) <= 20)) |
       isTRUE(time)
   }
 
@@ -6510,7 +6709,8 @@ batch_plate_heatmap <- function(
   }
 
   # Classify each sample's well state (use df = one row per sample)
-  no_prot_flag <- is.na(df$`Measured Mw Protein [Da]`)
+  no_prot_flag <- is.na(df$`Measured Mw Protein [Da]`) &
+    is.na(df$Compound)
   no_hit_flag <- !is.na(df$`Measured Mw Protein [Da]`) &
     is.na(df$Compound)
   well_state <- dplyr::case_when(

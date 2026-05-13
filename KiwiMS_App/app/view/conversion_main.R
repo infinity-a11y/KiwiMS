@@ -3334,6 +3334,9 @@ server <- function(
             set_selected_tab("Hits", session)
           } else if (analysis_select == 3) {
             #### Render Ki/kinact interface ----
+            # Reset any prior concentration exclusions so plots match the table
+            conversion_vars$modified_results <- NULL
+
             # Assign formatted hits to reactive variable
             conversion_vars$formatted_hits <- hits_summary
 
@@ -3368,27 +3371,22 @@ server <- function(
               unname() |>
               as.character()
 
-            conc_selected <- rep(TRUE, length(concentrations))
-            names(conc_selected) <- concentrations
+            all_fitted_conc <- rownames(
+              result_list$binding_kobs_result$kobs_result_table
+            )
+            conc_selected <- rep(TRUE, length(all_fitted_conc))
+            names(conc_selected) <- all_fitted_conc
             conversion_vars$select_concentration <- conc_selected
 
-            # All concentrations for tab display (includes those excluded from fitting)
-            all_concentrations <- dplyr::filter(hits_summary, `Cmp Name` != "N/A") |>
-              dplyr::count(!!rlang::sym(units[["Concentration"]])) |>
-              dplyr::select(1) |>
-              unlist() |>
-              unname() |>
-              as.character()
-
             # Define a set of IDs for the dynamic concentration tabs
-            dynamic_ui_ids <- paste0("concentration_tab_", all_concentrations)
+            dynamic_ui_ids <- paste0("concentration_tab_", all_fitted_conc)
 
             # Call function to render Ki/kinact results interface
             output$conversion_ui <- shiny::renderUI({
               ki_kinact_results_ui(
                 ns,
                 hits_summary,
-                all_concentrations,
+                all_fitted_conc,
                 dynamic_ui_ids
               )
             })
@@ -3621,6 +3619,11 @@ server <- function(
                   dplyr::mutate(
                     concentration = as.numeric(rownames(kobs_results)),
                     kobs = as.numeric(format(kobs, digits = 3)),
+                    kobs_se = ifelse(
+                      is.na(kobs_se),
+                      "N/A",
+                      as.character(signif(kobs_se, 3))
+                    ),
                     v = as.numeric(format(v, digits = 3)),
                     plateau = as.numeric(format(plateau, digits = 3))
                   ) |>
@@ -3636,6 +3639,11 @@ server <- function(
                       gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
                       "\u207b\u00b9]"
                     ),
+                    paste0(
+                      "SE [",
+                      gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+                      "\u207b\u00b9]"
+                    ),
                     "Velocity",
                     "Plateau [%]"
                   ))
@@ -3646,7 +3654,7 @@ server <- function(
                   dplyr::mutate(
                     Included = checkboxColumn(
                       nrow(kobs_results),
-                      5,
+                      6,
                       value = TRUE
                     )
                   )
@@ -3674,15 +3682,11 @@ server <- function(
                     fixedHeader = TRUE,
                     stripe = FALSE,
                     columnDefs = list(
-                      list(targets = -1, className = 'dt-last-col')
+                      list(targets = "_all", className = 'dt-center'),
+                      list(targets = -1, className = 'dt-last-col dt-center')
                     )
                   ),
-                  editable = list(
-                    target = "cell",
-                    disable = list(
-                      columns = which(names(kobs_results) != "Included") - 1
-                    )
-                  ),
+                  editable = FALSE,
                   callback = htmlwidgets::JS(js_code_gen(
                     "kobs_result",
                     which(names(kobs_results) == "Included"),
@@ -3723,8 +3727,14 @@ server <- function(
             output$binding_plot <- plotly::renderPlotly({
               shiny::req(result_list)
 
+              rl <- if (is.null(conversion_vars$modified_results)) {
+                result_list
+              } else {
+                conversion_vars$modified_results
+              }
+
               make_binding_plot(
-                kobs_result = result_list$binding_kobs_result,
+                kobs_result = rl$binding_kobs_result,
                 colors = concentration_colors,
                 units = units
               )
@@ -3819,8 +3829,8 @@ server <- function(
               }
             })
 
-            for (i in seq_along(all_concentrations)) {
-              concentration <- all_concentrations[[i]]
+            for (i in seq_along(all_fitted_conc)) {
+              concentration <- all_fitted_conc[[i]]
               ui_id <- dynamic_ui_ids[[i]]
 
               local({
@@ -3831,52 +3841,6 @@ server <- function(
                 conc_result <- result_list$binding_kobs_result[[
                   local_concentration
                 ]]
-
-                # Excluded concentration: insufficient time points for nonlinear fit
-                if (is.null(conc_result)) {
-                  time_col <- names(hits_summary)[grep("Time", names(hits_summary))][1]
-                  conc_rows <- dplyr::filter(
-                    hits_summary,
-                    !!rlang::sym(units[["Concentration"]]) == local_concentration
-                  )
-                  n_na <- nrow(dplyr::filter(
-                    conc_rows,
-                    is.na(`Cmp Name`) | `Cmp Name` == "N/A"
-                  ))
-                  n_tp <- conc_rows |>
-                    dplyr::filter(!is.na(`Cmp Name`), `Cmp Name` != "N/A") |>
-                    dplyr::distinct(!!rlang::sym(time_col)) |>
-                    dplyr::filter(!is.na(!!rlang::sym(time_col))) |>
-                    nrow()
-                  output[[local_ui_id]] <- shiny::renderUI({
-                    shiny::div(
-                      style = "height: 100%; min-height: 300px; display: flex; align-items: center; justify-content: center;",
-                      shiny::div(
-                        style = "text-align: center; color: white;",
-                        shiny::icon("triangle-exclamation", style = "font-size: 2em; margin-bottom: 0.5em; display: block;"),
-                        shiny::p(
-                          style = "font-size: 1.05em; margin-bottom: 0.25em;",
-                          "Concentration excluded due to insufficient time points for nonlinear fit."
-                        ),
-                        shiny::p(
-                          style = "font-size: 0.95em; margin-bottom: 0.1em;",
-                          sprintf(
-                            "%d distinct compound time point(s) available (≥ 3 required).",
-                            n_tp
-                          )
-                        ),
-                        if (n_na > 0) shiny::p(
-                          style = "font-size: 0.9em; opacity: 0.75;",
-                          sprintf(
-                            "%d control/N/A sample(s) excluded from time point count.",
-                            n_na
-                          )
-                        )
-                      )
-                    )
-                  })
-                  return(invisible(NULL))
-                }
 
                 ###### Render concentration interface UI ----
                 output[[local_ui_id]] <- shiny::renderUI({
@@ -3916,7 +3880,10 @@ server <- function(
                     colors = conversion_vars$conc_colors,
                     inputs = inputs,
                     units = units
-                  )
+                  ) |>
+                    dplyr::arrange(
+                      as.numeric(!!rlang::sym(units[["Time"]]))
+                    )
 
                   # Assign filtered table to reactive for eventual export
                   conc_tbl_raw(tbl)
@@ -3975,28 +3942,15 @@ server <- function(
                   local_ui_id,
                   "_spectra"
                 )]] <- plotly::renderPlotly({
-                  decon_samples <- gsub(
-                    "o",
-                    ".",
-                    sapply(
-                      strsplit(
-                        names(
-                          result_list$deconvolution
-                        ),
-                        "_"
-                      ),
-                      `[`,
-                      3
-                    )
-                  )
+                  conc_sample_ids <- unique(hits_summary$`Sample ID`[
+                    hits_summary[[units["Concentration"]]] == local_concentration
+                  ])
 
                   multiple_spectra(
                     results_list = result_list,
-                    samples = names(
-                      result_list$deconvolution
-                    )[which(
-                      decon_samples == local_concentration
-                    )],
+                    samples = names(result_list$deconvolution)[
+                      names(result_list$deconvolution) %in% conc_sample_ids
+                    ],
                     cubic = ifelse(
                       is.null(input[[paste0(local_ui_id, "_kind")]]) ||
                         input[[paste0(local_ui_id, "_kind")]] == "3D",
@@ -4032,15 +3986,9 @@ server <- function(
                   }
                 )
 
-                decon_samples_local <- gsub(
-                  "o",
-                  ".",
-                  sapply(
-                    strsplit(names(result_list$deconvolution), "_"),
-                    `[`,
-                    3
-                  )
-                )
+                conc_sample_ids_local <- unique(hits_summary$`Sample ID`[
+                  hits_summary[[units["Concentration"]]] == local_concentration
+                ])
                 setup_plot_dl(
                   input,
                   output,
@@ -4049,9 +3997,9 @@ server <- function(
                   build_fn = function(theme) {
                     multiple_spectra(
                       results_list = result_list,
-                      samples = names(result_list$deconvolution)[which(
-                        decon_samples_local == local_concentration
-                      )],
+                      samples = names(result_list$deconvolution)[
+                        names(result_list$deconvolution) %in% conc_sample_ids_local
+                      ],
                       cubic = ifelse(
                         is.null(input[[paste0(local_ui_id, "_kind")]]) ||
                           input[[paste0(local_ui_id, "_kind")]] == "3D",
@@ -4146,14 +4094,29 @@ server <- function(
             })
 
             filter_extremes <- function(hs) {
-              sample_col    <- intersect(c("Sample", "Sample ID"), names(hs))[1]
-              correct_col   <- intersect(c("% Correct", "Correct [%]"), names(hs))[1]
-              unmatched_col <- intersect(c("% Unmatched", "Unmatched [%]"), names(hs))[1]
-              if (is.na(sample_col) || is.na(correct_col) || is.na(unmatched_col)) return(hs)
-              samples_out <- dplyr::distinct(hs, !!rlang::sym(sample_col), .keep_all = TRUE) |>
+              sample_col <- intersect(c("Sample", "Sample ID"), names(hs))[1]
+              correct_col <- intersect(
+                c("% Correct", "Correct [%]"),
+                names(hs)
+              )[1]
+              unmatched_col <- intersect(
+                c("% Unmatched", "Unmatched [%]"),
+                names(hs)
+              )[1]
+              if (
+                is.na(sample_col) || is.na(correct_col) || is.na(unmatched_col)
+              ) {
+                return(hs)
+              }
+              samples_out <- dplyr::distinct(
+                hs,
+                !!rlang::sym(sample_col),
+                .keep_all = TRUE
+              ) |>
                 dplyr::filter(
                   suppressWarnings(as.numeric(!!rlang::sym(correct_col))) == 0 &
-                  suppressWarnings(as.numeric(!!rlang::sym(unmatched_col))) == 100
+                    suppressWarnings(as.numeric(!!rlang::sym(unmatched_col))) ==
+                      100
                 ) |>
                 dplyr::pull(!!rlang::sym(sample_col))
               dplyr::filter(hs, !(!!rlang::sym(sample_col)) %in% samples_out)
@@ -5765,21 +5728,32 @@ server <- function(
       event_expr = input[["kobs_result_cell_edit"]],
       observer_name = "Deconvolution Results Transfer",
       handler_fn = function() {
-        # DT.cellInfo adds +1 to convert JS 0-based to R 1-based, but our
-        # checkbox IDs are already 1-based — subtract 1 to get the true row.
-        row_idx <- input[["kobs_result_cell_edit"]]$row - 1L
-        new_val <- isTRUE(input[["kobs_result_cell_edit"]]$value)
+        # Resolve row index to concentration name to avoid positional offset bugs
+        result_list_local <- conversion_sidebar_vars$result_list()
+        shiny::req(result_list_local)
+        all_conc <- rownames(
+          result_list_local$binding_kobs_result$kobs_result_table
+        )
+        edited_conc <- all_conc[input[["kobs_result_cell_edit"]]$row]
+        shiny::req(!is.null(edited_conc), !is.na(edited_conc))
 
-        # Resolve the concentration name from the kobs table row (order-safe).
-        krt <- conversion_sidebar_vars$result_list()$binding_kobs_result$kobs_result_table
-        conc_name <- rownames(krt)[row_idx]
-        shiny::req(!is.null(conc_name), !is.na(conc_name))
+        # Expand select_concentration if this concentration is not yet tracked
+        if (!(edited_conc %in% names(conversion_vars$select_concentration))) {
+          new_entry <- TRUE
+          names(new_entry) <- edited_conc
+          conversion_vars$select_concentration <- c(
+            conversion_vars$select_concentration,
+            new_entry
+          )
+        }
 
-        # Apply change by name so display sort order doesn't matter.
-        conversion_vars$select_concentration[conc_name] <- new_val
+        # Apply changes to included concentrations
+        conversion_vars$select_concentration[edited_conc] <- input[[
+          "kobs_result_cell_edit"
+        ]]$value
 
         # Check number of selected concentrations
-        if (sum(conversion_vars$select_concentration, na.rm = TRUE) < 3) {
+        if (sum(conversion_vars$select_concentration) < 3) {
           shinyWidgets::show_toast(
             "≥ 3 concentrations needed",
             type = "warning",

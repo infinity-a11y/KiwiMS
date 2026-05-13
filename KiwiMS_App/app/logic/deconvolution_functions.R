@@ -1,4 +1,4 @@
-# app/logic/deconvolution_functions.R
+﻿# app/logic/deconvolution_functions.R
 
 box::use(
   data.table[fread, setnames, data.table, as.data.table],
@@ -602,23 +602,36 @@ deconvolute <- function(
 # plate_heatmap(): Well plate occupancy heatmap ----
 #' @export
 plate_heatmap <- function(data, all_wells = NULL, theme = "dark") {
-  font_color  <- if (theme == "light") "black" else "white"
-  empty_color <- if (theme == "light") "rgba(195,197,205,1)" else "rgba(42,44,52,1)"
-  tile_bg     <- if (theme == "light") "rgba(148,150,158,0.35)" else "rgba(118,120,128,0.55)"
+  font_color <- if (theme == "light") "black" else "white"
+  empty_color <- if (theme == "light") {
+    "rgba(195,197,205,1)"
+  } else {
+    "rgba(42,44,52,1)"
+  }
+  tile_bg <- if (theme == "light") {
+    "rgba(148,150,158,0.35)"
+  } else {
+    "rgba(118,120,128,0.55)"
+  }
 
   all_rows <- LETTERS[1:16]
   all_cols <- 1:24
 
   # Normalize well IDs ("A01" → "A1")
-  norm_well_id <- function(w) gsub("^([A-Za-z]+)0*(\\d+)$", "\\1\\2", toupper(trimws(w)))
+  norm_well_id <- function(w) {
+    gsub("^([A-Za-z]+)0*(\\d+)$", "\\1\\2", toupper(trimws(w)))
+  }
 
   # Determine bounding rectangle from all_wells if provided, else from data
   if (!is.null(all_wells) && length(all_wells) > 0) {
     nw <- norm_well_id(stats::na.omit(as.character(all_wells)))
     nw <- nw[nzchar(nw)]
     row_letters <- sub("\\d+$", "", nw)
-    col_nums    <- as.integer(sub("^[A-Za-z]+", "", nw))
-    used_row_idx <- range(match(row_letters, all_rows, nomatch = NA_integer_), na.rm = TRUE)
+    col_nums <- as.integer(sub("^[A-Za-z]+", "", nw))
+    used_row_idx <- range(
+      match(row_letters, all_rows, nomatch = NA_integer_),
+      na.rm = TRUE
+    )
     used_col_idx <- range(col_nums, na.rm = TRUE)
     row_range <- seq(used_row_idx[1], used_row_idx[2])
     col_range <- seq(used_col_idx[1], used_col_idx[2])
@@ -629,16 +642,26 @@ plate_heatmap <- function(data, all_wells = NULL, theme = "dark") {
 
   rows <- all_rows[row_range]
   cols <- all_cols[col_range]
-  nr   <- length(rows)
-  nc   <- length(cols)
+  nr <- length(rows)
+  nc <- length(cols)
 
   plate_layout <- expand.grid(row = rows, col = cols) |>
     dplyr::mutate(well_id = paste0(row, col))
 
   plate_data <- dplyr::left_join(plate_layout, data, by = "well_id")
 
-  z_mat    <- matrix(0,  nrow = nr, ncol = nc, dimnames = list(rows, as.character(cols)))
-  text_mat <- matrix("", nrow = nr, ncol = nc, dimnames = list(rows, as.character(cols)))
+  z_mat <- matrix(
+    0,
+    nrow = nr,
+    ncol = nc,
+    dimnames = list(rows, as.character(cols))
+  )
+  text_mat <- matrix(
+    "",
+    nrow = nr,
+    ncol = nc,
+    dimnames = list(rows, as.character(cols))
+  )
 
   for (r in rows) {
     for (c in cols) {
@@ -646,7 +669,12 @@ plate_heatmap <- function(data, all_wells = NULL, theme = "dark") {
       d <- plate_data[plate_data$well_id == wid, ]
       if (nrow(d) > 0 && !is.na(d$value[1])) {
         z_mat[r, as.character(c)] <- 1
-        text_mat[r, as.character(c)] <- paste0("Well: ", wid, "<br>Sample: ", d$sample[1])
+        text_mat[r, as.character(c)] <- paste0(
+          "Well: ",
+          wid,
+          "<br>Sample: ",
+          d$sample[1]
+        )
       } else {
         text_mat[r, as.character(c)] <- paste0("Well: ", wid, "<br>Empty")
       }
