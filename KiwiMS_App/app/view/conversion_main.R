@@ -345,6 +345,22 @@ server <- function(
           samples_table <- rhandsontable::hot_to_r(input$samples_table)
         })
 
+        # Concentration/Time columns come back as character (we render them as
+        # text to prevent handsontable's numeric type from rounding values);
+        # convert back to numeric here so downstream code gets numeric columns.
+        conc_time_cols <- grep(
+          "^Concentration|^Time",
+          names(samples_table),
+          value = TRUE
+        )
+        for (col in conc_time_cols) {
+          if (is.character(samples_table[[col]])) {
+            samples_table[[col]] <- suppressWarnings(
+              as.numeric(samples_table[[col]])
+            )
+          }
+        }
+
         # Assign to reactive variable
         sample_table_data(samples_table)
       },
@@ -1226,8 +1242,16 @@ server <- function(
         ) {
           # Get clean non-NA sample table
           shiny::req(sample_table_input())
+          raw_input <- sample_table_input()
+          # Concentration/Time come back as character from hot_to_r (text-type
+          # cells); convert to numeric before further processing
+          for (.col in grep("^Concentration|^Time", names(raw_input), value = TRUE)) {
+            if (is.character(raw_input[[.col]])) {
+              raw_input[[.col]] <- suppressWarnings(as.numeric(raw_input[[.col]]))
+            }
+          }
           sample_table <- clean_sample_table(
-            sample_table_input(),
+            raw_input,
             units = list(conc = input$conc_unit, time = input$time_unit)
           )
           write_log(paste(
@@ -3428,7 +3452,7 @@ server <- function(
                 bar_chart = input$kikinact_binding_chart,
                 truncated = input$truncate_names,
                 clickable = conversion_vars$units[["Concentration"]],
-                valid_concentrations = conversion_vars$concentrations,
+                valid_concentrations = names(conversion_vars$select_concentration),
                 units = units
               )
 

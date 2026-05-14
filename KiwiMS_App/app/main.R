@@ -1782,12 +1782,25 @@ server <- function(id) {
     shiny$outputOptions(output, "unidec_modal_body", suspendWhenHidden = FALSE)
     shiny$outputOptions(output, "update_modal_body", suspendWhenHidden = FALSE)
 
+    # Prepare config data frame for display: convert numeric cols to character
+    # to prevent xtable rounding, and drop Compound_* columns that are all empty.
+    config_table_df <- function(df) {
+      for (col in intersect(c("Compound_Concentration", "Incubation_Time"), names(df))) {
+        if (is.numeric(df[[col]])) df[[col]] <- as.character(df[[col]])
+      }
+      cmp_cols <- grep("^Compound_\\d+$", names(df), value = TRUE)
+      empty_cmp <- cmp_cols[sapply(cmp_cols, function(col) {
+        all(is.na(df[[col]]) | trimws(as.character(df[[col]])) == "")
+      })]
+      df[, setdiff(names(df), empty_cmp), drop = FALSE]
+    }
+
     # Pending config table — Sys.sleep drives the spinner for 1 second
     output$config_table <- shiny$renderTable(
       {
         shiny$req(pending_config())
         Sys.sleep(1)
-        pending_config()
+        config_table_df(pending_config())
       },
       striped = TRUE,
       hover = TRUE,
@@ -1800,7 +1813,7 @@ server <- function(id) {
     output$confirmed_config_table <- shiny$renderTable(
       {
         shiny$req(configfile())
-        configfile()
+        config_table_df(configfile())
       },
       striped = TRUE,
       hover = TRUE,

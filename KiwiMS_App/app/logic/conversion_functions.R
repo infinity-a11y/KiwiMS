@@ -588,8 +588,17 @@ sample_handsontable <- function(
     renderer_js <- ""
   }
 
+  # Pre-convert concentration/time columns to character to prevent handsontable
+  # numeric type from rounding values in the data source via numeral.js
+  display_tab <- tab
+  if (length(conc_time_idx) == 2) {
+    for (idx in conc_time_idx) {
+      display_tab[[idx]] <- as.character(display_tab[[idx]])
+    }
+  }
+
   handsontable <- rhandsontable::rhandsontable(
-    tab,
+    display_tab,
     rowHeaders = NULL,
     allowed_per_col = allowed_per_col,
     height = 28 + 23 * ifelse(nrow(tab > 15), 15, nrow(tab)),
@@ -628,17 +637,11 @@ sample_handsontable <- function(
   }
 
   if (length(conc_time_idx) == 2) {
-    handsontable <- rhandsontable::hot_col(
+    handsontable <- rhandsontable::hot_validate_numeric(
       handsontable,
-      col = conc_time_idx,
-      type = "numeric",
-      allowInvalid = FALSE,
-      format = "0.##########"
-    ) |>
-      rhandsontable::hot_validate_numeric(
-        cols = conc_time_idx,
-        min = 0
-      )
+      cols = conc_time_idx,
+      min = 0
+    )
   }
 
   return(handsontable)
@@ -1759,22 +1762,36 @@ log_hits_summary <- function(hits_summarized) {
   ))
 }
 
+# Plain-text number formatter for log messages: scientific notation for
+# very large (|exp| >= 4) or very small (exp <= -3) values, otherwise signif.
+fmt_log <- function(x, digits = 4) {
+  if (is.na(x) || !is.finite(x)) return(as.character(x))
+  abs_x <- abs(x)
+  if (abs_x == 0) return("0")
+  exp <- floor(log10(abs_x))
+  if (exp >= 4 || exp <= -3) {
+    formatC(x, format = "e", digits = 2)
+  } else {
+    as.character(signif(x, digits))
+  }
+}
+
 # Log binding kinetics analysis initiation
 #' @export
 log_binding_kinetics <- function(concentrations, times, units) {
   message(paste(
     sprintf(
-      "  ├─ %s concentrations present from %s to %s [%s] \n",
+      "  ├─ %s concentrations present from %s to %s [%s]\n",
       length(unique(concentrations)),
-      min(concentrations),
-      max(concentrations),
+      fmt_log(min(concentrations)),
+      fmt_log(max(concentrations)),
       units[1]
     ),
     sprintf(
-      " ├─ %s time points present from %s to %s [%s] \n",
+      " ├─ %s time points present from %s to %s [%s]\n",
       length(unique(times)),
-      min(times),
-      max(times),
+      fmt_log(min(times)),
+      fmt_log(max(times)),
       units[2]
     ),
     " ├─ Infer observed first-order rate constant k_obs\n  │  │"
@@ -1827,7 +1844,7 @@ log_concentration <- function(concentration, unit, last) {
         "  │  └─ Computing k_obs for %s %s",
         "  │  ├─ Computing k_obs for %s %s"
       ),
-      concentration,
+      fmt_log(concentration),
       unit
     )
   ))
@@ -1877,9 +1894,9 @@ log_timepoints <- function(data, unit, last) {
   tmax <- max(data$time)
   tp_label <- if (n == 1) "time point" else "time points"
   range_str <- if (tmin == tmax) {
-    sprintf("%s %s", tmin, unit)
+    sprintf("%s %s", fmt_log(tmin), unit)
   } else {
-    sprintf("%s - %s %s", tmin, tmax, unit)
+    sprintf("%s - %s %s", fmt_log(tmin), fmt_log(tmax), unit)
   }
   message(paste(
     sprintf(
@@ -1899,14 +1916,14 @@ log_timepoints <- function(data, unit, last) {
 log_kobs_result <- function(result, last, unit) {
   p <- if (last) "  │     " else "  │  │  "
   message(sprintf("%s├─ Nonlinear regression model fitted", p))
-  message(sprintf("%s├─ k_obs   = %s %s⁻¹", p, round(result$kobs, 4), unit))
-  message(sprintf("%s├─ v       = %s", p, round(result$v, 4)))
-  message(sprintf("%s└─ Plateau = %s%%", p, round(result$plateau, 2)))
+  message(sprintf("%s├─ k_obs   = %s %s⁻¹", p, fmt_log(result$kobs), unit))
+  message(sprintf("%s├─ v       = %s", p, fmt_log(result$v)))
+  message(sprintf("%s└─ Plateau = %s%%", p, fmt_log(result$plateau)))
 }
 
 # Log Ki/kinact warning
 log_ki_kinact_warning <- function(msg) {
-  message(sprintf("     └─ %s %s", .col_warn(warning_sym), msg))
+  message(sprintf("     ├─ %s %s", .col_warn(warning_sym), msg))
 }
 
 # Log (Kᵢ/kᵢₙₐ꜀ₜ) analysis initiation
@@ -1920,19 +1937,19 @@ log_ki_kinact_results <- function(results, units) {
     paste0(
       sprintf(
         "     ├─ kᵢₙₐ꜀ₜ = %s ± %s %s⁻¹\n",
-        round(results$Params[1, 1], 4),
-        round(results$Params[1, 2], 4),
+        fmt_log(results$Params[1, 1]),
+        fmt_log(results$Params[1, 2]),
         units[["Time"]]
       ),
       sprintf(
-        "     ├─ Kᵢ = %s ± %s %s\n",
-        round(results$Params[2, 1], 4),
-        round(results$Params[2, 2], 4),
+        "     ├─ Kᵢ     = %s ± %s %s\n",
+        fmt_log(results$Params[2, 1]),
+        fmt_log(results$Params[2, 2]),
         units[["Concentration"]]
       ),
       sprintf(
         "     └─ kᵢₙₐ꜀ₜ/Kᵢ = %s %s⁻¹ %s⁻¹",
-        round(results$Params[1, 1] / results$Params[2, 1], 4),
+        fmt_log(results$Params[1, 1] / results$Params[2, 1]),
         units[["Concentration"]],
         units[["Time"]]
       )
@@ -2306,6 +2323,9 @@ make_binding_plot <- function(
     "rgba(255,255,255,0.5)"
   }
 
+  has_replicates <- "binding_sd" %in% names(df_points) &&
+    !all(is.na(df_points$binding_sd))
+
   # Generate plot
   binding_plot <- plotly::plot_ly() |>
     # Predicted/modeled binding
@@ -2351,13 +2371,17 @@ make_binding_plot <- function(
         line = list(width = 1, color = "white")
       ),
       legendgroup = ~concentration,
-      error_y = list(
-        type = "data",
-        array = ~binding_sd,
-        visible = TRUE,
-        thickness = 1.5,
-        width = 4
-      ),
+      error_y = if (has_replicates) {
+        list(
+          type = "data",
+          array = ~binding_sd,
+          visible = TRUE,
+          thickness = 1.5,
+          width = 4
+        )
+      } else {
+        list(visible = FALSE)
+      },
       hovertemplate = ~ paste(
         "<b>Observed</b><br>",
         paste(
@@ -2700,7 +2724,7 @@ compute_kobs <- function(hits, units) {
       if (grepl("^no response", fit_check)) {
         message(sprintf(
           "  │  %s %s %s %s: no response → k_obs = 0",
-          branch, .col_warn(warning_sym), i, units["Concentration"]
+          branch, .col_warn(warning_sym), fmt_log(i), units["Concentration"]
         ))
         concentration_list[[i]] <- list(
           kobs = 0,
@@ -2749,7 +2773,7 @@ compute_kobs <- function(hits, units) {
       } else {
         message(sprintf(
           "  │  %s %s %s %s: skipped (%s)",
-          branch, .col_warn(warning_sym), i, units["Concentration"], fit_check
+          branch, .col_warn(warning_sym), fmt_log(i), units["Concentration"], fit_check
         ))
       }
       next
@@ -2889,12 +2913,19 @@ compute_ki_kinact <- function(kobs_result, units = units) {
     ))
   }
 
-  # Nonlinear regression
+  # Nonlinear regression — capture C-level warnings (e.g. lmdif maxiter) so
+  # they are routed through our logger instead of appearing as raw R warnings.
   nonlin_mod <- tryCatch(
-    nlsLM_fixed(
-      formula = kobs ~ (kinact * conc) / (KI + conc),
-      data = kobs,
-      start = start_values
+    withCallingHandlers(
+      nlsLM_fixed(
+        formula = kobs ~ (kinact * conc) / (KI + conc),
+        data = kobs,
+        start = start_values
+      ),
+      warning = function(w) {
+        log_ki_kinact_warning(paste("Solver:", conditionMessage(w)))
+        invokeRestart("muffleWarning")
+      }
     ),
     error = function(e) {
       log_ki_kinact_warning(paste("Fit failed:", conditionMessage(e)))
@@ -2910,9 +2941,9 @@ compute_ki_kinact <- function(kobs_result, units = units) {
   max_kobs_real <- max(kobs$kobs[kobs$conc > 0], na.rm = TRUE)
   if (max_kobs_real < 0.5 * fitted_kinact) {
     log_ki_kinact_warning(sprintf(
-      "highest observed k_obs (%.4f) is < 50%% of fitted kᵢₙₐ꜀ₜ (%.4f) — saturating region not observed, kᵢₙₐ꜀ₜ is extrapolated",
-      max_kobs_real,
-      fitted_kinact
+      "max k_obs (%s) < 50%% of kᵢₙₐ꜀ₜ (%s)\n     │    saturating region not observed — kᵢₙₐ꜀ₜ extrapolated",
+      fmt_log(max_kobs_real),
+      fmt_log(fitted_kinact)
     ))
   }
 
@@ -5194,6 +5225,16 @@ brighten_hex <- function(hex_colors, factor = 1.2) {
   grDevices::hsv(hsv_vals[1, ], hsv_vals[2, ], hsv_vals[3, ])
 }
 
+# Sample n colors from a sequential brewer palette, cutting off the darkest end.
+# cutoff = 0.85 means only the lightest 85% of the palette is used.
+brewer_seq_colors <- function(n, scale, max_colors, cutoff = 0.85) {
+  avail <- max(floor(max_colors * cutoff), 3)
+  raw <- RColorBrewer::brewer.pal(avail, scale)
+  if (n >= avail) return(raw)
+  if (n == 1) return(raw[1])
+  raw[round(seq(1, avail, length.out = n))]
+}
+
 # Make uniform color scale for compounds
 #' @export
 get_cmp_colorScale <- function(filtered_table, scale, variable, trunc) {
@@ -5232,19 +5273,20 @@ get_cmp_colorScale <- function(filtered_table, scale, variable, trunc) {
 
         scale <- "viridis"
       } else {
-        # Handle n < 3 (Brewer minimum request is 3)
-        n_request <- max(n, 3)
-        raw_colors <- RColorBrewer::brewer.pal(n_request, scale)
-
-        # Apply custom subsetting for contrast at low n
-        if (n == 2) {
-          colors <- raw_colors[c(1, 2)]
-        } else if (n == 1) {
-          colors <- raw_colors[1]
+        if (scale %in% sequential_scales) {
+          colors <- brewer_seq_colors(n, scale, max_colors)
         } else {
-          colors <- raw_colors[1:n]
+          # Qualitative: keep existing subsetting
+          n_request <- max(n, 3)
+          raw_colors <- RColorBrewer::brewer.pal(n_request, scale)
+          if (n == 2) {
+            colors <- raw_colors[c(1, 2)]
+          } else if (n == 1) {
+            colors <- raw_colors[1]
+          } else {
+            colors <- raw_colors[1:n]
+          }
         }
-
         break
       }
 
@@ -6054,7 +6096,10 @@ stats_palette <- function(n, scale) {
     max_colors <- RColorBrewer::brewer.pal.info[scale, "maxcolors"]
     if (n > max_colors) {
       brighten_hex(viridisLite::viridis(n), factor = 1.5)
+    } else if (scale %in% sequential_scales) {
+      brewer_seq_colors(n, scale, max_colors)
     } else {
+      # Qualitative
       n_req <- max(n, 3)
       raw <- RColorBrewer::brewer.pal(n_req, scale)
       if (n == 1) {
