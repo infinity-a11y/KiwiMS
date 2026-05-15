@@ -1396,6 +1396,8 @@ check_hits <- function(
       100
     hits_df$correct <- 100 - unmatched
 
+    hits_df3 <<- hits_df
+
     return(hits_df)
   }
 
@@ -1494,6 +1496,8 @@ check_hits <- function(
     }
   }
 
+  hits_df2 <<- hits_df
+
   # If no hits detected in peaks
   if (nrow(hits_df) == 0) {
     hits_df <- data.frame(
@@ -1528,6 +1532,8 @@ check_hits <- function(
       unmatched = NA,
       correct = NA
     )
+
+    hits_df1 <<- hits_df
   }
 
   # Calculate % unmatched and % correct
@@ -1765,9 +1771,13 @@ log_hits_summary <- function(hits_summarized) {
 # Plain-text number formatter for log messages: scientific notation for
 # very large (|exp| >= 4) or very small (exp <= -3) values, otherwise signif.
 fmt_log <- function(x, digits = 4) {
-  if (is.na(x) || !is.finite(x)) return(as.character(x))
+  if (is.na(x) || !is.finite(x)) {
+    return(as.character(x))
+  }
   abs_x <- abs(x)
-  if (abs_x == 0) return("0")
+  if (abs_x == 0) {
+    return("0")
+  }
   exp <- floor(log10(abs_x))
   if (exp >= 4 || exp <= -3) {
     formatC(x, format = "e", digits = 2)
@@ -2323,7 +2333,8 @@ make_binding_plot <- function(
     "rgba(255,255,255,0.5)"
   }
 
-  has_replicates <- "binding_sd" %in% names(df_points) &&
+  has_replicates <- "binding_sd" %in%
+    names(df_points) &&
     !all(is.na(df_points$binding_sd))
 
   # Generate plot
@@ -2724,7 +2735,10 @@ compute_kobs <- function(hits, units) {
       if (grepl("^no response", fit_check)) {
         message(sprintf(
           "  │  %s %s %s %s: no response → k_obs = 0",
-          branch, .col_warn(warning_sym), fmt_log(i), units["Concentration"]
+          branch,
+          .col_warn(warning_sym),
+          fmt_log(i),
+          units["Concentration"]
         ))
         concentration_list[[i]] <- list(
           kobs = 0,
@@ -2773,7 +2787,11 @@ compute_kobs <- function(hits, units) {
       } else {
         message(sprintf(
           "  │  %s %s %s %s: skipped (%s)",
-          branch, .col_warn(warning_sym), fmt_log(i), units["Concentration"], fit_check
+          branch,
+          .col_warn(warning_sym),
+          fmt_log(i),
+          units["Concentration"],
+          fit_check
         ))
       }
       next
@@ -3578,7 +3596,9 @@ multiple_spectra <- function(
       result_path = NULL
     )$mass
 
-    if (is.null(add_df) || nrow(add_df) == 0) next
+    if (is.null(add_df) || nrow(add_df) == 0) {
+      next
+    }
 
     if (time) {
       add_df <- dplyr::mutate(add_df, z = extract_minutes(samples[i]))
@@ -3590,17 +3610,25 @@ multiple_spectra <- function(
   }
 
   if (nrow(spectrum_data) == 0 || !("mass" %in% names(spectrum_data))) {
-    return(plotly::plot_ly() |>
-      plotly::layout(
-        annotations = list(list(
-          text = "No spectrum data available",
-          xref = "paper", yref = "paper",
-          x = 0.5, y = 0.5, showarrow = FALSE,
-          font = list(size = 14, color = if (theme == "light") "black" else "white")
-        )),
-        paper_bgcolor = if (theme == "light") "white" else "rgba(0,0,0,0)",
-        plot_bgcolor = if (theme == "light") "white" else "rgba(0,0,0,0)"
-      ))
+    return(
+      plotly::plot_ly() |>
+        plotly::layout(
+          annotations = list(list(
+            text = "No spectrum data available",
+            xref = "paper",
+            yref = "paper",
+            x = 0.5,
+            y = 0.5,
+            showarrow = FALSE,
+            font = list(
+              size = 14,
+              color = if (theme == "light") "black" else "white"
+            )
+          )),
+          paper_bgcolor = if (theme == "light") "white" else "rgba(0,0,0,0)",
+          plot_bgcolor = if (theme == "light") "white" else "rgba(0,0,0,0)"
+        )
+    )
   }
 
   # If truncated active adapt z variable
@@ -3634,7 +3662,9 @@ multiple_spectra <- function(
       result_path = NULL
     )$highlight_peaks
 
-    if (is.null(add_df) || nrow(add_df) == 0) next
+    if (is.null(add_df) || nrow(add_df) == 0) {
+      next
+    }
 
     if (time) {
       add_df <- dplyr::mutate(add_df, z = extract_minutes(samples[i]))
@@ -5230,7 +5260,6 @@ brighten_hex <- function(hex_colors, factor = 1.2) {
 brewer_seq_colors <- function(n, scale, max_colors, cutoff = 0.85) {
   avail <- max(floor(max_colors * cutoff), 3)
   raw <- RColorBrewer::brewer.pal(avail, scale)
-  if (n >= avail) return(raw)
   if (n == 1) return(raw[1])
   raw[round(seq(1, avail, length.out = n))]
 }
@@ -5381,7 +5410,8 @@ filter_color_list <- function(color_list, min_n) {
     )
   })
 
-  return(filtered_list)
+  # Drop entirely-empty groups so they don't appear as orphan headers
+  Filter(function(g) length(g) > 0, filtered_list)
 }
 
 # Make compound distribution plot for proteins tab
@@ -6130,7 +6160,8 @@ hex_to_rgba <- function(hex, alpha) {
 stats_histogram <- function(
   hits_summary,
   theme = "dark",
-  color_scale = "plasma"
+  color_scale = "plasma",
+  show = "Correct"
 ) {
   df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
 
@@ -6152,23 +6183,28 @@ stats_histogram <- function(
   col2 <- hex_to_rgba(pal[2], 0.7)
   col2b <- hex_to_rgba(pal[2], 1)
 
-  plotly::plot_ly() |>
-    plotly::add_histogram(
-      data = df,
-      x = ~`% Correct`,
-      name = "Correct [%]",
-      marker = list(color = col1, line = list(color = col1b, width = 0.5)),
-      xbins = list(start = 0, end = 100, size = 1)
-    ) |>
-    plotly::add_histogram(
+  p <- plotly::plot_ly()
+  if (show == "Unmatched") {
+    p <- plotly::add_histogram(
+      p,
       data = df,
       x = ~`% Unmatched`,
       name = "Unmatched [%]",
       marker = list(color = col2, line = list(color = col2b, width = 0.5)),
       xbins = list(start = 0, end = 100, size = 1)
-    ) |>
+    )
+  } else {
+    p <- plotly::add_histogram(
+      p,
+      data = df,
+      x = ~`% Correct`,
+      name = "Correct [%]",
+      marker = list(color = col1, line = list(color = col1b, width = 0.5)),
+      xbins = list(start = 0, end = 100, size = 1)
+    )
+  }
+  p |>
     plotly::layout(
-      barmode = "overlay",
       paper_bgcolor = "rgba(0,0,0,0)",
       plot_bgcolor = "rgba(0,0,0,0)",
       font = list(size = 14, color = font_color),
@@ -6199,7 +6235,8 @@ stats_boxplot <- function(
   hits_summary,
   theme = "dark",
   color_scale = "plasma",
-  show_points = TRUE
+  show_points = TRUE,
+  show = "Correct"
 ) {
   df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
 
@@ -6228,76 +6265,54 @@ stats_boxplot <- function(
   col2b <- hex_to_rgba(pal[2], 1)
   col2f <- hex_to_rgba(pal[2], 0.15)
 
-  p <- plotly::plot_ly() |>
-    # Box shape — no points, default box hover shows statistics
-    plotly::add_trace(
-      data = df,
-      y = ~`% Correct`,
-      name = "Correct [%]",
-      type = "box",
-      boxpoints = FALSE,
-      boxmean = TRUE,
-      line = list(color = col1b),
-      fillcolor = col1f,
-      showlegend = TRUE
-    ) |>
-    plotly::add_trace(
-      data = df,
-      y = ~`% Unmatched`,
-      name = "Unmatched [%]",
-      type = "box",
-      boxpoints = FALSE,
-      boxmean = TRUE,
-      line = list(color = col2b),
-      fillcolor = col2f,
-      showlegend = TRUE
-    )
+  show_unmatched <- show == "Unmatched"
+  box_col  <- if (show_unmatched) col2b  else col1b
+  box_fill <- if (show_unmatched) col2f  else col1f
+  box_name <- if (show_unmatched) "Unmatched [%]" else "Correct [%]"
+  box_y    <- if (show_unmatched) ~`% Unmatched`  else ~`% Correct`
+  hover_tmpl <- if (show_unmatched) {
+    "<b>%{text}</b><br>Unmatched [%]: %{y:.2f}<extra></extra>"
+  } else {
+    "<b>%{text}</b><br>Correct [%]: %{y:.2f}<extra></extra>"
+  }
+
+  p <- plotly::plot_ly()
+  p <- plotly::add_trace(
+    p,
+    data = df,
+    y = box_y,
+    name = box_name,
+    type = "box",
+    boxpoints = FALSE,
+    boxmean = TRUE,
+    line = list(color = box_col),
+    fillcolor = box_fill,
+    showlegend = TRUE
+  )
 
   if (show_points) {
-    p <- p |>
-      # Points-only overlay: invisible box shape on top so points capture hover
-      plotly::add_trace(
-        data = df,
-        y = ~`% Correct`,
-        text = ~Sample,
-        name = "Correct [%]",
-        type = "box",
-        boxpoints = "all",
-        jitter = 0.4,
-        pointpos = 0,
-        hoveron = "points",
-        hovertemplate = "<b>%{text}</b><br>Correct [%]: %{y:.2f}<extra></extra>",
-        whiskerwidth = 0,
-        line = list(color = "rgba(0,0,0,0)", width = 0),
-        fillcolor = "rgba(0,0,0,0)",
-        showlegend = FALSE,
-        marker = list(
-          color = "rgba(0,0,0,0)",
-          size = 8,
-          line = list(color = dot_border_color, width = 1.5)
-        )
-      ) |>
-      plotly::add_trace(
-        data = df,
-        y = ~`% Unmatched`,
-        text = ~Sample,
-        name = "Unmatched [%]",
-        type = "box",
-        boxpoints = "all",
-        jitter = 0.4,
-        pointpos = 0,
-        hoveron = "points",
-        hovertemplate = "<b>%{text}</b><br>Unmatched [%]: %{y:.2f}<extra></extra>",
-        whiskerwidth = 0,
-        line = list(color = "rgba(0,0,0,0)", width = 0),
-        fillcolor = "rgba(0,0,0,0)",
-        showlegend = FALSE,
-        marker = list(
-          color = "rgba(0,0,0,0)",
-          size = 8,
-          line = list(color = dot_border_color, width = 1.5)
-        )
+    p <- plotly::add_trace(
+      p,
+      data = df,
+      y = box_y,
+      text = ~Sample,
+      name = box_name,
+      type = "box",
+      boxpoints = "all",
+      jitter = 0.4,
+      pointpos = 0,
+      hoveron = "points",
+      hovertemplate = hover_tmpl,
+      whiskerwidth = 0,
+      line = list(color = "rgba(0,0,0,0)", width = 0),
+      fillcolor = "rgba(0,0,0,0)",
+      showlegend = FALSE,
+      marker = list(
+        color = "rgba(0,0,0,0)",
+        size = 8,
+        line = list(color = dot_border_color, width = 1.5)
       )
+    )
   }
 
   correct_sd_bp <- stats::sd(df$`% Correct`, na.rm = TRUE)
@@ -6306,7 +6321,7 @@ stats_boxplot <- function(
   unmatched_mean_bp <- mean(df$`% Unmatched`, na.rm = TRUE)
 
   bp_annots <- list()
-  if (!is.na(correct_sd_bp) && correct_sd_bp < 0.005) {
+  if (show_correct && !is.na(correct_sd_bp) && correct_sd_bp < 0.005) {
     bp_annots <- c(
       bp_annots,
       list(list(
@@ -6321,7 +6336,7 @@ stats_boxplot <- function(
       ))
     )
   }
-  if (!is.na(unmatched_sd_bp) && unmatched_sd_bp < 0.005) {
+  if (show_unmatched && !is.na(unmatched_sd_bp) && unmatched_sd_bp < 0.005) {
     bp_annots <- c(
       bp_annots,
       list(list(
@@ -6369,8 +6384,12 @@ stats_scatter <- function(
   full_scale = FALSE,
   group_by = NULL,
   color_scale = "plasma",
-  theme = "dark"
+  theme = "dark",
+  show = "Correct"
 ) {
+  metric_col   <- if (show == "Unmatched") "% Unmatched" else "% Correct"
+  metric_label <- if (show == "Unmatched") "Unmatched [%]" else "Correct [%]"
+
   df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
   df$`Total % Binding` <- ifelse(
     is.na(df$`Total % Binding`),
@@ -6396,9 +6415,9 @@ stats_scatter <- function(
     "rgba(255,255,255,0.5)"
   }
 
-  correct_vals <- df$`% Correct`
-  correct_mean <- mean(correct_vals, na.rm = TRUE)
-  correct_sd <- stats::sd(correct_vals, na.rm = TRUE)
+  metric_vals <- df[[metric_col]]
+  correct_mean <- mean(metric_vals, na.rm = TRUE)
+  correct_sd <- stats::sd(metric_vals, na.rm = TRUE)
   correct_upper <- correct_mean + correct_sd
   correct_lower <- correct_mean - correct_sd
   show_sd <- !is.na(correct_sd) && correct_sd >= 0.005
@@ -6407,13 +6426,13 @@ stats_scatter <- function(
     c(-5, 105)
   } else {
     pad <- max(
-      (max(correct_vals, na.rm = TRUE) - min(correct_vals, na.rm = TRUE)) *
+      (max(metric_vals, na.rm = TRUE) - min(metric_vals, na.rm = TRUE)) *
         0.08,
       3
     )
     c(
-      max(-5, floor(min(correct_vals, na.rm = TRUE) - pad)),
-      min(105, ceiling(max(correct_vals, na.rm = TRUE) + pad))
+      max(-5, floor(min(metric_vals, na.rm = TRUE) - pad)),
+      min(105, ceiling(max(metric_vals, na.rm = TRUE) + pad))
     )
   }
 
@@ -6439,15 +6458,15 @@ stats_scatter <- function(
     sub_df <- sub_df |>
       dplyr::mutate(
         x_plot = `Total % Binding` + stats::runif(dplyr::n(), -0.6, 0.6),
-        y_plot = `% Correct` + stats::runif(dplyr::n(), -0.6, 0.6),
+        y_plot = .data[[metric_col]] + stats::runif(dplyr::n(), -0.6, 0.6),
         tooltip = paste0(
           Sample,
           "<br>",
           "Tot. Binding [%]: ",
           round(`Total % Binding`, 2),
           "<br>",
-          "Correct [%]: ",
-          round(`% Correct`, 2)
+          metric_label, ": ",
+          round(.data[[metric_col]], 2)
         )
       )
     p <- plotly::add_markers(
@@ -6497,7 +6516,7 @@ stats_scatter <- function(
         hoverformat = ".2f"
       ),
       yaxis = list(
-        title = "Correct [%]",
+        title = metric_label,
         range = y_range,
         color = font_color,
         gridcolor = grid_color,
@@ -6590,8 +6609,13 @@ stats_violin <- function(
   full_scale = FALSE,
   theme = "dark",
   color_scale = "plasma",
-  inner = "box"
+  inner = "box",
+  show = "Correct"
 ) {
+  metric_col   <- if (show == "Unmatched") "% Unmatched" else "% Correct"
+  metric_label <- if (show == "Unmatched") "Unmatched [%]" else "Correct [%]"
+  hover_label  <- if (show == "Unmatched") "Unmatched [%]" else "Correct [%]"
+
   df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
   df[[group_by]] <- ifelse(
     is.na(df[[group_by]]),
@@ -6636,7 +6660,7 @@ stats_violin <- function(
     col <- hex_to_rgba(color_map[[grp]], 1)
     col_f <- hex_to_rgba(color_map[[grp]], 0.2)
     col_b <- hex_to_rgba(color_map[[grp]], 0.25)
-    grp_sd <- stats::sd(sub_df$`% Correct`, na.rm = TRUE)
+    grp_sd <- stats::sd(sub_df[[metric_col]], na.rm = TRUE)
     is_degenerate <- is.na(grp_sd) || grp_sd < 0.005
     if (is_degenerate) {
       # Degenerate group: strip chart (invisible box carrying jittered points)
@@ -6645,14 +6669,14 @@ stats_violin <- function(
         data = sub_df,
         type = "box",
         x = grp,
-        y = ~`% Correct`,
+        y = sub_df[[metric_col]],
         name = grp,
         text = ~Sample,
         boxpoints = "all",
         jitter = 0.5,
         pointpos = 0,
         hoveron = "points",
-        hovertemplate = "<b>%{text}</b><br>Correct [%]: %{y:.2f}<extra></extra>",
+        hovertemplate = paste0("<b>%{text}</b><br>", hover_label, ": %{y:.2f}<extra></extra>"),
         whiskerwidth = 0,
         line = list(color = "rgba(0,0,0,0)", width = 0),
         fillcolor = "rgba(0,0,0,0)",
@@ -6670,7 +6694,7 @@ stats_violin <- function(
         data = sub_df,
         type = "violin",
         x = grp,
-        y = ~`% Correct`,
+        y = sub_df[[metric_col]],
         name = grp,
         fillcolor = col_f,
         line = list(color = col, width = 1),
@@ -6705,7 +6729,7 @@ stats_violin <- function(
         zerolinecolor = zeroline_color
       ),
       yaxis = list(
-        title = "Correct [%]",
+        title = metric_label,
         range = y_range,
         color = font_color,
         gridcolor = grid_color,
@@ -6780,7 +6804,7 @@ batch_plate_heatmap <- function(
     # No-hit wells have 0 binding for numeric variables
     values[no_hit_flag & is.na(values)] <- 0
     display_vals <- if (variable %in% pct_vars) {
-      sprintf("%.1f%%", values)
+      sprintf("%.2f%%", values)
     } else {
       sprintf("%.2f", values)
     }
@@ -7175,7 +7199,7 @@ batch_plate_heatmap <- function(
     has_no_hit ||
     has_empty_in_rect
 
-  p |>
+  p_out <- p |>
     plotly::layout(
       shapes = c(np_shapes, nh_shapes),
       dragmode = "zoom",
@@ -7233,4 +7257,5 @@ batch_plate_heatmap <- function(
         filename = paste0(Sys.Date(), "_Batch_Heatmap")
       )
     )
+  p_out
 }

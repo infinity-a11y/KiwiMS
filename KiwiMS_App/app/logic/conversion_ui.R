@@ -916,7 +916,7 @@ summary_results_ui <- function(ns, batch_control) {
               ),
               bslib::card_body(
                 class = "protocol-stat-body",
-                shiny::uiOutput(ns("pstat_n_samples"))
+                shiny::uiOutput(ns("pstat_n_samples")),
               )
             )
           ),
@@ -1144,6 +1144,13 @@ summary_results_ui <- function(ns, batch_control) {
                 label = "Include only hits",
                 value = FALSE,
                 right = TRUE
+              ),
+              shinyWidgets::radioGroupButtons(
+                ns("stats_show_metric"),
+                label = NULL,
+                choices = c("Correct", "Unmatched"),
+                selected = "Correct",
+                size = "sm"
               )
             ),
             shiny::div(
@@ -1172,7 +1179,11 @@ summary_results_ui <- function(ns, batch_control) {
                   ),
                   bslib::card_body(
                     class = "protocol-stat-body",
-                    shiny::uiOutput(ns("pstat_correct_stat"))
+                    shinycssloaders::withSpinner(
+                      shiny::uiOutput(ns("pstat_correct_stat")),
+                      type = 1,
+                      color = "#7777f9"
+                    )
                   )
                 )
               ),
@@ -1200,7 +1211,11 @@ summary_results_ui <- function(ns, batch_control) {
                   ),
                   bslib::card_body(
                     class = "protocol-stat-body",
-                    shiny::uiOutput(ns("pstat_unmatched_stat"))
+                    shinycssloaders::withSpinner(
+                      shiny::uiOutput(ns("pstat_unmatched_stat")),
+                      type = 1,
+                      color = "#7777f9"
+                    )
                   )
                 )
               )

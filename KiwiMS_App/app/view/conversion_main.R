@@ -101,6 +101,41 @@ ui <- function(id) {
 
   shiny::div(
     class = "conversion-main-spinner",
+    shiny::tags$script(shiny::HTML("
+      (function() {
+        var _kiwiClickObserver = null;
+
+        function bindHeatmapClicks(inputId) {
+          document.querySelectorAll(
+            '.batch-heatmap-grid .js-plotly-plot:not([data-kiwiclick])'
+          ).forEach(function(el) {
+            el.setAttribute('data-kiwiclick', '1');
+            el.on('plotly_click', function(d) {
+              if (d && d.points && d.points.length > 0) {
+                var pt = d.points[0];
+                console.log('[KiwiMS] heatmap click x=' + pt.x + ' y=' + pt.y);
+                Shiny.setInputValue(inputId, {x: pt.x, y: pt.y}, {priority: 'event'});
+              }
+            });
+          });
+        }
+
+        Shiny.addCustomMessageHandler('kiwiMS_attachHeatmapClicks', function(msg) {
+          var inputId = msg.inputId;
+
+          // Bind any already-rendered elements immediately
+          bindHeatmapClicks(inputId);
+
+          // Replace the persistent observer so future renders (lazy outputs
+          // that fire when the Batch Control tab becomes visible) are caught
+          if (_kiwiClickObserver) _kiwiClickObserver.disconnect();
+          _kiwiClickObserver = new MutationObserver(function() {
+            bindHeatmapClicks(inputId);
+          });
+          _kiwiClickObserver.observe(document.body, {childList: true, subtree: true});
+        });
+      })();
+    ")),
     shinycssloaders::withSpinner(
       shiny::uiOutput(ns("conversion_ui")),
       type = 1,
@@ -150,6 +185,7 @@ server <- function(
     render_trigger <- shiny::reactiveVal(0)
     trigger_ki_kinact <- shiny::reactiveVal(0L)
     manual_render_spectrum <- shiny::reactiveVal(0L)
+    heatmap_pending_sample <- shiny::reactiveVal(NULL)
     manual_render_cmp_spectrum <- shiny::reactiveVal(0L)
 
     # Apply initial disabled styling for samples_fileinput after DOM is ready
@@ -1245,9 +1281,15 @@ server <- function(
           raw_input <- sample_table_input()
           # Concentration/Time come back as character from hot_to_r (text-type
           # cells); convert to numeric before further processing
-          for (.col in grep("^Concentration|^Time", names(raw_input), value = TRUE)) {
+          for (.col in grep(
+            "^Concentration|^Time",
+            names(raw_input),
+            value = TRUE
+          )) {
             if (is.character(raw_input[[.col]])) {
-              raw_input[[.col]] <- suppressWarnings(as.numeric(raw_input[[.col]]))
+              raw_input[[.col]] <- suppressWarnings(as.numeric(raw_input[[
+                .col
+              ]]))
             }
           }
           sample_table <- clean_sample_table(
@@ -3452,7 +3494,9 @@ server <- function(
                 bar_chart = input$kikinact_binding_chart,
                 truncated = input$truncate_names,
                 clickable = conversion_vars$units[["Concentration"]],
-                valid_concentrations = names(conversion_vars$select_concentration),
+                valid_concentrations = names(
+                  conversion_vars$select_concentration
+                ),
                 units = units
               )
 
@@ -3967,7 +4011,8 @@ server <- function(
                   "_spectra"
                 )]] <- plotly::renderPlotly({
                   conc_sample_ids <- unique(hits_summary$`Sample ID`[
-                    hits_summary[[units["Concentration"]]] == local_concentration
+                    hits_summary[[units["Concentration"]]] ==
+                      local_concentration
                   ])
 
                   multiple_spectra(
@@ -4022,7 +4067,8 @@ server <- function(
                     multiple_spectra(
                       results_list = result_list,
                       samples = names(result_list$deconvolution)[
-                        names(result_list$deconvolution) %in% conc_sample_ids_local
+                        names(result_list$deconvolution) %in%
+                          conc_sample_ids_local
                       ],
                       cubic = ifelse(
                         is.null(input[[paste0(local_ui_id, "_kind")]]) ||
@@ -4113,7 +4159,8 @@ server <- function(
               stats_histogram(
                 hs,
                 theme = "dark",
-                color_scale = stats_cs()
+                color_scale = stats_cs(),
+                show = input$stats_show_metric %||% "Correct"
               )
             })
 
@@ -4158,7 +4205,8 @@ server <- function(
                 hs,
                 theme = "dark",
                 color_scale = stats_cs(),
-                show_points = isTRUE(input$stats_boxplot_show_points)
+                show_points = isTRUE(input$stats_boxplot_show_points),
+                show = input$stats_show_metric %||% "Correct"
               )
             })
 
@@ -4181,7 +4229,8 @@ server <- function(
                 full_scale = fs,
                 group_by = grp,
                 color_scale = stats_cs(),
-                theme = "dark"
+                theme = "dark",
+                show = input$stats_show_metric %||% "Correct"
               )
             })
 
@@ -4209,7 +4258,8 @@ server <- function(
                   "Box"
                 } else {
                   input$stats_violin_inner
-                }
+                },
+                show = input$stats_show_metric %||% "Correct"
               )
             })
 
@@ -4316,6 +4366,18 @@ server <- function(
 
                 scale_choices <- if (isTRUE(vm$seq_only)) {
                   batch_heatmap_scale_choices_seq
+                } else if (!isTRUE(vm$is_combined)) {
+                  # Filter qualitative palettes to those supporting the actual
+                  # number of categories; renderUI is the authoritative source
+                  # (updateSelectInput in a separate observer fires before
+                  # renderUI and gets overwritten on each result reload).
+                  v_col <- vm$value
+                  if (v_col %in% names(hs)) {
+                    n_cats <- length(unique(stats::na.omit(as.character(hs[[v_col]]))))
+                    filter_color_list(batch_heatmap_scale_choices_all, n_cats)
+                  } else {
+                    batch_heatmap_scale_choices_all
+                  }
                 } else {
                   batch_heatmap_scale_choices_all
                 }
@@ -4341,7 +4403,7 @@ server <- function(
                     shinyWidgets::materialSwitch(
                       ns(paste0(vm$id, "_pct_scale_100")),
                       label = "Scale to 100%",
-                      value = FALSE,
+                      value = TRUE,
                       right = TRUE
                     )
                   },
@@ -4396,6 +4458,7 @@ server <- function(
                 pct <- isTRUE(vm$is_pct)
                 is_combined <- isTRUE(vm$is_combined)
                 default_cs <- vm$default_scale
+                seq_only <- isTRUE(vm$seq_only)
 
                 build_heatmap <- function(theme) {
                   rl <- conversion_sidebar_vars$result_list()
@@ -4464,7 +4527,73 @@ server <- function(
                     )
                   }
                 )
+
               })
+            })
+
+            # Start polling JS to bind click handlers to rendered plotly tiles
+            session$sendCustomMessage(
+              "kiwiMS_attachHeatmapClicks",
+              list(inputId = session$ns("heatmap_well_click"))
+            )
+
+            # Well click → navigate to Relative Binding / Samples View.
+            # ignoreInit = TRUE prevents the newly-created observer from firing
+            # with a stale heatmap_well_click value left over from a previous
+            # click (which would immediately re-navigate every time results_observer
+            # re-runs with analysis_select == 1).
+            shiny::observeEvent(
+              input$heatmap_well_click,
+              {
+                click <- input$heatmap_well_click
+                shiny::req(!is.null(click))
+                rl <- conversion_sidebar_vars$result_list()
+                shiny::req(rl, rl$hits_summary)
+                hs <- rl$hits_summary
+                # result_list()$hits_summary is raw (untransformed): column is
+                # "Sample", but after transform_hits it becomes "Sample ID".
+                # Picker choices come from the transformed version; values are identical.
+                sample_col <- if ("Sample ID" %in% names(hs)) "Sample ID" else "Sample"
+                shiny::req("Well" %in% names(hs), sample_col %in% names(hs))
+                well_id <- paste0(
+                  as.character(click$y),
+                  as.integer(click$x)
+                )
+                norm_wells <- gsub(
+                  "^([A-Z]+)0*(\\d+)$",
+                  "\\1\\2",
+                  toupper(as.character(hs[["Well"]]))
+                )
+                idx <- match(well_id, norm_wells)
+                shiny::req(!is.na(idx))
+                sample_id <- hs[[sample_col]][idx]
+                shiny::req(
+                  !is.na(sample_id),
+                  nzchar(trimws(as.character(sample_id)))
+                )
+                heatmap_pending_sample(as.character(sample_id))
+                shinyjs::runjs(
+                  "document.querySelector('#app-conversion_sidebar-analysis_select input[value=\"2\"]').click();"
+                )
+              },
+              ignoreNULL = TRUE,
+              ignoreInit = TRUE
+            )
+
+            # Apply pending sample once Relative Binding interface is active
+            # and the picker has been rendered (req on picker avoids racing the renderUI)
+            shiny::observe({
+              pending <- heatmap_pending_sample()
+              shiny::req(!is.null(pending))
+              shiny::req(conversion_sidebar_vars$analysis_select() == 2)
+              shiny::req(!is.null(input$conversion_sample_picker))
+              shinyWidgets::updatePickerInput(
+                session,
+                "conversion_sample_picker",
+                selected = pending
+              )
+              set_selected_tab("Samples View", session)
+              heatmap_pending_sample(NULL)
             })
 
             shiny::observe({
@@ -4482,7 +4611,11 @@ server <- function(
 
             output$pstat_n_samples <- shiny::renderUI({
               shiny::div(
-                shiny::div(class = "protocol-stat-value", nrow(hits_summary))
+                shiny::div(class = "protocol-stat-value", nrow(hits_summary)),
+                shiny::div(
+                  class = "protocol-stat-sub",
+                  "samples subjected to analysis"
+                )
               )
             })
 
@@ -4490,13 +4623,16 @@ server <- function(
               rl <- conversion_sidebar_vars$result_list()
               shiny::req(rl, rl$hits_summary)
 
-              rl1 <<- rl
               n <- sum(
                 !is.na(rl$hits_summary$Compound) &
                   nzchar(trimws(as.character(rl$hits_summary$Compound)))
               )
               shiny::div(
-                shiny::div(class = "protocol-stat-value", n)
+                shiny::div(class = "protocol-stat-value", n),
+                shiny::div(
+                  class = "protocol-stat-sub",
+                  "binding compounds observed"
+                )
               )
             })
 
@@ -4768,6 +4904,10 @@ server <- function(
                 shiny::div(
                   class = "protocol-stat-value",
                   sprintf("%g Da", if (is.null(val)) 3 else val)
+                ),
+                shiny::div(
+                  class = "protocol-stat-sub",
+                  "maximum acceptale mass deviation"
                 )
               )
             })
@@ -4778,6 +4918,10 @@ server <- function(
                 shiny::div(
                   class = "protocol-stat-value",
                   if (is.null(val)) 5 else val
+                ),
+                shiny::div(
+                  class = "protocol-stat-sub",
+                  "maximum no. of compounds bound"
                 )
               )
             })
