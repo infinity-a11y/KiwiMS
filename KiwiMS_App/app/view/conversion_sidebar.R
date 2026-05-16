@@ -85,116 +85,111 @@ server <- function(
 
       shiny::div(
         class = "sidebar-section",
-        shiny::fluidRow(
-          shiny::column(
-            width = 12,
+        shiny::div(
+          class = "sidebar-title custom-sidebar-title",
+          "Binding Analysis"
+        ),
+        shiny::numericInput(
+          ns("peak_tolerance"),
+          shiny::div(
+            class = "label-tooltip",
+            shiny::tags$label("Peak Tolerance [Da]"),
             shiny::div(
-              class = "sidebar-title custom-sidebar-title",
-              "Binding Analysis"
-            ),
-            shiny::numericInput(
-              ns("peak_tolerance"),
-              shiny::div(
-                class = "label-tooltip",
-                shiny::tags$label("Peak Tolerance [Da]"),
+              class = "label-save-button",
+              tooltip(
                 shiny::div(
-                  class = "label-save-button",
-                  tooltip(
-                    shiny::div(
-                      class = "save-button",
-                      shiny::actionButton(
-                        ns("save_peak_tol_btn"),
-                        label = NULL,
-                        icon = shiny::icon("floppy-disk"),
-                        class = "btn-default"
-                      )
-                    ),
-                    "Save Setting",
-                    placement = "top"
-                  ),
-                  tooltip(
-                    shiny::div(
-                      class = "tooltip-bttn",
-                      shiny::actionButton(
-                        ns("peak_tol_tooltip_bttn"),
-                        label = NULL,
-                        icon = shiny::icon("circle-question")
-                      )
-                    ),
-                    "Help",
-                    placement = "top"
+                  class = "save-button",
+                  shiny::actionButton(
+                    ns("save_peak_tol_btn"),
+                    label = NULL,
+                    icon = shiny::icon("floppy-disk"),
+                    class = "btn-default"
                   )
-                )
-              ),
-              value = pt_default,
-              min = 0,
-              max = 20,
-              step = 0.1,
-              width = "100%"
-            ),
-            shiny::numericInput(
-              ns("max_multiples"),
-              shiny::div(
-                class = "label-tooltip",
-                shiny::tags$label("Max. Stoichiometry"),
-
-                shiny::div(
-                  class = "label-save-button",
-                  tooltip(
-                    shiny::div(
-                      class = "save-button",
-                      shiny::actionButton(
-                        ns("save_max_mult_btn"),
-                        label = NULL,
-                        icon = shiny::icon("floppy-disk"),
-                        class = "btn-default"
-                      )
-                    ),
-                    "Save Setting",
-                    placement = "top"
-                  ),
-                  tooltip(
-                    shiny::div(
-                      class = "tooltip-bttn",
-                      shiny::actionButton(
-                        ns("max_mult_tooltip_bttn"),
-                        label = NULL,
-                        icon = shiny::icon("circle-question")
-                      )
-                    ),
-                    "Help",
-                    placement = "top"
-                  )
-                )
-              ),
-              value = mm_default,
-              min = 1,
-              max = 20,
-              step = 1,
-              width = "100%"
-            ),
-            shiny::div(
-              class = "ki-kinact-checkbox",
-              shiny::checkboxInput(
-                ns("run_ki_kinact"),
-                shiny::span(
-                  class = "ki-kinact-label",
-                  "Run",
-                  shiny::div(
-                    class = "ki-kinact-highlight",
-                    " K",
-                    htmltools::tags$sub("i"),
-                    " / k",
-                    htmltools::tags$sub("inact")
-                  ),
-                  " Analysis"
                 ),
-                value = FALSE
+                "Save Setting",
+                placement = "top"
+              ),
+              tooltip(
+                shiny::div(
+                  class = "tooltip-bttn",
+                  shiny::actionButton(
+                    ns("peak_tol_tooltip_bttn"),
+                    label = NULL,
+                    icon = shiny::icon("circle-question")
+                  )
+                ),
+                "Help",
+                placement = "top"
               )
+            )
+          ),
+          value = pt_default,
+          min = 0,
+          max = 20,
+          step = 0.1,
+          width = "100%"
+        ),
+        shiny::numericInput(
+          ns("max_multiples"),
+          shiny::div(
+            class = "label-tooltip",
+            shiny::tags$label("Max. Stoichiometry"),
+
+            shiny::div(
+              class = "label-save-button",
+              tooltip(
+                shiny::div(
+                  class = "save-button",
+                  shiny::actionButton(
+                    ns("save_max_mult_btn"),
+                    label = NULL,
+                    icon = shiny::icon("floppy-disk"),
+                    class = "btn-default"
+                  )
+                ),
+                "Save Setting",
+                placement = "top"
+              ),
+              tooltip(
+                shiny::div(
+                  class = "tooltip-bttn",
+                  shiny::actionButton(
+                    ns("max_mult_tooltip_bttn"),
+                    label = NULL,
+                    icon = shiny::icon("circle-question")
+                  )
+                ),
+                "Help",
+                placement = "top"
+              )
+            )
+          ),
+          value = mm_default,
+          min = 1,
+          max = 20,
+          step = 1,
+          width = "100%"
+        ),
+        shiny::div(
+          class = "ki-kinact-checkbox",
+          shiny::checkboxInput(
+            ns("run_ki_kinact"),
+            shiny::span(
+              class = "ki-kinact-label",
+              "Run",
+              shiny::div(
+                class = "ki-kinact-highlight",
+                " K",
+                htmltools::tags$sub("i"),
+                " / k",
+                htmltools::tags$sub("inact")
+              ),
+              " Analysis"
             ),
-            shiny::uiOutput(ns("run_button_wrapper"))
+            value = FALSE
           )
-        )
+        ),
+        shiny::uiOutput(ns("run_button_wrapper"))
       )
     })
 
@@ -214,47 +209,42 @@ server <- function(
       } else {
         shiny::div(
           class = "sidebar-section",
-          shiny::fluidRow(
-            shiny::column(
-              width = 12,
+          shiny::div(
+            class = "sidebar-title custom-sidebar-title",
+            "Results Menu"
+          ),
+          shiny::div(
+            class = "result-interface-selector-ui",
+            shiny::uiOutput(ns("analysis_select_ui")),
+            shiny::div(
+              class = "complex-picker-ui",
+              shiny::div(id = "complex-picker-connector"),
               shiny::div(
-                class = "sidebar-title custom-sidebar-title",
-                "Results Menu"
-              ),
-              shiny::div(
-                class = "result-interface-selector-ui",
-                shiny::uiOutput(ns("analysis_select_ui")),
-                shiny::div(
-                  class = "complex-picker-ui",
-                  shiny::div(id = "complex-picker-connector"),
-                  shiny::div(
-                    # class = "complex-picker custom-disable",
-                    class = "complex-picker",
-                    shinyWidgets::pickerInput(
-                      ns("complex"),
-                      NULL,
-                      choices = complexes()
-                    )
-                  )
+                # class = "complex-picker custom-disable",
+                class = "complex-picker",
+                shinyWidgets::pickerInput(
+                  ns("complex"),
+                  NULL,
+                  choices = complexes()
                 )
               )
-              # ,
-              # bslib::tooltip(
-              #   shiny::div(
-              #     shinyjs::disabled(
-              #       shiny::actionButton(
-              #         ns("report_conversion_results"),
-              #         "Report",
-              #         icon = shiny::icon("square-poll-vertical"),
-              #         width = "100%"
-              #       )
-              #     )
-              #   ),
-              #   "Report generation is temporarily unavailable",
-              #   placement = "top"
-              # )
             )
           )
+          # ,
+          # bslib::tooltip(
+          #   shiny::div(
+          #     shinyjs::disabled(
+          #       shiny::actionButton(
+          #         ns("report_conversion_results"),
+          #         "Report",
+          #         icon = shiny::icon("square-poll-vertical"),
+          #         width = "100%"
+          #       )
+          #     )
+          #   ),
+          #   "Report generation is temporarily unavailable",
+          #   placement = "top"
+          # )
         )
       }
     })
@@ -734,13 +724,14 @@ server <- function(
           shinyjs::addClass(
             selector = paste(
               "#app-conversion_sidebar-analysis_select .radio:nth-child(1),",
-              "#app-conversion_sidebar-analysis_select .radio:nth-child(2)"
+              "#app-conversion_sidebar-analysis_select .radio:nth-child(2),",
+              "#app-conversion_sidebar-analysis_select .radio:nth-child(3)"
             ),
             class = "custom-disable"
           )
           if (input$run_ki_kinact) {
             shinyjs::addClass(
-              selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(3)",
+              selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(4)",
               class = "custom-disable"
             )
           }
@@ -783,6 +774,7 @@ server <- function(
           label = NULL,
           choiceNames = list(
             "Summary",
+            "Hits",
             "Relative Binding",
             shiny::span(
               "K",
@@ -791,14 +783,14 @@ server <- function(
               htmltools::tags$sub("inact")
             )
           ),
-          choiceValues = list(1, 2, 3)
+          choiceValues = list(1, 4, 2, 3)
         ),
         if (!ki) {
           shiny::tags$script(shiny::HTML(paste0(
             "(function() {",
             "  $('#",
             ns("analysis_select"),
-            " .radio:nth-child(3)')",
+            " .radio:nth-child(4)')",
             "    .addClass('custom-disable');",
             "})()"
           )))
@@ -865,7 +857,7 @@ server <- function(
         #   '= "block";'
         # ))
 
-        if (input$analysis_select %in% c(1, 2)) {
+        if (input$analysis_select %in% c(1, 2, 4)) {
           shinyjs::addClass(
             selector = ".complex-picker .form-group .bootstrap-select",
             class = "custom-disable"

@@ -1,4 +1,4 @@
-# app/logic/conversion_ui.R
+﻿# app/logic/conversion_ui.R
 
 box::use(
   app /
@@ -309,168 +309,6 @@ ki_kinact_results_ui <- function(
   # bslib::navset_card_tab(
   #   id = ns("tabs"),
   static_panels <- list(
-    bslib::nav_panel(
-      title = "Hits",
-      shiny::div(
-        class = "conversion-result-wrapper hits-tab",
-        # shiny::div(
-        #   class = "tooltip-bttn hits-tab-tooltip",
-        #   shiny::actionButton(
-        #     ns("hits_table_tooltip_bttn"),
-        #     label = NULL,
-        #     icon = shiny::icon("circle-question")
-        #   )
-        # ),
-        shiny::fluidRow(
-          shiny::column(
-            width = 2,
-            align = "center",
-            shiny::div(
-              class = "hits-tab-checkboxes",
-              shiny::div(
-                class = "hits-tab-expand-box",
-                shiny::checkboxInput(
-                  ns("kikinact_hits_tab_expand"),
-                  label = "Expand Samples",
-                  value = TRUE
-                )
-              ),
-              shiny::div(
-                class = "hits-tab-na-box",
-                shiny::checkboxInput(
-                  ns("kikinact_hits_tab_na"),
-                  label = "Include NA",
-                  value = TRUE
-                )
-              )
-            )
-          ),
-          shiny::column(
-            width = 2,
-            align = "center",
-            shiny::div(
-              class = "hits-table-control-select",
-              shinyWidgets::pickerInput(
-                ns("kikinact_hits_tab_sample_select"),
-                label = "Select Samples",
-                choices = unique(
-                  hits_summary$`Sample ID`
-                ),
-                selected = unique(
-                  hits_summary$`Sample ID`
-                ),
-                multiple = TRUE,
-                options = list(
-                  `actions-box` = TRUE
-                )
-              )
-            )
-          ),
-          shiny::column(
-            width = 2,
-            align = "center",
-            shiny::div(
-              class = "hits-table-control-select",
-              shinyWidgets::pickerInput(
-                ns("kikinact_hits_tab_compound_select"),
-                label = "Select Compounds",
-                choices = unique(
-                  hits_summary$`Cmp Name`
-                )[
-                  !is.na(unique(
-                    hits_summary$`Cmp Name`
-                  ))
-                ],
-                selected = unique(
-                  hits_summary$`Cmp Name`
-                )[
-                  !is.na(unique(
-                    hits_summary$`Cmp Name`
-                  ))
-                ],
-                multiple = TRUE,
-                options = list(
-                  `actions-box` = TRUE
-                )
-              )
-            )
-          ),
-          shiny::column(
-            width = 2,
-            align = "center",
-            shiny::div(
-              class = "hits-table-control-select",
-              shinyWidgets::pickerInput(
-                ns("kikinact_hits_tab_col_select"),
-                label = "Select Columns",
-                choices = names(hits_summary)[
-                  !names(hits_summary) %in%
-                    c("Sample ID", "Cmp Name", "truncSample_ID")
-                ],
-                selected = names(hits_summary)[
-                  !names(hits_summary) %in%
-                    c(
-                      "Sample ID",
-                      "Cmp Name",
-                      "truncSample_ID",
-                      "Well",
-                      "Replicate",
-                      "Unmatched [%]",
-                      "Preferred",
-                      "Theor. Prot. [Da]",
-                      "Δ Prot. [Da]",
-                      "Int. Prot. [%]",
-                      "Int. Cmp [%]",
-                      "Δ Cmp [Da]"
-                    )
-                ],
-                multiple = TRUE,
-                options = list(
-                  `actions-box` = TRUE
-                )
-              )
-            )
-          ),
-          shiny::column(
-            width = 2,
-            align = "center",
-            shiny::div(
-              class = "hits-table-control-select",
-              shinyWidgets::pickerInput(
-                ns("kikinact_binding_chart"),
-                label = "Show Binding Bars",
-                choices = c("Binding [%]", "Tot. Binding [%]"),
-                selected = "Tot. Binding [%]",
-                multiple = TRUE,
-                options = list(
-                  `actions-box` = TRUE
-                )
-              )
-            )
-          ),
-          shiny::column(
-            width = 2,
-            align = "left",
-            shiny::div(
-              class = "hits-table-export",
-              shiny::tags$label(class = "control-label", "Export Table"),
-              table_dl_buttons(ns, "kikinact_hits_tab")
-            )
-          )
-        ),
-        shiny::div(
-          class = "hits-table-wrapper",
-          shinycssloaders::withSpinner(
-            DT::DTOutput(ns("kikinact_hits_tab")),
-            type = 1,
-            color = "#7777f9"
-          )
-        )
-      ),
-      shiny::tags$script(
-        popover_autoclose
-      )
-    ),
     bslib::nav_panel(
       title = "Binding",
       shiny::div(
@@ -1128,29 +966,32 @@ summary_results_ui <- function(ns, batch_control) {
           shiny::div(
             class = "input-stat-panel",
             shiny::div(
-              class = "input-panel palette-select",
-              bslib::tooltip(
-                shiny::selectInput(
-                  ns("stats_color_scale"),
+              class = "input-panel",
+              shiny::div(
+                class = "panel-group",
+                shiny::tags$label(
+                  "Hit Rate Parameter"
+                ),
+                shinyWidgets::radioGroupButtons(
+                  ns("stats_show_metric"),
                   label = NULL,
-                  choices = NULL
-                ) |>
-                  shiny::tagAppendAttributes(class = "palette-select"),
-                "Color palette",
-                placement = "top"
+                  choices = c("Correct", "Unmatched"),
+                  selected = "Correct",
+                  size = "sm"
+                )
               ),
-              shinyWidgets::materialSwitch(
-                ns("stats_exclude_extremes"),
-                label = "Include only hits",
-                value = FALSE,
-                right = TRUE
-              ),
-              shinyWidgets::radioGroupButtons(
-                ns("stats_show_metric"),
-                label = NULL,
-                choices = c("Correct", "Unmatched"),
-                selected = "Correct",
-                size = "sm"
+              shiny::div(
+                class = "panel-group",
+                shiny::tags$label(
+                  "Include only hits"
+                ),
+                shinyWidgets::radioGroupButtons(
+                  ns("stats_exclude_extremes"),
+                  label = NULL,
+                  choices = c("All", "Hits only"),
+                  selected = "All",
+                  size = "sm"
+                )
               )
             ),
             shiny::div(
@@ -1268,6 +1109,12 @@ summary_results_ui <- function(ns, batch_control) {
                       value = TRUE,
                       right = TRUE
                     ),
+                    shinyWidgets::materialSwitch(
+                      ns("stats_boxplot_fixed_range"),
+                      label = "Full Scale (0–100%)",
+                      value = FALSE,
+                      right = TRUE
+                    ),
                     style = "margin-right:20px;"
                   )),
                   plot_dl_popover(ns, "stats_boxplot"),
@@ -1302,6 +1149,16 @@ summary_results_ui <- function(ns, batch_control) {
                 shiny::div(
                   class = "box-header-settings-help",
                   card_settings_popover(shiny::div(
+                    bslib::tooltip(
+                      shiny::selectInput(
+                        ns("stats_scatter_color_scale"),
+                        label = "Color Scale",
+                        choices = NULL
+                      ) |>
+                        shiny::tagAppendAttributes(class = "palette-select"),
+                      "Color palette",
+                      placement = "top"
+                    ),
                     shiny::selectInput(
                       ns("stats_scatter_groupby"),
                       label = "Color By",
@@ -1345,10 +1202,20 @@ summary_results_ui <- function(ns, batch_control) {
               full_screen = TRUE,
               bslib::card_header(
                 class = "bg-dark help-header d-flex justify-content-between",
-                "Correct [%] Distribution by Group",
+                "Hit Rate Distribution by Group",
                 shiny::div(
                   class = "box-header-settings-help",
                   card_settings_popover(shiny::div(
+                    bslib::tooltip(
+                      shiny::selectInput(
+                        ns("stats_violin_color_scale"),
+                        label = "Color Scale",
+                        choices = NULL
+                      ) |>
+                        shiny::tagAppendAttributes(class = "palette-select"),
+                      "Color palette",
+                      placement = "top"
+                    ),
                     shiny::selectInput(
                       ns("stats_violin_groupby"),
                       label = "Group By",
@@ -1439,167 +1306,6 @@ summary_results_ui <- function(ns, batch_control) {
 binding_results_ui <- function(ns, hits_summary) {
   bslib::navset_card_tab(
     id = ns("tabs"),
-    bslib::nav_panel(
-      title = "Hits",
-      shiny::div(
-        class = "conversion-result-wrapper hits-tab",
-        shiny::fluidRow(
-          shiny::column(
-            width = 2,
-            align = "center",
-            shiny::div(
-              class = "hits-tab-checkboxes",
-              shiny::div(
-                class = "hits-tab-expand-box",
-                shiny::checkboxInput(
-                  ns("relbinding_hits_tab_expand"),
-                  label = "Expand Samples",
-                  value = TRUE
-                )
-              ),
-              shiny::div(
-                class = "hits-tab-na-box",
-                shiny::checkboxInput(
-                  ns("relbinding_hits_tab_na"),
-                  label = "Include NA",
-                  value = TRUE
-                )
-              )
-            )
-          ),
-          shiny::column(
-            width = 2,
-            align = "center",
-            shiny::div(
-              class = "hits-table-control-select",
-              shinyWidgets::pickerInput(
-                ns("relbinding_hits_tab_sample_select"),
-                label = "Select Samples",
-                choices = unique(
-                  hits_summary$`Sample ID`
-                ),
-                selected = unique(
-                  hits_summary$`Sample ID`
-                ),
-                multiple = TRUE,
-                options = list(
-                  `actions-box` = TRUE
-                )
-              )
-            )
-          ),
-          shiny::column(
-            width = 2,
-            align = "center",
-            shiny::div(
-              class = "hits-table-control-select",
-              shinyWidgets::pickerInput(
-                ns("relbinding_hits_tab_compound_select"),
-                label = "Select Compounds",
-                choices = unique(
-                  hits_summary$`Cmp Name`
-                )[
-                  !is.na(unique(
-                    hits_summary$`Cmp Name`
-                  ))
-                ],
-                selected = unique(
-                  hits_summary$`Cmp Name`
-                )[
-                  !is.na(unique(
-                    hits_summary$`Cmp Name`
-                  ))
-                ],
-                multiple = TRUE,
-                options = list(
-                  `actions-box` = TRUE
-                )
-              )
-            )
-          ),
-          shiny::column(
-            width = 2,
-            align = "center",
-            shiny::div(
-              class = "hits-table-control-select",
-              shinyWidgets::pickerInput(
-                ns("relbinding_hits_tab_col_select"),
-                label = "Select Columns",
-                choices = names(hits_summary)[
-                  !names(hits_summary) %in%
-                    c(
-                      "Sample ID",
-                      "Cmp Name",
-                      if (length(units) == 2) {
-                        c(units[["Concentration"]], units[["Time"]])
-                      },
-                      "truncSample_ID"
-                    )
-                ],
-                selected = names(hits_summary)[
-                  !names(hits_summary) %in%
-                    c(
-                      "Sample ID",
-                      "Cmp Name",
-                      if (length(units) == 2) {
-                        c(units[["Concentration"]], units[["Time"]])
-                      },
-                      "truncSample_ID",
-                      "Well",
-                      "Replicate",
-                      "Unmatched [%]",
-                      "Preferred",
-                      "Theor. Prot. [Da]",
-                      "Δ Prot. [Da]",
-                      "Int. Prot. [%]",
-                      "Int. Cmp [%]",
-                      "Δ Cmp [Da]"
-                    )
-                ],
-                multiple = TRUE,
-                options = list(
-                  `actions-box` = TRUE
-                )
-              )
-            )
-          ),
-          shiny::column(
-            width = 2,
-            align = "center",
-            shiny::div(
-              class = "hits-table-control-select",
-              shinyWidgets::pickerInput(
-                ns("relbinding_binding_chart"),
-                label = "Show Binding Bars",
-                choices = c("Binding [%]", "Tot. Binding [%]"),
-                selected = "Tot. Binding [%]",
-                multiple = TRUE,
-                options = list(
-                  `actions-box` = TRUE
-                )
-              )
-            )
-          ),
-          shiny::column(
-            width = 2,
-            align = "left",
-            shiny::div(
-              class = "hits-table-export",
-              shiny::tags$label(class = "control-label", "Export Table"),
-              table_dl_buttons(ns, "relbinding_hits_tab")
-            )
-          )
-        ),
-        shiny::div(
-          class = "hits-table-wrapper",
-          shinycssloaders::withSpinner(
-            DT::DTOutput(ns("relbinding_hits_tab")),
-            type = 1,
-            color = "#7777f9"
-          )
-        )
-      )
-    ),
     bslib::nav_panel(
       title = "Samples View",
       shiny::div(
@@ -2456,6 +2162,126 @@ binding_results_ui <- function(ns, hits_summary) {
         )
       )
     )
+  )
+}
+
+# Unified Hits interface (single card, no tabs)
+#' @export
+hits_results_ui <- function(ns, hits_summary, units) {
+  bslib::card(
+    class = "hits-unified-card",
+    bslib::card_body(
+      class = "conversion-result-wrapper hits-tab",
+      shiny::div(
+        class = "hits-controls",
+        shinyWidgets::pickerInput(
+          ns("hits_color_variable"),
+          label = "Color Variable",
+          choices = c("Compounds", "Samples"),
+          selected = "Compounds",
+          width = "125px"
+        ),
+        shinyWidgets::pickerInput(
+          ns("hits_color_scale"),
+          label = "Color Scale",
+          choices = NULL,
+          width = "125px"
+        ) |>
+          shiny::tagAppendAttributes(class = "palette-select"),
+        ,
+        shiny::div(
+          class = "hits-tab-checkboxes",
+          shiny::div(
+            class = "hits-tab-expand-box",
+            shiny::checkboxInput(
+              ns("hits_tab_expand"),
+              "Expand Samples",
+              value = TRUE
+            )
+          ),
+          shiny::div(
+            class = "hits-tab-na-box",
+            shiny::checkboxInput(
+              ns("hits_tab_na"),
+              "Include NA",
+              value = TRUE
+            )
+          )
+        ),
+        shinyWidgets::pickerInput(
+          ns("hits_tab_sample_select"),
+          label = "Select Samples",
+          choices = unique(hits_summary$`Sample ID`),
+          selected = unique(hits_summary$`Sample ID`),
+          multiple = TRUE,
+          options = list(`actions-box` = TRUE),
+          width = "125px"
+        ),
+        shinyWidgets::pickerInput(
+          ns("hits_tab_compound_select"),
+          label = "Select Compounds",
+          choices = unique(hits_summary$`Cmp Name`)[
+            !is.na(unique(hits_summary$`Cmp Name`))
+          ],
+          selected = unique(hits_summary$`Cmp Name`)[
+            !is.na(unique(hits_summary$`Cmp Name`))
+          ],
+          multiple = TRUE,
+          options = list(`actions-box` = TRUE)
+        ),
+        shinyWidgets::pickerInput(
+          ns("hits_tab_col_select"),
+          label = "Select Columns",
+          choices = names(hits_summary)[
+            !names(hits_summary) %in%
+              c("Sample ID", "Cmp Name", "truncSample_ID")
+          ],
+          selected = names(hits_summary)[
+            !names(hits_summary) %in%
+              c(
+                "Sample ID",
+                "Cmp Name",
+                "truncSample_ID",
+                "Well",
+                "Replicate",
+                "Unmatched [%]",
+                "Preferred",
+                "Theor. Prot. [Da]",
+                "Δ Prot. [Da]",
+                "Int. Prot. [%]",
+                "Int. Cmp [%]",
+                "Δ Cmp [Da]"
+              )
+          ],
+          multiple = TRUE,
+          options = list(`actions-box` = TRUE),
+          width = "125px"
+        ),
+        shinyWidgets::pickerInput(
+          ns("hits_binding_chart"),
+          label = "Show Binding Bars",
+          choices = c("Binding [%]", "Tot. Binding [%]"),
+          selected = "Tot. Binding [%]",
+          multiple = TRUE,
+          options = list(`actions-box` = TRUE),
+          width = "125px"
+        ),
+        shiny::div(
+          class = "hits-table-export",
+          shiny::tags$label(class = "control-label", "Export Table"),
+          table_dl_buttons(ns, "hits_unified_tab")
+        )
+      ),
+      shiny::div(
+        class = "hits-table-wrapper",
+        shinycssloaders::withSpinner(
+          DT::DTOutput(ns("hits_unified_tab")),
+          type = 1,
+          color = "#7777f9"
+        )
+      )
+    ),
+    shiny::tags$script(popover_autoclose)
   )
 }
 

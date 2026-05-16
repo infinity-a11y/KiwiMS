@@ -502,22 +502,22 @@ button:focus:not(:focus-visible) {
   color: white;
 }
 
-//TODO: assign height element id specific
 .btn-group>.btn {
   background-color: #e5e5e5;
   color: #404040 !important;
-  // border: none;
   font-weight: 100;
-  // font-size: 14px;
   font-size: 15px;
-  // height: 35px;
   align-content: center;
   cursor: pointer !important;
+  text-align: center;
+  width: 100%;
+  white-space: nowrap;
 }
 
 .btn-group>.btn:hover {
   background-color: #404040;
   color: white !important;
+  border: 1px solid white;
 }
 
 .btn-group .btn-group-sm .btn-group>.btn {
@@ -527,9 +527,9 @@ button:focus:not(:focus-visible) {
 .btn-check:checked+.btn:hover,
 .btn-group>.btn-check:checked+.btn {
   color: #fff !important;
-  background-color: #38387c !important;
-  border-color: #38387c !important;
-  box-shadow: inset 0px 0px 20px 3px #ffffff21;
+  background-color: #7777f9 !important;
+  border-color: white;
+  box-shadow: inset 0 0 10px rgba(255, 255, 255, .25);
 }
 
 .bs-actionsbox .btn-group {
@@ -606,15 +606,12 @@ input[type="number"]::-webkit-inner-spin-button {
 
 .ki-kinact-checkbox label {
   display: flex;
+  top: 4px;
+  position: relative;
 }
 
 #app-conversion_sidebar-run_ki_kinact {
   margin: 0;
-}
-
-.ki-kinact-checkbox {
-  margin-bottom: 1.5rem;
-  margin-top: 1.5rem;
 }
 
 .ki-kinact-checkbox span {
@@ -745,6 +742,7 @@ input[type="number"]::-webkit-inner-spin-button {
 .label-tooltip .save-button .btn {
   border: none !important;
   box-shadow: none !important;
+  background: transparent !important;
 }
 
 .label-tooltip .save-button .btn:hover {
@@ -1393,11 +1391,16 @@ td.listbox.htDimmed.current.highlight {
   font-size: 14px;
 }
 
+.start-button {
+  height: 100%;
+  align-content: center;
+}
+
 .start-button .btn {
   background: #38387c;
   box-shadow: inset 0px 0px 20px 4px rgb(255 255 255 / 30%);
   border: 1px solid #e5e5e5;
-  height: 100%;
+  height: 46px;
   width: 100%;
   color: white;
 }
@@ -1708,6 +1711,20 @@ decon-report-modal .btn-default {
   overflow: hidden;
 }
 
+#app-conversion_main-conversion_ui>.hits-unified-card {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+
+  >.card-body {
+    flex: 1 1 0;
+    min-height: 0;
+    padding: 1%;
+    overflow: hidden;
+  }
+}
+
 /* Structure & Tables */
 .conversion-result-wrapper {
   height: 100%;
@@ -1754,6 +1771,10 @@ decon-report-modal .btn-default {
   margin-left: -3px;
 }
 
+.conversion-sidebar-ui .form-group {
+  margin-bottom: unset;
+}
+
 .conversion-main-info {
   font-size: 0.8vw;
   font-style: italic;
@@ -1777,7 +1798,7 @@ decon-report-modal .btn-default {
 
 .custom-sidebar-title {
   display: flex;
-  margin-bottom: 10px !important;
+  margin-bottom: 0px !important;
   padding-bottom: 5px !important;
   font-size: 1.1em !important;
   gap: 5px;
@@ -2075,8 +2096,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 }
 
 /* Hits Tab */
-#app-conversion_main-relbinding_hits_tab,
-#app-conversion_main-kikinact_hits_tab {
+#app-conversion_main-hits_unified_tab {
   height: 100% !important;
   font-size: 12px;
 }
@@ -2085,8 +2105,7 @@ div[data-value="Protein Conversion"] .tab-pane {
   padding-bottom: 10px;
 }
 
-#app-conversion_main-relbinding_hits_tab .dataTables_wrapper,
-#app-conversion_main-kikinact_hits_tab .dataTables_wrapper {
+#app-conversion_main-hits_unified_tab .dataTables_wrapper {
   display: grid;
   grid-template-rows: auto 1fr auto;
   grid-template-columns: 1fr auto;
@@ -2130,13 +2149,11 @@ div[data-value="Protein Conversion"] .tab-pane {
   }
 }
 
-#app-conversion_main-relbinding_hits_tab>div,
-#app-conversion_main-kikinact_hits_tab>div {
+#app-conversion_main-hits_unified_tab>div {
   height: 100% !important;
 }
 
-#app-conversion_main-relbinding_hits_tab div.dataTables_scrollBody,
-#app-conversion_main-kikinact_hits_tab div.dataTables_scrollBody,
+#app-conversion_main-hits_unified_tab div.dataTables_scrollBody,
 #app-conversion_main-samples_table_view div.dataTables_scrollBody,
 #app-conversion_main-compounds_table_view div.dataTables_scrollBody,
 #app-conversion_main-proteins_table_view div.dataTables_scrollBody,
@@ -2146,8 +2163,7 @@ div[data-value="Protein Conversion"] .tab-pane {
   border-radius: 4px;
 }
 
-#app-conversion_main-relbinding_hits_tab tbody tr:first-child td:last-child,
-#app-conversion_main-kikinact_hits_tab tbody tr:first-child td:last-child,
+#app-conversion_main-hits_unified_tab tbody tr:first-child td:last-child,
 #app-conversion_main-samples_table_view tbody tr:first-child td:last-child,
 #app-conversion_main-compounds_table_view tbody tr:first-child td:last-child,
 #app-conversion_main-proteins_table_view tbody tr:first-child td:last-child,
@@ -2156,8 +2172,7 @@ div[data-value="Protein Conversion"] .tab-pane {
   border-top-right-radius: 4px;
 }
 
-#app-conversion_main-relbinding_hits_tab tbody tr:first-child td:first-child,
-#app-conversion_main-kikinact_hits_tab tbody tr:first-child td:first-child,
+#app-conversion_main-hits_unified_tab tbody tr:first-child td:first-child,
 #app-conversion_main-samples_table_view tbody tr:first-child td:first-child,
 #app-conversion_main-compounds_table_view tbody tr:first-child td:first-child,
 #app-conversion_main-proteins_table_view tbody tr:first-child td:first-child,
@@ -2166,8 +2181,7 @@ div[data-value="Protein Conversion"] .tab-pane {
   border-top-left-radius: 4px;
 }
 
-#app-conversion_main-relbinding_hits_tab tbody tr:last-child td:last-child,
-#app-conversion_main-kikinact_hits_tab tbody tr:last-child td:last-child,
+#app-conversion_main-hits_unified_tab tbody tr:last-child td:last-child,
 #app-conversion_main-samples_table_view tbody tr:last-child td:last-child,
 #app-conversion_main-compounds_table_view tbody tr:last-child td:last-child,
 #app-conversion_main-proteins_table_view tbody tr:last-child td:last-child,
@@ -2176,8 +2190,7 @@ div[data-value="Protein Conversion"] .tab-pane {
   border-bottom-right-radius: 4px;
 }
 
-#app-conversion_main-relbinding_hits_tab tbody tr:last-child td:first-child,
-#app-conversion_main-kikinact_hits_tab tbody tr:last-child td:first-child,
+#app-conversion_main-hits_unified_tab tbody tr:last-child td:first-child,
 #app-conversion_main-samples_table_view tbody tr:last-child td:first-child,
 #app-conversion_main-compounds_table_view tbody tr:last-child td:first-child,
 #app-conversion_main-proteins_table_view tbody tr:last-child td:first-child,
@@ -2186,8 +2199,7 @@ div[data-value="Protein Conversion"] .tab-pane {
   border-bottom-left-radius: 4px;
 }
 
-#app-conversion_main-relbinding_hits_tab tbody tr:last-child td,
-#app-conversion_main-kikinact_hits_tab tbody tr:last-child td,
+#app-conversion_main-hits_unified_tab tbody tr:last-child td,
 #app-conversion_main-samples_table_view tbody tr:last-child td,
 #app-conversion_main-compounds_table_view tbody tr:last-child td,
 #app-conversion_main-proteins_table_view tbody tr:last-child td,
@@ -2201,11 +2213,10 @@ div[data-value="Protein Conversion"] .tab-pane {
   border-right: none !important;
 }
 
-#app-conversion_main-relbinding_hits_tab tbody td,
 #app-conversion_main-samples_table_view tbody td,
 #app-conversion_main-compounds_table_view tbody td,
 #app-conversion_main-proteins_table_view tbody td,
-#app-conversion_main-kikinact_hits_tab tbody td,
+#app-conversion_main-hits_unified_tab tbody td,
 #app-conversion_main-kobs_result tbody td,
 .conc-hits-table tbody td {
   padding: 4px 6px !important;
@@ -2217,8 +2228,7 @@ div[data-value="Protein Conversion"] .tab-pane {
   align-content: center;
 }
 
-#app-conversion_main-relbinding_hits_tab .dataTables_scrollHead th,
-#app-conversion_main-kikinact_hits_tab .dataTables_scrollHead th,
+#app-conversion_main-hits_unified_tab .dataTables_scrollHead th,
 #app-conversion_main-samples_table_view .dataTables_scrollHead th,
 #app-conversion_main-compounds_table_view .dataTables_scrollHead th,
 #app-conversion_main-proteins_table_view .dataTables_scrollHead th,
@@ -2242,8 +2252,7 @@ div[data-value="Protein Conversion"] .tab-pane {
   vertical-align: middle !important;
 }
 
-#app-conversion_main-relbinding_hits_tab thead th:first-child,
-#app-conversion_main-kikinact_hits_tab thead th:first-child,
+#app-conversion_main-hits_unified_tab thead th:first-child,
 #app-conversion_main-samples_table_view thead th:first-child,
 #app-conversion_main-compounds_table_view thead th:first-child,
 #app-conversion_main-proteins_table_view thead th:first-child,
@@ -2253,8 +2262,7 @@ div[data-value="Protein Conversion"] .tab-pane {
   border-top-left-radius: 4px;
 }
 
-#app-conversion_main-relbinding_hits_tab thead th:first-child th.sorting,
-#app-conversion_main-kikinact_hits_tab thead th:first-child th.sorting,
+#app-conversion_main-hits_unified_tab thead th:first-child th.sorting,
 #app-conversion_main-samples_table_view thead th:first-child th.sorting,
 #app-conversion_main-compounds_table_view thead th:first-child th.sorting,
 #app-conversion_main-proteins_table_view thead th:first-child th.sorting,
@@ -2370,6 +2378,12 @@ div[data-value="Protein Conversion"] .tab-pane {
   text-align: center;
   height: 100%;
   padding: 1rem !important;
+
+  >.shinycssloaders-container {
+    height: 100%;
+    width: 100%;
+    align-content: center;
+  }
 }
 
 .protocol-stat-value {
@@ -3076,11 +3090,6 @@ th.sorting {
   background-color: inherit !important;
 }
 
-#app-conversion_main-download_relbinding_hits_table {
-  margin-top: 28px;
-  height: 47px;
-}
-
 #app-conversion_main-samples_table_view div.dataTables_scrollBody,
 #app-conversion_main-samples_table_view div.dataTables_scrollHead,
 #app-conversion_main-compounds_table_view div.dataTables_scrollBody,
@@ -3152,8 +3161,8 @@ th.sorting {
   padding-left: 20px;
   padding-right: 20px;
   background-color: rgba(0, 0, 0, 0.11);
-  border-radius: 3px;
-  box-shadow: inset 0px 0px 65px 2px rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  box-shadow: inset 0px 0px 65px 2px rgba(255, 255, 255, 0.5);
   height: fit-content !important;
   padding-top: 10px;
   padding-bottom: 10px;
@@ -4319,16 +4328,6 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   opacity: 1;
 }
 
-.hits-table-control-select .bootstrap-select>.dropdown-toggle {
-  height: 40px;
-  padding: 8px;
-  color: black;
-}
-
-.hits-table-control-select .form-group {
-  margin-bottom: 10px;
-}
-
 .selectize-control.single .selectize-input.input-active input:not(:read-only) {
   cursor: none !important;
   opacity: 0 !important;
@@ -4424,7 +4423,6 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 
 #app-conversion_sidebar-analysis_select {
   font-size: 15px;
-  margin-top: 20px;
 }
 
 .result-interface-selector-ui .shiny-options-group {
@@ -4454,6 +4452,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   margin-top: -10px;
   width: 80% !important;
   justify-self: end;
+  margin-bottom: 0;
 }
 
 .complex-picker .bootstrap-select>.dropdown-toggle {
@@ -4469,18 +4468,18 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 
 .complex-picker-ui {
   position: relative;
-  top: -25px;
+  top: -8px;
 }
 
 #complex-picker-connector {
-  border: 1px solid #999999;
+  border: 1px solid #999;
   position: relative;
   height: 30px;
-  border-right-color: transparent;
-  border-top-color: transparent;
-  left: 7%;
-  top: 9px;
-  width: 13%;
+  border-right-color: rgba(0, 0, 0, 0);
+  border-top-color: rgba(0, 0, 0, 0);
+  left: 6%;
+  top: 8px;
+  width: 14%;
   border-bottom-left-radius: 5px;
 }
 
@@ -4788,6 +4787,7 @@ sample-file-row .form-group {
   border: 1px solid;
   border-color: var(--bs-btn-border-color);
   min-width: fit-content;
+  background: transparent !important;
 }
 
 /* Settings modal */
@@ -4990,14 +4990,14 @@ sample-file-row .form-group {
 
 .input-panel {
   align-content: center;
-  padding: 2rem;
-  background-color: rgba(0, 0, 0, 0.1);
+  padding: 1rem;
+  background-color: rgba(0, 0, 0, .1);
   border-radius: 3px;
-  box-shadow: inset 0px 0px 65px 2px rgba(255, 255, 255, 0.3);
-  height: 100% !important;
+  box-shadow: inset 0px 0px 65px 2px rgba(255, 255, 255, .5);
+  height: fit-content !important;
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: 1rem;
 }
 
 .input-stat-panel {
@@ -5026,4 +5026,67 @@ sample-file-row .form-group {
 
 .input-panel .palette-select {
   justify-content: center;
+}
+
+.hits-controls {
+  width: 100%;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+#app-conversion_main-conversion_ui .form-group {
+  margin-bottom: unset;
+  width: revert-rule;
+}
+
+.hits-controls .bootstrap-select>.dropdown-toggle {
+  height: 40px;
+  padding: 8px;
+  color: black;
+}
+
+.panel-group {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.panel-group>label {
+  font-size: .9em;
+  width: 75%;
+  white-space: nowrap;
+  font-style: italic;
+}
+
+.panel-group .material-switch {
+  top: unset;
+}
+
+.panel-group .btn-group,
+.panel-group>div {
+  width: 100%;
+}
+
+.popover .btn-group>.btn,
+.popover .btn-group>.btn:hover {
+  border: 1px solid #656565 !important;
+}
+
+.popover .material-switch label {
+  position: relative;
+  top: 3px;
+}
+
+.popover .material-switch>label.switch {
+  top: unset !important;
+}
+
+.popover .material-switch {
+  margin-top: 20px;
+  margin-bottom: 20px;
+}
+
+.hits-controls .form-group {
+  width: 100% !important;
 }

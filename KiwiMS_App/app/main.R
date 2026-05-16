@@ -1645,12 +1645,12 @@ server <- function(id) {
               shiny$tags$tr(
                 shiny$tags$td(shiny$tags$code("Compound_Concentration")),
                 shiny$tags$td(class = "config-col-optional", "Optional"),
-                shiny$tags$td("Numeric \u00b7 all filled or all empty")
+                shiny$tags$td("Numeric \u00b7 all filled or all empty \u00b7 displayed as \u201cConcentration\u201d")
               ),
               shiny$tags$tr(
                 shiny$tags$td(shiny$tags$code("Incubation_Time")),
                 shiny$tags$td(class = "config-col-optional", "Optional"),
-                shiny$tags$td("Numeric \u00b7 all filled or all empty")
+                shiny$tags$td("Numeric \u00b7 all filled or all empty \u00b7 displayed as \u201cTime\u201d")
               ),
               shiny$tags$tr(
                 shiny$tags$td(shiny$tags$code("Compound_1 \u2013 Compound_5")),
@@ -1783,16 +1783,18 @@ server <- function(id) {
     shiny$outputOptions(output, "update_modal_body", suspendWhenHidden = FALSE)
 
     # Prepare config data frame for display: convert numeric cols to character
-    # to prevent xtable rounding, and drop Compound_* columns that are all empty.
+    # to prevent xtable rounding, drop all-empty columns, and rename display headers.
     config_table_df <- function(df) {
       for (col in intersect(c("Compound_Concentration", "Incubation_Time"), names(df))) {
         if (is.numeric(df[[col]])) df[[col]] <- as.character(df[[col]])
       }
-      cmp_cols <- grep("^Compound_\\d+$", names(df), value = TRUE)
-      empty_cmp <- cmp_cols[sapply(cmp_cols, function(col) {
+      empty_cols <- names(df)[sapply(names(df), function(col) {
         all(is.na(df[[col]]) | trimws(as.character(df[[col]])) == "")
       })]
-      df[, setdiff(names(df), empty_cmp), drop = FALSE]
+      df <- df[, setdiff(names(df), empty_cols), drop = FALSE]
+      names(df)[names(df) == "Compound_Concentration"] <- "Concentration"
+      names(df)[names(df) == "Incubation_Time"] <- "Time"
+      df
     }
 
     # Pending config table — Sys.sleep drives the spinner for 1 second
@@ -1803,7 +1805,7 @@ server <- function(id) {
         config_table_df(pending_config())
       },
       striped = TRUE,
-      hover = TRUE,
+      hover = FALSE,
       bordered = TRUE,
       spacing = "xs",
       na = ""
@@ -1816,7 +1818,7 @@ server <- function(id) {
         config_table_df(configfile())
       },
       striped = TRUE,
-      hover = TRUE,
+      hover = FALSE,
       bordered = TRUE,
       spacing = "xs",
       na = ""

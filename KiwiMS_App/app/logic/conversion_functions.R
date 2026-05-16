@@ -4582,9 +4582,13 @@ render_hits_table <- function(
   )
 
   # Format binding columns to consistent 2 decimal places
-  binding_fmt_cols <- intersect(
-    c("Binding [%]", "Tot. Binding [%]", "Unmatched [%]", "Correct [%]"),
-    names(hits_table)
+  # Exclude bar_chart columns — the render callback handles their display
+  binding_fmt_cols <- setdiff(
+    intersect(
+      c("Binding [%]", "Tot. Binding [%]", "Unmatched [%]", "Correct [%]"),
+      names(hits_table)
+    ),
+    bar_chart
   )
   if (length(binding_fmt_cols) > 0) {
     hits_datatable <- DT::formatRound(
@@ -6160,7 +6164,6 @@ hex_to_rgba <- function(hex, alpha) {
 stats_histogram <- function(
   hits_summary,
   theme = "dark",
-  color_scale = "plasma",
   show = "Correct"
 ) {
   df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
@@ -6177,11 +6180,10 @@ stats_histogram <- function(
     "rgba(255,255,255,0.5)"
   }
 
-  pal <- stats_palette(2, color_scale)
-  col1 <- hex_to_rgba(pal[1], 0.7)
-  col1b <- hex_to_rgba(pal[1], 1)
-  col2 <- hex_to_rgba(pal[2], 0.7)
-  col2b <- hex_to_rgba(pal[2], 1)
+  hex_correct   <- "#4daf4a"
+  hex_unmatched <- "#e41a1c"
+  col  <- hex_to_rgba(if (show == "Unmatched") hex_unmatched else hex_correct, 0.7)
+  colb <- hex_to_rgba(if (show == "Unmatched") hex_unmatched else hex_correct, 1)
 
   p <- plotly::plot_ly()
   if (show == "Unmatched") {
@@ -6190,7 +6192,7 @@ stats_histogram <- function(
       data = df,
       x = ~`% Unmatched`,
       name = "Unmatched [%]",
-      marker = list(color = col2, line = list(color = col2b, width = 0.5)),
+      marker = list(color = col, line = list(color = colb, width = 0.5)),
       xbins = list(start = 0, end = 100, size = 1)
     )
   } else {
@@ -6199,7 +6201,7 @@ stats_histogram <- function(
       data = df,
       x = ~`% Correct`,
       name = "Correct [%]",
-      marker = list(color = col1, line = list(color = col1b, width = 0.5)),
+      marker = list(color = col, line = list(color = colb, width = 0.5)),
       xbins = list(start = 0, end = 100, size = 1)
     )
   }
@@ -6234,9 +6236,9 @@ stats_histogram <- function(
 stats_boxplot <- function(
   hits_summary,
   theme = "dark",
-  color_scale = "plasma",
   show_points = TRUE,
-  show = "Correct"
+  show = "Correct",
+  fixed_range = TRUE
 ) {
   df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
 
@@ -6257,17 +6259,11 @@ stats_boxplot <- function(
     "rgba(255,255,255,0.5)"
   }
 
-  pal <- stats_palette(2, color_scale)
-  col1 <- hex_to_rgba(pal[1], 0.7)
-  col1b <- hex_to_rgba(pal[1], 1)
-  col1f <- hex_to_rgba(pal[1], 0.15)
-  col2 <- hex_to_rgba(pal[2], 0.7)
-  col2b <- hex_to_rgba(pal[2], 1)
-  col2f <- hex_to_rgba(pal[2], 0.15)
-
+  hex_base  <- if (show == "Unmatched") "#e41a1c" else "#4daf4a"
   show_unmatched <- show == "Unmatched"
-  box_col  <- if (show_unmatched) col2b  else col1b
-  box_fill <- if (show_unmatched) col2f  else col1f
+  show_correct   <- show == "Correct"
+  box_col  <- hex_to_rgba(hex_base, 1)
+  box_fill <- hex_to_rgba(hex_base, 0.15)
   box_name <- if (show_unmatched) "Unmatched [%]" else "Correct [%]"
   box_y    <- if (show_unmatched) ~`% Unmatched`  else ~`% Correct`
   hover_tmpl <- if (show_unmatched) {
@@ -6368,7 +6364,7 @@ stats_boxplot <- function(
       ),
       yaxis = list(
         title = "Value [%]",
-        range = c(-5, 105),
+        range = if (fixed_range) c(-5, 105) else NULL,
         color = font_color,
         gridcolor = grid_color,
         zerolinecolor = zeroline_color,
