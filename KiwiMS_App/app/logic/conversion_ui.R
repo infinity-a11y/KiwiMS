@@ -2177,18 +2177,21 @@ hits_results_ui <- function(ns, hits_summary, units) {
         shinyWidgets::pickerInput(
           ns("hits_color_variable"),
           label = "Color Variable",
-          choices = c("Compounds", "Samples"),
-          selected = "Compounds",
+          choices = if ("Concentration" %in% names(units)) {
+            c("Concentration", "Compounds", "Samples", "None")
+          } else {
+            c("Compounds", "Samples", "None")
+          },
+          selected = if ("Concentration" %in% names(units)) "Concentration" else "Compounds",
           width = "125px"
         ),
-        shinyWidgets::pickerInput(
+        shiny::selectInput(
           ns("hits_color_scale"),
           label = "Color Scale",
           choices = NULL,
           width = "125px"
         ) |>
           shiny::tagAppendAttributes(class = "palette-select"),
-        ,
         shiny::div(
           class = "hits-tab-checkboxes",
           shiny::div(

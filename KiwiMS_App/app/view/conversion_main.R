@@ -664,7 +664,12 @@ server <- function(
 
         # Read metadata from selected result DB (fast — sample names only)
         file_path <- file.path(input$samples_fileinput$datapath)
-        db_err <- validate_decon_db(file_path)
+        file_ext <- tolower(tools::file_ext(input$samples_fileinput$name))
+        db_err <- if (!file_ext %in% c("db", "sqlite", "sqlite3")) {
+          "Invalid file type: please upload a .db or .sqlite result file."
+        } else {
+          validate_decon_db(file_path)
+        }
         if (!is.null(db_err)) {
           shinyjs::runjs(paste0(
             'document.getElementById("blocking-overlay").style.display ',
@@ -4908,14 +4913,25 @@ server <- function(
 
               hits_datatable <- render_hits_table(
                 hits_table = hits_table,
-                concentration_colors = NULL,
+                concentration_colors = if (
+                  input$hits_color_variable == "Concentration" &&
+                    "Concentration" %in% names(units)
+                ) {
+                  conversion_vars$conc_colors
+                } else {
+                  NULL
+                },
                 bar_chart = input$hits_binding_chart,
-                colors = get_cmp_colorScale(
-                  filtered_table = hits_table,
-                  scale = input$hits_color_scale,
-                  variable = input$hits_color_variable,
-                  trunc = FALSE
-                ),
+                colors = if (input$hits_color_variable %in% c("Compounds", "Samples")) {
+                  get_cmp_colorScale(
+                    filtered_table = hits_table,
+                    scale = input$hits_color_scale,
+                    variable = input$hits_color_variable,
+                    trunc = FALSE
+                  )
+                } else {
+                  NULL
+                },
                 color_variable = input$hits_color_variable,
                 truncated = FALSE,
                 clickable = clickable_cols,
@@ -4927,6 +4943,7 @@ server <- function(
             }) |>
               shiny::bindEvent(
                 render_trigger(),
+                input$hits_color_variable,
                 input$hits_color_scale,
                 input$hits_tab_col_select,
                 input$hits_binding_chart,
@@ -5047,7 +5064,7 @@ server <- function(
                 selected <- "plasma"
               }
 
-              shinyWidgets::updatePickerInput(
+              shiny::updateSelectInput(
                 session = session,
                 "hits_color_scale",
                 choices = scales,

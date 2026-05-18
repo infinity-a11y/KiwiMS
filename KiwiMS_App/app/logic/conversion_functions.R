@@ -197,10 +197,11 @@ read_decon_peaks_max <- function(db_path, samples = NULL) {
   con <- DBI::dbConnect(RSQLite::SQLite(), db_path, flags = RSQLite::SQLITE_RO)
   on.exit(DBI::dbDisconnect(con), add = TRUE)
   where <- if (!is.null(samples) && length(samples) > 0) {
-    sprintf(
-      "WHERE sample IN (%s)",
-      paste(sprintf("'%s'", samples), collapse = ",")
+    quoted <- paste(
+      sapply(samples, function(s) DBI::dbQuoteLiteral(con, s)),
+      collapse = ", "
     )
+    sprintf("WHERE sample IN (%s)", quoted)
   } else {
     ""
   }
@@ -4625,7 +4626,7 @@ render_hits_table <- function(
           )
         )
     }
-  } else {
+  } else if (!is.null(colors)) {
     if (color_variable == "Compounds" & anyNA(hits_table$`Cmp Name`)) {
       names(colors)[
         names(colors) %in% c("NA", "N/A", as.character(NA))
