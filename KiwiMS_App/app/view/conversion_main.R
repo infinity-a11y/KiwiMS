@@ -34,6 +34,7 @@ box::use(
       multiple_spectra,
       render_hits_table,
       filter_hits_table,
+      transform_per_adduct,
       checkboxColumn,
       js_code_gen,
       new_sample_table,
@@ -1818,9 +1819,7 @@ server <- function(
           set_selected_tab("Samples", session)
         } else if (!is.null(result_list)) {
           ### Compute hits summary ----
-          hits_summary_2 <<- result_list$"hits_summary"
           hits_summary <- transform_hits(result_list$"hits_summary")
-          hits_summary1 <<- hits_summary
 
           # Get concentration and time units
           units <- c(
@@ -4894,15 +4893,40 @@ server <- function(
                   )
                 )
 
-              hits_table <- filter_hits_table(
-                hits_table,
-                selected_cols = input$hits_tab_col_select,
-                compounds = input$hits_tab_compound_select,
-                samples = input$hits_tab_sample_select,
-                expand = input$hits_tab_expand,
-                na_include = input$hits_tab_na,
-                units = units
-              )
+              if (isTRUE(input$hits_per_adduct == "Adduct View")) {
+                hits_table33 <<- hits_table
+                hits_table <- transform_per_adduct(hits_table)
+                adduct_binding_cols <- grep(
+                  "^(Binding|Total Binding) \\(",
+                  names(hits_table),
+                  value = TRUE
+                )
+                valid_adduct_cols <- intersect(
+                  input$hits_tab_col_select,
+                  names(hits_table)
+                )
+                hits_table <- filter_hits_table(
+                  hits_table,
+                  selected_cols = union(
+                    valid_adduct_cols,
+                    c("Tot. Binding [%]", adduct_binding_cols)
+                  ),
+                  compounds = input$hits_tab_compound_select,
+                  samples = input$hits_tab_sample_select,
+                  units = units
+                )
+              } else {
+                hits_table <- filter_hits_table(
+                  hits_table,
+                  selected_cols = union(
+                    input$hits_tab_col_select,
+                    "Tot. Binding [%]"
+                  ),
+                  compounds = input$hits_tab_compound_select,
+                  samples = input$hits_tab_sample_select,
+                  units = units
+                )
+              }
 
               hits_unified_raw(hits_table)
 
@@ -4922,7 +4946,9 @@ server <- function(
                   NULL
                 },
                 bar_chart = input$hits_binding_chart,
-                colors = if (input$hits_color_variable %in% c("Compounds", "Samples")) {
+                colors = if (
+                  input$hits_color_variable %in% c("Compounds", "Samples")
+                ) {
                   get_cmp_colorScale(
                     filtered_table = hits_table,
                     scale = input$hits_color_scale,
@@ -4935,6 +4961,7 @@ server <- function(
                 color_variable = input$hits_color_variable,
                 truncated = FALSE,
                 clickable = clickable_cols,
+                per_adduct = input$hits_per_adduct,
                 units = units
               )
 
@@ -4949,8 +4976,7 @@ server <- function(
                 input$hits_binding_chart,
                 input$hits_tab_compound_select,
                 input$hits_tab_sample_select,
-                input$hits_tab_na,
-                input$hits_tab_expand
+                input$hits_per_adduct
               )
 
             ##### Hits unified table export ----
@@ -4964,6 +4990,58 @@ server <- function(
                 paste0(get_session_prefix(), "_Hits_Table")
               }
             )
+
+            ##### Update column selector when display mode changes ----
+            shiny::observeEvent(input$hits_per_adduct, {
+              always_excluded <- c(
+                "Sample ID",
+                "Cmp Name",
+                "truncSample_ID",
+                "Tot. Binding [%]"
+              )
+
+              if (input$hits_per_adduct == "Adduct View") {
+                adduct_cols <- names(transform_per_adduct(hits_summary))
+                adduct_binding_cols <- grep(
+                  "^(Binding|Total Binding) \\(",
+                  adduct_cols,
+                  value = TRUE
+                )
+                new_choices <- adduct_cols[
+                  !adduct_cols %in% c(always_excluded, adduct_binding_cols)
+                ]
+                shinyWidgets::updatePickerInput(
+                  session,
+                  "hits_tab_col_select",
+                  choices = new_choices,
+                  selected = new_choices
+                )
+              } else {
+                per_hit_choices <- names(hits_summary)[
+                  !names(hits_summary) %in% always_excluded
+                ]
+                per_hit_selected <- per_hit_choices[
+                  !per_hit_choices %in%
+                    c(
+                      "Well",
+                      "Replicate",
+                      "Unmatched [%]",
+                      "Preferred",
+                      "Theor. Prot. [Da]",
+                      "Δ Prot. [Da]",
+                      "Int. Prot. [%]",
+                      "Int. Cmp [%]",
+                      "Δ Cmp [Da]"
+                    )
+                ]
+                shinyWidgets::updatePickerInput(
+                  session,
+                  "hits_tab_col_select",
+                  choices = per_hit_choices,
+                  selected = per_hit_selected
+                )
+              }
+            })
 
             ##### Hits unified table clicking observer ----
             shiny::observeEvent(
@@ -5645,47 +5723,6 @@ server <- function(
       }
     )
 
-    ### Enable/Disable hits table expand samples input ----
-    safe_observe(
-      observer_name = "Enable/Disable Hits Table Expand Samples Input",
-      handler_fn = function() {
-        shiny::req(conversion_vars$hits_summary)
-
-        if (!is.null(input$hits_tab_expand)) {
-          shinyjs::toggleState(
-            id = "hits_tab_expand",
-            condition = any(duplicated(
-              conversion_vars$hits_summary$`Sample ID`
-            ))
-          )
-          shinyjs::toggleClass(
-            selector = ".hits-tab-expand-box .checkbox",
-            class = "checkbox-disable"
-          )
-        }
-      }
-    )
-
-    ### Enable/Disable hits table NA exclude input ----
-    safe_observe(
-      observer_name = "Enable/Disable Hits Table NA Exclude Input",
-      handler_fn = function() {
-        shiny::req(conversion_vars$hits_summary)
-
-        if (!is.null(input$hits_tab_na)) {
-          shinyjs::toggleState(
-            id = "hits_tab_na",
-            condition = anyNA(conversion_vars$hits_summary) &
-              !all(is.na(conversion_vars$hits_summary$`Cmp Name`))
-          )
-          shinyjs::toggleClass(
-            selector = ".hits-tab-na-box .checkbox",
-            class = "checkbox-disable"
-          )
-        }
-      }
-    )
-
     ## Events for conversion result interface ----
 
     ### Reevaluate color scales depending on n of unique variable values ----
@@ -5735,106 +5772,6 @@ server <- function(
           choices = scales,
           selected = selected
         )
-      }
-    )
-
-    ### Expand samples from hits table ----
-    safe_observe(
-      event_expr = input$hits_tab_expand,
-      observer_name = "Expand Samples From Hits Table",
-      handler_fn = function() {
-        if (isFALSE(conversion_vars$expand_helper)) {
-          shinyjs::removeClass(
-            selector = ".hits-tab-col-select-ui .form-group",
-            class = "custom-disable"
-          )
-
-          col_names <- names(conversion_vars$hits_summary)
-          choices <- col_names[
-            !col_names %in%
-              c(
-                "Sample ID",
-                "Cmp Name",
-                if (length(units) == 2) {
-                  c(
-                    conversion_vars$units[["Concentration"]],
-                    conversion_vars$units[["Time"]]
-                  )
-                },
-                "truncSample_ID"
-              )
-          ]
-
-          selected <- choices[
-            !choices %in%
-              c(
-                "Well",
-                "Replicate",
-                "Unmatched [%]",
-                "Theor. Prot. [Da]",
-                "Δ Prot. [Da]",
-                "Int. Prot. [%]",
-                "Int. Cmp [%]",
-                "Δ Cmp [Da]"
-              )
-          ]
-
-          if (!is.null(input$hits_tab_col_select)) {
-            shinyWidgets::updatePickerInput(
-              session,
-              "hits_tab_col_select",
-              choices = choices,
-              selected = selected
-            )
-          }
-
-          if (!is.null(input$hits_binding_chart)) {
-            shinyWidgets::updatePickerInput(
-              session,
-              "hits_binding_chart",
-              choices = c("Binding [%]", "Tot. Binding [%]"),
-              selected = "Tot. Binding [%]",
-            )
-          }
-
-          conversion_vars$expand_helper <- TRUE
-        } else {
-          shinyjs::addClass(
-            selector = ".hits-tab-col-select-ui .form-group",
-            class = "custom-disable"
-          )
-
-          rep_col <- if ("Replicate" %in% names(conversion_vars$hits_summary)) {
-            "Replicate"
-          } else {
-            NULL
-          }
-          collapsed_choices <- c(
-            rep_col,
-            "Theor. Prot. [Da]",
-            "Tot. Binding [%]"
-          )
-
-          if (!is.null(input$hits_tab_col_select)) {
-            shinyWidgets::updatePickerInput(
-              session,
-              "hits_tab_col_select",
-              choices = collapsed_choices,
-              selected = collapsed_choices
-            )
-          }
-
-          if (!is.null(input$hits_binding_chart)) {
-            shinyWidgets::updatePickerInput(
-              session,
-              "hits_binding_chart",
-              choices = "Tot. Binding [%]",
-              selected = "Tot. Binding [%]"
-            )
-          }
-
-          conversion_vars$expand_helper <- FALSE
-        }
       }
     )
 

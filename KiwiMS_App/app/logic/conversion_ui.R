@@ -2173,7 +2173,13 @@ hits_results_ui <- function(ns, hits_summary, units) {
     bslib::card_body(
       class = "conversion-result-wrapper hits-tab",
       shiny::div(
-        class = "hits-controls",
+        class = "hits-controls input-panel",
+        shiny::radioButtons(
+          ns("hits_per_adduct"),
+          label = "Display",
+          choices = c("Hit View", "Adduct View"),
+          selected = "Hit View"
+        ),
         shinyWidgets::pickerInput(
           ns("hits_color_variable"),
           label = "Color Variable",
@@ -2182,43 +2188,25 @@ hits_results_ui <- function(ns, hits_summary, units) {
           } else {
             c("Compounds", "Samples", "None")
           },
-          selected = if ("Concentration" %in% names(units)) "Concentration" else "Compounds",
-          width = "125px"
+          selected = if ("Concentration" %in% names(units)) {
+            "Concentration"
+          } else {
+            "Compounds"
+          }
         ),
         shiny::selectInput(
           ns("hits_color_scale"),
           label = "Color Scale",
-          choices = NULL,
-          width = "125px"
+          choices = NULL
         ) |>
           shiny::tagAppendAttributes(class = "palette-select"),
-        shiny::div(
-          class = "hits-tab-checkboxes",
-          shiny::div(
-            class = "hits-tab-expand-box",
-            shiny::checkboxInput(
-              ns("hits_tab_expand"),
-              "Expand Samples",
-              value = TRUE
-            )
-          ),
-          shiny::div(
-            class = "hits-tab-na-box",
-            shiny::checkboxInput(
-              ns("hits_tab_na"),
-              "Include NA",
-              value = TRUE
-            )
-          )
-        ),
         shinyWidgets::pickerInput(
           ns("hits_tab_sample_select"),
           label = "Select Samples",
           choices = unique(hits_summary$`Sample ID`),
           selected = unique(hits_summary$`Sample ID`),
           multiple = TRUE,
-          options = list(`actions-box` = TRUE),
-          width = "125px"
+          options = list(`actions-box` = TRUE)
         ),
         shinyWidgets::pickerInput(
           ns("hits_tab_compound_select"),
@@ -2237,7 +2225,7 @@ hits_results_ui <- function(ns, hits_summary, units) {
           label = "Select Columns",
           choices = names(hits_summary)[
             !names(hits_summary) %in%
-              c("Sample ID", "Cmp Name", "truncSample_ID")
+              c("Sample ID", "Cmp Name", "truncSample_ID", "Tot. Binding [%]")
           ],
           selected = names(hits_summary)[
             !names(hits_summary) %in%
@@ -2245,6 +2233,7 @@ hits_results_ui <- function(ns, hits_summary, units) {
                 "Sample ID",
                 "Cmp Name",
                 "truncSample_ID",
+                "Tot. Binding [%]",
                 "Well",
                 "Replicate",
                 "Unmatched [%]",
@@ -2257,8 +2246,7 @@ hits_results_ui <- function(ns, hits_summary, units) {
               )
           ],
           multiple = TRUE,
-          options = list(`actions-box` = TRUE),
-          width = "125px"
+          options = list(`actions-box` = TRUE)
         ),
         shinyWidgets::pickerInput(
           ns("hits_binding_chart"),
@@ -2266,8 +2254,7 @@ hits_results_ui <- function(ns, hits_summary, units) {
           choices = c("Binding [%]", "Tot. Binding [%]"),
           selected = "Tot. Binding [%]",
           multiple = TRUE,
-          options = list(`actions-box` = TRUE),
-          width = "125px"
+          options = list(`actions-box` = TRUE)
         ),
         shiny::div(
           class = "hits-table-export",

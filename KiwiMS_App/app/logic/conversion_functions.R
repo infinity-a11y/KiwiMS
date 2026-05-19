@@ -1397,8 +1397,6 @@ check_hits <- function(
       100
     hits_df$correct <- 100 - unmatched
 
-    hits_df3 <<- hits_df
-
     return(hits_df)
   }
 
@@ -1497,8 +1495,6 @@ check_hits <- function(
     }
   }
 
-  hits_df2 <<- hits_df
-
   # If no hits detected in peaks
   if (nrow(hits_df) == 0) {
     hits_df <- data.frame(
@@ -1533,8 +1529,6 @@ check_hits <- function(
       unmatched = NA,
       correct = NA
     )
-
-    hits_df1 <<- hits_df
   }
 
   # Calculate % unmatched and % correct
@@ -1559,8 +1553,6 @@ check_hits <- function(
 # Compound MW = 10|11
 
 conversion <- function(hits) {
-  hits1 <<- hits
-
   # Check 'hits' argument validity
   if (!is.data.frame(hits) || nrow(hits) < 1) {
     log_err_no_df()
@@ -1986,18 +1978,6 @@ add_hits <- function(
   protein_mw <- protein_table$`Mass 1`
   compound_mw <- as.matrix(compound_table[, -1])
   rownames(compound_mw) <- compound_table[, 1]
-
-  #TODO
-  results <<- results
-  sample_table <<- sample_table
-  protein_table <<- protein_table
-  compound_table <<- compound_table
-  peak_tolerance <<- peak_tolerance
-  max_multiples <<- max_multiples
-  samples <<- samples
-  protein_mw <<- protein_mw
-  compound_mw <<- compound_mw
-  config1 <<- config
 
   hits_max <- if (ki_kinact) 80 else 100
 
@@ -2671,9 +2651,6 @@ predict_values <- function(
 }
 
 compute_kobs <- function(hits, units) {
-  hits2 <<- hits
-  units2 <<- units
-
   # Prepare empty objects
   concentration_list <- list()
   binding_table <- data.frame()
@@ -2703,8 +2680,6 @@ compute_kobs <- function(hits, units) {
     raw_data <- hits |>
       dplyr::filter(!!rlang::sym(conc) == i)
 
-    # Average technical replicates grouped by Replicate column; fall back to
-    # distinct-by-time when the column is absent
     if ("Replicate" %in% names(raw_data) && !all(is.na(raw_data$Replicate))) {
       data <- raw_data |>
         dplyr::group_by(Replicate) |>
@@ -4396,46 +4371,13 @@ filter_hits_table <- function(
   selected_cols = NULL,
   compounds = NULL,
   samples = NULL,
-  expand = TRUE,
-  na_include = TRUE,
   units
 ) {
-  # Modify if samples are summarized instead of expanded
-  if (!expand) {
-    if ("Replicate" %in% names(hits_table)) {
-      hits_table <- hits_table |>
-        dplyr::distinct(
-          `Sample ID`,
-          Replicate,
-          `Protein`,
-          `Cmp Name`,
-          `Theor. Prot. [Da]`,
-          `Tot. Binding [%]`,
-          `truncSample_ID`
-        )
-    } else {
-      hits_table <- hits_table |>
-        dplyr::distinct(
-          `Sample ID`,
-          `Protein`,
-          `Cmp Name`,
-          `Theor. Prot. [Da]`,
-          `Tot. Binding [%]`,
-          `truncSample_ID`
-        )
-    }
-  }
-
   # Filter compounds
-  if (!is.null(compounds) && length(compounds) > 0 && na_include) {
+  if (!is.null(compounds) && length(compounds) > 0) {
     hits_table <- dplyr::filter(
       hits_table,
       `Cmp Name` %in% compounds | is.na(`Cmp Name`)
-    )
-  } else if (!is.null(compounds) && length(compounds) > 0) {
-    hits_table <- dplyr::filter(
-      hits_table,
-      `Cmp Name` %in% compounds
     )
   }
 
@@ -4467,6 +4409,110 @@ filter_hits_table <- function(
   return(hits_table)
 }
 
+# Transform per hit table to display per-adduct entries
+#' @export
+transform_per_adduct <- function(hits_table) {
+  # Get distinct adducts
+  distinct_adducts <- dplyr::distinct(hits_table, `Sample ID`, `Cmp Name`)
+
+  # Get colnames of retained columns subset
+  col_names <- names(hits_table)[
+    !names(hits_table) %in%
+      c(
+        "Peak Signal [Da]",
+        "Int. Cmp [%]",
+        "Theor. Cmp [Da]",
+        "Δ Cmp [Da]",
+        "Bind. Stoich.",
+        "Preferred",
+        "Binding [%]"
+      )
+  ]
+
+  # Initiate list object to store table intermediates
+  entries <- vector("list", nrow(distinct_adducts))
+
+  # Iterate generating one table per distinct adduct
+  for (i in seq_len(nrow(distinct_adducts))) {
+    sample <- distinct_adducts$`Sample ID`[i] # Current sample
+    cmp <- distinct_adducts$`Cmp Name`[i] # Current compound
+
+    if (is.na(cmp)) {
+      hits_per_adduct <- hits_table[
+        hits_table$`Sample ID` == sample,
+        col_names
+      ][1, ]
+    } else {
+      # Build hits df per adduct
+      hits_table_subset <- hits_table[
+        hits_table$`Sample ID` == sample & hits_table$`Cmp Name` == cmp,
+      ]
+      hits_per_adduct <- hits_table_subset[, col_names][1, ]
+
+      # Append mass-shift columns
+      mass_shifts <- unique(hits_table_subset$`Theor. Cmp [Da]`)
+      for (mass_shift in mass_shifts) {
+        hits_table_subset_mass_shift <- hits_table_subset[
+          hits_table_subset$`Theor. Cmp [Da]` == mass_shift,
+        ]
+
+        binding_vals <- as.list(hits_table_subset_mass_shift$`Binding [%]`)
+        names(binding_vals) <- paste0(
+          "Binding (",
+          mass_shift,
+          ifelse(hits_table_subset_mass_shift$Preferred == "FALSE", "*", ""),
+          ")x",
+          hits_table_subset_mass_shift$`Bind. Stoich.`,
+          " [%]"
+        )
+        binding_vals[[paste0("Total Binding (", mass_shift, ") [%]")]] <-
+          sum(hits_table_subset_mass_shift$`Binding [%]`)
+
+        hits_per_adduct <- dplyr::mutate(hits_per_adduct, !!!binding_vals)
+      }
+    }
+
+    ## TODO
+    # # Optionally adding concentration and time columns
+    # if ("Concentration" %in% names(units)) {
+    #   hits_per_adduct <- dplyr::mutate(
+    #     hits_per_adduct,
+    #     !!rlang::sym(
+    #       units[[
+    #         "Concentration"
+    #       ]]
+    #     ) := hits_table_subset$concentration,
+    #     !!rlang::sym(units[["Time"]]) := hits_table_subset$time,
+    #     .after = Protein
+    #   )
+    # }
+
+    entries[[i]] <- hits_per_adduct
+  }
+
+  # Join all hits_per_adduct tables
+  hits_table <- suppressMessages(Reduce(dplyr::full_join, entries))
+
+  # Sort mass-shift columns by mass
+  all_cols <- names(hits_table)
+  is_mass <- grepl("^(Binding|Total Binding) \\(", all_cols)
+  fixed_cols <- all_cols[!is_mass]
+  mass_cols <- all_cols[is_mass]
+  mass_vals <- as.numeric(regmatches(
+    mass_cols,
+    regexpr("[0-9]+\\.[0-9]+", mass_cols)
+  ))
+  stoich_vals <- suppressWarnings(as.numeric(sub(
+    ".*x([0-9]+) \\[%\\]$",
+    "\\1",
+    mass_cols
+  )))
+  stoich_vals[is.na(stoich_vals)] <- Inf
+  mass_cols <- mass_cols[order(mass_vals, stoich_vals)]
+
+  return(hits_table[, c(fixed_cols, mass_cols)])
+}
+
 # Rendering function of hits table
 #' @export
 render_hits_table <- function(
@@ -4479,8 +4525,21 @@ render_hits_table <- function(
   truncated = NULL,
   clickable = FALSE,
   valid_concentrations = NULL,
+  per_adduct = FALSE,
   units
 ) {
+  hits_table <<- hits_table
+  concentration_colors <<- concentration_colors
+  single_conc <<- single_conc
+  bar_chart <<- bar_chart
+  colors1 <<- colors
+  color_variable <<- color_variable
+  truncated <<- truncated
+  clickable <<- clickable
+  valid_concentrations <<- valid_concentrations
+  per_adduct <<- per_adduct
+  units1 <<- units
+
   # Adapt table layout
   if (!is.null(single_conc)) {
     menu_length <- list(c(25, -1), c('25', 'All'))
@@ -4492,6 +4551,12 @@ render_hits_table <- function(
     )
     dom_value <- "fti"
   }
+
+  # 0-based indices of hidden columns (truncSample_ID); used to align
+  # td:eq() visible-index with the data-array index in rowCallback
+  hidden_col_json <- jsonlite::toJSON(
+    which(names(hits_table) == "truncSample_ID") - 1L
+  )
 
   # Determine clickable cells
   rowCallback <- NULL
@@ -4516,13 +4581,19 @@ render_hits_table <- function(
         "  var validConc = ",
         valid_conc_js,
         ";",
+        "  var hiddenCols = ",
+        hidden_col_json,
+        ";",
+        "  var visOffset = 0;",
         "  for(var i=0; i<data.length; i++){",
+        "    if(hiddenCols.includes(i)){ visOffset++; continue; }",
+        "    var vi = i - visOffset;",
         "    if(data[i] === null){",
-        "      $('td:eq('+i+')', row).html('N/A').css({'color': 'inherit'});",
+        "      $('td:eq('+vi+')', row).html('N/A').css({'color': 'inherit'});",
         "    }",
         "    if(targets.includes(i) && data[i] !== null){",
         "      var isValid = validConc === null || validConc.includes(parseFloat(data[i]));",
-        "      if(isValid) $('td:eq('+i+')', row).addClass('clickable-column');",
+        "      if(isValid) $('td:eq('+vi+')', row).addClass('clickable-column');",
         "    }",
         "  }",
         "}"
@@ -4530,6 +4601,23 @@ render_hits_table <- function(
     } else {
       clickable_targets <- NULL
     }
+  }
+
+  if (is.null(rowCallback)) {
+    rowCallback <- c(
+      "function(row, data){",
+      "  var hiddenCols = ",
+      hidden_col_json,
+      ";",
+      "  var visOffset = 0;",
+      "  for(var i=0; i<data.length; i++){",
+      "    if(hiddenCols.includes(i)){ visOffset++; continue; }",
+      "    if(data[i] === null){",
+      "      $('td:eq('+(i-visOffset)+')', row).html('N/A').css({'color': 'inherit'});",
+      "    }",
+      "  }",
+      "}"
+    )
   }
 
   # Generate datatable
@@ -4586,7 +4674,14 @@ render_hits_table <- function(
   # Exclude bar_chart columns — the render callback handles their display
   binding_fmt_cols <- setdiff(
     intersect(
-      c("Binding [%]", "Tot. Binding [%]", "Unmatched [%]", "Correct [%]"),
+      c(
+        "Binding [%]",
+        "Tot. Binding [%]",
+        "Unmatched [%]",
+        "Correct [%]",
+        "Int. Prot. [%]",
+        "Int. Cmp [%]"
+      ),
       names(hits_table)
     ),
     bar_chart
@@ -4595,6 +4690,18 @@ render_hits_table <- function(
     hits_datatable <- DT::formatRound(
       hits_datatable,
       columns = binding_fmt_cols,
+      digits = 2
+    )
+  }
+
+  adduct_fmt_cols <- setdiff(
+    grep("^(Binding|Total Binding) \\(", names(hits_table), value = TRUE),
+    bar_chart
+  )
+  if (length(adduct_fmt_cols) > 0) {
+    hits_datatable <- DT::formatRound(
+      hits_datatable,
+      columns = which(names(hits_table) %in% adduct_fmt_cols),
       digits = 2
     )
   }
@@ -5116,11 +5223,6 @@ transform_hits <- function(hits_summary) {
   # Shared transformations
   summary_table <- hits_summary |>
     dplyr::mutate(
-      # Format Intensity columns
-      dplyr::across(
-        dplyr::any_of(c("Intensity", "Protein Intensity")) & where(is.numeric),
-        ~ round(.x, 2)
-      ),
       # Convert binding cols to exact percentage — rounding only happens in DT display
       dplyr::across(
         c(`% Binding`, `Total % Binding`),
@@ -5265,7 +5367,9 @@ brighten_hex <- function(hex_colors, factor = 1.2) {
 brewer_seq_colors <- function(n, scale, max_colors, cutoff = 0.85) {
   avail <- max(floor(max_colors * cutoff), 3)
   raw <- RColorBrewer::brewer.pal(avail, scale)
-  if (n == 1) return(raw[1])
+  if (n == 1) {
+    return(raw[1])
+  }
   raw[round(seq(1, avail, length.out = n))]
 }
 
@@ -6181,10 +6285,16 @@ stats_histogram <- function(
     "rgba(255,255,255,0.5)"
   }
 
-  hex_correct   <- "#4daf4a"
+  hex_correct <- "#4daf4a"
   hex_unmatched <- "#e41a1c"
-  col  <- hex_to_rgba(if (show == "Unmatched") hex_unmatched else hex_correct, 0.7)
-  colb <- hex_to_rgba(if (show == "Unmatched") hex_unmatched else hex_correct, 1)
+  col <- hex_to_rgba(
+    if (show == "Unmatched") hex_unmatched else hex_correct,
+    0.7
+  )
+  colb <- hex_to_rgba(
+    if (show == "Unmatched") hex_unmatched else hex_correct,
+    1
+  )
 
   p <- plotly::plot_ly()
   if (show == "Unmatched") {
@@ -6221,14 +6331,16 @@ stats_histogram <- function(
         color = font_color,
         gridcolor = grid_color,
         zerolinecolor = zeroline_color,
-        hoverformat = ".2f"
+        hoverformat = ".0f"
       ),
       yaxis = list(
         title = "Count",
         color = font_color,
         gridcolor = grid_color,
         zerolinecolor = zeroline_color,
-        hoverformat = ".2f"
+        tick0 = 0,
+        dtick = 1,
+        hoverformat = "d"
       )
     )
 }
@@ -6260,13 +6372,13 @@ stats_boxplot <- function(
     "rgba(255,255,255,0.5)"
   }
 
-  hex_base  <- if (show == "Unmatched") "#e41a1c" else "#4daf4a"
+  hex_base <- if (show == "Unmatched") "#e41a1c" else "#4daf4a"
   show_unmatched <- show == "Unmatched"
-  show_correct   <- show == "Correct"
-  box_col  <- hex_to_rgba(hex_base, 1)
+  show_correct <- show == "Correct"
+  box_col <- hex_to_rgba(hex_base, 1)
   box_fill <- hex_to_rgba(hex_base, 0.15)
   box_name <- if (show_unmatched) "Unmatched [%]" else "Correct [%]"
-  box_y    <- if (show_unmatched) ~`% Unmatched`  else ~`% Correct`
+  box_y <- if (show_unmatched) ~`% Unmatched` else ~`% Correct`
   hover_tmpl <- if (show_unmatched) {
     "<b>%{text}</b><br>Unmatched [%]: %{y:.2f}<extra></extra>"
   } else {
@@ -6384,7 +6496,7 @@ stats_scatter <- function(
   theme = "dark",
   show = "Correct"
 ) {
-  metric_col   <- if (show == "Unmatched") "% Unmatched" else "% Correct"
+  metric_col <- if (show == "Unmatched") "% Unmatched" else "% Correct"
   metric_label <- if (show == "Unmatched") "Unmatched [%]" else "Correct [%]"
 
   df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
@@ -6462,7 +6574,8 @@ stats_scatter <- function(
           "Tot. Binding [%]: ",
           round(`Total % Binding`, 2),
           "<br>",
-          metric_label, ": ",
+          metric_label,
+          ": ",
           round(.data[[metric_col]], 2)
         )
       )
@@ -6609,9 +6722,9 @@ stats_violin <- function(
   inner = "box",
   show = "Correct"
 ) {
-  metric_col   <- if (show == "Unmatched") "% Unmatched" else "% Correct"
+  metric_col <- if (show == "Unmatched") "% Unmatched" else "% Correct"
   metric_label <- if (show == "Unmatched") "Unmatched [%]" else "Correct [%]"
-  hover_label  <- if (show == "Unmatched") "Unmatched [%]" else "Correct [%]"
+  hover_label <- if (show == "Unmatched") "Unmatched [%]" else "Correct [%]"
 
   df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
   df[[group_by]] <- ifelse(
@@ -6673,7 +6786,11 @@ stats_violin <- function(
         jitter = 0.5,
         pointpos = 0,
         hoveron = "points",
-        hovertemplate = paste0("<b>%{text}</b><br>", hover_label, ": %{y:.2f}<extra></extra>"),
+        hovertemplate = paste0(
+          "<b>%{text}</b><br>",
+          hover_label,
+          ": %{y:.2f}<extra></extra>"
+        ),
         whiskerwidth = 0,
         line = list(color = "rgba(0,0,0,0)", width = 0),
         fillcolor = "rgba(0,0,0,0)",
@@ -6745,8 +6862,6 @@ batch_plate_heatmap <- function(
   scale_mode = "minmax",
   theme = "dark"
 ) {
-  hits_summary3 <<- hits_summary
-
   # Only Total % Binding is stored as 0-1 fraction; % Correct / % Unmatched are 0-100
   fraction_vars <- c("Total % Binding")
   pct_vars <- c("Total % Binding", "% Correct", "% Unmatched")

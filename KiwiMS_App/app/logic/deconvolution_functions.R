@@ -912,12 +912,6 @@ spectrum_plot <- function(
   show_peak_labels = TRUE,
   show_mass_diff = TRUE
 ) {
-  result_path <<- result_path
-  sample1 <<- sample
-  plot_data <<- plot_data
-  color_cmp <<- color_cmp
-  color_variable <<- color_variable
-
   if (is.null(plot_data)) {
     plot_data <- process_plot_data(
       sample,
