@@ -4411,7 +4411,17 @@ filter_hits_table <- function(
 
 # Transform per hit table to display per-adduct entries
 #' @export
-transform_per_adduct <- function(hits_table) {
+transform_per_adduct <- function(
+  hits_table,
+  proteins_table,
+  compounds_table,
+  samples_table
+) {
+  hits_table3333 <<- hits_table
+  proteins_table <<- proteins_table
+  compounds_table <<- compounds_table
+  samples_table <<- samples_table
+
   # Get distinct adducts
   distinct_adducts <- dplyr::distinct(hits_table, `Sample ID`, `Cmp Name`)
 
@@ -4451,25 +4461,41 @@ transform_per_adduct <- function(hits_table) {
 
       # Append mass-shift columns
       mass_shifts <- unique(hits_table_subset$`Theor. Cmp [Da]`)
+      cmp_mass_shifts <- as.numeric(compounds_table[
+        compounds_table$Compound == cmp,
+        -1
+      ])
+
       for (mass_shift in mass_shifts) {
         hits_table_subset_mass_shift <- hits_table_subset[
           hits_table_subset$`Theor. Cmp [Da]` == mass_shift,
         ]
 
+        mass_no <- which(cmp_mass_shifts %in% as.numeric(mass_shift))
+        if (length(mass_no) == 0) next
+
         binding_vals <- as.list(hits_table_subset_mass_shift$`Binding [%]`)
         names(binding_vals) <- paste0(
-          "Binding (",
-          mass_shift,
+          "Binding (Mass ",
+          mass_no,
           ifelse(hits_table_subset_mass_shift$Preferred == "FALSE", "*", ""),
           ")x",
           hits_table_subset_mass_shift$`Bind. Stoich.`,
           " [%]"
         )
-        binding_vals[[paste0("Total Binding (", mass_shift, ") [%]")]] <-
+        binding_vals[[paste0("Total Binding (Mass ", mass_no, ") [%]")]] <-
           sum(hits_table_subset_mass_shift$`Binding [%]`)
+
+        binding_vals[[paste("Mass", mass_no)]] <- cmp_mass_shifts[[mass_no]]
 
         hits_per_adduct <- dplyr::mutate(hits_per_adduct, !!!binding_vals)
       }
+
+      # Attach mass shifts for respective compound
+      # hits_per_adduct <- dplyr::bind_cols(
+      #   hits_per_adduct,
+      #   compounds_table[compounds_table$Compound == cmp, -1]
+      # )
     }
 
     ## TODO
@@ -4493,24 +4519,64 @@ transform_per_adduct <- function(hits_table) {
   # Join all hits_per_adduct tables
   hits_table <- suppressMessages(Reduce(dplyr::full_join, entries))
 
-  # Sort mass-shift columns by mass
+  ### Sort mass-shift columns by mass
   all_cols <- names(hits_table)
-  is_mass <- grepl("^(Binding|Total Binding) \\(", all_cols)
-  fixed_cols <- all_cols[!is_mass]
-  mass_cols <- all_cols[is_mass]
-  mass_vals <- as.numeric(regmatches(
-    mass_cols,
-    regexpr("[0-9]+\\.[0-9]+", mass_cols)
-  ))
-  stoich_vals <- suppressWarnings(as.numeric(sub(
-    ".*x([0-9]+) \\[%\\]$",
-    "\\1",
-    mass_cols
-  )))
-  stoich_vals[is.na(stoich_vals)] <- Inf
-  mass_cols <- mass_cols[order(mass_vals, stoich_vals)]
 
-  return(hits_table[, c(fixed_cols, mass_cols)])
+  # 1. Define helper to extract numbers from strings
+  get_number <- function(string, pattern) {
+    matches <- regmatches(string, regexpr(pattern, string, perl = TRUE))
+    as.numeric(gsub("[^0-9]", "", matches))
+  }
+
+  # 2. Identify and define the raw mass columns
+  is_raw_mass <- grepl("^Mass [0-9]+$", all_cols)
+  raw_mass_names <- all_cols[is_raw_mass]
+  is_binding <- grepl("^(Binding|Total Binding) \\(", all_cols)
+  binding_cols <- all_cols[is_binding]
+
+  # 3. Calculate Stoichiometry for binding_cols
+  # We look for the "x" followed by a number
+  stoich_vals <- suppressWarnings(as.numeric(sub(
+    ".*x([0-9]+).*",
+    "\\1",
+    binding_cols
+  )))
+  stoich_vals[is.na(stoich_vals)] <- Inf # Totals get Inf to move to the end
+
+  # 4. Get the Mass ID for all components
+  all_relevant_cols <- c(raw_mass_names, binding_cols)
+  all_mass_ids <- c(
+    get_number(raw_mass_names, "[0-9]+"),
+    get_number(binding_cols, "(?<=Mass )[0-9]+")
+  )
+
+  # 5. Define hierarchy for sorting
+  # Raw Mass = 1, Binding = 2, Total = 3
+  type_rank <- ifelse(
+    grepl("^Mass [0-9]+$", all_relevant_cols),
+    1,
+    ifelse(grepl("^Total", all_relevant_cols), 3, 2)
+  )
+
+  # 6. Perform the sort
+  # Order by: Mass ID -> Type Rank -> Stoichiometry
+  # Note: For raw mass columns, we assign a stoich of 0 to ensure they come first
+  all_stoich <- c(rep(0, length(raw_mass_names)), stoich_vals)
+
+  final_sorted_relevant <- all_relevant_cols[order(
+    all_mass_ids,
+    type_rank,
+    all_stoich
+  )]
+
+  # 7. Final full vector
+  fixed_cols <- all_cols[
+    !grepl("^Mass [0-9]+$", all_cols) &
+      !grepl("^(Binding|Total Binding) \\(", all_cols)
+  ]
+  final_column_order <- c(fixed_cols, final_sorted_relevant)
+
+  return(hits_table[, final_column_order])
 }
 
 # Rendering function of hits table
@@ -4657,9 +4723,15 @@ render_hits_table <- function(
         )
         paste0(
           "function(thead, data, start, end, display) {",
-          "  var names = ", jsonlite::toJSON(tooltip_names), ";",
+          "  var names = ",
+          jsonlite::toJSON(tooltip_names),
+          ";",
           "  $(thead).find('th').each(function(i) {",
           "    if (i < names.length) $(this).attr('title', names[i]);",
+          "    var h = $(this).html().replace(/Mass (\\d)/g, 'Mass\\u00a0$1');",
+          "    var n = 0;",
+          "    h = h.replace(/ /g, function(m) { return ++n <= 2 ? m : '\\u00a0'; });",
+          "    $(this).html(h);",
           "  });",
           "}"
         )

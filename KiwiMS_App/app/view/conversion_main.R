@@ -1634,7 +1634,8 @@ server <- function(
       select_concentration = NULL,
       conc_colors = NULL,
       expand_helper = FALSE,
-      hits_summary = NULL
+      hits_summary = NULL,
+      hits_summary_adduct = NULL
     )
 
     # Reactive value to track current hits data frame
@@ -4882,13 +4883,18 @@ server <- function(
             hits_col_select_trigger <- shiny::reactiveVal(0)
             hits_col_updating <- shiny::reactiveVal(FALSE)
 
-            shiny::observeEvent(input$hits_tab_col_select, {
-              if (isTRUE(hits_col_updating())) {
-                hits_col_updating(FALSE)
-              } else {
-                hits_col_select_trigger(hits_col_select_trigger() + 1)
-              }
-            }, ignoreInit = TRUE, ignoreNULL = FALSE)
+            shiny::observeEvent(
+              input$hits_tab_col_select,
+              {
+                if (isTRUE(hits_col_updating())) {
+                  hits_col_updating(FALSE)
+                } else {
+                  hits_col_select_trigger(hits_col_select_trigger() + 1)
+                }
+              },
+              ignoreInit = TRUE,
+              ignoreNULL = FALSE
+            )
 
             output$hits_unified_tab <- DT::renderDT({
               shiny::req(
@@ -4898,7 +4904,6 @@ server <- function(
                 input$hits_color_variable,
                 input$hits_color_scale
               )
-
               num_sort_cols <- c()
               if ("Concentration" %in% names(units)) {
                 num_sort_cols <- c(num_sort_cols, units[["Concentration"]])
@@ -4917,10 +4922,19 @@ server <- function(
                 )
 
               if (isTRUE(input$hits_per_adduct == "Adduct View")) {
-                hits_table33 <<- hits_table
-                hits_table <- transform_per_adduct(hits_table)
+                hits_table <- transform_per_adduct(
+                  hits_table,
+                  proteins_table = protein_table_data(),
+                  compounds_table = compound_table_data(),
+                  samples_table = declaration_vars$sample_table
+                )
                 adduct_binding_cols <- grep(
                   "^(Binding|Total Binding) \\(",
+                  names(hits_table),
+                  value = TRUE
+                )
+                adduct_mass_cols <- grep(
+                  "^Mass ",
                   names(hits_table),
                   value = TRUE
                 )
@@ -4928,12 +4942,17 @@ server <- function(
                   input$hits_tab_col_select,
                   names(hits_table)
                 )
+                always_cols <- c(
+                  "Tot. Binding [%]",
+                  adduct_binding_cols,
+                  adduct_mass_cols
+                )
+                all_selected <- names(hits_table)[
+                  names(hits_table) %in% union(valid_adduct_cols, always_cols)
+                ]
                 hits_table <- filter_hits_table(
                   hits_table,
-                  selected_cols = union(
-                    valid_adduct_cols,
-                    c("Tot. Binding [%]", adduct_binding_cols)
-                  ),
+                  selected_cols = all_selected,
                   compounds = input$hits_tab_compound_select,
                   samples = input$hits_tab_sample_select,
                   units = units
@@ -4942,7 +4961,11 @@ server <- function(
                 hits_sel <- input$hits_tab_col_select
                 binding_pos <- which(hits_sel == "Binding [%]")
                 if (length(binding_pos) > 0) {
-                  hits_sel <- append(hits_sel, "Tot. Binding [%]", after = binding_pos)
+                  hits_sel <- append(
+                    hits_sel,
+                    "Tot. Binding [%]",
+                    after = binding_pos
+                  )
                 } else {
                   hits_sel <- union(hits_sel, "Tot. Binding [%]")
                 }
@@ -5006,7 +5029,6 @@ server <- function(
                 input$hits_color_variable,
                 input$hits_color_scale,
                 hits_col_select_trigger(),
-                input$hits_tab_col_select,
                 input$hits_binding_chart,
                 input$hits_tab_compound_select,
                 input$hits_tab_sample_select,
@@ -5035,29 +5057,41 @@ server <- function(
                 "Cmp Name",
                 "truncSample_ID",
                 "Tot. Binding [%]",
-                if ("Concentration" %in% names(units)) units[["Concentration"]] else NULL,
+                if ("Concentration" %in% names(units)) {
+                  units[["Concentration"]]
+                } else {
+                  NULL
+                },
                 if ("Time" %in% names(units)) units[["Time"]] else NULL
               )
 
               if (input$hits_per_adduct == "Adduct View") {
-                adduct_cols <- names(transform_per_adduct(hits_summary))
+                adduct_cols <- names(transform_per_adduct(
+                  hits_summary,
+                  proteins_table = protein_table_data(),
+                  compounds_table = compound_table_data(),
+                  samples_table = declaration_vars$sample_table
+                ))
                 adduct_binding_cols <- grep(
                   "^(Binding|Total Binding) \\(",
                   adduct_cols,
                   value = TRUE
                 )
+                adduct_mass_cols <- grep("^Mass ", adduct_cols, value = TRUE)
                 new_choices <- adduct_cols[
-                  !adduct_cols %in% c(always_excluded, adduct_binding_cols)
+                  !adduct_cols %in%
+                    c(always_excluded, adduct_binding_cols, adduct_mass_cols)
                 ]
                 adduct_selected <- new_choices[
-                  new_choices %in% c(
-                    "Theor. Prot. [Da]",
-                    "Int. Prot. [%]",
-                    "Theor. Cmp [Da]",
-                    "Bind. Stoich.",
-                    "Binding [%]",
-                    "Correct [%]"
-                  )
+                  new_choices %in%
+                    c(
+                      "Theor. Prot. [Da]",
+                      "Int. Prot. [%]",
+                      "Theor. Cmp [Da]",
+                      "Bind. Stoich.",
+                      "Binding [%]",
+                      "Correct [%]"
+                    )
                 ]
                 shinyWidgets::updatePickerInput(
                   session,
@@ -5178,8 +5212,10 @@ server <- function(
                 length(unique(
                   if (input$hits_color_variable == "Samples") {
                     hs$`Sample ID`
-                  } else if (input$hits_color_variable == "Concentration" &&
-                    "Concentration" %in% names(conversion_vars$units)) {
+                  } else if (
+                    input$hits_color_variable == "Concentration" &&
+                      "Concentration" %in% names(conversion_vars$units)
+                  ) {
                     hs[[conversion_vars$units[["Concentration"]]]]
                   } else {
                     hs$`Cmp Name`
