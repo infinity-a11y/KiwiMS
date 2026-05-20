@@ -4867,6 +4867,19 @@ server <- function(
             })
 
             ##### Hits unified table ----
+            # Proxy trigger: incremented only on genuine user col-select changes,
+            # not on programmatic updatePickerInput calls from the mode observer.
+            hits_col_select_trigger <- shiny::reactiveVal(0)
+            hits_col_updating <- shiny::reactiveVal(FALSE)
+
+            shiny::observeEvent(input$hits_tab_col_select, {
+              if (isTRUE(hits_col_updating())) {
+                hits_col_updating(FALSE)
+              } else {
+                hits_col_select_trigger(hits_col_select_trigger() + 1)
+              }
+            }, ignoreInit = TRUE, ignoreNULL = FALSE)
+
             output$hits_unified_tab <- DT::renderDT({
               shiny::req(
                 hits_summary,
@@ -4916,12 +4929,16 @@ server <- function(
                   units = units
                 )
               } else {
+                hits_sel <- input$hits_tab_col_select
+                binding_pos <- which(hits_sel == "Binding [%]")
+                if (length(binding_pos) > 0) {
+                  hits_sel <- append(hits_sel, "Tot. Binding [%]", after = binding_pos)
+                } else {
+                  hits_sel <- union(hits_sel, "Tot. Binding [%]")
+                }
                 hits_table <- filter_hits_table(
                   hits_table,
-                  selected_cols = union(
-                    input$hits_tab_col_select,
-                    "Tot. Binding [%]"
-                  ),
+                  selected_cols = hits_sel,
                   compounds = input$hits_tab_compound_select,
                   samples = input$hits_tab_sample_select,
                   units = units
@@ -4972,7 +4989,7 @@ server <- function(
                 render_trigger(),
                 input$hits_color_variable,
                 input$hits_color_scale,
-                input$hits_tab_col_select,
+                hits_col_select_trigger(),
                 input$hits_binding_chart,
                 input$hits_tab_compound_select,
                 input$hits_tab_sample_select,
@@ -4993,8 +5010,10 @@ server <- function(
 
             ##### Update column selector when display mode changes ----
             shiny::observeEvent(input$hits_per_adduct, {
+              hits_col_updating(TRUE)
               always_excluded <- c(
                 "Sample ID",
+                "Protein",
                 "Cmp Name",
                 "truncSample_ID",
                 "Tot. Binding [%]"
@@ -5010,11 +5029,21 @@ server <- function(
                 new_choices <- adduct_cols[
                   !adduct_cols %in% c(always_excluded, adduct_binding_cols)
                 ]
+                adduct_selected <- new_choices[
+                  new_choices %in% c(
+                    "Theor. Prot. [Da]",
+                    "Int. Prot. [%]",
+                    "Theor. Cmp [Da]",
+                    "Bind. Stoich.",
+                    "Binding [%]",
+                    "Correct [%]"
+                  )
+                ]
                 shinyWidgets::updatePickerInput(
                   session,
                   "hits_tab_col_select",
                   choices = new_choices,
-                  selected = new_choices
+                  selected = adduct_selected
                 )
               } else {
                 per_hit_choices <- names(hits_summary)[
@@ -5027,7 +5056,7 @@ server <- function(
                       "Replicate",
                       "Unmatched [%]",
                       "Preferred",
-                      "Theor. Prot. [Da]",
+                      "Meas. Prot. [Da]",
                       "Δ Prot. [Da]",
                       "Int. Prot. [%]",
                       "Int. Cmp [%]",

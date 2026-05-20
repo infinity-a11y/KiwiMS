@@ -6273,6 +6273,11 @@ stats_histogram <- function(
 ) {
   df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
 
+  x_col <- if (show == "Unmatched") df$`% Unmatched` else df$`% Correct`
+  bin_counts <- tabulate(floor(x_col) + 1L)
+  max_count <- if (length(bin_counts) > 0) max(bin_counts) else 1L
+  y_dtick <- max(1L, ceiling(max_count / 8))
+
   font_color <- if (theme == "light") "black" else "white"
   grid_color <- if (theme == "light") {
     "rgba(0,0,0,0.1)"
@@ -6339,7 +6344,7 @@ stats_histogram <- function(
         gridcolor = grid_color,
         zerolinecolor = zeroline_color,
         tick0 = 0,
-        dtick = 1,
+        dtick = y_dtick,
         hoverformat = "d"
       )
     )

@@ -2236,19 +2236,19 @@ div[data-value="Protein Conversion"] .tab-pane {
   text-align: center !important;
 }
 
-// #app-conversion_main-hits_unified_tab .dataTables_scrollHead thead th:first-child {
-//   position: sticky;
-//   left: 0;
-//   z-index: 3;
-//   background: #e5e5e5;
-// }
+#app-conversion_main-hits_unified_tab .dataTables_scrollHead thead th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: #e5e5e5;
+}
 
-// #app-conversion_main-hits_unified_tab .dataTables_scrollBody tbody td:first-child {
-//   position: sticky;
-//   left: 0;
-//   z-index: 2;
-//   background-color: inherit;
-// }
+#app-conversion_main-hits_unified_tab .dataTables_scrollBody tbody td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background-color: inherit;
+}
 
 #app-conversion_main-kobs_result .dataTables_scrollHead th {
   text-align: center !important;
@@ -4854,6 +4854,12 @@ sample-file-row .form-group {
   border-color: var(--bs-btn-border-color);
   min-width: fit-content;
   background: transparent !important;
+}
+
+.save-button .btn:hover {
+  color: var(--bs-btn-hover-color) !important;
+  background-color: var(--bs-btn-hover-bg) !important;
+  border-color: var(--bs-btn-hover-border-color) !important;
 }
 
 /* Settings modal */

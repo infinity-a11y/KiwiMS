@@ -2225,12 +2225,13 @@ hits_results_ui <- function(ns, hits_summary, units) {
           label = "Select Columns",
           choices = names(hits_summary)[
             !names(hits_summary) %in%
-              c("Sample ID", "Cmp Name", "truncSample_ID", "Tot. Binding [%]")
+              c("Sample ID", "Protein", "Cmp Name", "truncSample_ID", "Tot. Binding [%]")
           ],
           selected = names(hits_summary)[
             !names(hits_summary) %in%
               c(
                 "Sample ID",
+                "Protein",
                 "Cmp Name",
                 "truncSample_ID",
                 "Tot. Binding [%]",
@@ -2238,7 +2239,7 @@ hits_results_ui <- function(ns, hits_summary, units) {
                 "Replicate",
                 "Unmatched [%]",
                 "Preferred",
-                "Theor. Prot. [Da]",
+                "Meas. Prot. [Da]",
                 "Δ Prot. [Da]",
                 "Int. Prot. [%]",
                 "Int. Cmp [%]",
