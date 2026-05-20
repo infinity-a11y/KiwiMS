@@ -11,7 +11,8 @@ box::use(
       sequential_scales,
       qualitative_scales,
       gradient_scales,
-      paste_hook_js
+      paste_hook_js,
+      hits_col_full_names
     ],
 )
 
@@ -1697,7 +1698,6 @@ log_intensities <- function(total, unbound, binding) {
   perc_binding <- (binding / total) * 100
 
   message(paste0(
-    "  │  ├─ Total Intensity: 100%%\n",
     sprintf("  │  ├─ Unbound Protein: %.2f%%\n", perc_unbound),
     sprintf("  │  └─ Total Binding:   %.2f%%", perc_binding)
   ))
@@ -4620,6 +4620,23 @@ render_hits_table <- function(
     )
   }
 
+  # Percentage columns formatted to 2 d.p. via columnDefs render (not formatRound)
+  # so null cells survive rowCallback as "N/A" without post-draw interference.
+  binding_fmt_cols <- setdiff(
+    intersect(
+      c(
+        "Binding [%]",
+        "Tot. Binding [%]",
+        "Unmatched [%]",
+        "Correct [%]",
+        "Int. Prot. [%]",
+        "Int. Cmp [%]"
+      ),
+      names(hits_table)
+    ),
+    bar_chart
+  )
+
   # Generate datatable
   hits_datatable <- DT::datatable(
     data = hits_table,
@@ -4631,6 +4648,22 @@ render_hits_table <- function(
     ),
     options = list(
       rowCallback = htmlwidgets::JS(rowCallback),
+      headerCallback = htmlwidgets::JS({
+        visible_cols <- names(hits_table)[names(hits_table) != "truncSample_ID"]
+        tooltip_names <- ifelse(
+          visible_cols %in% names(hits_col_full_names),
+          hits_col_full_names[visible_cols],
+          visible_cols
+        )
+        paste0(
+          "function(thead, data, start, end, display) {",
+          "  var names = ", jsonlite::toJSON(tooltip_names), ";",
+          "  $(thead).find('th').each(function(i) {",
+          "    if (i < names.length) $(this).attr('title', names[i]);",
+          "  });",
+          "}"
+        )
+      }),
       scrollX = TRUE,
       scrollY = TRUE,
       scrollCollapse = TRUE,
@@ -4662,6 +4695,21 @@ render_hits_table <- function(
         } else {
           list()
         },
+        if (length(binding_fmt_cols) > 0) {
+          list(
+            targets = binding_fmt_cols,
+            render = htmlwidgets::JS(
+              "function(data, type, row, meta) {",
+              "  if (type !== 'display') return data;",
+              "  if (data === null || data === undefined) return null;",
+              "  var n = parseFloat(data);",
+              "  return isNaN(n) ? data : n.toFixed(2);",
+              "}"
+            )
+          )
+        } else {
+          list()
+        },
         list(
           targets = -1,
           className = 'dt-last-col'
@@ -4669,30 +4717,6 @@ render_hits_table <- function(
       )
     )
   )
-
-  # Format binding columns to consistent 2 decimal places
-  # Exclude bar_chart columns — the render callback handles their display
-  binding_fmt_cols <- setdiff(
-    intersect(
-      c(
-        "Binding [%]",
-        "Tot. Binding [%]",
-        "Unmatched [%]",
-        "Correct [%]",
-        "Int. Prot. [%]",
-        "Int. Cmp [%]"
-      ),
-      names(hits_table)
-    ),
-    bar_chart
-  )
-  if (length(binding_fmt_cols) > 0) {
-    hits_datatable <- DT::formatRound(
-      hits_datatable,
-      columns = binding_fmt_cols,
-      digits = 2
-    )
-  }
 
   adduct_fmt_cols <- setdiff(
     grep("^(Binding|Total Binding) \\(", names(hits_table), value = TRUE),
@@ -4956,6 +4980,20 @@ confirm_ui_changes <- function(
   # Disable clear button
   shinyjs::disable(paste0("clear_", tab_low))
 
+  # Disable unit selectors (Samples tab only)
+  if (tab_low == "samples") {
+    shinyjs::disable("conc_unit")
+    shinyjs::addClass(
+      selector = ".shiny-input-container:has(#app-conversion_main-conc_unit) .bootstrap-select",
+      class = "custom-disable"
+    )
+    shinyjs::disable("time_unit")
+    shinyjs::addClass(
+      selector = ".shiny-input-container:has(#app-conversion_main-time_unit) .bootstrap-select",
+      class = "custom-disable"
+    )
+  }
+
   # Disable file upload
   shinyjs::disable(paste0(tab_low, "_fileinput"))
   shinyjs::addClass(
@@ -5011,6 +5049,20 @@ edit_ui_changes <- function(
 
   # Enable clear button
   shinyjs::enable(paste0("clear_", tab_low))
+
+  # Enable unit selectors (Samples tab only)
+  if (tab_low == "samples") {
+    shinyjs::enable("conc_unit")
+    shinyjs::removeClass(
+      selector = ".shiny-input-container:has(#app-conversion_main-conc_unit) .bootstrap-select",
+      class = "custom-disable"
+    )
+    shinyjs::enable("time_unit")
+    shinyjs::removeClass(
+      selector = ".shiny-input-container:has(#app-conversion_main-time_unit) .bootstrap-select",
+      class = "custom-disable"
+    )
+  }
 
   # Enable file upload
   shinyjs::enable(paste0(tab_low, "_fileinput"))
@@ -5375,7 +5427,13 @@ brewer_seq_colors <- function(n, scale, max_colors, cutoff = 0.85) {
 
 # Make uniform color scale for compounds
 #' @export
-get_cmp_colorScale <- function(filtered_table, scale, variable, trunc) {
+get_cmp_colorScale <- function(
+  filtered_table,
+  scale,
+  variable,
+  trunc,
+  conc_col = NULL
+) {
   if (variable == "Compounds") {
     # cmp_levels <- unique(filtered_table[["Theor. Cmp"]])
     cmp_levels <- unique(filtered_table[["Cmp Name"]])
@@ -5385,6 +5443,8 @@ get_cmp_colorScale <- function(filtered_table, scale, variable, trunc) {
     } else {
       cmp_levels <- unique(filtered_table[["Sample ID"]])
     }
+  } else if (variable == "Concentration") {
+    cmp_levels <- unique(filtered_table[[conc_col]])
   }
 
   n <- length(cmp_levels)

@@ -89,6 +89,37 @@ hits_table_names <- c(
   "Tot. Binding [%]"
 )
 
+# Full column name tooltips for hits table headers (abbreviated -> full)
+#' @export
+hits_col_full_names <- c(
+  "Well"             = "Well",
+  "Sample ID"        = "Sample ID",
+  "Protein"          = "Protein",
+  "Cmp Name"         = "Compound Name",
+  "Theor. Prot. [Da]" = "Theoretical Protein [Da]",
+  "Meas. Prot. [Da]" = "Measured Protein [Da]",
+  "Δ Prot. [Da]"     = "Δ Protein [Da]",
+  "Int. Prot. [%]"   = "Protein Intensity [%]",
+  "Peak Signal [Da]" = "Peak Signal [Da]",
+  "Int. Cmp [%]"     = "Compound Intensity [%]",
+  "Theor. Cmp [Da]"  = "Theoretical Compound [Da]",
+  "Δ Cmp [Da]"       = "Δ Compound [Da]",
+  "Bind. Stoich."    = "Binding Stoichiometry",
+  "Preferred"        = "Preferred Hit",
+  "Binding [%]"      = "Binding [%]",
+  "Tot. Binding [%]" = "Total Binding [%]",
+  "Unmatched [%]"    = "Unmatched [%]",
+  "Correct [%]"      = "Correct [%]",
+  "Replicate"        = "Replicate",
+  "Conc. [M]"        = "Concentration [M]",
+  "Conc. [mM]"       = "Concentration [mM]",
+  "Conc. [μM]"       = "Concentration [μM]",
+  "Conc. [nM]"       = "Concentration [nM]",
+  "Conc. [pM]"       = "Concentration [pM]",
+  "Time [s]"         = "Time [s]",
+  "Time [min]"       = "Time [min]"
+)
+
 # Sequential color scales
 #' @export
 sequential_scales <- list(

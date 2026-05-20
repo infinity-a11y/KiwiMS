@@ -1805,6 +1805,16 @@ server <- function(
                 selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
                 class = "custom-disable"
               )
+              shinyjs::disable("conc_unit")
+              shinyjs::addClass(
+                selector = ".shiny-input-container:has(#app-conversion_main-conc_unit) .bootstrap-select",
+                class = "custom-disable"
+              )
+              shinyjs::disable("time_unit")
+              shinyjs::addClass(
+                selector = ".shiny-input-container:has(#app-conversion_main-time_unit) .bootstrap-select",
+                class = "custom-disable"
+              )
             },
             once = TRUE
           )
@@ -4958,7 +4968,13 @@ server <- function(
                   input$hits_color_variable == "Concentration" &&
                     "Concentration" %in% names(units)
                 ) {
-                  conversion_vars$conc_colors
+                  get_cmp_colorScale(
+                    filtered_table = hits_table,
+                    scale = input$hits_color_scale,
+                    variable = "Concentration",
+                    trunc = FALSE,
+                    conc_col = units[["Concentration"]]
+                  )
                 } else {
                   NULL
                 },
@@ -4990,10 +5006,12 @@ server <- function(
                 input$hits_color_variable,
                 input$hits_color_scale,
                 hits_col_select_trigger(),
+                input$hits_tab_col_select,
                 input$hits_binding_chart,
                 input$hits_tab_compound_select,
                 input$hits_tab_sample_select,
-                input$hits_per_adduct
+                input$hits_per_adduct,
+                ignoreNULL = FALSE
               )
 
             ##### Hits unified table export ----
@@ -5016,7 +5034,9 @@ server <- function(
                 "Protein",
                 "Cmp Name",
                 "truncSample_ID",
-                "Tot. Binding [%]"
+                "Tot. Binding [%]",
+                if ("Concentration" %in% names(units)) units[["Concentration"]] else NULL,
+                if ("Time" %in% names(units)) units[["Time"]] else NULL
               )
 
               if (input$hits_per_adduct == "Adduct View") {
@@ -5158,6 +5178,9 @@ server <- function(
                 length(unique(
                   if (input$hits_color_variable == "Samples") {
                     hs$`Sample ID`
+                  } else if (input$hits_color_variable == "Concentration" &&
+                    "Concentration" %in% names(conversion_vars$units)) {
+                    hs[[conversion_vars$units[["Concentration"]]]]
                   } else {
                     hs$`Cmp Name`
                   }
@@ -5168,7 +5191,7 @@ server <- function(
               if (!is.null(color_scale) && color_scale %in% unlist(scales)) {
                 selected <- color_scale
               } else {
-                selected <- "plasma"
+                selected <- "turbo"
               }
 
               shiny::updateSelectInput(
