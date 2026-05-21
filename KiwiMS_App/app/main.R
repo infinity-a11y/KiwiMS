@@ -172,6 +172,26 @@ ui <- function(id) {
       });
     "
     )),
+    shiny$tags$script(shiny$HTML(
+      "
+      var _exportStates = {};
+      Shiny.addCustomMessageHandler('setExportState', function(msg) {
+        _exportStates[msg.prefix] = msg.enabled;
+        applyExportState(msg.prefix);
+      });
+      function applyExportState(prefix) {
+        var btns = $('[id$=\"_' + prefix + '_html\"],[id$=\"_' + prefix + '_png\"],[id$=\"_' + prefix + '_svg\"]');
+        if (_exportStates[prefix] === false) {
+          btns.prop('disabled', true).addClass('disabled').css('pointer-events', 'none').css('opacity', '0.5');
+        } else {
+          btns.prop('disabled', false).removeClass('disabled').css('pointer-events', '').css('opacity', '');
+        }
+      }
+      $(document).on('shown.bs.popover', function() {
+        Object.keys(_exportStates).forEach(applyExportState);
+      });
+    "
+    )),
     useWaiter(),
     waiterShowOnLoad(
       html = shiny$tags$div(

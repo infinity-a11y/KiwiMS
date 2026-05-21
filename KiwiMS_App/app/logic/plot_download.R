@@ -102,11 +102,42 @@ setup_plot_dl <- function(
   session,
   prefix,
   build_fn,
-  filename_fn
+  filename_fn,
+  available_fn = NULL
 ) {
+  if (!is.null(available_fn)) {
+    shiny::observe({
+      session$sendCustomMessage("setExportState", list(
+        prefix = prefix,
+        enabled = isTRUE(available_fn())
+      ))
+    })
+  }
+  no_plot_toast <- function() {
+    shinyWidgets::show_toast(
+      "No plot to export",
+      text = "Generate a plot first before exporting.",
+      type = "warning",
+      timer = 4000,
+      timerProgressBar = TRUE
+    )
+  }
+
+  try_build <- function(theme) {
+    tryCatch(
+      shiny::isolate(build_fn(theme)),
+      error = function(e) NULL
+    )
+  }
+
   output[[paste0("dl_", prefix, "_html")]] <- shiny::downloadHandler(
     filename = function() paste0(filename_fn(), ".html"),
     content = function(file) {
+      p <- try_build(input[[paste0(prefix, "_dl_theme")]] %||% "light")
+      if (is.null(p)) {
+        no_plot_toast()
+        shiny::req(FALSE)
+      }
       show_toast(
         "Exporting as HTML",
         text = NULL,
@@ -114,12 +145,16 @@ setup_plot_dl <- function(
         timer = 3000,
         timerProgressBar = TRUE
       )
-      p <- build_fn(input[[paste0(prefix, "_dl_theme")]] %||% "light")
       saveWidget(as_widget(p), file, selfcontained = TRUE)
     }
   )
 
   shiny::observeEvent(input[[paste0("dl_", prefix, "_png")]], {
+    p <- try_build(input[[paste0(prefix, "_dl_theme")]] %||% "light")
+    if (is.null(p)) {
+      no_plot_toast()
+      return(invisible(NULL))
+    }
     show_toast(
       "Exporting as PNG",
       text = NULL,
@@ -127,7 +162,6 @@ setup_plot_dl <- function(
       timer = 3000,
       timerProgressBar = TRUE
     )
-    p <- build_fn(input[[paste0(prefix, "_dl_theme")]] %||% "light")
     session$sendCustomMessage(
       "downloadPlot",
       list(
@@ -141,6 +175,11 @@ setup_plot_dl <- function(
   })
 
   shiny::observeEvent(input[[paste0("dl_", prefix, "_svg")]], {
+    p <- try_build(input[[paste0(prefix, "_dl_theme")]] %||% "light")
+    if (is.null(p)) {
+      no_plot_toast()
+      return(invisible(NULL))
+    }
     show_toast(
       "Exporting as SVG",
       text = NULL,
@@ -148,7 +187,6 @@ setup_plot_dl <- function(
       timer = 3000,
       timerProgressBar = TRUE
     )
-    p <- build_fn(input[[paste0(prefix, "_dl_theme")]] %||% "light")
     session$sendCustomMessage(
       "downloadPlot",
       list(
