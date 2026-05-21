@@ -814,9 +814,7 @@ process_plot_data <- function(
       )
 
       # Normalize intensities
-      mass$intensity <- (mass$intensity - min(mass$intensity)) /
-        (max(mass$intensity) - min(mass$intensity)) *
-        100
+      mass$intensity <- mass$intensity / max(mass$intensity) * 100
 
       # Match peaks to spectrum
       highlight_peaks <- mass[mass$mass %in% peaks$mass, ]
@@ -836,9 +834,7 @@ process_plot_data <- function(
     mass <- mass[-c(1, nrow(mass)), ]
 
     # Normalize intensities
-    mass$intensity <- (mass$intensity - min(mass$intensity)) /
-      (max(mass$intensity) - min(mass$intensity)) *
-      100
+    mass$intensity <- mass$intensity / max(mass$intensity) * 100
 
     # Merge non-preferred hits per peak: sort preferred first, then collapse
     # multiple interpretations of the same peak into a single combined label.
