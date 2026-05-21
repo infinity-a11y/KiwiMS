@@ -64,7 +64,8 @@ ui <- function(id) {
       )
     ),
     shiny$div(id = "blocking-overlay"),
-    shiny$tags$script(shiny$HTML("
+    shiny$tags$script(shiny$HTML(
+      "
       (function() {
         var map = new Map();
         $(document).on('shiny:recalculating', function(event) {
@@ -85,7 +86,8 @@ ui <- function(id) {
           });
         });
       })();
-    ")),
+    "
+    )),
     shiny$tags$script(shiny$HTML(
       "
       Shiny.addCustomMessageHandler('downloadPlot', function(msg) {
@@ -346,9 +348,13 @@ server <- function(id) {
     log_view$server("logs", active_tab_reactive, log_buttons)
 
     # Gear button in log sidebar opens Settings modal scrolled to Logs section
-    shiny$observeEvent(log_buttons$open_settings(), {
-      open_settings_modal(open_section = "logs")
-    }, ignoreInit = TRUE)
+    shiny$observeEvent(
+      log_buttons$open_settings(),
+      {
+        open_settings_modal(open_section = "logs")
+      },
+      ignoreInit = TRUE
+    )
 
     reset_button <- shiny$reactiveVal(0)
     configfile <- shiny$reactiveVal(NULL)
@@ -398,7 +404,11 @@ server <- function(id) {
               ),
               shiny$div(
                 id = ns("settings_general_body"),
-                class = if (identical(open_section, "general")) "collapse show" else "collapse",
+                class = if (identical(open_section, "general")) {
+                  "collapse show"
+                } else {
+                  "collapse"
+                },
                 shiny$tags$table(
                   class = "table table-sm table-bordered settings-table",
                   shiny$tags$tbody(
@@ -484,7 +494,11 @@ server <- function(id) {
               ),
               shiny$div(
                 id = ns("settings_deconv_body"),
-                class = if (identical(open_section, "deconv")) "collapse show" else "collapse",
+                class = if (identical(open_section, "deconv")) {
+                  "collapse show"
+                } else {
+                  "collapse"
+                },
                 shiny$tags$table(
                   class = "table table-sm table-bordered settings-table",
                   shiny$tags$tbody(
@@ -750,7 +764,11 @@ server <- function(id) {
               ),
               shiny$div(
                 id = ns("settings_conv_body"),
-                class = if (identical(open_section, "conv")) "collapse show" else "collapse",
+                class = if (identical(open_section, "conv")) {
+                  "collapse show"
+                } else {
+                  "collapse"
+                },
                 shiny$tags$table(
                   class = "table table-sm table-bordered settings-table",
                   shiny$tags$tbody(
@@ -822,7 +840,11 @@ server <- function(id) {
               ),
               shiny$div(
                 id = ns("settings_logs_body"),
-                class = if (identical(open_section, "logs")) "collapse show" else "collapse",
+                class = if (identical(open_section, "logs")) {
+                  "collapse show"
+                } else {
+                  "collapse"
+                },
                 shiny$tags$table(
                   class = "table table-sm table-bordered settings-table",
                   shiny$tags$tbody(
@@ -896,29 +918,89 @@ server <- function(id) {
     d <- get_default_user_settings()
 
     do_reset_general <- function() {
-      shiny::updateTextInput(session, "settings_input_path", value = d$deconv_input_dir)
+      shiny::updateTextInput(
+        session,
+        "settings_input_path",
+        value = d$deconv_input_dir
+      )
       shiny::updateTextInput(session, "settings_dest_path", value = "")
-      shiny::updateCheckboxInput(session, "settings_keep_raw_output", value = d$deconv_keep_raw_output)
+      shiny::updateCheckboxInput(
+        session,
+        "settings_keep_raw_output",
+        value = d$deconv_keep_raw_output
+      )
     }
 
     do_reset_deconv <- function() {
-      shiny::updateNumericInput(session, "settings_startz", value = d$deconv_startz)
+      shiny::updateNumericInput(
+        session,
+        "settings_startz",
+        value = d$deconv_startz
+      )
       shiny::updateNumericInput(session, "settings_endz", value = d$deconv_endz)
-      shiny::updateNumericInput(session, "settings_minmz", value = d$deconv_minmz)
-      shiny::updateNumericInput(session, "settings_maxmz", value = d$deconv_maxmz)
-      shiny::updateNumericInput(session, "settings_masslb", value = d$deconv_masslb)
-      shiny::updateNumericInput(session, "settings_massub", value = d$deconv_massub)
-      shiny::updateNumericInput(session, "settings_time_start", value = d$deconv_time_start)
-      shiny::updateNumericInput(session, "settings_time_end", value = d$deconv_time_end)
-      shiny::updateNumericInput(session, "settings_peakwindow", value = d$deconv_peakwindow)
-      shiny::updateSelectInput(session, "settings_peaknorm", selected = d$deconv_peaknorm)
-      shiny::updateNumericInput(session, "settings_peakthresh", value = d$deconv_peakthresh)
-      shiny::updateNumericInput(session, "settings_massbins", value = d$deconv_massbins)
+      shiny::updateNumericInput(
+        session,
+        "settings_minmz",
+        value = d$deconv_minmz
+      )
+      shiny::updateNumericInput(
+        session,
+        "settings_maxmz",
+        value = d$deconv_maxmz
+      )
+      shiny::updateNumericInput(
+        session,
+        "settings_masslb",
+        value = d$deconv_masslb
+      )
+      shiny::updateNumericInput(
+        session,
+        "settings_massub",
+        value = d$deconv_massub
+      )
+      shiny::updateNumericInput(
+        session,
+        "settings_time_start",
+        value = d$deconv_time_start
+      )
+      shiny::updateNumericInput(
+        session,
+        "settings_time_end",
+        value = d$deconv_time_end
+      )
+      shiny::updateNumericInput(
+        session,
+        "settings_peakwindow",
+        value = d$deconv_peakwindow
+      )
+      shiny::updateSelectInput(
+        session,
+        "settings_peaknorm",
+        selected = d$deconv_peaknorm
+      )
+      shiny::updateNumericInput(
+        session,
+        "settings_peakthresh",
+        value = d$deconv_peakthresh
+      )
+      shiny::updateNumericInput(
+        session,
+        "settings_massbins",
+        value = d$deconv_massbins
+      )
     }
 
     do_reset_conv <- function() {
-      shiny::updateNumericInput(session, "settings_peak_tol", value = d$peak_tolerance)
-      shiny::updateNumericInput(session, "settings_max_mult", value = d$max_multiples)
+      shiny::updateNumericInput(
+        session,
+        "settings_peak_tol",
+        value = d$peak_tolerance
+      )
+      shiny::updateNumericInput(
+        session,
+        "settings_max_mult",
+        value = d$max_multiples
+      )
     }
 
     do_reset_logs <- function() {
@@ -926,9 +1008,9 @@ server <- function(id) {
     }
 
     shiny$observeEvent(input$reset_general, do_reset_general())
-    shiny$observeEvent(input$reset_deconv,  do_reset_deconv())
-    shiny$observeEvent(input$reset_conv,    do_reset_conv())
-    shiny$observeEvent(input$reset_logs,    do_reset_logs())
+    shiny$observeEvent(input$reset_deconv, do_reset_deconv())
+    shiny$observeEvent(input$reset_conv, do_reset_conv())
+    shiny$observeEvent(input$reset_logs, do_reset_logs())
     shiny$observeEvent(input$reset_default, {
       do_reset_general()
       do_reset_deconv()
@@ -1489,7 +1571,7 @@ server <- function(id) {
     if (identical(local_version, remote_version)) {
       # Variables for modal
       message <- "KiwiMS is up-to-date"
-      hint <- "No action needed. Update anyway?"
+      hint <- "No action needed."
       release_url <- get_latest_release_url()
       link <- ifelse(
         is.null(release_url),
@@ -1628,7 +1710,9 @@ server <- function(id) {
               shiny$tags$tr(
                 shiny$tags$td(shiny$tags$code("Replicate")),
                 shiny$tags$td(class = "config-col-optional", "Optional"),
-                shiny$tags$td("Replicate group label \u00b7 free text \u00b7 partial fill allowed")
+                shiny$tags$td(
+                  "Replicate group label \u00b7 free text \u00b7 partial fill allowed"
+                )
               ),
               shiny$tags$tr(
                 shiny$tags$td(shiny$tags$code("Protein")),
@@ -1645,12 +1729,16 @@ server <- function(id) {
               shiny$tags$tr(
                 shiny$tags$td(shiny$tags$code("Compound_Concentration")),
                 shiny$tags$td(class = "config-col-optional", "Optional"),
-                shiny$tags$td("Numeric \u00b7 all filled or all empty \u00b7 displayed as \u201cConcentration\u201d")
+                shiny$tags$td(
+                  "Numeric \u00b7 all filled or all empty \u00b7 displayed as \u201cConcentration\u201d"
+                )
               ),
               shiny$tags$tr(
                 shiny$tags$td(shiny$tags$code("Incubation_Time")),
                 shiny$tags$td(class = "config-col-optional", "Optional"),
-                shiny$tags$td("Numeric \u00b7 all filled or all empty \u00b7 displayed as \u201cTime\u201d")
+                shiny$tags$td(
+                  "Numeric \u00b7 all filled or all empty \u00b7 displayed as \u201cTime\u201d"
+                )
               ),
               shiny$tags$tr(
                 shiny$tags$td(shiny$tags$code("Compound_1 \u2013 Compound_5")),
@@ -1785,7 +1873,10 @@ server <- function(id) {
     # Prepare config data frame for display: convert numeric cols to character
     # to prevent xtable rounding, drop all-empty columns, and rename display headers.
     config_table_df <- function(df) {
-      for (col in intersect(c("Compound_Concentration", "Incubation_Time"), names(df))) {
+      for (col in intersect(
+        c("Compound_Concentration", "Incubation_Time"),
+        names(df)
+      )) {
         if (is.numeric(df[[col]])) df[[col]] <- as.character(df[[col]])
       }
       empty_cols <- names(df)[sapply(names(df), function(col) {

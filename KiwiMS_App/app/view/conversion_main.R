@@ -4878,18 +4878,13 @@ server <- function(
             })
 
             ##### Hits unified table ----
-            # Proxy trigger: incremented only on genuine user col-select changes,
-            # not on programmatic updatePickerInput calls from the mode observer.
-            hits_col_select_trigger <- shiny::reactiveVal(0)
-            hits_col_updating <- shiny::reactiveVal(FALSE)
+            hits_col_selection <- shiny::reactiveVal(NULL)
 
             shiny::observeEvent(
               input$hits_tab_col_select,
               {
-                if (isTRUE(hits_col_updating())) {
-                  hits_col_updating(FALSE)
-                } else {
-                  hits_col_select_trigger(hits_col_select_trigger() + 1)
+                if (!identical(hits_col_selection(), input$hits_tab_col_select)) {
+                  hits_col_selection(input$hits_tab_col_select)
                 }
               },
               ignoreInit = TRUE,
@@ -4939,7 +4934,7 @@ server <- function(
                   value = TRUE
                 )
                 valid_adduct_cols <- intersect(
-                  input$hits_tab_col_select,
+                  if (is.null(hits_col_selection())) input$hits_tab_col_select else hits_col_selection(),
                   names(hits_table)
                 )
                 always_cols <- c(
@@ -4958,7 +4953,7 @@ server <- function(
                   units = units
                 )
               } else {
-                hits_sel <- input$hits_tab_col_select
+                hits_sel <- if (is.null(hits_col_selection())) input$hits_tab_col_select else hits_col_selection()
                 binding_pos <- which(hits_sel == "Binding [%]")
                 if (length(binding_pos) > 0) {
                   hits_sel <- append(
@@ -5028,11 +5023,10 @@ server <- function(
                 render_trigger(),
                 input$hits_color_variable,
                 input$hits_color_scale,
-                hits_col_select_trigger(),
+                hits_col_selection(),
                 input$hits_binding_chart,
                 input$hits_tab_compound_select,
                 input$hits_tab_sample_select,
-                input$hits_per_adduct,
                 ignoreNULL = FALSE
               )
 
@@ -5050,7 +5044,6 @@ server <- function(
 
             ##### Update column selector when display mode changes ----
             shiny::observeEvent(input$hits_per_adduct, {
-              hits_col_updating(TRUE)
               always_excluded <- c(
                 "Sample ID",
                 "Protein",
@@ -5093,6 +5086,7 @@ server <- function(
                       "Correct [%]"
                     )
                 ]
+                hits_col_selection(adduct_selected)
                 shinyWidgets::updatePickerInput(
                   session,
                   "hits_tab_col_select",
@@ -5117,6 +5111,7 @@ server <- function(
                       "Δ Cmp [Da]"
                     )
                 ]
+                hits_col_selection(per_hit_selected)
                 shinyWidgets::updatePickerInput(
                   session,
                   "hits_tab_col_select",
@@ -5124,7 +5119,7 @@ server <- function(
                   selected = per_hit_selected
                 )
               }
-            })
+            }, ignoreInit = TRUE)
 
             ##### Hits unified table clicking observer ----
             shiny::observeEvent(

@@ -2226,8 +2226,16 @@ hits_results_ui <- function(ns, hits_summary, units) {
           choices = names(hits_summary)[
             !names(hits_summary) %in%
               c(
-                "Sample ID", "Protein", "Cmp Name", "truncSample_ID", "Tot. Binding [%]",
-                if ("Concentration" %in% names(units)) units[["Concentration"]] else NULL,
+                "Sample ID",
+                "Protein",
+                "Cmp Name",
+                "truncSample_ID",
+                "Tot. Binding [%]",
+                if ("Concentration" %in% names(units)) {
+                  units[["Concentration"]]
+                } else {
+                  NULL
+                },
                 if ("Time" %in% names(units)) units[["Time"]] else NULL
               )
           ],
@@ -2239,7 +2247,11 @@ hits_results_ui <- function(ns, hits_summary, units) {
                 "Cmp Name",
                 "truncSample_ID",
                 "Tot. Binding [%]",
-                if ("Concentration" %in% names(units)) units[["Concentration"]] else NULL,
+                if ("Concentration" %in% names(units)) {
+                  units[["Concentration"]]
+                } else {
+                  NULL
+                },
                 if ("Time" %in% names(units)) units[["Time"]] else NULL,
                 "Well",
                 "Replicate",
@@ -2257,9 +2269,23 @@ hits_results_ui <- function(ns, hits_summary, units) {
         ),
         shinyWidgets::pickerInput(
           ns("hits_binding_chart"),
-          label = "Show Binding Bars",
-          choices = c("Binding [%]", "Tot. Binding [%]"),
-          selected = "Tot. Binding [%]",
+          label = "Show % Bar",
+          choices = c(
+            "Binding [%]",
+            "Tot. Binding [%]",
+            "Int. Prot. [%]",
+            "Int. Cmp [%]",
+            "Unmatched [%]",
+            "Correct [%]"
+          ),
+          selected = c(
+            "Binding [%]",
+            "Tot. Binding [%]",
+            "Int. Prot. [%]",
+            "Int. Cmp [%]",
+            "Unmatched [%]",
+            "Correct [%]"
+          ),
           multiple = TRUE,
           options = list(`actions-box` = TRUE)
         ),

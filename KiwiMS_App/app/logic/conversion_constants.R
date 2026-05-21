@@ -193,11 +193,20 @@ chart_js <- '
 function(data, type, row, meta) {
   if (type === "display") {
     var val = parseFloat(data);
+    var label = isNaN(val) ? "" : val.toFixed(2);
     var width = isNaN(val) ? 0 : val;
-
-    return "<div class=\'bar-chart-bar\'>" +
-             "<div class=\'bar\' style=\'width: " + width + "%;\'></div>" +
-           "</div>";
+    if (val >= 50) {
+      return "<div class=\'bar-chart-bar\'>" +
+               "<div class=\'bar\' style=\'width:" + width + "%\'>" +
+                 "<span class=\'bar-label-inside\'>" + label + "</span>" +
+               "</div>" +
+             "</div>";
+    } else {
+      return "<div class=\'bar-chart-bar\'>" +
+               "<div class=\'bar\' style=\'width:" + width + "%\'></div>" +
+               "<span class=\'bar-label-outside\'>" + label + "</span>" +
+             "</div>";
+    }
   }
   return data;
 }

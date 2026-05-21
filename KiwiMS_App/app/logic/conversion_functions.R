@@ -4754,7 +4754,8 @@ render_hits_table <- function(
           list(
             targets = bar_chart[bar_chart %in% names(hits_table)],
             render = htmlwidgets::JS(chart_js),
-            type = "num"
+            type = "num",
+            className = "bar-chart-col"
           )
         } else {
           list()
