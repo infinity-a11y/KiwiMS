@@ -60,7 +60,7 @@ plot_dl_popover <- function(ns, prefix) {
               "Large" = "large",
               "Very Large" = "xlarge"
             ),
-            selected = "normal",
+            selected = "large",
             inline = TRUE
           ),
           shiny::div(class = "plot-dl-label", "File Format"),

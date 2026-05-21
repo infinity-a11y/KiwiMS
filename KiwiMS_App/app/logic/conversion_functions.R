@@ -4749,7 +4749,8 @@ render_hits_table <- function(
       dom = dom_value,
       paging = ifelse(!is.null(single_conc), TRUE, FALSE),
       columnDefs = list(
-        list(className = 'dt-left', targets = "_all"),
+        list(className = 'dt-center', targets = "_all"),
+        list(className = 'dt-left', targets = 0),
         if (length(bar_chart) > 0 & any(bar_chart %in% names(hits_table))) {
           list(
             targets = bar_chart[bar_chart %in% names(hits_table)],

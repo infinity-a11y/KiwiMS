@@ -1,4 +1,4 @@
-﻿# app/logic/deconvolution_functions.R
+# app/logic/deconvolution_functions.R
 
 box::use(
   data.table[fread, setnames, data.table, as.data.table],
@@ -912,6 +912,12 @@ spectrum_plot <- function(
   show_peak_labels = TRUE,
   show_mass_diff = TRUE
 ) {
+  result_path <<- result_path
+  sample1 <<- sample
+  plot_data1 <<- plot_data
+  color_cmp <<- color_cmp
+  color_variable <<- color_variable
+
   if (is.null(plot_data)) {
     plot_data <- process_plot_data(
       sample,
@@ -943,48 +949,6 @@ spectrum_plot <- function(
 
   if (identical(color_variable, "Samples") && !is.null(color_cmp)) {
     data_line_color <- color_cmp
-  }
-
-  # ggplot (non-interactive) section
-  if (!interactive) {
-    plot <- ggplot2::ggplot(
-      plot_data$mass,
-      ggplot2::aes(
-        x = mass,
-        y = intensity,
-        group = 1,
-        text = paste0(
-          "Mass: ",
-          mass,
-          " Da\nIntensity: ",
-          round(intensity, 2)
-        )
-      )
-    ) +
-      ggplot2::geom_line(color = data_line_color) +
-      ggplot2::scale_y_continuous(labels = scales::percent_format(scale = 1))
-
-    if (tolower(theme) == "dark") {
-      plot <- plot + ggplot2::theme_dark()
-    } else {
-      plot <- plot + ggplot2::theme_minimal()
-    }
-
-    if (raw) {
-      plot <- plot + ggplot2::labs(y = "Intensity [%]", x = "m/z [Th]")
-    } else {
-      plot <- plot +
-        ggplot2::geom_point(
-          data = plot_data$highlight_peaks,
-          ggplot2::aes(x = mass, y = intensity),
-          fill = "#e8cb97",
-          colour = marker_border_color,
-          shape = 21,
-          size = 2
-        ) +
-        ggplot2::labs(y = "Intensity [%]", x = "Mass [Da]")
-    }
-    return(plot)
   }
 
   # Interactive plotly
@@ -1051,6 +1015,7 @@ spectrum_plot <- function(
       mode = "lines",
       color = I(data_line_color),
       hoverinfo = "text",
+      showlegend = FALSE,
       text = ~ paste0(
         "Mass: ",
         mass,
@@ -1152,44 +1117,47 @@ spectrum_plot <- function(
           }
         }
 
-        plot <- plotly::add_markers(
-          plot,
-          data = plot_data$highlight_peaks,
-          x = ~mass,
-          y = ~intensity,
-          marker = list(
-            color = if (!is.null(color_cmp)) {
-              ~ I(color)
-            } else {
-              marker_fill_color
-            },
-            line = list(
-              # color = marker_border_color,
-              color = ~ I(linecolor),
-              width = 1
+        peaks_data <- plot_data$highlight_peaks[
+          !is.na(plot_data$highlight_peaks$intensity),
+        ]
+        for (peak_name in unique(peaks_data$name)) {
+          nd <- peaks_data[peaks_data$name == peak_name, ]
+          plot <- plotly::add_markers(
+            plot,
+            data = nd,
+            x = ~mass,
+            y = ~intensity,
+            name = peak_name,
+            marker = list(
+              color = if (!is.null(color_cmp)) {
+                ~ I(color)
+              } else {
+                marker_fill_color
+              },
+              line = list(color = ~ I(linecolor), width = 1),
+              symbol = ~ I(symbol),
+              size = 12,
+              zindex = 100
             ),
-            symbol = ~ I(symbol),
-            size = 12,
-            zindex = 100
-          ),
-          hoverinfo = "text",
-          text = ~ paste0(
-            "Name: ",
-            name,
-            "\nMeasured: ",
-            mass,
-            " Da",
-            "\nIntensity: ",
-            round(intensity, 2),
-            "%\n",
-            ifelse(
-              is.na(mass_stoich_label),
-              paste0("Theor. Mw: ", mw),
-              paste0("Mass Shifts: ", mass_stoich_label)
-            )
-          ),
-          showlegend = FALSE
-        )
+            hoverinfo = "text",
+            text = ~ paste0(
+              "Name: ",
+              name,
+              "\nMeasured: ",
+              mass,
+              " Da",
+              "\nIntensity: ",
+              round(intensity, 2),
+              "%\n",
+              ifelse(
+                is.na(mass_stoich_label),
+                paste0("Theor. Mw: ", mw),
+                paste0("Mass Shifts: ", mass_stoich_label)
+              )
+            ),
+            showlegend = TRUE
+          )
+        }
       }
 
       # Annotation logic for mass difference + per-peak labels
@@ -1404,6 +1372,13 @@ spectrum_plot <- function(
       xaxis = xaxis_list,
       shapes = all_shapes,
       annotations = all_annotations,
+      showlegend = !is.null(sample),
+      legend = list(
+        bgcolor = "rgba(0,0,0,0)",
+        font = list(color = font_color, size = 12),
+        itemclick = FALSE,
+        itemdoubleclick = FALSE
+      ),
       margin = list(t = 0, r = 0, b = 0, l = 50)
     ) |>
       plotly::config(
