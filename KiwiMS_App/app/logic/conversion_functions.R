@@ -3876,22 +3876,25 @@ multiple_spectra <- function(
         )
     }
 
-    # One legend entry per unique name+symbol (protein names as diamond,
-    # compound names as circle). A "Marker" legendgrouptitle separates them
-    # from the sample entries, and a fake invisible "Sample ID" header trace
-    # sits between the two sections so both labels appear at the same level.
     if (nrow(peaks_data) > 0 && !time) {
       name_entries <- peaks_data |>
         dplyr::filter(!is.na(name)) |>
         dplyr::distinct(name, symbol) |>
         dplyr::arrange(dplyr::desc(symbol == "diamond"), name)
 
+      protein_seen <- FALSE
+      compound_seen <- FALSE
+
       for (i in seq_len(nrow(name_entries))) {
         entry_name <- name_entries$name[i]
         sym <- name_entries$symbol[i]
         first_peak <- peaks_data[peaks_data$name == entry_name, ][1, ]
-        plot <- plotly::add_trace(
-          plot,
+        is_protein <- sym == "diamond"
+        lg <- if (is_protein) "proteins" else "compounds"
+        add_lgt <- (is_protein && !protein_seen) || (!is_protein && !compound_seen)
+
+        args <- list(
+          p = plot,
           inherit = FALSE,
           type = "scatter3d",
           mode = "markers",
@@ -3899,18 +3902,33 @@ multiple_spectra <- function(
           y = first_peak$intensity,
           z = as.character(first_peak$z),
           name = entry_name,
+          legendgroup = lg,
           marker = list(
             color = font_color,
             symbol = paste0(sym, "-open"),
-            size = 0,
-            line = list(color = font_color, width = 0)
+            size = 0.001
           ),
           visible = TRUE,
           showlegend = TRUE,
           legendrank = i,
           hoverinfo = "skip"
         )
+        if (add_lgt) {
+          args$legendgrouptitle <- list(
+            text = if (is_protein) "Proteins" else "Compounds",
+            font = list(color = font_color)
+          )
+        }
+        plot <- do.call(plotly::add_trace, args)
+
+        if (is_protein) protein_seen <- TRUE else compound_seen <- TRUE
       }
+
+      plot <- plotly::style(
+        plot,
+        legendgrouptitle = list(text = "Samples", font = list(color = font_color)),
+        traces = 1
+      )
     }
 
     plot |>
@@ -3921,7 +3939,9 @@ multiple_spectra <- function(
         legend = list(
           bgcolor = "rgba(0,0,0,0)",
           bordercolor = "rgba(0,0,0,0)",
-          font = list(color = font_color),
+          font = list(size = 11, color = font_color),
+          itemsizing = "constant",
+          tracegroupgap = 4,
           title = list(
             text = if (time) {
               paste0(
@@ -4114,38 +4134,36 @@ multiple_spectra <- function(
         showlegend = FALSE
       )
 
-    # One legend entry per unique name+symbol (protein names as diamond,
-    # compound names as circle). A "Marker" legendgrouptitle separates them
-    # from the sample entries, and a fake invisible "Sample ID" header trace
-    # sits between the two sections so both labels appear at the same level.
     if (nrow(peaks_data) > 0) {
       name_entries <- peaks_data |>
         dplyr::filter(!is.na(name)) |>
         dplyr::distinct(name, symbol) |>
         dplyr::arrange(dplyr::desc(symbol == "diamond"), name)
 
+      protein_seen <- FALSE
+      compound_seen <- FALSE
+
       for (i in seq_len(nrow(name_entries))) {
         entry_name <- name_entries$name[i]
         sym <- name_entries$symbol[i]
         first_peak <- peaks_data[peaks_data$name == entry_name, ][1, ]
-        plot_2d <- plotly::add_trace(
-          plot_2d,
+        is_protein <- sym == "diamond"
+        lg <- if (is_protein) "proteins" else "compounds"
+        add_lgt <- (is_protein && !protein_seen) || (!is_protein && !compound_seen)
+
+        args <- list(
+          p = plot_2d,
           inherit = FALSE,
           type = "scatter",
           mode = "markers",
           x = first_peak$mass,
           y = first_peak$intensity,
           name = entry_name,
-          legendgroup = "marker_type",
-          legendgrouptitle = if (i == 1) {
-            list(text = "Marker", font = list(color = font_color))
-          } else {
-            NULL
-          },
+          legendgroup = lg,
           marker = list(
             color = "rgba(0,0,0,0)",
             symbol = paste0(sym, "-open"),
-            size = 14,
+            size = 0.001,
             line = list(color = font_color, width = 2)
           ),
           visible = TRUE,
@@ -4153,7 +4171,22 @@ multiple_spectra <- function(
           legendrank = i,
           hoverinfo = "skip"
         )
+        if (add_lgt) {
+          args$legendgrouptitle <- list(
+            text = if (is_protein) "Proteins" else "Compounds",
+            font = list(color = font_color)
+          )
+        }
+        plot_2d <- do.call(plotly::add_trace, args)
+
+        if (is_protein) protein_seen <- TRUE else compound_seen <- TRUE
       }
+
+      plot_2d <- plotly::style(
+        plot_2d,
+        legendgrouptitle = list(text = "Samples", font = list(color = font_color)),
+        traces = 1
+      )
     }
 
     plot_2d |>
@@ -4176,7 +4209,9 @@ multiple_spectra <- function(
         legend = list(
           bgcolor = "rgba(0,0,0,0)",
           bordercolor = "rgba(0,0,0,0)",
-          font = list(color = font_color),
+          font = list(size = 11, color = font_color),
+          itemsizing = "constant",
+          tracegroupgap = 4,
           title = list(
             text = if (time) {
               paste0(
