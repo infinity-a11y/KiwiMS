@@ -1746,9 +1746,12 @@ binding_results_ui <- function(ns, hits_summary) {
                           "100"
                         )
                       ),
-                      shiny::uiOutput(ns(
-                        "compounds_distribution_labels_ui"
-                      )),
+                      shinyWidgets::materialSwitch(
+                        ns("cmp_distribution_labels"),
+                        label = "Show Labels",
+                        value = TRUE,
+                        right = TRUE
+                      ),
                       style = "margin-right: 20px;"
                     )
                   ),
@@ -2019,9 +2022,12 @@ binding_results_ui <- function(ns, hits_summary) {
                           "100"
                         )
                       ),
-                      shiny::uiOutput(ns(
-                        "proteins_distribution_labels_ui"
-                      )),
+                      shinyWidgets::materialSwitch(
+                        ns("protein_distribution_labels"),
+                        label = "Show Labels",
+                        value = TRUE,
+                        right = TRUE
+                      ),
                       style = "margin-right: 20px;"
                     )
                   ),

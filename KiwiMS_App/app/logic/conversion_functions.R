@@ -1533,7 +1533,12 @@ check_hits <- function(
   }
 
   # Calculate % unmatched and % correct
-  hits_df$unmatched <- unmatched <- sum(!peaks$mass %in% hits_df$peak) /
+  # hits_df$unmatched <- unmatched <- sum(!peaks$mass %in% hits_df$peak) /
+  #   nrow(peaks) *
+  #   100
+  hits_df$unmatched <- unmatched <- sum(
+    !peaks$mass %in% c(hits_df$peak, hits_df$measured_prot)
+  ) /
     nrow(peaks) *
     100
   hits_df$correct <- correct <- 100 - unmatched
@@ -3871,6 +3876,43 @@ multiple_spectra <- function(
         )
     }
 
+    # One legend entry per unique name+symbol (protein names as diamond,
+    # compound names as circle). A "Marker" legendgrouptitle separates them
+    # from the sample entries, and a fake invisible "Sample ID" header trace
+    # sits between the two sections so both labels appear at the same level.
+    if (nrow(peaks_data) > 0 && !time) {
+      name_entries <- peaks_data |>
+        dplyr::filter(!is.na(name)) |>
+        dplyr::distinct(name, symbol) |>
+        dplyr::arrange(dplyr::desc(symbol == "diamond"), name)
+
+      for (i in seq_len(nrow(name_entries))) {
+        entry_name <- name_entries$name[i]
+        sym <- name_entries$symbol[i]
+        first_peak <- peaks_data[peaks_data$name == entry_name, ][1, ]
+        plot <- plotly::add_trace(
+          plot,
+          inherit = FALSE,
+          type = "scatter3d",
+          mode = "markers",
+          x = first_peak$mass,
+          y = first_peak$intensity,
+          z = as.character(first_peak$z),
+          name = entry_name,
+          marker = list(
+            color = font_color,
+            symbol = paste0(sym, "-open"),
+            size = 0,
+            line = list(color = font_color, width = 0)
+          ),
+          visible = TRUE,
+          showlegend = TRUE,
+          legendrank = i,
+          hoverinfo = "skip"
+        )
+      }
+    }
+
     plot |>
       plotly::layout(
         paper_bgcolor = "rgba(0,0,0,0)",
@@ -3881,19 +3923,15 @@ multiple_spectra <- function(
           bordercolor = "rgba(0,0,0,0)",
           font = list(color = font_color),
           title = list(
-            text = paste(
-              "<b>",
-              ifelse(
-                time,
-                paste0(
-                  "Time [",
-                  gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
-                  "]  "
-                ),
-                "Sample ID"
-              ),
-              "</b>"
-            ),
+            text = if (time) {
+              paste0(
+                "<b> Time [",
+                gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+                "]  </b>"
+              )
+            } else {
+              ""
+            },
             color = font_color
           )
         ),
@@ -4000,7 +4038,7 @@ multiple_spectra <- function(
       )
     }
 
-    plotly::plot_ly(
+    plot_2d <- plotly::plot_ly(
       data = spectrum_data,
       x = ~mass,
       y = ~intensity,
@@ -4074,7 +4112,51 @@ multiple_spectra <- function(
           mw
         ),
         showlegend = FALSE
-      ) |>
+      )
+
+    # One legend entry per unique name+symbol (protein names as diamond,
+    # compound names as circle). A "Marker" legendgrouptitle separates them
+    # from the sample entries, and a fake invisible "Sample ID" header trace
+    # sits between the two sections so both labels appear at the same level.
+    if (nrow(peaks_data) > 0) {
+      name_entries <- peaks_data |>
+        dplyr::filter(!is.na(name)) |>
+        dplyr::distinct(name, symbol) |>
+        dplyr::arrange(dplyr::desc(symbol == "diamond"), name)
+
+      for (i in seq_len(nrow(name_entries))) {
+        entry_name <- name_entries$name[i]
+        sym <- name_entries$symbol[i]
+        first_peak <- peaks_data[peaks_data$name == entry_name, ][1, ]
+        plot_2d <- plotly::add_trace(
+          plot_2d,
+          inherit = FALSE,
+          type = "scatter",
+          mode = "markers",
+          x = first_peak$mass,
+          y = first_peak$intensity,
+          name = entry_name,
+          legendgroup = "marker_type",
+          legendgrouptitle = if (i == 1) {
+            list(text = "Marker", font = list(color = font_color))
+          } else {
+            NULL
+          },
+          marker = list(
+            color = "rgba(0,0,0,0)",
+            symbol = paste0(sym, "-open"),
+            size = 14,
+            line = list(color = font_color, width = 2)
+          ),
+          visible = TRUE,
+          showlegend = TRUE,
+          legendrank = i,
+          hoverinfo = "skip"
+        )
+      }
+    }
+
+    plot_2d |>
       plotly::layout(
         paper_bgcolor = "rgba(0,0,0,0)",
         plot_bgcolor = "rgba(0,0,0,0)",
@@ -4096,19 +4178,15 @@ multiple_spectra <- function(
           bordercolor = "rgba(0,0,0,0)",
           font = list(color = font_color),
           title = list(
-            text = paste(
-              "<b>",
-              ifelse(
-                time,
-                paste0(
-                  "Time [",
-                  gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
-                  "]  "
-                ),
-                "Sample ID"
-              ),
-              "</b>"
-            ),
+            text = if (time) {
+              paste0(
+                "<b> Time [",
+                gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+                "]  </b>"
+              )
+            } else {
+              ""
+            },
             color = font_color
           )
         )
@@ -4162,6 +4240,17 @@ filter_table_view <- function(table, colors, inputs, units) {
           )
         }
       },
+      `Theor. Cmp [Da]` = {
+        theor <- `Theor. Cmp [Da]`
+        valid <- !is.na(theor) & theor != "N/A"
+        if (any(valid)) theor[valid][1] else NA_character_
+      },
+      `Bind. Stoich.` = {
+        theor <- `Theor. Cmp [Da]`
+        stoich <- `Bind. Stoich.`
+        valid <- !is.na(theor) & theor != "N/A"
+        if (any(valid)) stoich[valid][1] else NA_character_
+      },
       `Binding [%]` = {
         pref <- `Binding [%]`[Preferred == "TRUE"]
         if (length(pref) > 0) pref[1] else `Binding [%]`[1]
@@ -4169,6 +4258,23 @@ filter_table_view <- function(table, colors, inputs, units) {
       `Tot. Binding [%]` = `Tot. Binding [%]`[1]
     ) |>
     dplyr::select(-`Peak Signal [Da]`)
+
+  table <- if (length(units) == 2) {
+    dplyr::arrange(
+      table,
+      `Cmp Name`,
+      as.numeric(.data[[units[["Concentration"]]]]),
+      as.numeric(.data[[units[["Time"]]]])
+    )
+  } else {
+    dplyr::arrange(
+      table,
+      `Cmp Name`,
+      `Tot. Binding [%]`,
+      `Binding [%]`,
+      `Sample ID`
+    )
+  }
 
   # Prepare data frame for table
   tbl <- table |>
@@ -4178,6 +4284,8 @@ filter_table_view <- function(table, colors, inputs, units) {
       `Cmp Name` = `Cmp Name`,
       dplyr::any_of(optional_cols),
       `Mass Shift` = mass_stoich_html,
+      `Theor. Cmp [Da]` = `Theor. Cmp [Da]`,
+      `Bind. Stoich.` = `Bind. Stoich.`,
       `Binding [%]` = `Binding [%]`,
       `Total %` = `Tot. Binding [%]`
     ) |>
@@ -4315,16 +4423,26 @@ render_table_view <- function(table, colors, tab, inputs, units) {
             "col_var",
             "label_color",
             "trunc_label",
+            "Theor. Cmp [Da]",
+            "Bind. Stoich.",
             if (tab == "Concentration") "Cmp Name"
           )
         ),
         list(className = 'dt-center', targets = "_all"),
         list(
           targets = "Binding [%]",
+          type = "num",
+          className = if (!is.null(render_binding)) "bar-chart-col" else NULL,
           render = render_binding
         ),
         list(
           targets = "Total %",
+          type = "num",
+          className = if (!is.null(render_tot_binding)) {
+            "bar-chart-col"
+          } else {
+            NULL
+          },
           render = render_tot_binding
         ),
         list(
@@ -4334,34 +4452,32 @@ render_table_view <- function(table, colors, tab, inputs, units) {
       )
     )
   ) |>
-    DT::formatRound(
-      columns = intersect(c("Binding [%]", "Total %"), names(table)),
-      digits = 2
-    ) |>
     DT::formatStyle(
       columns = "col_var",
       target = 'row',
       backgroundColor = DT::styleEqual(
-        levels = if (
-          length(units) == 2 && inputs$color_variable == units["Concentration"]
-        ) {
-          names(colors)
-        } else {
-          names(colors)
-        },
+        levels = names(colors),
         values = colors
       ),
       color = DT::styleEqual(
-        levels = if (
-          length(units) == 2 && inputs$color_variable == units["Concentration"]
-        ) {
-          names(colors)
-        } else {
-          names(colors)
-        },
+        levels = names(colors),
         values = get_contrast_color(colors)
       )
-    )
+    ) |>
+    (\(dt) {
+      if (tab == "Proteins") {
+        na_label <- if (!is.null(row_group)) "Compound: N/A" else "N/A"
+        dt |>
+          DT::formatStyle(
+            "Cmp Name",
+            target = "row",
+            backgroundColor = DT::styleEqual(na_label, "transparent"),
+            color = DT::styleEqual(na_label, "inherit")
+          )
+      } else {
+        dt
+      }
+    })()
 }
 
 # Selection and filtering of hits table
@@ -5660,15 +5776,6 @@ prot_compound_distribution <- function(
   distribution_labels = NULL,
   theme = "dark"
 ) {
-  hits_summary2 <<- hits_summary
-  protein <<- protein
-  color_variable <<- color_variable
-  truncate_names <<- truncate_names
-  color_scale <<- color_scale
-  distribution_scale <<- distribution_scale
-  distribution_labels <<- distribution_labels
-  theme1 <<- theme
-
   tbl <- hits_summary |>
     dplyr::filter(
       `Protein` == protein &
@@ -5690,13 +5797,13 @@ prot_compound_distribution <- function(
 
   # Merge non-preferred hits (same peak) into their preferred counterpart
   tbl <- tbl |>
-    dplyr::arrange(
-      `Cmp Name`,
-      `Sample ID`,
-      `Peak Signal [Da]`,
-      dplyr::desc(Preferred == "TRUE"),
-      dplyr::desc(suppressWarnings(as.numeric(`Theor. Cmp [Da]`)))
-    ) |>
+    # dplyr::arrange(
+    #   `Cmp Name`,
+    #   `Sample ID`,
+    #   `Peak Signal [Da]`,
+    #   dplyr::desc(Preferred == "TRUE"),
+    #   dplyr::desc(suppressWarnings(as.numeric(`Theor. Cmp [Da]`)))
+    # ) |>
     dplyr::group_by(`Cmp Name`, `Sample ID`, `Peak Signal [Da]`) |>
     dplyr::reframe(
       `Protein` = `Protein`[1],
@@ -5720,7 +5827,8 @@ prot_compound_distribution <- function(
         if (length(pref) > 0) pref[1] else `Binding [%]`[1]
       }
     ) |>
-    dplyr::select(-`Peak Signal [Da]`)
+    dplyr::select(-`Peak Signal [Da]`) |>
+    dplyr::arrange(`Cmp Name`, `Tot. Binding [%]`, `Binding [%]`, `Sample ID`)
 
   tbl <- tbl |>
     dplyr::group_by(`Cmp Name`) |>
@@ -5895,7 +6003,7 @@ prot_compound_distribution <- function(
         hoverlabel = list(align = "left", valign = "middle"),
         marker = list(
           color = col,
-          line = list(color = row$label_color[[1]], width = 1)
+          line = list(color = axis_color, width = 1)
         ),
         yaxis = yax,
         showlegend = FALSE
@@ -5970,7 +6078,7 @@ prot_compound_distribution <- function(
         text = ~mass_stoich,
         textposition = 'inside',
         textfont = list(size = 12),
-        marker = list(line = list(color = ~label_color, width = 1)),
+        marker = list(line = list(color = axis_color, width = 1)),
         showlegend = FALSE
       )
 
@@ -6078,6 +6186,7 @@ cmp_compound_distribution <- function(
       }
     ) |>
     dplyr::select(-`Peak Signal [Da]`) |>
+    dplyr::arrange(`Tot. Binding [%]`, `Binding [%]`, `Sample ID`) |>
     dplyr::mutate(
       `Sample ID` = if (truncate_names) `truncSample_ID` else `Sample ID`
     )
@@ -6148,7 +6257,7 @@ cmp_compound_distribution <- function(
       text = ~mass_stoich,
       textposition = 'inside',
       textfont = list(size = 12),
-      marker = list(line = list(color = ~label_color, width = 1)),
+      marker = list(line = list(color = axis_color, width = 1)),
       showlegend = FALSE
     )
 
@@ -6203,12 +6312,12 @@ cmp_compound_distribution <- function(
         showgrid = FALSE,
         zeroline = FALSE,
         color = axis_color,
-        showticklabels = TRUE
-        #   ifelse(
-        #   !is.null(distribution_labels),
-        #   distribution_labels,
-        #   max(nchar(levels(tbl$`Sample ID`))) <= 22 | nrow(tbl) < 4
-        # )
+        showticklabels = ifelse(
+          !is.null(distribution_labels),
+          distribution_labels,
+          max(nchar(as.character(unique(tbl$`Sample ID`)))) <= 22 |
+            nrow(tbl) < 4
+        )
       ),
       yaxis = list(
         range = range,
@@ -6558,9 +6667,20 @@ stats_boxplot <- function(
       hovertemplate = hover_tmpl,
       showlegend = FALSE,
       hoverlabel = list(
-        bgcolor = if (theme == "dark") "rgba(50,52,60,0.95)" else "rgba(255,255,255,0.9)",
-        bordercolor = if (theme == "dark") "rgba(200,200,200,0.4)" else "rgba(0,0,0,0.2)",
-        font = list(color = if (theme == "dark") "#ffffff" else "#000000", size = 12)
+        bgcolor = if (theme == "dark") {
+          "rgba(50,52,60,0.95)"
+        } else {
+          "rgba(255,255,255,0.9)"
+        },
+        bordercolor = if (theme == "dark") {
+          "rgba(200,200,200,0.4)"
+        } else {
+          "rgba(0,0,0,0.2)"
+        },
+        font = list(
+          color = if (theme == "dark") "#ffffff" else "#000000",
+          size = 12
+        )
       ),
       marker = list(
         color = "rgba(0,0,0,0)",
@@ -6607,22 +6727,22 @@ stats_boxplot <- function(
     )
   }
 
-  q1_bp   <- unname(stats::quantile(metric_vals_bp, 0.25, na.rm = TRUE))
-  med_bp  <- stats::median(metric_vals_bp, na.rm = TRUE)
+  q1_bp <- unname(stats::quantile(metric_vals_bp, 0.25, na.rm = TRUE))
+  med_bp <- stats::median(metric_vals_bp, na.rm = TRUE)
   mean_bp <- mean(metric_vals_bp, na.rm = TRUE)
-  q3_bp   <- unname(stats::quantile(metric_vals_bp, 0.75, na.rm = TRUE))
+  q3_bp <- unname(stats::quantile(metric_vals_bp, 0.75, na.rm = TRUE))
 
   sa_font <- list(color = font_color, size = 10)
   # When median and mean are within 1.5% of each other, nudge them apart
   # symmetrically by ±0.75%, preserving their relative order so each label
   # stays on the correct side of the other
   if (abs(mean_bp - med_bp) < 1.5) {
-    mid_mm    <- (med_bp + mean_bp) / 2
+    mid_mm <- (med_bp + mean_bp) / 2
     direction <- if (mean_bp >= med_bp) 1 else -1
-    med_y     <- mid_mm - direction * 0.75
-    mean_y    <- mid_mm + direction * 0.75
+    med_y <- mid_mm - direction * 0.75
+    mean_y <- mid_mm + direction * 0.75
   } else {
-    med_y  <- med_bp
+    med_y <- med_bp
     mean_y <- mean_bp
   }
 
@@ -6630,24 +6750,48 @@ stats_boxplot <- function(
     bp_annots,
     list(
       list(
-        x = 0.65, xref = "paper", y = q1_bp, yref = "y",
+        x = 0.65,
+        xref = "paper",
+        y = q1_bp,
+        yref = "y",
         text = sprintf("Q1: %.2f%%", q1_bp),
-        showarrow = FALSE, xanchor = "left", yanchor = "middle", font = sa_font
+        showarrow = FALSE,
+        xanchor = "left",
+        yanchor = "middle",
+        font = sa_font
       ),
       list(
-        x = 0.65, xref = "paper", y = med_y, yref = "y",
+        x = 0.65,
+        xref = "paper",
+        y = med_y,
+        yref = "y",
         text = sprintf("Median: %.2f%%", med_bp),
-        showarrow = FALSE, xanchor = "left", yanchor = "middle", font = sa_font
+        showarrow = FALSE,
+        xanchor = "left",
+        yanchor = "middle",
+        font = sa_font
       ),
       list(
-        x = 0.65, xref = "paper", y = mean_y, yref = "y",
+        x = 0.65,
+        xref = "paper",
+        y = mean_y,
+        yref = "y",
         text = sprintf("Mean: %.2f%%", mean_bp),
-        showarrow = FALSE, xanchor = "left", yanchor = "middle", font = sa_font
+        showarrow = FALSE,
+        xanchor = "left",
+        yanchor = "middle",
+        font = sa_font
       ),
       list(
-        x = 0.65, xref = "paper", y = q3_bp, yref = "y",
+        x = 0.65,
+        xref = "paper",
+        y = q3_bp,
+        yref = "y",
         text = sprintf("Q3: %.2f%%", q3_bp),
-        showarrow = FALSE, xanchor = "left", yanchor = "middle", font = sa_font
+        showarrow = FALSE,
+        xanchor = "left",
+        yanchor = "middle",
+        font = sa_font
       )
     )
   )
@@ -6655,7 +6799,7 @@ stats_boxplot <- function(
   p |>
     plotly::layout(
       paper_bgcolor = "rgba(0,0,0,0)",
-      plot_bgcolor  = "rgba(0,0,0,0)",
+      plot_bgcolor = "rgba(0,0,0,0)",
       font = list(size = 14, color = font_color),
       legend = list(bgcolor = "rgba(0,0,0,0)", font = list(color = font_color)),
       hoverlabel = if (theme == "dark") {

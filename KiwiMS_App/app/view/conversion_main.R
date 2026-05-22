@@ -1802,7 +1802,6 @@ server <- function(
           output$compounds_compound_distribution_ui <- NULL
           output$compounds_compound_distribution <- NULL
           output$compounds_present_compounds_na <- NULL
-          output$compounds_distribution_labels_ui <- NULL
           output$cmp_annotated_spectrum_na <- NULL
           output$cmp_annotated_spectrum_container <- NULL
           output$compounds_annotated_spectrum <- NULL
@@ -1814,7 +1813,6 @@ server <- function(
           output$proteins_present_compounds_ui <- NULL
           output$proteins_present_compounds_na <- NULL
           output$proteins_compound_distribution <- NULL
-          output$protein_distribution_labels_ui <- NULL
           output$annotated_spectrum_container <- NULL
           output$proteins_annotated_spectrum <- NULL
           output$proteins_spectrum_labels_ui <- NULL
@@ -1906,7 +1904,8 @@ server <- function(
                 `Protein`,
                 `Cmp Name`,
                 `Tot. Binding [%]`,
-                `Binding [%]`
+                `Binding [%]`,
+                `Sample ID`
               )
           }
 
@@ -1925,8 +1924,6 @@ server <- function(
             mapping$original
           )]
           conversion_vars$hits_summary <- hits_summary
-
-          foo <<- hits_summary
 
           ### Render result interfaces ----
           if (analysis_select == 2) {
@@ -2465,30 +2462,30 @@ server <- function(
                 cmp_dist_settings()
               )
 
-            ####### Show label input UI ----
-            output$compounds_distribution_labels_ui <- shiny::renderUI({
-              shiny::req(hits_summary, input$conversion_compound_picker)
+            ####### Show label input (update static switch) ----
+            shiny::observeEvent(
+              list(input$conversion_compound_picker, input$truncate_names),
+              {
+                shiny::req(hits_summary, input$conversion_compound_picker)
 
-              tbl <- hits_summary |>
-                dplyr::filter(`Cmp Name` == input$conversion_compound_picker)
+                tbl <- hits_summary |>
+                  dplyr::filter(`Cmp Name` == input$conversion_compound_picker)
+                tbl1 <<- tbl
+                sample_ids <- if (input$truncate_names) {
+                  tbl$`truncSample_ID`
+                } else {
+                  tbl$`Sample ID`
+                }
+                sample_ids1 <<- sample_ids
 
-              if (input$truncate_names) {
-                sample_ids <- tbl$`truncSample_ID`
-              } else {
-                sample_ids <- tbl$`Sample ID`
-              }
-
-              # condition <- max(nchar(unique(sample_ids))) <= 22 |
-              #   nrow(tbl) < 4
-              condition <- TRUE
-
-              shinyWidgets::materialSwitch(
-                ns("cmp_distribution_labels"),
-                label = "Show Labels",
-                value = condition,
-                right = TRUE
-              )
-            })
+                shinyWidgets::updateMaterialSwitch(
+                  session,
+                  "cmp_distribution_labels",
+                  value = max(nchar(unique(sample_ids))) <= 22 | nrow(tbl) < 4
+                )
+              },
+              ignoreInit = TRUE
+            )
 
             ###### Annotated spectrum ----
 
@@ -2987,35 +2984,35 @@ server <- function(
               )
 
             ####### Show label input UI ----
-            output$protein_distribution_labels_ui <- shiny::renderUI({
-              shiny::req(
-                hits_summary,
-                input$conversion_protein_picker,
-                input$truncate_names
-              )
+            ####### Show label input (update static switch) ----
+            shiny::observeEvent(
+              list(input$conversion_protein_picker, input$truncate_names),
+              {
+                shiny::req(hits_summary, input$conversion_protein_picker)
+                tbl <- hits_summary |>
+                  dplyr::filter(`Protein` == input$conversion_protein_picker)
+                tbl <<- tbl
+                sample_ids <- if (input$truncate_names) {
+                  tbl$`truncSample_ID`
+                } else {
+                  tbl$`Sample ID`
+                }
+                sample_ids <<- sample_ids
 
-              tbl <- hits_summary |>
-                dplyr::filter(`Protein` == input$conversion_protein_picker)
+                condition <- ifelse(
+                  length(unique(tbl$`Cmp Name`)) > 1,
+                  max(nchar(unique(sample_ids)), na.rm = TRUE) <= 22,
+                  max(nchar(unique(tbl$`Cmp Name`)), na.rm = TRUE) <= 22
+                )
 
-              if (input$truncate_names) {
-                sample_ids <- tbl$`truncSample_ID`
-              } else {
-                sample_ids <- tbl$`Sample ID`
-              }
-
-              condition <- ifelse(
-                length(unique(tbl$`Cmp Name`)) > 1,
-                max(nchar(unique(sample_ids))) <= 22,
-                max(nchar(unique(tbl$`Cmp Name`))) <= 22
-              )
-
-              shinyWidgets::materialSwitch(
-                ns("protein_distribution_labels"),
-                label = "Show Labels",
-                value = condition,
-                right = TRUE
-              )
-            })
+                shinyWidgets::updateMaterialSwitch(
+                  session,
+                  "protein_distribution_labels",
+                  value = condition
+                )
+              },
+              ignoreInit = TRUE
+            )
 
             ###### Annotated spectrum ----
 
@@ -3251,9 +3248,9 @@ server <- function(
                   color_variable = input$color_variable
                 )
 
-                # Get colors
+                # Get colors — exclude N/A compound rows so scale spans only real hits
                 colors <- get_cmp_colorScale(
-                  filtered_table = tbl,
+                  filtered_table = dplyr::filter(tbl, !is.na(`Cmp Name`)),
                   scale = input$color_scale,
                   variable = input$color_variable,
                   trunc = input$truncate_names

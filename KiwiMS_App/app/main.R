@@ -147,11 +147,26 @@ ui <- function(id) {
         }
         document.body.style.cursor = 'progress';
         var div = document.createElement('div');
-        div.className = 'plotly-dl-offscreen';
         div.style.width  = q.width  + 'px';
         div.style.height = q.height + 'px';
+        if (isCubicSpectra) {
+          // WebGL (scatter3d) requires the element to be in the visible viewport —
+          // browsers skip WebGL rendering for off-screen elements, producing a blank canvas.
+          // Position in-viewport but invisible to the user.
+          div.style.position = 'fixed';
+          div.style.top = '0';
+          div.style.left = '0';
+          div.style.zIndex = '99999';
+          div.style.opacity = '0.001';
+          div.style.pointerEvents = 'none';
+        } else {
+          div.className = 'plotly-dl-offscreen';
+        }
         document.body.appendChild(div);
         Plotly.newPlot(div, fig.data, fig.layout, fig.config || {}).then(function() {
+          // For WebGL/3D, wait for the GPU to finish rendering before screenshotting.
+          return new Promise(function(resolve) { setTimeout(resolve, isCubicSpectra ? 800 : 0); });
+        }).then(function() {
           return Plotly.downloadImage(div, {
             format: msg.format, width: q.width, height: q.height,
             scale: msg.format === 'svg' ? 1 : q.scale, filename: msg.filename

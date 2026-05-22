@@ -769,8 +769,8 @@ server <- function(
           inputId = ns("analysis_select"),
           label = NULL,
           choiceNames = list(
-            "Summary",
-            "Hits",
+            "Summary Statistics",
+            "Hits Table",
             "Relative Binding",
             shiny::span(
               "K",

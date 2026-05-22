@@ -265,7 +265,8 @@ prepare_hits_export <- function(table) {
         "truncSample_ID",
         "label_color",
         "col_var",
-        "trunc_label"
+        "trunc_label",
+        "Mass Shift"
       )
   ]
 }
