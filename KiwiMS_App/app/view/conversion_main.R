@@ -137,6 +137,50 @@ ui <- function(id) {
           });
           _kiwiClickObserver.observe(document.body, {childList: true, subtree: true});
         });
+
+        var _scatterClickObservers = {};
+
+        function bindScatterClicks(inputId, plotElId) {
+          var container = document.getElementById(plotElId);
+          if (!container) return;
+          var el = container.classList.contains('js-plotly-plot')
+            ? container
+            : container.querySelector('.js-plotly-plot');
+          if (!el) return;
+
+          // Remove previous handler before re-binding so Plotly re-renders
+          // (which call newPlot and clear the event system) don't leave us
+          // without a listener. Unlike heatmap tiles (recreated via renderUI),
+          // this element persists in the DOM, so we cannot rely on an
+          // already-bound attribute guard.
+          if (el._kiwiScatterHandler) {
+            try { el.removeListener('plotly_click', el._kiwiScatterHandler); } catch(e) {}
+          }
+          el._kiwiScatterHandler = function(d) {
+            if (d && d.points && d.points.length > 0) {
+              var pt = d.points[0];
+              console.log('[KiwiMS] scatter click sample=' + pt.customdata);
+              Shiny.setInputValue(inputId, {sample: pt.customdata}, {priority: 'event'});
+            }
+          };
+          el.on('plotly_click', el._kiwiScatterHandler);
+        }
+
+        Shiny.addCustomMessageHandler('kiwiMS_attachScatterClicks', function(msg) {
+          var inputId = msg.inputId;
+          var plotElId = msg.plotElId;
+          bindScatterClicks(inputId, plotElId);
+          // Each plot gets its own observer so sending messages for multiple
+          // plots does not disconnect the observers of the earlier ones.
+          if (_scatterClickObservers[plotElId]) {
+            _scatterClickObservers[plotElId].disconnect();
+          }
+          var obs = new MutationObserver(function() {
+            bindScatterClicks(inputId, plotElId);
+          });
+          obs.observe(document.body, {childList: true, subtree: true});
+          _scatterClickObservers[plotElId] = obs;
+        });
       })();
     "
     )),
@@ -190,6 +234,9 @@ server <- function(
     trigger_ki_kinact <- shiny::reactiveVal(0L)
     manual_render_spectrum <- shiny::reactiveVal(0L)
     heatmap_pending_sample <- shiny::reactiveVal(NULL)
+    stats_scatter_pending_sample <- shiny::reactiveVal(NULL)
+    stats_boxplot_pending_sample <- shiny::reactiveVal(NULL)
+    stats_violin_pending_sample <- shiny::reactiveVal(NULL)
     manual_render_cmp_spectrum <- shiny::reactiveVal(0L)
 
     # Apply initial disabled styling for samples_fileinput after DOM is ready
@@ -1878,6 +1925,8 @@ server <- function(
             mapping$original
           )]
           conversion_vars$hits_summary <- hits_summary
+
+          foo <<- hits_summary
 
           ### Render result interfaces ----
           if (analysis_select == 2) {
@@ -3842,6 +3891,7 @@ server <- function(
               })
             }
           } else if (analysis_select == 1) {
+            #### Render Summary interface ----
             output$conversion_ui <- shiny::renderUI({
               summary_results_ui(
                 ns,
@@ -4290,6 +4340,27 @@ server <- function(
               "kiwiMS_attachHeatmapClicks",
               list(inputId = session$ns("heatmap_well_click"))
             )
+            session$sendCustomMessage(
+              "kiwiMS_attachScatterClicks",
+              list(
+                inputId = session$ns("stats_scatter_click"),
+                plotElId = session$ns("stats_scatter")
+              )
+            )
+            session$sendCustomMessage(
+              "kiwiMS_attachScatterClicks",
+              list(
+                inputId = session$ns("stats_boxplot_click"),
+                plotElId = session$ns("stats_boxplot")
+              )
+            )
+            session$sendCustomMessage(
+              "kiwiMS_attachScatterClicks",
+              list(
+                inputId = session$ns("stats_violin_click"),
+                plotElId = session$ns("stats_violin")
+              )
+            )
 
             # Well click → navigate to Relative Binding / Samples View.
             # ignoreInit = TRUE prevents the newly-created observer from firing
@@ -4352,6 +4423,105 @@ server <- function(
               )
               set_selected_tab("Samples View", session)
               heatmap_pending_sample(NULL)
+            })
+
+            # Scatter click → navigate to Relative Binding / Samples View
+            shiny::observeEvent(
+              input$stats_scatter_click,
+              {
+                click <- input$stats_scatter_click
+                shiny::req(
+                  !is.null(click),
+                  !is.null(click$sample),
+                  nzchar(trimws(as.character(click$sample)))
+                )
+                stats_scatter_pending_sample(as.character(click$sample))
+                shinyjs::runjs(
+                  "document.querySelector('#app-conversion_sidebar-analysis_select input[value=\"2\"]').click();"
+                )
+              },
+              ignoreNULL = TRUE,
+              ignoreInit = TRUE
+            )
+
+            shiny::observe({
+              pending <- stats_scatter_pending_sample()
+              shiny::req(!is.null(pending))
+              shiny::req(conversion_sidebar_vars$analysis_select() == 2)
+              shiny::req(!is.null(input$conversion_sample_picker))
+              shinyWidgets::updatePickerInput(
+                session,
+                "conversion_sample_picker",
+                selected = pending
+              )
+              set_selected_tab("Samples View", session)
+              stats_scatter_pending_sample(NULL)
+            })
+
+            # Boxplot point click → navigate to Relative Binding / Samples View
+            shiny::observeEvent(
+              input$stats_boxplot_click,
+              {
+                click <- input$stats_boxplot_click
+                shiny::req(
+                  !is.null(click),
+                  !is.null(click$sample),
+                  nzchar(trimws(as.character(click$sample)))
+                )
+                stats_boxplot_pending_sample(as.character(click$sample))
+                shinyjs::runjs(
+                  "document.querySelector('#app-conversion_sidebar-analysis_select input[value=\"2\"]').click();"
+                )
+              },
+              ignoreNULL = TRUE,
+              ignoreInit = TRUE
+            )
+
+            shiny::observe({
+              pending <- stats_boxplot_pending_sample()
+              shiny::req(!is.null(pending))
+              shiny::req(conversion_sidebar_vars$analysis_select() == 2)
+              shiny::req(!is.null(input$conversion_sample_picker))
+              shinyWidgets::updatePickerInput(
+                session,
+                "conversion_sample_picker",
+                selected = pending
+              )
+              set_selected_tab("Samples View", session)
+              stats_boxplot_pending_sample(NULL)
+            })
+
+            # Violin point click → navigate to Relative Binding / Samples View
+            shiny::observeEvent(
+              input$stats_violin_click,
+              {
+                click <- input$stats_violin_click
+                shiny::req(
+                  !is.null(click),
+                  !is.null(click$sample),
+                  nzchar(trimws(as.character(click$sample)))
+                )
+                stats_violin_pending_sample(as.character(click$sample))
+                shinyjs::runjs(
+                  "document.querySelector('#app-conversion_sidebar-analysis_select input[value=\"2\"]').click();"
+                )
+              },
+              ignoreNULL = TRUE,
+              ignoreInit = TRUE
+            )
+
+            shiny::observe({
+              pending <- stats_violin_pending_sample()
+              shiny::req(!is.null(pending))
+              shiny::req(conversion_sidebar_vars$analysis_select() == 2)
+              shiny::req(!is.null(input$conversion_sample_picker))
+              shinyWidgets::updatePickerInput(
+                session,
+                "conversion_sample_picker",
+                selected = pending
+              )
+              set_selected_tab("Samples View", session)
+              stats_violin_pending_sample(NULL)
             })
 
             shiny::observe({
@@ -4883,7 +5053,9 @@ server <- function(
             shiny::observeEvent(
               input$hits_tab_col_select,
               {
-                if (!identical(hits_col_selection(), input$hits_tab_col_select)) {
+                if (
+                  !identical(hits_col_selection(), input$hits_tab_col_select)
+                ) {
                   hits_col_selection(input$hits_tab_col_select)
                 }
               },
@@ -4934,7 +5106,11 @@ server <- function(
                   value = TRUE
                 )
                 valid_adduct_cols <- intersect(
-                  if (is.null(hits_col_selection())) input$hits_tab_col_select else hits_col_selection(),
+                  if (is.null(hits_col_selection())) {
+                    input$hits_tab_col_select
+                  } else {
+                    hits_col_selection()
+                  },
                   names(hits_table)
                 )
                 always_cols <- c(
@@ -4953,7 +5129,11 @@ server <- function(
                   units = units
                 )
               } else {
-                hits_sel <- if (is.null(hits_col_selection())) input$hits_tab_col_select else hits_col_selection()
+                hits_sel <- if (is.null(hits_col_selection())) {
+                  input$hits_tab_col_select
+                } else {
+                  hits_col_selection()
+                }
                 binding_pos <- which(hits_sel == "Binding [%]")
                 if (length(binding_pos) > 0) {
                   hits_sel <- append(
@@ -5043,83 +5223,87 @@ server <- function(
             )
 
             ##### Update column selector when display mode changes ----
-            shiny::observeEvent(input$hits_per_adduct, {
-              always_excluded <- c(
-                "Sample ID",
-                "Protein",
-                "Cmp Name",
-                "truncSample_ID",
-                "Tot. Binding [%]",
-                if ("Concentration" %in% names(units)) {
-                  units[["Concentration"]]
-                } else {
-                  NULL
-                },
-                if ("Time" %in% names(units)) units[["Time"]] else NULL
-              )
+            shiny::observeEvent(
+              input$hits_per_adduct,
+              {
+                always_excluded <- c(
+                  "Sample ID",
+                  "Protein",
+                  "Cmp Name",
+                  "truncSample_ID",
+                  "Tot. Binding [%]",
+                  if ("Concentration" %in% names(units)) {
+                    units[["Concentration"]]
+                  } else {
+                    NULL
+                  },
+                  if ("Time" %in% names(units)) units[["Time"]] else NULL
+                )
 
-              if (input$hits_per_adduct == "Adduct View") {
-                adduct_cols <- names(transform_per_adduct(
-                  hits_summary,
-                  proteins_table = protein_table_data(),
-                  compounds_table = compound_table_data(),
-                  samples_table = declaration_vars$sample_table
-                ))
-                adduct_binding_cols <- grep(
-                  "^(Binding|Total Binding) \\(",
-                  adduct_cols,
-                  value = TRUE
-                )
-                adduct_mass_cols <- grep("^Mass ", adduct_cols, value = TRUE)
-                new_choices <- adduct_cols[
-                  !adduct_cols %in%
-                    c(always_excluded, adduct_binding_cols, adduct_mass_cols)
-                ]
-                adduct_selected <- new_choices[
-                  new_choices %in%
-                    c(
-                      "Theor. Prot. [Da]",
-                      "Int. Prot. [%]",
-                      "Theor. Cmp [Da]",
-                      "Bind. Stoich.",
-                      "Binding [%]",
-                      "Correct [%]"
-                    )
-                ]
-                hits_col_selection(adduct_selected)
-                shinyWidgets::updatePickerInput(
-                  session,
-                  "hits_tab_col_select",
-                  choices = new_choices,
-                  selected = adduct_selected
-                )
-              } else {
-                per_hit_choices <- names(hits_summary)[
-                  !names(hits_summary) %in% always_excluded
-                ]
-                per_hit_selected <- per_hit_choices[
-                  !per_hit_choices %in%
-                    c(
-                      "Well",
-                      "Replicate",
-                      "Unmatched [%]",
-                      "Preferred",
-                      "Meas. Prot. [Da]",
-                      "Δ Prot. [Da]",
-                      "Int. Prot. [%]",
-                      "Int. Cmp [%]",
-                      "Δ Cmp [Da]"
-                    )
-                ]
-                hits_col_selection(per_hit_selected)
-                shinyWidgets::updatePickerInput(
-                  session,
-                  "hits_tab_col_select",
-                  choices = per_hit_choices,
-                  selected = per_hit_selected
-                )
-              }
-            }, ignoreInit = TRUE)
+                if (input$hits_per_adduct == "Adduct View") {
+                  adduct_cols <- names(transform_per_adduct(
+                    hits_summary,
+                    proteins_table = protein_table_data(),
+                    compounds_table = compound_table_data(),
+                    samples_table = declaration_vars$sample_table
+                  ))
+                  adduct_binding_cols <- grep(
+                    "^(Binding|Total Binding) \\(",
+                    adduct_cols,
+                    value = TRUE
+                  )
+                  adduct_mass_cols <- grep("^Mass ", adduct_cols, value = TRUE)
+                  new_choices <- adduct_cols[
+                    !adduct_cols %in%
+                      c(always_excluded, adduct_binding_cols, adduct_mass_cols)
+                  ]
+                  adduct_selected <- new_choices[
+                    new_choices %in%
+                      c(
+                        "Theor. Prot. [Da]",
+                        "Int. Prot. [%]",
+                        "Theor. Cmp [Da]",
+                        "Bind. Stoich.",
+                        "Binding [%]",
+                        "Correct [%]"
+                      )
+                  ]
+                  hits_col_selection(adduct_selected)
+                  shinyWidgets::updatePickerInput(
+                    session,
+                    "hits_tab_col_select",
+                    choices = new_choices,
+                    selected = adduct_selected
+                  )
+                } else {
+                  per_hit_choices <- names(hits_summary)[
+                    !names(hits_summary) %in% always_excluded
+                  ]
+                  per_hit_selected <- per_hit_choices[
+                    !per_hit_choices %in%
+                      c(
+                        "Well",
+                        "Replicate",
+                        "Unmatched [%]",
+                        "Preferred",
+                        "Meas. Prot. [Da]",
+                        "Δ Prot. [Da]",
+                        "Int. Prot. [%]",
+                        "Int. Cmp [%]",
+                        "Δ Cmp [Da]"
+                      )
+                  ]
+                  hits_col_selection(per_hit_selected)
+                  shinyWidgets::updatePickerInput(
+                    session,
+                    "hits_tab_col_select",
+                    choices = per_hit_choices,
+                    selected = per_hit_selected
+                  )
+                }
+              },
+              ignoreInit = TRUE
+            )
 
             ##### Hits unified table clicking observer ----
             shiny::observeEvent(

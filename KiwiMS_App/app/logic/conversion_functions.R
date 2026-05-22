@@ -4269,20 +4269,20 @@ render_table_view <- function(table, colors, tab, inputs, units) {
   if (isTRUE(inputs$truncate_names) && "trunc_label" %in% names(table)) {
     table[["Sample ID"]] <- table[["trunc_label"]]
   }
+  if (!is.null(inputs$binding_bar) && !isTRUE(inputs$binding_bar)) {
+    table[["Binding [%]"]] <- sprintf("%.2f", table[["Binding [%]"]])
+  }
+  if (!is.null(inputs$tot_binding_bar) && !isTRUE(inputs$tot_binding_bar)) {
+    table[["Total %"]] <- sprintf("%.2f", table[["Total %"]])
+  }
 
-  # Add human-readable prefix to group rows (after truncation so it isn't overwritten)
+  # Add  prefix to group rows
   if (!is.null(row_group)) {
     if (tab == "Compounds") {
       table$`Sample ID` <- paste("Sample:", table$`Sample ID`)
     } else if (any(tab %in% c("Samples", "Proteins"))) {
       table$`Cmp Name` <- paste("Compound:", table$`Cmp Name`)
     }
-  }
-  if (!is.null(inputs$binding_bar) && !isTRUE(inputs$binding_bar)) {
-    table[["Binding [%]"]] <- sprintf("%.2f", table[["Binding [%]"]])
-  }
-  if (!is.null(inputs$tot_binding_bar) && !isTRUE(inputs$tot_binding_bar)) {
-    table[["Total %"]] <- sprintf("%.2f", table[["Total %"]])
   }
 
   DT::datatable(
@@ -4417,11 +4417,6 @@ transform_per_adduct <- function(
   compounds_table,
   samples_table
 ) {
-  hits_table3333 <<- hits_table
-  proteins_table <<- proteins_table
-  compounds_table <<- compounds_table
-  samples_table <<- samples_table
-
   # Get distinct adducts
   distinct_adducts <- dplyr::distinct(hits_table, `Sample ID`, `Cmp Name`)
 
@@ -4472,7 +4467,9 @@ transform_per_adduct <- function(
         ]
 
         mass_no <- which(cmp_mass_shifts %in% as.numeric(mass_shift))
-        if (length(mass_no) == 0) next
+        if (length(mass_no) == 0) {
+          next
+        }
 
         binding_vals <- as.list(hits_table_subset_mass_shift$`Binding [%]`)
         names(binding_vals) <- paste0(
@@ -4594,18 +4591,6 @@ render_hits_table <- function(
   per_adduct = FALSE,
   units
 ) {
-  hits_table <<- hits_table
-  concentration_colors <<- concentration_colors
-  single_conc <<- single_conc
-  bar_chart <<- bar_chart
-  colors1 <<- colors
-  color_variable <<- color_variable
-  truncated <<- truncated
-  clickable <<- clickable
-  valid_concentrations <<- valid_concentrations
-  per_adduct <<- per_adduct
-  units1 <<- units
-
   # Adapt table layout
   if (!is.null(single_conc)) {
     menu_length <- list(c(25, -1), c('25', 'All'))
@@ -4750,7 +4735,13 @@ render_hits_table <- function(
       paging = ifelse(!is.null(single_conc), TRUE, FALSE),
       columnDefs = list(
         list(className = 'dt-center', targets = "_all"),
-        list(className = 'dt-left', targets = 0),
+        list(
+          targets = 0,
+          className = 'dt-left',
+          createdCell = htmlwidgets::JS(
+            "function(td) { td.style.textAlign = 'left'; }"
+          )
+        ),
         if (length(bar_chart) > 0 & any(bar_chart %in% names(hits_table))) {
           list(
             targets = bar_chart[bar_chart %in% names(hits_table)],
@@ -5669,6 +5660,15 @@ prot_compound_distribution <- function(
   distribution_labels = NULL,
   theme = "dark"
 ) {
+  hits_summary2 <<- hits_summary
+  protein <<- protein
+  color_variable <<- color_variable
+  truncate_names <<- truncate_names
+  color_scale <<- color_scale
+  distribution_scale <<- distribution_scale
+  distribution_labels <<- distribution_labels
+  theme1 <<- theme
+
   tbl <- hits_summary |>
     dplyr::filter(
       `Protein` == protein &
@@ -6465,7 +6465,7 @@ stats_histogram <- function(
         font = list(color = font_color)
       ),
       xaxis = list(
-        title = "Value [%]",
+        title = paste(show, "[%]"),
         range = c(-2, 102),
         color = font_color,
         gridcolor = grid_color,
@@ -6516,45 +6516,52 @@ stats_boxplot <- function(
   show_correct <- show == "Correct"
   box_col <- hex_to_rgba(hex_base, 1)
   box_fill <- hex_to_rgba(hex_base, 0.15)
-  box_name <- if (show_unmatched) "Unmatched [%]" else "Correct [%]"
   box_y <- if (show_unmatched) ~`% Unmatched` else ~`% Correct`
+  box_name <- if (show_unmatched) "Unmatched [%]" else "Correct [%]"
   hover_tmpl <- if (show_unmatched) {
     "<b>%{text}</b><br>Unmatched [%]: %{y:.2f}<extra></extra>"
   } else {
     "<b>%{text}</b><br>Correct [%]: %{y:.2f}<extra></extra>"
   }
 
+  # box_half_width = 0.3 gives box width = 0.6, which is exactly 50% of x range c(-0.4, 0.8)
+  box_half_width <- 0.3
+  metric_vals_bp <- if (show_unmatched) df$`% Unmatched` else df$`% Correct`
+
   p <- plotly::plot_ly()
+  # Box shape: visual only, excluded from hit detection
   p <- plotly::add_trace(
     p,
     data = df,
+    x = 0,
     y = box_y,
-    name = box_name,
+    name = "",
     type = "box",
     boxpoints = FALSE,
     boxmean = TRUE,
+    width = 2 * box_half_width,
+    hoverinfo = "skip",
     line = list(color = box_col),
     fillcolor = box_fill,
     showlegend = TRUE
   )
-
   if (show_points) {
+    x_jit <- stats::runif(nrow(df), -box_half_width, box_half_width)
     p <- plotly::add_trace(
       p,
-      data = df,
-      y = box_y,
-      text = ~Sample,
-      name = box_name,
-      type = "box",
-      boxpoints = "all",
-      jitter = 0.4,
-      pointpos = 0,
-      hoveron = "points",
+      type = "scatter",
+      mode = "markers",
+      x = x_jit,
+      y = metric_vals_bp,
+      text = df$Sample,
+      customdata = df$Sample,
       hovertemplate = hover_tmpl,
-      whiskerwidth = 0,
-      line = list(color = "rgba(0,0,0,0)", width = 0),
-      fillcolor = "rgba(0,0,0,0)",
       showlegend = FALSE,
+      hoverlabel = list(
+        bgcolor = if (theme == "dark") "rgba(50,52,60,0.95)" else "rgba(255,255,255,0.9)",
+        bordercolor = if (theme == "dark") "rgba(200,200,200,0.4)" else "rgba(0,0,0,0.2)",
+        font = list(color = if (theme == "dark") "#ffffff" else "#000000", size = 12)
+      ),
       marker = list(
         color = "rgba(0,0,0,0)",
         size = 8,
@@ -6573,7 +6580,7 @@ stats_boxplot <- function(
     bp_annots <- c(
       bp_annots,
       list(list(
-        x = "Correct [%]",
+        x = 0,
         xref = "x",
         y = correct_mean_bp - 4,
         yref = "y",
@@ -6588,7 +6595,7 @@ stats_boxplot <- function(
     bp_annots <- c(
       bp_annots,
       list(list(
-        x = "Unmatched [%]",
+        x = 0,
         xref = "x",
         y = unmatched_mean_bp - 4,
         yref = "y",
@@ -6600,22 +6607,75 @@ stats_boxplot <- function(
     )
   }
 
+  q1_bp   <- unname(stats::quantile(metric_vals_bp, 0.25, na.rm = TRUE))
+  med_bp  <- stats::median(metric_vals_bp, na.rm = TRUE)
+  mean_bp <- mean(metric_vals_bp, na.rm = TRUE)
+  q3_bp   <- unname(stats::quantile(metric_vals_bp, 0.75, na.rm = TRUE))
+
+  sa_font <- list(color = font_color, size = 10)
+  # When median and mean are within 1.5% of each other, nudge them apart
+  # symmetrically by ±0.75%, preserving their relative order so each label
+  # stays on the correct side of the other
+  if (abs(mean_bp - med_bp) < 1.5) {
+    mid_mm    <- (med_bp + mean_bp) / 2
+    direction <- if (mean_bp >= med_bp) 1 else -1
+    med_y     <- mid_mm - direction * 0.75
+    mean_y    <- mid_mm + direction * 0.75
+  } else {
+    med_y  <- med_bp
+    mean_y <- mean_bp
+  }
+
+  bp_annots <- c(
+    bp_annots,
+    list(
+      list(
+        x = 0.65, xref = "paper", y = q1_bp, yref = "y",
+        text = sprintf("Q1: %.2f%%", q1_bp),
+        showarrow = FALSE, xanchor = "left", yanchor = "middle", font = sa_font
+      ),
+      list(
+        x = 0.65, xref = "paper", y = med_y, yref = "y",
+        text = sprintf("Median: %.2f%%", med_bp),
+        showarrow = FALSE, xanchor = "left", yanchor = "middle", font = sa_font
+      ),
+      list(
+        x = 0.65, xref = "paper", y = mean_y, yref = "y",
+        text = sprintf("Mean: %.2f%%", mean_bp),
+        showarrow = FALSE, xanchor = "left", yanchor = "middle", font = sa_font
+      ),
+      list(
+        x = 0.65, xref = "paper", y = q3_bp, yref = "y",
+        text = sprintf("Q3: %.2f%%", q3_bp),
+        showarrow = FALSE, xanchor = "left", yanchor = "middle", font = sa_font
+      )
+    )
+  )
+
   p |>
     plotly::layout(
       paper_bgcolor = "rgba(0,0,0,0)",
-      plot_bgcolor = "rgba(0,0,0,0)",
+      plot_bgcolor  = "rgba(0,0,0,0)",
       font = list(size = 14, color = font_color),
-      legend = list(
-        bgcolor = "rgba(0,0,0,0)",
-        font = list(color = font_color)
-      ),
+      legend = list(bgcolor = "rgba(0,0,0,0)", font = list(color = font_color)),
+      hoverlabel = if (theme == "dark") {
+        list(
+          bgcolor = "rgba(50,52,60,0.95)",
+          bordercolor = "rgba(200,200,200,0.4)",
+          font = list(color = "#ffffff", size = 12)
+        )
+      } else {
+        list()
+      },
       xaxis = list(
+        showticklabels = FALSE,
         color = font_color,
+        range = c(-0.4, 0.8),
         gridcolor = "rgba(0,0,0,0)",
         zerolinecolor = "rgba(0,0,0,0)"
       ),
       yaxis = list(
-        title = "Value [%]",
+        title = paste(show, "[%]"),
         range = if (fixed_range) c(-5, 105) else NULL,
         color = font_color,
         gridcolor = grid_color,
@@ -6725,8 +6785,9 @@ stats_scatter <- function(
       y = ~y_plot,
       name = grp,
       showlegend = TRUE,
-      customdata = ~tooltip,
-      hovertemplate = "%{customdata}<extra></extra>",
+      customdata = ~Sample,
+      text = ~tooltip,
+      hovertemplate = "%{text}<extra></extra>",
       marker = list(
         color = color_map[[grp]],
         size = 8,
@@ -6904,35 +6965,33 @@ stats_violin <- function(
   color_map <- stats::setNames(pal, groups)
 
   p <- plotly::plot_ly()
-  for (grp in groups) {
+  for (i in seq_along(groups)) {
+    grp <- groups[[i]]
+    cat_idx <- i - 1L
     sub_df <- dplyr::filter(df, .data[[group_by]] == grp)
     col <- hex_to_rgba(color_map[[grp]], 1)
     col_f <- hex_to_rgba(color_map[[grp]], 0.2)
     col_b <- hex_to_rgba(color_map[[grp]], 0.25)
     grp_sd <- stats::sd(sub_df[[metric_col]], na.rm = TRUE)
     is_degenerate <- is.na(grp_sd) || grp_sd < 0.005
+    hover_tmpl_v <- paste0(
+      "<b>%{text}</b><br>",
+      hover_label,
+      ": %{y:.2f}<extra></extra>"
+    )
     if (is_degenerate) {
-      # Degenerate group: strip chart (invisible box carrying jittered points)
+      # Scatter: manually jittered — visual AND hit targets
+      x_jit <- cat_idx + stats::runif(nrow(sub_df), -0.25, 0.25)
       p <- plotly::add_trace(
         p,
-        data = sub_df,
-        type = "box",
-        x = grp,
+        type = "scatter",
+        mode = "markers",
+        x = x_jit,
         y = sub_df[[metric_col]],
+        text = sub_df$Sample,
+        customdata = sub_df$Sample,
+        hovertemplate = hover_tmpl_v,
         name = grp,
-        text = ~Sample,
-        boxpoints = "all",
-        jitter = 0.5,
-        pointpos = 0,
-        hoveron = "points",
-        hovertemplate = paste0(
-          "<b>%{text}</b><br>",
-          hover_label,
-          ": %{y:.2f}<extra></extra>"
-        ),
-        whiskerwidth = 0,
-        line = list(color = "rgba(0,0,0,0)", width = 0),
-        fillcolor = "rgba(0,0,0,0)",
         showlegend = FALSE,
         marker = list(
           color = col,
@@ -6942,13 +7001,15 @@ stats_violin <- function(
         )
       )
     } else {
+      # Violin shape: visual only, excluded from hit detection
       p <- suppressWarnings(plotly::add_trace(
         p,
         data = sub_df,
         type = "violin",
-        x = grp,
+        x = rep(cat_idx, nrow(sub_df)),
         y = sub_df[[metric_col]],
         name = grp,
+        hoverinfo = "skip",
         fillcolor = col_f,
         line = list(color = col, width = 1),
         box = list(
@@ -6957,16 +7018,30 @@ stats_violin <- function(
           line = list(color = box_line_color, width = 1)
         ),
         meanline = list(visible = show_box, color = box_line_color, width = 1),
-        points = if (show_points) "all" else FALSE,
-        pointpos = 0,
-        jitter = 0.3,
-        marker = list(
-          color = "rgba(0,0,0,0)",
-          size = 7,
-          line = list(color = dot_border_color, width = 1)
-        ),
+        points = FALSE,
         showlegend = FALSE
       ))
+      if (show_points) {
+        # Scatter: manually jittered — visual AND hit targets
+        x_jit <- cat_idx + stats::runif(nrow(sub_df), -0.25, 0.25)
+        p <- plotly::add_trace(
+          p,
+          type = "scatter",
+          mode = "markers",
+          x = x_jit,
+          y = sub_df[[metric_col]],
+          text = sub_df$Sample,
+          customdata = sub_df$Sample,
+          hovertemplate = hover_tmpl_v,
+          showlegend = FALSE,
+          marker = list(
+            color = col,
+            size = 7,
+            opacity = 0.9,
+            line = list(color = dot_border_color, width = 1)
+          )
+        )
+      }
     }
   }
 
@@ -6977,6 +7052,9 @@ stats_violin <- function(
       font = list(size = 14, color = font_color),
       xaxis = list(
         title = group_by,
+        tickmode = "array",
+        tickvals = as.list(seq_along(groups) - 1L),
+        ticktext = as.list(groups),
         color = font_color,
         gridcolor = grid_color,
         zerolinecolor = zeroline_color
