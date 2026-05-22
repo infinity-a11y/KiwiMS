@@ -1225,7 +1225,7 @@ spectrum_plot <- function(
         }
       }
 
-      # NEW: Add short diagonal leader + text label for EACH peak (if enabled)
+      # Add short diagonal leader + text label for each peak (if enabled)
       peak_labels <- list()
       leader_lines <- list()
 

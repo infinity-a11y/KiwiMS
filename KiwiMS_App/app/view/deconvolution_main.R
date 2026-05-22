@@ -2359,6 +2359,9 @@ server <- function(
       delay(1000, show(selector = "#app-deconvolution_main-processing"))
 
       ### Render result spectrum
+      spectrum_ready <- shiny$reactiveVal(FALSE)
+      shiny$observeEvent(result_files_sel(), { spectrum_ready(FALSE) }, ignoreNULL = FALSE)
+
       setup_plot_dl(
         input,
         output,
@@ -2416,7 +2419,8 @@ server <- function(
             shiny$req(FALSE)
           }
         },
-        filename_fn = function() paste0(get_session_prefix(), "_Spectrum")
+        filename_fn = function() paste0(get_session_prefix(), "_Spectrum"),
+        available_fn = spectrum_ready
       )
 
       output$spectrum <- renderPlotly({
@@ -2473,6 +2477,7 @@ server <- function(
             show_mass_diff = FALSE
           )
           waiter_hide(id = ns("spectrum"))
+          spectrum_ready(TRUE)
           return(spectrum)
         }
 
@@ -2488,6 +2493,7 @@ server <- function(
             show_mass_diff = FALSE
           )
           waiter_hide(id = ns("spectrum"))
+          spectrum_ready(TRUE)
           return(spectrum)
         }
       })
