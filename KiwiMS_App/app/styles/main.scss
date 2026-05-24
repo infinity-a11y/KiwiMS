@@ -2577,21 +2577,18 @@ div[data-value="Protein Conversion"] .tab-pane {
   background: #ddddde !important;
 }
 
-// .deconvolution-spectrum-card .plotly #scene,
-// .deconvolution-spectrum-card .plot-container .plotly,
-// .deconvolution-spectrum-card .plotly .gl-container,
-// .deconvolution-heatmap-card .plotly #scene,
-// .deconvolution-heatmap-card .plot-container .plotly,
-// .deconvolution-heatmap-card .plotly .gl-container,
-// .result-conc-tab .plotly #scene,
-// .result-conc-tab .plot-container .plotly,
-// .result-conc-tab .plotly .gl-container,
-// .conversion-samples-wrapper .plotly #scene,
-// .conversion-samples-wrapper .plot-container .plotly,
-// .conversion-samples-wrapper .plotly .gl-container .conversion-samples-wrapper .plotly #scene,
-.plotly #scene,
-.plot-container .plotly,
-.plotly .gl-container .conversion-samples-wrapper .plotly #scene {
+.deconvolution-spectrum-card .plotly #scene,
+.deconvolution-spectrum-card .plot-container .plotly,
+.deconvolution-spectrum-card .plotly .gl-container,
+.deconvolution-heatmap-card .plotly #scene,
+.deconvolution-heatmap-card .plot-container .plotly,
+.deconvolution-heatmap-card .plotly .gl-container,
+.result-conc-tab .plotly #scene,
+.result-conc-tab .plot-container .plotly,
+.result-conc-tab .plotly .gl-container,
+.conversion-samples-wrapper .plotly #scene,
+.conversion-samples-wrapper .plot-container .plotly,
+.conversion-samples-wrapper .plotly .gl-container {
   top: unset !important;
   left: unset !important;
   height: 100% !important;
