@@ -402,7 +402,9 @@ server <- function(
 
           # Show spinner on conversion_ui while computation runs
           analysis_running(TRUE)
-          shinyjs::runjs('document.getElementById("blocking-overlay").style.display = "block";')
+          shinyjs::runjs(
+            'document.getElementById("blocking-overlay").style.display = "block";'
+          )
 
           shinyjs::delay(100, {
             # Preset logical flags
@@ -526,13 +528,18 @@ server <- function(
                 icon = shiny::icon("play"),
                 disabled = FALSE
               )
-              shinyjs::runjs('document.getElementById("blocking-overlay").style.display = "none";')
-              analysis_running(FALSE)
-              shiny::showNotification(
-                "No hits detected — please review your parameters.",
-                type = "warning",
-                duration = 8
+              shinyjs::runjs(
+                'document.getElementById("blocking-overlay").style.display = "none";'
               )
+              analysis_running(FALSE)
+              n_samples <- length(unique(result_with_hits$hits_summary$Sample))
+              shiny::showModal(shiny::modalDialog(
+                title = "No hits detected",
+                shiny::p(paste0(n_samples, " sample(s) screened. Please review your parameters.")),
+                footer = shiny::modalButton("Dismiss"),
+                easyClose = TRUE,
+                size = "s"
+              ))
             } else {
               # Assign result list and hits table to reactive vars
               write_log(paste(
@@ -570,9 +577,23 @@ server <- function(
               shinyjs::disable("max_multiples")
 
               console_log_snapshot(paste(log_lines, collapse = ""))
-              shinyjs::runjs('document.getElementById("blocking-overlay").style.display = "none";')
+              shinyjs::runjs(
+                'document.getElementById("blocking-overlay").style.display = "none";'
+              )
               analysis_running(FALSE)
               analysis_status("done")
+              n_samples <- length(unique(result_with_hits$hits_summary$Sample))
+              n_hits <- sum(!is.na(result_with_hits$hits_summary$Compound))
+              shiny::showModal(shiny::modalDialog(
+                title = "Analysis completed",
+                shiny::tagList(
+                  shiny::p(paste0(n_samples, " sample(s) screened.")),
+                  shiny::p(paste0(n_hits, " hit(s) detected."))
+                ),
+                footer = shiny::modalButton("Dismiss"),
+                easyClose = TRUE,
+                size = "s"
+              ))
             }
           }) # end shinyjs::delay
         } else {

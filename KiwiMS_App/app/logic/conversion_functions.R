@@ -3736,7 +3736,7 @@ multiple_spectra <- function(
       # Declare coloring variables for graph elements
       color <- NULL
       line <- list(color = font_color, width = 1)
-      z_linecolor <- list(color = font_color)
+      z_linecolor <- list(color = font_color, width = 1)
     } else if (color_variable == "Samples") {
       # Match colors to peaks and spectrum data
       peaks_data$z_color <- color_cmp[match(peaks_data$z, names(color_cmp))]
@@ -3749,7 +3749,7 @@ multiple_spectra <- function(
       color <- ~ I(z_color)
       line <- list(width = 1)
       marker_color <- ~ I(z_color)
-      z_linecolor <- NULL
+      z_linecolor <- list(width = 1)
     }
   } else {
     # Make color palette
@@ -3775,7 +3775,7 @@ multiple_spectra <- function(
     # Declare coloring variables for graph elements
     color <- ~ I(z_color)
     line <- list(width = 1)
-    z_linecolor <- NULL
+    z_linecolor <- list(width = 1)
   }
 
   # Condition on data size
@@ -3891,7 +3891,8 @@ multiple_spectra <- function(
         first_peak <- peaks_data[peaks_data$name == entry_name, ][1, ]
         is_protein <- sym == "diamond"
         lg <- if (is_protein) "proteins" else "compounds"
-        add_lgt <- (is_protein && !protein_seen) || (!is_protein && !compound_seen)
+        add_lgt <- (is_protein && !protein_seen) ||
+          (!is_protein && !compound_seen)
 
         args <- list(
           p = plot,
@@ -3926,7 +3927,10 @@ multiple_spectra <- function(
 
       plot <- plotly::style(
         plot,
-        legendgrouptitle = list(text = "Samples", font = list(color = font_color)),
+        legendgrouptitle = list(
+          text = "Samples",
+          font = list(color = font_color)
+        ),
         traces = 1
       )
     }
@@ -4149,7 +4153,8 @@ multiple_spectra <- function(
         first_peak <- peaks_data[peaks_data$name == entry_name, ][1, ]
         is_protein <- sym == "diamond"
         lg <- if (is_protein) "proteins" else "compounds"
-        add_lgt <- (is_protein && !protein_seen) || (!is_protein && !compound_seen)
+        add_lgt <- (is_protein && !protein_seen) ||
+          (!is_protein && !compound_seen)
 
         args <- list(
           p = plot_2d,
@@ -4161,10 +4166,9 @@ multiple_spectra <- function(
           name = entry_name,
           legendgroup = lg,
           marker = list(
-            color = "rgba(0,0,0,0)",
+            color = font_color,
             symbol = paste0(sym, "-open"),
-            size = 0.001,
-            line = list(color = font_color, width = 2)
+            size = 0.001
           ),
           visible = TRUE,
           showlegend = TRUE,
@@ -4184,7 +4188,10 @@ multiple_spectra <- function(
 
       plot_2d <- plotly::style(
         plot_2d,
-        legendgrouptitle = list(text = "Samples", font = list(color = font_color)),
+        legendgrouptitle = list(
+          text = "Samples",
+          font = list(color = font_color)
+        ),
         traces = 1
       )
     }
@@ -6066,7 +6073,8 @@ prot_compound_distribution <- function(
           bar_width +
           max(0, local_n - 1) * group_gap
         off <- -local_cluster_width / 2 + i_group * (bar_width + group_gap)
-        cmp_idx <- which(cmp_levels == as.character(tot_row$`Cmp Name`[[1]])) - 1L
+        cmp_idx <- which(cmp_levels == as.character(tot_row$`Cmp Name`[[1]])) -
+          1L
         annots[[j]] <- list(
           x = cmp_idx + off + bar_width / 2,
           y = tot_row$total_val[[1]],

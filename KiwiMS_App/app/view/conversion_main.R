@@ -2959,32 +2959,32 @@ server <- function(
             )
 
             ###### Compound distribution ----
-            output$proteins_compound_distribution <- plotly::renderPlotly({
-              shiny::req(
-                hits_summary,
-                input$conversion_protein_picker,
-                input$color_variable,
-                !is.null(input$truncate_names),
-                input$color_scale
-              )
+            # output$proteins_compound_distribution <- plotly::renderPlotly({
+            #   shiny::req(
+            #     hits_summary,
+            #     input$conversion_protein_picker,
+            #     input$color_variable,
+            #     !is.null(input$truncate_names),
+            #     input$color_scale
+            #   )
 
-              prot_compound_distribution(
-                hits_summary = hits_summary,
-                protein = input$conversion_protein_picker,
-                color_variable = input$color_variable,
-                truncate_names = input$truncate_names,
-                color_scale = input$color_scale,
-                distribution_scale = input$protein_distribution_scale,
-                distribution_labels = input$protein_distribution_labels
-              )
-            }) |>
-              shiny::bindEvent(
-                render_trigger(),
-                input$color_scale,
-                input$conversion_protein_picker,
-                input$truncate_names,
-                prot_dist_settings()
-              )
+            #   prot_compound_distribution(
+            #     hits_summary = hits_summary,
+            #     protein = input$conversion_protein_picker,
+            #     color_variable = input$color_variable,
+            #     truncate_names = input$truncate_names,
+            #     color_scale = input$color_scale,
+            #     distribution_scale = input$protein_distribution_scale,
+            #     distribution_labels = input$protein_distribution_labels
+            #   )
+            # }) |>
+            #   shiny::bindEvent(
+            #     render_trigger(),
+            #     input$color_scale,
+            #     input$conversion_protein_picker,
+            #     input$truncate_names,
+            #     prot_dist_settings()
+            #   )
 
             ####### Show label input UI ----
             ####### Show label input (update static switch) ----
@@ -3239,9 +3239,12 @@ server <- function(
                   !is.null(input$truncate_names),
                   input$color_scale
                 )
+                hits_summary33 <<- hits_summary
 
                 tbl <- hits_summary |>
                   dplyr::filter(`Protein` == input$conversion_protein_picker)
+
+                tbl1 <<- tbl
 
                 # Summarize inputs
                 inputs <- list(
@@ -3251,13 +3254,22 @@ server <- function(
                   color_variable = input$color_variable
                 )
 
+                inputs1 <<- inputs
+
                 # Get colors — exclude N/A compound rows so scale spans only real hits
+                tbl_excl <- dplyr::filter(tbl, !is.na(`Cmp Name`))
+
                 colors <- get_cmp_colorScale(
-                  filtered_table = dplyr::filter(tbl, !is.na(`Cmp Name`)),
+                  filtered_table = if (nrow(tbl_excl)) {
+                    tbl_excl
+                  } else {
+                    tbl
+                  },
                   scale = input$color_scale,
                   variable = input$color_variable,
                   trunc = input$truncate_names
                 )
+                colors1 <<- colors
 
                 # Prefiltering of table
                 tbl <- filter_table_view(
@@ -3266,6 +3278,8 @@ server <- function(
                   inputs = inputs,
                   units = units
                 )
+
+                tbl5 <<- tbl
 
                 # Assign filtered table to reactive for eventual export
                 proteins_table_view_raw(tbl)
