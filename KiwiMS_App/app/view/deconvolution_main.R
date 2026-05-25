@@ -17,7 +17,6 @@ box::use(
   shiny,
   shinyjs[delay, disable, disabled, enable, hide, show, hidden, runjs],
   shinyWidgets[
-    pickerInput,
     progressBar,
     radioGroupButtons,
     updateProgressBar
@@ -785,7 +784,7 @@ server <- function(
             shiny$fluidRow(
               shiny$br(),
               shiny$column(
-                width = 11,
+                width = 12,
                 shiny$uiOutput(ns("message_ui")),
                 shiny$uiOutput(ns("target_sel_ui")),
                 shiny$br(),
@@ -1113,22 +1112,54 @@ server <- function(
           (isFALSE(deconvolution_sidebar_vars$use_config()) ||
             length(config_file()) == 0)
       ) {
-        picker <- pickerInput(
-          ns("target_selector"),
-          "",
-          choices = basename(dir_ls(dir_sel, glob = "*.raw")),
-          selected = basename(dir_ls(dir_sel, glob = "*.raw")),
-          options = list(
-            `live-search` = TRUE,
-            `actions-box` = TRUE,
-            size = 10,
-            style = "border-color: black;"
+        files <- basename(dir_ls(dir_sel, glob = "*.raw"))
+        picker <- shiny$div(
+          class = "kiwi-file-selector",
+          shiny$div(
+            class = "kiwi-file-actions",
+            shiny$actionButton(
+              ns("target_select_all"),
+              "Select All",
+              class = "btn btn-default btn-sm"
+            ),
+            shiny$actionButton(
+              ns("target_deselect_all"),
+              "Deselect All",
+              class = "btn btn-default btn-sm"
+            )
           ),
-          multiple = TRUE
+          shiny$div(
+            class = "kiwi-file-list",
+            shiny$checkboxGroupInput(
+              ns("target_selector"),
+              NULL,
+              choices = files,
+              selected = files,
+              width = "100%"
+            )
+          )
         )
       }
 
       return(picker)
+    })
+
+    shiny$observeEvent(input$target_select_all, {
+      dir_sel <- deconvolution_sidebar_vars$dir()
+      files <- basename(dir_ls(dir_sel, glob = "*.raw"))
+      shiny$updateCheckboxGroupInput(
+        session,
+        "target_selector",
+        selected = files
+      )
+    })
+
+    shiny$observeEvent(input$target_deselect_all, {
+      shiny$updateCheckboxGroupInput(
+        session,
+        "target_selector",
+        selected = character(0)
+      )
     })
 
     #### Deconvolution start ----
@@ -1417,16 +1448,34 @@ server <- function(
 
           # Store pre-launch diagnostics in a reactive variable so they survive
           # processx truncating the log file when the subprocess starts.
-          reactVars$decon_prelaunch_info <- paste(c(
-            sprintf("[%s] === Deconvolution subprocess launch ===", format(Sys.time(), "%H:%M:%S")),
-            sprintf("  Rscript          : %s", rscript_path),
-            sprintf("  R_HOME           : %s", Sys.getenv("R_HOME",            unset = "(not set)")),
-            sprintf("  PYTHONHOME       : %s", Sys.getenv("PYTHONHOME",        unset = "(not set)")),
-            sprintf("  RETICULATE_PYTHON: %s", Sys.getenv("RETICULATE_PYTHON", unset = "(not set)")),
-            sprintf("  KIWIMS_RSCRIPT   : %s", Sys.getenv("KIWIMS_RSCRIPT",   unset = "(not set)")),
-            sprintf("  Working dir      : %s", getwd()),
-            "---"
-          ), collapse = "\n")
+          reactVars$decon_prelaunch_info <- paste(
+            c(
+              sprintf(
+                "[%s] === Deconvolution subprocess launch ===",
+                format(Sys.time(), "%H:%M:%S")
+              ),
+              sprintf("  Rscript          : %s", rscript_path),
+              sprintf(
+                "  R_HOME           : %s",
+                Sys.getenv("R_HOME", unset = "(not set)")
+              ),
+              sprintf(
+                "  PYTHONHOME       : %s",
+                Sys.getenv("PYTHONHOME", unset = "(not set)")
+              ),
+              sprintf(
+                "  RETICULATE_PYTHON: %s",
+                Sys.getenv("RETICULATE_PYTHON", unset = "(not set)")
+              ),
+              sprintf(
+                "  KIWIMS_RSCRIPT   : %s",
+                Sys.getenv("KIWIMS_RSCRIPT", unset = "(not set)")
+              ),
+              sprintf("  Working dir      : %s", getwd()),
+              "---"
+            ),
+            collapse = "\n"
+          )
 
           rx_process <- process$new(
             rscript_path,
@@ -1595,7 +1644,7 @@ server <- function(
               "target(s) completed"
             ))
             proc$kill_tree()
-            Sys.sleep(0.75)  # let the OS release file handles before connecting
+            Sys.sleep(0.75) # let the OS release file handles before connecting
           }
           cleanup_wal(db_snap)
         })
@@ -2038,7 +2087,10 @@ server <- function(
 
                 # Save heatmap
                 if (!file.exists(file.path(temp, "heatmap.rds"))) {
-                  heatmap <- plate_heatmap(reactVars$rslt_df, all_wells = config_file()[["Well"]])
+                  heatmap <- plate_heatmap(
+                    reactVars$rslt_df,
+                    all_wells = config_file()[["Well"]]
+                  )
                   saveRDS(heatmap, file.path(temp, "heatmap.rds"))
                 }
               } else {
@@ -2360,7 +2412,13 @@ server <- function(
 
       ### Render result spectrum
       spectrum_ready <- shiny$reactiveVal(FALSE)
-      shiny$observeEvent(result_files_sel(), { spectrum_ready(FALSE) }, ignoreNULL = FALSE)
+      shiny$observeEvent(
+        result_files_sel(),
+        {
+          spectrum_ready(FALSE)
+        },
+        ignoreNULL = FALSE
+      )
 
       setup_plot_dl(
         input,
@@ -2731,7 +2789,10 @@ server <- function(
           shiny$req(nrow(reactVars$rslt_df) > 0)
           waiter_show(id = ns("heatmap"), html = spin_wave())
 
-          heatmap <- plate_heatmap(reactVars$rslt_df, all_wells = config_file()[["Well"]]) |>
+          heatmap <- plate_heatmap(
+            reactVars$rslt_df,
+            all_wells = config_file()[["Well"]]
+          ) |>
             event_register("plotly_click")
 
           waiter_hide(id = ns("heatmap"))
@@ -2875,7 +2936,7 @@ server <- function(
       proc <- decon_process_data()
       if (!is.null(proc) && proc$is_alive()) {
         proc$kill_tree()
-        Sys.sleep(0.75)  # let OS release file handles before connecting
+        Sys.sleep(0.75) # let OS release file handles before connecting
       }
 
       cleanup_wal(file.path(
@@ -2947,13 +3008,18 @@ server <- function(
           !is.null(reactVars$decon_process_out) &&
             file.exists(reactVars$decon_process_out)
         ) {
-          paste(readLines(reactVars$decon_process_out, warn = FALSE), collapse = "\n")
+          paste(
+            readLines(reactVars$decon_process_out, warn = FALSE),
+            collapse = "\n"
+          )
         } else {
           "(log file not found)"
         }
 
         prelaunch <- reactVars$decon_prelaunch_info
-        reactVars$deconvolution_log <- if (!is.null(prelaunch) && nzchar(prelaunch)) {
+        reactVars$deconvolution_log <- if (
+          !is.null(prelaunch) && nzchar(prelaunch)
+        ) {
           paste0(prelaunch, "\n", file_content)
         } else {
           file_content

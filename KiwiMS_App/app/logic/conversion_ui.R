@@ -1969,7 +1969,7 @@ binding_results_ui <- function(ns, hits_summary) {
                       shinyWidgets::materialSwitch(
                         ns("proteins_table_view_tot_binding_bar"),
                         label = "Tot. Binding [%] Bar",
-                        value = FALSE,
+                        value = TRUE,
                         right = TRUE
                       ),
                       style = "margin-right: 20px;"
