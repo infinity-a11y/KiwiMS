@@ -6054,36 +6054,41 @@ prot_compound_distribution <- function(
       )
 
     cmp_levels <- levels(tbl$`Cmp Name`)
-    annots <- vector("list", nrow(totals_cmp_grp))
-    for (j in seq_len(nrow(totals_cmp_grp))) {
-      tot_row <- totals_cmp_grp[j, ]
-      g <- tot_row$Group[[1]]
-      i_group <- group_map[[g]]
-      local_n <- compound_local_n_map[[as.character(tot_row$`Cmp Name`[[1]])]]
-      local_cluster_width <- local_n *
-        bar_width +
-        max(0, local_n - 1) * group_gap
-      off <- -local_cluster_width / 2 + i_group * (bar_width + group_gap)
-      cmp_idx <- which(cmp_levels == as.character(tot_row$`Cmp Name`[[1]])) - 1L
-      annots[[j]] <- list(
-        x = cmp_idx + off + bar_width / 2,
-        y = tot_row$total_val[[1]],
-        text = paste0(sprintf("%.2f", tot_row$total_val[[1]]), "%"),
-        xref = "x",
-        yref = "y",
-        xanchor = "center",
-        yanchor = "bottom",
-        showarrow = FALSE,
-        font = list(color = axis_color, size = 12),
-        yshift = 4
-      )
-    }
 
-    bar_chart <- bar_chart |>
-      plotly::layout(
-        xaxis = list(title = list(text = NULL)),
-        annotations = annots
-      )
+    if (nrow(totals_cmp_grp) <= 30) {
+      annots <- vector("list", nrow(totals_cmp_grp))
+      for (j in seq_len(nrow(totals_cmp_grp))) {
+        tot_row <- totals_cmp_grp[j, ]
+        g <- tot_row$Group[[1]]
+        i_group <- group_map[[g]]
+        local_n <- compound_local_n_map[[as.character(tot_row$`Cmp Name`[[1]])]]
+        local_cluster_width <- local_n *
+          bar_width +
+          max(0, local_n - 1) * group_gap
+        off <- -local_cluster_width / 2 + i_group * (bar_width + group_gap)
+        cmp_idx <- which(cmp_levels == as.character(tot_row$`Cmp Name`[[1]])) - 1L
+        annots[[j]] <- list(
+          x = cmp_idx + off + bar_width / 2,
+          y = tot_row$total_val[[1]],
+          text = paste0(sprintf("%.2f", tot_row$total_val[[1]]), "%"),
+          xref = "x",
+          yref = "y",
+          xanchor = "center",
+          yanchor = "bottom",
+          showarrow = FALSE,
+          font = list(color = axis_color, size = 12),
+          yshift = 4
+        )
+      }
+      bar_chart <- bar_chart |>
+        plotly::layout(
+          xaxis = list(title = list(text = NULL)),
+          annotations = annots
+        )
+    } else {
+      bar_chart <- bar_chart |>
+        plotly::layout(xaxis = list(title = list(text = NULL)))
+    }
   } else {
     bar_chart <- plotly::plot_ly(data = tbl) |>
       plotly::add_trace(

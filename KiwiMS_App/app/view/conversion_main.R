@@ -455,7 +455,10 @@ server <- function(
     )
 
     ## Conversion Declaration UI ----
-    output$conversion_ui <- shiny::renderUI(conversion_declaration_ui(ns))
+    output$conversion_ui <- shiny::renderUI({
+      shiny::req(!conversion_sidebar_vars$analysis_running())
+      conversion_declaration_ui(ns)
+    })
 
     ### UI Render Functions ----
     #### Table render functions ----
@@ -3001,8 +3004,8 @@ server <- function(
 
                 condition <- ifelse(
                   length(unique(tbl$`Cmp Name`)) > 1,
-                  max(nchar(unique(sample_ids)), na.rm = TRUE) <= 22,
-                  max(nchar(unique(tbl$`Cmp Name`)), na.rm = TRUE) <= 22
+                  max(nchar(unique(tbl$`Cmp Name`)), na.rm = TRUE) <= 22,
+                  max(nchar(unique(sample_ids)), na.rm = TRUE) <= 22
                 )
 
                 shinyWidgets::updateMaterialSwitch(
@@ -4084,7 +4087,7 @@ server <- function(
                   "% Correct" = "Greens",
                   "% Unmatched" = "Reds"
                 ),
-                label = "Correct / Unmatched",
+                label = "Hit Rate",
                 id = "batch_heatmap_pct_cmp",
                 is_pct = TRUE,
                 is_combined = TRUE,
@@ -6027,7 +6030,8 @@ server <- function(
           selected <- color_scale
           render_trigger(render_trigger() + 1)
         } else {
-          selected <- "plasma"
+          # selected <- "plasma"
+          selected <- "turbo"
         }
 
         shiny::updateSelectInput(
