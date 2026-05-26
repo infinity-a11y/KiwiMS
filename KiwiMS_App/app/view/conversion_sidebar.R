@@ -534,11 +534,15 @@ server <- function(
               analysis_running(FALSE)
               n_samples <- length(unique(result_with_hits$hits_summary$Sample))
               shiny::showModal(shiny::modalDialog(
-                title = "No hits detected",
-                shiny::p(paste0(n_samples, " sample(s) screened. Please review your parameters.")),
+                title = shiny::tagList(
+                  shiny::icon("circle-xmark", style = "color: #dc3545; margin-right: 8px;"),
+                  "No hits detected"
+                ),
+                shiny::tags$p(paste0(n_samples, " sample(s) screened.")),
+                shiny::tags$p("Please review your parameters."),
                 footer = shiny::modalButton("Dismiss"),
                 easyClose = TRUE,
-                size = "s"
+                size = "m"
               ))
             } else {
               # Assign result list and hits table to reactive vars
@@ -585,14 +589,15 @@ server <- function(
               n_samples <- length(unique(result_with_hits$hits_summary$Sample))
               n_hits <- sum(!is.na(result_with_hits$hits_summary$Compound))
               shiny::showModal(shiny::modalDialog(
-                title = "Analysis completed",
-                shiny::tagList(
-                  shiny::p(paste0(n_samples, " sample(s) screened.")),
-                  shiny::p(paste0(n_hits, " hit(s) detected."))
+                title = shiny::tagList(
+                  shiny::icon("circle-check", style = "color: #28a745; margin-right: 8px;"),
+                  "Analysis completed"
                 ),
+                shiny::tags$p(paste0(n_samples, " sample(s) screened.")),
+                shiny::tags$p(paste0(n_hits, " hit(s) detected.")),
                 footer = shiny::modalButton("Dismiss"),
                 easyClose = TRUE,
-                size = "s"
+                size = "m"
               ))
             }
           }) # end shinyjs::delay

@@ -6685,23 +6685,42 @@ stats_boxplot <- function(
   box_half_width <- 0.3
   metric_vals_bp <- if (show_unmatched) df$`% Unmatched` else df$`% Correct`
 
-  p <- plotly::plot_ly()
-  # Box shape: visual only, excluded from hit detection
-  p <- plotly::add_trace(
-    p,
-    data = df,
-    x = 0,
-    y = box_y,
-    name = "",
-    type = "box",
-    boxpoints = FALSE,
-    boxmean = TRUE,
-    width = 2 * box_half_width,
-    hoverinfo = "skip",
-    line = list(color = box_col),
-    fillcolor = box_fill,
-    showlegend = TRUE
+  # Pre-compute with R's quantile() for the annotations and box shapes
+  q1_bp   <- unname(stats::quantile(metric_vals_bp, 0.25, na.rm = TRUE))
+  med_bp  <- stats::median(metric_vals_bp, na.rm = TRUE)
+  mean_bp <- mean(metric_vals_bp, na.rm = TRUE)
+  q3_bp   <- unname(stats::quantile(metric_vals_bp, 0.75, na.rm = TRUE))
+  iqr_bp      <- q3_bp - q1_bp
+  lo_fence_bp <- min(metric_vals_bp[metric_vals_bp >= q1_bp - 1.5 * iqr_bp])
+  hi_fence_bp <- max(metric_vals_bp[metric_vals_bp <= q3_bp + 1.5 * iqr_bp])
+
+  # Box is drawn as layout shapes so Plotly's quartile algorithm is bypassed entirely
+  whisk_half <- box_half_width * 0.5
+  box_shapes <- list(
+    list(type = "rect", xref = "x", yref = "y",
+         x0 = -box_half_width, x1 = box_half_width, y0 = q1_bp, y1 = q3_bp,
+         fillcolor = box_fill, line = list(color = box_col, width = 1.5)),
+    list(type = "line", xref = "x", yref = "y",
+         x0 = -box_half_width, x1 = box_half_width, y0 = med_bp, y1 = med_bp,
+         line = list(color = box_col, width = 2)),
+    list(type = "line", xref = "x", yref = "y",
+         x0 = -box_half_width, x1 = box_half_width, y0 = mean_bp, y1 = mean_bp,
+         line = list(color = box_col, width = 1.5, dash = "dot")),
+    list(type = "line", xref = "x", yref = "y",
+         x0 = 0, x1 = 0, y0 = q3_bp, y1 = hi_fence_bp,
+         line = list(color = box_col, width = 1.5)),
+    list(type = "line", xref = "x", yref = "y",
+         x0 = -whisk_half, x1 = whisk_half, y0 = hi_fence_bp, y1 = hi_fence_bp,
+         line = list(color = box_col, width = 1.5)),
+    list(type = "line", xref = "x", yref = "y",
+         x0 = 0, x1 = 0, y0 = lo_fence_bp, y1 = q1_bp,
+         line = list(color = box_col, width = 1.5)),
+    list(type = "line", xref = "x", yref = "y",
+         x0 = -whisk_half, x1 = whisk_half, y0 = lo_fence_bp, y1 = lo_fence_bp,
+         line = list(color = box_col, width = 1.5))
   )
+
+  p <- plotly::plot_ly()
   if (show_points) {
     x_jit <- stats::runif(nrow(df), -box_half_width, box_half_width)
     p <- plotly::add_trace(
@@ -6775,24 +6794,33 @@ stats_boxplot <- function(
     )
   }
 
-  q1_bp <- unname(stats::quantile(metric_vals_bp, 0.25, na.rm = TRUE))
-  med_bp <- stats::median(metric_vals_bp, na.rm = TRUE)
-  mean_bp <- mean(metric_vals_bp, na.rm = TRUE)
-  q3_bp <- unname(stats::quantile(metric_vals_bp, 0.75, na.rm = TRUE))
-
   sa_font <- list(color = font_color, size = 10)
-  # When median and mean are within 1.5% of each other, nudge them apart
-  # symmetrically by ±0.75%, preserving their relative order so each label
-  # stays on the correct side of the other
-  if (abs(mean_bp - med_bp) < 1.5) {
-    mid_mm <- (med_bp + mean_bp) / 2
-    direction <- if (mean_bp >= med_bp) 1 else -1
-    med_y <- mid_mm - direction * 0.75
-    mean_y <- mid_mm + direction * 0.75
-  } else {
-    med_y <- med_bp
-    mean_y <- mean_bp
-  }
+  # Spread all four label y-positions by actual value with a minimum gap
+  spread_ys <- local({
+    min_gap <- 5
+    raw <- c(q1_bp, med_bp, mean_bp, q3_bp)
+    idx <- order(raw)
+    s   <- raw[idx]
+    for (iter in seq_len(50)) {
+      changed <- FALSE
+      for (i in seq_len(3)) {
+        if (s[i + 1] - s[i] < min_gap) {
+          mid    <- (s[i] + s[i + 1]) / 2
+          s[i]   <- mid - min_gap / 2
+          s[i + 1] <- mid + min_gap / 2
+          changed <- TRUE
+        }
+      }
+      if (!changed) break
+    }
+    result      <- raw
+    result[idx] <- s
+    result
+  })
+  q1_y   <- spread_ys[1]
+  med_y  <- spread_ys[2]
+  mean_y <- spread_ys[3]
+  q3_y   <- spread_ys[4]
 
   bp_annots <- c(
     bp_annots,
@@ -6800,7 +6828,7 @@ stats_boxplot <- function(
       list(
         x = 0.65,
         xref = "paper",
-        y = q1_bp,
+        y = q1_y,
         yref = "y",
         text = sprintf("Q1: %.2f%%", q1_bp),
         showarrow = FALSE,
@@ -6833,7 +6861,7 @@ stats_boxplot <- function(
       list(
         x = 0.65,
         xref = "paper",
-        y = q3_bp,
+        y = q3_y,
         yref = "y",
         text = sprintf("Q3: %.2f%%", q3_bp),
         showarrow = FALSE,
@@ -6874,7 +6902,8 @@ stats_boxplot <- function(
         zerolinecolor = zeroline_color,
         hoverformat = ".2f"
       ),
-      annotations = if (length(bp_annots) > 0) bp_annots else NULL
+      annotations = if (length(bp_annots) > 0) bp_annots else NULL,
+      shapes = box_shapes
     )
 }
 
@@ -7172,16 +7201,16 @@ stats_violin <- function(
       ": %{y:.2f}<extra></extra>"
     )
     if (is_degenerate) {
-      # Scatter: manually jittered — visual AND hit targets
-      x_jit <- cat_idx + stats::runif(nrow(sub_df), -0.25, 0.25)
+      # Single-member groups stay centered; multi-member degenerate groups get jitter
+      x_jit <- if (nrow(sub_df) == 1) cat_idx else cat_idx + stats::runif(nrow(sub_df), -0.25, 0.25)
       p <- plotly::add_trace(
         p,
         type = "scatter",
         mode = "markers",
         x = x_jit,
         y = sub_df[[metric_col]],
-        text = sub_df$Sample,
-        customdata = sub_df$Sample,
+        text = I(sub_df$Sample),
+        customdata = I(sub_df$Sample),
         hovertemplate = hover_tmpl_v,
         name = grp,
         showlegend = FALSE,

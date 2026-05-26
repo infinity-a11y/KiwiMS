@@ -2473,13 +2473,12 @@ server <- function(
 
                 tbl <- hits_summary |>
                   dplyr::filter(`Cmp Name` == input$conversion_compound_picker)
-                tbl1 <<- tbl
+
                 sample_ids <- if (input$truncate_names) {
                   tbl$`truncSample_ID`
                 } else {
                   tbl$`Sample ID`
                 }
-                sample_ids1 <<- sample_ids
 
                 shinyWidgets::updateMaterialSwitch(
                   session,
@@ -2959,32 +2958,32 @@ server <- function(
             )
 
             ###### Compound distribution ----
-            # output$proteins_compound_distribution <- plotly::renderPlotly({
-            #   shiny::req(
-            #     hits_summary,
-            #     input$conversion_protein_picker,
-            #     input$color_variable,
-            #     !is.null(input$truncate_names),
-            #     input$color_scale
-            #   )
+            output$proteins_compound_distribution <- plotly::renderPlotly({
+              shiny::req(
+                hits_summary,
+                input$conversion_protein_picker,
+                input$color_variable,
+                !is.null(input$truncate_names),
+                input$color_scale
+              )
 
-            #   prot_compound_distribution(
-            #     hits_summary = hits_summary,
-            #     protein = input$conversion_protein_picker,
-            #     color_variable = input$color_variable,
-            #     truncate_names = input$truncate_names,
-            #     color_scale = input$color_scale,
-            #     distribution_scale = input$protein_distribution_scale,
-            #     distribution_labels = input$protein_distribution_labels
-            #   )
-            # }) |>
-            #   shiny::bindEvent(
-            #     render_trigger(),
-            #     input$color_scale,
-            #     input$conversion_protein_picker,
-            #     input$truncate_names,
-            #     prot_dist_settings()
-            #   )
+              prot_compound_distribution(
+                hits_summary = hits_summary,
+                protein = input$conversion_protein_picker,
+                color_variable = input$color_variable,
+                truncate_names = input$truncate_names,
+                color_scale = input$color_scale,
+                distribution_scale = input$protein_distribution_scale,
+                distribution_labels = input$protein_distribution_labels
+              )
+            }) |>
+              shiny::bindEvent(
+                render_trigger(),
+                input$color_scale,
+                input$conversion_protein_picker,
+                input$truncate_names,
+                prot_dist_settings()
+              )
 
             ####### Show label input UI ----
             ####### Show label input (update static switch) ----
@@ -2994,13 +2993,12 @@ server <- function(
                 shiny::req(hits_summary, input$conversion_protein_picker)
                 tbl <- hits_summary |>
                   dplyr::filter(`Protein` == input$conversion_protein_picker)
-                tbl <<- tbl
+
                 sample_ids <- if (input$truncate_names) {
                   tbl$`truncSample_ID`
                 } else {
                   tbl$`Sample ID`
                 }
-                sample_ids <<- sample_ids
 
                 condition <- ifelse(
                   length(unique(tbl$`Cmp Name`)) > 1,
@@ -3239,12 +3237,8 @@ server <- function(
                   !is.null(input$truncate_names),
                   input$color_scale
                 )
-                hits_summary33 <<- hits_summary
-
                 tbl <- hits_summary |>
                   dplyr::filter(`Protein` == input$conversion_protein_picker)
-
-                tbl1 <<- tbl
 
                 # Summarize inputs
                 inputs <- list(
@@ -3253,8 +3247,6 @@ server <- function(
                   truncate_names = input$truncate_names,
                   color_variable = input$color_variable
                 )
-
-                inputs1 <<- inputs
 
                 # Get colors — exclude N/A compound rows so scale spans only real hits
                 tbl_excl <- dplyr::filter(tbl, !is.na(`Cmp Name`))
@@ -3269,7 +3261,6 @@ server <- function(
                   variable = input$color_variable,
                   trunc = input$truncate_names
                 )
-                colors1 <<- colors
 
                 # Prefiltering of table
                 tbl <- filter_table_view(
@@ -3278,8 +3269,6 @@ server <- function(
                   inputs = inputs,
                   units = units
                 )
-
-                tbl5 <<- tbl
 
                 # Assign filtered table to reactive for eventual export
                 proteins_table_view_raw(tbl)
@@ -4013,6 +4002,9 @@ server <- function(
             output$stats_boxplot <- plotly::renderPlotly({
               rl <- conversion_sidebar_vars$result_list()
               shiny::req(rl, rl$hits_summary)
+
+              test <<- rl$hits_summary
+
               hs <- if (identical(input$stats_exclude_extremes, "Hits only")) {
                 filter_extremes(rl$hits_summary)
               } else {

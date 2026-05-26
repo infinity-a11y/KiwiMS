@@ -3091,9 +3091,9 @@ th.sorting {
   display: flex;
   align-items: center;
   width: 100%;
-  height: 18px;
-  background-color: rgb(0 0 0 / 12%);
-  border-radius: 3px;
+  background-color: rgba(0, 0, 0, 0.25);
+  border-radius: 0px;
+  border: 1px solid #4f4f4f;
 }
 
 .bar {
