@@ -11,7 +11,8 @@ box::use(
       sequential_scales,
       qualitative_scales,
       gradient_scales,
-      paste_hook_js
+      paste_hook_js,
+      hits_col_full_names
     ],
 )
 
@@ -197,10 +198,11 @@ read_decon_peaks_max <- function(db_path, samples = NULL) {
   con <- DBI::dbConnect(RSQLite::SQLite(), db_path, flags = RSQLite::SQLITE_RO)
   on.exit(DBI::dbDisconnect(con), add = TRUE)
   where <- if (!is.null(samples) && length(samples) > 0) {
-    sprintf(
-      "WHERE sample IN (%s)",
-      paste(sprintf("'%s'", samples), collapse = ",")
+    quoted <- paste(
+      sapply(samples, function(s) DBI::dbQuoteLiteral(con, s)),
+      collapse = ", "
     )
+    sprintf("WHERE sample IN (%s)", quoted)
   } else {
     ""
   }
@@ -588,8 +590,17 @@ sample_handsontable <- function(
     renderer_js <- ""
   }
 
+  # Pre-convert concentration/time columns to character to prevent handsontable
+  # numeric type from rounding values in the data source via numeral.js
+  display_tab <- tab
+  if (length(conc_time_idx) == 2) {
+    for (idx in conc_time_idx) {
+      display_tab[[idx]] <- as.character(display_tab[[idx]])
+    }
+  }
+
   handsontable <- rhandsontable::rhandsontable(
-    tab,
+    display_tab,
     rowHeaders = NULL,
     allowed_per_col = allowed_per_col,
     height = 28 + 23 * ifelse(nrow(tab > 15), 15, nrow(tab)),
@@ -628,17 +639,11 @@ sample_handsontable <- function(
   }
 
   if (length(conc_time_idx) == 2) {
-    handsontable <- rhandsontable::hot_col(
+    handsontable <- rhandsontable::hot_validate_numeric(
       handsontable,
-      col = conc_time_idx,
-      type = "numeric",
-      allowInvalid = FALSE,
-      format = "0.##########"
-    ) |>
-      rhandsontable::hot_validate_numeric(
-        cols = conc_time_idx,
-        min = 0
-      )
+      cols = conc_time_idx,
+      min = 0
+    )
   }
 
   return(handsontable)
@@ -677,22 +682,17 @@ fill_sample_table <- function(sample_table, ki_kinact) {
   col_diff <- abs(ncol(sample_table) - 7)
 
   if (col_diff != 0) {
-    # Get concentration, time columns if ki_kinact active
     sample_table <- cbind(
       sample_table,
       (data.frame(rep(list(rep("", nrow(sample_table))), col_diff)))
     )
+    names(sample_table) <- c("Sample", "Protein", paste("Compound", 1:5))
+  }
 
-    if (ki_kinact) {
-      sample_table <- cbind(sample_table, conc_time)
-    }
-
-    names(sample_table) <- c(
-      "Sample",
-      "Protein",
-      paste("Compound", 1:5),
-      if (ki_kinact) c("Concentration", "Time")
-    )
+  # Re-attach Concentration/Time outside the col_diff block so they are
+  # preserved regardless of whether padding was needed.
+  if (ki_kinact) {
+    sample_table <- cbind(sample_table, conc_time)
   }
 
   # Reattach Replicate right after Sample
@@ -725,15 +725,15 @@ clean_sample_table <- function(sample_table, units = NULL) {
   ]
 
   df <- extra_cmp_section[,
-    colSums(is.na(extra_cmp_section) | extra_cmp_section == "") !=
+    colSums(as.matrix(is.na(extra_cmp_section) | extra_cmp_section == "")) !=
       nrow(extra_cmp_section),
     drop = FALSE
   ]
 
   # Rebuild data frame with consecutive values
-  if (ncol(extra_cmp_section)) {
+  if (isTRUE(ncol(extra_cmp_section) > 0)) {
     df <- data.frame()
-    for (i in 1:nrow(extra_cmp_section)) {
+    for (i in seq_len(nrow(extra_cmp_section))) {
       # Extract vector from input table
       row_noNA <- unlist(extra_cmp_section[i, ])[
         !is.na(unlist(extra_cmp_section[i, ])) &
@@ -778,7 +778,7 @@ clean_sample_table <- function(sample_table, units = NULL) {
   # Rename columns — preserve or apply units to Conc/Time names
   names(df) <- c(
     header_cols,
-    paste("Compound", 1:n_cmp),
+    if (n_cmp > 0) paste("Compound", seq_len(n_cmp)) else character(0),
     if (has_conc_time) {
       c(
         paste0(
@@ -1203,6 +1203,9 @@ get_peaks <- function(peak_file = NULL, result_sample, results) {
   # Set names
   names(peaks) <- c("mass", "intensity")
 
+  # Normalize peaks
+  peaks$intensity <- peaks$intensity / max(peaks$intensity) * 100
+
   # Message information
   log_status(nrow(peaks), peaks$mass)
 
@@ -1348,21 +1351,34 @@ check_hits <- function(
   peaks,
   peak_tolerance,
   max_multiples,
-  sample
+  sample,
+  well = NA
 ) {
+  # Get protein name and mass
+  prot_name <- as.character(protein_mw[, 1])
+  prot_mass <- as.numeric(protein_mw[, 2])
+
   # Find protein peak
-  protein_peak <- peaks$mass >= protein_mw[, -1] - peak_tolerance &
-    peaks$mass <= protein_mw[, -1] + peak_tolerance
+  protein_peak <- peaks$mass >= prot_mass - peak_tolerance &
+    peaks$mass <= prot_mass + peak_tolerance
 
-  # Abort if peaks show invalid peaks
-  if (!any(protein_peak)) {
-    log_alert()
+  prot_intensity <- ifelse(
+    !any(protein_peak),
+    0,
+    peaks$intensity[which(protein_peak)]
+  )
 
+  # Keep only peaks above protein mw
+  peaks_valid <- peaks$mass >= prot_mass - peak_tolerance
+
+  if (any(peaks_valid)) {
+    peaks_filtered <- as.data.frame(peaks[peaks_valid, ])
+  } else {
     hits_df <- data.frame(
-      well = "A1",
+      well = well,
       sample = sample,
-      protein = protein_mw[, 1],
-      theor_prot = as.numeric(protein_mw[, -1]),
+      protein = prot_name,
+      theor_prot = prot_mass,
       measured_prot = NA,
       delta_prot = NA,
       prot_intensity = NA,
@@ -1371,40 +1387,16 @@ check_hits <- function(
       compound = NA,
       cmp_mass = NA,
       delta_cmp = NA,
-      multiple = NA
+      multiple = NA,
+      preferred = NA,
+      unmatched = NA,
+      correct = NA
     )
 
-    return(hits_df)
-  }
-
-  # Remove peak intensity normalization
-  # Normalize peak intensity
-  # peaks$intensity <- peaks$intensity / max(peaks$intensity) * 100
-
-  # Keep only peaks above protein mw
-  peaks_valid <- peaks$mass >= protein_mw[, -1] - peak_tolerance
-  if (any(peaks_valid) && sum(peaks_valid) > 1) {
-    peaks_filtered <- as.data.frame(peaks[peaks_valid, ])
-  } else {
-    log_alert()
-
-    hits_df <- data.frame(
-      well = "A1",
-      sample = sample,
-      protein = protein_mw[, 1],
-      theor_prot = as.numeric(protein_mw[, -1]),
-      measured_prot = peaks$mass[which(protein_peak)],
-      delta_prot = abs(
-        as.numeric(protein_mw[, -1]) - peaks$mass[which(protein_peak)]
-      ),
-      prot_intensity = peaks$intensity[which(protein_peak)],
-      peak = NA,
-      intensity = NA,
-      compound = NA,
-      cmp_mass = NA,
-      delta_cmp = NA,
-      multiple = NA
-    )
+    hits_df$unmatched <- unmatched <- sum(!peaks$mass %in% hits_df$peak) /
+      nrow(peaks) *
+      100
+    hits_df$correct <- 100 - unmatched
 
     return(hits_df)
   }
@@ -1426,7 +1418,7 @@ check_hits <- function(
   }
 
   # Addition of protein mw with multiples matrix
-  complex_mat <- mat + protein_mw[, -1]
+  complex_mat <- mat + prot_mass
 
   # Initiate empty hits data frame
   hits_df <- data.frame()
@@ -1441,6 +1433,8 @@ check_hits <- function(
     if (any(hits, na.rm = TRUE)) {
       indices <- which(hits, arr.ind = TRUE)
 
+      hits_add <- data.frame()
+
       for (k in 1:nrow(indices)) {
         # Retrieve compound mass from hit on complex
         multiple <- as.integer(sub(".*\\*", "", colnames(hits)[indices[k, 2]]))
@@ -1450,57 +1444,106 @@ check_hits <- function(
         ]
 
         # Construct new entry for hits_df data frame
-        hits_add <- data.frame(
-          well = "A1",
+        hit <- data.frame(
+          well = well,
           sample = sample,
-          protein = protein_mw[, 1],
-          theor_prot = as.numeric(protein_mw[, -1]),
-          measured_prot = peaks$mass[which(protein_peak)],
-          delta_prot = round(
+          protein = prot_name,
+          theor_prot = prot_mass,
+          measured_prot = if (any(protein_peak)) {
+            peaks$mass[which(protein_peak)]
+          } else {
+            NA
+          },
+          delta_prot = if (any(protein_peak)) {
             abs(
-              as.numeric(protein_mw[, -1]) - peaks$mass[which(protein_peak)]
-            ),
-            2
-          ),
-          prot_intensity = peaks$intensity[which(protein_peak)],
+              prot_mass - peaks$mass[which(protein_peak)]
+            )
+          } else {
+            NA
+          },
+          prot_intensity = prot_intensity,
           peak = peaks_filtered[j, "mass"],
           intensity = peaks_filtered[j, "intensity"],
           compound = rownames(hits)[indices[1]],
           cmp_mass = cmp_mass,
           delta_cmp = abs(
             (as.numeric(cmp_mass) * multiple) -
-              (peaks_filtered[j, "mass"] - as.numeric(protein_mw[, -1]))
+              (peaks_filtered[j, "mass"] - prot_mass)
           ),
-          multiple = multiple
+          multiple = multiple,
+          preferred = TRUE,
+          unmatched = NA,
+          correct = NA
         )
 
-        hits_df <- rbind(hits_df, hits_add)
+        hits_add <- rbind(hits_add, hit)
       }
+
+      # Case multiple matching
+      if (nrow(hits_add) > 1) {
+        # Hit with highest compound mass is preferred to add to total binding
+        hits_add <- hits_add |>
+          dplyr::group_by(compound) |>
+          dplyr::mutate(
+            preferred = dplyr::row_number() == 1
+          )
+
+        # Log duplication event
+        log_duplicated_hits(hits_add)
+      }
+
+      hits_df <- rbind(hits_df, hits_add)
     }
   }
 
   # If no hits detected in peaks
   if (nrow(hits_df) == 0) {
     hits_df <- data.frame(
-      well = "A1",
+      well = well,
       sample = sample,
-      protein = protein_mw[, 1],
-      theor_prot = as.numeric(protein_mw[, -1]),
-      measured_prot = peaks$mass[which(protein_peak)],
-      delta_prot = abs(
-        as.numeric(protein_mw[, -1]) - peaks$mass[which(protein_peak)]
-      ),
-      prot_intensity = peaks$intensity[which(protein_peak)],
-      peak = NA,
+      protein = prot_name,
+      theor_prot = prot_mass,
+      measured_prot = if (any(protein_peak)) {
+        peaks$mass[which(protein_peak)]
+      } else {
+        NA
+      },
+      delta_prot = if (any(protein_peak)) {
+        abs(
+          prot_mass - peaks$mass[which(protein_peak)]
+        )
+      } else {
+        NA
+      },
+      prot_intensity = if (any(protein_peak)) prot_intensity else NA,
+      peak = if (any(protein_peak)) {
+        peaks$mass[which(protein_peak)]
+      } else {
+        NA
+      },
       intensity = NA,
       compound = NA,
       cmp_mass = NA,
       delta_cmp = NA,
-      multiple = NA
+      multiple = NA,
+      preferred = NA,
+      unmatched = NA,
+      correct = NA
     )
   }
 
-  log_hits_count(nrow(hits_df))
+  # Calculate % unmatched and % correct
+  # hits_df$unmatched <- unmatched <- sum(!peaks$mass %in% hits_df$peak) /
+  #   nrow(peaks) *
+  #   100
+  hits_df$unmatched <- unmatched <- sum(
+    !peaks$mass %in% c(hits_df$peak, hits_df$measured_prot)
+  ) /
+    nrow(peaks) *
+    100
+  hits_df$correct <- correct <- 100 - unmatched
+
+  log_result(nrow(hits_df), unmatched, correct)
   return(hits_df)
 }
 
@@ -1520,57 +1563,56 @@ conversion <- function(hits) {
   if (!is.data.frame(hits) || nrow(hits) < 1) {
     log_err_no_df()
     return(NULL)
-  } else if (ncol(hits) != 13) {
-    log_err_cols()
+  } else if (ncol(hits) != 16) {
+    log_err_cols(ncol(hits))
     return(NULL)
-  } else if (anyNA(hits)) {
-    hits <- hits |>
-      dplyr::mutate(
-        `%binding` = NA
-      ) |>
-      dplyr::mutate(
-        `%binding_tot` = NA,
-        .before = peak
-      )
+  } else if (nrow(hits) == 1 && is.na(hits$intensity)) {
+    # Case only protein detected no hits
+    I_total <- hits$prot_intensity # Total intensity
+    hits <- dplyr::mutate(hits, `%binding` = 0)
+    hits <- dplyr::mutate(
+      hits,
+      `%binding_tot` = 0,
+      .before = peak
+    )
   } else {
-    # Peaks: 1000(IA), 1010(IB), 1020(IC), 1011(ID)
-    # Peaks are in hits data frame
+    # Total intensity (only preferred)
+    I_total <- sum(hits$intensity[hits$preferred]) +
+      ifelse(anyNA(hits$prot_intensity), 0, unique(hits$prot_intensity))
 
-    # Gesamtintensität: IA + IB + IC + ID = Itotal
-    I_total <- sum(unique(hits$intensity)) + unique(hits$prot_intensity)
-    perc_bind_prot <- unique(hits$prot_intensity) / I_total
-
-    # nicht umgesetztes / ungebundenes Protein: IA / Itotal * 100
-
-    # %BinIB = IB / Itotal * 100
-    # %BinIC = IC / Itotal * 100
-    # usw ....
-
-    # %Bintotal = %BinIB + %BinIC + %BinID  (alles was nicht freies Prot ist)
+    # Protein only binding
+    perc_bind_prot <- ifelse(
+      anyNA(hits$prot_intensity),
+      0,
+      unique(hits$prot_intensity) / I_total
+    )
 
     # Adding %Binding values to hit data frame
-    hits <- hits |>
-      dplyr::mutate(
-        `%binding` = intensity / I_total
-      )
-    hits <- hits |>
-      dplyr::mutate(
-        `%binding_tot` = sum(unique(hits$`%binding`)),
-        .before = peak
-      )
+    hits <- dplyr::mutate(hits, `%binding` = intensity / I_total)
+    hits <- dplyr::mutate(
+      hits,
+      `%binding_tot` = sum(unique(hits$`%binding`)),
+      .before = peak
+    )
 
-    # Plausibilitätscheck check result < 100 - richtig so?
+    # Plausibility check
     total_relBinding <- hits$`%binding_tot`[1] + perc_bind_prot
-    if (!all.equal(total_relBinding, 1)) {
+    if (!isTRUE(all.equal(total_relBinding, 1))) {
       log_err_binding()
       return(NULL)
     }
 
+    # Log computed relative binding values
     log_intensities(
       I_total,
       unique(hits$prot_intensity),
       sum(unique(hits$intensity))
     )
+
+    # Normalize peak intensity
+    # max_intensity <- max(c(hits$intensity, hits$prot_intensity))
+    # hits$intensity <- hits$intensity / max_intensity * 100
+    # hits$prot_intensity <- hits$prot_intensity / max_intensity * 100
   }
 
   # Change column names
@@ -1589,6 +1631,9 @@ conversion <- function(hits) {
     "Compound Mw [Da]",
     "Delta Mw Compound [Da]",
     "Binding Stoichiometry",
+    "Preferred",
+    "% Unmatched",
+    "% Correct",
     "% Binding"
   )
 
@@ -1598,7 +1643,6 @@ conversion <- function(hits) {
 # Header: The Sample Name
 log_start <- function(sample_name) {
   message(sprintf("Hit Screening: %s\n  │", sample_name))
-  Sys.sleep(0.05)
 }
 
 # Status: Peak Info
@@ -1613,13 +1657,44 @@ log_status <- function(n_peaks, mass = NULL) {
   } else {
     message(sprintf("  ├─ Status: %s peaks detected", n_peaks))
   }
-  # Sys.sleep(0.05)
 }
 
-# 3. The hit count
-log_hits_count <- function(n_hits) {
+log_duplicated_hits <- function(hits_add) {
+  message(sprintf(
+    "  ├─ %s Hit duplicates at %s Da",
+    .col_warn(warning_sym),
+    hits_add[1, "peak"]
+  ))
+  for (i in 1:nrow(hits_add)) {
+    message(sprintf(
+      "  │  └─ Compound %s - %s%s",
+      hits_add[i, "compound"],
+      paste0("[", hits_add[i, "cmp_mass"], "]x", hits_add[i, "multiple"]),
+      paste0(" - Preferred: ", hits_add[i, "preferred"])
+    ))
+  }
+}
+
+.col_warn <- function(x) {
+  if (!is.null(shiny::getDefaultReactiveDomain())) {
+    paste0('<span style="color: darkorange; font-weight: bold;">', x, "</span>")
+  } else {
+    paste0("\033[33m", x, "\033[39m")
+  }
+}
+.col_err <- function(x) {
+  if (!is.null(shiny::getDefaultReactiveDomain())) {
+    paste0('<span style="color: #e53935; font-weight: bold;">', x, "</span>")
+  } else {
+    paste0("\033[31m", x, "\033[39m")
+  }
+}
+
+# Log conversion result per sample
+log_result <- function(n_hits, unmatched, correct) {
   message(sprintf("  ├─ Result: %s hits detected", n_hits))
-  # Sys.sleep(0.05)
+  message(sprintf("  │  ├─ Unmatched: %.2f%%", unmatched))
+  message(sprintf("  │  ├─ Correct: %.2f%%", correct))
 }
 
 log_intensities <- function(total, unbound, binding) {
@@ -1628,30 +1703,26 @@ log_intensities <- function(total, unbound, binding) {
   perc_binding <- (binding / total) * 100
 
   message(paste0(
-    sprintf("  │  ├─ Total Intensity: %.2f (100%%)\n", total),
-    sprintf("  │  ├─ Unbound Protein: %.2f (%.1f%%)\n", unbound, perc_unbound),
-    sprintf("  │  └─ Total Binding:   %.2f (%.1f%%)", binding, perc_binding)
+    sprintf("  │  ├─ Unbound Protein: %.2f%%\n", perc_unbound),
+    sprintf("  │  └─ Total Binding:   %.2f%%", perc_binding)
   ))
-  # Sys.sleep(0.05)
 }
 
-# Alert: No Peaks
+# No Peaks
 log_alert <- function(msg = "No protein peak detected") {
-  message(sprintf("  ├─ ⚠️ %s.  ", msg))
-  # Sys.sleep(0.05)
+  message(sprintf("  ├─ %s %s.  ", .col_warn(warning_sym), msg))
 }
 
 # Footer: Closing a successful sample
 log_done <- function() {
   message(paste0("  │\n", "  └─ ☑ Sample completed.\n  "))
-  # Sys.sleep(0.05)
 }
 
 # Alert: empty hits argument
 log_err_no_df <- function() {
   msg <- sprintf(
     "  │  └─ %s ALERT: 'hits' argument must be a data frame with at least one row. Skipping.\n",
-    warning_sym
+    .col_err(warning_sym)
   )
   message(msg)
 }
@@ -1659,32 +1730,58 @@ log_err_no_df <- function() {
 # Alert: discrepancy in expected hits columns
 log_err_cols <- function(current_cols) {
   msg <- sprintf(
-    "  │  └─ %s ALERT: 'hits' data frame has %s columns, but 13 are required.\n",
-    warning_sym,
+    "  │  └─ %s ALERT: 'hits' data frame has %s columns, but 16 are required.\n",
+    .col_err(warning_sym),
     current_cols
   )
   message(msg)
 }
 
-# Alert: 100% Total %-Binding plausibility check
+# Alert: 100% Tot. Binding [%] plausibility check
 log_err_binding <- function() {
   msg <- sprintf(
     "  │  └─ %s ALERT: Total relative binding is not 100%%. Check data integrity.\n",
-    warning_sym
+    .col_err(warning_sym)
   )
   message(msg)
 }
 
 # Log hits summary
 log_hits_summary <- function(hits_summarized) {
-  message(paste(
-    "SUMMARIZING HITS\n  │\n",
-    sprintf(
-      " ├─ %s sample(s) screened\n",
-      length(unique(hits_summarized$Sample))
-    ),
-    sprintf(" └─ %s hit(s) detected in total\n", sum(!is.na(hits_summarized$Compound)))
+  unmatched_vals <- as.numeric(hits_summarized[["% Unmatched"]])
+  correct_vals <- as.numeric(hits_summarized[["% Correct"]])
+  mean_unmatched <- mean(unmatched_vals, na.rm = TRUE)
+  sd_unmatched <- stats::sd(unmatched_vals, na.rm = TRUE)
+  mean_correct <- mean(correct_vals, na.rm = TRUE)
+  sd_correct <- stats::sd(correct_vals, na.rm = TRUE)
+
+  message(sprintf(
+    "SUMMARIZING HITS\n  │\n  ├─ %s sample(s) screened\n  ├─ %s hit(s) detected in total\n  ├─ Unmatched: %.2f%% (SD: %.2f%%)\n  └─ Correct:   %.2f%% (SD: %.2f%%)\n",
+    length(unique(hits_summarized$Sample)),
+    sum(!is.na(hits_summarized$Compound)),
+    mean_unmatched,
+    sd_unmatched,
+    mean_correct,
+    sd_correct
   ))
+}
+
+# Plain-text number formatter for log messages: scientific notation for
+# very large (|exp| >= 4) or very small (exp <= -3) values, otherwise signif.
+fmt_log <- function(x, digits = 4) {
+  if (is.na(x) || !is.finite(x)) {
+    return(as.character(x))
+  }
+  abs_x <- abs(x)
+  if (abs_x == 0) {
+    return("0")
+  }
+  exp <- floor(log10(abs_x))
+  if (exp >= 4 || exp <= -3) {
+    formatC(x, format = "e", digits = 2)
+  } else {
+    as.character(signif(x, digits))
+  }
 }
 
 # Log binding kinetics analysis initiation
@@ -1692,17 +1789,17 @@ log_hits_summary <- function(hits_summarized) {
 log_binding_kinetics <- function(concentrations, times, units) {
   message(paste(
     sprintf(
-      "  ├─ %s concentrations present from %s to %s [%s] \n",
+      "  ├─ %s concentrations present from %s to %s [%s]\n",
       length(unique(concentrations)),
-      min(concentrations),
-      max(concentrations),
+      fmt_log(min(concentrations)),
+      fmt_log(max(concentrations)),
       units[1]
     ),
     sprintf(
-      " ├─ %s time points present from %s to %s [%s] \n",
+      " ├─ %s time points present from %s to %s [%s]\n",
       length(unique(times)),
-      min(times),
-      max(times),
+      fmt_log(min(times)),
+      fmt_log(max(times)),
       units[2]
     ),
     " ├─ Infer observed first-order rate constant k_obs\n  │  │"
@@ -1715,7 +1812,8 @@ log_filtered_samples <- function(diff) {
   if (diff > 0) {
     message(paste(
       sprintf(
-        "  │  ├─ %s sample(s) ignored due to missing hits",
+        "  │  ├─ %s %s sample(s) ignored due to missing hits",
+        .col_warn(warning_sym),
         diff
       )
     ))
@@ -1731,12 +1829,16 @@ log_filtered_concentrations <- function(initial_tbl, filtered_tbl, conc_time) {
   not_present_conc <- unique(initial_tbl[[conc_time[1]]])[!conc_diff]
 
   if (length(not_present_conc)) {
-    message(paste(
-      sprintf(
-        "  │  ├─ Concentrations %s are omitted after filtering\n",
-        paste(not_present_conc, collapse = "; ")
-      ),
-      " │  │"
+    n <- length(not_present_conc)
+    connectors <- c(rep("├─", max(n - 1, 0)), "└─")
+    sub_lines <- paste0(
+      sprintf("  │  │  %s %s\n", connectors, not_present_conc),
+      collapse = ""
+    )
+    message(sprintf(
+      "  │  ├─ %s Omitted concentrations after filtering\n%s  │  │",
+      .col_warn(warning_sym),
+      sub_lines
     ))
   }
 }
@@ -1750,69 +1852,91 @@ log_concentration <- function(concentration, unit, last) {
         "  │  └─ Computing k_obs for %s %s",
         "  │  ├─ Computing k_obs for %s %s"
       ),
-      concentration,
+      fmt_log(concentration),
       unit
     )
   ))
 }
 
+# Log nonlinear fit failure
+log_fit_failed <- function(last, reason) {
+  message(sprintf(
+    ifelse(
+      last,
+      "  │     └─ %s Skipped: %s",
+      "  │  │  └─ %s Skipped: %s"
+    ),
+    .col_warn(warning_sym),
+    reason
+  ))
+}
+
+# Pre-flight check: returns NULL if data is suitable for nlsLM, or a reason string if not
+can_fit_kobs <- function(data) {
+  real <- data[data$time > 0 & !is.na(data$binding), ]
+  n <- nrow(real)
+  if (n < 2) {
+    tp_label <- if (n == 1) "1 time point" else "0 time points"
+    return(sprintf("only %s available (minimum 2 required)", tp_label))
+  }
+  if (length(unique(real$binding)) < 2) {
+    vals <- real$binding
+    if (all(vals == 0)) {
+      return("no response detected (binding = 0% at all time points)")
+    }
+    if (all(vals >= 100)) {
+      return("immediate saturation (binding = 100% at all time points)")
+    }
+    return(sprintf(
+      "flat response (binding = %s%% at all time points)",
+      round(vals[1], 1)
+    ))
+  }
+  NULL
+}
+
 # Log timepoints
 log_timepoints <- function(data, unit, last) {
+  n <- nrow(data)
+  tmin <- min(data$time)
+  tmax <- max(data$time)
+  tp_label <- if (n == 1) "time point" else "time points"
+  range_str <- if (tmin == tmax) {
+    sprintf("%s %s", fmt_log(tmin), unit)
+  } else {
+    sprintf("%s - %s %s", fmt_log(tmin), fmt_log(tmax), unit)
+  }
   message(paste(
     sprintf(
       ifelse(
         last,
-        "  │     ├─ %s time points included (%s - %s %s)",
-        "  │  │  ├─ %s time points included (%s - %s %s)"
+        "  │     ├─ %s %s included (%s)",
+        "  │  │  ├─ %s %s included (%s)"
       ),
-      nrow(data),
-      min(data$time),
-      max(data$time),
-      unit
-    ),
-    if (nrow(data) < 3) {
-      sprintf(
-        ifelse(
-          last,
-          "\n  │     └─ %s ≥ 3 time points required for nonlinear fit",
-          "\n  │  │  └─ %s ≥ 3 time points required for nonlinear fit"
-        ),
-        warning_sym
-      )
-    }
+      n,
+      tp_label,
+      range_str
+    )
   ))
 }
 
 # Log kobs result
 log_kobs_result <- function(result, last, unit) {
-  message(
-    if (last) {
-      paste(
-        "  │     ├─ Nonlinear regression model fitted\n",
-        sprintf(
-          " │     ├─ k_obs = %s %s⁻¹\n",
-          round(result$kobs, 4),
-          unit
-        ),
-        sprintf(" │     ├─ v = %s\n", round(result$v, 4)),
-        sprintf(" │     └─ Plateau = %s\n  │", round(result$kobs, 4))
-      )
-    } else {
-      paste(
-        "  │  │  ├─ Nonlinear regression model fitted.\n",
-        sprintf(" │  │  ├─ k_obs = %s %s⁻¹\n", round(result$kobs, 4), unit),
-        sprintf(" │  │  ├─ v = %s\n", round(result$v, 4)),
-        sprintf(" │  │  └─ Plateau = %s\n  │  │", round(result$kobs, 4))
-      )
-    }
-  )
+  p <- if (last) "  │     " else "  │  │  "
+  message(sprintf("%s├─ Nonlinear regression model fitted", p))
+  message(sprintf("%s├─ k_obs   = %s %s⁻¹", p, fmt_log(result$kobs), unit))
+  message(sprintf("%s├─ v       = %s", p, fmt_log(result$v)))
+  message(sprintf("%s└─ Plateau = %s%%", p, fmt_log(result$plateau)))
+}
+
+# Log Ki/kinact warning
+log_ki_kinact_warning <- function(msg) {
+  message(sprintf("     ├─ %s %s", .col_warn(warning_sym), msg))
 }
 
 # Log (Kᵢ/kᵢₙₐ꜀ₜ) analysis initiation
 log_ki_kinact_analysis <- function() {
-  message(paste(
-    "  └─ Infer second-order rate constant Kᵢ/kᵢₙₐ꜀ₜ"
-  ))
+  message(paste("  │\n", " └─ Infer second-order rate constant Kᵢ/kᵢₙₐ꜀ₜ"))
 }
 
 # Log Ki/kinact results
@@ -1821,19 +1945,19 @@ log_ki_kinact_results <- function(results, units) {
     paste0(
       sprintf(
         "     ├─ kᵢₙₐ꜀ₜ = %s ± %s %s⁻¹\n",
-        round(results$Params[1, 1], 4),
-        round(results$Params[1, 2], 4),
+        fmt_log(results$Params[1, 1]),
+        fmt_log(results$Params[1, 2]),
         units[["Time"]]
       ),
       sprintf(
-        "     ├─ Kᵢ = %s ± %s %s\n",
-        round(results$Params[2, 1], 4),
-        round(results$Params[2, 2], 4),
+        "     ├─ Kᵢ     = %s ± %s %s\n",
+        fmt_log(results$Params[2, 1]),
+        fmt_log(results$Params[2, 2]),
         units[["Concentration"]]
       ),
       sprintf(
         "     └─ kᵢₙₐ꜀ₜ/Kᵢ = %s %s⁻¹ %s⁻¹",
-        round(results$Params[1, 1] / results$Params[2, 1], 4),
+        fmt_log(results$Params[1, 1] / results$Params[2, 1]),
         units[["Concentration"]],
         units[["Time"]]
       )
@@ -1851,18 +1975,22 @@ add_hits <- function(
   peak_tolerance,
   max_multiples,
   session,
-  ns
+  ns,
+  ki_kinact = FALSE,
+  config = NULL
 ) {
   samples <- names(results$deconvolution)
   protein_mw <- protein_table$`Mass 1`
   compound_mw <- as.matrix(compound_table[, -1])
   rownames(compound_mw) <- compound_table[, 1]
 
+  hits_max <- if (ki_kinact) 80 else 100
+
   for (i in seq_along(samples)) {
     shinyWidgets::updateProgressBar(
       session = session,
       id = ns("conversion_progress"),
-      value = ifelse(i == 1, 0, (i - 1) / length(samples) * 100),
+      value = ifelse(i == 1, 0, (i - 1) / length(samples) * hits_max),
       title = paste(
         "[",
         i,
@@ -1883,6 +2011,23 @@ add_hits <- function(
       grep("Compound", names(sample_table))
     ]
 
+    # Determine well position if config is present
+    sample_well <- NA
+    if (
+      !is.null(config) &&
+        "Well" %in% names(config) &&
+        "Sample" %in% names(config)
+    ) {
+      cfg_key <- gsub("\\.raw$", "", config[["Sample"]], ignore.case = TRUE)
+      idx <- match(s_key, cfg_key)
+      if (!is.na(idx)) {
+        raw_well <- as.character(config[["Well"]][idx])
+        if (!is.na(raw_well) && nzchar(trimws(raw_well))) {
+          sample_well <- sub("^.*:", "", raw_well)
+        }
+      }
+    }
+
     results$deconvolution[[samples[i]]][["hits"]] <- check_hits(
       sample_table = sample_table,
       protein_mw = protein_table[protein_table$Protein == present_protein, ],
@@ -1890,10 +2035,11 @@ add_hits <- function(
       peaks = get_peaks(result_sample = samples[i], results = results),
       peak_tolerance = peak_tolerance,
       max_multiples = max_multiples,
-      sample = samples[i]
+      sample = samples[i],
+      well = sample_well
     )
 
-    # Conversion of relative intensities to %-Binding
+    # Conversion of relative intensities to Binding [%]
     # Add resulting hits data frame to sample
     results$deconvolution[[samples[i]]][[
       "hits"
@@ -1907,11 +2053,12 @@ add_hits <- function(
   shinyWidgets::updateProgressBar(
     session = session,
     id = ns("conversion_progress"),
-    value = 100,
+    value = hits_max,
     title = paste0(
-      "Search for hits in ",
+      "Hit screening completed for ",
       length(samples),
-      " samples completed."
+      " sample(s).",
+      if (ki_kinact) " Computing binding kinetics..." else ""
     )
   )
 
@@ -1995,10 +2142,10 @@ check_filter_hits <- function(result_list) {
   if (
     is.null(result_list$hits_summary) || nrow(result_list$hits_summary) == 0
   ) {
-    # Log no hits detected
-    message(
-      "  └─ No hits detected in any sample. Skipping binding kinetics analysis."
-    )
+    message(sprintf(
+      "  └─ %s No hits detected in any sample. Skipping binding kinetics analysis.",
+      .col_err(warning_sym)
+    ))
     return(NULL)
   }
 
@@ -2083,13 +2230,14 @@ add_kobs_binding_result <- function(
       kobs_result_table,
       data.frame(
         binding_kobs_result[[i]]$kobs,
+        binding_kobs_result[[i]]$kobs_se,
         binding_kobs_result[[i]]$v,
         binding_kobs_result[[i]]$plateau
       )
     )
   }
   rownames(kobs_result_table) <- conc_names
-  colnames(kobs_result_table) <- c("kobs", "v", "plateau")
+  colnames(kobs_result_table) <- c("kobs", "kobs_se", "v", "plateau")
 
   # Add kobs result table
   binding_kobs_result$kobs_result_table <- kobs_result_table
@@ -2110,7 +2258,9 @@ add_ki_kinact_result <- function(result_list, units) {
   )
 
   # Log Ki/kinact results
-  log_ki_kinact_results(results = ki_kinact_result, units = units)
+  if (!is.null(ki_kinact_result)) {
+    log_ki_kinact_results(results = ki_kinact_result, units = units)
+  }
 
   return(ki_kinact_result)
 }
@@ -2132,16 +2282,29 @@ make_binding_plot <- function(
     )
   }
 
-  # Keep only non-zero observed data points
+  # Keep observed data points at t > 0 (excludes dummy t=0 anchor rows)
   df_points <- kobs_result$binding_table[
-    !(kobs_result$binding_table$time == 0 |
-      kobs_result$binding_table$binding == 0),
+    kobs_result$binding_table$time > 0 &
+      !is.na(kobs_result$binding_table$binding),
   ]
 
-  # Set symbols to corresponding concentration
+  # Identify concentrations with no observed data (e.g. kobs=0 no-response)
+  all_conc_chr <- unique(as.character(kobs_result$binding_table$concentration))
+  obs_conc_chr <- unique(as.character(df_points$concentration))
+  missing_conc <- setdiff(all_conc_chr, obs_conc_chr)
+
+  # Sort df_points so legend order follows descending concentration
+  all_conc_sorted <- sort(as.numeric(all_conc_chr), decreasing = TRUE)
+  df_points$concentration <- factor(
+    as.character(df_points$concentration),
+    levels = as.character(all_conc_sorted)
+  )
+  df_points <- df_points[order(df_points$concentration), ]
+
+  # Set symbols to corresponding concentration (descending)
   symbol_map <- stats::setNames(
-    symbols[1:length(levels(df_points$concentration))],
-    levels(df_points$concentration)
+    symbols[seq_along(all_conc_sorted)],
+    as.character(all_conc_sorted)
   )
 
   font_color <- if (theme == "light") "black" else "white"
@@ -2155,6 +2318,10 @@ make_binding_plot <- function(
   } else {
     "rgba(255,255,255,0.5)"
   }
+
+  has_replicates <- "binding_sd" %in%
+    names(df_points) &&
+    !all(is.na(df_points$binding_sd))
 
   # Generate plot
   binding_plot <- plotly::plot_ly() |>
@@ -2175,7 +2342,7 @@ make_binding_plot <- function(
           gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
           "<br>"
         ),
-        "%-Binding: %{y:.2f}<br>",
+        "Binding [%]: %{y:.2f}<br>",
         paste0(
           "K<sub>obs</sub>: %{customdata:.2f} ",
           gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
@@ -2201,6 +2368,17 @@ make_binding_plot <- function(
         line = list(width = 1, color = "white")
       ),
       legendgroup = ~concentration,
+      error_y = if (has_replicates) {
+        list(
+          type = "data",
+          array = ~binding_sd,
+          visible = TRUE,
+          thickness = 1.5,
+          width = 4
+        )
+      } else {
+        list(visible = FALSE)
+      },
       hovertemplate = ~ paste(
         "<b>Observed</b><br>",
         paste(
@@ -2208,7 +2386,7 @@ make_binding_plot <- function(
           gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
           "<br>"
         ),
-        "%-Binding: %{y:.2f}<br>",
+        "Binding [%]: %{y:.2f}<br>",
         paste0(
           "K<sub>obs</sub>: %{customdata:.2f} ",
           gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
@@ -2218,7 +2396,35 @@ make_binding_plot <- function(
       ),
       customdata = ~kobs,
       showlegend = ifelse(is.null(filter_conc), TRUE, FALSE)
-    ) |>
+    )
+
+  # Add explicit legend-only entries for no-response concentrations (no observed points)
+  if (is.null(filter_conc) && length(missing_conc) > 0) {
+    for (conc_name in as.character(sort(
+      as.numeric(missing_conc),
+      decreasing = TRUE
+    ))) {
+      binding_plot <- binding_plot |>
+        plotly::add_markers(
+          x = 0,
+          y = 0,
+          name = conc_name,
+          legendgroup = conc_name,
+          marker = list(
+            size = 12,
+            color = unname(colors[conc_name]),
+            symbol = unname(symbol_map[conc_name]),
+            opacity = 0,
+            line = list(width = 0)
+          ),
+          showlegend = TRUE,
+          hoverinfo = "skip",
+          inherit = FALSE
+        )
+    }
+  }
+
+  binding_plot <- binding_plot |>
     plotly::layout(
       hovermode = "closest",
       paper_bgcolor = "rgba(0,0,0,0)",
@@ -2229,7 +2435,7 @@ make_binding_plot <- function(
           text = paste0(
             "Concentration [",
             gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
-"]  "
+            "]  "
           ),
           font = list(color = font_color)
         ),
@@ -2265,18 +2471,29 @@ make_kobs_plot <- function(ki_kinact_result, colors, units, theme = "dark") {
     !is.na(ki_kinact_result$Kobs_Data$predicted_kobs),
   ]
 
-  # Get observed kobs data points
+  # Get observed kobs data points (include kobs=0 for no-response; exclude dummy anchor at conc=0)
   df_points <- ki_kinact_result$Kobs_Data[
     !is.na(ki_kinact_result$Kobs_Data$kobs) &
-      ki_kinact_result$Kobs_Data$kobs != 0,
+      ki_kinact_result$Kobs_Data$conc > 0,
   ]
-  df_points$conc <- factor(df_points$conc, levels = sort(df_points$conc))
+  ordered_levels <- sort(
+    unique(as.numeric(as.character(df_points$conc))),
+    decreasing = TRUE
+  )
+  df_points$conc <- factor(
+    as.character(df_points$conc),
+    levels = as.character(ordered_levels)
+  )
+  # Sort so legend order matches factor level order (first appearance drives plotly legend)
+  df_points <- df_points[order(df_points$conc), ]
+  df_points$kobs_se_label <- ifelse(
+    is.na(df_points$kobs_se),
+    "N/A",
+    sprintf("%.4f", df_points$kobs_se)
+  )
 
-  # Set symbols to corresponding concentration
-  ordered_conc <- df_points |>
-    dplyr::arrange(dplyr::desc(conc)) |>
-    dplyr::reframe(conc) |>
-    unlist()
+  # Set symbols to corresponding concentration (descending, matching binding curve)
+  ordered_conc <- as.character(ordered_levels)
 
   symbol_map <- stats::setNames(
     symbols[1:length(ordered_conc)],
@@ -2308,49 +2525,66 @@ make_kobs_plot <- function(ki_kinact_result, colors, units, theme = "dark") {
       hovertemplate = paste(
         "<b>Predicted</b><br>",
         paste0(
-          "Concentration: %{x:.2f} ",
+          "Concentration: %{x} ",
           gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
           "<br>"
         ),
         paste0(
-          "K<sub>obs</sub>: %{y:.2f} ",
+          "K<sub>obs</sub>: %{y:.4f} ",
           gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
           "⁻¹"
         ),
         "<extra></extra>"
       ),
       showlegend = FALSE
-    ) |>
-    # Calculated kobs
-    plotly::add_markers(
-      data = df_points,
+    )
+
+  conc_unit <- gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]])
+  time_unit <- gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])
+
+  for (conc_name in ordered_conc) {
+    sub <- df_points[as.character(df_points$conc) == conc_name, , drop = FALSE]
+    kobs_plot <- plotly::add_markers(
+      kobs_plot,
+      data = sub,
       x = ~ as.numeric(as.character(conc)),
       y = ~kobs,
-      type = "scatter",
-      color = ~conc,
+      name = conc_name,
+      legendgroup = conc_name,
       marker = list(
         size = 12,
         opacity = 1,
+        color = unname(colors[conc_name]),
+        symbol = unname(symbol_map[conc_name]),
         line = list(width = 1, color = font_color)
       ),
-      name = ~conc,
-      symbols = symbol_map,
-      symbol = ~ as.character(conc),
-      hovertemplate = paste(
+      customdata = ~kobs_se_label,
+      error_y = list(
+        type = "data",
+        array = ~kobs_se,
+        visible = TRUE,
+        thickness = 1.5,
+        width = 4,
+        color = font_color
+      ),
+      hovertemplate = paste0(
         "<b>Calculated</b><br>",
-        paste0(
-          "Concentration: %{x:.2f} ",
-          gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
-          "<br>"
-        ),
-        paste0(
-          "K<sub>obs</sub>: %{y:.2f} ",
-          gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
-          "⁻¹"
-        ),
+        "Concentration: ",
+        conc_name,
+        " ",
+        conc_unit,
+        "<br>",
+        "K<sub>obs</sub>: %{y:.4f} ± %{customdata} ",
+        time_unit,
+        "⁻¹",
         "<extra></extra>"
       ),
-    ) |>
+      showlegend = TRUE,
+      inherit = FALSE
+    )
+  }
+
+  kobs_plot <- kobs_plot |>
     plotly::layout(
       hovermode = "closest",
       paper_bgcolor = "rgba(0,0,0,0)",
@@ -2361,7 +2595,7 @@ make_kobs_plot <- function(ki_kinact_result, colors, units, theme = "dark") {
           text = paste0(
             "Concentration [",
             gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
-"]  "
+            "]  "
           ),
           font = list(color = font_color)
         ),
@@ -2447,25 +2681,20 @@ compute_kobs <- function(hits, units) {
       FALSE
     )
 
-    # Log concentrations
-    log_concentration(
-      concentration = i,
-      unit = units["Concentration"],
-      last = last
-    )
+    # Filter rows for this concentration
+    raw_data <- hits |>
+      dplyr::filter(!!rlang::sym(conc) == i)
 
-    # TODO
-    # Currently no duplicates/triplicates considered
-    data <- hits |>
-      dplyr::filter(!!rlang::sym(conc) == i) |>
-      dplyr::distinct(time, .keep_all = TRUE)
-
-    # Log timepoints
-    log_timepoints(data = data, unit = units["Time"], last = last)
-
-    # If less than 3 entries abort and continue with next iteration
-    if (sum(!is.na(data$binding)) < 3) {
-      next
+    if ("Replicate" %in% names(raw_data) && !all(is.na(raw_data$Replicate))) {
+      data <- raw_data |>
+        dplyr::group_by(Replicate) |>
+        dplyr::summarise(
+          time = dplyr::first(time),
+          binding = mean(binding, na.rm = TRUE),
+          .groups = "drop"
+        )
+    } else {
+      data <- dplyr::distinct(raw_data, time, .keep_all = TRUE)
     }
 
     # Make dummy row to anchor fitting at 0
@@ -2479,17 +2708,105 @@ compute_kobs <- function(hits, units) {
     }
     data <- rbind(data, dummy_row)
 
-    # Nonlinear regression with customized minpack.lm::nlsLM() function
-    nonlin_mod <- nlsLM_fixed(
-      formula = binding ~ 100 * (v / kobs * (1 - exp(-kobs * time))),
-      start = start_vals,
-      data = data
+    # Pre-flight: verify data is identifiable before attempting fit
+    # Check before logging so skipped concentrations emit a single compact line
+    fit_check <- can_fit_kobs(data)
+    if (!is.null(fit_check)) {
+      branch <- if (last) "└─" else "├─"
+      if (grepl("^no response", fit_check)) {
+        message(sprintf(
+          "  │  %s %s %s %s: no response → k_obs = 0",
+          branch,
+          .col_warn(warning_sym),
+          fmt_log(i),
+          units["Concentration"]
+        ))
+        concentration_list[[i]] <- list(
+          kobs = 0,
+          kobs_se = NA_real_,
+          v = 0,
+          plateau = 0,
+          nlm = NULL
+        )
+
+        # Build per-timepoint SD the same way as the normal case
+        if (
+          "Replicate" %in% names(raw_data) && !all(is.na(raw_data$Replicate))
+        ) {
+          tp_sd_zero <- raw_data |>
+            dplyr::group_by(time) |>
+            dplyr::summarise(
+              binding_sd = stats::sd(binding, na.rm = TRUE),
+              .groups = "drop"
+            )
+        } else {
+          tp_sd_zero <- data.frame(
+            time = unique(raw_data$time),
+            binding_sd = NA_real_
+          )
+        }
+
+        predictions_zero <- data.frame(
+          time = seq(0, max(hits$time), by = 1),
+          predicted_binding = 0
+        )
+
+        binding_table <- rbind(
+          binding_table,
+          dplyr::left_join(
+            predictions_zero,
+            dplyr::select(data, c("time", "binding")),
+            by = "time"
+          ) |>
+            dplyr::left_join(tp_sd_zero, by = "time") |>
+            dplyr::mutate(
+              concentration = i,
+              kobs = 0,
+              kobs_se = NA_real_
+            )
+        )
+      } else {
+        message(sprintf(
+          "  │  %s %s %s %s: skipped (%s)",
+          branch,
+          .col_warn(warning_sym),
+          fmt_log(i),
+          units["Concentration"],
+          fit_check
+        ))
+      }
+      next
+    }
+
+    # Only log the verbose header + timepoints when actually fitting
+    log_concentration(
+      concentration = i,
+      unit = units["Concentration"],
+      last = last
     )
+    log_timepoints(data = data, unit = units["Time"], last = last)
+
+    # Nonlinear regression with customized minpack.lm::nlsLM() function
+    nonlin_mod <- tryCatch(
+      nlsLM_fixed(
+        formula = binding ~ 100 * (v / kobs * (1 - exp(-kobs * time))),
+        start = start_vals,
+        data = data
+      ),
+      error = function(e) {
+        log_fit_failed(last, conditionMessage(e))
+        NULL
+      }
+    )
+    if (is.null(nonlin_mod)) {
+      next
+    }
 
     # Extract parameters
     params <- summary(nonlin_mod)$parameters
     result <- list(
       kobs = params[2, 1],
+      kobs_se = params[2, 2],
       v = params[1, 1],
       plateau = 100 * (params[1, 1] / params[2, 1]),
       nlm = nonlin_mod
@@ -2507,6 +2824,18 @@ compute_kobs <- function(hits, units) {
       max = max(hits$time)
     )
 
+    # Per-time-point SD from raw replicates (NA when no Replicate column)
+    if ("Replicate" %in% names(raw_data) && !all(is.na(raw_data$Replicate))) {
+      tp_sd <- raw_data |>
+        dplyr::group_by(time) |>
+        dplyr::summarise(
+          binding_sd = stats::sd(binding, na.rm = TRUE),
+          .groups = "drop"
+        )
+    } else {
+      tp_sd <- data.frame(time = unique(raw_data$time), binding_sd = NA_real_)
+    }
+
     # Append predictions to predictions data frame
     binding_table <- rbind(
       binding_table,
@@ -2515,14 +2844,20 @@ compute_kobs <- function(hits, units) {
         dplyr::select(data, c("time", "binding")),
         by = "time"
       ) |>
-        dplyr::mutate(concentration = i, kobs = result$kobs)
+        dplyr::left_join(tp_sd, by = "time") |>
+        dplyr::mutate(
+          concentration = i,
+          kobs = result$kobs,
+          kobs_se = result$kobs_se
+        )
     )
 
     # Add predictions specific for concentration
     concentration_list[[i]][["predictions"]] <- predictions
 
-    # Save hits for concentration
+    # Save hits for concentration (averaged) and raw replicates for scatter plots
     concentration_list[[i]][["hits"]] <- data
+    concentration_list[[i]][["hits_raw"]] <- raw_data
 
     # Log kobs result
     log_kobs_result(
@@ -2548,11 +2883,11 @@ compute_kobs <- function(hits, units) {
 }
 
 compute_ki_kinact <- function(kobs_result, units = units) {
-  # Get kobs subset
-  kobs <- kobs_result$binding_table |>
-    dplyr::filter(!duplicated(kobs_result$binding_table$kobs)) |>
-    dplyr::mutate(conc = as.numeric(as.character(concentration))) |>
-    dplyr::select(conc, kobs)
+  # One row per concentration from kobs_result_table (avoids deduplication by value)
+  kobs <- kobs_result$kobs_result_table
+  kobs$conc <- as.numeric(rownames(kobs))
+  kobs <- kobs[, c("conc", "kobs", "kobs_se")]
+  kobs <- kobs[order(kobs$conc), ]
 
   # Adjust start values to units
   if (units["Concentration"] == "M" & units["Time"] == "s") {
@@ -2561,19 +2896,55 @@ compute_ki_kinact <- function(kobs_result, units = units) {
     start_values <- c(kinact = 1000, KI = 10)
   }
 
-  # Add dummy row x,y = 0
+  # Add dummy row at origin
   kobs_dummy <- kobs[1, ]
   kobs_dummy$kobs <- 0
   kobs_dummy$conc <- 0
   kobs <- rbind(kobs, kobs_dummy)
   kobs <- kobs[order(kobs$conc), ]
 
-  # Nonlinear regression
-  nonlin_mod <- nlsLM_fixed(
-    formula = kobs ~ (kinact * conc) / (KI + conc),
-    data = kobs,
-    start = start_values
+  # Pre-flight: warn if fewer than 3 real data points (0 or negative DOF)
+  n_real <- nrow(kobs) - 1
+  if (n_real < 3) {
+    log_ki_kinact_warning(sprintf(
+      "only %d kobs value(s) available — parameter estimates will have 0 or negative degrees of freedom",
+      n_real
+    ))
+  }
+
+  # Nonlinear regression — capture C-level warnings (e.g. lmdif maxiter) so
+  # they are routed through our logger instead of appearing as raw R warnings.
+  nonlin_mod <- tryCatch(
+    withCallingHandlers(
+      nlsLM_fixed(
+        formula = kobs ~ (kinact * conc) / (KI + conc),
+        data = kobs,
+        start = start_values
+      ),
+      warning = function(w) {
+        log_ki_kinact_warning(paste("Solver:", conditionMessage(w)))
+        invokeRestart("muffleWarning")
+      }
+    ),
+    error = function(e) {
+      log_ki_kinact_warning(paste("Fit failed:", conditionMessage(e)))
+      NULL
+    }
   )
+  if (is.null(nonlin_mod)) {
+    return(NULL)
+  }
+
+  # Post-fit: warn if the saturating region was never observed
+  fitted_kinact <- summary(nonlin_mod)$parameters[1, 1]
+  max_kobs_real <- max(kobs$kobs[kobs$conc > 0], na.rm = TRUE)
+  if (max_kobs_real < 0.5 * fitted_kinact) {
+    log_ki_kinact_warning(sprintf(
+      "max k_obs (%s) < 50%% of kᵢₙₐ꜀ₜ (%s)\n     │    saturating region not observed — kᵢₙₐ꜀ₜ extrapolated",
+      fmt_log(max_kobs_real),
+      fmt_log(fitted_kinact)
+    ))
+  }
 
   # Predict kobs values with NLM
   kobs_predicted <- predict_values(
@@ -3206,6 +3577,10 @@ multiple_spectra <- function(
       result_path = NULL
     )$mass
 
+    if (is.null(add_df) || nrow(add_df) == 0) {
+      next
+    }
+
     if (time) {
       add_df <- dplyr::mutate(add_df, z = extract_minutes(samples[i]))
     } else {
@@ -3213,6 +3588,28 @@ multiple_spectra <- function(
     }
 
     spectrum_data <- rbind(spectrum_data, add_df)
+  }
+
+  if (nrow(spectrum_data) == 0 || !("mass" %in% names(spectrum_data))) {
+    return(
+      plotly::plot_ly() |>
+        plotly::layout(
+          annotations = list(list(
+            text = "No spectrum data available",
+            xref = "paper",
+            yref = "paper",
+            x = 0.5,
+            y = 0.5,
+            showarrow = FALSE,
+            font = list(
+              size = 14,
+              color = if (theme == "light") "black" else "white"
+            )
+          )),
+          paper_bgcolor = if (theme == "light") "white" else "rgba(0,0,0,0)",
+          plot_bgcolor = if (theme == "light") "white" else "rgba(0,0,0,0)"
+        )
+    )
   }
 
   # If truncated active adapt z variable
@@ -3245,6 +3642,10 @@ multiple_spectra <- function(
       results_list$deconvolution[[samples[i]]],
       result_path = NULL
     )$highlight_peaks
+
+    if (is.null(add_df) || nrow(add_df) == 0) {
+      next
+    }
 
     if (time) {
       add_df <- dplyr::mutate(add_df, z = extract_minutes(samples[i]))
@@ -3302,6 +3703,12 @@ multiple_spectra <- function(
       symbol = ifelse(mass %in% prot_peaks, "diamond", "circle"),
       linecolor = font_color
     )
+  } else {
+    peaks_data <- dplyr::mutate(
+      peaks_data,
+      symbol = "circle",
+      linecolor = font_color
+    )
   }
 
   color_cmp <- color_cmp[!is.na(names(color_cmp))]
@@ -3326,10 +3733,12 @@ multiple_spectra <- function(
         marker_color <- font_color
       }
 
+      peaks_data$mk_color <- if (is.character(marker_color)) marker_color else peaks_data$color
+
       # Declare coloring variables for graph elements
       color <- NULL
       line <- list(color = font_color, width = 1)
-      z_linecolor <- list(color = font_color)
+      z_linecolor <- list(color = font_color, width = 1)
     } else if (color_variable == "Samples") {
       # Match colors to peaks and spectrum data
       peaks_data$z_color <- color_cmp[match(peaks_data$z, names(color_cmp))]
@@ -3338,17 +3747,25 @@ multiple_spectra <- function(
         names(color_cmp)
       )]
 
+      # Protein diamonds use theme fill; compound circles use sample color
+      peaks_data <- dplyr::mutate(
+        peaks_data,
+        z_color = ifelse(symbol == "diamond", font_color, z_color)
+      )
+
+      peaks_data$mk_color <- peaks_data$z_color
+
       # Declare coloring variables for graph elements
       color <- ~ I(z_color)
       line <- list(width = 1)
       marker_color <- ~ I(z_color)
-      z_linecolor <- NULL
+      z_linecolor <- list(width = 1)
     }
   } else {
     # Make color palette
     color_cmp <- brighten_hex(
       viridisLite::viridis(length(unique(spectrum_data$z))),
-      factor = 1.33
+      factor = 1.5
     )
     names(color_cmp) <- levels(spectrum_data$z)
 
@@ -3357,6 +3774,7 @@ multiple_spectra <- function(
       peaks_data,
       color = ifelse(symbol == "diamond", font_color, inv_color)
     )
+    peaks_data$mk_color <- peaks_data$color
     marker_color <- ~ I(color)
 
     # Match colors to spectrum data
@@ -3368,13 +3786,14 @@ multiple_spectra <- function(
     # Declare coloring variables for graph elements
     color <- ~ I(z_color)
     line <- list(width = 1)
-    z_linecolor <- NULL
+    z_linecolor <- list(width = 1)
   }
 
   # Condition on data size
   if (is.null(labels_show)) {
-    labels_show <- (length(unique(peaks_data$z)) <= 8 &
-      max(nchar(as.character(peaks_data$z))) <= 20) |
+    z_chr <- as.character(peaks_data$z)
+    labels_show <- (length(unique(z_chr)) <= 8 &
+      (length(z_chr) == 0 || max(nchar(z_chr)) <= 20)) |
       isTRUE(time)
   }
 
@@ -3421,7 +3840,7 @@ multiple_spectra <- function(
         marker_list <- list(
           size = 5,
           zindex = 100,
-          line = list(color = font_color, width = 3)
+          line = list(color = inv_color, width = 3)
         )
       } else {
         marker_list <- list(
@@ -3429,7 +3848,7 @@ multiple_spectra <- function(
           symbol = ~ I(symbol),
           size = 5,
           zindex = 100,
-          line = list(color = font_color, width = 3)
+          line = list(color = inv_color, width = 3)
         )
       }
 
@@ -3468,29 +3887,87 @@ multiple_spectra <- function(
         )
     }
 
+    if (nrow(peaks_data) > 0 && !time) {
+      name_entries <- peaks_data |>
+        dplyr::filter(!is.na(name)) |>
+        dplyr::distinct(name, symbol) |>
+        dplyr::arrange(dplyr::desc(symbol == "diamond"), name)
+
+      protein_seen <- FALSE
+      compound_seen <- FALSE
+
+      for (i in seq_len(nrow(name_entries))) {
+        entry_name <- name_entries$name[i]
+        sym <- name_entries$symbol[i]
+        first_peak <- peaks_data[peaks_data$name == entry_name, ][1, ]
+        is_protein <- sym == "diamond"
+        lg <- if (is_protein) "proteins" else "compounds"
+        add_lgt <- (is_protein && !protein_seen) ||
+          (!is_protein && !compound_seen)
+
+        args <- list(
+          p = plot,
+          inherit = FALSE,
+          type = "scatter",
+          mode = "markers",
+          x = 0,
+          y = 0,
+          name = entry_name,
+          legendgroup = lg,
+          marker = list(
+            color = font_color,
+            symbol = paste0(sym, "-open"),
+            size = 8
+          ),
+          visible = TRUE,
+          showlegend = TRUE,
+          legendrank = i,
+          hoverinfo = "skip"
+        )
+        if (add_lgt) {
+          args$legendgrouptitle <- list(
+            text = if (is_protein) "Proteins" else "Compounds",
+            font = list(color = font_color)
+          )
+        }
+        plot <- do.call(plotly::add_trace, args)
+
+        if (is_protein) protein_seen <- TRUE else compound_seen <- TRUE
+      }
+
+      plot <- plotly::style(
+        plot,
+        legendgrouptitle = list(
+          text = "Samples",
+          font = list(color = font_color)
+        ),
+        traces = 1
+      )
+    }
+
     plot |>
       plotly::layout(
         paper_bgcolor = "rgba(0,0,0,0)",
         plot_bgcolor = "rgba(0,0,0,0)",
         font = list(size = 14, color = font_color),
+        xaxis = list(visible = FALSE, showgrid = FALSE, zeroline = FALSE, range = c(1, 2)),
+        yaxis = list(visible = FALSE, showgrid = FALSE, zeroline = FALSE, range = c(1, 2)),
         legend = list(
           bgcolor = "rgba(0,0,0,0)",
           bordercolor = "rgba(0,0,0,0)",
-          font = list(color = font_color),
+          font = list(size = 11, color = font_color),
+          itemsizing = "constant",
+          tracegroupgap = 4,
           title = list(
-            text = paste(
-              "<b>",
-              ifelse(
-                time,
-                paste0(
-                  "Time [",
-                  gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
-                  "]  "
-                ),
-                "Sample ID"
-              ),
-              "</b>"
-            ),
+            text = if (time) {
+              paste0(
+                "<b> Time [",
+                gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+                "]  </b>"
+              )
+            } else {
+              ""
+            },
             color = font_color
           )
         ),
@@ -3593,11 +4070,11 @@ multiple_spectra <- function(
     } else {
       brighten_hex(
         viridisLite::viridis(length(unique(peaks_data$z))),
-        factor = 1.33
+        factor = 1.5
       )
     }
 
-    plotly::plot_ly(
+    plot_2d <- plotly::plot_ly(
       data = spectrum_data,
       x = ~mass,
       y = ~intensity,
@@ -3628,25 +4105,19 @@ multiple_spectra <- function(
       showlegend = TRUE
     ) |>
       plotly::add_markers(
-        data = dplyr::mutate(
-          peaks_data,
-          symbol = paste0(symbol, "-open")
-        ),
+        data = peaks_data,
         x = ~mass,
         y = ~intensity,
-        split = ~ interaction(z, name),
+        split = ~ seq_len(nrow(peaks_data)),
         legendgroup = ~z,
         mode = "markers",
-        color = marker_color,
         symbol = ~ I(symbol),
         inherit = FALSE,
-        marker = c(
-          list(
-            size = 10,
-            zindex = 100,
-            line = list(color = font_color, width = 1.5)
-          ),
-          if (is.null(color_variable)) list(color = font_color) else list()
+        marker = list(
+          color = ~ I(mk_color),
+          size = 10,
+          zindex = 100,
+          line = list(color = inv_color, width = 1.5)
         ),
         hoverinfo = "text",
         text = ~ paste0(
@@ -3671,7 +4142,69 @@ multiple_spectra <- function(
           mw
         ),
         showlegend = FALSE
-      ) |>
+      )
+
+    if (nrow(peaks_data) > 0) {
+      name_entries <- peaks_data |>
+        dplyr::filter(!is.na(name)) |>
+        dplyr::distinct(name, symbol) |>
+        dplyr::arrange(dplyr::desc(symbol == "diamond"), name)
+
+      protein_seen <- FALSE
+      compound_seen <- FALSE
+
+      for (i in seq_len(nrow(name_entries))) {
+        entry_name <- name_entries$name[i]
+        sym <- name_entries$symbol[i]
+        first_peak <- peaks_data[peaks_data$name == entry_name, ][1, ]
+        is_protein <- sym == "diamond"
+        lg <- if (is_protein) "proteins" else "compounds"
+        add_lgt <- (is_protein && !protein_seen) ||
+          (!is_protein && !compound_seen)
+
+        args <- list(
+          p = plot_2d,
+          inherit = FALSE,
+          type = "scatter",
+          mode = "markers",
+          x = 0,
+          y = 0,
+          xaxis = "x2",
+          yaxis = "y2",
+          name = entry_name,
+          legendgroup = lg,
+          marker = list(
+            color = font_color,
+            symbol = if (is_protein) sym else paste0(sym, "-open"),
+            size = 8
+          ),
+          visible = TRUE,
+          showlegend = TRUE,
+          legendrank = i,
+          hoverinfo = "skip"
+        )
+        if (add_lgt) {
+          args$legendgrouptitle <- list(
+            text = if (is_protein) "Proteins" else "Compounds",
+            font = list(color = font_color)
+          )
+        }
+        plot_2d <- do.call(plotly::add_trace, args)
+
+        if (is_protein) protein_seen <- TRUE else compound_seen <- TRUE
+      }
+
+      plot_2d <- plotly::style(
+        plot_2d,
+        legendgrouptitle = list(
+          text = "Samples",
+          font = list(color = font_color)
+        ),
+        traces = 1
+      )
+    }
+
+    plot_2d |>
       plotly::layout(
         paper_bgcolor = "rgba(0,0,0,0)",
         plot_bgcolor = "rgba(0,0,0,0)",
@@ -3688,24 +4221,36 @@ multiple_spectra <- function(
           gridcolor = grid_color,
           zerolinecolor = zeroline_color
         ),
+        xaxis2 = list(
+          visible = FALSE,
+          showgrid = FALSE,
+          zeroline = FALSE,
+          range = c(1, 2),
+          overlaying = "x"
+        ),
+        yaxis2 = list(
+          visible = FALSE,
+          showgrid = FALSE,
+          zeroline = FALSE,
+          range = c(1, 2),
+          overlaying = "y"
+        ),
         legend = list(
           bgcolor = "rgba(0,0,0,0)",
           bordercolor = "rgba(0,0,0,0)",
-          font = list(color = font_color),
+          font = list(size = 11, color = font_color),
+          itemsizing = "constant",
+          tracegroupgap = 4,
           title = list(
-            text = paste(
-              "<b>",
-              ifelse(
-                time,
-                paste0(
-                  "Time [",
-                  gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
-                  "]  "
-                ),
-                "Sample ID"
-              ),
-              "</b>"
-            ),
+            text = if (time) {
+              paste0(
+                "<b> Time [",
+                gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+                "]  </b>"
+              )
+            } else {
+              ""
+            },
             color = font_color
           )
         )
@@ -3726,17 +4271,87 @@ filter_table_view <- function(table, colors, inputs, units) {
     NULL
   }
 
-  # Prepate data frame for table
+  # Merge non-preferred hits per peak into their preferred counterpart
+  table <- table |>
+    dplyr::arrange(
+      `Sample ID`,
+      `Cmp Name`,
+      `Peak Signal [Da]`,
+      dplyr::desc(Preferred == "TRUE"),
+      dplyr::desc(suppressWarnings(as.numeric(`Theor. Cmp [Da]`)))
+    ) |>
+    dplyr::group_by(`Sample ID`, `Cmp Name`, `Peak Signal [Da]`) |>
+    dplyr::reframe(
+      truncSample_ID = `truncSample_ID`[1],
+      dplyr::across(dplyr::any_of(optional_cols), ~ .x[1]),
+      mass_stoich_html = {
+        theor <- `Theor. Cmp [Da]`
+        stoich <- `Bind. Stoich.`
+        valid <- !is.na(theor) & theor != "N/A"
+        if (!any(valid)) {
+          "N/A"
+        } else {
+          paste(
+            paste0(
+              "[",
+              theor[valid],
+              "]&thinsp;",
+              sapply(stoich[valid], function(x) {
+                as.character(htmltools::tags$sub(x))
+              })
+            ),
+            collapse = " + "
+          )
+        }
+      },
+      `Theor. Cmp [Da]` = {
+        theor <- `Theor. Cmp [Da]`
+        valid <- !is.na(theor) & theor != "N/A"
+        if (any(valid)) theor[valid][1] else NA_character_
+      },
+      `Bind. Stoich.` = {
+        theor <- `Theor. Cmp [Da]`
+        stoich <- `Bind. Stoich.`
+        valid <- !is.na(theor) & theor != "N/A"
+        if (any(valid)) stoich[valid][1] else NA_character_
+      },
+      `Binding [%]` = {
+        pref <- `Binding [%]`[Preferred == "TRUE"]
+        if (length(pref) > 0) pref[1] else `Binding [%]`[1]
+      },
+      `Tot. Binding [%]` = `Tot. Binding [%]`[1]
+    ) |>
+    dplyr::select(-`Peak Signal [Da]`)
+
+  table <- if (length(units) == 2) {
+    dplyr::arrange(
+      table,
+      `Cmp Name`,
+      as.numeric(.data[[units[["Concentration"]]]]),
+      as.numeric(.data[[units[["Time"]]]])
+    )
+  } else {
+    dplyr::arrange(
+      table,
+      `Cmp Name`,
+      `Tot. Binding [%]`,
+      `Binding [%]`,
+      `Sample ID`
+    )
+  }
+
+  # Prepare data frame for table
   tbl <- table |>
     dplyr::ungroup() |>
     dplyr::select(
       `Sample ID` = `Sample ID`,
       `Cmp Name` = `Cmp Name`,
       dplyr::any_of(optional_cols),
-      `Mass Shift` = `Theor. Cmp [Da]`,
+      `Mass Shift` = mass_stoich_html,
+      `Theor. Cmp [Da]` = `Theor. Cmp [Da]`,
       `Bind. Stoich.` = `Bind. Stoich.`,
-      `%-Binding` = `%-Binding`,
-      `Total %` = `Total %-Binding`
+      `Binding [%]` = `Binding [%]`,
+      `Total %` = `Tot. Binding [%]`
     ) |>
     dplyr::mutate(
       # Truncated label used only for color matching / display; original Sample ID kept
@@ -3758,7 +4373,7 @@ filter_table_view <- function(table, colors, inputs, units) {
         },
         names(colors)
       )]),
-      `%-Binding` = round(`%-Binding`, 1),
+      `Binding [%]` = `Binding [%]`,
       `Total %` = `Total %`,
       col_var = !!rlang::sym(
         if (
@@ -3826,8 +4441,14 @@ render_table_view <- function(table, colors, tab, inputs, units) {
   if (isTRUE(inputs$truncate_names) && "trunc_label" %in% names(table)) {
     table[["Sample ID"]] <- table[["trunc_label"]]
   }
+  if (!is.null(inputs$binding_bar) && !isTRUE(inputs$binding_bar)) {
+    table[["Binding [%]"]] <- sprintf("%.2f", table[["Binding [%]"]])
+  }
+  if (!is.null(inputs$tot_binding_bar) && !isTRUE(inputs$tot_binding_bar)) {
+    table[["Total %"]] <- sprintf("%.2f", table[["Total %"]])
+  }
 
-  # Add human-readable prefix to group rows (after truncation so it isn't overwritten)
+  # Add  prefix to group rows
   if (!is.null(row_group)) {
     if (tab == "Compounds") {
       table$`Sample ID` <- paste("Sample:", table$`Sample ID`)
@@ -3835,27 +4456,6 @@ render_table_view <- function(table, colors, tab, inputs, units) {
       table$`Cmp Name` <- paste("Compound:", table$`Cmp Name`)
     }
   }
-  if (!is.null(inputs$binding_bar) && !isTRUE(inputs$binding_bar)) {
-    table[["%-Binding"]] <- as.character(table[["%-Binding"]])
-  }
-  if (!is.null(inputs$tot_binding_bar) && !isTRUE(inputs$tot_binding_bar)) {
-    table[["Total %"]] <- as.character(table[["Total %"]])
-  }
-  table <- dplyr::mutate(
-    table,
-    `Mass Shift` = ifelse(
-      `Mass Shift` == "N/A",
-      "N/A",
-      paste0(
-        "[",
-        `Mass Shift`,
-        "]",
-        "&thinsp;<sub>",
-        `Bind. Stoich.`,
-        "</sub>"
-      )
-    )
-  )
 
   DT::datatable(
     data = table,
@@ -3886,18 +4486,28 @@ render_table_view <- function(table, colors, tab, inputs, units) {
           targets = c(
             "col_var",
             "label_color",
-            "Bind. Stoich.",
             "trunc_label",
+            "Theor. Cmp [Da]",
+            "Bind. Stoich.",
             if (tab == "Concentration") "Cmp Name"
           )
         ),
         list(className = 'dt-center', targets = "_all"),
+        list(className = 'dt-nowrap', targets = "Mass Shift"),
         list(
-          targets = "%-Binding",
+          targets = "Binding [%]",
+          type = "num",
+          className = if (!is.null(render_binding)) "bar-chart-col" else NULL,
           render = render_binding
         ),
         list(
           targets = "Total %",
+          type = "num",
+          className = if (!is.null(render_tot_binding)) {
+            "bar-chart-col"
+          } else {
+            NULL
+          },
           render = render_tot_binding
         ),
         list(
@@ -3911,26 +4521,28 @@ render_table_view <- function(table, colors, tab, inputs, units) {
       columns = "col_var",
       target = 'row',
       backgroundColor = DT::styleEqual(
-        levels = if (
-          length(units) == 2 && inputs$color_variable == units["Concentration"]
-        ) {
-          names(colors)
-        } else {
-          names(colors)
-        },
+        levels = names(colors),
         values = colors
       ),
       color = DT::styleEqual(
-        levels = if (
-          length(units) == 2 && inputs$color_variable == units["Concentration"]
-        ) {
-          names(colors)
-        } else {
-          names(colors)
-        },
+        levels = names(colors),
         values = get_contrast_color(colors)
       )
-    )
+    ) |>
+    (\(dt) {
+      if (tab == "Proteins") {
+        na_label <- if (!is.null(row_group)) "Compound: N/A" else "N/A"
+        dt |>
+          DT::formatStyle(
+            "Cmp Name",
+            target = "row",
+            backgroundColor = DT::styleEqual(na_label, "transparent"),
+            color = DT::styleEqual(na_label, "inherit")
+          )
+      } else {
+        dt
+      }
+    })()
 }
 
 # Selection and filtering of hits table
@@ -3940,51 +4552,18 @@ filter_hits_table <- function(
   selected_cols = NULL,
   compounds = NULL,
   samples = NULL,
-  expand = TRUE,
-  na_include = TRUE,
   units
 ) {
-  # Modify if samples are summarized instead of expanded
-  if (!expand) {
-    if ("Replicate" %in% names(hits_table)) {
-      hits_table <- hits_table |>
-        dplyr::distinct(
-          `Sample ID`,
-          Replicate,
-          `Protein`,
-          `Cmp Name`,
-          `Theor. Prot. [Da]`,
-          `Total %-Binding`,
-          `truncSample_ID`
-        )
-    } else {
-      hits_table <- hits_table |>
-        dplyr::distinct(
-          `Sample ID`,
-          `Protein`,
-          `Cmp Name`,
-          `Theor. Prot. [Da]`,
-          `Total %-Binding`,
-          `truncSample_ID`
-        )
-    }
-  }
-
   # Filter compounds
-  if (!is.null(compounds) && na_include) {
+  if (!is.null(compounds) && length(compounds) > 0) {
     hits_table <- dplyr::filter(
       hits_table,
       `Cmp Name` %in% compounds | is.na(`Cmp Name`)
     )
-  } else if (!is.null(compounds)) {
-    hits_table <- dplyr::filter(
-      hits_table,
-      `Cmp Name` %in% compounds
-    )
   }
 
   # Filter samples
-  if (!is.null(samples)) {
+  if (!is.null(samples) && length(samples) > 0) {
     hits_table <- dplyr::filter(hits_table, `Sample ID` %in% samples)
   }
 
@@ -3997,7 +4576,6 @@ filter_hits_table <- function(
     "Sample ID",
     "Protein",
     "Cmp Name",
-    if ("Replicate" %in% names(hits_table)) "Replicate" else NULL,
     if ("Concentration" %in% names(units)) units[["Concentration"]] else NULL,
     if ("Time" %in% names(units)) units[["Time"]] else NULL,
     "truncSample_ID"
@@ -4012,6 +4590,173 @@ filter_hits_table <- function(
   return(hits_table)
 }
 
+# Transform per hit table to display per-adduct entries
+#' @export
+transform_per_adduct <- function(
+  hits_table,
+  proteins_table,
+  compounds_table,
+  samples_table
+) {
+  # Get distinct adducts
+  distinct_adducts <- dplyr::distinct(hits_table, `Sample ID`, `Cmp Name`)
+
+  # Get colnames of retained columns subset
+  col_names <- names(hits_table)[
+    !names(hits_table) %in%
+      c(
+        "Peak Signal [Da]",
+        "Int. Cmp [%]",
+        "Theor. Cmp [Da]",
+        "Δ Cmp [Da]",
+        "Bind. Stoich.",
+        "Preferred",
+        "Binding [%]"
+      )
+  ]
+
+  # Initiate list object to store table intermediates
+  entries <- vector("list", nrow(distinct_adducts))
+
+  # Iterate generating one table per distinct adduct
+  for (i in seq_len(nrow(distinct_adducts))) {
+    sample <- distinct_adducts$`Sample ID`[i] # Current sample
+    cmp <- distinct_adducts$`Cmp Name`[i] # Current compound
+
+    if (is.na(cmp)) {
+      hits_per_adduct <- hits_table[
+        hits_table$`Sample ID` == sample,
+        col_names
+      ][1, ]
+    } else {
+      # Build hits df per adduct
+      hits_table_subset <- hits_table[
+        hits_table$`Sample ID` == sample & hits_table$`Cmp Name` == cmp,
+      ]
+      hits_per_adduct <- hits_table_subset[, col_names][1, ]
+
+      # Append mass-shift columns
+      mass_shifts <- unique(hits_table_subset$`Theor. Cmp [Da]`)
+      cmp_mass_shifts <- as.numeric(compounds_table[
+        compounds_table$Compound == cmp,
+        -1
+      ])
+
+      for (mass_shift in mass_shifts) {
+        hits_table_subset_mass_shift <- hits_table_subset[
+          hits_table_subset$`Theor. Cmp [Da]` == mass_shift,
+        ]
+
+        mass_no <- which(cmp_mass_shifts %in% as.numeric(mass_shift))
+        if (length(mass_no) == 0) {
+          next
+        }
+
+        binding_vals <- as.list(hits_table_subset_mass_shift$`Binding [%]`)
+        names(binding_vals) <- paste0(
+          "Binding (Mass ",
+          mass_no,
+          ifelse(hits_table_subset_mass_shift$Preferred == "FALSE", "*", ""),
+          ")x",
+          hits_table_subset_mass_shift$`Bind. Stoich.`,
+          " [%]"
+        )
+        binding_vals[[paste0("Total Binding (Mass ", mass_no, ") [%]")]] <-
+          sum(hits_table_subset_mass_shift$`Binding [%]`)
+
+        binding_vals[[paste("Mass", mass_no)]] <- cmp_mass_shifts[[mass_no]]
+
+        hits_per_adduct <- dplyr::mutate(hits_per_adduct, !!!binding_vals)
+      }
+
+      # Attach mass shifts for respective compound
+      # hits_per_adduct <- dplyr::bind_cols(
+      #   hits_per_adduct,
+      #   compounds_table[compounds_table$Compound == cmp, -1]
+      # )
+    }
+
+    ## TODO
+    # # Optionally adding concentration and time columns
+    # if ("Concentration" %in% names(units)) {
+    #   hits_per_adduct <- dplyr::mutate(
+    #     hits_per_adduct,
+    #     !!rlang::sym(
+    #       units[[
+    #         "Concentration"
+    #       ]]
+    #     ) := hits_table_subset$concentration,
+    #     !!rlang::sym(units[["Time"]]) := hits_table_subset$time,
+    #     .after = Protein
+    #   )
+    # }
+
+    entries[[i]] <- hits_per_adduct
+  }
+
+  # Join all hits_per_adduct tables
+  hits_table <- suppressMessages(Reduce(dplyr::full_join, entries))
+
+  ### Sort mass-shift columns by mass
+  all_cols <- names(hits_table)
+
+  # 1. Define helper to extract numbers from strings
+  get_number <- function(string, pattern) {
+    matches <- regmatches(string, regexpr(pattern, string, perl = TRUE))
+    as.numeric(gsub("[^0-9]", "", matches))
+  }
+
+  # 2. Identify and define the raw mass columns
+  is_raw_mass <- grepl("^Mass [0-9]+$", all_cols)
+  raw_mass_names <- all_cols[is_raw_mass]
+  is_binding <- grepl("^(Binding|Total Binding) \\(", all_cols)
+  binding_cols <- all_cols[is_binding]
+
+  # 3. Calculate Stoichiometry for binding_cols
+  # We look for the "x" followed by a number
+  stoich_vals <- suppressWarnings(as.numeric(sub(
+    ".*x([0-9]+).*",
+    "\\1",
+    binding_cols
+  )))
+  stoich_vals[is.na(stoich_vals)] <- Inf # Totals get Inf to move to the end
+
+  # 4. Get the Mass ID for all components
+  all_relevant_cols <- c(raw_mass_names, binding_cols)
+  all_mass_ids <- c(
+    get_number(raw_mass_names, "[0-9]+"),
+    get_number(binding_cols, "(?<=Mass )[0-9]+")
+  )
+
+  # 5. Define hierarchy for sorting
+  # Raw Mass = 1, Binding = 2, Total = 3
+  type_rank <- ifelse(
+    grepl("^Mass [0-9]+$", all_relevant_cols),
+    1,
+    ifelse(grepl("^Total", all_relevant_cols), 3, 2)
+  )
+
+  # 6. Perform the sort
+  # Order by: Mass ID -> Type Rank -> Stoichiometry
+  # Note: For raw mass columns, we assign a stoich of 0 to ensure they come first
+  all_stoich <- c(rep(0, length(raw_mass_names)), stoich_vals)
+
+  final_sorted_relevant <- all_relevant_cols[order(
+    all_mass_ids,
+    type_rank,
+    all_stoich
+  )]
+
+  # 7. Final full vector
+  fixed_cols <- all_cols[
+    !grepl("^Mass [0-9]+$", all_cols) &
+      !grepl("^(Binding|Total Binding) \\(", all_cols)
+  ]
+  final_column_order <- c(fixed_cols, final_sorted_relevant)
+
+  return(hits_table[, final_column_order])
+}
+
 # Rendering function of hits table
 #' @export
 render_hits_table <- function(
@@ -4023,6 +4768,8 @@ render_hits_table <- function(
   color_variable = NULL,
   truncated = NULL,
   clickable = FALSE,
+  valid_concentrations = NULL,
+  per_adduct = FALSE,
   units
 ) {
   # Adapt table layout
@@ -4037,6 +4784,12 @@ render_hits_table <- function(
     dom_value <- "fti"
   }
 
+  # 0-based indices of hidden columns (truncSample_ID); used to align
+  # td:eq() visible-index with the data-array index in rowCallback
+  hidden_col_json <- jsonlite::toJSON(
+    which(names(hits_table) == "truncSample_ID") - 1L
+  )
+
   # Determine clickable cells
   rowCallback <- NULL
   if (!isFALSE(clickable)) {
@@ -4046,17 +4799,33 @@ render_hits_table <- function(
       ) -
         1
 
+      valid_conc_js <- if (!is.null(valid_concentrations)) {
+        jsonlite::toJSON(as.numeric(valid_concentrations))
+      } else {
+        "null"
+      }
+
       rowCallback <- c(
         "function(row, data){",
         "  var targets = ",
         jsonlite::toJSON(clickable_targets),
         ";",
+        "  var validConc = ",
+        valid_conc_js,
+        ";",
+        "  var hiddenCols = ",
+        hidden_col_json,
+        ";",
+        "  var visOffset = 0;",
         "  for(var i=0; i<data.length; i++){",
+        "    if(hiddenCols.includes(i)){ visOffset++; continue; }",
+        "    var vi = i - visOffset;",
         "    if(data[i] === null){",
-        "      $('td:eq('+i+')', row).html('N/A').css({'color': 'inherit'});",
+        "      $('td:eq('+vi+')', row).html('N/A').css({'color': 'inherit'});",
         "    }",
         "    if(targets.includes(i) && data[i] !== null){",
-        "      $('td:eq('+i+')', row).addClass('clickable-column');",
+        "      var isValid = validConc === null || validConc.includes(parseFloat(data[i]));",
+        "      if(isValid) $('td:eq('+vi+')', row).addClass('clickable-column');",
         "    }",
         "  }",
         "}"
@@ -4065,6 +4834,40 @@ render_hits_table <- function(
       clickable_targets <- NULL
     }
   }
+
+  if (is.null(rowCallback)) {
+    rowCallback <- c(
+      "function(row, data){",
+      "  var hiddenCols = ",
+      hidden_col_json,
+      ";",
+      "  var visOffset = 0;",
+      "  for(var i=0; i<data.length; i++){",
+      "    if(hiddenCols.includes(i)){ visOffset++; continue; }",
+      "    if(data[i] === null){",
+      "      $('td:eq('+(i-visOffset)+')', row).html('N/A').css({'color': 'inherit'});",
+      "    }",
+      "  }",
+      "}"
+    )
+  }
+
+  # Percentage columns formatted to 2 d.p. via columnDefs render (not formatRound)
+  # so null cells survive rowCallback as "N/A" without post-draw interference.
+  binding_fmt_cols <- setdiff(
+    intersect(
+      c(
+        "Binding [%]",
+        "Tot. Binding [%]",
+        "Unmatched [%]",
+        "Correct [%]",
+        "Int. Prot. [%]",
+        "Int. Cmp [%]"
+      ),
+      names(hits_table)
+    ),
+    bar_chart
+  )
 
   # Generate datatable
   hits_datatable <- DT::datatable(
@@ -4077,19 +4880,55 @@ render_hits_table <- function(
     ),
     options = list(
       rowCallback = htmlwidgets::JS(rowCallback),
+      headerCallback = htmlwidgets::JS({
+        visible_cols <- names(hits_table)[names(hits_table) != "truncSample_ID"]
+        tooltip_names <- ifelse(
+          visible_cols %in% names(hits_col_full_names),
+          hits_col_full_names[visible_cols],
+          visible_cols
+        )
+        paste0(
+          "function(thead, data, start, end, display) {",
+          "  var names = ",
+          jsonlite::toJSON(tooltip_names),
+          ";",
+          "  $(thead).find('th').each(function(i) {",
+          "    if (i < names.length) $(this).attr('title', names[i]);",
+          "    var h = $(this).html().replace(/Mass (\\d)/g, 'Mass\\u00a0$1');",
+          "    var n = 0;",
+          "    h = h.replace(/ /g, function(m) { return ++n <= 2 ? m : '\\u00a0'; });",
+          "    $(this).html(h);",
+          "  });",
+          "}"
+        )
+      }),
       scrollX = TRUE,
       scrollY = TRUE,
       scrollCollapse = TRUE,
-      fixedHeader = TRUE,
       stripe = FALSE,
+      initComplete = htmlwidgets::JS(
+        "function(settings, json) {",
+        "  var api = this.api();",
+        "  setTimeout(function() { api.columns.adjust(); }, 50);",
+        "}"
+      ),
       dom = dom_value,
       paging = ifelse(!is.null(single_conc), TRUE, FALSE),
       columnDefs = list(
+        list(className = 'dt-center', targets = "_all"),
+        list(
+          targets = 0,
+          className = 'dt-left',
+          createdCell = htmlwidgets::JS(
+            "function(td) { td.style.textAlign = 'left'; }"
+          )
+        ),
         if (length(bar_chart) > 0 & any(bar_chart %in% names(hits_table))) {
           list(
             targets = bar_chart[bar_chart %in% names(hits_table)],
             render = htmlwidgets::JS(chart_js),
-            type = "num"
+            type = "num",
+            className = "bar-chart-col"
           )
         } else {
           list()
@@ -4102,6 +4941,21 @@ render_hits_table <- function(
         } else {
           list()
         },
+        if (length(binding_fmt_cols) > 0) {
+          list(
+            targets = binding_fmt_cols,
+            render = htmlwidgets::JS(
+              "function(data, type, row, meta) {",
+              "  if (type !== 'display') return data;",
+              "  if (data === null || data === undefined) return null;",
+              "  var n = parseFloat(data);",
+              "  return isNaN(n) ? data : n.toFixed(2);",
+              "}"
+            )
+          )
+        } else {
+          list()
+        },
         list(
           targets = -1,
           className = 'dt-last-col'
@@ -4109,6 +4963,18 @@ render_hits_table <- function(
       )
     )
   )
+
+  adduct_fmt_cols <- setdiff(
+    grep("^(Binding|Total Binding) \\(", names(hits_table), value = TRUE),
+    bar_chart
+  )
+  if (length(adduct_fmt_cols) > 0) {
+    hits_datatable <- DT::formatRound(
+      hits_datatable,
+      columns = which(names(hits_table) %in% adduct_fmt_cols),
+      digits = 2
+    )
+  }
 
   if (!is.null(concentration_colors)) {
     if (!is.null(single_conc)) {
@@ -4137,7 +5003,7 @@ render_hits_table <- function(
           )
         )
     }
-  } else {
+  } else if (!is.null(colors)) {
     if (color_variable == "Compounds" & anyNA(hits_table$`Cmp Name`)) {
       names(colors)[
         names(colors) %in% c("NA", "N/A", as.character(NA))
@@ -4236,12 +5102,12 @@ compute_replicate_labels <- function(sample_names, config = NULL) {
     }
   }
 
-  # Fill remaining NAs with _R<n>, avoiding clashes with existing _R<n> labels
+  # Fill remaining NAs with R<n>, avoiding clashes with existing R<n> labels
   existing <- labels[!is.na(labels)]
   used_ints <- suppressWarnings(stats::na.omit(as.integer(
     regmatches(
       existing,
-      regexpr("(?<=_[Rr])\\d+$", existing, perl = TRUE)
+      regexpr("(?<=[Rr])\\d+$", existing, perl = TRUE)
     )
   )))
   ctr <- 1L
@@ -4249,7 +5115,7 @@ compute_replicate_labels <- function(sample_names, config = NULL) {
     while (ctr %in% used_ints) {
       ctr <- ctr + 1L
     }
-    labels[i] <- paste0("_R", ctr)
+    labels[i] <- paste0("R", ctr)
     used_ints <- c(used_ints, ctr)
     ctr <- ctr + 1L
   }
@@ -4301,6 +5167,30 @@ new_sample_table <- function(
   return(sample_tab)
 }
 
+# Re-apply Concentration/Time values from an old sample table into a newly
+# rebuilt one, matched by Sample name. Rows not present in the old table keep
+# their NA values.
+#' @export
+restore_conc_time <- function(new_table, old_table) {
+  if (is.null(old_table)) {
+    return(new_table)
+  }
+  conc_col_old <- grep("^Concentration", names(old_table), value = TRUE)
+  time_col_old <- grep("^Time", names(old_table), value = TRUE)
+  if (length(conc_col_old) != 1 || length(time_col_old) != 1) {
+    return(new_table)
+  }
+  conc_col_new <- grep("^Concentration", names(new_table), value = TRUE)
+  time_col_new <- grep("^Time", names(new_table), value = TRUE)
+  if (length(conc_col_new) != 1 || length(time_col_new) != 1) {
+    return(new_table)
+  }
+  idx <- match(new_table$Sample, old_table$Sample)
+  new_table[[conc_col_new]] <- old_table[[conc_col_old]][idx]
+  new_table[[time_col_new]] <- old_table[[time_col_old]][idx]
+  new_table
+}
+
 # UI changes when conversion declaration tab is confirmed
 #' @export
 confirm_ui_changes <- function(
@@ -4335,6 +5225,20 @@ confirm_ui_changes <- function(
 
   # Disable clear button
   shinyjs::disable(paste0("clear_", tab_low))
+
+  # Disable unit selectors (Samples tab only)
+  if (tab_low == "samples") {
+    shinyjs::disable("conc_unit")
+    shinyjs::addClass(
+      selector = ".shiny-input-container:has(#app-conversion_main-conc_unit) .bootstrap-select",
+      class = "custom-disable"
+    )
+    shinyjs::disable("time_unit")
+    shinyjs::addClass(
+      selector = ".shiny-input-container:has(#app-conversion_main-time_unit) .bootstrap-select",
+      class = "custom-disable"
+    )
+  }
 
   # Disable file upload
   shinyjs::disable(paste0(tab_low, "_fileinput"))
@@ -4392,6 +5296,20 @@ edit_ui_changes <- function(
   # Enable clear button
   shinyjs::enable(paste0("clear_", tab_low))
 
+  # Enable unit selectors (Samples tab only)
+  if (tab_low == "samples") {
+    shinyjs::enable("conc_unit")
+    shinyjs::removeClass(
+      selector = ".shiny-input-container:has(#app-conversion_main-conc_unit) .bootstrap-select",
+      class = "custom-disable"
+    )
+    shinyjs::enable("time_unit")
+    shinyjs::removeClass(
+      selector = ".shiny-input-container:has(#app-conversion_main-time_unit) .bootstrap-select",
+      class = "custom-disable"
+    )
+  }
+
   # Enable file upload
   shinyjs::enable(paste0(tab_low, "_fileinput"))
   shinyjs::removeClass(
@@ -4430,10 +5348,14 @@ table_observe <- function(
   compounds,
   tolerance = 3
 ) {
-  # Show waiter with 0.25 seconds minimum runtime
+  # Show waiter with 0.25 seconds minimum runtime; on.exit ensures hide always runs
   waiter::waiter_show(
     id = ns(paste0(tab, "_table_info")),
     html = waiter::spin_throbber()
+  )
+  on.exit(
+    waiter::waiter_hide(id = ns(paste0(tab, "_table_info"))),
+    add = TRUE
   )
   Sys.sleep(0.25)
 
@@ -4531,9 +5453,6 @@ table_observe <- function(
     }
   }
 
-  # Hide waiter
-  waiter::waiter_hide(id = ns(paste0(tab, "_table_info")))
-
   return(table_status)
 }
 
@@ -4602,15 +5521,10 @@ transform_hits <- function(hits_summary) {
   # Shared transformations
   summary_table <- hits_summary |>
     dplyr::mutate(
-      # Format Intensity columns
-      dplyr::across(
-        dplyr::any_of(c("Intensity", "Protein Intensity")) & where(is.numeric),
-        ~ round(.x, 2)
-      ),
-      # Transform binding cols to rounded percentage
+      # Convert binding cols to exact percentage — rounding only happens in DT display
       dplyr::across(
         c(`% Binding`, `Total % Binding`),
-        ~ dplyr::if_else(is.na(.x), 0, round(.x * 100, 2))
+        ~ dplyr::if_else(is.na(.x), 0, .x * 100)
       ),
       # Round protein mass columns (kept numeric for sorting/export)
       dplyr::across(
@@ -4629,19 +5543,22 @@ transform_hits <- function(hits_summary) {
           format(.x, nsmall = 1, trim = TRUE)
         )
       ),
-      # Global NA cleanup (convert to character, exclude numeric protein mass cols)
+      # Global NA cleanup (convert to character, exclude compound and binding cols)
       dplyr::across(
         !dplyr::any_of(c(
           "Compound",
           "% Binding",
           "Total % Binding",
-          "Mw Protein [Da]",
-          "Measured Mw Protein [Da]"
+          "Mw Protein [Da]"
         )),
         ~ tidyr::replace_na(as.character(.x), "N/A")
       )
     ) |>
-    dplyr::relocate(dplyr::any_of("Total % Binding"), .after = "% Binding")
+    dplyr::relocate(dplyr::any_of("Total % Binding"), .after = "% Binding") |>
+    dplyr::relocate(
+      dplyr::any_of(c("% Unmatched", "% Correct")),
+      .after = "Total % Binding"
+    )
 
   # Define column names
   col_names <- c(
@@ -4651,15 +5568,18 @@ transform_hits <- function(hits_summary) {
     "Theor. Prot. [Da]",
     "Meas. Prot. [Da]",
     "Δ Prot. [Da]",
-    "Int. Prot.",
+    "Int. Prot. [%]",
     "Peak Signal [Da]",
-    "Int. Cmp",
+    "Int. Cmp [%]",
     "Cmp Name",
     "Theor. Cmp [Da]",
     "Δ Cmp [Da]",
     "Bind. Stoich.",
-    "%-Binding",
-    "Total %-Binding"
+    "Preferred",
+    "Binding [%]",
+    "Tot. Binding [%]",
+    "Unmatched [%]",
+    "Correct [%]"
   )
 
   # Interface dependent logic
@@ -4740,9 +5660,26 @@ brighten_hex <- function(hex_colors, factor = 1.2) {
   grDevices::hsv(hsv_vals[1, ], hsv_vals[2, ], hsv_vals[3, ])
 }
 
+# Sample n colors from a sequential brewer palette, cutting off the darkest end.
+# cutoff = 0.85 means only the lightest 85% of the palette is used.
+brewer_seq_colors <- function(n, scale, max_colors, cutoff = 0.85) {
+  avail <- max(floor(max_colors * cutoff), 3)
+  raw <- RColorBrewer::brewer.pal(avail, scale)
+  if (n == 1) {
+    return(raw[1])
+  }
+  raw[round(seq(1, avail, length.out = n))]
+}
+
 # Make uniform color scale for compounds
 #' @export
-get_cmp_colorScale <- function(filtered_table, scale, variable, trunc) {
+get_cmp_colorScale <- function(
+  filtered_table,
+  scale,
+  variable,
+  trunc,
+  conc_col = NULL
+) {
   if (variable == "Compounds") {
     # cmp_levels <- unique(filtered_table[["Theor. Cmp"]])
     cmp_levels <- unique(filtered_table[["Cmp Name"]])
@@ -4752,6 +5689,8 @@ get_cmp_colorScale <- function(filtered_table, scale, variable, trunc) {
     } else {
       cmp_levels <- unique(filtered_table[["Sample ID"]])
     }
+  } else if (variable == "Concentration") {
+    cmp_levels <- unique(filtered_table[[conc_col]])
   }
 
   n <- length(cmp_levels)
@@ -4778,33 +5717,36 @@ get_cmp_colorScale <- function(filtered_table, scale, variable, trunc) {
 
         scale <- "viridis"
       } else {
-        # Handle n < 3 (Brewer minimum request is 3)
-        n_request <- max(n, 3)
-        raw_colors <- RColorBrewer::brewer.pal(n_request, scale)
-
-        # Apply custom subsetting for contrast at low n
-        if (n == 2) {
-          colors <- raw_colors[c(1, 2)]
-        } else if (n == 1) {
-          colors <- raw_colors[1]
+        if (scale %in% sequential_scales) {
+          colors <- brewer_seq_colors(n, scale, max_colors)
         } else {
-          colors <- raw_colors[1:n]
+          # Qualitative: keep existing subsetting
+          n_request <- max(n, 3)
+          raw_colors <- RColorBrewer::brewer.pal(n_request, scale)
+          if (n == 2) {
+            colors <- raw_colors[c(1, 2)]
+          } else if (n == 1) {
+            colors <- raw_colors[1]
+          } else {
+            colors <- raw_colors[1:n]
+          }
         }
-
         break
       }
 
       # ViridisLite Scales
     } else if (scale %in% gradient_scales) {
       vir_func <- getExportedValue("viridisLite", scale)
-      colors <- vir_func(n)
+      dark_begin_scales <- c("magma", "inferno", "rocket", "mako")
+      begin <- if (scale %in% dark_begin_scales) 0.15 else 0
+      colors <- vir_func(n, begin = begin, end = 0.9)
     } else {
       stop(paste("Scale", scale, "not recognized in provided lists."))
     }
   }
 
   # Adjust brightness
-  colors <- brighten_hex(colors, factor = 1.33)
+  colors <- brighten_hex(colors, factor = 1.5)
 
   # Assign names mapping the colors to the specific variable levels
   names(colors) <- cmp_levels
@@ -4883,7 +5825,8 @@ filter_color_list <- function(color_list, min_n) {
     )
   })
 
-  return(filtered_list)
+  # Drop entirely-empty groups so they don't appear as orphan headers
+  Filter(function(g) length(g) > 0, filtered_list)
 }
 
 # Make compound distribution plot for proteins tab
@@ -4904,18 +5847,68 @@ prot_compound_distribution <- function(
         !is.na(`Cmp Name`)
     )
 
-  colors <- get_cmp_colorScale(
-    filtered_table = tbl,
-    scale = color_scale,
-    variable = color_variable,
-    trunc = truncate_names
-  )
-
   if (color_variable == "Compounds") {
     color <- ~`Cmp Name`
   } else if (color_variable == "Samples") {
     color <- ~`Sample ID`
   }
+
+  # Merge non-preferred hits (same peak) into their preferred counterpart
+  tbl <- tbl |>
+    # dplyr::arrange(
+    #   `Cmp Name`,
+    #   `Sample ID`,
+    #   `Peak Signal [Da]`,
+    #   dplyr::desc(Preferred == "TRUE"),
+    #   dplyr::desc(suppressWarnings(as.numeric(`Theor. Cmp [Da]`)))
+    # ) |>
+    dplyr::group_by(`Cmp Name`, `Sample ID`, `Peak Signal [Da]`) |>
+    dplyr::reframe(
+      `Protein` = `Protein`[1],
+      `Tot. Binding [%]` = `Tot. Binding [%]`[1],
+      `truncSample_ID` = `truncSample_ID`[1],
+      mass_stoich_raw = paste(
+        paste0(
+          "[",
+          `Theor. Cmp [Da]`,
+          "]",
+          sapply(`Bind. Stoich.`, function(x) {
+            as.character(htmltools::tags$sub(x))
+          })
+        ),
+        collapse = " + "
+      ),
+      `Theor. Cmp [Da]` = `Theor. Cmp [Da]`[Preferred == "TRUE"][1],
+      `Bind. Stoich.` = `Bind. Stoich.`[Preferred == "TRUE"][1],
+      `Binding [%]` = {
+        pref <- `Binding [%]`[Preferred == "TRUE"]
+        if (length(pref) > 0) pref[1] else `Binding [%]`[1]
+      }
+    ) |>
+    dplyr::select(-`Peak Signal [Da]`) |>
+    dplyr::arrange(`Cmp Name`, `Tot. Binding [%]`, `Binding [%]`, `Sample ID`)
+
+  .sid_raw <- if (truncate_names) tbl$truncSample_ID else tbl$`Sample ID`
+  global_sample_order <- tbl |>
+    dplyr::mutate(.sid = .sid_raw) |>
+    dplyr::group_by(.sid) |>
+    dplyr::summarize(
+      .mean_tb = mean(as.numeric(as.character(`Tot. Binding [%]`)), na.rm = TRUE),
+      .groups = "drop"
+    ) |>
+    dplyr::arrange(.mean_tb, .sid) |>
+    dplyr::pull(.sid)
+
+  colors <- get_cmp_colorScale(
+    filtered_table = if (color_variable == "Compounds") {
+      tbl
+    } else {
+      tbl[order(match(.sid_raw, global_sample_order)), ]
+    },
+    scale = color_scale,
+    variable = color_variable,
+    trunc = truncate_names
+  )
 
   tbl <- tbl |>
     dplyr::group_by(`Cmp Name`) |>
@@ -4925,23 +5918,22 @@ prot_compound_distribution <- function(
       } else {
         `Sample ID`
       },
-      mass_stoich = paste0(
-        "[",
-        `Theor. Cmp [Da]`,
-        "]",
-        sapply(`Bind. Stoich.`, function(x) {
-          as.character(htmltools::tags$sub(x))
-        })
+      Group = match(as.character(`Sample ID`), global_sample_order),
+      `Cmp Name` = factor(
+        `Cmp Name`,
+        levels = if (color_variable == "Compounds") {
+          names(colors)[names(colors) %in% unique(`Cmp Name`)]
+        } else {
+          unique(`Cmp Name`)
+        }
       ),
-      Group = match(`Sample ID`, unique(`Sample ID`)),
-      `Cmp Name` = factor(`Cmp Name`, levels = unique(`Cmp Name`)),
       `Sample ID` = factor(
         `Sample ID`,
-        levels = unique(`Sample ID`)
+        levels = global_sample_order
       ),
-      `%-Binding` = factor(
-        `%-Binding`,
-        levels = unique(`%-Binding`)
+      `Binding [%]` = factor(
+        `Binding [%]`,
+        levels = unique(`Binding [%]`)
       ),
       bg_hex = if (color_variable == "Compounds") {
         colors[as.character(`Cmp Name`)]
@@ -4953,7 +5945,7 @@ prot_compound_distribution <- function(
         "<span style='color:",
         label_color,
         "'>",
-        mass_stoich,
+        mass_stoich_raw,
         "</span>"
       )
     ) |>
@@ -4961,7 +5953,7 @@ prot_compound_distribution <- function(
 
   range <- c(
     0,
-    max(tbl$`Total %-Binding`) + 10
+    max(tbl$`Tot. Binding [%]`) + 10
   )
 
   if (!is.null(distribution_scale) && distribution_scale == "100") {
@@ -4971,7 +5963,8 @@ prot_compound_distribution <- function(
   condition <- ifelse(
     length(levels(tbl$`Cmp Name`)) > 1,
     max(nchar(levels(tbl$`Cmp Name`))) <= 22,
-    max(nchar(levels(tbl$`Sample ID`))) <= 22
+    length(levels(tbl$`Sample ID`)) <= 50 |
+      max(nchar(levels(tbl$`Sample ID`))) <= 22
   )
 
   showticklabels <- ifelse(
@@ -4991,7 +5984,6 @@ prot_compound_distribution <- function(
       plot_bgcolor = 'rgba(0,0,0,0)',
       xaxis = list(
         type = "category",
-        tickson = "boundaries",
         categoryorder = "array",
         categoryarray = levels(tbl$`Cmp Name`),
         showgrid = FALSE,
@@ -5001,7 +5993,7 @@ prot_compound_distribution <- function(
       ),
       yaxis = list(
         range = range,
-        title = list(text = "%-Binding"),
+        title = list(text = "Binding [%]"),
         zeroline = FALSE,
         gridcolor = grid_color,
         color = axis_color,
@@ -5014,9 +6006,6 @@ prot_compound_distribution <- function(
     n_groups <- length(groups)
     group_map <- stats::setNames(0:(n_groups - 1), groups)
 
-    bar_width <- min(0.3, 0.85 / (n_groups + max(0, n_groups - 1) * 0.15))
-    group_gap <- bar_width * 0.15
-
     compound_local_n <- tbl |>
       dplyr::group_by(`Cmp Name`) |>
       dplyr::summarize(local_n = dplyr::n_distinct(Group), .groups = "drop")
@@ -5024,6 +6013,17 @@ prot_compound_distribution <- function(
       compound_local_n$local_n,
       compound_local_n$`Cmp Name`
     )
+
+    max_local_n <- max(compound_local_n$local_n)
+    bar_width <- min(0.3, 0.85 / (max_local_n + max(0, max_local_n - 1) * 0.15))
+    group_gap <- bar_width * 0.15
+
+    local_i_map <- tbl |>
+      dplyr::distinct(`Cmp Name`, Group) |>
+      dplyr::arrange(`Cmp Name`, Group) |>
+      dplyr::group_by(`Cmp Name`) |>
+      dplyr::mutate(local_i = dplyr::row_number() - 1L) |>
+      dplyr::ungroup()
 
     if (n_groups > 1) {
       for (i in 2:n_groups) {
@@ -5055,7 +6055,11 @@ prot_compound_distribution <- function(
       local_cluster_width <- local_n *
         bar_width +
         max(0, local_n - 1) * group_gap
-      off <- -local_cluster_width / 2 + i_group * (bar_width + group_gap)
+      local_i <- local_i_map$local_i[
+        local_i_map$`Cmp Name` == as.character(row$`Cmp Name`[[1]]) &
+          local_i_map$Group == g
+      ]
+      off <- -local_cluster_width / 2 + local_i * (bar_width + group_gap)
 
       if (color_variable == "Compounds") {
         var <- as.character(row$`Cmp Name`[[1]])
@@ -5064,18 +6068,15 @@ prot_compound_distribution <- function(
       }
 
       col <- colors[[var]]
-      y_val <- row$`%-Binding`[[1]]
+      y_val <- row$`Binding [%]`[[1]]
 
       hover_text <- paste0(
         "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
-        row$`Theor. Cmp [Da]`[[1]],
+        row$mass_stoich_raw[[1]],
         "</b><br>",
-        "<span style='opacity: 0.8'>Stoichiometry:</span> <b>",
-        row$`Bind. Stoich.`[[1]],
-        "</b><br>",
-        "<span style='opacity: 0.8'>%-Binding:</span> <b>",
-        row$`%-Binding`[[1]],
-        "</b>",
+        "<span style='opacity: 0.8'>Binding [%]:</span> <b>",
+        sprintf("%.2f", as.numeric(as.character(row$`Binding [%]`[[1]]))),
+        "%</b>",
         "<extra><div style='text-align: left;'>",
         "<span style='opacity: 0.8;;'>Cmp Name: </span><b>",
         row$`Cmp Name`[[1]],
@@ -5090,7 +6091,7 @@ prot_compound_distribution <- function(
         bar_chart,
         x = row$`Cmp Name`[[1]],
         y = as.numeric(as.character(y_val)),
-        offsetgroup = i_group,
+        offsetgroup = local_i,
         offset = off,
         width = bar_width,
         text = row$mass_stoich[[1]],
@@ -5101,36 +6102,77 @@ prot_compound_distribution <- function(
         hoverlabel = list(align = "left", valign = "middle"),
         marker = list(
           color = col,
-          line = list(color = 'black', width = 1)
+          line = list(color = axis_color, width = 1)
         ),
         yaxis = yax,
         showlegend = FALSE
       )
     }
 
-    bar_chart <- bar_chart |>
-      plotly::layout(
-        xaxis = list(title = list(text = NULL))
+    # Total % binding annotation above each (Cmp Name, Sample) bar stack
+    totals_cmp_grp <- tbl |>
+      dplyr::group_by(`Cmp Name`, Group) |>
+      dplyr::summarize(
+        total_val = sum(as.numeric(as.character(`Binding [%]`))),
+        .groups = "drop"
       )
+
+    cmp_levels <- levels(tbl$`Cmp Name`)
+
+    if (nrow(totals_cmp_grp) <= 30) {
+      annots <- vector("list", nrow(totals_cmp_grp))
+      for (j in seq_len(nrow(totals_cmp_grp))) {
+        tot_row <- totals_cmp_grp[j, ]
+        g <- tot_row$Group[[1]]
+        local_n <- compound_local_n_map[[as.character(tot_row$`Cmp Name`[[1]])]]
+        local_cluster_width <- local_n *
+          bar_width +
+          max(0, local_n - 1) * group_gap
+        local_i <- local_i_map$local_i[
+          local_i_map$`Cmp Name` == as.character(tot_row$`Cmp Name`[[1]]) &
+            local_i_map$Group == g
+        ]
+        off <- -local_cluster_width / 2 + local_i * (bar_width + group_gap)
+        cmp_idx <- which(cmp_levels == as.character(tot_row$`Cmp Name`[[1]])) -
+          1L
+        annots[[j]] <- list(
+          x = cmp_idx + off + bar_width / 2,
+          y = tot_row$total_val[[1]],
+          text = paste0(sprintf("%.2f", tot_row$total_val[[1]]), "%"),
+          xref = "x",
+          yref = "y",
+          xanchor = "center",
+          yanchor = "bottom",
+          showarrow = FALSE,
+          font = list(color = axis_color, size = 12),
+          yshift = 4
+        )
+      }
+      bar_chart <- bar_chart |>
+        plotly::layout(
+          xaxis = list(title = list(text = NULL)),
+          annotations = annots
+        )
+    } else {
+      bar_chart <- bar_chart |>
+        plotly::layout(xaxis = list(title = list(text = NULL)))
+    }
   } else {
     bar_chart <- plotly::plot_ly(data = tbl) |>
       plotly::add_trace(
         x = ~`Sample ID`,
-        y = ~ as.numeric(as.character(`%-Binding`)),
+        y = ~ as.numeric(as.character(`Binding [%]`)),
         color = color,
         colors = colors,
         type = 'bar',
         name = ~mass_stoich,
         hovertemplate = ~ paste0(
-          "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
-          `Theor. Cmp [Da]`,
+          "<span style='opacity: 0.8'>Mass Shift / Stoich.:</span> <b>",
+          mass_stoich_raw,
           "</b><br>",
-          "<span style='opacity: 0.8'>Stoichiometry:</span> <b>",
-          `Bind. Stoich.`,
-          "</b><br>",
-          "<span style='opacity: 0.8'>%-Binding:</span> <b>",
-          `%-Binding`,
-          "</b>",
+          "<span style='opacity: 0.8'>Binding [%]:</span> <b>",
+          sprintf("%.2f", as.numeric(as.character(`Binding [%]`))),
+          "%</b>",
           "<extra><div style='text-align: left;'>",
           "<span style='opacity: 0.8;;'>Cmp Name: </span><b>",
           `Cmp Name`,
@@ -5144,14 +6186,14 @@ prot_compound_distribution <- function(
         text = ~mass_stoich,
         textposition = 'inside',
         textfont = list(size = 12),
-        marker = list(line = list(color = 'white', width = 1)),
+        marker = list(line = list(color = axis_color, width = 1)),
         showlegend = FALSE
       )
 
     if (length(tbl$`Sample ID`) <= 20) {
       totals <- dplyr::group_by(tbl, `Sample ID`) |>
         dplyr::summarize(
-          total_val = sum(as.numeric(as.character(`%-Binding`)))
+          total_val = sum(as.numeric(as.character(`Binding [%]`)))
         )
       bar_chart <- bar_chart |>
         plotly::add_trace(
@@ -5160,7 +6202,7 @@ prot_compound_distribution <- function(
           y = ~total_val,
           type = 'scatter',
           mode = 'text',
-          text = ~ paste0(total_val, "%"),
+          text = ~ paste0(sprintf("%.2f", total_val), "%"),
           textposition = 'top center',
           showlegend = FALSE,
           hoverinfo = 'none',
@@ -5194,7 +6236,7 @@ prot_compound_distribution <- function(
         ),
         yaxis = list(
           range = range,
-          title = list(text = "%-Binding"),
+          title = list(text = "Binding [%]"),
           zeroline = FALSE,
           gridcolor = grid_color,
           color = axis_color
@@ -5218,21 +6260,43 @@ cmp_compound_distribution <- function(
   theme = "dark"
 ) {
   tbl <- hits_summary |>
-    dplyr::filter(`Cmp Name` == compound) |>
+    dplyr::filter(`Cmp Name` == compound)
+
+  # Merge non-preferred hits (same peak) into their preferred counterpart
+  tbl <- tbl |>
+    dplyr::arrange(
+      `Sample ID`,
+      `Peak Signal [Da]`,
+      dplyr::desc(Preferred == "TRUE"),
+      dplyr::desc(suppressWarnings(as.numeric(`Theor. Cmp [Da]`)))
+    ) |>
+    dplyr::group_by(`Sample ID`, `Peak Signal [Da]`) |>
+    dplyr::reframe(
+      `Cmp Name` = `Cmp Name`[1],
+      `Tot. Binding [%]` = `Tot. Binding [%]`[1],
+      `truncSample_ID` = `truncSample_ID`[1],
+      mass_stoich_raw = paste(
+        paste0(
+          "[",
+          `Theor. Cmp [Da]`,
+          "]",
+          sapply(`Bind. Stoich.`, function(x) {
+            as.character(htmltools::tags$sub(x))
+          })
+        ),
+        collapse = " + "
+      ),
+      `Theor. Cmp [Da]` = `Theor. Cmp [Da]`[Preferred == "TRUE"][1],
+      `Bind. Stoich.` = `Bind. Stoich.`[Preferred == "TRUE"][1],
+      `Binding [%]` = {
+        pref <- `Binding [%]`[Preferred == "TRUE"]
+        if (length(pref) > 0) pref[1] else `Binding [%]`[1]
+      }
+    ) |>
+    dplyr::select(-`Peak Signal [Da]`) |>
+    dplyr::arrange(`Tot. Binding [%]`, `Binding [%]`, `Sample ID`) |>
     dplyr::mutate(
-      `Sample ID` = if (truncate_names) {
-        `truncSample_ID`
-      } else {
-        `Sample ID`
-      },
-      mass_stoich = paste0(
-        "[",
-        `Theor. Cmp [Da]`,
-        "]",
-        sapply(`Bind. Stoich.`, function(x) {
-          as.character(htmltools::tags$sub(x))
-        })
-      )
+      `Sample ID` = if (truncate_names) `truncSample_ID` else `Sample ID`
     )
 
   tbl$`Sample ID` <- factor(
@@ -5259,7 +6323,7 @@ cmp_compound_distribution <- function(
         "<span style='color:",
         label_color,
         "'>",
-        mass_stoich,
+        mass_stoich_raw,
         "</span>"
       )
     )
@@ -5276,21 +6340,18 @@ cmp_compound_distribution <- function(
   bar_chart <- plotly::plot_ly(data = tbl) |>
     plotly::add_trace(
       x = ~`Sample ID`,
-      y = ~`%-Binding`,
+      y = ~`Binding [%]`,
       color = color,
       colors = colors,
       type = 'bar',
       name = ~mass_stoich,
       hovertemplate = ~ paste0(
         "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
-        `Theor. Cmp [Da]`,
+        mass_stoich_raw,
         "</b><br>",
-        "<span style='opacity: 0.8'>Stoichiometry:</span> <b>",
-        `Bind. Stoich.`,
-        "</b><br>",
-        "<span style='opacity: 0.8'>%-Binding:</span> <b>",
-        `%-Binding`,
-        "</b>",
+        "<span style='opacity: 0.8'>Binding [%]:</span> <b>",
+        sprintf("%.2f", `Binding [%]`),
+        "%</b>",
         "<extra><div style='text-align: left;'>",
         "<span style='opacity: 0.8;;'>Cmp Name: </span><b>",
         `Cmp Name`,
@@ -5304,14 +6365,14 @@ cmp_compound_distribution <- function(
       text = ~mass_stoich,
       textposition = 'inside',
       textfont = list(size = 12),
-      marker = list(line = list(color = 'white', width = 1)),
+      marker = list(line = list(color = axis_color, width = 1)),
       showlegend = FALSE
     )
 
   if (length(tbl$`Sample ID`) <= 20) {
     totals <- dplyr::group_by(tbl, `Sample ID`) |>
       dplyr::summarize(
-        total_val = sum(`%-Binding`)
+        total_val = sum(`Binding [%]`)
       )
     bar_chart <- bar_chart |>
       plotly::add_trace(
@@ -5320,7 +6381,7 @@ cmp_compound_distribution <- function(
         y = ~total_val,
         type = 'scatter',
         mode = 'text',
-        text = ~ paste0(total_val, "%"),
+        text = ~ paste0(round(total_val, 2), "%"),
         textposition = 'top center',
         showlegend = FALSE,
         hoverinfo = 'none',
@@ -5340,7 +6401,7 @@ cmp_compound_distribution <- function(
 
   range <- c(
     0,
-    max(tbl$`Total %-Binding`) + 10
+    max(tbl$`Tot. Binding [%]`) + 10
   )
 
   if (!is.null(distribution_scale) && distribution_scale == "100") {
@@ -5359,16 +6420,11 @@ cmp_compound_distribution <- function(
         showgrid = FALSE,
         zeroline = FALSE,
         color = axis_color,
-        showticklabels = TRUE
-        #   ifelse(
-        #   !is.null(distribution_labels),
-        #   distribution_labels,
-        #   max(nchar(levels(tbl$`Sample ID`))) <= 22 | nrow(tbl) < 4
-        # )
+        showticklabels = if (!is.null(distribution_labels)) distribution_labels else TRUE
       ),
       yaxis = list(
         range = range,
-        title = list(text = "%-Binding"),
+        title = list(text = "Binding [%]"),
         zeroline = FALSE,
         gridcolor = grid_color,
         color = axis_color
@@ -5393,53 +6449,54 @@ smpl_compound_distribution <- function(
     return(NULL)
   }
 
+  # Group by compound + peak: multiple stoichiometry interpretations of the
+  # same peak are merged into one slice with a combined [x]xN + [y]xM label.
+  # Only the Preferred hit's binding value counts for the slice size.
   cmp_table <- tbl |>
-    dplyr::group_by(`Cmp Name`) |>
-    dplyr::arrange(dplyr::desc(`Theor. Cmp [Da]`), `Bind. Stoich.`) |>
+    dplyr::arrange(
+      `Cmp Name`,
+      `Peak Signal [Da]`,
+      dplyr::desc(Preferred == "TRUE"),
+      dplyr::desc(suppressWarnings(as.numeric(`Theor. Cmp [Da]`)))
+    ) |>
+    dplyr::group_by(`Cmp Name`, `Peak Signal [Da]`) |>
     dplyr::reframe(
-      `Cmp Name` = `Cmp Name`,
-      `Sample ID` = if (truncate_names) `truncSample_ID` else `Sample ID`,
-      total_bind = `Total %-Binding`,
-      mass_shift = `Theor. Cmp [Da]`,
-      mass_stoich = paste0(
-        "[",
-        `Theor. Cmp [Da]`,
-        "]",
-        sapply(`Bind. Stoich.`, function(x) {
-          as.character(htmltools::tags$sub(x))
-        })
+      `Cmp Name` = `Cmp Name`[1],
+      `Sample ID` = if (truncate_names) `truncSample_ID`[1] else `Sample ID`[1],
+      total_bind = `Tot. Binding [%]`[1],
+      mass_stoich = paste(
+        paste0(
+          "[",
+          `Theor. Cmp [Da]`,
+          "]",
+          sapply(`Bind. Stoich.`, function(x) {
+            as.character(htmltools::tags$sub(x))
+          })
+        ),
+        collapse = " + "
       ),
-      relBinding = `%-Binding` / 100,
-      `%-Binding` = paste0(as.character(`%-Binding`), "%"),
+      relBinding = {
+        pref <- `Binding [%]`[Preferred == "TRUE"]
+        (if (length(pref) > 0) pref[1] else `Binding [%]`[1]) / 100
+      }
+    ) |>
+    dplyr::select(-`Peak Signal [Da]`) |>
+    dplyr::mutate(
+      `Binding [%]` = paste0(sprintf("%.2f", relBinding * 100), "%")
     ) |>
     rbind(
       data.frame(
-        "Unbound",
-        "Unbound",
-        100 - tbl$`Total %-Binding`[1],
-        "Unbound",
-        "Unbound",
-        1 - tbl$`Total %-Binding`[1] / 100,
-        "Unbound"
-      ) |>
-        stats::setNames(c(
-          "Sample ID",
-          "Cmp Name",
-          "total_bind",
-          "mass_shift",
-          "mass_stoich",
-          "relBinding",
-          "%-Binding"
-        )) |>
-        dplyr::select(c(
-          "Cmp Name",
-          "Sample ID",
-          "total_bind",
-          "mass_shift",
-          "mass_stoich",
-          "relBinding",
-          "%-Binding"
-        ))
+        "Cmp Name" = "Unbound",
+        "Sample ID" = "Unbound",
+        total_bind = 100 - tbl$`Tot. Binding [%]`[1],
+        mass_stoich = "Unbound Protein",
+        relBinding = 1 - tbl$`Tot. Binding [%]`[1] / 100,
+        "Binding [%]" = paste0(
+          sprintf("%.2f", 100 - tbl$`Tot. Binding [%]`[1]),
+          "%"
+        ),
+        check.names = FALSE
+      )
     )
 
   colors <- c(
@@ -5458,7 +6515,7 @@ smpl_compound_distribution <- function(
   } else {
     cmp_table$color <- colors[match(cmp_table$`Sample ID`, names(colors))]
   }
-  cmp_table$color[cmp_table$mass_shift == "Unbound"] <- "#333338"
+  cmp_table$color[cmp_table$`Cmp Name` == "Unbound"] <- "#333338"
 
   font_color <- if (theme == "light") "black" else "white"
 
@@ -5469,8 +6526,8 @@ smpl_compound_distribution <- function(
     sort = FALSE,
     type = 'pie',
     hole = 0.4,
-    textinfo = 'label+percent',
-    texttemplate = "%{label}<br>%{percent}",
+    text = ~`Binding [%]`,
+    texttemplate = "%{label}<br>%{text}",
     textposition = 'outside',
     hovertemplate = ~ paste0(
       "<span style='opacity: 0.8'>Compound:</span> <b>",
@@ -5479,8 +6536,8 @@ smpl_compound_distribution <- function(
       "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
       `mass_stoich`,
       "</b><br>",
-      "<span style='opacity: 0.8'>%-Binding:</span> <b>",
-      `%-Binding`,
+      "<span style='opacity: 0.8'>Binding [%]:</span> <b>",
+      `Binding [%]`,
       "<extra></extra>"
     ),
     outsidetextfont = list(color = font_color, size = 12),
@@ -5500,7 +6557,11 @@ smpl_compound_distribution <- function(
         list(
           x = 0.5,
           y = 0.5,
-          text = paste0("<b>", cmp_table$total_bind[1], "%</b><br>Bound"),
+          text = paste0(
+            "<b>",
+            sprintf("%.2f", cmp_table$total_bind[1]),
+            "%</b><br>Bound"
+          ),
           xref = "paper",
           yref = "paper",
           xanchor = "center",
@@ -5513,4 +6574,1300 @@ smpl_compound_distribution <- function(
         )
       )
     )
+}
+
+stats_palette <- function(n, scale) {
+  if (scale %in% unlist(c(qualitative_scales, sequential_scales))) {
+    max_colors <- RColorBrewer::brewer.pal.info[scale, "maxcolors"]
+    if (n > max_colors) {
+      brighten_hex(viridisLite::viridis(n), factor = 1.5)
+    } else if (scale %in% sequential_scales) {
+      brewer_seq_colors(n, scale, max_colors)
+    } else {
+      # Qualitative
+      n_req <- max(n, 3)
+      raw <- RColorBrewer::brewer.pal(n_req, scale)
+      if (n == 1) {
+        raw[1]
+      } else if (n == 2) {
+        raw[c(1, 3)]
+      } else {
+        raw[seq_len(n)]
+      }
+    }
+  } else {
+    vir_func <- tryCatch(
+      getExportedValue("viridisLite", scale),
+      error = function(e) viridisLite::viridis
+    )
+    dark_begin_scales <- c("magma", "inferno", "rocket", "mako")
+    begin <- if (scale %in% dark_begin_scales) 0.15 else 0
+    brighten_hex(vir_func(n, begin = begin), factor = 1.5)
+  }
+}
+
+hex_to_rgba <- function(hex, alpha) {
+  rgb <- grDevices::col2rgb(hex)
+  sprintf("rgba(%d,%d,%d,%.2f)", rgb[1], rgb[2], rgb[3], alpha)
+}
+
+#' @export
+stats_histogram <- function(
+  hits_summary,
+  theme = "dark",
+  show = "Correct"
+) {
+  df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
+
+  x_col <- if (show == "Unmatched") df$`% Unmatched` else df$`% Correct`
+  bin_counts <- tabulate(floor(x_col) + 1L)
+  max_count <- if (length(bin_counts) > 0) max(bin_counts) else 1L
+  y_dtick <- max(1L, ceiling(max_count / 8))
+
+  font_color <- if (theme == "light") "black" else "white"
+  grid_color <- if (theme == "light") {
+    "rgba(0,0,0,0.1)"
+  } else {
+    "rgba(255,255,255,0.2)"
+  }
+  zeroline_color <- if (theme == "light") {
+    "rgba(0,0,0,0.5)"
+  } else {
+    "rgba(255,255,255,0.5)"
+  }
+
+  hex_correct <- "#4daf4a"
+  hex_unmatched <- "#e41a1c"
+  col <- hex_to_rgba(
+    if (show == "Unmatched") hex_unmatched else hex_correct,
+    0.7
+  )
+  colb <- hex_to_rgba(
+    if (show == "Unmatched") hex_unmatched else hex_correct,
+    1
+  )
+
+  p <- plotly::plot_ly()
+  if (show == "Unmatched") {
+    p <- plotly::add_histogram(
+      p,
+      data = df,
+      x = ~`% Unmatched`,
+      name = "Unmatched [%]",
+      marker = list(color = col, line = list(color = colb, width = 0.5)),
+      xbins = list(start = 0, end = 101, size = 1)
+    )
+  } else {
+    p <- plotly::add_histogram(
+      p,
+      data = df,
+      x = ~`% Correct`,
+      name = "Correct [%]",
+      marker = list(color = col, line = list(color = colb, width = 0.5)),
+      xbins = list(start = 0, end = 101, size = 1)
+    )
+  }
+  p |>
+    plotly::layout(
+      paper_bgcolor = "rgba(0,0,0,0)",
+      plot_bgcolor = "rgba(0,0,0,0)",
+      font = list(size = 14, color = font_color),
+      legend = list(
+        bgcolor = "rgba(0,0,0,0)",
+        font = list(color = font_color)
+      ),
+      xaxis = list(
+        title = paste(show, "[%]"),
+        range = c(-2, 102),
+        color = font_color,
+        gridcolor = grid_color,
+        zerolinecolor = zeroline_color,
+        hoverformat = ".0f"
+      ),
+      yaxis = list(
+        title = "Count",
+        color = font_color,
+        gridcolor = grid_color,
+        zerolinecolor = zeroline_color,
+        tick0 = 0,
+        dtick = y_dtick,
+        hoverformat = "d"
+      )
+    )
+}
+
+#' @export
+stats_boxplot <- function(
+  hits_summary,
+  theme = "dark",
+  show_points = TRUE,
+  show = "Correct",
+  fixed_range = TRUE
+) {
+  df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
+
+  font_color <- if (theme == "light") "black" else "white"
+  grid_color <- if (theme == "light") {
+    "rgba(0,0,0,0.1)"
+  } else {
+    "rgba(255,255,255,0.2)"
+  }
+  zeroline_color <- if (theme == "light") {
+    "rgba(0,0,0,0.5)"
+  } else {
+    "rgba(255,255,255,0.5)"
+  }
+  dot_border_color <- if (theme == "light") {
+    "rgba(0,0,0,0.5)"
+  } else {
+    "rgba(255,255,255,0.5)"
+  }
+
+  hex_base <- if (show == "Unmatched") "#e41a1c" else "#4daf4a"
+  show_unmatched <- show == "Unmatched"
+  show_correct <- show == "Correct"
+  box_col <- hex_to_rgba(hex_base, 1)
+  box_fill <- hex_to_rgba(hex_base, 0.15)
+  box_y <- if (show_unmatched) ~`% Unmatched` else ~`% Correct`
+  box_name <- if (show_unmatched) "Unmatched [%]" else "Correct [%]"
+  hover_tmpl <- if (show_unmatched) {
+    "<b>%{text}</b><br>Unmatched [%]: %{y:.2f}<extra></extra>"
+  } else {
+    "<b>%{text}</b><br>Correct [%]: %{y:.2f}<extra></extra>"
+  }
+
+  # box_half_width = 0.3 gives box width = 0.6, which is exactly 50% of x range c(-0.4, 0.8)
+  box_half_width <- 0.3
+  metric_vals_bp <- if (show_unmatched) df$`% Unmatched` else df$`% Correct`
+
+  # Pre-compute with R's quantile() for the annotations and box shapes
+  q1_bp   <- unname(stats::quantile(metric_vals_bp, 0.25, na.rm = TRUE))
+  med_bp  <- stats::median(metric_vals_bp, na.rm = TRUE)
+  mean_bp <- mean(metric_vals_bp, na.rm = TRUE)
+  q3_bp   <- unname(stats::quantile(metric_vals_bp, 0.75, na.rm = TRUE))
+  iqr_bp      <- q3_bp - q1_bp
+  lo_fence_bp <- min(metric_vals_bp[metric_vals_bp >= q1_bp - 1.5 * iqr_bp])
+  hi_fence_bp <- max(metric_vals_bp[metric_vals_bp <= q3_bp + 1.5 * iqr_bp])
+
+  # Box is drawn as layout shapes so Plotly's quartile algorithm is bypassed entirely
+  whisk_half <- box_half_width * 0.5
+  box_shapes <- list(
+    list(type = "rect", xref = "x", yref = "y",
+         x0 = -box_half_width, x1 = box_half_width, y0 = q1_bp, y1 = q3_bp,
+         fillcolor = box_fill, line = list(color = box_col, width = 1.5)),
+    list(type = "line", xref = "x", yref = "y",
+         x0 = -box_half_width, x1 = box_half_width, y0 = med_bp, y1 = med_bp,
+         line = list(color = box_col, width = 2)),
+    list(type = "line", xref = "x", yref = "y",
+         x0 = -box_half_width, x1 = box_half_width, y0 = mean_bp, y1 = mean_bp,
+         line = list(color = box_col, width = 1.5, dash = "dot")),
+    list(type = "line", xref = "x", yref = "y",
+         x0 = 0, x1 = 0, y0 = q3_bp, y1 = hi_fence_bp,
+         line = list(color = box_col, width = 1.5)),
+    list(type = "line", xref = "x", yref = "y",
+         x0 = -whisk_half, x1 = whisk_half, y0 = hi_fence_bp, y1 = hi_fence_bp,
+         line = list(color = box_col, width = 1.5)),
+    list(type = "line", xref = "x", yref = "y",
+         x0 = 0, x1 = 0, y0 = lo_fence_bp, y1 = q1_bp,
+         line = list(color = box_col, width = 1.5)),
+    list(type = "line", xref = "x", yref = "y",
+         x0 = -whisk_half, x1 = whisk_half, y0 = lo_fence_bp, y1 = lo_fence_bp,
+         line = list(color = box_col, width = 1.5))
+  )
+
+  if (show_points) {
+    x_jit <- stats::runif(nrow(df), -box_half_width, box_half_width)
+    p <- plotly::plot_ly(
+      type = "scatter",
+      mode = "markers",
+      x = x_jit,
+      y = metric_vals_bp,
+      text = df$Sample,
+      customdata = df$Sample,
+      hovertemplate = hover_tmpl,
+      showlegend = FALSE,
+      hoverlabel = list(
+        bgcolor = if (theme == "dark") {
+          "rgba(50,52,60,0.95)"
+        } else {
+          "rgba(255,255,255,0.9)"
+        },
+        bordercolor = if (theme == "dark") {
+          "rgba(200,200,200,0.4)"
+        } else {
+          "rgba(0,0,0,0.2)"
+        },
+        font = list(
+          color = if (theme == "dark") "#ffffff" else "#000000",
+          size = 12
+        )
+      ),
+      marker = list(
+        color = "rgba(0,0,0,0)",
+        size = 8,
+        line = list(color = dot_border_color, width = 1.5)
+      )
+    )
+  } else {
+    p <- plotly::plot_ly(
+      type = "scatter",
+      mode = "markers",
+      x = numeric(0),
+      y = numeric(0),
+      showlegend = FALSE,
+      hoverinfo = "none"
+    )
+  }
+
+  correct_sd_bp <- stats::sd(df$`% Correct`, na.rm = TRUE)
+  unmatched_sd_bp <- stats::sd(df$`% Unmatched`, na.rm = TRUE)
+  correct_mean_bp <- mean(df$`% Correct`, na.rm = TRUE)
+  unmatched_mean_bp <- mean(df$`% Unmatched`, na.rm = TRUE)
+
+  bp_annots <- list()
+  if (show_correct && !is.na(correct_sd_bp) && correct_sd_bp < 0.005) {
+    bp_annots <- c(
+      bp_annots,
+      list(list(
+        x = 0,
+        xref = "x",
+        y = correct_mean_bp - 4,
+        yref = "y",
+        text = sprintf("All values: %.2f%%", correct_mean_bp),
+        showarrow = FALSE,
+        yanchor = "top",
+        font = list(color = font_color, size = 11)
+      ))
+    )
+  }
+  if (show_unmatched && !is.na(unmatched_sd_bp) && unmatched_sd_bp < 0.005) {
+    bp_annots <- c(
+      bp_annots,
+      list(list(
+        x = 0,
+        xref = "x",
+        y = unmatched_mean_bp - 4,
+        yref = "y",
+        text = sprintf("All values: %.2f%%", unmatched_mean_bp),
+        showarrow = FALSE,
+        yanchor = "top",
+        font = list(color = font_color, size = 11)
+      ))
+    )
+  }
+
+  sa_font <- list(color = font_color, size = 10)
+  # Spread all four label y-positions by actual value with a minimum gap
+  spread_ys <- local({
+    min_gap <- 5
+    raw <- c(q1_bp, med_bp, mean_bp, q3_bp)
+    idx <- order(raw)
+    s   <- raw[idx]
+    for (iter in seq_len(50)) {
+      changed <- FALSE
+      for (i in seq_len(3)) {
+        if (s[i + 1] - s[i] < min_gap) {
+          mid    <- (s[i] + s[i + 1]) / 2
+          s[i]   <- mid - min_gap / 2
+          s[i + 1] <- mid + min_gap / 2
+          changed <- TRUE
+        }
+      }
+      if (!changed) break
+    }
+    result      <- raw
+    result[idx] <- s
+    result
+  })
+  q1_y   <- spread_ys[1]
+  med_y  <- spread_ys[2]
+  mean_y <- spread_ys[3]
+  q3_y   <- spread_ys[4]
+
+  bp_annots <- c(
+    bp_annots,
+    list(
+      list(
+        x = 0.65,
+        xref = "paper",
+        y = q1_y,
+        yref = "y",
+        text = sprintf("Q1: %.2f%%", q1_bp),
+        showarrow = FALSE,
+        xanchor = "left",
+        yanchor = "middle",
+        font = sa_font
+      ),
+      list(
+        x = 0.65,
+        xref = "paper",
+        y = med_y,
+        yref = "y",
+        text = sprintf("Median: %.2f%%", med_bp),
+        showarrow = FALSE,
+        xanchor = "left",
+        yanchor = "middle",
+        font = sa_font
+      ),
+      list(
+        x = 0.65,
+        xref = "paper",
+        y = mean_y,
+        yref = "y",
+        text = sprintf("Mean: %.2f%%", mean_bp),
+        showarrow = FALSE,
+        xanchor = "left",
+        yanchor = "middle",
+        font = sa_font
+      ),
+      list(
+        x = 0.65,
+        xref = "paper",
+        y = q3_y,
+        yref = "y",
+        text = sprintf("Q3: %.2f%%", q3_bp),
+        showarrow = FALSE,
+        xanchor = "left",
+        yanchor = "middle",
+        font = sa_font
+      )
+    )
+  )
+
+  p |>
+    plotly::layout(
+      paper_bgcolor = "rgba(0,0,0,0)",
+      plot_bgcolor = "rgba(0,0,0,0)",
+      font = list(size = 14, color = font_color),
+      legend = list(bgcolor = "rgba(0,0,0,0)", font = list(color = font_color)),
+      hoverlabel = if (theme == "dark") {
+        list(
+          bgcolor = "rgba(50,52,60,0.95)",
+          bordercolor = "rgba(200,200,200,0.4)",
+          font = list(color = "#ffffff", size = 12)
+        )
+      } else {
+        list()
+      },
+      xaxis = list(
+        showticklabels = FALSE,
+        color = font_color,
+        range = c(-0.4, 0.8),
+        gridcolor = "rgba(0,0,0,0)",
+        zerolinecolor = "rgba(0,0,0,0)"
+      ),
+      yaxis = list(
+        title = paste(show, "[%]"),
+        range = if (fixed_range) c(-5, 105) else NULL,
+        color = font_color,
+        gridcolor = grid_color,
+        zerolinecolor = zeroline_color,
+        hoverformat = ".2f"
+      ),
+      annotations = if (length(bp_annots) > 0) bp_annots else NULL,
+      shapes = box_shapes
+    )
+}
+
+#' @export
+stats_scatter <- function(
+  hits_summary,
+  full_scale = FALSE,
+  group_by = NULL,
+  color_scale = "plasma",
+  theme = "dark",
+  show = "Correct"
+) {
+  metric_col <- if (show == "Unmatched") "% Unmatched" else "% Correct"
+  metric_label <- if (show == "Unmatched") "Unmatched [%]" else "Correct [%]"
+
+  df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
+  df$`Total % Binding` <- ifelse(
+    is.na(df$`Total % Binding`),
+    0,
+    df$`Total % Binding`
+  ) *
+    100
+
+  font_color <- if (theme == "light") "black" else "white"
+  grid_color <- if (theme == "light") {
+    "rgba(0,0,0,0.1)"
+  } else {
+    "rgba(255,255,255,0.2)"
+  }
+  zeroline_color <- if (theme == "light") {
+    "rgba(0,0,0,0.5)"
+  } else {
+    "rgba(255,255,255,0.5)"
+  }
+  dot_border_color <- if (theme == "light") {
+    "rgba(0,0,0,0.5)"
+  } else {
+    "rgba(255,255,255,0.5)"
+  }
+
+  metric_vals <- df[[metric_col]]
+  correct_mean <- mean(metric_vals, na.rm = TRUE)
+  correct_sd <- stats::sd(metric_vals, na.rm = TRUE)
+  correct_upper <- correct_mean + correct_sd
+  correct_lower <- correct_mean - correct_sd
+  show_sd <- !is.na(correct_sd) && correct_sd >= 0.005
+
+  y_range <- if (full_scale) {
+    c(-5, 105)
+  } else {
+    pad <- max(
+      (max(metric_vals, na.rm = TRUE) - min(metric_vals, na.rm = TRUE)) *
+        0.08,
+      3
+    )
+    c(
+      max(-5, floor(min(metric_vals, na.rm = TRUE) - pad)),
+      min(105, ceiling(max(metric_vals, na.rm = TRUE) + pad))
+    )
+  }
+
+  group_by <- if (
+    is.null(group_by) || !nzchar(group_by) || !group_by %in% names(df)
+  ) {
+    if ("Protein" %in% names(df)) "Protein" else names(df)[1]
+  } else {
+    group_by
+  }
+
+  df <- df[!is.na(df[[group_by]]), ]
+  groups <- as.character(unique(df[[group_by]]))
+  df[[group_by]] <- as.character(df[[group_by]])
+  color_map <- stats::setNames(
+    stats_palette(length(groups), color_scale),
+    groups
+  )
+
+  p <- plotly::plot_ly()
+  for (grp in groups) {
+    sub_df <- dplyr::filter(df, .data[[group_by]] == grp)
+    sub_df <- sub_df |>
+      dplyr::mutate(
+        x_plot = `Total % Binding` + stats::runif(dplyr::n(), -0.6, 0.6),
+        y_plot = .data[[metric_col]] + stats::runif(dplyr::n(), -0.6, 0.6),
+        tooltip = paste0(
+          Sample,
+          "<br>",
+          "Tot. Binding [%]: ",
+          round(`Total % Binding`, 2),
+          "<br>",
+          metric_label,
+          ": ",
+          round(.data[[metric_col]], 2)
+        )
+      )
+    p <- plotly::add_markers(
+      p,
+      data = sub_df,
+      x = ~x_plot,
+      y = ~y_plot,
+      name = grp,
+      showlegend = TRUE,
+      customdata = ~Sample,
+      text = ~tooltip,
+      hovertemplate = "%{text}<extra></extra>",
+      marker = list(
+        color = color_map[[grp]],
+        size = 8,
+        opacity = 0.8,
+        line = list(color = dot_border_color, width = 1)
+      )
+    )
+  }
+
+  ref_color <- if (theme == "light") {
+    "rgba(0,0,0,0.7)"
+  } else {
+    "rgba(255,255,255,0.7)"
+  }
+  sd_color <- if (theme == "light") {
+    "rgba(0,0,0,0.7)"
+  } else {
+    "rgba(255,255,255,0.7)"
+  }
+
+  p |>
+    plotly::layout(
+      paper_bgcolor = "rgba(0,0,0,0)",
+      plot_bgcolor = "rgba(0,0,0,0)",
+      font = list(size = 14, color = font_color),
+      showlegend = TRUE,
+      legend = list(
+        bgcolor = "rgba(0,0,0,0)",
+        font = list(color = font_color)
+      ),
+      xaxis = list(
+        title = "Tot. Binding [%]",
+        color = font_color,
+        gridcolor = grid_color,
+        zerolinecolor = zeroline_color,
+        hoverformat = ".2f"
+      ),
+      yaxis = list(
+        title = metric_label,
+        range = y_range,
+        color = font_color,
+        gridcolor = grid_color,
+        zerolinecolor = zeroline_color,
+        hoverformat = ".2f"
+      ),
+      shapes = c(
+        list(list(
+          type = "line",
+          x0 = 0,
+          x1 = 1,
+          xref = "paper",
+          y0 = correct_mean,
+          y1 = correct_mean,
+          line = list(color = ref_color, width = 1.5, dash = "dash")
+        )),
+        if (show_sd) {
+          list(
+            list(
+              type = "line",
+              x0 = 0,
+              x1 = 1,
+              xref = "paper",
+              y0 = correct_upper,
+              y1 = correct_upper,
+              line = list(color = sd_color, width = 1, dash = "dot")
+            ),
+            list(
+              type = "line",
+              x0 = 0,
+              x1 = 1,
+              xref = "paper",
+              y0 = correct_lower,
+              y1 = correct_lower,
+              line = list(color = sd_color, width = 1, dash = "dot")
+            )
+          )
+        } else {
+          list()
+        }
+      ),
+      annotations = c(
+        list(list(
+          x = 1,
+          xref = "paper",
+          y = correct_mean,
+          yref = "y",
+          text = sprintf("<b>Mean</b> %.2f%%", correct_mean),
+          showarrow = FALSE,
+          xanchor = "right",
+          yanchor = "bottom",
+          font = list(color = font_color, size = 11)
+        )),
+        if (show_sd) {
+          list(
+            list(
+              x = 1,
+              xref = "paper",
+              y = correct_upper,
+              yref = "y",
+              text = sprintf("+1 SD  %.2f%%", correct_upper),
+              showarrow = FALSE,
+              xanchor = "right",
+              yanchor = "bottom",
+              font = list(color = font_color, size = 10)
+            ),
+            list(
+              x = 1,
+              xref = "paper",
+              y = correct_lower,
+              yref = "y",
+              text = sprintf("− 1 SD  %.2f%%", correct_lower),
+              showarrow = FALSE,
+              xanchor = "right",
+              yanchor = "top",
+              font = list(color = font_color, size = 10)
+            )
+          )
+        } else {
+          list()
+        }
+      )
+    )
+}
+
+#' @export
+stats_violin <- function(
+  hits_summary,
+  group_by = "Protein",
+  full_scale = FALSE,
+  theme = "dark",
+  color_scale = "plasma",
+  inner = "box",
+  show = "Correct"
+) {
+  metric_col <- if (show == "Unmatched") "% Unmatched" else "% Correct"
+  metric_label <- if (show == "Unmatched") "Unmatched [%]" else "Correct [%]"
+  hover_label <- if (show == "Unmatched") "Unmatched [%]" else "Correct [%]"
+
+  df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
+  df[[group_by]] <- ifelse(
+    is.na(df[[group_by]]),
+    "Unknown",
+    as.character(df[[group_by]])
+  )
+
+  font_color <- if (theme == "light") "black" else "white"
+  grid_color <- if (theme == "light") {
+    "rgba(0,0,0,0.1)"
+  } else {
+    "rgba(255,255,255,0.2)"
+  }
+  zeroline_color <- if (theme == "light") {
+    "rgba(0,0,0,0.5)"
+  } else {
+    "rgba(255,255,255,0.5)"
+  }
+  dot_border_color <- if (theme == "light") {
+    "rgba(0,0,0,0.5)"
+  } else {
+    "rgba(255,255,255,0.5)"
+  }
+  box_line_color <- if (theme == "light") {
+    "rgba(0,0,0,1)"
+  } else {
+    "rgba(255,255,255,1)"
+  }
+
+  show_box <- inner != "Points"
+  show_points <- inner == "Points"
+
+  y_range <- if (full_scale) c(-5, 105) else NULL
+
+  groups <- unique(df[[group_by]])
+  pal <- stats_palette(length(groups), color_scale)
+  color_map <- stats::setNames(pal, groups)
+
+  p <- plotly::plot_ly()
+  for (i in seq_along(groups)) {
+    grp <- groups[[i]]
+    cat_idx <- i - 1L
+    sub_df <- dplyr::filter(df, .data[[group_by]] == grp)
+    col <- hex_to_rgba(color_map[[grp]], 1)
+    col_f <- hex_to_rgba(color_map[[grp]], 0.2)
+    col_b <- hex_to_rgba(color_map[[grp]], 0.25)
+    grp_sd <- stats::sd(sub_df[[metric_col]], na.rm = TRUE)
+    is_degenerate <- is.na(grp_sd) || grp_sd < 0.005
+    hover_tmpl_v <- paste0(
+      "<b>%{text}</b><br>",
+      hover_label,
+      ": %{y:.2f}<extra></extra>"
+    )
+    if (is_degenerate) {
+      # Single-member groups stay centered; multi-member degenerate groups get jitter
+      x_jit <- if (nrow(sub_df) == 1) cat_idx else cat_idx + stats::runif(nrow(sub_df), -0.25, 0.25)
+      p <- plotly::add_trace(
+        p,
+        type = "scatter",
+        mode = "markers",
+        x = x_jit,
+        y = sub_df[[metric_col]],
+        text = I(sub_df$Sample),
+        customdata = I(sub_df$Sample),
+        hovertemplate = hover_tmpl_v,
+        name = grp,
+        showlegend = FALSE,
+        marker = list(
+          color = col,
+          size = 8,
+          opacity = 0.9,
+          line = list(color = dot_border_color, width = 1)
+        )
+      )
+    } else {
+      # Violin shape: visual only, excluded from hit detection
+      p <- suppressWarnings(plotly::add_trace(
+        p,
+        data = sub_df,
+        type = "violin",
+        x = rep(cat_idx, nrow(sub_df)),
+        y = sub_df[[metric_col]],
+        name = grp,
+        hoverinfo = "skip",
+        fillcolor = col_f,
+        line = list(color = col, width = 1),
+        box = list(
+          visible = show_box,
+          fillcolor = col_b,
+          line = list(color = box_line_color, width = 1)
+        ),
+        meanline = list(visible = show_box, color = box_line_color, width = 1),
+        points = FALSE,
+        showlegend = FALSE
+      ))
+      if (show_points) {
+        # Scatter: manually jittered — visual AND hit targets
+        x_jit <- cat_idx + stats::runif(nrow(sub_df), -0.25, 0.25)
+        p <- plotly::add_trace(
+          p,
+          type = "scatter",
+          mode = "markers",
+          x = x_jit,
+          y = sub_df[[metric_col]],
+          text = sub_df$Sample,
+          customdata = sub_df$Sample,
+          hovertemplate = hover_tmpl_v,
+          showlegend = FALSE,
+          marker = list(
+            color = col,
+            size = 7,
+            opacity = 0.9,
+            line = list(color = dot_border_color, width = 1)
+          )
+        )
+      }
+    }
+  }
+
+  p |>
+    plotly::layout(
+      paper_bgcolor = "rgba(0,0,0,0)",
+      plot_bgcolor = "rgba(0,0,0,0)",
+      font = list(size = 14, color = font_color),
+      xaxis = list(
+        title = group_by,
+        tickmode = "array",
+        tickvals = as.list(seq_along(groups) - 1L),
+        ticktext = as.list(groups),
+        color = font_color,
+        gridcolor = grid_color,
+        zerolinecolor = zeroline_color
+      ),
+      yaxis = list(
+        title = metric_label,
+        range = y_range,
+        color = font_color,
+        gridcolor = grid_color,
+        zerolinecolor = zeroline_color,
+        hoverformat = ".2f"
+      )
+    )
+}
+
+# batch_plate_heatmap(): Interactive well plate heatmap for batch control ----
+#' @export
+batch_plate_heatmap <- function(
+  hits_summary,
+  variable = "Total % Binding",
+  color_scale = "plasma",
+  scale_mode = "minmax",
+  theme = "dark"
+) {
+  # Only Total % Binding is stored as 0-1 fraction; % Correct / % Unmatched are 0-100
+  fraction_vars <- c("Total % Binding")
+  pct_vars <- c("Total % Binding", "% Correct", "% Unmatched")
+  numeric_vars <- c(
+    "Total % Binding",
+    "% Correct",
+    "% Unmatched",
+    "Concentration"
+  )
+
+  font_color <- if (theme == "light") "black" else "white"
+  paper_bg <- if (theme == "light") "#f0f0f5" else "#23252e"
+  tile_bg <- "rgba(190,192,200,0.38)"
+
+  df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
+  if (!variable %in% names(df)) {
+    return(plotly::plotly_empty())
+  }
+
+  if (
+    !"Well" %in% names(df) ||
+      all(is.na(df[["Well"]])) ||
+      all(trimws(as.character(df[["Well"]])) %in% c("", "NA", "N/A"))
+  ) {
+    return(plotly::plotly_empty())
+  }
+
+  # Classify each sample's well state (use df = one row per sample)
+  no_prot_flag <- is.na(df$`Measured Mw Protein [Da]`) &
+    is.na(df$Compound)
+  no_hit_flag <- !is.na(df$`Measured Mw Protein [Da]`) &
+    is.na(df$Compound)
+  well_state <- dplyr::case_when(
+    no_prot_flag ~ "no_prot",
+    no_hit_flag ~ "no_hit",
+    TRUE ~ "normal"
+  )
+
+  raw_vals <- df[[variable]]
+  is_numeric_var <- variable %in% numeric_vars
+
+  cat_levels <- NULL
+  if (!is_numeric_var) {
+    cat_levels <- sort(unique(stats::na.omit(as.character(raw_vals))))
+    values <- as.numeric(factor(as.character(raw_vals), levels = cat_levels))
+    display_vals <- as.character(raw_vals)
+  } else {
+    values <- as.numeric(raw_vals)
+    if (variable %in% fraction_vars) {
+      values <- values * 100
+    }
+    # No-hit wells have 0 binding for numeric variables
+    values[no_hit_flag & is.na(values)] <- 0
+    display_vals <- if (variable %in% pct_vars) {
+      sprintf("%.2f%%", values)
+    } else {
+      sprintf("%.2f", values)
+    }
+  }
+
+  # Normalize well IDs: "A01" → "A1", "B12" → "B12"
+  raw_wells <- toupper(as.character(df[["Well"]]))
+  norm_wells <- gsub("^([A-Z]+)0*(\\d+)$", "\\1\\2", raw_wells)
+
+  data <- data.frame(
+    well_id = norm_wells,
+    value = values,
+    display = display_vals,
+    sample = df[["Sample"]],
+    well_state = well_state,
+    stringsAsFactors = FALSE
+  )
+
+  rows <- LETTERS[1:16]
+  cols <- 1:24
+  plate_layout <- expand.grid(
+    row = rows,
+    col = cols,
+    stringsAsFactors = FALSE
+  ) |>
+    dplyr::mutate(well_id = paste0(row, col))
+  plate_data <- dplyr::left_join(plate_layout, data, by = "well_id")
+
+  z_mat <- matrix(
+    NA_real_,
+    nrow = 16,
+    ncol = 24,
+    dimnames = list(rows, as.character(cols))
+  )
+  text_mat <- matrix(
+    "",
+    nrow = 16,
+    ncol = 24,
+    dimnames = list(rows, as.character(cols))
+  )
+  presence_mat <- matrix(
+    FALSE,
+    nrow = 16,
+    ncol = 24,
+    dimnames = list(rows, as.character(cols))
+  )
+  no_prot_col_vals <- integer(0)
+  no_prot_row_vals <- character(0)
+  no_hit_col_vals <- integer(0)
+  no_hit_row_vals <- character(0)
+
+  for (r in rows) {
+    for (c in cols) {
+      wid <- paste0(r, c)
+      d <- plate_data[plate_data$well_id == wid, ]
+      ws <- if (!is.na(d$well_state[1])) d$well_state[1] else "empty"
+
+      if (ws != "empty") {
+        presence_mat[r, as.character(c)] <- TRUE
+      }
+
+      if (!is.na(d$value[1])) {
+        if (ws != "no_prot") {
+          z_mat[r, as.character(c)] <- d$value[1]
+        }
+        hover_txt <- paste0(
+          "Well: ",
+          wid,
+          "<br>Sample: ",
+          d$sample[1],
+          "<br>",
+          variable,
+          ": ",
+          d$display[1]
+        )
+        if (ws == "no_prot") {
+          hover_txt <- paste0(hover_txt, "<br>No protein peak detected")
+          no_prot_col_vals <- c(no_prot_col_vals, c)
+          no_prot_row_vals <- c(no_prot_row_vals, r)
+        } else if (ws == "no_hit") {
+          hover_txt <- paste0(hover_txt, "<br>No compound binding")
+          no_hit_col_vals <- c(no_hit_col_vals, c)
+          no_hit_row_vals <- c(no_hit_row_vals, r)
+        }
+        text_mat[r, as.character(c)] <- hover_txt
+      } else if (ws == "no_prot") {
+        hover_txt <- paste0(
+          "Well: ",
+          wid,
+          "<br>Sample: ",
+          d$sample[1],
+          "<br>No protein peak detected"
+        )
+        text_mat[r, as.character(c)] <- hover_txt
+        no_prot_col_vals <- c(no_prot_col_vals, c)
+        no_prot_row_vals <- c(no_prot_row_vals, r)
+      } else if (ws == "no_hit") {
+        hover_txt <- paste0(
+          "Well: ",
+          wid,
+          "<br>Sample: ",
+          d$sample[1],
+          "<br>No compound binding"
+        )
+        text_mat[r, as.character(c)] <- hover_txt
+        no_hit_col_vals <- c(no_hit_col_vals, c)
+        no_hit_row_vals <- c(no_hit_row_vals, r)
+      } else {
+        text_mat[r, as.character(c)] <- paste0("Well: ", wid, "<br>Empty")
+      }
+    }
+  }
+
+  # Trim to bounding rectangle of all wells present in dataset
+  has_empty_in_rect <- FALSE
+  used_row_idx <- which(rowSums(presence_mat) > 0)
+  used_col_idx <- which(colSums(presence_mat) > 0)
+  if (length(used_row_idx) > 0 && length(used_col_idx) > 0) {
+    row_range <- seq(min(used_row_idx), max(used_row_idx))
+    col_range <- seq(min(used_col_idx), max(used_col_idx))
+    display_rows <- rows[row_range]
+    display_cols <- cols[col_range]
+    z_mat <- z_mat[row_range, col_range, drop = FALSE]
+    text_mat <- text_mat[row_range, col_range, drop = FALSE]
+    has_empty_in_rect <- any(!presence_mat[row_range, col_range])
+    keep_np <- no_prot_row_vals %in%
+      display_rows &
+      no_prot_col_vals %in% display_cols
+    no_prot_row_vals <- no_prot_row_vals[keep_np]
+    no_prot_col_vals <- no_prot_col_vals[keep_np]
+    keep_nh <- no_hit_row_vals %in%
+      display_rows &
+      no_hit_col_vals %in% display_cols
+    no_hit_row_vals <- no_hit_row_vals[keep_nh]
+    no_hit_col_vals <- no_hit_col_vals[keep_nh]
+    rows <- display_rows
+    cols <- display_cols
+  }
+
+  tick_vals <- NULL
+  tick_text <- NULL
+
+  if (is_numeric_var) {
+    full_scale <- variable %in% pct_vars && scale_mode == "min100"
+    zmin <- if (full_scale) 0 else min(z_mat, na.rm = TRUE)
+    zmax <- if (full_scale) 100 else max(z_mat, na.rm = TRUE)
+    if (!is.finite(zmin) || !is.finite(zmax) || zmin == zmax) {
+      zmin <- 0
+      zmax <- 1
+    }
+    n_stops <- 9
+    pal <- stats_palette(n_stops, color_scale)
+    cs <- lapply(seq_len(n_stops), function(i) {
+      list((i - 1) / (n_stops - 1), pal[i])
+    })
+    show_scale <- TRUE
+    cb_title <- variable
+  } else {
+    n_cats <- length(cat_levels)
+    pal <- stats_palette(max(n_cats, 2), color_scale)
+    if (n_cats <= 1) {
+      cs <- list(list(0, pal[1]), list(1, pal[1]))
+    } else {
+      cs <- lapply(seq_len(n_cats), function(i) {
+        list((i - 1) / (n_cats - 1), pal[i])
+      })
+    }
+    zmin <- 1
+    zmax <- max(n_cats, 2)
+    show_scale <- FALSE
+    cb_title <- variable
+  }
+
+  # Position colorbar below the Well States legend group when it has entries
+  n_ws_items <- as.integer(length(no_prot_row_vals) > 0) +
+    as.integer(length(no_hit_row_vals) > 0) +
+    as.integer(has_empty_in_rect)
+  cb_y <- if (is_numeric_var && n_ws_items > 0L) {
+    max(0.05, 1.0 - (n_ws_items + 1L) * 0.08 - 0.04)
+  } else {
+    0.5
+  }
+
+  p <- plotly::plot_ly(
+    z = z_mat,
+    x = cols,
+    y = rows,
+    type = "heatmap",
+    colorscale = cs,
+    showscale = show_scale,
+    zmin = zmin,
+    zmax = zmax,
+    xgap = 3,
+    ygap = 3,
+    text = text_mat,
+    hoverinfo = "text",
+    colorbar = list(
+      title = list(text = cb_title, font = list(color = font_color, size = 13)),
+      tickfont = list(color = font_color, size = 11),
+      outlinecolor = font_color,
+      y = cb_y,
+      yanchor = "top"
+    )
+  )
+
+  if (!is_numeric_var && !is.null(cat_levels) && length(cat_levels) > 0) {
+    n_cats <- length(cat_levels)
+    pal <- stats_palette(max(n_cats, 2), color_scale)
+    for (i in seq_len(n_cats)) {
+      p <- p |>
+        plotly::add_trace(
+          type = "scatter",
+          x = min(cols) - 10000,
+          y = rows[1],
+          mode = "markers",
+          visible = TRUE,
+          marker = list(
+            symbol = "square",
+            color = pal[i],
+            size = 10,
+            line = list(width = 0)
+          ),
+          name = cat_levels[i],
+          showlegend = TRUE,
+          inherit = FALSE,
+          hoverinfo = "skip",
+          legendrank = 200,
+          legendgroup = "categories",
+          legendgrouptitle = list(
+            text = cb_title,
+            font = list(color = font_color, size = 13)
+          )
+        )
+    }
+  }
+
+  has_no_prot <- length(no_prot_row_vals) > 0
+  tile_px_est <- min(480 / length(cols), 360 / length(rows))
+  d_np <- as.integer(max(4L, min(11L, round(tile_px_est * 0.24))))
+  d_nh <- as.integer(max(4L, min(12L, round(tile_px_est * 0.27))))
+  np_shapes <- if (has_no_prot) {
+    d <- d_np
+    unlist(
+      lapply(seq_along(no_prot_col_vals), function(i) {
+        cx <- no_prot_col_vals[i]
+        cy <- which(rows == no_prot_row_vals[i]) - 1L
+        list(
+          list(
+            type = "line",
+            xref = "x",
+            yref = "y",
+            xsizemode = "pixel",
+            ysizemode = "pixel",
+            xanchor = cx,
+            yanchor = cy,
+            x0 = -d,
+            y0 = -d,
+            x1 = d,
+            y1 = d,
+            line = list(color = "black", width = 2.5)
+          ),
+          list(
+            type = "line",
+            xref = "x",
+            yref = "y",
+            xsizemode = "pixel",
+            ysizemode = "pixel",
+            xanchor = cx,
+            yanchor = cy,
+            x0 = -d,
+            y0 = d,
+            x1 = d,
+            y1 = -d,
+            line = list(color = "black", width = 2.5)
+          )
+        )
+      }),
+      recursive = FALSE
+    )
+  } else {
+    list()
+  }
+  if (has_no_prot) {
+    p <- p |>
+      plotly::add_trace(
+        type = "scatter",
+        mode = "markers",
+        x = min(cols) - 10000,
+        y = rows[1],
+        visible = TRUE,
+        marker = list(
+          symbol = "x-thin",
+          size = 10,
+          color = "rgba(0,0,0,0)",
+          line = list(color = font_color, width = 2.5)
+        ),
+        name = "No Protein Peak",
+        showlegend = TRUE,
+        inherit = FALSE,
+        hoverinfo = "skip",
+        legendrank = 100,
+        legendgroup = "well_states",
+        legendgrouptitle = list(
+          text = "Well States",
+          font = list(color = font_color, size = 13)
+        )
+      )
+  }
+
+  has_no_hit <- length(no_hit_col_vals) > 0
+  nh_shapes <- if (has_no_hit) {
+    d <- d_nh
+    lapply(seq_along(no_hit_col_vals), function(i) {
+      cx <- no_hit_col_vals[i]
+      cy <- which(rows == no_hit_row_vals[i]) - 1L
+      list(
+        type = "circle",
+        xref = "x",
+        yref = "y",
+        xsizemode = "pixel",
+        ysizemode = "pixel",
+        xanchor = cx,
+        yanchor = cy,
+        x0 = -d,
+        y0 = -d,
+        x1 = d,
+        y1 = d,
+        fillcolor = "rgba(0,0,0,0)",
+        line = list(color = "black", width = 2)
+      )
+    })
+  } else {
+    list()
+  }
+  if (has_no_hit) {
+    p <- p |>
+      plotly::add_trace(
+        type = "scatter",
+        mode = "markers",
+        x = min(cols) - 10000,
+        y = rows[1],
+        visible = TRUE,
+        marker = list(
+          symbol = "circle-open",
+          size = 10,
+          color = font_color,
+          line = list(color = font_color, width = 2)
+        ),
+        name = "No Compound Binding",
+        showlegend = TRUE,
+        inherit = FALSE,
+        hoverinfo = "skip",
+        legendrank = 100,
+        legendgroup = "well_states",
+        legendgrouptitle = list(
+          text = "Well States",
+          font = list(color = font_color, size = 13)
+        )
+      )
+  }
+
+  # Empty well: legend swatch
+  if (has_empty_in_rect) {
+    p <- p |>
+      plotly::add_trace(
+        type = "scatter",
+        mode = "markers",
+        x = min(cols) - 10000,
+        y = rows[1],
+        visible = TRUE,
+        marker = list(
+          symbol = "square",
+          size = 10,
+          color = tile_bg,
+          line = list(color = "rgba(130,132,140,0.6)", width = 1)
+        ),
+        name = "Empty",
+        showlegend = TRUE,
+        inherit = FALSE,
+        hoverinfo = "skip",
+        legendrank = 100,
+        legendgroup = "well_states",
+        legendgrouptitle = list(
+          text = "Well States",
+          font = list(color = font_color, size = 13)
+        )
+      )
+  }
+
+  show_legend_any <- !is_numeric_var ||
+    has_no_prot ||
+    has_no_hit ||
+    has_empty_in_rect
+
+  p_out <- p |>
+    plotly::layout(
+      shapes = c(np_shapes, nh_shapes),
+      dragmode = "zoom",
+      showlegend = show_legend_any,
+      legend = list(
+        font = list(color = font_color, size = 11),
+        bgcolor = "rgba(0,0,0,0)",
+        y = 1,
+        yanchor = "top"
+      ),
+      hoverlabel = list(
+        bgcolor = "rgba(56, 56, 124, 0.86)",
+        font = list(size = 14, color = "white"),
+        bordercolor = "white"
+      ),
+      xaxis = list(
+        side = "top",
+        tickmode = "array",
+        tickvals = cols,
+        ticktext = as.character(cols),
+        tickfont = list(color = font_color, size = 12),
+        tickangle = 0,
+        ticklen = 0,
+        showgrid = FALSE,
+        zeroline = FALSE,
+        automargin = FALSE,
+        range = c(min(cols) - 0.5, max(cols) + 0.5)
+      ),
+      yaxis = list(
+        range = c(length(rows) - 0.5, -0.5),
+        tickfont = list(color = font_color, size = 12),
+        ticklen = 0,
+        showgrid = FALSE,
+        zeroline = FALSE,
+        scaleanchor = "x",
+        scaleratio = 1,
+        automargin = FALSE
+      ),
+      margin = list(t = 25, r = if (is_numeric_var) 0 else 10, b = 0, l = 30),
+      plot_bgcolor = tile_bg,
+      paper_bgcolor = "rgba(0,0,0,0)"
+    ) |>
+    plotly::config(
+      displayModeBar = "hover",
+      scrollZoom = FALSE,
+      modeBarButtons = list(list(
+        "zoom2d",
+        "toImage",
+        "autoScale2d",
+        "resetScale2d",
+        "zoomIn2d",
+        "zoomOut2d"
+      )),
+      toImageButtonOptions = list(
+        filename = paste0(Sys.Date(), "_Batch_Heatmap")
+      )
+    )
+  p_out
 }

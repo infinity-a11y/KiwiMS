@@ -79,14 +79,45 @@ hits_table_names <- c(
   "Theor. Prot. [Da]",
   "Meas. Prot. [Da]",
   "Δ Prot. [Da]",
-  "Int. Prot.",
+  "Int. Prot. [%]",
   "Peak Signal [Da]",
-  "Int. Cmp",
+  "Int. Cmp [%]",
   "Theor. Cmp [Da]",
   "Δ Cmp [Da]",
   "Bind. Stoich.",
-  "%-Binding",
-  "Total %-Binding"
+  "Binding [%]",
+  "Tot. Binding [%]"
+)
+
+# Full column name tooltips for hits table headers (abbreviated -> full)
+#' @export
+hits_col_full_names <- c(
+  "Well"             = "Well",
+  "Sample ID"        = "Sample ID",
+  "Protein"          = "Protein",
+  "Cmp Name"         = "Compound Name",
+  "Theor. Prot. [Da]" = "Theoretical Protein [Da]",
+  "Meas. Prot. [Da]" = "Measured Protein [Da]",
+  "Δ Prot. [Da]"     = "Δ Protein [Da]",
+  "Int. Prot. [%]"   = "Protein Intensity [%]",
+  "Peak Signal [Da]" = "Peak Signal [Da]",
+  "Int. Cmp [%]"     = "Compound Intensity [%]",
+  "Theor. Cmp [Da]"  = "Theoretical Compound [Da]",
+  "Δ Cmp [Da]"       = "Δ Compound [Da]",
+  "Bind. Stoich."    = "Binding Stoichiometry",
+  "Preferred"        = "Preferred Hit",
+  "Binding [%]"      = "Binding [%]",
+  "Tot. Binding [%]" = "Total Binding [%]",
+  "Unmatched [%]"    = "Unmatched [%]",
+  "Correct [%]"      = "Correct [%]",
+  "Replicate"        = "Replicate",
+  "Conc. [M]"        = "Concentration [M]",
+  "Conc. [mM]"       = "Concentration [mM]",
+  "Conc. [μM]"       = "Concentration [μM]",
+  "Conc. [nM]"       = "Concentration [nM]",
+  "Conc. [pM]"       = "Concentration [pM]",
+  "Time [s]"         = "Time [s]",
+  "Time [min]"       = "Time [min]"
 )
 
 # Sequential color scales
@@ -162,11 +193,20 @@ chart_js <- '
 function(data, type, row, meta) {
   if (type === "display") {
     var val = parseFloat(data);
+    var label = isNaN(val) ? "" : val.toFixed(2);
     var width = isNaN(val) ? 0 : val;
-
-    return "<div class=\'bar-chart-bar\'>" +
-             "<div class=\'bar\' style=\'width: " + width + "%;\'></div>" +
-           "</div>";
+    if (val >= 50) {
+      return "<div class=\'bar-chart-bar\'>" +
+               "<div class=\'bar\' style=\'width:" + width + "%\'>" +
+                 "<span class=\'bar-label-inside\'>" + label + "</span>" +
+               "</div>" +
+             "</div>";
+    } else {
+      return "<div class=\'bar-chart-bar\'>" +
+               "<div class=\'bar\' style=\'width:" + width + "%\'></div>" +
+               "<span class=\'bar-label-outside\'>" + label + "</span>" +
+             "</div>";
+    }
   }
   return data;
 }

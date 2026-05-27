@@ -27,7 +27,8 @@ startShiny <- function() {
   dev_python <- "C:/Users/marian/AppData/Local/miniconda3/envs/kiwims/python.exe"
   if (!file.exists(dev_python)) {
     stop(
-      "Dev Python not found at: ", dev_python,
+      "Dev Python not found at: ",
+      dev_python,
       "\nUpdate dev_python in dev/dev_mode.R to point at your kiwims conda env."
     )
   }
@@ -36,28 +37,42 @@ startShiny <- function() {
   # itself. Run a quick pre-flight to confirm it works; fall back to system R
   # if it fails (e.g. DLL not found, bad build), and clear R_HOME so the
   # system R subprocess uses its own registered home.
-  r_portable     <- normalizePath("R-Portable",                  mustWork = FALSE)
-  r_portable_exe <- normalizePath("R-Portable/bin/Rscript.exe",  mustWork = FALSE)
+  r_portable <- normalizePath("R-Portable", mustWork = FALSE)
+  r_portable_exe <- normalizePath(
+    "R-Portable/bin/Rscript.exe",
+    mustWork = FALSE
+  )
   old_r_home <- Sys.getenv("R_HOME", unset = "")
-  Sys.setenv(R_HOME = r_portable)  # set before test so the child inherits it
+  Sys.setenv(R_HOME = r_portable) # set before test so the child inherits it
 
-  r_portable_ok <- tryCatch({
-    res <- processx::run(
-      r_portable_exe,
-      args            = c("--vanilla", "--no-save", "--no-restore", "-e", "cat('OK')"),
-      timeout         = 15,
-      error_on_status = FALSE
-    )
-    trimws(res$stdout) == "OK"
-  }, error = function(e) FALSE)
+  r_portable_ok <- tryCatch(
+    {
+      res <- processx::run(
+        r_portable_exe,
+        args = c("--vanilla", "--no-save", "--no-restore", "-e", "cat('OK')"),
+        timeout = 15,
+        error_on_status = FALSE
+      )
+      trimws(res$stdout) == "OK"
+    },
+    error = function(e) FALSE
+  )
 
   if (r_portable_ok) {
-    message("[dev_mode] R-Portable pre-flight: OK  -> using R-Portable for subprocess")
+    message(
+      "[dev_mode] R-Portable pre-flight: OK  -> using R-Portable for subprocess"
+    )
     dev_rscript <- r_portable_exe
   } else {
-    message("[dev_mode] R-Portable pre-flight: FAIL -> falling back to system R")
+    message(
+      "[dev_mode] R-Portable pre-flight: FAIL -> falling back to system R"
+    )
     # Restore R_HOME so system R subprocess uses the correct (registered) home.
-    if (nzchar(old_r_home)) Sys.setenv(R_HOME = old_r_home) else Sys.unsetenv("R_HOME")
+    if (nzchar(old_r_home)) {
+      Sys.setenv(R_HOME = old_r_home)
+    } else {
+      Sys.unsetenv("R_HOME")
+    }
     dev_rscript <- file.path(R.home("bin"), "Rscript.exe")
   }
 
@@ -69,8 +84,8 @@ startShiny <- function() {
 
   Sys.setenv(
     RETICULATE_PYTHON = dev_python,
-    PYTHONNOUSERSITE  = "1",  # prevent roaming user site-packages leaking in
-    KIWIMS_RSCRIPT    = dev_rscript
+    PYTHONNOUSERSITE = "1", # prevent roaming user site-packages leaking in
+    KIWIMS_RSCRIPT = dev_rscript
   )
 
   rhino::build_sass()

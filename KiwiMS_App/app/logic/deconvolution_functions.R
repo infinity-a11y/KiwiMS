@@ -599,22 +599,69 @@ deconvolute <- function(
   }
 }
 
-# create_384_plate_heatmap(): Make 384 well plate layout ----
+# plate_heatmap(): Well plate occupancy heatmap ----
 #' @export
-create_384_plate_heatmap <- function(data) {
-  # A at top (index 1), P at bottom (index 16) — yaxis autorange="reversed"
-  # maps them so A appears at the top of the plot
-  rows <- LETTERS[1:16]
-  cols <- 1:24
+plate_heatmap <- function(data, all_wells = NULL, theme = "dark") {
+  font_color <- if (theme == "light") "black" else "white"
+  empty_color <- if (theme == "light") {
+    "rgba(195,197,205,1)"
+  } else {
+    "rgba(42,44,52,1)"
+  }
+  tile_bg <- if (theme == "light") {
+    "rgba(148,150,158,0.35)"
+  } else {
+    "rgba(118,120,128,0.55)"
+  }
+
+  all_rows <- LETTERS[1:16]
+  all_cols <- 1:24
+
+  # Normalize well IDs ("A01" → "A1")
+  norm_well_id <- function(w) {
+    gsub("^([A-Za-z]+)0*(\\d+)$", "\\1\\2", toupper(trimws(w)))
+  }
+
+  # Determine bounding rectangle from all_wells if provided, else from data
+  if (!is.null(all_wells) && length(all_wells) > 0) {
+    nw <- norm_well_id(stats::na.omit(as.character(all_wells)))
+    nw <- nw[nzchar(nw)]
+    row_letters <- sub("\\d+$", "", nw)
+    col_nums <- as.integer(sub("^[A-Za-z]+", "", nw))
+    used_row_idx <- range(
+      match(row_letters, all_rows, nomatch = NA_integer_),
+      na.rm = TRUE
+    )
+    used_col_idx <- range(col_nums, na.rm = TRUE)
+    row_range <- seq(used_row_idx[1], used_row_idx[2])
+    col_range <- seq(used_col_idx[1], used_col_idx[2])
+  } else {
+    row_range <- seq_len(16)
+    col_range <- seq_len(24)
+  }
+
+  rows <- all_rows[row_range]
+  cols <- all_cols[col_range]
+  nr <- length(rows)
+  nc <- length(cols)
 
   plate_layout <- expand.grid(row = rows, col = cols) |>
-    mutate(well_id = paste0(row, col))
+    dplyr::mutate(well_id = paste0(row, col))
 
-  plate_data <- left_join(plate_layout, data, by = "well_id")
+  plate_data <- dplyr::left_join(plate_layout, data, by = "well_id")
 
-  # Build z matrix (rows = A..P, cols = 1..24) and tooltip text matrix
-  z_mat <- matrix(0, nrow = 16, ncol = 24, dimnames = list(rows, cols))
-  text_mat <- matrix("", nrow = 16, ncol = 24, dimnames = list(rows, cols))
+  z_mat <- matrix(
+    0,
+    nrow = nr,
+    ncol = nc,
+    dimnames = list(rows, as.character(cols))
+  )
+  text_mat <- matrix(
+    "",
+    nrow = nr,
+    ncol = nc,
+    dimnames = list(rows, as.character(cols))
+  )
 
   for (r in rows) {
     for (c in cols) {
@@ -634,10 +681,7 @@ create_384_plate_heatmap <- function(data) {
     }
   }
 
-  # Colorscale:
-  #   0 = empty well  — solid dark fill so xgap/ygap border is visible
-  #   1 = occupied    — white
-  colorscale <- list(c(0, "rgba(42,44,52,1)"), c(1, "white"))
+  colorscale <- list(c(0, empty_color), c(1, "white"))
 
   plotly::plot_ly(
     z = z_mat,
@@ -648,8 +692,8 @@ create_384_plate_heatmap <- function(data) {
     showscale = FALSE,
     zmin = 0,
     zmax = 1,
-    xgap = 2,
-    ygap = 2,
+    xgap = 3,
+    ygap = 3,
     text = text_mat,
     hovertemplate = "%{text}<extra></extra>"
   ) |>
@@ -666,18 +710,19 @@ create_384_plate_heatmap <- function(data) {
         tickmode = "array",
         tickvals = cols,
         ticktext = as.character(cols),
-        tickfont = list(color = "white", size = 12),
+        tickfont = list(color = font_color, size = 12),
         tickangle = 0,
         ticklen = 0,
         showgrid = FALSE,
         zeroline = FALSE,
         automargin = FALSE,
+        range = c(min(cols) - 0.5, max(cols) + 0.5),
         scaleanchor = "y",
         scaleratio = 1
       ),
       yaxis = list(
         autorange = "reversed",
-        tickfont = list(color = "white", size = 12),
+        tickfont = list(color = font_color, size = 12),
         ticklen = 0,
         showgrid = FALSE,
         zeroline = FALSE,
@@ -686,7 +731,7 @@ create_384_plate_heatmap <- function(data) {
         automargin = FALSE
       ),
       margin = list(t = 25, r = 0, b = 0, l = 30),
-      plot_bgcolor = "rgba(160,160,170,0.25)",
+      plot_bgcolor = tile_bg,
       paper_bgcolor = "rgba(0,0,0,0)"
     ) |>
     config(
@@ -769,9 +814,7 @@ process_plot_data <- function(
       )
 
       # Normalize intensities
-      mass$intensity <- (mass$intensity - min(mass$intensity)) /
-        (max(mass$intensity) - min(mass$intensity)) *
-        100
+      mass$intensity <- mass$intensity / max(mass$intensity) * 100
 
       # Match peaks to spectrum
       highlight_peaks <- mass[mass$mass %in% peaks$mass, ]
@@ -791,29 +834,34 @@ process_plot_data <- function(
     mass <- mass[-c(1, nrow(mass)), ]
 
     # Normalize intensities
-    mass$intensity <- (mass$intensity - min(mass$intensity)) /
-      (max(mass$intensity) - min(mass$intensity)) *
-      100
+    mass$intensity <- mass$intensity / max(mass$intensity) * 100
 
-    # Read peaks
-    peaks <- c(
-      unique(
-        sample$hits$`Measured Mw Protein [Da]`
-      ),
-      sample$hits$`Peak [Da]`
-    )
-
-    # If duplicated peaks throw message
-    if (any(duplicated(peaks))) {
-      message(
-        "\u26A0",
-        " ",
-        sample$hits$Sample[1],
-        " has multiple hits for ",
-        sum(duplicated(peaks)),
-        " compound(s)."
+    # Merge non-preferred hits per peak: sort preferred first, then collapse
+    # multiple interpretations of the same peak into a single combined label.
+    compound_hits <- sample$hits |>
+      dplyr::arrange(
+        `Peak [Da]`,
+        dplyr::desc(Preferred == "TRUE"),
+        dplyr::desc(suppressWarnings(as.numeric(`Compound Mw [Da]`)))
+      ) |>
+      dplyr::group_by(`Peak [Da]`) |>
+      dplyr::reframe(
+        Compound = Compound[Preferred == "TRUE"][1],
+        `Compound Mw [Da]` = `Compound Mw [Da]`[Preferred == "TRUE"][1],
+        `Binding Stoichiometry` = `Binding Stoichiometry`[Preferred == "TRUE"][
+          1
+        ],
+        mass_stoich_label = paste(
+          paste0("[", `Compound Mw [Da]`, "] x", `Binding Stoichiometry`),
+          collapse = " + "
+        )
       )
-    }
+
+    # Peaks: protein + one entry per unique compound peak
+    peaks <- c(
+      unique(sample$hits$`Measured Mw Protein [Da]`),
+      compound_hits$`Peak [Da]`
+    )
 
     # Match peaks to mass spectrum
     indices <- match(peaks, mass$mass)
@@ -821,25 +869,24 @@ process_plot_data <- function(
 
     # Get protein and compound names
     name <- c(
-      unique(
-        sample$hits$Protein
-      ),
-      sample$hits$Compound
+      unique(sample$hits$Protein),
+      compound_hits$Compound
     )
 
-    # Get molecular weights
+    # Get molecular weights (preferred hit's theoretical mass)
     mw <- c(
-      unique(
-        sample$hits$`Mw Protein [Da]`
-      ),
-      sample$hits$`Compound Mw [Da]`
+      unique(sample$hits$`Mw Protein [Da]`),
+      compound_hits$`Compound Mw [Da]`
     )
 
-    # Get stoichiometry values
-    multiple <- c(1, sample$hits$`Binding Stoichiometry`)
+    # Get stoichiometry values (preferred hit)
+    multiple <- c(1, compound_hits$`Binding Stoichiometry`)
 
-    # Summarize in data frame
-    highlight_peaks <- cbind(peak_df, name, mw, multiple) |>
+    # Combined mass-shift label for hover; NA for the protein peak
+    mass_stoich_label <- c(NA_character_, compound_hits$mass_stoich_label)
+
+    # Summarize in data frame - one row per unique peak
+    highlight_peaks <- cbind(peak_df, name, mw, multiple, mass_stoich_label) |>
       dplyr::filter(!is.na(name))
   }
 
@@ -892,48 +939,6 @@ spectrum_plot <- function(
 
   if (identical(color_variable, "Samples") && !is.null(color_cmp)) {
     data_line_color <- color_cmp
-  }
-
-  # ggplot (non-interactive) section
-  if (!interactive) {
-    plot <- ggplot2::ggplot(
-      plot_data$mass,
-      ggplot2::aes(
-        x = mass,
-        y = intensity,
-        group = 1,
-        text = paste0(
-          "Mass: ",
-          mass,
-          " Da\nIntensity: ",
-          round(intensity, 2)
-        )
-      )
-    ) +
-      ggplot2::geom_line(color = data_line_color) +
-      ggplot2::scale_y_continuous(labels = scales::percent_format(scale = 1))
-
-    if (tolower(theme) == "dark") {
-      plot <- plot + ggplot2::theme_dark()
-    } else {
-      plot <- plot + ggplot2::theme_minimal()
-    }
-
-    if (raw) {
-      plot <- plot + ggplot2::labs(y = "Intensity [%]", x = "m/z [Th]")
-    } else {
-      plot <- plot +
-        ggplot2::geom_point(
-          data = plot_data$highlight_peaks,
-          ggplot2::aes(x = mass, y = intensity),
-          fill = "#e8cb97",
-          colour = marker_border_color,
-          shape = 21,
-          size = 2
-        ) +
-        ggplot2::labs(y = "Intensity [%]", x = "Mass [Da]")
-    }
-    return(plot)
   }
 
   # Interactive plotly
@@ -1000,6 +1005,7 @@ spectrum_plot <- function(
       mode = "lines",
       color = I(data_line_color),
       hoverinfo = "text",
+      showlegend = FALSE,
       text = ~ paste0(
         "Mass: ",
         mass,
@@ -1018,7 +1024,8 @@ spectrum_plot <- function(
       zeroline = FALSE,
       zerolinecolor = zeroline_color,
       ticks = "outside",
-      tickcolor = "transparent"
+      tickcolor = "transparent",
+      range = list(0, 105)
     )
 
     # Prepare xaxis list
@@ -1032,11 +1039,7 @@ spectrum_plot <- function(
     )
 
     # If annotated peaks present add markers
-    if (
-      isFALSE(
-        nrow(plot_data$highlight_peaks) == 1 & anyNA(plot_data$highlight_peaks)
-      )
-    ) {
+    if (!all(is.na(plot_data$highlight_peaks$mass))) {
       if (is.null(sample)) {
         # Simple peaks from file or DB — no compound annotation columns
         plot <- plotly::add_markers(
@@ -1066,14 +1069,6 @@ spectrum_plot <- function(
           showlegend = FALSE
         )
       } else {
-        dupl <- duplicated(plot_data$highlight_peaks$mass)
-        if (any(dupl)) {
-          plot_data$highlight_peaks$intensity[
-            dupl
-          ] <- plot_data$highlight_peaks$intensity[dupl] +
-            1
-        }
-
         if (!is.null(color_cmp)) {
           # Prepare marker symbols
           plot_data$highlight_peaks <- dplyr::mutate(
@@ -1112,254 +1107,49 @@ spectrum_plot <- function(
           }
         }
 
-        plot <- plotly::add_markers(
-          plot,
-          data = plot_data$highlight_peaks,
-          x = ~mass,
-          y = ~intensity,
-          marker = list(
-            color = if (!is.null(color_cmp)) {
-              ~ I(color)
-            } else {
-              marker_fill_color
-            },
-            line = list(
-              # color = marker_border_color,
-              color = ~ I(linecolor),
-              width = 1
+        peaks_data <- plot_data$highlight_peaks[
+          !is.na(plot_data$highlight_peaks$intensity),
+        ]
+        for (peak_name in unique(peaks_data$name)) {
+          nd <- peaks_data[peaks_data$name == peak_name, ]
+          plot <- plotly::add_markers(
+            plot,
+            data = nd,
+            x = ~mass,
+            y = ~intensity,
+            name = peak_name,
+            marker = list(
+              color = if (!is.null(color_cmp)) {
+                ~ I(color)
+              } else {
+                marker_fill_color
+              },
+              line = list(color = ~ I(linecolor), width = 1),
+              symbol = ~ I(symbol),
+              size = 12,
+              zindex = 100
             ),
-            symbol = ~ I(symbol),
-            size = 12,
-            zindex = 100
-          ),
-          hoverinfo = "text",
-          text = ~ paste0(
-            "Name: ",
-            name,
-            "\nMeasured: ",
-            mass,
-            " Da\nIntensity: ",
-            round(intensity, 2),
-            "%\n",
-            "Theor. Mw: ",
-            mw
-          ),
-          showlegend = FALSE
-        )
+            hoverinfo = "text",
+            text = ~ paste0(
+              "Name: ",
+              name,
+              "\nMeasured: ",
+              mass,
+              " Da",
+              "\nIntensity: ",
+              round(intensity, 2),
+              "%\n",
+              ifelse(
+                is.na(mass_stoich_label),
+                paste0("Theor. Mw: ", mw),
+                paste0("Mass Shifts: ", mass_stoich_label)
+              )
+            ),
+            showlegend = TRUE
+          )
+        }
       }
 
-      #   # Annotation logic for mass difference + per-peak labels
-      #   shapes <- NULL
-      #   annotations <- NULL
-      #   unique_masses <- unique(plot_data$highlight_peaks$mass)
-
-      #   # Mass difference connector (if enabled and exactly two unique masses)
-      #   if (show_mass_diff && length(unique_masses) == 2) {
-      #     x1 <- min(unique_masses)
-      #     x2 <- max(unique_masses)
-      #     diff <- x2 - x1
-      #     i1 <- plot_data$highlight_peaks$intensity[
-      #       plot_data$highlight_peaks$mass == x1
-      #     ][1]
-      #     i2 <- plot_data$highlight_peaks$intensity[
-      #       plot_data$highlight_peaks$mass == x2
-      #     ][1]
-      #     y_max_peak <- max(i1, i2, na.rm = TRUE)
-      #     y_offset <- 5
-      #     y_line <- y_max_peak + y_offset
-      #     y_text <- y_line + (y_offset / 2)
-      #     mid_x <- (x1 + x2) / 2
-      #     diff_text <- sprintf("%.2f Da", diff)
-
-      #     shapes <- list(
-      #       list(
-      #         type = "line",
-      #         x0 = x1,
-      #         y0 = i1,
-      #         x1 = x1,
-      #         y1 = y_line,
-      #         line = list(color = font_color, width = 1, dash = "dot")
-      #       ),
-      #       list(
-      #         type = "line",
-      #         x0 = x2,
-      #         y0 = i2,
-      #         x1 = x2,
-      #         y1 = y_line,
-      #         line = list(color = font_color, width = 1, dash = "dot")
-      #       ),
-      #       list(
-      #         type = "line",
-      #         x0 = x1,
-      #         y0 = y_line,
-      #         x1 = x2,
-      #         y1 = y_line,
-      #         line = list(color = font_color, width = 1, dash = "dot")
-      #       )
-      #     )
-
-      #     annotations <- list(
-      #       list(
-      #         x = mid_x,
-      #         y = y_text,
-      #         text = diff_text,
-      #         showarrow = FALSE,
-      #         font = list(color = font_color, size = 12)
-      #       )
-      #     )
-      #   }
-
-      #   # Add diagonal leader and text label for each peak
-      #   peak_labels <- list()
-      #   leader_lines <- list()
-
-      #   if (show_peak_labels) {
-      #     # Compute ranges
-      #     if (nrow(plot_data$mass) > 0) {
-      #       x_min <- min(plot_data$mass$mass, na.rm = TRUE)
-      #       x_max <- max(plot_data$mass$mass, na.rm = TRUE)
-      #       x_range <- x_max - x_min
-      #     } else {
-      #       x_range <- 1000 # fallback reasonable default
-      #     }
-
-      #     # Temporary y_range estimate (will finalize later)
-      #     temp_y_range <- 100 + 20 # rough estimate including buffers
-
-      #     # Assumed plot aspect ratio (width / height) - adjust if your typical plot size differs
-      #     assumed_aspect <- 1.8 # Typical for wide plots; e.g., 900x500 => 1.8
-
-      #     # Desired vertical rise in y-data units (reduced for shorter lines)
-      #     delta_y <- 2 # % units; reduced from 4
-
-      #     # Compute delta_x for ~45-degree visual angle
-      #     delta_x <- delta_y * x_range / (assumed_aspect * temp_y_range)
-
-      #     # Fallback if ranges are zero/invalid
-      #     if (!is.finite(delta_x) || delta_x <= 0) {
-      #       delta_x <- 25 # reduced fallback in Da
-      #     }
-
-      #     for (i in seq_len(nrow(plot_data$highlight_peaks))) {
-      #       px <- plot_data$highlight_peaks$mass[i]
-      #       py <- plot_data$highlight_peaks$intensity[i]
-
-      #       # Diagonal end point: up and right
-      #       end_x <- px + delta_x
-      #       end_y <- py + delta_y
-
-      #       # Leader line (short segment + arrowhead at END for pointing up-right)
-      #       leader_lines[[length(leader_lines) + 1]] <- list(
-      #         type = "line",
-      #         x0 = px,
-      #         y0 = py,
-      #         x1 = end_x,
-      #         y1 = end_y,
-      #         line = list(color = font_color, width = 1.5),
-      #         arrowhead = 2, # arrow at end
-      #         arrowsize = 0.9,
-      #         arrowwidth = 1.3,
-      #         standoff = 3, # small gap at start
-      #         layer = "below" # <-- KEY CHANGE: place behind markers
-      #       )
-
-      #       # Text label slightly right and above the arrow end
-      #       label_x <- end_x + (delta_x * 0.02)
-      #       label_y <- end_y
-
-      #       # Format mass nicely
-      #       label_text <- sprintf("%.1f Da", px)
-
-      #       peak_labels[[length(peak_labels) + 1]] <- list(
-      #         x = label_x,
-      #         y = label_y,
-      #         text = label_text,
-      #         showarrow = FALSE,
-      #         font = list(color = font_color, size = 11),
-      #         xanchor = "left",
-      #         yanchor = "bottom"
-      #       )
-      #     }
-      #   }
-
-      #   # Combine all shapes and annotations
-      #   all_shapes <- c(shapes, leader_lines)
-      #   all_annotations <- c(annotations, peak_labels)
-
-      #   # Precisely calculate the minimum required max_y_needed
-      #   max_peak_y <- if (nrow(plot_data$highlight_peaks) > 0) {
-      #     max(plot_data$highlight_peaks$intensity, na.rm = TRUE)
-      #   } else {
-      #     0
-      #   }
-
-      #   max_shape_y <- if (length(all_shapes) > 0) {
-      #     max(
-      #       sapply(all_shapes, function(s) max(c(s$y0, s$y1), na.rm = TRUE)),
-      #       na.rm = TRUE
-      #     )
-      #   } else {
-      #     0
-      #   }
-
-      #   max_anno_y <- if (length(all_annotations) > 0) {
-      #     max(
-      #       sapply(all_annotations, function(a) if (!is.null(a$y)) a$y else 0),
-      #       na.rm = TRUE
-      #     )
-      #   } else {
-      #     0
-      #   }
-
-      #   overall_max_y <- max(
-      #     c(100, max_peak_y, max_shape_y, max_anno_y),
-      #     na.rm = TRUE
-      #   )
-
-      #   # Add buffer depending on whether annotations are present
-      #   if (show_peak_labels && nrow(plot_data$highlight_peaks) > 0) {
-      #     # When peak labels are active → need more headroom for text above the highest peak
-      #     text_buffer <- 5 # increased to prevent clipping of highest label
-      #   } else if (show_mass_diff && length(unique_masses) == 2) {
-      #     # When only mass diff is active → smaller buffer is usually enough
-      #     text_buffer <- 3
-      #   } else {
-      #     # No annotations → minimal or no extra buffer needed
-      #     text_buffer <- 2
-      #   }
-
-      #   max_y_needed <- overall_max_y + text_buffer
-
-      #   yaxis_list$range <- c(0, max_y_needed)
-      # } else {
-      #   all_shapes <- NULL
-      #   all_annotations <- NULL
-      # }
-
-      # plot <- plotly::layout(
-      #   plot,
-      #   hovermode = "closest",
-      #   paper_bgcolor = bg_color,
-      #   plot_bgcolor = plot_bg_color,
-      #   font = list(size = 14, color = font_color),
-      #   yaxis = yaxis_list,
-      #   xaxis = xaxis_list,
-      #   shapes = all_shapes,
-      #   annotations = all_annotations,
-      #   margin = list(t = 0, r = 0, b = 0, l = 50)
-      # ) |>
-      #   plotly::config(
-      #     displayModeBar = "hover",
-      #     scrollZoom = FALSE,
-      #     modeBarButtons = list(list(
-      #       "zoom2d",
-      #       "toImage",
-      #       "autoScale2d",
-      #       "resetScale2d",
-      #       "zoomIn2d",
-      #       "zoomOut2d"
-      #     ))
-      #   )
       # Annotation logic for mass difference + per-peak labels
       shapes <- NULL
       annotations <- NULL
@@ -1435,7 +1225,7 @@ spectrum_plot <- function(
         }
       }
 
-      # NEW: Add short diagonal leader + text label for EACH peak (if enabled)
+      # Add short diagonal leader + text label for each peak (if enabled)
       peak_labels <- list()
       leader_lines <- list()
 
@@ -1556,7 +1346,7 @@ spectrum_plot <- function(
 
       max_y_needed <- overall_max_y + text_buffer
 
-      yaxis_list$range <- c(0, max_y_needed)
+      yaxis_list$range <- c(0, max(max_y_needed, 105))
     } else {
       all_shapes <- NULL
       all_annotations <- NULL
@@ -1572,6 +1362,13 @@ spectrum_plot <- function(
       xaxis = xaxis_list,
       shapes = all_shapes,
       annotations = all_annotations,
+      showlegend = !is.null(sample),
+      legend = list(
+        bgcolor = "rgba(0,0,0,0)",
+        font = list(color = font_color, size = 12),
+        itemclick = FALSE,
+        itemdoubleclick = FALSE
+      ),
       margin = list(t = 0, r = 0, b = 0, l = 50)
     ) |>
       plotly::config(
@@ -1831,7 +1628,9 @@ generate_decon_rslt <- function(
 # WAL is only deleted when already empty; SHM is always safe to remove.
 #' @export
 cleanup_wal <- function(db_path) {
-  if (!file.exists(db_path)) return(invisible(NULL))
+  if (!file.exists(db_path)) {
+    return(invisible(NULL))
+  }
   tryCatch(
     {
       con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
@@ -1844,9 +1643,11 @@ cleanup_wal <- function(db_path) {
   )
   wal <- paste0(db_path, "-wal")
   shm <- paste0(db_path, "-shm")
-  if (file.exists(wal) && file.size(wal) == 0)
+  if (file.exists(wal) && file.size(wal) == 0) {
     tryCatch(file.remove(wal), error = function(e) NULL)
-  if (file.exists(shm))
+  }
+  if (file.exists(shm)) {
     tryCatch(file.remove(shm), error = function(e) NULL)
+  }
   invisible(NULL)
 }

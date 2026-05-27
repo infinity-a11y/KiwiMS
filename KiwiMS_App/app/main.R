@@ -66,6 +66,30 @@ ui <- function(id) {
     shiny$div(id = "blocking-overlay"),
     shiny$tags$script(shiny$HTML(
       "
+      (function() {
+        var map = new Map();
+        $(document).on('shiny:recalculating', function(event) {
+          var el = event.target;
+          if (el.closest && el.closest('.conversion-main-spinner')) {
+            el.classList.add('kiwi-rendering');
+            map.set(el.id, el);
+          }
+        });
+        $(document).on('shiny:value shiny:error', function(event) {
+          var el = map.get(event.name);
+          if (!el) return;
+          map.delete(event.name);
+          requestAnimationFrame(function() {
+            requestAnimationFrame(function() {
+              el.classList.remove('kiwi-rendering');
+            });
+          });
+        });
+      })();
+    "
+    )),
+    shiny$tags$script(shiny$HTML(
+      "
       Shiny.addCustomMessageHandler('downloadPlot', function(msg) {
         var qualityMap = {
           low:    { width: 1280, height: 720,  scale: 1 },
@@ -90,6 +114,16 @@ ui <- function(id) {
               if (trace[key] && typeof trace[key].size === 'number')
                 trace[key].size = Math.round(trace[key].size * contextScale);
             });
+            if (trace.legendgrouptitle && trace.legendgrouptitle.font &&
+                typeof trace.legendgrouptitle.font.size === 'number')
+              trace.legendgrouptitle.font.size = Math.round(trace.legendgrouptitle.font.size * contextScale);
+            if (trace.colorbar) {
+              if (trace.colorbar.title && trace.colorbar.title.font &&
+                  typeof trace.colorbar.title.font.size === 'number')
+                trace.colorbar.title.font.size = Math.round(trace.colorbar.title.font.size * contextScale);
+              if (trace.colorbar.tickfont && typeof trace.colorbar.tickfont.size === 'number')
+                trace.colorbar.tickfont.size = Math.round(trace.colorbar.tickfont.size * contextScale);
+            }
           });
           if (fig.layout.margin && typeof fig.layout.margin === 'object') {
             ['l', 'r', 't', 'b', 'pad'].forEach(function(side) {
@@ -113,11 +147,26 @@ ui <- function(id) {
         }
         document.body.style.cursor = 'progress';
         var div = document.createElement('div');
-        div.className = 'plotly-dl-offscreen';
         div.style.width  = q.width  + 'px';
         div.style.height = q.height + 'px';
+        if (isCubicSpectra) {
+          // WebGL (scatter3d) requires the element to be in the visible viewport —
+          // browsers skip WebGL rendering for off-screen elements, producing a blank canvas.
+          // Position in-viewport but invisible to the user.
+          div.style.position = 'fixed';
+          div.style.top = '0';
+          div.style.left = '0';
+          div.style.zIndex = '99999';
+          div.style.opacity = '0.001';
+          div.style.pointerEvents = 'none';
+        } else {
+          div.className = 'plotly-dl-offscreen';
+        }
         document.body.appendChild(div);
         Plotly.newPlot(div, fig.data, fig.layout, fig.config || {}).then(function() {
+          // For WebGL/3D, wait for the GPU to finish rendering before screenshotting.
+          return new Promise(function(resolve) { setTimeout(resolve, isCubicSpectra ? 800 : 0); });
+        }).then(function() {
           return Plotly.downloadImage(div, {
             format: msg.format, width: q.width, height: q.height,
             scale: msg.format === 'svg' ? 1 : q.scale, filename: msg.filename
@@ -135,6 +184,26 @@ ui <- function(id) {
       $(window).on('focus', function() {
         if (document.body.style.cursor === 'progress')
           setTimeout(function() { document.body.style.cursor = ''; }, 300);
+      });
+    "
+    )),
+    shiny$tags$script(shiny$HTML(
+      "
+      var _exportStates = {};
+      Shiny.addCustomMessageHandler('setExportState', function(msg) {
+        _exportStates[msg.prefix] = msg.enabled;
+        applyExportState(msg.prefix);
+      });
+      function applyExportState(prefix) {
+        var btns = $('[id$=\"_' + prefix + '_html\"],[id$=\"_' + prefix + '_png\"],[id$=\"_' + prefix + '_svg\"]');
+        if (_exportStates[prefix] === false) {
+          btns.prop('disabled', true).addClass('disabled').css('pointer-events', 'none').css('opacity', '0.5');
+        } else {
+          btns.prop('disabled', false).removeClass('disabled').css('pointer-events', '').css('opacity', '');
+        }
+      }
+      $(document).on('shown.bs.popover', function() {
+        Object.keys(_exportStates).forEach(applyExportState);
       });
     "
     )),
@@ -313,6 +382,15 @@ server <- function(id) {
     log_buttons <- log_sidebar$server("log_sidebar")
     log_view$server("logs", active_tab_reactive, log_buttons)
 
+    # Gear button in log sidebar opens Settings modal scrolled to Logs section
+    shiny$observeEvent(
+      log_buttons$open_settings(),
+      {
+        open_settings_modal(open_section = "logs")
+      },
+      ignoreInit = TRUE
+    )
+
     reset_button <- shiny$reactiveVal(0)
     configfile <- shiny$reactiveVal(NULL)
     pending_config <- shiny$reactiveVal(NULL)
@@ -332,7 +410,7 @@ server <- function(id) {
 
     # Reusable function to open the settings modal
     # initial_path: pre-fill dest folder from caller (e.g. currently active path)
-    open_settings_modal <- function(initial_path = NULL) {
+    open_settings_modal <- function(initial_path = NULL, open_section = NULL) {
       s <- dest_settings()
       base <- if (length(initial_path) == 1L && nzchar(initial_path)) {
         initial_path
@@ -361,7 +439,11 @@ server <- function(id) {
               ),
               shiny$div(
                 id = ns("settings_general_body"),
-                class = "collapse show",
+                class = if (identical(open_section, "general")) {
+                  "collapse show"
+                } else {
+                  "collapse"
+                },
                 shiny$tags$table(
                   class = "table table-sm table-bordered settings-table",
                   shiny$tags$tbody(
@@ -447,7 +529,11 @@ server <- function(id) {
               ),
               shiny$div(
                 id = ns("settings_deconv_body"),
-                class = "collapse show",
+                class = if (identical(open_section, "deconv")) {
+                  "collapse show"
+                } else {
+                  "collapse"
+                },
                 shiny$tags$table(
                   class = "table table-sm table-bordered settings-table",
                   shiny$tags$tbody(
@@ -713,7 +799,11 @@ server <- function(id) {
               ),
               shiny$div(
                 id = ns("settings_conv_body"),
-                class = "collapse show",
+                class = if (identical(open_section, "conv")) {
+                  "collapse show"
+                } else {
+                  "collapse"
+                },
                 shiny$tags$table(
                   class = "table table-sm table-bordered settings-table",
                   shiny$tags$tbody(
@@ -775,6 +865,66 @@ server <- function(id) {
                 )
               ),
 
+              # --- Logs ---
+              shiny$div(
+                class = "settings-collapse-header settings-logs-section",
+                `data-bs-toggle` = "collapse",
+                `data-bs-target` = paste0("#", ns("settings_logs_body")),
+                "Logs",
+                shiny$icon("chevron-down", class = "settings-collapse-icon")
+              ),
+              shiny$div(
+                id = ns("settings_logs_body"),
+                class = if (identical(open_section, "logs")) {
+                  "collapse show"
+                } else {
+                  "collapse"
+                },
+                shiny$tags$table(
+                  class = "table table-sm table-bordered settings-table",
+                  shiny$tags$tbody(
+                    shiny$tags$tr(
+                      shiny$tags$td(
+                        class = "settings-table-label",
+                        shiny$tags$span(
+                          "Log Directory",
+                          class = "settings-label-tooltip",
+                          `data-tooltip` = "Parent folder for daily log sub-folders. Takes effect on next app start."
+                        )
+                      ),
+                      shiny$tags$td(
+                        shiny$textInput(
+                          ns("settings_log_dir"),
+                          label = NULL,
+                          value = if (nzchar(us$log_dir)) us$log_dir else "",
+                          placeholder = paste0(
+                            Sys.getenv("USERPROFILE"),
+                            "\\Documents\\KiwiMS\\logs  (default)"
+                          ),
+                          width = "100%"
+                        )
+                      ),
+                      shiny$tags$td(
+                        class = "settings-table-feedback",
+                        shiny$uiOutput(ns("settings_log_dir_display"))
+                      )
+                    ),
+                    shiny$tags$tr(
+                      shiny$tags$td(class = "settings-table-label"),
+                      shiny$tags$td(
+                        colspan = "2",
+                        shiny$actionButton(
+                          ns("reset_logs"),
+                          "Reset Section",
+                          icon = shiny$icon("rotate-left"),
+                          width = "100%"
+                        )
+                      )
+                    )
+                  )
+                )
+              ),
+
               # --- Reset All ---
               shiny$div(
                 class = "settings-reset-all",
@@ -803,38 +953,104 @@ server <- function(id) {
     d <- get_default_user_settings()
 
     do_reset_general <- function() {
-      shiny::updateTextInput(session, "settings_input_path", value = d$deconv_input_dir)
+      shiny::updateTextInput(
+        session,
+        "settings_input_path",
+        value = d$deconv_input_dir
+      )
       shiny::updateTextInput(session, "settings_dest_path", value = "")
-      shiny::updateCheckboxInput(session, "settings_keep_raw_output", value = d$deconv_keep_raw_output)
+      shiny::updateCheckboxInput(
+        session,
+        "settings_keep_raw_output",
+        value = d$deconv_keep_raw_output
+      )
     }
 
     do_reset_deconv <- function() {
-      shiny::updateNumericInput(session, "settings_startz", value = d$deconv_startz)
+      shiny::updateNumericInput(
+        session,
+        "settings_startz",
+        value = d$deconv_startz
+      )
       shiny::updateNumericInput(session, "settings_endz", value = d$deconv_endz)
-      shiny::updateNumericInput(session, "settings_minmz", value = d$deconv_minmz)
-      shiny::updateNumericInput(session, "settings_maxmz", value = d$deconv_maxmz)
-      shiny::updateNumericInput(session, "settings_masslb", value = d$deconv_masslb)
-      shiny::updateNumericInput(session, "settings_massub", value = d$deconv_massub)
-      shiny::updateNumericInput(session, "settings_time_start", value = d$deconv_time_start)
-      shiny::updateNumericInput(session, "settings_time_end", value = d$deconv_time_end)
-      shiny::updateNumericInput(session, "settings_peakwindow", value = d$deconv_peakwindow)
-      shiny::updateSelectInput(session, "settings_peaknorm", selected = d$deconv_peaknorm)
-      shiny::updateNumericInput(session, "settings_peakthresh", value = d$deconv_peakthresh)
-      shiny::updateNumericInput(session, "settings_massbins", value = d$deconv_massbins)
+      shiny::updateNumericInput(
+        session,
+        "settings_minmz",
+        value = d$deconv_minmz
+      )
+      shiny::updateNumericInput(
+        session,
+        "settings_maxmz",
+        value = d$deconv_maxmz
+      )
+      shiny::updateNumericInput(
+        session,
+        "settings_masslb",
+        value = d$deconv_masslb
+      )
+      shiny::updateNumericInput(
+        session,
+        "settings_massub",
+        value = d$deconv_massub
+      )
+      shiny::updateNumericInput(
+        session,
+        "settings_time_start",
+        value = d$deconv_time_start
+      )
+      shiny::updateNumericInput(
+        session,
+        "settings_time_end",
+        value = d$deconv_time_end
+      )
+      shiny::updateNumericInput(
+        session,
+        "settings_peakwindow",
+        value = d$deconv_peakwindow
+      )
+      shiny::updateSelectInput(
+        session,
+        "settings_peaknorm",
+        selected = d$deconv_peaknorm
+      )
+      shiny::updateNumericInput(
+        session,
+        "settings_peakthresh",
+        value = d$deconv_peakthresh
+      )
+      shiny::updateNumericInput(
+        session,
+        "settings_massbins",
+        value = d$deconv_massbins
+      )
     }
 
     do_reset_conv <- function() {
-      shiny::updateNumericInput(session, "settings_peak_tol", value = d$peak_tolerance)
-      shiny::updateNumericInput(session, "settings_max_mult", value = d$max_multiples)
+      shiny::updateNumericInput(
+        session,
+        "settings_peak_tol",
+        value = d$peak_tolerance
+      )
+      shiny::updateNumericInput(
+        session,
+        "settings_max_mult",
+        value = d$max_multiples
+      )
+    }
+
+    do_reset_logs <- function() {
+      shiny::updateTextInput(session, "settings_log_dir", value = d$log_dir)
     }
 
     shiny$observeEvent(input$reset_general, do_reset_general())
-    shiny$observeEvent(input$reset_deconv,  do_reset_deconv())
-    shiny$observeEvent(input$reset_conv,    do_reset_conv())
+    shiny$observeEvent(input$reset_deconv, do_reset_deconv())
+    shiny$observeEvent(input$reset_conv, do_reset_conv())
+    shiny$observeEvent(input$reset_logs, do_reset_logs())
     shiny$observeEvent(input$reset_default, {
       do_reset_general()
       do_reset_deconv()
       do_reset_conv()
+      do_reset_logs()
     })
 
     # Resolve typed/pasted path from the text input
@@ -846,6 +1062,11 @@ server <- function(id) {
     settings_input_path_picked <- shiny$reactive({
       p <- input$settings_input_path
       trimws(if (!is.null(p)) p else read_user_settings()$deconv_input_dir)
+    })
+
+    settings_log_dir_picked <- shiny$reactive({
+      p <- input$settings_log_dir
+      trimws(if (!is.null(p)) p else "")
     })
 
     # Settings opened from nav button
@@ -895,6 +1116,31 @@ server <- function(id) {
           " Cannot use a .raw folder as default input"
         )
       } else if (dir.exists(path)) {
+        shiny$div(
+          class = "settings-dest-feedback settings-dest-feedback--valid",
+          shiny$icon("circle-check"),
+          " Folder exists"
+        )
+      } else {
+        shiny$div(
+          class = "settings-dest-feedback settings-dest-feedback--invalid",
+          shiny$icon("triangle-exclamation"),
+          " Folder not found"
+        )
+      }
+    })
+
+    # Live feedback for log directory path inside modal
+    output$settings_log_dir_display <- shiny$renderUI({
+      path <- settings_log_dir_picked()
+      if (!nzchar(path)) {
+        return(shiny$div(
+          class = "settings-dest-feedback",
+          shiny$icon("circle-minus"),
+          " Using default"
+        ))
+      }
+      if (dir.exists(path)) {
         shiny$div(
           class = "settings-dest-feedback settings-dest-feedback--valid",
           shiny$icon("circle-check"),
@@ -1246,6 +1492,10 @@ server <- function(id) {
       )
       current$deconv_input_dir <- inp
 
+      current$log_dir <- trimws(
+        if (!is.null(input$settings_log_dir)) input$settings_log_dir else ""
+      )
+
       save_user_settings(current)
 
       shiny$removeModal()
@@ -1311,7 +1561,8 @@ server <- function(id) {
       deconvolution_sidebar_vars$open_settings_clicked(),
       {
         open_settings_modal(
-          initial_path = deconvolution_sidebar_vars$targetpath()
+          initial_path = deconvolution_sidebar_vars$targetpath(),
+          open_section = "general"
         )
       },
       ignoreNULL = TRUE,
@@ -1355,7 +1606,7 @@ server <- function(id) {
     if (identical(local_version, remote_version)) {
       # Variables for modal
       message <- "KiwiMS is up-to-date"
-      hint <- "No action needed. Update anyway?"
+      hint <- "No action needed."
       release_url <- get_latest_release_url()
       link <- ifelse(
         is.null(release_url),
@@ -1494,7 +1745,9 @@ server <- function(id) {
               shiny$tags$tr(
                 shiny$tags$td(shiny$tags$code("Replicate")),
                 shiny$tags$td(class = "config-col-optional", "Optional"),
-                shiny$tags$td("Replicate group label \u00b7 free text \u00b7 partial fill allowed")
+                shiny$tags$td(
+                  "Replicate group label \u00b7 free text \u00b7 partial fill allowed"
+                )
               ),
               shiny$tags$tr(
                 shiny$tags$td(shiny$tags$code("Protein")),
@@ -1511,12 +1764,16 @@ server <- function(id) {
               shiny$tags$tr(
                 shiny$tags$td(shiny$tags$code("Compound_Concentration")),
                 shiny$tags$td(class = "config-col-optional", "Optional"),
-                shiny$tags$td("Numeric \u00b7 all filled or all empty")
+                shiny$tags$td(
+                  "Numeric \u00b7 all filled or all empty \u00b7 displayed as \u201cConcentration\u201d"
+                )
               ),
               shiny$tags$tr(
                 shiny$tags$td(shiny$tags$code("Incubation_Time")),
                 shiny$tags$td(class = "config-col-optional", "Optional"),
-                shiny$tags$td("Numeric \u00b7 all filled or all empty")
+                shiny$tags$td(
+                  "Numeric \u00b7 all filled or all empty \u00b7 displayed as \u201cTime\u201d"
+                )
               ),
               shiny$tags$tr(
                 shiny$tags$td(shiny$tags$code("Compound_1 \u2013 Compound_5")),
@@ -1648,15 +1905,33 @@ server <- function(id) {
     shiny$outputOptions(output, "unidec_modal_body", suspendWhenHidden = FALSE)
     shiny$outputOptions(output, "update_modal_body", suspendWhenHidden = FALSE)
 
+    # Prepare config data frame for display: convert numeric cols to character
+    # to prevent xtable rounding, drop all-empty columns, and rename display headers.
+    config_table_df <- function(df) {
+      for (col in intersect(
+        c("Compound_Concentration", "Incubation_Time"),
+        names(df)
+      )) {
+        if (is.numeric(df[[col]])) df[[col]] <- as.character(df[[col]])
+      }
+      empty_cols <- names(df)[sapply(names(df), function(col) {
+        all(is.na(df[[col]]) | trimws(as.character(df[[col]])) == "")
+      })]
+      df <- df[, setdiff(names(df), empty_cols), drop = FALSE]
+      names(df)[names(df) == "Compound_Concentration"] <- "Concentration"
+      names(df)[names(df) == "Incubation_Time"] <- "Time"
+      df
+    }
+
     # Pending config table — Sys.sleep drives the spinner for 1 second
     output$config_table <- shiny$renderTable(
       {
         shiny$req(pending_config())
         Sys.sleep(1)
-        pending_config()
+        config_table_df(pending_config())
       },
       striped = TRUE,
-      hover = TRUE,
+      hover = FALSE,
       bordered = TRUE,
       spacing = "xs",
       na = ""
@@ -1666,10 +1941,10 @@ server <- function(id) {
     output$confirmed_config_table <- shiny$renderTable(
       {
         shiny$req(configfile())
-        configfile()
+        config_table_df(configfile())
       },
       striped = TRUE,
-      hover = TRUE,
+      hover = FALSE,
       bordered = TRUE,
       spacing = "xs",
       na = ""

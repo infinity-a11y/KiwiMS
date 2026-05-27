@@ -1,4 +1,4 @@
-# app/logic/conversion_ui.R
+﻿# app/logic/conversion_ui.R
 
 box::use(
   app /
@@ -10,6 +10,10 @@ box::use(
     logic /
     conversion_functions[
       format_scientific,
+      stats_histogram,
+      stats_boxplot,
+      stats_scatter,
+      stats_violin,
     ],
   app /
     logic /
@@ -43,7 +47,7 @@ ki_kinact_concentrations_tabs <- function(ns, local_ui_id, conc_result, units) {
                       local_ui_id,
                       "_kind"
                     )),
-                    choices = c("3D", "Planar")
+                    choices = c("Cubic", "Planar")
                   )
                 ),
                 style = "margin-right: 20px;"
@@ -143,13 +147,27 @@ ki_kinact_concentrations_tabs <- function(ns, local_ui_id, conc_result, units) {
             )
           ),
           shiny::div(
-            class = "kobs-val",
-            paste(
-              format_scientific(conc_result$kobs),
-              paste0(
-                gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
-                "⁻¹"
-              )
+            class = "result-card-content",
+            shiny::div(
+              class = "main-result",
+              shiny::HTML(paste(
+                format_scientific(conc_result$kobs),
+                paste0(
+                  gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+                  "⁻¹"
+                )
+              ))
+            ),
+            shiny::div(
+              class = "error-result",
+              shiny::HTML(paste(
+                "±",
+                if (is.na(conc_result$kobs_se)) {
+                  "n.a."
+                } else {
+                  format_scientific(conc_result$kobs_se)
+                }
+              ))
             )
           )
         )
@@ -220,7 +238,7 @@ ki_kinact_concentrations_tabs <- function(ns, local_ui_id, conc_result, units) {
                     local_ui_id,
                     "concentrations_table_view_binding_bar"
                   )),
-                  label = "%-Binding Bar",
+                  label = "Binding [%] Bar",
                   value = TRUE,
                   right = TRUE
                 ),
@@ -229,8 +247,8 @@ ki_kinact_concentrations_tabs <- function(ns, local_ui_id, conc_result, units) {
                     local_ui_id,
                     "concentrations_table_view_tot_binding_bar"
                   )),
-                  label = "Total %-Binding Bar",
-                  value = FALSE,
+                  label = "Tot. Binding [%] Bar",
+                  value = TRUE,
                   right = TRUE
                 ),
                 style = "margin-right: 20px;"
@@ -291,155 +309,6 @@ ki_kinact_results_ui <- function(
   # bslib::navset_card_tab(
   #   id = ns("tabs"),
   static_panels <- list(
-    bslib::nav_panel(
-      title = "Hits",
-      shiny::div(
-        class = "conversion-result-wrapper hits-tab",
-        # shiny::div(
-        #   class = "tooltip-bttn hits-tab-tooltip",
-        #   shiny::actionButton(
-        #     ns("hits_table_tooltip_bttn"),
-        #     label = NULL,
-        #     icon = shiny::icon("circle-question")
-        #   )
-        # ),
-        shiny::fluidRow(
-          shiny::column(
-            width = 2,
-            align = "center",
-            shiny::div(
-              class = "hits-tab-checkboxes",
-              shiny::div(
-                class = "hits-tab-expand-box",
-                shiny::checkboxInput(
-                  ns("kikinact_hits_tab_expand"),
-                  label = "Expand Samples",
-                  value = TRUE
-                )
-              ),
-              shiny::div(
-                class = "hits-tab-na-box",
-                shiny::checkboxInput(
-                  ns("kikinact_hits_tab_na"),
-                  label = "Include NA",
-                  value = TRUE
-                )
-              )
-            )
-          ),
-          shiny::column(
-            width = 2,
-            align = "center",
-            shiny::div(
-              class = "hits-table-control-select",
-              shinyWidgets::pickerInput(
-                ns("kikinact_hits_tab_sample_select"),
-                label = "Select Samples",
-                choices = unique(
-                  hits_summary$`Sample ID`
-                ),
-                selected = unique(
-                  hits_summary$`Sample ID`
-                ),
-                multiple = TRUE,
-                options = list(
-                  `actions-box` = TRUE
-                )
-              )
-            )
-          ),
-          shiny::column(
-            width = 2,
-            align = "center",
-            shiny::div(
-              class = "hits-table-control-select",
-              shinyWidgets::pickerInput(
-                ns("kikinact_hits_tab_compound_select"),
-                label = "Select Compounds",
-                choices = unique(
-                  hits_summary$`Cmp Name`
-                )[
-                  !is.na(unique(
-                    hits_summary$`Cmp Name`
-                  ))
-                ],
-                selected = unique(
-                  hits_summary$`Cmp Name`
-                )[
-                  !is.na(unique(
-                    hits_summary$`Cmp Name`
-                  ))
-                ],
-                multiple = TRUE,
-                options = list(
-                  `actions-box` = TRUE
-                )
-              )
-            )
-          ),
-          shiny::column(
-            width = 2,
-            align = "center",
-            shiny::div(
-              class = "hits-table-control-select",
-              shinyWidgets::pickerInput(
-                ns("kikinact_hits_tab_col_select"),
-                label = "Select Columns",
-                choices = names(hits_summary)[
-                  !names(hits_summary) %in%
-                    c("Sample ID", "Cmp Name", "truncSample_ID", "Replicate")
-                ],
-                selected = names(hits_summary)[
-                  !names(hits_summary) %in%
-                    c("Sample ID", "Cmp Name", "truncSample_ID", "Replicate")
-                ][-c(1:2, 4:5, 7, 9)],
-                multiple = TRUE,
-                options = list(
-                  `actions-box` = TRUE
-                )
-              )
-            )
-          ),
-          shiny::column(
-            width = 2,
-            align = "center",
-            shiny::div(
-              class = "hits-table-control-select",
-              shinyWidgets::pickerInput(
-                ns("kikinact_binding_chart"),
-                label = "Show Binding Bars",
-                choices = c("%-Binding", "Total %-Binding"),
-                selected = "Total %-Binding",
-                multiple = TRUE,
-                options = list(
-                  `actions-box` = TRUE
-                )
-              )
-            )
-          ),
-          shiny::column(
-            width = 2,
-            align = "left",
-            shiny::div(
-              class = "hits-table-export",
-              shiny::tags$label(class = "control-label", "Export Table"),
-              table_dl_buttons(ns, "kikinact_hits_tab")
-            )
-          )
-        ),
-        shiny::div(
-          class = "hits-table-wrapper",
-          shinycssloaders::withSpinner(
-            DT::DTOutput(ns("kikinact_hits_tab")),
-            type = 1,
-            color = "#7777f9"
-          )
-        )
-      ),
-      shiny::tags$script(
-        popover_autoclose
-      )
-    ),
     bslib::nav_panel(
       title = "Binding",
       shiny::div(
@@ -683,165 +552,760 @@ ki_kinact_results_ui <- function(
   )
 }
 
+# Summary interface
+#' @export
+summary_results_ui <- function(ns, batch_control) {
+  bslib::navset_card_tab(
+    id = ns("summary_tabs"),
+    bslib::nav_panel(
+      title = "Protocol",
+      shiny::div(
+        class = "protocol-tab",
+        shiny::div(
+          class = "protocol-left-col",
+          shiny::div(
+            class = "card-custom protocol-log-card",
+            bslib::card(
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Conversion Log",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  bslib::tooltip(
+                    shiny::div(
+                      bslib::popover(
+                        shiny::icon("arrow-up-from-bracket"),
+                        shiny::div(
+                          class = "plot-dl-popover",
+                          shiny::div(class = "plot-dl-label", "File Format"),
+                          shiny::div(
+                            class = "plot-dl-buttons",
+                            shiny::actionButton(
+                              ns("copy_protocol_log"),
+                              "Clip",
+                              icon = shiny::icon("clipboard"),
+                              class = "btn-sm btn-default"
+                            ),
+                            shiny::actionButton(
+                              ns("save_protocol_log"),
+                              "Save",
+                              icon = shiny::icon("file-lines"),
+                              class = "btn-sm btn-default"
+                            )
+                          )
+                        ),
+                        title = "Export Log"
+                      )
+                    ),
+                    "Export",
+                    placement = "top"
+                  ),
+                  bslib::tooltip(
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("protocol_log_help_bttn"),
+                        NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    ),
+                    "Help",
+                    placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(
+                shiny::div(
+                  class = "protocol-log-wrapper",
+                  shiny::div(
+                    id = ns("protocol_log_body"),
+                    class = "protocol-log-body",
+                    shiny::uiOutput(ns("summary_protocol"))
+                  ),
+                  shiny::actionButton(
+                    ns("protocol_scroll_top"),
+                    NULL,
+                    icon = shiny::icon("arrow-up"),
+                    title = "Jump to top"
+                  ),
+                  shiny::actionButton(
+                    ns("protocol_scroll_bot"),
+                    NULL,
+                    icon = shiny::icon("arrow-down"),
+                    title = "Jump to bottom"
+                  ),
+                  shiny::tags$script(shiny::HTML(sprintf(
+                    "
+                  (function() {
+                    var cId = '%s', tId = '%s', bId = '%s';
+                    function setup() {
+                      var c = document.getElementById(cId);
+                      var t = document.getElementById(tId);
+                      var b = document.getElementById(bId);
+                      if (!c || !t || !b) { setTimeout(setup, 100); return; }
+                      function update() {
+                        t.disabled = c.scrollTop <= 10;
+                        b.disabled = (c.scrollHeight - c.scrollTop - c.clientHeight) <= 10;
+                      }
+                      c.addEventListener('scroll', update);
+                      new MutationObserver(update).observe(c, { childList: true, subtree: true });
+                      t.addEventListener('click', function() {
+                        c.scrollTo({ top: 0, behavior: 'smooth' });
+                      });
+                      b.addEventListener('click', function() {
+                        c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
+                      });
+                      update();
+                    }
+                    setup();
+                  })();
+                ",
+                    ns("protocol_log_body"),
+                    ns("protocol_scroll_top"),
+                    ns("protocol_scroll_bot")
+                  ))),
+                )
+              )
+            )
+          ),
+          shiny::div(
+            class = "protocol-secondary-grid",
+            shiny::div(
+              class = "card-custom",
+              bslib::card(
+                bslib::card_header(
+                  class = "bg-dark help-header d-flex justify-content-between",
+                  "Alerts",
+                  shiny::div(
+                    class = "box-header-settings-help",
+                    bslib::tooltip(
+                      shiny::div(
+                        class = "tooltip-bttn",
+                        shiny::actionButton(
+                          ns("pstat_alerts_help"),
+                          NULL,
+                          icon = shiny::icon("circle-question")
+                        )
+                      ),
+                      "Help",
+                      placement = "top"
+                    )
+                  )
+                ),
+                bslib::card_body(
+                  class = "protocol-stat-body",
+                  shiny::uiOutput(ns("pstat_alerts"))
+                )
+              )
+            ),
+            shiny::div(
+              class = "card-custom",
+              bslib::card(
+                bslib::card_header(
+                  class = "bg-dark help-header d-flex justify-content-between",
+                  "Warnings",
+                  shiny::div(
+                    class = "box-header-settings-help",
+                    bslib::tooltip(
+                      shiny::div(
+                        class = "tooltip-bttn",
+                        shiny::actionButton(
+                          ns("pstat_warnings_help"),
+                          NULL,
+                          icon = shiny::icon("circle-question")
+                        )
+                      ),
+                      "Help",
+                      placement = "top"
+                    )
+                  )
+                ),
+                bslib::card_body(
+                  class = "protocol-stat-body",
+                  shiny::uiOutput(ns("pstat_warnings"))
+                )
+              )
+            )
+          )
+        ),
+        shiny::div(
+          class = "protocol-stats-grid",
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Screened Samples",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  bslib::tooltip(
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("pstat_n_samples_help"),
+                        NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    ),
+                    "Help",
+                    placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(
+                class = "protocol-stat-body",
+                shiny::uiOutput(ns("pstat_n_samples")),
+              )
+            )
+          ),
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Hits Detected",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  bslib::tooltip(
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("pstat_n_hits_help"),
+                        NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    ),
+                    "Help",
+                    placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(
+                class = "protocol-stat-body",
+                shiny::uiOutput(ns("pstat_n_hits"))
+              )
+            )
+          ),
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Proteins Detected",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  bslib::tooltip(
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("pstat_n_proteins_help"),
+                        NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    ),
+                    "Help",
+                    placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(
+                class = "protocol-stat-body",
+                shiny::uiOutput(ns("pstat_n_proteins"))
+              )
+            )
+          ),
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Compounds Detected",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  bslib::tooltip(
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("pstat_n_compounds_help"),
+                        NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    ),
+                    "Help",
+                    placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(
+                class = "protocol-stat-body",
+                shiny::uiOutput(ns("pstat_n_compounds"))
+              )
+            )
+          ),
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Correct [%]",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  bslib::tooltip(
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("pstat_correct_help"),
+                        NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    ),
+                    "Help",
+                    placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(
+                class = "protocol-stat-body",
+                shiny::uiOutput(ns("pstat_correct"))
+              )
+            )
+          ),
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Unmatched [%]",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  bslib::tooltip(
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("pstat_unmatched_help"),
+                        NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    ),
+                    "Help",
+                    placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(
+                class = "protocol-stat-body",
+                shiny::uiOutput(ns("pstat_unmatched"))
+              )
+            )
+          ),
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Peak Tolerance",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  bslib::tooltip(
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("pstat_peak_tol_help"),
+                        NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    ),
+                    "Help",
+                    placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(
+                class = "protocol-stat-body",
+                shiny::uiOutput(ns("pstat_peak_tol"))
+              )
+            )
+          ),
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Max. Stoichiometry",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  bslib::tooltip(
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("pstat_max_stoich_help"),
+                        NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    ),
+                    "Help",
+                    placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(
+                class = "protocol-stat-body",
+                shiny::uiOutput(ns("pstat_max_stoich"))
+              )
+            )
+          )
+        )
+      )
+    ),
+    bslib::nav_panel(
+      title = "Statistics",
+      shiny::div(
+        class = "conversion-result-wrapper",
+        shiny::div(
+          class = "statistics-tab",
+          shiny::div(
+            class = "input-stat-panel",
+            shiny::div(
+              class = "input-panel",
+              shiny::div(
+                class = "panel-group",
+                shiny::tags$label(
+                  "Hit Rate Parameter"
+                ),
+                shinyWidgets::radioGroupButtons(
+                  ns("stats_show_metric"),
+                  label = NULL,
+                  choices = c("Correct", "Unmatched"),
+                  selected = "Correct",
+                  size = "sm"
+                )
+              ),
+              shiny::div(
+                class = "panel-group",
+                shiny::tags$label(
+                  "Include only hits"
+                ),
+                shinyWidgets::radioGroupButtons(
+                  ns("stats_exclude_extremes"),
+                  label = NULL,
+                  choices = c("All", "Hits only"),
+                  selected = "All",
+                  size = "sm"
+                )
+              )
+            ),
+            shiny::div(
+              class = "statistics-correct-unmatched-cards",
+              shiny::div(
+                class = "card-custom",
+                bslib::card(
+                  bslib::card_header(
+                    class = "bg-dark help-header d-flex justify-content-between",
+                    "Correct [%]",
+                    shiny::div(
+                      class = "box-header-settings-help",
+                      bslib::tooltip(
+                        shiny::div(
+                          class = "tooltip-bttn",
+                          shiny::actionButton(
+                            ns("pstat_correct_help"),
+                            NULL,
+                            icon = shiny::icon("circle-question")
+                          )
+                        ),
+                        "Help",
+                        placement = "top"
+                      )
+                    )
+                  ),
+                  bslib::card_body(
+                    class = "protocol-stat-body",
+                    shinycssloaders::withSpinner(
+                      shiny::uiOutput(ns("pstat_correct_stat")),
+                      type = 1,
+                      color = "#7777f9"
+                    )
+                  )
+                )
+              ),
+              shiny::div(
+                class = "card-custom",
+                bslib::card(
+                  bslib::card_header(
+                    class = "bg-dark help-header d-flex justify-content-between",
+                    "Unmatched [%]",
+                    shiny::div(
+                      class = "box-header-settings-help",
+                      bslib::tooltip(
+                        shiny::div(
+                          class = "tooltip-bttn",
+                          shiny::actionButton(
+                            ns("pstat_unmatched_help"),
+                            NULL,
+                            icon = shiny::icon("circle-question")
+                          )
+                        ),
+                        "Help",
+                        placement = "top"
+                      )
+                    )
+                  ),
+                  bslib::card_body(
+                    class = "protocol-stat-body",
+                    shinycssloaders::withSpinner(
+                      shiny::uiOutput(ns("pstat_unmatched_stat")),
+                      type = 1,
+                      color = "#7777f9"
+                    )
+                  )
+                )
+              )
+            )
+          ),
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              full_screen = TRUE,
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Hit Rate Distribution",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  plot_dl_popover(ns, "stats_histogram"),
+                  bslib::tooltip(
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("stats_histogram_help_bttn"),
+                        NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    ),
+                    "Help",
+                    placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(shinycssloaders::withSpinner(
+                plotly::plotlyOutput(ns("stats_histogram"), height = "100%"),
+                type = 1,
+                color = "#7777f9"
+              ))
+            )
+          ),
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              full_screen = TRUE,
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Hit Rate Summary Statistics",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  card_settings_popover(shiny::div(
+                    shinyWidgets::materialSwitch(
+                      ns("stats_boxplot_show_points"),
+                      label = "Show Points",
+                      value = TRUE,
+                      right = TRUE
+                    ),
+                    shinyWidgets::materialSwitch(
+                      ns("stats_boxplot_fixed_range"),
+                      label = "Full Scale (0–100%)",
+                      value = FALSE,
+                      right = TRUE
+                    ),
+                    style = "margin-right:20px;"
+                  )),
+                  plot_dl_popover(ns, "stats_boxplot"),
+                  bslib::tooltip(
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("stats_boxplot_help_bttn"),
+                        NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    ),
+                    "Help",
+                    placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(shinycssloaders::withSpinner(
+                plotly::plotlyOutput(ns("stats_boxplot"), height = "100%"),
+                type = 1,
+                color = "#7777f9"
+              ))
+            )
+          ),
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              full_screen = TRUE,
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Binding vs. Hit Rate",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  card_settings_popover(shiny::div(
+                    bslib::tooltip(
+                      shiny::selectInput(
+                        ns("stats_scatter_color_scale"),
+                        label = "Color Scale",
+                        choices = NULL
+                      ) |>
+                        shiny::tagAppendAttributes(class = "palette-select"),
+                      "Color palette",
+                      placement = "top"
+                    ),
+                    shiny::selectInput(
+                      ns("stats_scatter_groupby"),
+                      label = "Color By",
+                      choices = c("Protein", "Compound"),
+                      selected = "Protein",
+                      width = "140px"
+                    ),
+                    shinyWidgets::materialSwitch(
+                      ns("stats_scatter_full_scale"),
+                      label = "Full Scale (0–100%)",
+                      value = FALSE,
+                      right = TRUE
+                    ),
+                    style = "margin-right:20px;"
+                  )),
+                  plot_dl_popover(ns, "stats_scatter"),
+                  bslib::tooltip(
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("stats_scatter_help_bttn"),
+                        NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    ),
+                    "Help",
+                    placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(shinycssloaders::withSpinner(
+                plotly::plotlyOutput(ns("stats_scatter"), height = "100%"),
+                type = 1,
+                color = "#7777f9"
+              ))
+            )
+          ),
+          shiny::div(
+            class = "card-custom",
+            bslib::card(
+              full_screen = TRUE,
+              bslib::card_header(
+                class = "bg-dark help-header d-flex justify-content-between",
+                "Hit Rate Distribution by Group",
+                shiny::div(
+                  class = "box-header-settings-help",
+                  card_settings_popover(shiny::div(
+                    bslib::tooltip(
+                      shiny::selectInput(
+                        ns("stats_violin_color_scale"),
+                        label = "Color Scale",
+                        choices = NULL
+                      ) |>
+                        shiny::tagAppendAttributes(class = "palette-select"),
+                      "Color palette",
+                      placement = "top"
+                    ),
+                    shiny::selectInput(
+                      ns("stats_violin_groupby"),
+                      label = "Group By",
+                      choices = c("Protein", "Compound"),
+                      selected = "Protein",
+                      width = "140px"
+                    ),
+                    shinyWidgets::materialSwitch(
+                      ns("stats_violin_full_scale"),
+                      label = "Full Scale (0–100%)",
+                      value = FALSE,
+                      right = TRUE
+                    ),
+                    shiny::div(
+                      class = "conversion-tab-items-label",
+                      shiny::HTML("Inner")
+                    ),
+                    shinyWidgets::radioGroupButtons(
+                      ns("stats_violin_inner"),
+                      label = NULL,
+                      choices = c("Box", "Points"),
+                      selected = "Box",
+                      size = "sm"
+                    ),
+                    style = "margin-right:20px;"
+                  )),
+                  plot_dl_popover(ns, "stats_violin"),
+                  bslib::tooltip(
+                    shiny::div(
+                      class = "tooltip-bttn",
+                      shiny::actionButton(
+                        ns("stats_violin_help_bttn"),
+                        NULL,
+                        icon = shiny::icon("circle-question")
+                      )
+                    ),
+                    "Help",
+                    placement = "top"
+                  )
+                )
+              ),
+              bslib::card_body(shinycssloaders::withSpinner(
+                plotly::plotlyOutput(ns("stats_violin"), height = "100%"),
+                type = 1,
+                color = "#7777f9"
+              ))
+            )
+          )
+        )
+      )
+    ),
+    if (batch_control) {
+      bslib::nav_panel(
+        title = "Batch Control",
+        shiny::div(
+          class = "conversion-result-wrapper",
+          shiny::div(
+            class = "batch-control-tab",
+            shiny::uiOutput(ns("batch_heatmap_cards"))
+          )
+        )
+      )
+    },
+    bslib::nav_item(
+      id = ns("summary_tab_items"),
+      class = "conversion-tab-item-wrapper",
+      shiny::div(
+        class = "conversion-tab-items",
+        bslib::tooltip(
+          shiny::div(
+            class = "tooltip-bttn",
+            shiny::actionButton(
+              ns("summary_tooltip_bttn"),
+              label = NULL,
+              icon = shiny::icon("circle-question")
+            )
+          ),
+          "Help",
+          placement = "top"
+        )
+      )
+    )
+  )
+}
+
 # Binding results interface
 #' @export
 binding_results_ui <- function(ns, hits_summary) {
   bslib::navset_card_tab(
     id = ns("tabs"),
-    bslib::nav_panel(
-      title = "Hits",
-      shiny::div(
-        class = "conversion-result-wrapper hits-tab",
-        shiny::fluidRow(
-          shiny::column(
-            width = 2,
-            align = "center",
-            shiny::div(
-              class = "hits-tab-checkboxes",
-              shiny::div(
-                class = "hits-tab-expand-box",
-                shiny::checkboxInput(
-                  ns("relbinding_hits_tab_expand"),
-                  label = "Expand Samples",
-                  value = TRUE
-                )
-              ),
-              shiny::div(
-                class = "hits-tab-na-box",
-                shiny::checkboxInput(
-                  ns("relbinding_hits_tab_na"),
-                  label = "Include NA",
-                  value = TRUE
-                )
-              )
-            )
-          ),
-          shiny::column(
-            width = 2,
-            align = "center",
-            shiny::div(
-              class = "hits-table-control-select",
-              shinyWidgets::pickerInput(
-                ns("relbinding_hits_tab_sample_select"),
-                label = "Select Samples",
-                choices = unique(
-                  hits_summary$`Sample ID`
-                ),
-                selected = unique(
-                  hits_summary$`Sample ID`
-                ),
-                multiple = TRUE,
-                options = list(
-                  `actions-box` = TRUE
-                )
-              )
-            )
-          ),
-          shiny::column(
-            width = 2,
-            align = "center",
-            shiny::div(
-              class = "hits-table-control-select",
-              shinyWidgets::pickerInput(
-                ns("relbinding_hits_tab_compound_select"),
-                label = "Select Compounds",
-                choices = unique(
-                  hits_summary$`Cmp Name`
-                )[
-                  !is.na(unique(
-                    hits_summary$`Cmp Name`
-                  ))
-                ],
-                selected = unique(
-                  hits_summary$`Cmp Name`
-                )[
-                  !is.na(unique(
-                    hits_summary$`Cmp Name`
-                  ))
-                ],
-                multiple = TRUE,
-                options = list(
-                  `actions-box` = TRUE
-                )
-              )
-            )
-          ),
-          shiny::column(
-            width = 2,
-            align = "center",
-            shiny::div(
-              class = "hits-table-control-select",
-              shinyWidgets::pickerInput(
-                ns("relbinding_hits_tab_col_select"),
-                label = "Select Columns",
-                choices = names(hits_summary)[
-                  !names(hits_summary) %in%
-                    c(
-                      "Sample ID",
-                      "Cmp Name",
-                      if (length(units) == 2) {
-                        c(units[["Concentration"]], units[["Time"]])
-                      },
-                      "truncSample_ID",
-                      "Replicate"
-                    )
-                ],
-                selected = names(hits_summary)[
-                  !names(hits_summary) %in%
-                    c(
-                      "Sample ID",
-                      "Cmp Name",
-                      if (length(units) == 2) {
-                        c(units[["Concentration"]], units[["Time"]])
-                      },
-                      "truncSample_ID",
-                      "Replicate"
-                    )
-                ][-c(1:2, 4:5, 7, 9)],
-                multiple = TRUE,
-                options = list(
-                  `actions-box` = TRUE
-                )
-              )
-            )
-          ),
-          shiny::column(
-            width = 2,
-            align = "center",
-            shiny::div(
-              class = "hits-table-control-select",
-              shinyWidgets::pickerInput(
-                ns("relbinding_binding_chart"),
-                label = "Show Binding Bars",
-                choices = c("%-Binding", "Total %-Binding"),
-                selected = "Total %-Binding",
-                multiple = TRUE,
-                options = list(
-                  `actions-box` = TRUE
-                )
-              )
-            )
-          ),
-          shiny::column(
-            width = 2,
-            align = "left",
-            shiny::div(
-              class = "hits-table-export",
-              shiny::tags$label(class = "control-label", "Export Table"),
-              table_dl_buttons(ns, "relbinding_hits_tab")
-            )
-          )
-        ),
-        shiny::div(
-          class = "hits-table-wrapper",
-          shinycssloaders::withSpinner(
-            DT::DTOutput(ns("relbinding_hits_tab")),
-            type = 1,
-            color = "#7777f9"
-          )
-        )
-      )
-    ),
     bslib::nav_panel(
       title = "Samples View",
       shiny::div(
@@ -924,7 +1388,7 @@ binding_results_ui <- function(ns, hits_summary) {
                 bslib::card(
                   bslib::card_header(
                     class = "bg-dark help-header",
-                    "Total %-Binding",
+                    "Tot. Binding [%]",
                     bslib::tooltip(
                       shiny::div(
                         class = "tooltip-bttn",
@@ -971,7 +1435,7 @@ binding_results_ui <- function(ns, hits_summary) {
                         ns(
                           "samples_table_view_binding_bar"
                         ),
-                        label = "%-Binding Bar",
+                        label = "Binding [%] Bar",
                         value = TRUE,
                         right = TRUE
                       ),
@@ -979,8 +1443,8 @@ binding_results_ui <- function(ns, hits_summary) {
                         ns(
                           "samples_table_view_tot_binding_bar"
                         ),
-                        label = "Total %-Binding Bar",
-                        value = FALSE,
+                        label = "Tot. Binding [%] Bar",
+                        value = TRUE,
                         right = TRUE
                       ),
                       style = "margin-right: 20px;"
@@ -1177,7 +1641,7 @@ binding_results_ui <- function(ns, hits_summary) {
                 bslib::card(
                   bslib::card_header(
                     class = "bg-dark help-header",
-                    "Total %-Binding",
+                    "Tot. Binding [%]",
                     bslib::tooltip(
                       shiny::div(
                         class = "tooltip-bttn",
@@ -1222,14 +1686,14 @@ binding_results_ui <- function(ns, hits_summary) {
                     shiny::div(
                       shinyWidgets::materialSwitch(
                         ns("compounds_table_view_binding_bar"),
-                        label = "%-Binding Bar",
+                        label = "Binding [%] Bar",
                         value = TRUE,
                         right = TRUE
                       ),
                       shinyWidgets::materialSwitch(
                         ns("compounds_table_view_tot_binding_bar"),
-                        label = "Total %-Binding Bar",
-                        value = FALSE,
+                        label = "Tot. Binding [%] Bar",
+                        value = TRUE,
                         right = TRUE
                       ),
                       style = "margin-right: 20px;"
@@ -1282,9 +1746,12 @@ binding_results_ui <- function(ns, hits_summary) {
                           "100"
                         )
                       ),
-                      shiny::uiOutput(ns(
-                        "compounds_distribution_labels_ui"
-                      )),
+                      shinyWidgets::materialSwitch(
+                        ns("cmp_distribution_labels"),
+                        label = "Show Labels",
+                        value = TRUE,
+                        right = TRUE
+                      ),
                       style = "margin-right: 20px;"
                     )
                   ),
@@ -1325,7 +1792,7 @@ binding_results_ui <- function(ns, hits_summary) {
                         class = "spectrum-radio-button",
                         shinyWidgets::radioGroupButtons(
                           ns("compounds_spectrum_kind"),
-                          choices = c("3D", "Planar")
+                          choices = c("Cubic", "Planar")
                         )
                       ),
                       shinyWidgets::materialSwitch(
@@ -1438,14 +1905,18 @@ binding_results_ui <- function(ns, hits_summary) {
                 bslib::card(
                   bslib::card_header(
                     class = "bg-dark help-header d-flex justify-content-between",
-                    "Total %-Binding",
+                    "Tot. Binding [%]",
                     shiny::div(
                       class = "box-header-settings-help",
                       card_settings_popover(
                         shiny::div(
-                          shiny::uiOutput(ns(
-                            "proteins_total_pct_binding"
-                          )),
+                          shiny::selectInput(
+                            ns("total_pct_prot_binding_select"),
+                            "Select Compound",
+                            choices = unique(hits_summary$`Cmp Name`[
+                              !is.na(hits_summary$`Cmp Name`)
+                            ])
+                          ),
                           style = "margin-right: 20px;"
                         )
                       ),
@@ -1491,14 +1962,14 @@ binding_results_ui <- function(ns, hits_summary) {
                     shiny::div(
                       shinyWidgets::materialSwitch(
                         ns("proteins_table_view_binding_bar"),
-                        label = "%-Binding Bar",
+                        label = "Binding [%] Bar",
                         value = TRUE,
                         right = TRUE
                       ),
                       shinyWidgets::materialSwitch(
                         ns("proteins_table_view_tot_binding_bar"),
-                        label = "Total %-Binding Bar",
-                        value = FALSE,
+                        label = "Tot. Binding [%] Bar",
+                        value = TRUE,
                         right = TRUE
                       ),
                       style = "margin-right: 20px;"
@@ -1551,9 +2022,12 @@ binding_results_ui <- function(ns, hits_summary) {
                           "100"
                         )
                       ),
-                      shiny::uiOutput(ns(
-                        "proteins_distribution_labels_ui"
-                      )),
+                      shinyWidgets::materialSwitch(
+                        ns("protein_distribution_labels"),
+                        label = "Show Labels",
+                        value = TRUE,
+                        right = TRUE
+                      ),
                       style = "margin-right: 20px;"
                     )
                   ),
@@ -1600,7 +2074,7 @@ binding_results_ui <- function(ns, hits_summary) {
                         class = "spectrum-radio-button",
                         shinyWidgets::radioGroupButtons(
                           ns("proteins_spectrum_kind"),
-                          choices = c("3D", "Planar")
+                          choices = c("Cubic", "Planar")
                         )
                       ),
                       shinyWidgets::materialSwitch(
@@ -1609,7 +2083,9 @@ binding_results_ui <- function(ns, hits_summary) {
                         value = local({
                           prot <- unique(hits_summary$`Protein`)[1]
                           tbl <- hits_summary[hits_summary$`Protein` == prot, ]
-                          if (is.na(prot) || nrow(tbl) < 2) return(TRUE)
+                          if (is.na(prot) || nrow(tbl) < 2) {
+                            return(TRUE)
+                          }
                           ids <- tbl$`Sample ID`
                           ids <- ids[!is.na(ids)]
                           length(unique(ids)) <= 8 &
@@ -1667,10 +2143,16 @@ binding_results_ui <- function(ns, hits_summary) {
           )
         ),
         shiny::uiOutput(ns("color_variable_ui")),
-        shiny::selectInput(
-          ns("color_scale"),
-          label = NULL,
-          choices = NULL
+        bslib::tooltip(
+          shiny::selectInput(
+            ns("color_scale"),
+            label = NULL,
+            choices = NULL,
+            width = "120px"
+          ) |>
+            shiny::tagAppendAttributes(class = "palette-select"),
+          "Color palette",
+          placement = "top"
         ),
         bslib::tooltip(
           shiny::div(
@@ -1686,6 +2168,149 @@ binding_results_ui <- function(ns, hits_summary) {
         )
       )
     )
+  )
+}
+
+# Unified Hits interface (single card, no tabs)
+#' @export
+hits_results_ui <- function(ns, hits_summary, units) {
+  bslib::card(
+    class = "hits-unified-card",
+    bslib::card_body(
+      class = "conversion-result-wrapper hits-tab",
+      shiny::div(
+        class = "hits-controls input-panel",
+        shiny::radioButtons(
+          ns("hits_per_adduct"),
+          label = "Display",
+          choices = c("Hit View", "Adduct View"),
+          selected = "Hit View"
+        ),
+        shinyWidgets::pickerInput(
+          ns("hits_color_variable"),
+          label = "Color Variable",
+          choices = if ("Concentration" %in% names(units)) {
+            c("Concentration", "Compounds", "Samples", "None")
+          } else {
+            c("Compounds", "Samples", "None")
+          },
+          selected = if ("Concentration" %in% names(units)) {
+            "Concentration"
+          } else {
+            "Compounds"
+          }
+        ),
+        shiny::selectInput(
+          ns("hits_color_scale"),
+          label = "Color Scale",
+          choices = NULL
+        ) |>
+          shiny::tagAppendAttributes(class = "palette-select"),
+        shinyWidgets::pickerInput(
+          ns("hits_tab_sample_select"),
+          label = "Select Samples",
+          choices = unique(hits_summary$`Sample ID`),
+          selected = unique(hits_summary$`Sample ID`),
+          multiple = TRUE,
+          options = list(`actions-box` = TRUE)
+        ),
+        shinyWidgets::pickerInput(
+          ns("hits_tab_compound_select"),
+          label = "Select Compounds",
+          choices = unique(hits_summary$`Cmp Name`)[
+            !is.na(unique(hits_summary$`Cmp Name`))
+          ],
+          selected = unique(hits_summary$`Cmp Name`)[
+            !is.na(unique(hits_summary$`Cmp Name`))
+          ],
+          multiple = TRUE,
+          options = list(`actions-box` = TRUE)
+        ),
+        shinyWidgets::pickerInput(
+          ns("hits_tab_col_select"),
+          label = "Select Columns",
+          choices = names(hits_summary)[
+            !names(hits_summary) %in%
+              c(
+                "Sample ID",
+                "Protein",
+                "Cmp Name",
+                "truncSample_ID",
+                "Tot. Binding [%]",
+                if ("Concentration" %in% names(units)) {
+                  units[["Concentration"]]
+                } else {
+                  NULL
+                },
+                if ("Time" %in% names(units)) units[["Time"]] else NULL
+              )
+          ],
+          selected = names(hits_summary)[
+            !names(hits_summary) %in%
+              c(
+                "Sample ID",
+                "Protein",
+                "Cmp Name",
+                "truncSample_ID",
+                "Tot. Binding [%]",
+                if ("Concentration" %in% names(units)) {
+                  units[["Concentration"]]
+                } else {
+                  NULL
+                },
+                if ("Time" %in% names(units)) units[["Time"]] else NULL,
+                "Well",
+                "Replicate",
+                "Unmatched [%]",
+                "Preferred",
+                "Meas. Prot. [Da]",
+                "Δ Prot. [Da]",
+                "Int. Prot. [%]",
+                "Int. Cmp [%]",
+                "Δ Cmp [Da]"
+              )
+          ],
+          multiple = TRUE,
+          options = list(`actions-box` = TRUE)
+        ),
+        shinyWidgets::pickerInput(
+          ns("hits_binding_chart"),
+          label = "Show % Bar",
+          choices = c(
+            "Binding [%]",
+            "Tot. Binding [%]",
+            "Int. Prot. [%]",
+            "Int. Cmp [%]",
+            "Unmatched [%]",
+            "Correct [%]"
+          ),
+          selected = c(
+            "Binding [%]",
+            "Tot. Binding [%]",
+            "Int. Prot. [%]",
+            "Int. Cmp [%]",
+            "Unmatched [%]",
+            "Correct [%]"
+          ),
+          multiple = TRUE,
+          options = list(`actions-box` = TRUE)
+        ),
+        shiny::div(
+          class = "hits-table-export",
+          shiny::tags$label(class = "control-label", "Export Table"),
+          table_dl_buttons(ns, "hits_unified_tab")
+        )
+      ),
+      shiny::div(
+        class = "hits-table-wrapper",
+        shinycssloaders::withSpinner(
+          DT::DTOutput(ns("hits_unified_tab")),
+          type = 1,
+          color = "#7777f9"
+        )
+      )
+    ),
+    shiny::tags$script(popover_autoclose)
   )
 }
 
@@ -1852,12 +2477,12 @@ conversion_declaration_ui <- function(
       bslib::tooltip(
         shiny::div(
           style = "width: 100%;",
-          shiny::actionButton(
+          shinyjs::disabled(shiny::actionButton(
             ns("clear_samples"),
             label = NULL,
             icon = shiny::icon("eraser"),
             width = "100%"
-          )
+          ))
         ),
         "Clear Sample Table",
         placement = "top"

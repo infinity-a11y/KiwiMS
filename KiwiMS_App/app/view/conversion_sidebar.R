@@ -14,7 +14,6 @@ box::use(
       check_filter_hits,
       add_kobs_binding_result,
       add_ki_kinact_result,
-      conversion_tracking_js,
       log_binding_kinetics,
       log_filtered_samples,
       log_filtered_concentrations,
@@ -40,7 +39,7 @@ ui <- function(id) {
 
   bslib::sidebar(
     class = "conversion-sidebar",
-    width = "17%",
+    width = "18%",
     shinyjs::useShinyjs(),
     shiny::uiOutput(ns("conversion_sidebar_ui"))
   )
@@ -61,6 +60,13 @@ server <- function(
     result_list <- shiny::reactiveVal(NULL)
     complexes <- shiny::reactiveVal(NULL)
     analysis_status <- shiny::reactiveVal("pending")
+    ki_kinact_available <- shiny::reactiveVal(FALSE)
+    console_log_snapshot <- shiny::reactiveVal(NULL)
+    analysis_running <- shiny::reactiveVal(FALSE)
+
+    shiny::observeEvent(input$console_log_snapshot, {
+      console_log_snapshot(input$console_log_snapshot)
+    })
 
     # Render sidebar UI ----
     output$conversion_sidebar_ui <- shiny::renderUI({
@@ -79,116 +85,111 @@ server <- function(
 
       shiny::div(
         class = "sidebar-section",
-        shiny::fluidRow(
-          shiny::column(
-            width = 12,
+        shiny::div(
+          class = "sidebar-title custom-sidebar-title",
+          "Binding Analysis"
+        ),
+        shiny::numericInput(
+          ns("peak_tolerance"),
+          shiny::div(
+            class = "label-tooltip",
+            shiny::tags$label("Peak Tolerance [Da]"),
             shiny::div(
-              class = "sidebar-title custom-sidebar-title",
-              "Binding Analysis"
-            ),
-            shiny::numericInput(
-              ns("peak_tolerance"),
-              shiny::div(
-                class = "label-tooltip",
-                shiny::tags$label("Peak Tolerance [Da]"),
+              class = "label-save-button",
+              tooltip(
                 shiny::div(
-                  class = "label-save-button",
-                  tooltip(
-                    shiny::div(
-                      class = "save-button",
-                      shiny::actionButton(
-                        ns("save_peak_tol_btn"),
-                        label = NULL,
-                        icon = shiny::icon("floppy-disk"),
-                        class = "btn-default"
-                      )
-                    ),
-                    "Save Setting",
-                    placement = "top"
-                  ),
-                  tooltip(
-                    shiny::div(
-                      class = "tooltip-bttn",
-                      shiny::actionButton(
-                        ns("peak_tol_tooltip_bttn"),
-                        label = NULL,
-                        icon = shiny::icon("circle-question")
-                      )
-                    ),
-                    "Help",
-                    placement = "top"
+                  class = "save-button",
+                  shiny::actionButton(
+                    ns("save_peak_tol_btn"),
+                    label = NULL,
+                    icon = shiny::icon("floppy-disk"),
+                    class = "btn-default"
                   )
-                )
-              ),
-              value = pt_default,
-              min = 0,
-              max = 20,
-              step = 0.1,
-              width = "100%"
-            ),
-            shiny::numericInput(
-              ns("max_multiples"),
-              shiny::div(
-                class = "label-tooltip",
-                shiny::tags$label("Max. Stoichiometry"),
-
-                shiny::div(
-                  class = "label-save-button",
-                  tooltip(
-                    shiny::div(
-                      class = "save-button",
-                      shiny::actionButton(
-                        ns("save_max_mult_btn"),
-                        label = NULL,
-                        icon = shiny::icon("floppy-disk"),
-                        class = "btn-default"
-                      )
-                    ),
-                    "Save Setting",
-                    placement = "top"
-                  ),
-                  tooltip(
-                    shiny::div(
-                      class = "tooltip-bttn",
-                      shiny::actionButton(
-                        ns("max_mult_tooltip_bttn"),
-                        label = NULL,
-                        icon = shiny::icon("circle-question")
-                      )
-                    ),
-                    "Help",
-                    placement = "top"
-                  )
-                )
-              ),
-              value = mm_default,
-              min = 1,
-              max = 20,
-              step = 1,
-              width = "100%"
-            ),
-            shiny::div(
-              class = "ki-kinact-checkbox",
-              shiny::checkboxInput(
-                ns("run_ki_kinact"),
-                shiny::span(
-                  class = "ki-kinact-label",
-                  "Run",
-                  shiny::div(
-                    class = "ki-kinact-highlight",
-                    " K",
-                    htmltools::tags$sub("i"),
-                    " / k",
-                    htmltools::tags$sub("inact")
-                  ),
-                  " Analysis"
                 ),
-                value = FALSE
+                "Save Setting",
+                placement = "top"
+              ),
+              tooltip(
+                shiny::div(
+                  class = "tooltip-bttn",
+                  shiny::actionButton(
+                    ns("peak_tol_tooltip_bttn"),
+                    label = NULL,
+                    icon = shiny::icon("circle-question")
+                  )
+                ),
+                "Help",
+                placement = "top"
               )
+            )
+          ),
+          value = pt_default,
+          min = 0,
+          max = 20,
+          step = 0.1,
+          width = "100%"
+        ),
+        shiny::numericInput(
+          ns("max_multiples"),
+          shiny::div(
+            class = "label-tooltip",
+            shiny::tags$label("Max. Stoichiometry"),
+
+            shiny::div(
+              class = "label-save-button",
+              tooltip(
+                shiny::div(
+                  class = "save-button",
+                  shiny::actionButton(
+                    ns("save_max_mult_btn"),
+                    label = NULL,
+                    icon = shiny::icon("floppy-disk"),
+                    class = "btn-default"
+                  )
+                ),
+                "Save Setting",
+                placement = "top"
+              ),
+              tooltip(
+                shiny::div(
+                  class = "tooltip-bttn",
+                  shiny::actionButton(
+                    ns("max_mult_tooltip_bttn"),
+                    label = NULL,
+                    icon = shiny::icon("circle-question")
+                  )
+                ),
+                "Help",
+                placement = "top"
+              )
+            )
+          ),
+          value = mm_default,
+          min = 1,
+          max = 20,
+          step = 1,
+          width = "100%"
+        ),
+        shiny::div(
+          class = "ki-kinact-checkbox",
+          shiny::checkboxInput(
+            ns("run_ki_kinact"),
+            shiny::span(
+              class = "ki-kinact-label",
+              "Run",
+              shiny::div(
+                class = "ki-kinact-highlight",
+                " K",
+                htmltools::tags$sub("i"),
+                " / k",
+                htmltools::tags$sub("inact")
+              ),
+              " Analysis"
             ),
-            shiny::uiOutput(ns("run_button_wrapper"))
+            value = FALSE
           )
-        )
+        ),
+        shiny::uiOutput(ns("run_button_wrapper"))
       )
     })
 
@@ -208,47 +209,42 @@ server <- function(
       } else {
         shiny::div(
           class = "sidebar-section",
-          shiny::fluidRow(
-            shiny::column(
-              width = 12,
+          shiny::div(
+            class = "sidebar-title custom-sidebar-title",
+            "Results Menu"
+          ),
+          shiny::div(
+            class = "result-interface-selector-ui",
+            shiny::uiOutput(ns("analysis_select_ui")),
+            shiny::div(
+              class = "complex-picker-ui",
+              shiny::div(id = "complex-picker-connector"),
               shiny::div(
-                class = "sidebar-title custom-sidebar-title",
-                "Results Menu"
-              ),
-              shiny::div(
-                class = "result-interface-selector-ui",
-                shiny::uiOutput(ns("analysis_select_ui")),
-                shiny::div(
-                  class = "complex-picker-ui",
-                  shiny::div(id = "complex-picker-connector"),
-                  shiny::div(
-                    # class = "complex-picker custom-disable",
-                    class = "complex-picker",
-                    shinyWidgets::pickerInput(
-                      ns("complex"),
-                      NULL,
-                      choices = complexes()
-                    )
-                  )
+                # class = "complex-picker custom-disable",
+                class = "complex-picker",
+                shinyWidgets::pickerInput(
+                  ns("complex"),
+                  NULL,
+                  choices = complexes()
                 )
-              ),
-
-              bslib::tooltip(
-                shiny::div(
-                  shinyjs::disabled(
-                    shiny::actionButton(
-                      ns("report_conversion_results"),
-                      "Report",
-                      icon = shiny::icon("square-poll-vertical"),
-                      width = "100%"
-                    )
-                  )
-                ),
-                "Report generation is temporarily unavailable",
-                placement = "top"
               )
             )
           )
+          # ,
+          # bslib::tooltip(
+          #   shiny::div(
+          #     shinyjs::disabled(
+          #       shiny::actionButton(
+          #         ns("report_conversion_results"),
+          #         "Report",
+          #         icon = shiny::icon("square-poll-vertical"),
+          #         width = "100%"
+          #       )
+          #     )
+          #   ),
+          #   "Report generation is temporarily unavailable",
+          #   placement = "top"
+          # )
         )
       }
     })
@@ -382,106 +378,40 @@ server <- function(
 
     # Analysis run event ----
 
-    ## Running analysis UI ----
-    safe_observe(
-      event_expr = input$run_binding_analysis,
-      observer_name = "Conversion Analysis UI",
-      handler_fn = function() {
-        shiny::req(analysis_status() == "pending")
-
-        shiny::showModal(
-          shiny::div(
-            class = "start-modal log-modal",
-            shiny::modalDialog(
-              shiny::fluidRow(
-                shiny::br(),
-                shiny::column(
-                  width = 12,
-                  shinyjs::useShinyjs(),
-                  shiny::div(
-                    class = "conversion-progress",
-                    shinyWidgets::progressBar(
-                      id = ns("conversion_progress"),
-                      value = 0,
-                      title = "Initiating Conversion",
-                      display_pct = TRUE
-                    )
-                  ),
-                  shiny::div(
-                    class = "console-container",
-                    shiny::tags$pre(id = ns("console_log")),
-                    shiny::actionButton(
-                      ns("scroll_btn"),
-                      NULL,
-                      icon = shiny::icon("arrow-down"),
-                      class = "btn-info btn-sm"
-                    )
-                  )
-                )
-              ),
-              title = "Binding Analysis",
-              easyClose = FALSE,
-              footer = shiny::tagList(
-                shiny::div(
-                  class = "conversion-footer",
-                  shiny::div(
-                    class = "conversion-save-button",
-                    shiny::div(
-                      class = "modal-button",
-                      shinyjs::disabled(shiny::actionButton(
-                        ns("copy_conversion_log"),
-                        "Clip",
-                        icon = shiny::icon("clipboard")
-                      ))
-                    ),
-                    shiny::div(
-                      class = "modal-button",
-                      shinyjs::disabled(shiny::actionButton(
-                        ns("save_conversion_log"),
-                        "Save",
-                        icon = shiny::icon("download"),
-                        width = "auto"
-                      ))
-                    )
-                  ),
-                  shiny::div(
-                    class = "modal-button",
-                    shinyjs::disabled(shiny::actionButton(
-                      ns("dismiss_conversion"),
-                      "Dismiss"
-                    ))
-                  )
-                )
-              )
-            )
-          )
-        )
-      },
-      priority = 10
-    )
-
     ## Conditional processing ----
     safe_observe(
       event_expr = input$run_binding_analysis,
       observer_name = "Conversion Processing",
       handler_fn = function() {
         if (analysis_status() == "pending") {
+          write_log("Conversion initiated")
+          write_log(paste(
+            "Conversion parameters:\n",
+            paste(
+              c(
+                paste("Ki/kinact =", isTRUE(input$run_ki_kinact)),
+                paste("Peak Tolerance =", input$peak_tolerance, "Da"),
+                paste("Max. Stoichiometry =", input$max_multiples)
+              ),
+              collapse = "\n "
+            )
+          ))
           # Disable ki/kinact analysis checkbox
           shinyjs::disable("run_ki_kinact")
           shinyjs::addClass(selector = ".checkbox", class = "checkbox-disable")
 
-          # Delay conversion start
-          Sys.sleep(1)
+          # Show spinner on conversion_ui while computation runs
+          analysis_running(TRUE)
+          shinyjs::runjs(
+            'document.getElementById("blocking-overlay").style.display = "block";'
+          )
 
-          # Preset logical ki_kinact_check
+          # Preset logical flags
           ki_kinact_check <- FALSE
+          no_hits_found <- FALSE
 
-          # Activate JS function for conversion process tracking
-          shinyjs::runjs(sprintf(
-            conversion_tracking_js,
-            ns("console_log"),
-            ns("scroll_btn")
-          ))
+          # Accumulate messages for protocol log snapshot
+          log_lines <- character(0)
 
           # Add hits
           withCallingHandlers(
@@ -494,7 +424,9 @@ server <- function(
                 peak_tolerance = input$peak_tolerance,
                 max_multiples = input$max_multiples,
                 session = session,
-                ns = ns
+                ns = ns,
+                ki_kinact = isTRUE(input$run_ki_kinact),
+                config = config_file()
               )
 
               result_with_hits$hits_summary <- summarize_hits(
@@ -502,12 +434,21 @@ server <- function(
                 sample_table = conversion_main_vars$input_list()$Samples_Table
               )
 
+              if (sum(!is.na(result_with_hits$hits_summary$Compound)) == 0) {
+                no_hits_found <- TRUE
+                message(
+                  "No hits detected — result interface will not be loaded.\n"
+                )
+              }
+
               # If Ki/kinact analysis is set to be performed
-              if (input$run_ki_kinact) {
+              if (!no_hits_found && input$run_ki_kinact) {
                 message(paste("COMPUTING BINDING KINETICS\n  │"))
 
                 # Get concentration and time units
-                conc_time <- names(result_with_hits$hits_summary)[unlist(sapply(
+                conc_time <- names(
+                  result_with_hits$hits_summary
+                )[unlist(sapply(
                   c("Concentration", "Time"),
                   grep,
                   names(result_with_hits$hits_summary)
@@ -530,6 +471,7 @@ server <- function(
                 )
 
                 ki_kinact_check <- is.data.frame(hits_summary_filtered)
+                ki_kinact_available(ki_kinact_check)
 
                 if (ki_kinact_check) {
                   # Log filtered samples
@@ -561,170 +503,89 @@ server <- function(
               }
             },
             message = function(m) {
-              clean_msg <- gsub("\\", "\\\\", m$message, fixed = TRUE)
-              clean_msg <- gsub("'", "\\'", clean_msg, fixed = TRUE)
-              clean_msg <- gsub("\n", "<br>", clean_msg, fixed = TRUE)
-
-              js_cmd <- sprintf(
-                "
-            var el = document.getElementById('%s');
-            if (el) {
-              el.innerHTML += '%s';
-              el.doAutoScroll();
-            }
-              ",
-                ns("console_log"),
-                clean_msg
-              )
-
-              shinyjs::runjs(js_cmd)
+              clean_msg <- gsub("\n", "<br>", m$message)
+              log_lines <<- c(log_lines, clean_msg)
+              invokeRestart("muffleMessage")
             }
           )
 
-          # # TODO
-          # # Dev Mode
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_TEST.rds"
-          # )
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits1.rds"
-          # )
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_7.rds"
-          # )
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_13.rds"
-          # )
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_19.rds"
-          # )
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_25.rds"
-          # )
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_33.rds"
-          # )
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_42.rds"
-          # )
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_55.rds"
-          # )
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\result_with_hits_61.rds"
-          # )
+          if (no_hits_found) {
+            # No hits — log, re-enable inputs, stay in declaration
+            write_log("Conversion finalized — no hits detected")
 
-          ## TESTING
-
-          # # Single entry
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\one_entry.rds"
-          # )
-
-          # # NA entry
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\one_entryNA.rds"
-          # )
-
-          # # Two NA entries
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\two_entryNA.rds"
-          # )
-
-          # # NA diff
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\NA_diff.rds"
-          # )
-
-          # # NA diff2
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\NA_diff2.rds"
-          # )
-
-          # # HiDrive-kinact-K
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\HiDrive-kinact-K.rds"
-          # )
-
-          # # 2025-12-10_MS_in-house_protein
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\2025-12-10_MS_in-house_protein.rds"
-          # )
-
-          # # HiDrive-kinact-KI Testdaten
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results.rds"
-          # )
-
-          # # HiDrive-2025-09-04_New-Test-data
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\Marian\\Desktop\\KF_Testing\\results_conversion.rds"
-          # )
-
-          # # Test
-          # result_with_hits <- readRDS(
-          #   "C:\\Users\\marian\\Desktop\\KF_Testing\\test.rds"
-          # )
-
-          # Assign result list and hits table to reactive vars
-          result_list(result_with_hits)
-
-          # Save distinct protein - compound combinations/complexes
-          complex_df <- dplyr::distinct(
-            result_with_hits$hits_summary,
-            Protein,
-            Compound
-          ) |>
-            dplyr::filter(!is.na(Compound))
-
-          choice_values <- stats::setNames(
-            complex_df$Compound,
-            complex_df$Compound
-          )
-
-          complexes <- split(choice_values, complex_df$Protein)
-
-          complexes(complexes)
-
-          # Update sidebar control inputs
-          shiny::updateActionButton(
-            session = session,
-            "run_binding_analysis",
-            label = "Reset",
-            icon = shiny::icon("repeat")
-          )
-          shinyjs::disable("peak_tolerance")
-          shinyjs::disable("max_multiples")
-
-          # Enable modal window buttons
-          shinyjs::enable("save_conversion_log")
-          shinyjs::enable("copy_conversion_log")
-          shinyjs::enable("dismiss_conversion")
-          shinyjs::addClass(
-            id = "dismiss_conversion",
-            class = "btn-highlight"
-          )
-
-          shinyjs::delay(
-            500,
+            shinyjs::enable("run_ki_kinact")
             shinyjs::removeClass(
-              selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(1)",
-              class = "custom-disable"
+              selector = ".checkbox",
+              class = "checkbox-disable"
             )
-          )
-          if (ki_kinact_check) {
-            shinyjs::delay(
-              500,
-              shinyjs::removeClass(
-                selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(2)",
-                class = "custom-disable"
-              )
+            shinyjs::enable("peak_tolerance")
+            shinyjs::enable("max_multiples")
+            shiny::updateActionButton(
+              session = session,
+              "run_binding_analysis",
+              label = "Start",
+              icon = shiny::icon("play"),
+              disabled = FALSE
             )
-          }
+            shinyjs::runjs(
+              'document.getElementById("blocking-overlay").style.display = "none";'
+            )
+            analysis_running(FALSE)
+            shinyWidgets::show_toast(
+              title = "No hits detected",
+              text = "Please review your parameters.",
+              type = "warning",
+              timer = 5000,
+              timerProgressBar = TRUE
+            )
+          } else {
+            # Assign result list and hits table to reactive vars
+            write_log(paste(
+              "Conversion finalized —",
+              sum(!is.na(result_with_hits$hits_summary$Compound)),
+              "hit(s)"
+            ))
+            result_list(result_with_hits)
 
-          analysis_status("done")
+            # Save distinct protein - compound combinations/complexes
+            complex_df <- dplyr::distinct(
+              result_with_hits$hits_summary,
+              Protein,
+              Compound
+            ) |>
+              dplyr::filter(!is.na(Compound))
+
+            choice_values <- stats::setNames(
+              complex_df$Compound,
+              complex_df$Compound
+            )
+
+            complexes <- split(choice_values, complex_df$Protein)
+
+            complexes(complexes)
+
+            # Update sidebar control inputs
+            shiny::updateActionButton(
+              session = session,
+              "run_binding_analysis",
+              label = "Reset",
+              icon = shiny::icon("repeat")
+            )
+            shinyjs::disable("peak_tolerance")
+            shinyjs::disable("max_multiples")
+
+            console_log_snapshot(paste(log_lines, collapse = ""))
+            shinyjs::runjs(
+              'document.getElementById("blocking-overlay").style.display = "none";'
+            )
+            analysis_running(FALSE)
+            analysis_status("done")
+          }
         } else {
+          write_log("Conversion reset")
           result_list(NULL)
+          console_log_snapshot(NULL)
+          ki_kinact_available(FALSE)
           analysis_status("pending")
 
           # Enable ki/kinact analysis checkbox
@@ -736,12 +597,16 @@ server <- function(
 
           # Disable result interface radio buttons
           shinyjs::addClass(
-            selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(1)",
+            selector = paste(
+              "#app-conversion_sidebar-analysis_select .radio:nth-child(1),",
+              "#app-conversion_sidebar-analysis_select .radio:nth-child(2),",
+              "#app-conversion_sidebar-analysis_select .radio:nth-child(3)"
+            ),
             class = "custom-disable"
           )
           if (input$run_ki_kinact) {
             shinyjs::addClass(
-              selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(2)",
+              selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(4)",
               class = "custom-disable"
             )
           }
@@ -757,8 +622,8 @@ server <- function(
             asis = TRUE
           )
 
-          # Reset analysis interface selection to Binding Analysis
-          shiny::updateRadioButtons(session, "analysis_select", selected = 1)
+          # Reset analysis interface selection to Relative Binding
+          shiny::updateRadioButtons(session, "analysis_select", selected = 2)
 
           # Reenable conversion parameter inputs
           shinyjs::enable("peak_tolerance")
@@ -777,11 +642,14 @@ server <- function(
 
     ## Render analysis select input element ----
     output$analysis_select_ui <- shiny::renderUI({
+      ki <- ki_kinact_available()
       shiny::tagList(
         shiny::radioButtons(
           inputId = ns("analysis_select"),
           label = NULL,
           choiceNames = list(
+            "Summary Statistics",
+            "Hits Table",
             "Relative Binding",
             shiny::span(
               "K",
@@ -790,68 +658,20 @@ server <- function(
               htmltools::tags$sub("inact")
             )
           ),
-          choiceValues = list(1, 2)
+          choiceValues = list(1, 4, 2, 3)
         ),
-        shiny::tags$script(paste0(
-          "
-      (function() {
-        var selector = '#",
-          ns("analysis_select"),
-          " .radio:nth-child(1), #",
-          ns("analysis_select"),
-          " .radio:nth-child(2)';
-        $(selector).addClass('custom-disable');
-      })();
-    "
-        ))
+        if (!ki) {
+          shiny::tags$script(shiny::HTML(paste0(
+            "(function() {",
+            "  $('#",
+            ns("analysis_select"),
+            " .radio:nth-child(4)')",
+            "    .addClass('custom-disable');",
+            "})()"
+          )))
+        }
       )
     })
-
-    ## Dismiss conversion ----
-    shiny::observeEvent(input$dismiss_conversion, {
-      shiny::removeModal()
-    })
-
-    ## Copy conversion log to clipboard ----
-    shiny::observeEvent(input$copy_conversion_log, {
-      shinyjs::runjs(sprintf(
-        "
-    var text = document.getElementById('%s').innerText;
-    navigator.clipboard.writeText(text).then(function() {
-      alert('Log copied to clipboard!');
-    });
-  ",
-        session$ns("console_log")
-      ))
-    })
-
-    ## Save conversion log ----
-    safe_observe(
-      event_expr = input$save_conversion_log,
-      observer_name = "Conversion Log Saver",
-      handler_fn = function() {
-        # Generate a filename with a timestamp
-        fname <- paste0(
-          "conversion_SESSION",
-          get_session_id(),
-          ".txt"
-        )
-
-        shinyjs::runjs(sprintf(
-          "
-    var text = document.getElementById('app-conversion_sidebar-console_log').innerText;
-    var element = document.createElement('a');
-    element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
-    element.setAttribute('download', '%s');
-    element.style.display = 'none';
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
-  ",
-          fname
-        ))
-      }
-    )
 
     # Analysis select UI conditional rendering ----
     ## Toggle classes ----
@@ -866,9 +686,7 @@ server <- function(
         #   '= "block";'
         # ))
 
-        if (input$analysis_select == 1) {
-          shiny::updateRadioButtons(session, "analysis_select", selected = 1)
-
+        if (input$analysis_select %in% c(1, 2, 4)) {
           shinyjs::addClass(
             selector = ".complex-picker .form-group .bootstrap-select",
             class = "custom-disable"
@@ -1079,9 +897,12 @@ server <- function(
         complex = shiny::reactive(input$complex),
         run_analysis = shiny::reactive(input$run_binding_analysis),
         peak_tolerance = shiny::reactive(input$peak_tolerance),
+        max_multiples = shiny::reactive(input$max_multiples),
         run_ki_kinact = shiny::reactive(input$run_ki_kinact),
         analysis_select = shiny::reactive(input$analysis_select),
-        open_config_clicked = shiny::reactive(input$open_config_btn)
+        open_config_clicked = shiny::reactive(input$open_config_btn),
+        console_log_snapshot = shiny::reactive(console_log_snapshot()),
+        analysis_running = shiny::reactive(analysis_running())
       )
     )
   })
