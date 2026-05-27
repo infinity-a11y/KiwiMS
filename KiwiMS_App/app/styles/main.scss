@@ -1,4 +1,4 @@
-﻿/* ==========================================================================
+/* ==========================================================================
    TARGET FILE SELECTOR
    ========================================================================== */
 .kiwi-file-selector {
@@ -3091,7 +3091,8 @@ th.sorting {
   display: flex;
   align-items: center;
   width: 100%;
-  background-color: rgba(0, 0, 0, 0.25);
+  height: 18px;
+  background-color: rgba(0, 0, 0, 0.2);
   border-radius: 0px;
   border: 1px solid #4f4f4f;
 }
@@ -3101,8 +3102,9 @@ th.sorting {
   align-items: center;
   justify-content: flex-end;
   height: 100%;
-  background-color: #e5e5e5;
-  border-radius: 2px;
+  background-color: #ebebeb;
+  border-top-right-radius: 2px;
+  border-bottom-right-radius: 2px;
   overflow: hidden;
   flex-shrink: 0;
 }
@@ -3156,7 +3158,7 @@ th.sorting {
 }
 
 .conversion-result-wrapper label {
-  color: #e5e5e5 !important;
+  color: #ebebeb !important;
   text-align: left;
 }
 
@@ -3488,7 +3490,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #f781bf 88%,
     #999999 88%,
     #999999 100%
-  );
+  ) !important;
   color: black;
   text-align: left;
 }
@@ -3514,7 +3516,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #e5c494 87.5%,
     #b3b3b3 87.5%,
     #b3b3b3 100%
-  );
+  ) !important;
   color: black;
   text-align: left;
 }
@@ -3548,7 +3550,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #ccebc5 91.6667%,
     #ffed6f 91.6667%,
     #ffed6f 100%
-  );
+  ) !important;
   color: black;
   text-align: left;
 }
@@ -3576,7 +3578,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #fddaec 88.8889%,
     #f2f2f2 88.8889%,
     #f2f2f2 100%
-  );
+  ) !important;
   color: black;
   text-align: left;
 }
@@ -3601,7 +3603,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #f1e2cc 87.5%,
     #cccccc 87.5%,
     #cccccc 100%
-  );
+  ) !important;
   color: black;
   text-align: left;
 }
@@ -3626,7 +3628,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #a6761d 87.5%,
     #666666 87.5%,
     #666666 100%
-  );
+  ) !important;
   color: black;
   text-align: left;
 }
@@ -3651,7 +3653,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #bf5b17 87.5%,
     #666666 87.5%,
     #666666 100%
-  );
+  ) !important;
   color: black;
   text-align: left;
 }
@@ -3678,7 +3680,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #bd0026 88.8889%,
     #800026 88.8889%,
     #800026 100%
-  );
+  ) !important;
   color: black;
   text-align: left;
 }
@@ -3705,7 +3707,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #993404 88.8889%,
     #662506 88.8889%,
     #662506 100%
-  );
+  ) !important;
   color: black;
   text-align: left;
 }
@@ -3732,7 +3734,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #253494 88.8889%,
     #081d58 88.8889%,
     #081d58 100%
-  );
+  ) !important;
   color: black;
   text-align: left;
 }
@@ -3759,7 +3761,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #006837 88.8889%,
     #004529 88.8889%,
     #004529 100%
-  );
+  ) !important;
   color: black;
   text-align: left;
 }
@@ -3786,7 +3788,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #a50f15 88.8889%,
     #67000d 88.8889%,
     #67000d 100%
-  );
+  ) !important;
   color: black;
   text-align: left;
 }
@@ -3813,7 +3815,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #7a0177 88.8889%,
     #49006a 88.8889%,
     #49006a 100%
-  );
+  ) !important;
   color: black;
   text-align: left;
 }
@@ -3840,7 +3842,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #54278f 88.8889%,
     #3f007d 88.8889%,
     #3f007d 100%
-  );
+  ) !important;
   color: black;
   text-align: left;
 }
@@ -3867,7 +3869,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #980043 88.8889%,
     #67001f 88.8889%,
     #67001f 100%
-  );
+  ) !important;
   color: black;
   text-align: left;
 }
@@ -3894,7 +3896,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #016c59 88.8889%,
     #014636 88.8889%,
     #014636 100%
-  );
+  ) !important;
   color: black;
   text-align: left;
 }
@@ -3921,7 +3923,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #045a8d 88.8889%,
     #023858 88.8889%,
     #023858 100%
-  );
+  ) !important;
   color: black;
   text-align: left;
 }
@@ -3948,7 +3950,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #b30000 88.8889%,
     #7f0000 88.8889%,
     #7f0000 100%
-  );
+  ) !important;
   color: black;
   text-align: left;
 }
@@ -3975,7 +3977,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #b30000 88.8889%,
     #7f0000 88.8889%,
     #7f0000 100%
-  );
+  ) !important;
   color: black;
   text-align: left;
 }
@@ -4002,7 +4004,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #252525 88.8889%,
     #000000 88.8889%,
     #000000 100%
-  );
+  ) !important;
   color: black;
   text-align: left;
 }
@@ -4029,7 +4031,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #006d2c 88.8889%,
     #00441b 88.8889%,
     #00441b 100%
-  );
+  ) !important;
   color: black;
   text-align: left;
 }
@@ -4056,7 +4058,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #006d2c 88.8889%,
     #00441b 88.8889%,
     #00441b 100%
-  );
+  ) !important;
   color: black;
   text-align: left;
 }
@@ -4083,7 +4085,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #810f7c 88.8889%,
     #4d004b 88.8889%,
     #4d004b 100%
-  );
+  ) !important;
   color: black;
   text-align: left;
 }
@@ -4110,7 +4112,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #006d2c 88.8889%,
     #00441b 88.8889%,
     #00441b 100%
-  );
+  ) !important;
   color: black;
   text-align: left;
 }
@@ -4137,7 +4139,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #08519c 88.8889%,
     #08306b 88.8889%,
     #08306b 100%
-  );
+  ) !important;
   color: black;
   text-align: left;
 }
@@ -4168,7 +4170,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #f5db4dff,
     #f1f077ff,
     #fcffa4ff
-  );
+  ) !important;
   color: white;
   text-align: left;
 }
@@ -4197,7 +4199,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #fdcb26ff,
     #f7e225ff,
     #f0f921ff
-  );
+  ) !important;
   color: white;
   text-align: left;
 }
@@ -4226,7 +4228,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #b8de29ff,
     #dce318ff,
     #fde725ff
-  );
+  ) !important;
   color: white;
   text-align: left;
 }
@@ -4255,7 +4257,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #e5d05aff,
     #f5dd4dff,
     #ffea46ff
-  );
+  ) !important;
   color: white;
   text-align: left;
 }
@@ -4284,7 +4286,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #f7c9aaff,
     #f8dac4ff,
     #faebddff
-  );
+  ) !important;
   color: white;
   text-align: left;
 }
@@ -4313,7 +4315,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #aee3c0ff,
     #c7ecd2ff,
     #def5e5ff
-  );
+  ) !important;
   color: white;
   text-align: left;
 }
@@ -4343,7 +4345,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #fed395ff,
     #fde8aaff,
     #fcfdbfff
-  );
+  ) !important;
   color: white;
   text-align: left;
 }
@@ -4373,7 +4375,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     #c82803ff,
     #a51301ff,
     #7a0403ff
-  );
+  ) !important;
   color: white;
   text-align: left;
 }
@@ -5145,6 +5147,10 @@ sample-file-row .form-group {
   color: #fff;
   font-size: 15px;
   padding: 2px;
+}
+
+.palette-select .selectize-input > input[type="text"] {
+  background: transparent !important;
 }
 
 .hits-control .btn {

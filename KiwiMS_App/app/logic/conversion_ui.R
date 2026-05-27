@@ -47,7 +47,7 @@ ki_kinact_concentrations_tabs <- function(ns, local_ui_id, conc_result, units) {
                       local_ui_id,
                       "_kind"
                     )),
-                    choices = c("3D", "Planar")
+                    choices = c("Cubic", "Planar")
                   )
                 ),
                 style = "margin-right: 20px;"
@@ -248,7 +248,7 @@ ki_kinact_concentrations_tabs <- function(ns, local_ui_id, conc_result, units) {
                     "concentrations_table_view_tot_binding_bar"
                   )),
                   label = "Tot. Binding [%] Bar",
-                  value = FALSE,
+                  value = TRUE,
                   right = TRUE
                 ),
                 style = "margin-right: 20px;"
@@ -1444,7 +1444,7 @@ binding_results_ui <- function(ns, hits_summary) {
                           "samples_table_view_tot_binding_bar"
                         ),
                         label = "Tot. Binding [%] Bar",
-                        value = FALSE,
+                        value = TRUE,
                         right = TRUE
                       ),
                       style = "margin-right: 20px;"
@@ -1792,7 +1792,7 @@ binding_results_ui <- function(ns, hits_summary) {
                         class = "spectrum-radio-button",
                         shinyWidgets::radioGroupButtons(
                           ns("compounds_spectrum_kind"),
-                          choices = c("3D", "Planar")
+                          choices = c("Cubic", "Planar")
                         )
                       ),
                       shinyWidgets::materialSwitch(
@@ -2074,7 +2074,7 @@ binding_results_ui <- function(ns, hits_summary) {
                         class = "spectrum-radio-button",
                         shinyWidgets::radioGroupButtons(
                           ns("proteins_spectrum_kind"),
-                          choices = c("3D", "Planar")
+                          choices = c("Cubic", "Planar")
                         )
                       ),
                       shinyWidgets::materialSwitch(

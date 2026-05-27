@@ -231,6 +231,7 @@ server <- function(
     compound_table_trigger <- shiny::reactiveVal(0)
     sample_table_trigger <- shiny::reactiveVal(0)
     render_trigger <- shiny::reactiveVal(0)
+    show_completion_toast <- shiny::reactiveVal(NULL)
     trigger_ki_kinact <- shiny::reactiveVal(0L)
     manual_render_spectrum <- shiny::reactiveVal(0L)
     heatmap_pending_sample <- shiny::reactiveVal(NULL)
@@ -457,6 +458,7 @@ server <- function(
     ## Conversion Declaration UI ----
     output$conversion_ui <- shiny::renderUI({
       shiny::req(!conversion_sidebar_vars$analysis_running())
+      shiny::req(is.null(conversion_sidebar_vars$result_list()))
       conversion_declaration_ui(ns)
     })
 
@@ -928,7 +930,6 @@ server <- function(
         shiny::req(
           compound_table_input(),
           declaration_vars$compound_table_active
-          #,conversion_sidebar_vars$peak_tolerance()
         )
 
         compound_table <- clean_prot_comp_table(
@@ -1790,6 +1791,7 @@ server <- function(
           # Reset render trigger so bindEvent-guarded plots don't fire stale data
           render_trigger(0)
           manual_render_spectrum(0L)
+          show_completion_toast(NULL)
 
           # Null binding interface
           output$hits_unified_tab <- NULL
@@ -1927,6 +1929,12 @@ server <- function(
             mapping$original
           )]
           conversion_vars$hits_summary <- hits_summary
+
+          shinyWidgets::updateMaterialSwitch(
+            session,
+            "stats_boxplot_show_points",
+            value = nrow(hits_summary) <= 100
+          )
 
           ### Render result interfaces ----
           if (analysis_select == 2) {
@@ -2483,7 +2491,7 @@ server <- function(
                 shinyWidgets::updateMaterialSwitch(
                   session,
                   "cmp_distribution_labels",
-                  value = max(nchar(unique(sample_ids))) <= 22 | nrow(tbl) < 4
+                  value = TRUE
                 )
               },
               ignoreInit = TRUE
@@ -2627,7 +2635,7 @@ server <- function(
                     hits_summary$`Cmp Name` == conversion_compound_picker
                   ]),
                   cubic = is.null(input$compounds_spectrum_kind) ||
-                    input$compounds_spectrum_kind == "3D",
+                    input$compounds_spectrum_kind == "Cubic",
                   color_cmp = colors,
                   truncated = if (truncate_names) mapping else FALSE,
                   color_variable = color_variable,
@@ -3003,7 +3011,8 @@ server <- function(
                 condition <- ifelse(
                   length(unique(tbl$`Cmp Name`)) > 1,
                   max(nchar(unique(tbl$`Cmp Name`)), na.rm = TRUE) <= 22,
-                  max(nchar(unique(sample_ids)), na.rm = TRUE) <= 22
+                  length(unique(sample_ids)) <= 50 |
+                    max(nchar(unique(sample_ids)), na.rm = TRUE) <= 22
                 )
 
                 shinyWidgets::updateMaterialSwitch(
@@ -3155,7 +3164,7 @@ server <- function(
                     #   hits_summary$`Meas. Prot.` != "N/A"
                   ]),
                   cubic = is.null(input$proteins_spectrum_kind) ||
-                    input$proteins_spectrum_kind == "3D",
+                    input$proteins_spectrum_kind == "Cubic",
                   color_cmp = colors,
                   truncated = if (truncate_names) mapping else FALSE,
                   color_variable = color_variable,
@@ -3250,12 +3259,13 @@ server <- function(
 
                 # Get colors — exclude N/A compound rows so scale spans only real hits
                 tbl_excl <- dplyr::filter(tbl, !is.na(`Cmp Name`))
+                tbl_for_colors <- if (nrow(tbl_excl)) tbl_excl else tbl
 
                 colors <- get_cmp_colorScale(
-                  filtered_table = if (nrow(tbl_excl)) {
-                    tbl_excl
+                  filtered_table = if (input$color_variable == "Compounds") {
+                    dplyr::arrange(tbl_for_colors, `Cmp Name`, `Sample ID`)
                   } else {
-                    tbl
+                    tbl_for_colors
                   },
                   scale = input$color_scale,
                   variable = input$color_variable,
@@ -3827,7 +3837,7 @@ server <- function(
                     ],
                     cubic = ifelse(
                       is.null(input[[paste0(local_ui_id, "_kind")]]) ||
-                        input[[paste0(local_ui_id, "_kind")]] == "3D",
+                        input[[paste0(local_ui_id, "_kind")]] == "Cubic",
                       TRUE,
                       FALSE
                     ),
@@ -3877,7 +3887,7 @@ server <- function(
                       ],
                       cubic = ifelse(
                         is.null(input[[paste0(local_ui_id, "_kind")]]) ||
-                          input[[paste0(local_ui_id, "_kind")]] == "3D",
+                          input[[paste0(local_ui_id, "_kind")]] == "Cubic",
                         TRUE,
                         FALSE
                       ),
@@ -4002,8 +4012,6 @@ server <- function(
             output$stats_boxplot <- plotly::renderPlotly({
               rl <- conversion_sidebar_vars$result_list()
               shiny::req(rl, rl$hits_summary)
-
-              test <<- rl$hits_summary
 
               hs <- if (identical(input$stats_exclude_extremes, "Hits only")) {
                 filter_extremes(rl$hits_summary)
@@ -4572,9 +4580,8 @@ server <- function(
 
             # Protocol tab cards - use captured hits_summary, no filtering
             output$pstat_correct <- shiny::renderUI({
-              vals <- suppressWarnings(as.numeric(hits_summary[[
-                "Correct [%]"
-              ]]))
+              hs <- dplyr::distinct(hits_summary, `Sample ID`, .keep_all = TRUE)
+              vals <- suppressWarnings(as.numeric(hs[["Correct [%]"]]))
               m <- mean(vals, na.rm = TRUE)
               s <- stats::sd(vals, na.rm = TRUE)
               cls <- if (!is.na(m) && m < 10) {
@@ -4594,9 +4601,8 @@ server <- function(
             })
 
             output$pstat_unmatched <- shiny::renderUI({
-              vals <- suppressWarnings(as.numeric(hits_summary[[
-                "Unmatched [%]"
-              ]]))
+              hs <- dplyr::distinct(hits_summary, `Sample ID`, .keep_all = TRUE)
+              vals <- suppressWarnings(as.numeric(hs[["Unmatched [%]"]]))
               m <- mean(vals, na.rm = TRUE)
               s <- stats::sd(vals, na.rm = TRUE)
               cls <- if (!is.na(m) && m > 90) {
@@ -4622,6 +4628,7 @@ server <- function(
               } else {
                 hits_summary
               }
+              hs <- dplyr::distinct(hs, `Sample ID`, .keep_all = TRUE)
               vals <- suppressWarnings(as.numeric(hs[["Correct [%]"]]))
               m <- mean(vals, na.rm = TRUE)
               s <- stats::sd(vals, na.rm = TRUE)
@@ -4647,6 +4654,7 @@ server <- function(
               } else {
                 hits_summary
               }
+              hs <- dplyr::distinct(hs, `Sample ID`, .keep_all = TRUE)
               vals <- suppressWarnings(as.numeric(hs[["Unmatched [%]"]]))
               m <- mean(vals, na.rm = TRUE)
               s <- stats::sd(vals, na.rm = TRUE)
@@ -5069,6 +5077,18 @@ server <- function(
               ignoreNULL = FALSE
             )
 
+            hits_tab_trigger <- shiny::reactive({
+              list(
+                render_trigger(),
+                input$hits_color_variable,
+                input$hits_color_scale,
+                hits_col_selection(),
+                input$hits_binding_chart,
+                input$hits_tab_compound_select,
+                input$hits_tab_sample_select
+              )
+            }) |> shiny::debounce(200)
+
             output$hits_unified_tab <- DT::renderDT({
               shiny::req(
                 hits_summary,
@@ -5205,16 +5225,7 @@ server <- function(
               hits_unified_current(hits_datatable)
               return(hits_datatable)
             }) |>
-              shiny::bindEvent(
-                render_trigger(),
-                input$hits_color_variable,
-                input$hits_color_scale,
-                hits_col_selection(),
-                input$hits_binding_chart,
-                input$hits_tab_compound_select,
-                input$hits_tab_sample_select,
-                ignoreNULL = FALSE
-              )
+              shiny::bindEvent(hits_tab_trigger(), ignoreNULL = FALSE)
 
             ##### Hits unified table export ----
             setup_table_dl(
@@ -5389,30 +5400,33 @@ server <- function(
               color_scale <- input$hits_color_scale
               hs <- conversion_vars$hits_summary
 
+              n <- length(unique(
+                if (input$hits_color_variable == "Samples") {
+                  hs$`Sample ID`
+                } else if (
+                  input$hits_color_variable == "Concentration" &&
+                    "Concentration" %in% names(conversion_vars$units)
+                ) {
+                  hs[[conversion_vars$units[["Concentration"]]]]
+                } else {
+                  hs$`Cmp Name`
+                }
+              ))
+
               scales <- filter_color_list(
                 list(
                   Qualitative = qualitative_scales,
                   Sequential = sequential_scales
                 ),
-                length(unique(
-                  if (input$hits_color_variable == "Samples") {
-                    hs$`Sample ID`
-                  } else if (
-                    input$hits_color_variable == "Concentration" &&
-                      "Concentration" %in% names(conversion_vars$units)
-                  ) {
-                    hs[[conversion_vars$units[["Concentration"]]]]
-                  } else {
-                    hs$`Cmp Name`
-                  }
-                ))
+                n
               )
               scales[["Gradient"]] <- gradient_scales
 
               if (!is.null(color_scale) && color_scale %in% unlist(scales)) {
                 selected <- color_scale
               } else {
-                selected <- "turbo"
+                set3_max <- RColorBrewer::brewer.pal.info["Set3", "maxcolors"]
+                selected <- if (n <= set3_max) "Set3" else "turbo"
               }
 
               shiny::updateSelectInput(
@@ -5423,6 +5437,11 @@ server <- function(
               )
             })
           }
+
+          n_hits_detected <- sum(!is.na(hits_summary$`Cmp Name`))
+          if (!identical(show_completion_toast(), n_hits_detected)) {
+            show_completion_toast(n_hits_detected)
+          }
         }
 
         # Unblock UI
@@ -5432,6 +5451,23 @@ server <- function(
         ))
       },
       suspended = TRUE
+    )
+
+    shiny::observeEvent(
+      show_completion_toast(),
+      {
+        n_hits <- show_completion_toast()
+        shiny::req(!is.null(n_hits))
+        shinyWidgets::show_toast(
+          title = "Analysis completed",
+          text = paste0(n_hits, " hit(s) detected."),
+          type = "success",
+          timer = 4000,
+          timerProgressBar = TRUE
+        )
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
     )
 
     ## Hits pending navigation observer ----
@@ -5623,7 +5659,7 @@ server <- function(
             results_list = result_list,
             samples = samples,
             cubic = is.null(input$compounds_spectrum_kind) ||
-              input$compounds_spectrum_kind == "3D",
+              input$compounds_spectrum_kind == "Cubic",
             color_cmp = colors,
             truncated = if (input$truncate_names) id_mapping else FALSE,
             color_variable = input$color_variable,
@@ -5717,7 +5753,7 @@ server <- function(
             results_list = result_list,
             samples = samples,
             cubic = is.null(input$proteins_spectrum_kind) ||
-              input$proteins_spectrum_kind == "3D",
+              input$proteins_spectrum_kind == "Cubic",
             color_cmp = colors,
             truncated = if (input$truncate_names) id_mapping else FALSE,
             color_variable = input$color_variable,
@@ -5983,8 +6019,7 @@ server <- function(
         shinyWidgets::updateMaterialSwitch(
           session = session,
           "cmp_distribution_labels",
-          value = max(nchar(unique(sample_ids))) <= 22 |
-            nrow(tbl) < 4
+          value = TRUE
         )
 
         shinyWidgets::updateMaterialSwitch(
@@ -6016,18 +6051,20 @@ server <- function(
         color_scale <- input$color_scale
         hits_summary <- conversion_vars$hits_summary
 
+        n <- length(unique(
+          if (input$color_variable == "Samples") {
+            hits_summary$`Sample ID`
+          } else {
+            hits_summary$`Cmp Name`
+          }
+        ))
+
         scales <- filter_color_list(
           list(
             Qualitative = qualitative_scales,
             Sequential = sequential_scales
           ),
-          length(unique(
-            if (input$color_variable == "Samples") {
-              hits_summary$`Sample ID`
-            } else {
-              hits_summary$`Cmp Name`
-            }
-          ))
+          n
         )
 
         scales[["Gradient"]] <- gradient_scales
@@ -6036,8 +6073,8 @@ server <- function(
           selected <- color_scale
           render_trigger(render_trigger() + 1)
         } else {
-          # selected <- "plasma"
-          selected <- "turbo"
+          set3_max <- RColorBrewer::brewer.pal.info["Set3", "maxcolors"]
+          selected <- if (n <= set3_max) "Set3" else "turbo"
         }
 
         shiny::updateSelectInput(

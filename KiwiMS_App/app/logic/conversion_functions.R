@@ -3733,6 +3733,8 @@ multiple_spectra <- function(
         marker_color <- font_color
       }
 
+      peaks_data$mk_color <- if (is.character(marker_color)) marker_color else peaks_data$color
+
       # Declare coloring variables for graph elements
       color <- NULL
       line <- list(color = font_color, width = 1)
@@ -3744,6 +3746,14 @@ multiple_spectra <- function(
         spectrum_data$z,
         names(color_cmp)
       )]
+
+      # Protein diamonds use theme fill; compound circles use sample color
+      peaks_data <- dplyr::mutate(
+        peaks_data,
+        z_color = ifelse(symbol == "diamond", font_color, z_color)
+      )
+
+      peaks_data$mk_color <- peaks_data$z_color
 
       # Declare coloring variables for graph elements
       color <- ~ I(z_color)
@@ -3764,6 +3774,7 @@ multiple_spectra <- function(
       peaks_data,
       color = ifelse(symbol == "diamond", font_color, inv_color)
     )
+    peaks_data$mk_color <- peaks_data$color
     marker_color <- ~ I(color)
 
     # Match colors to spectrum data
@@ -3829,7 +3840,7 @@ multiple_spectra <- function(
         marker_list <- list(
           size = 5,
           zindex = 100,
-          line = list(color = font_color, width = 3)
+          line = list(color = inv_color, width = 3)
         )
       } else {
         marker_list <- list(
@@ -3837,7 +3848,7 @@ multiple_spectra <- function(
           symbol = ~ I(symbol),
           size = 5,
           zindex = 100,
-          line = list(color = font_color, width = 3)
+          line = list(color = inv_color, width = 3)
         )
       }
 
@@ -3897,17 +3908,16 @@ multiple_spectra <- function(
         args <- list(
           p = plot,
           inherit = FALSE,
-          type = "scatter3d",
+          type = "scatter",
           mode = "markers",
-          x = first_peak$mass,
-          y = first_peak$intensity,
-          z = as.character(first_peak$z),
+          x = 0,
+          y = 0,
           name = entry_name,
           legendgroup = lg,
           marker = list(
             color = font_color,
             symbol = paste0(sym, "-open"),
-            size = 0.001
+            size = 8
           ),
           visible = TRUE,
           showlegend = TRUE,
@@ -3940,6 +3950,8 @@ multiple_spectra <- function(
         paper_bgcolor = "rgba(0,0,0,0)",
         plot_bgcolor = "rgba(0,0,0,0)",
         font = list(size = 14, color = font_color),
+        xaxis = list(visible = FALSE, showgrid = FALSE, zeroline = FALSE, range = c(1, 2)),
+        yaxis = list(visible = FALSE, showgrid = FALSE, zeroline = FALSE, range = c(1, 2)),
         legend = list(
           bgcolor = "rgba(0,0,0,0)",
           bordercolor = "rgba(0,0,0,0)",
@@ -4093,25 +4105,19 @@ multiple_spectra <- function(
       showlegend = TRUE
     ) |>
       plotly::add_markers(
-        data = dplyr::mutate(
-          peaks_data,
-          symbol = paste0(symbol, "-open")
-        ),
+        data = peaks_data,
         x = ~mass,
         y = ~intensity,
-        split = ~ interaction(z, name),
+        split = ~ seq_len(nrow(peaks_data)),
         legendgroup = ~z,
         mode = "markers",
-        color = marker_color,
         symbol = ~ I(symbol),
         inherit = FALSE,
-        marker = c(
-          list(
-            size = 10,
-            zindex = 100,
-            line = list(color = font_color, width = 1.5)
-          ),
-          if (is.null(color_variable)) list(color = font_color) else list()
+        marker = list(
+          color = ~ I(mk_color),
+          size = 10,
+          zindex = 100,
+          line = list(color = inv_color, width = 1.5)
         ),
         hoverinfo = "text",
         text = ~ paste0(
@@ -4161,14 +4167,16 @@ multiple_spectra <- function(
           inherit = FALSE,
           type = "scatter",
           mode = "markers",
-          x = first_peak$mass,
-          y = first_peak$intensity,
+          x = 0,
+          y = 0,
+          xaxis = "x2",
+          yaxis = "y2",
           name = entry_name,
           legendgroup = lg,
           marker = list(
             color = font_color,
-            symbol = paste0(sym, "-open"),
-            size = 0.001
+            symbol = if (is_protein) sym else paste0(sym, "-open"),
+            size = 8
           ),
           visible = TRUE,
           showlegend = TRUE,
@@ -4212,6 +4220,20 @@ multiple_spectra <- function(
           color = font_color,
           gridcolor = grid_color,
           zerolinecolor = zeroline_color
+        ),
+        xaxis2 = list(
+          visible = FALSE,
+          showgrid = FALSE,
+          zeroline = FALSE,
+          range = c(1, 2),
+          overlaying = "x"
+        ),
+        yaxis2 = list(
+          visible = FALSE,
+          showgrid = FALSE,
+          zeroline = FALSE,
+          range = c(1, 2),
+          overlaying = "y"
         ),
         legend = list(
           bgcolor = "rgba(0,0,0,0)",
@@ -4471,6 +4493,7 @@ render_table_view <- function(table, colors, tab, inputs, units) {
           )
         ),
         list(className = 'dt-center', targets = "_all"),
+        list(className = 'dt-nowrap', targets = "Mass Shift"),
         list(
           targets = "Binding [%]",
           type = "num",
@@ -5824,13 +5847,6 @@ prot_compound_distribution <- function(
         !is.na(`Cmp Name`)
     )
 
-  colors <- get_cmp_colorScale(
-    filtered_table = tbl,
-    scale = color_scale,
-    variable = color_variable,
-    trunc = truncate_names
-  )
-
   if (color_variable == "Compounds") {
     color <- ~`Cmp Name`
   } else if (color_variable == "Samples") {
@@ -5872,6 +5888,28 @@ prot_compound_distribution <- function(
     dplyr::select(-`Peak Signal [Da]`) |>
     dplyr::arrange(`Cmp Name`, `Tot. Binding [%]`, `Binding [%]`, `Sample ID`)
 
+  .sid_raw <- if (truncate_names) tbl$truncSample_ID else tbl$`Sample ID`
+  global_sample_order <- tbl |>
+    dplyr::mutate(.sid = .sid_raw) |>
+    dplyr::group_by(.sid) |>
+    dplyr::summarize(
+      .mean_tb = mean(as.numeric(as.character(`Tot. Binding [%]`)), na.rm = TRUE),
+      .groups = "drop"
+    ) |>
+    dplyr::arrange(.mean_tb, .sid) |>
+    dplyr::pull(.sid)
+
+  colors <- get_cmp_colorScale(
+    filtered_table = if (color_variable == "Compounds") {
+      tbl
+    } else {
+      tbl[order(match(.sid_raw, global_sample_order)), ]
+    },
+    scale = color_scale,
+    variable = color_variable,
+    trunc = truncate_names
+  )
+
   tbl <- tbl |>
     dplyr::group_by(`Cmp Name`) |>
     dplyr::mutate(
@@ -5880,11 +5918,18 @@ prot_compound_distribution <- function(
       } else {
         `Sample ID`
       },
-      Group = match(`Sample ID`, unique(`Sample ID`)),
-      `Cmp Name` = factor(`Cmp Name`, levels = unique(`Cmp Name`)),
+      Group = match(as.character(`Sample ID`), global_sample_order),
+      `Cmp Name` = factor(
+        `Cmp Name`,
+        levels = if (color_variable == "Compounds") {
+          names(colors)[names(colors) %in% unique(`Cmp Name`)]
+        } else {
+          unique(`Cmp Name`)
+        }
+      ),
       `Sample ID` = factor(
         `Sample ID`,
-        levels = unique(`Sample ID`)
+        levels = global_sample_order
       ),
       `Binding [%]` = factor(
         `Binding [%]`,
@@ -5918,7 +5963,8 @@ prot_compound_distribution <- function(
   condition <- ifelse(
     length(levels(tbl$`Cmp Name`)) > 1,
     max(nchar(levels(tbl$`Cmp Name`))) <= 22,
-    max(nchar(levels(tbl$`Sample ID`))) <= 22
+    length(levels(tbl$`Sample ID`)) <= 50 |
+      max(nchar(levels(tbl$`Sample ID`))) <= 22
   )
 
   showticklabels <- ifelse(
@@ -5938,7 +5984,6 @@ prot_compound_distribution <- function(
       plot_bgcolor = 'rgba(0,0,0,0)',
       xaxis = list(
         type = "category",
-        tickson = "boundaries",
         categoryorder = "array",
         categoryarray = levels(tbl$`Cmp Name`),
         showgrid = FALSE,
@@ -5961,9 +6006,6 @@ prot_compound_distribution <- function(
     n_groups <- length(groups)
     group_map <- stats::setNames(0:(n_groups - 1), groups)
 
-    bar_width <- min(0.3, 0.85 / (n_groups + max(0, n_groups - 1) * 0.15))
-    group_gap <- bar_width * 0.15
-
     compound_local_n <- tbl |>
       dplyr::group_by(`Cmp Name`) |>
       dplyr::summarize(local_n = dplyr::n_distinct(Group), .groups = "drop")
@@ -5971,6 +6013,17 @@ prot_compound_distribution <- function(
       compound_local_n$local_n,
       compound_local_n$`Cmp Name`
     )
+
+    max_local_n <- max(compound_local_n$local_n)
+    bar_width <- min(0.3, 0.85 / (max_local_n + max(0, max_local_n - 1) * 0.15))
+    group_gap <- bar_width * 0.15
+
+    local_i_map <- tbl |>
+      dplyr::distinct(`Cmp Name`, Group) |>
+      dplyr::arrange(`Cmp Name`, Group) |>
+      dplyr::group_by(`Cmp Name`) |>
+      dplyr::mutate(local_i = dplyr::row_number() - 1L) |>
+      dplyr::ungroup()
 
     if (n_groups > 1) {
       for (i in 2:n_groups) {
@@ -6002,7 +6055,11 @@ prot_compound_distribution <- function(
       local_cluster_width <- local_n *
         bar_width +
         max(0, local_n - 1) * group_gap
-      off <- -local_cluster_width / 2 + i_group * (bar_width + group_gap)
+      local_i <- local_i_map$local_i[
+        local_i_map$`Cmp Name` == as.character(row$`Cmp Name`[[1]]) &
+          local_i_map$Group == g
+      ]
+      off <- -local_cluster_width / 2 + local_i * (bar_width + group_gap)
 
       if (color_variable == "Compounds") {
         var <- as.character(row$`Cmp Name`[[1]])
@@ -6034,7 +6091,7 @@ prot_compound_distribution <- function(
         bar_chart,
         x = row$`Cmp Name`[[1]],
         y = as.numeric(as.character(y_val)),
-        offsetgroup = i_group,
+        offsetgroup = local_i,
         offset = off,
         width = bar_width,
         text = row$mass_stoich[[1]],
@@ -6067,12 +6124,15 @@ prot_compound_distribution <- function(
       for (j in seq_len(nrow(totals_cmp_grp))) {
         tot_row <- totals_cmp_grp[j, ]
         g <- tot_row$Group[[1]]
-        i_group <- group_map[[g]]
         local_n <- compound_local_n_map[[as.character(tot_row$`Cmp Name`[[1]])]]
         local_cluster_width <- local_n *
           bar_width +
           max(0, local_n - 1) * group_gap
-        off <- -local_cluster_width / 2 + i_group * (bar_width + group_gap)
+        local_i <- local_i_map$local_i[
+          local_i_map$`Cmp Name` == as.character(tot_row$`Cmp Name`[[1]]) &
+            local_i_map$Group == g
+        ]
+        off <- -local_cluster_width / 2 + local_i * (bar_width + group_gap)
         cmp_idx <- which(cmp_levels == as.character(tot_row$`Cmp Name`[[1]])) -
           1L
         annots[[j]] <- list(
@@ -6360,12 +6420,7 @@ cmp_compound_distribution <- function(
         showgrid = FALSE,
         zeroline = FALSE,
         color = axis_color,
-        showticklabels = ifelse(
-          !is.null(distribution_labels),
-          distribution_labels,
-          max(nchar(as.character(unique(tbl$`Sample ID`)))) <= 22 |
-            nrow(tbl) < 4
-        )
+        showticklabels = if (!is.null(distribution_labels)) distribution_labels else TRUE
       ),
       yaxis = list(
         range = range,
@@ -6600,7 +6655,7 @@ stats_histogram <- function(
       x = ~`% Unmatched`,
       name = "Unmatched [%]",
       marker = list(color = col, line = list(color = colb, width = 0.5)),
-      xbins = list(start = 0, end = 100, size = 1)
+      xbins = list(start = 0, end = 101, size = 1)
     )
   } else {
     p <- plotly::add_histogram(
@@ -6609,7 +6664,7 @@ stats_histogram <- function(
       x = ~`% Correct`,
       name = "Correct [%]",
       marker = list(color = col, line = list(color = colb, width = 0.5)),
-      xbins = list(start = 0, end = 100, size = 1)
+      xbins = list(start = 0, end = 101, size = 1)
     )
   }
   p |>
@@ -6720,11 +6775,9 @@ stats_boxplot <- function(
          line = list(color = box_col, width = 1.5))
   )
 
-  p <- plotly::plot_ly()
   if (show_points) {
     x_jit <- stats::runif(nrow(df), -box_half_width, box_half_width)
-    p <- plotly::add_trace(
-      p,
+    p <- plotly::plot_ly(
       type = "scatter",
       mode = "markers",
       x = x_jit,
@@ -6754,6 +6807,15 @@ stats_boxplot <- function(
         size = 8,
         line = list(color = dot_border_color, width = 1.5)
       )
+    )
+  } else {
+    p <- plotly::plot_ly(
+      type = "scatter",
+      mode = "markers",
+      x = numeric(0),
+      y = numeric(0),
+      showlegend = FALSE,
+      hoverinfo = "none"
     )
   }
 

@@ -406,201 +406,181 @@ server <- function(
             'document.getElementById("blocking-overlay").style.display = "block";'
           )
 
-          shinyjs::delay(100, {
-            # Preset logical flags
-            ki_kinact_check <- FALSE
-            no_hits_found <- FALSE
+          # Preset logical flags
+          ki_kinact_check <- FALSE
+          no_hits_found <- FALSE
 
-            # Accumulate messages for protocol log snapshot
-            log_lines <- character(0)
+          # Accumulate messages for protocol log snapshot
+          log_lines <- character(0)
 
-            # Add hits
-            withCallingHandlers(
-              expr = {
-                result_with_hits <- add_hits(
-                  conversion_main_vars$input_list()$result,
-                  sample_table = conversion_main_vars$input_list()$Samples_Table,
-                  protein_table = conversion_main_vars$input_list()$Protein_Table,
-                  compound_table = conversion_main_vars$input_list()$Compound_Table,
-                  peak_tolerance = input$peak_tolerance,
-                  max_multiples = input$max_multiples,
-                  session = session,
-                  ns = ns,
-                  ki_kinact = isTRUE(input$run_ki_kinact),
-                  config = config_file()
+          # Add hits
+          withCallingHandlers(
+            expr = {
+              result_with_hits <- add_hits(
+                conversion_main_vars$input_list()$result,
+                sample_table = conversion_main_vars$input_list()$Samples_Table,
+                protein_table = conversion_main_vars$input_list()$Protein_Table,
+                compound_table = conversion_main_vars$input_list()$Compound_Table,
+                peak_tolerance = input$peak_tolerance,
+                max_multiples = input$max_multiples,
+                session = session,
+                ns = ns,
+                ki_kinact = isTRUE(input$run_ki_kinact),
+                config = config_file()
+              )
+
+              result_with_hits$hits_summary <- summarize_hits(
+                result_with_hits,
+                sample_table = conversion_main_vars$input_list()$Samples_Table
+              )
+
+              if (sum(!is.na(result_with_hits$hits_summary$Compound)) == 0) {
+                no_hits_found <- TRUE
+                message(
+                  "No hits detected — result interface will not be loaded.\n"
+                )
+              }
+
+              # If Ki/kinact analysis is set to be performed
+              if (!no_hits_found && input$run_ki_kinact) {
+                message(paste("COMPUTING BINDING KINETICS\n  │"))
+
+                # Get concentration and time units
+                conc_time <- names(
+                  result_with_hits$hits_summary
+                )[unlist(sapply(
+                  c("Concentration", "Time"),
+                  grep,
+                  names(result_with_hits$hits_summary)
+                ))]
+                units <- gsub("Concentration |Time |\\[|\\]", "", conc_time)
+                names(units) <- c("Concentration", "Time")
+
+                # Log initiation of binding kinetics analysis
+                log_binding_kinetics(
+                  concentrations = result_with_hits$hits_summary[[conc_time[
+                    1
+                  ]]],
+                  times = result_with_hits$hits_summary[[conc_time[2]]],
+                  units = units
                 )
 
-                result_with_hits$hits_summary <- summarize_hits(
-                  result_with_hits,
-                  sample_table = conversion_main_vars$input_list()$Samples_Table
+                # Perform checks for binding kinetics analysis prerequisites
+                hits_summary_filtered <- check_filter_hits(
+                  result_with_hits
                 )
 
-                if (sum(!is.na(result_with_hits$hits_summary$Compound)) == 0) {
-                  no_hits_found <- TRUE
-                  message(
-                    "No hits detected — result interface will not be loaded.\n"
+                ki_kinact_check <- is.data.frame(hits_summary_filtered)
+                ki_kinact_available(ki_kinact_check)
+
+                if (ki_kinact_check) {
+                  # Log filtered samples
+                  log_filtered_samples(
+                    diff = nrow(result_with_hits$hits_summary) -
+                      nrow(hits_summary_filtered)
                   )
-                }
 
-                # If Ki/kinact analysis is set to be performed
-                if (!no_hits_found && input$run_ki_kinact) {
-                  message(paste("COMPUTING BINDING KINETICS\n  │"))
+                  # Log filtered concentrations
+                  log_filtered_concentrations(
+                    initial_tbl = result_with_hits$hits_summary,
+                    filtered_tbl = hits_summary_filtered,
+                    conc_time = conc_time
+                  )
 
-                  # Get concentration and time units
-                  conc_time <- names(
-                    result_with_hits$hits_summary
-                  )[unlist(sapply(
-                    c("Concentration", "Time"),
-                    grep,
-                    names(result_with_hits$hits_summary)
-                  ))]
-                  units <- gsub("Concentration |Time |\\[|\\]", "", conc_time)
-                  names(units) <- c("Concentration", "Time")
-
-                  # Log initiation of binding kinetics analysis
-                  log_binding_kinetics(
-                    concentrations = result_with_hits$hits_summary[[conc_time[
-                      1
-                    ]]],
-                    times = result_with_hits$hits_summary[[conc_time[2]]],
+                  # Add binding/kobs results to result list
+                  result_with_hits$binding_kobs_result <- add_kobs_binding_result(
+                    hits_summary_filtered,
+                    conc_time = conc_time,
                     units = units
                   )
 
-                  # Perform checks for binding kinetics analysis prerequisites
-                  hits_summary_filtered <- check_filter_hits(
-                    result_with_hits
+                  # Add Ki/kinact results to result list
+                  result_with_hits$ki_kinact_result <- add_ki_kinact_result(
+                    result_with_hits,
+                    units = units
                   )
-
-                  ki_kinact_check <- is.data.frame(hits_summary_filtered)
-                  ki_kinact_available(ki_kinact_check)
-
-                  if (ki_kinact_check) {
-                    # Log filtered samples
-                    log_filtered_samples(
-                      diff = nrow(result_with_hits$hits_summary) -
-                        nrow(hits_summary_filtered)
-                    )
-
-                    # Log filtered concentrations
-                    log_filtered_concentrations(
-                      initial_tbl = result_with_hits$hits_summary,
-                      filtered_tbl = hits_summary_filtered,
-                      conc_time = conc_time
-                    )
-
-                    # Add binding/kobs results to result list
-                    result_with_hits$binding_kobs_result <- add_kobs_binding_result(
-                      hits_summary_filtered,
-                      conc_time = conc_time,
-                      units = units
-                    )
-
-                    # Add Ki/kinact results to result list
-                    result_with_hits$ki_kinact_result <- add_ki_kinact_result(
-                      result_with_hits,
-                      units = units
-                    )
-                  }
                 }
-              },
-              message = function(m) {
-                clean_msg <- gsub("\n", "<br>", m$message)
-                log_lines <<- c(log_lines, clean_msg)
-                invokeRestart("muffleMessage")
               }
+            },
+            message = function(m) {
+              clean_msg <- gsub("\n", "<br>", m$message)
+              log_lines <<- c(log_lines, clean_msg)
+              invokeRestart("muffleMessage")
+            }
+          )
+
+          if (no_hits_found) {
+            # No hits — log, re-enable inputs, stay in declaration
+            write_log("Conversion finalized — no hits detected")
+
+            shinyjs::enable("run_ki_kinact")
+            shinyjs::removeClass(
+              selector = ".checkbox",
+              class = "checkbox-disable"
+            )
+            shinyjs::enable("peak_tolerance")
+            shinyjs::enable("max_multiples")
+            shiny::updateActionButton(
+              session = session,
+              "run_binding_analysis",
+              label = "Start",
+              icon = shiny::icon("play"),
+              disabled = FALSE
+            )
+            shinyjs::runjs(
+              'document.getElementById("blocking-overlay").style.display = "none";'
+            )
+            analysis_running(FALSE)
+            shinyWidgets::show_toast(
+              title = "No hits detected",
+              text = "Please review your parameters.",
+              type = "warning",
+              timer = 5000,
+              timerProgressBar = TRUE
+            )
+          } else {
+            # Assign result list and hits table to reactive vars
+            write_log(paste(
+              "Conversion finalized —",
+              sum(!is.na(result_with_hits$hits_summary$Compound)),
+              "hit(s)"
+            ))
+            result_list(result_with_hits)
+
+            # Save distinct protein - compound combinations/complexes
+            complex_df <- dplyr::distinct(
+              result_with_hits$hits_summary,
+              Protein,
+              Compound
+            ) |>
+              dplyr::filter(!is.na(Compound))
+
+            choice_values <- stats::setNames(
+              complex_df$Compound,
+              complex_df$Compound
             )
 
-            if (no_hits_found) {
-              # No hits — log, re-enable inputs, stay in declaration
-              write_log("Conversion finalized — no hits detected")
+            complexes <- split(choice_values, complex_df$Protein)
 
-              shinyjs::enable("run_ki_kinact")
-              shinyjs::removeClass(
-                selector = ".checkbox",
-                class = "checkbox-disable"
-              )
-              shinyjs::enable("peak_tolerance")
-              shinyjs::enable("max_multiples")
-              shiny::updateActionButton(
-                session = session,
-                "run_binding_analysis",
-                label = "Start",
-                icon = shiny::icon("play"),
-                disabled = FALSE
-              )
-              shinyjs::runjs(
-                'document.getElementById("blocking-overlay").style.display = "none";'
-              )
-              analysis_running(FALSE)
-              n_samples <- length(unique(result_with_hits$hits_summary$Sample))
-              shiny::showModal(shiny::modalDialog(
-                title = shiny::tagList(
-                  shiny::icon("circle-xmark", style = "color: #dc3545; margin-right: 8px;"),
-                  "No hits detected"
-                ),
-                shiny::tags$p(paste0(n_samples, " sample(s) screened.")),
-                shiny::tags$p("Please review your parameters."),
-                footer = shiny::modalButton("Dismiss"),
-                easyClose = TRUE,
-                size = "m"
-              ))
-            } else {
-              # Assign result list and hits table to reactive vars
-              write_log(paste(
-                "Conversion finalized —",
-                sum(!is.na(result_with_hits$hits_summary$Compound)),
-                "hit(s)"
-              ))
-              result_list(result_with_hits)
+            complexes(complexes)
 
-              # Save distinct protein - compound combinations/complexes
-              complex_df <- dplyr::distinct(
-                result_with_hits$hits_summary,
-                Protein,
-                Compound
-              ) |>
-                dplyr::filter(!is.na(Compound))
+            # Update sidebar control inputs
+            shiny::updateActionButton(
+              session = session,
+              "run_binding_analysis",
+              label = "Reset",
+              icon = shiny::icon("repeat")
+            )
+            shinyjs::disable("peak_tolerance")
+            shinyjs::disable("max_multiples")
 
-              choice_values <- stats::setNames(
-                complex_df$Compound,
-                complex_df$Compound
-              )
-
-              complexes <- split(choice_values, complex_df$Protein)
-
-              complexes(complexes)
-
-              # Update sidebar control inputs
-              shiny::updateActionButton(
-                session = session,
-                "run_binding_analysis",
-                label = "Reset",
-                icon = shiny::icon("repeat")
-              )
-              shinyjs::disable("peak_tolerance")
-              shinyjs::disable("max_multiples")
-
-              console_log_snapshot(paste(log_lines, collapse = ""))
-              shinyjs::runjs(
-                'document.getElementById("blocking-overlay").style.display = "none";'
-              )
-              analysis_running(FALSE)
-              analysis_status("done")
-              n_samples <- length(unique(result_with_hits$hits_summary$Sample))
-              n_hits <- sum(!is.na(result_with_hits$hits_summary$Compound))
-              shiny::showModal(shiny::modalDialog(
-                title = shiny::tagList(
-                  shiny::icon("circle-check", style = "color: #28a745; margin-right: 8px;"),
-                  "Analysis completed"
-                ),
-                shiny::tags$p(paste0(n_samples, " sample(s) screened.")),
-                shiny::tags$p(paste0(n_hits, " hit(s) detected.")),
-                footer = shiny::modalButton("Dismiss"),
-                easyClose = TRUE,
-                size = "m"
-              ))
-            }
-          }) # end shinyjs::delay
+            console_log_snapshot(paste(log_lines, collapse = ""))
+            shinyjs::runjs(
+              'document.getElementById("blocking-overlay").style.display = "none";'
+            )
+            analysis_running(FALSE)
+            analysis_status("done")
+          }
         } else {
           write_log("Conversion reset")
           result_list(NULL)
