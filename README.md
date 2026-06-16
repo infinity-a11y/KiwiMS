@@ -1,10 +1,15 @@
 <img src="KiwiMS_App/resources/KiwiMS.png" align="right" width="20%"/>
 
-KiwiMS is an interactive pipeline with graphical user interface to perform proteomics mass spectrometry data analysis. It implements UniDec's (https://github.com/michaelmarty/UniDec) bayesian mass spectra deconvolution method and provides downstream analyses for protein binding studies.
+KiwiMS is an open-source desktop app that turns intact-protein mass spectrometry into covalent target-engagement data — automating charge deconvolution, adduct and stoichiometry assignment, occupancy, and k_inact/K_I kinetics for targeted covalent inhibitor (TCI) screening, no scripting required.
+Built on UniDec (https://github.com/michaelmarty/UniDec), it processes whole microplates in parallel and outputs interactive plots and shareable reports — taking you from raw output files to ranked covalent binders in one workflow.
 
 ![Windows](https://img.shields.io/badge/Windows-339033?style=flat&logo=windows&logoColor=white) [![Version](https://img.shields.io/badge/Version-0.7.0-E8CB98)](https://github.com/infinity-a11y/KiwiMS/releases/tag/0.7.0) [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-659DA3.svg)](https://www.gnu.org/licenses/gpl-3.0) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.16575977.svg)](https://doi.org/10.5281/zenodo.16575976)
 
-<sup>*KiwiMS is supposed to be used for research and academic purposes only.*</sup>
+<br>
+<img src="KiwiMS_App/resources/hfu_logo.webp" width="200"/>
+<img src="KiwiMS_App/resources/bmftr_logo.webp" width="200"/>
+Developed at Hochschule Furtwangen. Funded by Federal Ministry of Research, Technologies and Space.
+
 <br><br>
 ## Current Version
 <b>KiwiMS 0.7.0</b> <br> <https://github.com/infinity-a11y/KiwiMS/releases/tag/0.7.0>
