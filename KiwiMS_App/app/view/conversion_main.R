@@ -4553,7 +4553,10 @@ server <- function(
 
             output$pstat_n_samples <- shiny::renderUI({
               shiny::div(
-                shiny::div(class = "protocol-stat-value", nrow(hits_summary)),
+                shiny::div(
+                  class = "protocol-stat-value",
+                  length(unique(hits_summary$`Sample ID`))
+                ),
                 shiny::div(
                   class = "protocol-stat-sub",
                   "samples subjected to analysis"
@@ -5087,7 +5090,8 @@ server <- function(
                 input$hits_tab_compound_select,
                 input$hits_tab_sample_select
               )
-            }) |> shiny::debounce(200)
+            }) |>
+              shiny::debounce(200)
 
             output$hits_unified_tab <- DT::renderDT({
               shiny::req(
