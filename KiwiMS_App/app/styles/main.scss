@@ -930,11 +930,21 @@ input[type="number"]::-webkit-inner-spin-button {
   border: none;
 }
 
-.result-picker .selectize-dropdown-content {
-  width: 100%;
+.result-picker .bootstrap-select {
+  width: 100% !important;
 }
 
-.result-picker .selectize-dropdown .selectize-dropdown .option {
+.result-picker .bootstrap-select .dropdown-menu {
+  width: 100% !important;
+  inset: auto !important;
+  top: 100% !important;
+  left: 0 !important;
+  right: auto !important;
+  margin: 0 !important;
+  transform: none !important;
+}
+
+.result-picker .bootstrap-select .dropdown-menu .text {
   text-align: left;
 }
 
@@ -1670,7 +1680,7 @@ code {
 
 /* Result Picker & Misc */
 
-.result-picker .selectize-control.single .selectize-input {
+.result-picker .bootstrap-select > .dropdown-toggle {
   height: 47px;
   border: 1px solid #000;
   background-color: #e5e5e5 !important;
@@ -4565,8 +4575,19 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   margin: calc(var(--bs-modal-footer-gap) * 0.5);
 }
 
+// The outer .dropdown-menu wraps both the search box and the scrollable
+// option list, which also carries the ".dropdown-menu.inner" class. Capping
+// max-height on the ambiguous ".dropdown-menu" selector clips the outer
+// wrapper too, cutting off the last group even though the inner list still
+// reports room to scroll. Constrain only the actual scrollable inner list.
 .conversion-samples-control .bootstrap-select .dropdown-menu {
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.conversion-samples-control .bootstrap-select .dropdown-menu.inner {
   max-height: 350px !important;
+  overflow-y: auto !important;
 }
 
 #app-conversion_sidebar-analysis_select {

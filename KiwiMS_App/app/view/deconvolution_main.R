@@ -19,7 +19,9 @@ box::use(
   shinyWidgets[
     progressBar,
     radioGroupButtons,
-    updateProgressBar
+    updateProgressBar,
+    pickerInput,
+    pickerOptions
   ],
   clipr[write_clip],
   utils[capture.output, head, tail],
@@ -1335,10 +1337,14 @@ server <- function(
       output$result_picker_ui <- shiny$renderUI(
         shiny$div(
           class = "result-picker",
-          disabled(shiny$selectInput(
+          disabled(pickerInput(
             ns("result_picker"),
             "Select Sample",
-            choices = ""
+            choices = "",
+            options = pickerOptions(
+              liveSearch = TRUE,
+              liveSearchPlaceholder = "Search samples ..."
+            )
           ))
         )
       )
@@ -1770,11 +1776,15 @@ server <- function(
                   output$result_picker_ui <- shiny$renderUI({
                     shiny$div(
                       class = "result-picker",
-                      shiny$selectInput(
+                      pickerInput(
                         ns("result_picker"),
                         "Select Sample",
                         choices = named_choices,
-                        selected = result_files_sel()
+                        selected = result_files_sel(),
+                        options = pickerOptions(
+                          liveSearch = TRUE,
+                          liveSearchPlaceholder = "Search samples ..."
+                        )
                       )
                     )
                   })
@@ -1852,11 +1862,15 @@ server <- function(
                 output$result_picker_ui <- shiny$renderUI({
                   shiny$div(
                     class = "result-picker",
-                    shiny$selectInput(
+                    pickerInput(
                       ns("result_picker"),
                       "Select Sample",
                       choices = named_choices,
-                      selected = sel_default
+                      selected = sel_default,
+                      options = pickerOptions(
+                        liveSearch = TRUE,
+                        liveSearchPlaceholder = "Search samples ..."
+                      )
                     )
                   )
                 })
@@ -2074,11 +2088,15 @@ server <- function(
                   output$result_picker_ui <- shiny$renderUI(
                     shiny$div(
                       class = "result-picker",
-                      shiny$selectInput(
+                      pickerInput(
                         ns("result_picker"),
                         "Select Sample",
                         choices = named_choices,
-                        selected = result_files_sel()
+                        selected = result_files_sel(),
+                        options = pickerOptions(
+                          liveSearch = TRUE,
+                          liveSearchPlaceholder = "Search samples ..."
+                        )
                       )
                     )
                   )
@@ -2170,11 +2188,15 @@ server <- function(
                   output$result_picker_ui <- shiny$renderUI(
                     shiny$div(
                       class = "result-picker",
-                      shiny$selectInput(
+                      pickerInput(
                         ns("result_picker"),
                         "Select Sample",
                         choices = named_choices,
-                        selected = sel_default
+                        selected = sel_default,
+                        options = pickerOptions(
+                          liveSearch = TRUE,
+                          liveSearchPlaceholder = "Search samples ..."
+                        )
                       )
                     )
                   )

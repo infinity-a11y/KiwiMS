@@ -2852,7 +2852,7 @@ server <- function(
               if (!length(choices)) {
                 choices <- character(0)
               }
-              shiny::updateSelectInput(
+              shinyWidgets::updatePickerInput(
                 session,
                 "total_pct_prot_binding_select",
                 choices = choices

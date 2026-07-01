@@ -1319,33 +1319,39 @@ binding_results_ui <- function(ns, hits_summary) {
               shinyWidgets::pickerInput(
                 ns("conversion_sample_picker"),
                 "Select Sample",
-                choices = if (anyNA(hits_summary$`Cmp Name`)) {
-                  # Extract the vectors
-                  hits_vec <- unique(hits_summary$`Sample ID`[
-                    !is.na(hits_summary$`Cmp Name`)
-                  ])
-                  no_hits_vec <- unique(hits_summary$`Sample ID`[is.na(
-                    hits_summary$`Cmp Name`
-                  )])
-
+                choices = {
                   choices_list <- list()
-                  if (length(hits_vec)) {
-                    choices_list[["Hits"]] <- stats::setNames(
-                      hits_vec,
-                      hits_vec
-                    )
+                  cmp_col <- as.character(hits_summary$`Cmp Name`)
+                  sample_col <- as.character(hits_summary$`Sample ID`)
+                  # Treat missing/blank/placeholder compound values as "no hit"
+                  no_cmp <- is.na(cmp_col) |
+                    !nzchar(trimws(cmp_col)) |
+                    trimws(cmp_col) %in% c("N/A", "NA")
+                  no_sample <- is.na(sample_col) | !nzchar(trimws(sample_col))
+
+                  cmp_names <- unique(cmp_col[!no_cmp])
+                  for (cmp in cmp_names) {
+                    cmp_samples <- unique(sample_col[
+                      !no_cmp & !no_sample & cmp_col == cmp
+                    ])
+                    if (length(cmp_samples)) {
+                      choices_list[[paste0("Compound: ", cmp)]] <-
+                        stats::setNames(cmp_samples, cmp_samples)
+                    }
                   }
+                  no_hits_vec <- unique(sample_col[no_cmp & !no_sample])
                   if (length(no_hits_vec)) {
                     choices_list[["No Hits"]] <- stats::setNames(
                       no_hits_vec,
                       no_hits_vec
                     )
                   }
-
                   choices_list
-                } else {
-                  unique(hits_summary$`Sample ID`)
-                }
+                },
+                options = shinyWidgets::pickerOptions(
+                  liveSearch = TRUE,
+                  liveSearchPlaceholder = "Search samples ..."
+                )
               )
             ),
             shiny::div(
@@ -1590,13 +1596,29 @@ binding_results_ui <- function(ns, hits_summary) {
               shinyWidgets::pickerInput(
                 ns("conversion_compound_picker"),
                 "Select Compound",
-                choices = unique(
-                  hits_summary$`Cmp Name`
-                )[
-                  !is.na(unique(
-                    hits_summary$`Cmp Name`
-                  ))
-                ]
+                choices = {
+                  choices_list <- list()
+                  cmp_col <- as.character(hits_summary$`Cmp Name`)
+                  prot_col <- as.character(hits_summary$`Protein`)
+                  no_cmp <- is.na(cmp_col) | !nzchar(trimws(cmp_col))
+                  no_prot <- is.na(prot_col) | !nzchar(trimws(prot_col))
+
+                  prot_names <- unique(prot_col[!no_prot])
+                  for (prot in prot_names) {
+                    prot_cmps <- unique(cmp_col[
+                      !no_cmp & !no_prot & prot_col == prot
+                    ])
+                    if (length(prot_cmps)) {
+                      choices_list[[paste0("Protein: ", prot)]] <-
+                        stats::setNames(prot_cmps, prot_cmps)
+                    }
+                  }
+                  choices_list
+                },
+                options = shinyWidgets::pickerOptions(
+                  liveSearch = TRUE,
+                  liveSearchPlaceholder = "Search compounds ..."
+                )
               )
             ),
             shiny::div(
@@ -1860,7 +1882,11 @@ binding_results_ui <- function(ns, hits_summary) {
                   hits_summary$`Protein`
                 )[
                   !is.na(unique(hits_summary$`Protein`))
-                ]
+                ],
+                options = shinyWidgets::pickerOptions(
+                  liveSearch = TRUE,
+                  liveSearchPlaceholder = "Search proteins ..."
+                )
               )
             ),
             shiny::div(
@@ -1910,12 +1936,16 @@ binding_results_ui <- function(ns, hits_summary) {
                       class = "box-header-settings-help",
                       card_settings_popover(
                         shiny::div(
-                          shiny::selectInput(
+                          shinyWidgets::pickerInput(
                             ns("total_pct_prot_binding_select"),
                             "Select Compound",
                             choices = unique(hits_summary$`Cmp Name`[
                               !is.na(hits_summary$`Cmp Name`)
-                            ])
+                            ]),
+                            options = shinyWidgets::pickerOptions(
+                              liveSearch = TRUE,
+                              liveSearchPlaceholder = "Search compounds ..."
+                            )
                           ),
                           style = "margin-right: 20px;"
                         )

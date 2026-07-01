@@ -927,7 +927,7 @@ deconvolution_results_ui <- function(ns, show_heatmap = FALSE) {
                 value = TRUE,
                 right = TRUE
               ),
-              style = "margin-right: 20px;"
+              style = "padding-right: 20px;"
             )
           ),
           plot_dl_popover(ns, "decon_spectrum"),
