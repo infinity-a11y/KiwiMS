@@ -459,7 +459,26 @@ server <- function(
     output$conversion_ui <- shiny::renderUI({
       shiny::req(!conversion_sidebar_vars$analysis_running())
       shiny::req(is.null(conversion_sidebar_vars$result_list()))
-      conversion_declaration_ui(ns)
+      shiny::isolate(conversion_declaration_ui(
+        ns,
+        proteins_status = if (isTRUE(declaration_vars$protein_table_status)) {
+          "confirmed"
+        } else {
+          ""
+        },
+        compounds_status = if (
+          isTRUE(declaration_vars$compound_table_status)
+        ) {
+          "confirmed"
+        } else {
+          ""
+        },
+        samples_status = if (isTRUE(declaration_vars$samples_confirmed)) {
+          "confirmed"
+        } else {
+          ""
+        }
+      ))
     })
 
     ### UI Render Functions ----
