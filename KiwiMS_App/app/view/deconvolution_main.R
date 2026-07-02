@@ -2576,6 +2576,48 @@ server <- function(
           spectrum_ready(TRUE)
           return(spectrum)
         }
+
+        # Neither the DB nor the on-disk UniDec output had data to show.
+        # For the raw m/z view this is expected when "Keep UniDec output files" was
+        # off during deconvolution, since the raw files were never written
+        # to disk. Surface a hint instead of leaving a blank plot.
+        waiter_hide(id = ns("spectrum"))
+        spectrum_ready(TRUE)
+
+        hint_text <- if (is_raw_toggle) {
+          if (!isTRUE(read_user_settings()$deconv_keep_raw_output)) {
+            paste0(
+              "No raw m/z spectrum available.<br>",
+              "Enable \"Keep UniDec output files\" in Settings before running ",
+              "deconvolution to store raw spectra for this view."
+            )
+          } else {
+            "No raw m/z spectrum available for this sample."
+          }
+        } else {
+          "No spectrum data available for this sample."
+        }
+
+        return(
+          plotly::plot_ly(type = "scatter", mode = "markers") |>
+            plotly::layout(
+              paper_bgcolor = "rgba(0,0,0,0)",
+              plot_bgcolor = "rgba(0,0,0,0)",
+              xaxis = list(visible = FALSE),
+              yaxis = list(visible = FALSE),
+              annotations = list(list(
+                x = 0.5,
+                y = 0.5,
+                xref = "paper",
+                yref = "paper",
+                xanchor = "center",
+                yanchor = "middle",
+                text = hint_text,
+                showarrow = FALSE,
+                font = list(size = 14, color = "white")
+              ))
+            )
+        )
       })
 
       output$deconvolution_data <- DT::renderDataTable(server = FALSE, {

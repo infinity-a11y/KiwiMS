@@ -9,7 +9,6 @@ box::use(
   shinyWidgets[
     pickerInput,
     progressBar,
-    radioGroupButtons,
     updateProgressBar
   ],
   clipr[write_clip],
@@ -915,10 +914,11 @@ deconvolution_results_ui <- function(ns, show_heatmap = FALSE) {
             shiny::div(
               shiny::div(
                 class = "spectrum-radio-button",
-                radioGroupButtons(
+                shiny::radioButtons(
                   ns("toggle_result"),
-                  choiceNames = c("Deconvoluted", "Raw m/z"),
-                  choiceValues = c(FALSE, TRUE)
+                  label = NULL,
+                  choiceNames = list("Deconvoluted", "Raw m/z"),
+                  choiceValues = list(FALSE, TRUE)
                 )
               ),
               shinyWidgets::materialSwitch(
