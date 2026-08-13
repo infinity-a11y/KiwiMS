@@ -13,7 +13,7 @@ box::use(
       summarize_hits,
       check_filter_hits,
       add_kobs_binding_result,
-      add_ki_kinact_result,
+      add_kinact_ki_result,
       log_binding_kinetics,
       log_filtered_samples,
       log_filtered_concentrations,
@@ -60,7 +60,7 @@ server <- function(
     result_list <- shiny::reactiveVal(NULL)
     complexes <- shiny::reactiveVal(NULL)
     analysis_status <- shiny::reactiveVal("pending")
-    ki_kinact_available <- shiny::reactiveVal(FALSE)
+    kinact_ki_available <- shiny::reactiveVal(FALSE)
     console_log_snapshot <- shiny::reactiveVal(NULL)
     analysis_running <- shiny::reactiveVal(FALSE)
 
@@ -171,18 +171,18 @@ server <- function(
           width = "100%"
         ),
         shiny::div(
-          class = "ki-kinact-checkbox",
+          class = "kinact-ki-checkbox",
           shiny::checkboxInput(
-            ns("run_ki_kinact"),
+            ns("run_kinact_ki"),
             shiny::span(
-              class = "ki-kinact-label",
+              class = "kinact-ki-label",
               "Run",
               shiny::div(
-                class = "ki-kinact-highlight",
-                " K",
-                htmltools::tags$sub("i"),
-                " / k",
-                htmltools::tags$sub("inact")
+                class = "kinact-ki-highlight",
+                " k",
+                htmltools::tags$sub("inact"),
+                " / K",
+                htmltools::tags$sub("i")
               ),
               " Analysis"
             ),
@@ -273,13 +273,13 @@ server <- function(
       )
     })
 
-    # Activate ki_kinact from config autofill signal ----
+    # Activate kinact_ki from config autofill signal ----
     safe_observe(
-      event_expr = conversion_main_vars$activate_ki_kinact(),
-      observer_name = "Activate Ki/kinact from Config",
+      event_expr = conversion_main_vars$activate_kinact_ki(),
+      observer_name = "Activate kinact/Ki from Config",
       handler_fn = function() {
-        shiny::req(conversion_main_vars$activate_ki_kinact() > 0)
-        shiny::updateCheckboxInput(session, "run_ki_kinact", value = TRUE)
+        shiny::req(conversion_main_vars$activate_kinact_ki() > 0)
+        shiny::updateCheckboxInput(session, "run_kinact_ki", value = TRUE)
       }
     )
 
@@ -287,7 +287,7 @@ server <- function(
     ## Idle checkbox ----
     # Temporarily blocking UI and wait for conversion main module server answer to allow Start button to react
     safe_observe(
-      event_expr = input$run_ki_kinact,
+      event_expr = input$run_kinact_ki,
       observer_name = "Checkbox Idle",
       handler_fn = function() {
         # Block UI
@@ -312,7 +312,7 @@ server <- function(
     #   event_expr = conversion_main_vars$samples_confirmed(),
     #   observer_name = "Checkbox Toggle",
     #   handler_fn = function() {
-    #     shinyjs::toggleState("run_ki_kinact")
+    #     shinyjs::toggleState("run_kinact_ki")
     #     shinyjs::toggleClass(selector = ".checkbox", class = "checkbox-disable")
     #   }
     # )
@@ -364,8 +364,8 @@ server <- function(
           label = "Start",
           icon = shiny::icon("play")
         )
-        # Enable ki/kinact analysis checkbox
-        shinyjs::enable("run_ki_kinact")
+        # Enable kinact/Ki analysis checkbox
+        shinyjs::enable("run_kinact_ki")
         shinyjs::removeClass(
           selector = ".checkbox",
           class = "checkbox-disable"
@@ -389,15 +389,15 @@ server <- function(
             "Conversion parameters:\n",
             paste(
               c(
-                paste("Ki/kinact =", isTRUE(input$run_ki_kinact)),
+                paste("kinact/Ki =", isTRUE(input$run_kinact_ki)),
                 paste("Peak Tolerance =", input$peak_tolerance, "Da"),
                 paste("Max. Stoichiometry =", input$max_multiples)
               ),
               collapse = "\n "
             )
           ))
-          # Disable ki/kinact analysis checkbox
-          shinyjs::disable("run_ki_kinact")
+          # Disable kinact/Ki analysis checkbox
+          shinyjs::disable("run_kinact_ki")
           shinyjs::addClass(selector = ".checkbox", class = "checkbox-disable")
 
           # Show spinner on conversion_ui while computation runs
@@ -407,7 +407,7 @@ server <- function(
           )
 
           # Preset logical flags
-          ki_kinact_check <- FALSE
+          kinact_ki_check <- FALSE
           no_hits_found <- FALSE
 
           # Accumulate messages for protocol log snapshot
@@ -425,7 +425,7 @@ server <- function(
                 max_multiples = input$max_multiples,
                 session = session,
                 ns = ns,
-                ki_kinact = isTRUE(input$run_ki_kinact),
+                kinact_ki = isTRUE(input$run_kinact_ki),
                 config = config_file()
               )
 
@@ -441,8 +441,8 @@ server <- function(
                 )
               }
 
-              # If Ki/kinact analysis is set to be performed
-              if (!no_hits_found && input$run_ki_kinact) {
+              # If kinact/Ki analysis is set to be performed
+              if (!no_hits_found && input$run_kinact_ki) {
                 message(paste("COMPUTING BINDING KINETICS\n  │"))
 
                 # Get concentration and time units
@@ -470,10 +470,10 @@ server <- function(
                   result_with_hits
                 )
 
-                ki_kinact_check <- is.data.frame(hits_summary_filtered)
-                ki_kinact_available(ki_kinact_check)
+                kinact_ki_check <- is.data.frame(hits_summary_filtered)
+                kinact_ki_available(kinact_ki_check)
 
-                if (ki_kinact_check) {
+                if (kinact_ki_check) {
                   # Log filtered samples
                   log_filtered_samples(
                     diff = nrow(result_with_hits$hits_summary) -
@@ -494,8 +494,8 @@ server <- function(
                     units = units
                   )
 
-                  # Add Ki/kinact results to result list
-                  result_with_hits$ki_kinact_result <- add_ki_kinact_result(
+                  # Add kinact/Ki results to result list
+                  result_with_hits$kinact_ki_result <- add_kinact_ki_result(
                     result_with_hits,
                     units = units
                   )
@@ -513,7 +513,7 @@ server <- function(
             # No hits — log, re-enable inputs, stay in declaration
             write_log("Conversion finalized — no hits detected")
 
-            shinyjs::enable("run_ki_kinact")
+            shinyjs::enable("run_kinact_ki")
             shinyjs::removeClass(
               selector = ".checkbox",
               class = "checkbox-disable"
@@ -585,11 +585,11 @@ server <- function(
           write_log("Conversion reset")
           result_list(NULL)
           console_log_snapshot(NULL)
-          ki_kinact_available(FALSE)
+          kinact_ki_available(FALSE)
           analysis_status("pending")
 
-          # Enable ki/kinact analysis checkbox
-          shinyjs::enable("run_ki_kinact")
+          # Enable kinact/Ki analysis checkbox
+          shinyjs::enable("run_kinact_ki")
           shinyjs::removeClass(
             selector = ".checkbox",
             class = "checkbox-disable"
@@ -604,7 +604,7 @@ server <- function(
             ),
             class = "custom-disable"
           )
-          if (input$run_ki_kinact) {
+          if (input$run_kinact_ki) {
             shinyjs::addClass(
               selector = "#app-conversion_sidebar-analysis_select .radio:nth-child(4)",
               class = "custom-disable"
@@ -642,7 +642,7 @@ server <- function(
 
     ## Render analysis select input element ----
     output$analysis_select_ui <- shiny::renderUI({
-      ki <- ki_kinact_available()
+      ki <- kinact_ki_available()
       shiny::tagList(
         shiny::radioButtons(
           inputId = ns("analysis_select"),
@@ -898,7 +898,7 @@ server <- function(
         run_analysis = shiny::reactive(input$run_binding_analysis),
         peak_tolerance = shiny::reactive(input$peak_tolerance),
         max_multiples = shiny::reactive(input$max_multiples),
-        run_ki_kinact = shiny::reactive(input$run_ki_kinact),
+        run_kinact_ki = shiny::reactive(input$run_kinact_ki),
         analysis_select = shiny::reactive(input$analysis_select),
         open_config_clicked = shiny::reactive(input$open_config_btn),
         console_log_snapshot = shiny::reactive(console_log_snapshot()),

@@ -83,64 +83,6 @@ catch {
 }
 
 #-----------------------------#
-# Create Temporary Directory
-#-----------------------------#
-try {
-    $tempPath = Join-Path $env:TEMP "kiwims_setup"
-    if (-not (Test-Path $tempPath)) {
-        New-Item -Path $tempPath -ItemType Directory -Force | Out-Null
-        Write-Output "Created temporary directory: $tempPath"
-    }
-}
-catch {
-    Write-Output "Creating temporary directory failed: "
-    Stop-Transcript
-    exit 1
-}
-
-#-----------------------------#
-# Determine Report Path
-#-----------------------------#
-try {
-    if ($installScope -eq "allusers") {
-        $reportBase = [Environment]::GetFolderPath("CommonDocuments")
-    }
-    else {
-        $reportBase = [Environment]::GetFolderPath("MyDocuments")
-    }
-    $reportPath = Join-Path $reportBase "KiwiMS\report"
-    
-    if (-not (Test-Path $reportPath)) {
-        New-Item -Path $reportPath -ItemType Directory -Force | Out-Null
-        Write-Output "Created KiwiMS report directory: $reportPath"
-    }
-}
-catch {
-    Write-Output "Defining/Creating report directory failed: "
-    Stop-Transcript
-    exit 1
-}
-
-#-----------------------------#
-# Move Report Files
-#-----------------------------#
-try {
-    $sourcePath = Join-Path $basePath "app\report\*"
-    if (Test-Path $sourcePath) {
-        Move-Item -Path $sourcePath -Destination $reportPath -Force -ErrorAction Stop
-        Write-Output "Moved report files to: $reportPath"
-    }
-    else {
-        Write-Output "No report files found at $sourcePath. Skipping ..."
-    }
-}
-catch {
-    Write-Output "Moving report files failed: "
-    Stop-Transcript
-    exit 1
-}
-
-#-----------------------------#
 # Finalize Configuration
 #-----------------------------#
 try {

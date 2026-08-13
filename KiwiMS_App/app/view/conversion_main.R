@@ -16,8 +16,8 @@ box::use(
       sample_table_legend,
       conversion_declaration_ui,
       binding_results_ui,
-      ki_kinact_results_ui,
-      ki_kinact_concentrations_tabs,
+      kinact_ki_results_ui,
+      kinact_ki_concentrations_tabs,
       summary_results_ui,
       hits_results_ui,
     ],
@@ -25,7 +25,7 @@ box::use(
     logic /
     conversion_functions[
       add_kobs_binding_result,
-      add_ki_kinact_result,
+      add_kinact_ki_result,
       sample_handsontable,
       prot_comp_handsontable,
       set_selected_tab,
@@ -232,7 +232,7 @@ server <- function(
     sample_table_trigger <- shiny::reactiveVal(0)
     render_trigger <- shiny::reactiveVal(0)
     show_completion_toast <- shiny::reactiveVal(NULL)
-    trigger_ki_kinact <- shiny::reactiveVal(0L)
+    trigger_kinact_ki <- shiny::reactiveVal(0L)
     manual_render_spectrum <- shiny::reactiveVal(0L)
     heatmap_pending_sample <- shiny::reactiveVal(NULL)
     stats_scatter_pending_sample <- shiny::reactiveVal(NULL)
@@ -370,7 +370,7 @@ server <- function(
     safe_observe(
       observer_name = "Conditional Adaption of Concentration/Time Input UI",
       handler_fn = function() {
-        if (isTRUE(conversion_sidebar_vars$run_ki_kinact())) {
+        if (isTRUE(conversion_sidebar_vars$run_kinact_ki())) {
           shinyjs::removeClass(
             selector = ".unit-selectors .form-group .bootstrap-select",
             class = "custom-disable"
@@ -664,7 +664,7 @@ server <- function(
             result = declaration_vars$result,
             protein_table = declaration_vars$protein_table,
             compound_table = declaration_vars$compound_table,
-            ki_kinact = conversion_sidebar_vars$run_ki_kinact()
+            kinact_ki = conversion_sidebar_vars$run_kinact_ki()
           ),
           config_file()
         ))
@@ -783,7 +783,7 @@ server <- function(
             result = declaration_vars$result,
             protein_table = declaration_vars$protein_table,
             compound_table = declaration_vars$compound_table,
-            ki_kinact = conversion_sidebar_vars$run_ki_kinact()
+            kinact_ki = conversion_sidebar_vars$run_kinact_ki()
           ),
           config_file()
         ))
@@ -883,9 +883,9 @@ server <- function(
         if (
           has_conc &&
             has_time &&
-            !isTRUE(conversion_sidebar_vars$run_ki_kinact())
+            !isTRUE(conversion_sidebar_vars$run_kinact_ki())
         ) {
-          trigger_ki_kinact(trigger_ki_kinact() + 1L)
+          trigger_kinact_ki(trigger_kinact_ki() + 1L)
         }
       },
       priority = -5
@@ -1076,10 +1076,10 @@ server <- function(
       priority = 100
     )
 
-    ## Event activate ki_kinact analysis ----
+    ## Event activate kinact_ki analysis ----
     safe_observe(
-      event_expr = conversion_sidebar_vars$run_ki_kinact(),
-      observer_name = "Ki/kinact Activation",
+      event_expr = conversion_sidebar_vars$run_kinact_ki(),
+      observer_name = "kinact/Ki Activation",
       handler_fn = function() {
         shiny::req(
           input$samples_table,
@@ -1094,7 +1094,7 @@ server <- function(
 
         if (
           isTRUE(declaration_vars$samples_confirmed) &&
-            isTRUE(conversion_sidebar_vars$run_ki_kinact())
+            isTRUE(conversion_sidebar_vars$run_kinact_ki())
         ) {
           # Make UI changes
           edit_ui_changes(
@@ -1113,11 +1113,11 @@ server <- function(
           # names like "Concentration [M]" / "Time [s]" are handled correctly
           sample_table <- fill_sample_table(
             sample_table_data(),
-            ki_kinact = has_conc_time
+            kinact_ki = has_conc_time
           )
 
           # Only append empty Conc/Time when they were absent before;
-          # fill_sample_table already restores them when ki_kinact = TRUE
+          # fill_sample_table already restores them when kinact_ki = TRUE
           if (!has_conc_time) {
             sample_table_data(cbind(
               sample_table,
@@ -1127,7 +1127,7 @@ server <- function(
           } else {
             sample_table_data(sample_table)
           }
-        } else if (isTRUE(conversion_sidebar_vars$run_ki_kinact())) {
+        } else if (isTRUE(conversion_sidebar_vars$run_kinact_ki())) {
           if (!has_conc_time) {
             sample_table_data(cbind(
               sample_table_data(),
@@ -1177,7 +1177,7 @@ server <- function(
           declaration_vars$samples_confirmed <- FALSE
           sample_table_data(fill_sample_table(
             sample_table_data(),
-            ki_kinact = conversion_sidebar_vars$run_ki_kinact()
+            kinact_ki = conversion_sidebar_vars$run_kinact_ki()
           ))
           sample_table_trigger(sample_table_trigger() + 1)
 
@@ -1283,7 +1283,7 @@ server <- function(
                 result = declaration_vars$result,
                 protein_table = protein_table,
                 compound_table = declaration_vars$compound_table,
-                ki_kinact = conversion_sidebar_vars$run_ki_kinact()
+                kinact_ki = conversion_sidebar_vars$run_kinact_ki()
               ),
               config_file()
             )
@@ -1334,7 +1334,7 @@ server <- function(
                 result = declaration_vars$result,
                 protein_table = declaration_vars$protein_table,
                 compound_table = compound_table,
-                ki_kinact = conversion_sidebar_vars$run_ki_kinact()
+                kinact_ki = conversion_sidebar_vars$run_kinact_ki()
               ),
               config_file()
             )
@@ -1523,7 +1523,7 @@ server <- function(
               result = declaration_vars$result,
               protein_table = declaration_vars$protein_table,
               compound_table = declaration_vars$compound_table,
-              ki_kinact = conversion_sidebar_vars$run_ki_kinact()
+              kinact_ki = conversion_sidebar_vars$run_kinact_ki()
             ),
             config_file()
           ))
@@ -1600,7 +1600,7 @@ server <- function(
             result = declaration_vars$result,
             protein_table = declaration_vars$protein_table,
             compound_table = declaration_vars$compound_table,
-            ki_kinact = conversion_sidebar_vars$run_ki_kinact()
+            kinact_ki = conversion_sidebar_vars$run_kinact_ki()
           ),
           config_file()
         ))
@@ -1720,8 +1720,8 @@ server <- function(
     kobs_result_raw <- shiny::reactiveVal()
 
     ## Reactive functions ----
-    # Infer Ki/kinact result from selected samples
-    ki_kinact_result <- shiny::reactive({
+    # Infer kinact/Ki result from selected samples
+    kinact_ki_result <- shiny::reactive({
       shiny::req(conversion_sidebar_vars$result_list())
 
       if (is.null(conversion_vars$modified_results)) {
@@ -1744,7 +1744,7 @@ server <- function(
         ))
       }
 
-      return(result_list$ki_kinact_result$Params)
+      return(result_list$kinact_ki_result$Params)
     })
 
     ## Render conversion results interface ----
@@ -1779,7 +1779,7 @@ server <- function(
         shiny::req(length(analysis_select) > 0)
 
         shiny::isolate({
-          run_ki_kinact <- conversion_sidebar_vars$run_ki_kinact()
+          run_kinact_ki <- conversion_sidebar_vars$run_kinact_ki()
           select_concentration <- conversion_vars$select_concentration
         })
 
@@ -1789,7 +1789,7 @@ server <- function(
           # Null kinetics interface
           output$kinact <- NULL
           output$Ki <- NULL
-          output$Ki_kinact <- NULL
+          output$Kinact_Ki <- NULL
           output$kobs_result <- NULL
           output$binding_plot <- NULL
           output$kobs_plot <- NULL
@@ -3345,7 +3345,7 @@ server <- function(
               )
             })
           } else if (analysis_select == 3) {
-            #### Render Ki/kinact interface ----
+            #### Render kinact/Ki interface ----
             # Reset any prior concentration exclusions so plots match the table
             conversion_vars$modified_results <- NULL
 
@@ -3393,9 +3393,9 @@ server <- function(
             # Define a set of IDs for the dynamic concentration tabs
             dynamic_ui_ids <- paste0("concentration_tab_", all_fitted_conc)
 
-            # Call function to render Ki/kinact results interface
+            # Call function to render kinact/Ki results interface
             output$conversion_ui <- shiny::renderUI({
-              ki_kinact_results_ui(
+              kinact_ki_results_ui(
                 ns,
                 hits_summary,
                 all_fitted_conc,
@@ -3412,7 +3412,7 @@ server <- function(
                 shiny::div(
                   class = "main-result",
                   shiny::HTML(paste(
-                    format_scientific(ki_kinact_result()[1, 1]),
+                    format_scientific(kinact_ki_result()[1, 1]),
                     paste0(gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]), "⁻¹")
                   ))
                 ),
@@ -3420,7 +3420,7 @@ server <- function(
                   class = "error-result",
                   shiny::HTML(paste(
                     "±",
-                    format_scientific(ki_kinact_result()[1, 2])
+                    format_scientific(kinact_ki_result()[1, 2])
                   ))
                 ),
                 shiny::div(
@@ -3428,7 +3428,7 @@ server <- function(
                   shiny::HTML(
                     paste(
                       "<b>t value</b>&nbsp;",
-                      format_scientific(ki_kinact_result()[1, 3])
+                      format_scientific(kinact_ki_result()[1, 3])
                     )
                   )
                 ),
@@ -3437,7 +3437,7 @@ server <- function(
                   shiny::HTML(
                     paste(
                       "<b>Pr(>|t|)</b>&nbsp;",
-                      format_scientific(ki_kinact_result()[1, 4])
+                      format_scientific(kinact_ki_result()[1, 4])
                     )
                   )
                 )
@@ -3451,7 +3451,7 @@ server <- function(
                 shiny::div(
                   class = "main-result",
                   shiny::HTML(paste(
-                    format_scientific(ki_kinact_result()[2, 1]),
+                    format_scientific(kinact_ki_result()[2, 1]),
                     paste0(
                       gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]])
                     )
@@ -3461,7 +3461,7 @@ server <- function(
                   class = "error-result",
                   shiny::HTML(paste(
                     "±",
-                    format_scientific(ki_kinact_result()[2, 2])
+                    format_scientific(kinact_ki_result()[2, 2])
                   ))
                 ),
                 shiny::div(
@@ -3469,7 +3469,7 @@ server <- function(
                   shiny::HTML(
                     paste(
                       "<b>t value</b>&nbsp;",
-                      format_scientific(ki_kinact_result()[2, 3])
+                      format_scientific(kinact_ki_result()[2, 3])
                     )
                   )
                 ),
@@ -3478,22 +3478,22 @@ server <- function(
                   shiny::HTML(
                     paste(
                       "<b>Pr(>|t|)</b>&nbsp;",
-                      format_scientific(ki_kinact_result()[2, 4])
+                      format_scientific(kinact_ki_result()[2, 4])
                     )
                   )
                 )
               )
             })
 
-            ###### Calculated Ki/kinact value ----
-            output$Ki_kinact <- shiny::renderUI({
+            ###### Calculated kinact/Ki value ----
+            output$Kinact_Ki <- shiny::renderUI({
               shiny::div(
                 class = "result-card-content",
                 shiny::div(
                   class = "main-result",
                   shiny::HTML(paste(
                     format_scientific(
-                      ki_kinact_result()[1, 1] / ki_kinact_result()[2, 1]
+                      kinact_ki_result()[1, 1] / kinact_ki_result()[2, 1]
                     ),
                     "<br>",
                     paste0(
@@ -3653,7 +3653,7 @@ server <- function(
               }
 
               make_kobs_plot(
-                ki_kinact_result = result_list$ki_kinact_result,
+                kinact_ki_result = result_list$kinact_ki_result,
                 colors = concentration_colors,
                 units = units
               )
@@ -3691,7 +3691,7 @@ server <- function(
                   conversion_vars$modified_results
                 }
                 make_kobs_plot(
-                  ki_kinact_result = rl$ki_kinact_result,
+                  kinact_ki_result = rl$kinact_ki_result,
                   colors = concentration_colors,
                   units = units,
                   theme = theme
@@ -3746,7 +3746,7 @@ server <- function(
 
                 ###### Render concentration interface UI ----
                 output[[local_ui_id]] <- shiny::renderUI({
-                  ki_kinact_concentrations_tabs(
+                  kinact_ki_concentrations_tabs(
                     ns,
                     local_ui_id,
                     conc_result,
@@ -6023,7 +6023,7 @@ server <- function(
       handler_fn = function() {
         shiny::req(
           conversion_vars$hits_summary,
-          !is.null(conversion_sidebar_vars$run_ki_kinact()),
+          !is.null(conversion_sidebar_vars$run_kinact_ki()),
           input$truncate_names,
           input$conversion_compound_picker
         )
@@ -6173,8 +6173,8 @@ server <- function(
           conc_time = conversion_vars$units
         )
 
-        # Add Ki/kinact results to result list
-        result_list$ki_kinact_result <- add_ki_kinact_result(
+        # Add kinact/Ki results to result list
+        result_list$kinact_ki_result <- add_kinact_ki_result(
           result_list,
           units = units_adapt
         )
@@ -6204,7 +6204,7 @@ server <- function(
                 shiny::br(),
                 shiny::div(
                   class = "tooltip-text",
-                  "Assign each sample their contained protein and compound(s). If a Ki/kinact analysis is intended, samples need to be annotated with their corresponding compound concentration and incubation time. Sample annotation can be performed via file upload or by filling the table directly. The table also supports copy/paste for efficient filling."
+                  "Assign each sample their contained protein and compound(s). If a kinact/Ki analysis is intended, samples need to be annotated with their corresponding compound concentration and incubation time. Sample annotation can be performed via file upload or by filling the table directly. The table also supports copy/paste for efficient filling."
                 )
               ),
               title = "Samples Declaration",
@@ -6652,8 +6652,8 @@ server <- function(
       )
     })
 
-    ## Ki/kinact value ----
-    shiny::observeEvent(input$Ki_kinact_tooltip_bttn, {
+    ## kinact/Ki value ----
+    shiny::observeEvent(input$Kinact_Ki_tooltip_bttn, {
       shiny::showModal(
         shiny::div(
           class = "conversion-modal",
@@ -7086,7 +7086,7 @@ server <- function(
       )),
       samples_confirmed = shiny::reactive(declaration_vars$samples_confirmed),
       cancel_continuation = shiny::reactive(input$conversion_cont_cancel),
-      activate_ki_kinact = shiny::reactive(trigger_ki_kinact())
+      activate_kinact_ki = shiny::reactive(trigger_kinact_ki())
     )
   })
 }

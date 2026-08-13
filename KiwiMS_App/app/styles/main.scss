@@ -661,21 +661,21 @@ input[type="number"]::-webkit-inner-spin-button {
   border-color: #7777f9;
 }
 
-.ki-kinact-checkbox label {
+.kinact-ki-checkbox label {
   display: flex;
   top: 4px;
   position: relative;
 }
 
-#app-conversion_sidebar-run_ki_kinact {
+#app-conversion_sidebar-run_kinact_ki {
   margin: 0;
 }
 
-.ki-kinact-checkbox span {
+.kinact-ki-checkbox span {
   align-self: center;
 }
 
-.ki-kinact-label {
+.kinact-ki-label {
   display: flex;
   gap: 0.5em;
   margin-left: 0.5em;
@@ -683,7 +683,7 @@ input[type="number"]::-webkit-inner-spin-button {
   margin-top: -2px;
 }
 
-.ki-kinact-highlight {
+.kinact-ki-highlight {
   color: #fff;
   padding-left: 0.5em;
   align-content: baseline;
@@ -2061,7 +2061,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 
 #app-conversion_main-kinact .waiter-overlay,
 #app-conversion_main-Ki .waiter-overlay,
-#app-conversion_main-Ki_kinact .waiter-overlay {
+#app-conversion_main-Kinact_Ki .waiter-overlay {
   position: relative !important;
   height: 100% !important;
   width: 100% !important;
@@ -2072,7 +2072,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 
 #app-conversion_main-kinact,
 #app-conversion_main-Ki,
-#app-conversion_main-Ki_kinact {
+#app-conversion_main-Kinact_Ki {
   width: 100%;
   height: 100%;
   display: flex;
@@ -2081,14 +2081,14 @@ div[data-value="Protein Conversion"] .tab-pane {
 }
 
 #app-conversion_main-kobs_result .table,
-#app-conversion_main-ki_kinact_result .table,
+#app-conversion_main-kinact_ki_result .table,
 #app-conversion_main-select_concentration {
   margin: 0;
   --bs-table-bg: transparent;
   height: fit-content;
 }
 
-.ki-kinact-ui {
+.kinact-ki-ui {
   display: flex;
   align-items: center;
 }
