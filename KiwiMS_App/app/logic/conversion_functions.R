@@ -2867,17 +2867,21 @@ compute_kobs <- function(hits, units) {
     )
   }
 
-  # Reorder concentrations as factor
-  concentration_list[["binding_table"]] <- binding_table |>
-    dplyr::mutate(
-      concentration = factor(
-        concentration,
-        levels = sort(
-          as.numeric(unique(concentration)),
-          decreasing = TRUE
+  # Reorder concentrations as factor (skip if no concentration was fitted,
+  # otherwise binding_table is a zero-column data.frame without `concentration`)
+  if ("concentration" %in% names(binding_table)) {
+    binding_table <- binding_table |>
+      dplyr::mutate(
+        concentration = factor(
+          concentration,
+          levels = sort(
+            as.numeric(unique(concentration)),
+            decreasing = TRUE
+          )
         )
       )
-    )
+  }
+  concentration_list[["binding_table"]] <- binding_table
 
   return(concentration_list)
 }
