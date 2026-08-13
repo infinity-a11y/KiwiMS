@@ -5,17 +5,32 @@ box::use(
 )
 
 # Resolve log directory: use stored setting if available, otherwise default to
-# %USERPROFILE%\Documents\KiwiMS\logs (applied at app load; change takes effect on restart).
+# %LOCALAPPDATA%\KiwiMS\log
 log_dir <- local({
-  stored <- tryCatch({
-    s <- readRDS(file.path(
-      Sys.getenv("LOCALAPPDATA"), "KiwiMS", "settings", "user_settings.rds"
-    ))
-    d <- s[["log_dir"]]
-    if (!is.null(d) && nzchar(trimws(d))) trimws(d) else NULL
-  }, error = function(e) NULL)
-  if (!is.null(stored)) stored else {
-    file.path(Sys.getenv("USERPROFILE"), "Documents", "KiwiMS", "logs")
+  settings_file <- file.path(
+    Sys.getenv("LOCALAPPDATA"),
+    "KiwiMS",
+    "settings",
+    "user_settings.rds"
+  )
+  # Guard with file.exists(): readRDS() warns before it errors, and
+  # tryCatch(error=) swallows only the error - see app/logic/user_settings.R.
+  stored <- if (!file.exists(settings_file)) {
+    NULL
+  } else {
+    tryCatch(
+      {
+        s <- readRDS(settings_file)
+        d <- s[["log_dir"]]
+        if (!is.null(d) && nzchar(trimws(d))) trimws(d) else NULL
+      },
+      error = function(e) NULL
+    )
+  }
+  if (!is.null(stored)) {
+    stored
+  } else {
+    file.path(Sys.getenv("LOCALAPPDATA"), "KiwiMS", "logs")
   }
 })
 log_daily <- file.path(log_dir, Sys.Date())

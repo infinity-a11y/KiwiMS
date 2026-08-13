@@ -651,7 +651,7 @@ sample_handsontable <- function(
 
 # Function to fill missing columns in sample table
 #' @export
-fill_sample_table <- function(sample_table, ki_kinact) {
+fill_sample_table <- function(sample_table, kinact_ki) {
   # Stash Replicate (not part of the 7-col standard) to avoid count mismatch
   has_rep <- "Replicate" %in% names(sample_table)
   rep_col <- if (has_rep) sample_table[["Replicate"]] else NULL
@@ -662,7 +662,7 @@ fill_sample_table <- function(sample_table, ki_kinact) {
     ]
   }
 
-  if (ki_kinact) {
+  if (kinact_ki) {
     conc_time <- sample_table[, sapply(
       c("Concentration", "Time"),
       grep,
@@ -691,7 +691,7 @@ fill_sample_table <- function(sample_table, ki_kinact) {
 
   # Re-attach Concentration/Time outside the col_diff block so they are
   # preserved regardless of whether padding was needed.
-  if (ki_kinact) {
+  if (kinact_ki) {
     sample_table <- cbind(sample_table, conc_time)
   }
 
@@ -1929,18 +1929,18 @@ log_kobs_result <- function(result, last, unit) {
   message(sprintf("%s└─ Plateau = %s%%", p, fmt_log(result$plateau)))
 }
 
-# Log Ki/kinact warning
-log_ki_kinact_warning <- function(msg) {
+# Log kinact/Ki warning
+log_kinact_ki_warning <- function(msg) {
   message(sprintf("     ├─ %s %s", .col_warn(warning_sym), msg))
 }
 
 # Log (Kᵢ/kᵢₙₐ꜀ₜ) analysis initiation
-log_ki_kinact_analysis <- function() {
+log_kinact_ki_analysis <- function() {
   message(paste("  │\n", " └─ Infer second-order rate constant Kᵢ/kᵢₙₐ꜀ₜ"))
 }
 
-# Log Ki/kinact results
-log_ki_kinact_results <- function(results, units) {
+# Log kinact/Ki results
+log_kinact_ki_results <- function(results, units) {
   message(
     paste0(
       sprintf(
@@ -1976,7 +1976,7 @@ add_hits <- function(
   max_multiples,
   session,
   ns,
-  ki_kinact = FALSE,
+  kinact_ki = FALSE,
   config = NULL
 ) {
   samples <- names(results$deconvolution)
@@ -1984,7 +1984,7 @@ add_hits <- function(
   compound_mw <- as.matrix(compound_table[, -1])
   rownames(compound_mw) <- compound_table[, 1]
 
-  hits_max <- if (ki_kinact) 80 else 100
+  hits_max <- if (kinact_ki) 80 else 100
 
   for (i in seq_along(samples)) {
     shinyWidgets::updateProgressBar(
@@ -2058,7 +2058,7 @@ add_hits <- function(
       "Hit screening completed for ",
       length(samples),
       " sample(s).",
-      if (ki_kinact) " Computing binding kinetics..." else ""
+      if (kinact_ki) " Computing binding kinetics..." else ""
     )
   )
 
@@ -2135,7 +2135,7 @@ extract_minutes <- function(strings) {
   as.numeric(minutes)
 }
 
-# Function perform checks for ki/kinact analysis prerequisites
+# Function perform checks for kinact/Ki analysis prerequisites
 #' @export
 check_filter_hits <- function(result_list) {
   # Check if hits summary is present and contains hits
@@ -2245,24 +2245,24 @@ add_kobs_binding_result <- function(
   return(binding_kobs_result)
 }
 
-# Function to add Ki/kinact results to result list
+# Function to add kinact/Ki results to result list
 #' @export
-add_ki_kinact_result <- function(result_list, units) {
+add_kinact_ki_result <- function(result_list, units) {
   # Log (Kᵢ/kᵢₙₐ꜀ₜ) analysis initiation
-  log_ki_kinact_analysis()
+  log_kinact_ki_analysis()
 
-  # Calculcate Ki/kinact from binding/kobs result
-  ki_kinact_result <- compute_ki_kinact(
+  # Calculcate kinact/Ki from binding/kobs result
+  kinact_ki_result <- compute_kinact_ki(
     result_list[["binding_kobs_result"]],
     units = units
   )
 
-  # Log Ki/kinact results
-  if (!is.null(ki_kinact_result)) {
-    log_ki_kinact_results(results = ki_kinact_result, units = units)
+  # Log kinact/Ki results
+  if (!is.null(kinact_ki_result)) {
+    log_kinact_ki_results(results = kinact_ki_result, units = units)
   }
 
-  return(ki_kinact_result)
+  return(kinact_ki_result)
 }
 
 # Function to generate and display binding plot
@@ -2465,16 +2465,16 @@ make_binding_plot <- function(
 
 # Function to generate and display kobs plot
 #' @export
-make_kobs_plot <- function(ki_kinact_result, colors, units, theme = "dark") {
+make_kobs_plot <- function(kinact_ki_result, colors, units, theme = "dark") {
   # Get predicted/modeled kobs
-  df <- ki_kinact_result$Kobs_Data[
-    !is.na(ki_kinact_result$Kobs_Data$predicted_kobs),
+  df <- kinact_ki_result$Kobs_Data[
+    !is.na(kinact_ki_result$Kobs_Data$predicted_kobs),
   ]
 
   # Get observed kobs data points (include kobs=0 for no-response; exclude dummy anchor at conc=0)
-  df_points <- ki_kinact_result$Kobs_Data[
-    !is.na(ki_kinact_result$Kobs_Data$kobs) &
-      ki_kinact_result$Kobs_Data$conc > 0,
+  df_points <- kinact_ki_result$Kobs_Data[
+    !is.na(kinact_ki_result$Kobs_Data$kobs) &
+      kinact_ki_result$Kobs_Data$conc > 0,
   ]
   ordered_levels <- sort(
     unique(as.numeric(as.character(df_points$conc))),
@@ -2867,22 +2867,26 @@ compute_kobs <- function(hits, units) {
     )
   }
 
-  # Reorder concentrations as factor
-  concentration_list[["binding_table"]] <- binding_table |>
-    dplyr::mutate(
-      concentration = factor(
-        concentration,
-        levels = sort(
-          as.numeric(unique(concentration)),
-          decreasing = TRUE
+  # Reorder concentrations as factor (skip if no concentration was fitted,
+  # otherwise binding_table is a zero-column data.frame without `concentration`)
+  if ("concentration" %in% names(binding_table)) {
+    binding_table <- binding_table |>
+      dplyr::mutate(
+        concentration = factor(
+          concentration,
+          levels = sort(
+            as.numeric(unique(concentration)),
+            decreasing = TRUE
+          )
         )
       )
-    )
+  }
+  concentration_list[["binding_table"]] <- binding_table
 
   return(concentration_list)
 }
 
-compute_ki_kinact <- function(kobs_result, units = units) {
+compute_kinact_ki <- function(kobs_result, units = units) {
   # One row per concentration from kobs_result_table (avoids deduplication by value)
   kobs <- kobs_result$kobs_result_table
   kobs$conc <- as.numeric(rownames(kobs))
@@ -2906,7 +2910,7 @@ compute_ki_kinact <- function(kobs_result, units = units) {
   # Pre-flight: warn if fewer than 3 real data points (0 or negative DOF)
   n_real <- nrow(kobs) - 1
   if (n_real < 3) {
-    log_ki_kinact_warning(sprintf(
+    log_kinact_ki_warning(sprintf(
       "only %d kobs value(s) available — parameter estimates will have 0 or negative degrees of freedom",
       n_real
     ))
@@ -2922,12 +2926,12 @@ compute_ki_kinact <- function(kobs_result, units = units) {
         start = start_values
       ),
       warning = function(w) {
-        log_ki_kinact_warning(paste("Solver:", conditionMessage(w)))
+        log_kinact_ki_warning(paste("Solver:", conditionMessage(w)))
         invokeRestart("muffleWarning")
       }
     ),
     error = function(e) {
-      log_ki_kinact_warning(paste("Fit failed:", conditionMessage(e)))
+      log_kinact_ki_warning(paste("Fit failed:", conditionMessage(e)))
       NULL
     }
   )
@@ -2939,7 +2943,7 @@ compute_ki_kinact <- function(kobs_result, units = units) {
   fitted_kinact <- summary(nonlin_mod)$parameters[1, 1]
   max_kobs_real <- max(kobs$kobs[kobs$conc > 0], na.rm = TRUE)
   if (max_kobs_real < 0.5 * fitted_kinact) {
-    log_ki_kinact_warning(sprintf(
+    log_kinact_ki_warning(sprintf(
       "max k_obs (%s) < 50%% of kᵢₙₐ꜀ₜ (%s)\n     │    saturating region not observed — kᵢₙₐ꜀ₜ extrapolated",
       fmt_log(max_kobs_real),
       fmt_log(fitted_kinact)
@@ -2959,12 +2963,12 @@ compute_ki_kinact <- function(kobs_result, units = units) {
   kobs_data <- dplyr::full_join(kobs_predicted, kobs, by = "conc")
 
   # Return complete list
-  ki_kinact_result <- list(
+  kinact_ki_result <- list(
     "Params" = summary(nonlin_mod)$parameters,
     "Kobs_Data" = kobs_data
   )
 
-  return(ki_kinact_result)
+  return(kinact_ki_result)
 }
 
 # Modified minpack.lm::nlsLM() function due to namespace issues with stats::model.frame()
@@ -5128,7 +5132,7 @@ new_sample_table <- function(
   result,
   protein_table,
   compound_table,
-  ki_kinact = FALSE
+  kinact_ki = FALSE
 ) {
   sample_names <- sort(paste0(
     result$samples %||% names(result$deconvolution),
@@ -5149,7 +5153,7 @@ new_sample_table <- function(
     rep(list(""), 4)
   )
 
-  if (!is.null(ki_kinact) && ki_kinact) {
+  if (!is.null(kinact_ki) && kinact_ki) {
     sample_tab <- cbind(
       sample_tab,
       Concentration = as.numeric(NA),
@@ -5161,7 +5165,7 @@ new_sample_table <- function(
     "Sample",
     "Protein",
     paste("Compound", 1:5),
-    if (isTRUE(ki_kinact)) c("Concentration", "Time")
+    if (isTRUE(kinact_ki)) c("Concentration", "Time")
   )
 
   return(sample_tab)

@@ -3407,13 +3407,19 @@ server <- function(
               regexpr("id\\d+", basename(log_path))
             )
 
-            # Get user documents path to retrieve files needed for report generation
-            script_dir <- file.path(
-              Sys.getenv("USERPROFILE"),
-              "Documents",
-              "KiwiMS",
-              "report"
-            )
+            # Get path to the files needed for report generation. A per-user install
+            # puts them in the user's Documents, an all-users install in Public
+            # Documents, so fall back to the shared copy when the personal one is
+            # absent.
+            script_dir <- local({
+              user_dir <- file.path(
+                Sys.getenv("USERPROFILE"), "Documents", "KiwiMS", "report"
+              )
+              public_dir <- file.path(
+                Sys.getenv("PUBLIC"), "Documents", "KiwiMS", "report"
+              )
+              if (dir.exists(user_dir)) user_dir else public_dir
+            })
 
             # Set html report output filename
             output_file <- paste0(

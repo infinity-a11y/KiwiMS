@@ -4,6 +4,12 @@
 # No -noConsole → normal console application
 # =============================================
 
+param(
+    # Suppress the "Press Enter" prompts so dev\build_installer.ps1 can drive this
+    # script unattended.
+    [switch] $NoPause
+)
+
 # Go to the folder where this script is located
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $scriptDir
@@ -19,7 +25,7 @@ if (-not (Get-Command ps2exe -ErrorAction SilentlyContinue)) {
         Write-Host "[ERROR] PS2EXE module not found." -ForegroundColor Red
         Write-Host "Please run in PowerShell:" -ForegroundColor Yellow
         Write-Host "   Install-Module ps2exe -Scope CurrentUser -Force" -ForegroundColor Yellow
-        Read-Host "Press Enter to exit"
+        if (-not $NoPause) { Read-Host "Press Enter to exit" }
         exit 1
     }
 }
@@ -47,7 +53,9 @@ if ($LASTEXITCODE -eq 0) {
 else {
     Write-Host ""
     Write-Host "❌ Compilation failed. See error messages above." -ForegroundColor Red
+    if (-not $NoPause) { Read-Host "Press Enter to close" }
+    exit 1
 }
 
 Write-Host ""
-Read-Host "Press Enter to close"
+if (-not $NoPause) { Read-Host "Press Enter to close" }

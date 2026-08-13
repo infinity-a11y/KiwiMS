@@ -25,9 +25,9 @@ box::use(
     ],
 )
 
-# Ki/kinact results interface
+# kinact/Ki results interface
 #' @export
-ki_kinact_concentrations_tabs <- function(ns, local_ui_id, conc_result, units) {
+kinact_ki_concentrations_tabs <- function(ns, local_ui_id, conc_result, units) {
   shiny::div(
     class = "result-conc-tab",
     shiny::div(
@@ -283,9 +283,9 @@ ki_kinact_concentrations_tabs <- function(ns, local_ui_id, conc_result, units) {
   )
 }
 
-# Ki/kinact results interface
+# kinact/Ki results interface
 #' @export
-ki_kinact_results_ui <- function(
+kinact_ki_results_ui <- function(
   ns,
   hits_summary,
   concentrations,
@@ -503,17 +503,17 @@ ki_kinact_results_ui <- function(
                   class = "bg-dark help-header",
                   htmltools::tagList(
                     shiny::div(
-                      "K",
-                      htmltools::tags$sub("i"),
-                      "/ k",
+                      "k",
                       htmltools::tags$sub("inact"),
+                      "/ K",
+                      htmltools::tags$sub("i"),
                     )
                   ),
                   bslib::tooltip(
                     shiny::div(
                       class = "tooltip-bttn",
                       shiny::actionButton(
-                        ns("Ki_kinact_tooltip_bttn"),
+                        ns("Kinact_Ki_tooltip_bttn"),
                         label = NULL,
                         icon = shiny::icon("circle-question")
                       )
@@ -525,7 +525,7 @@ ki_kinact_results_ui <- function(
                 shiny::div(
                   class = "kobs-val",
                   shinycssloaders::withSpinner(
-                    shiny::uiOutput(ns("Ki_kinact")),
+                    shiny::uiOutput(ns("Kinact_Ki")),
                     type = 1,
                     color = "#7777f9"
                   )

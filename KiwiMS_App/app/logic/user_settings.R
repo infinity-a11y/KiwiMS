@@ -33,7 +33,15 @@ get_default_user_settings <- function() {
 
 #' @export
 read_user_settings <- function() {
-  stored <- tryCatch(readRDS(settings_path), error = function(e) list())
+  # Guard with file.exists(): readRDS() emits a "cannot open compressed file"
+  # warning before it errors, and tryCatch(error=) swallows only the error - the
+  # warning still reaches the log. The file is absent by definition until the
+  # first setting is saved, so a fresh install would log it on every read.
+  stored <- if (file.exists(settings_path)) {
+    tryCatch(readRDS(settings_path), error = function(e) list())
+  } else {
+    list()
+  }
   # Drop any NA entries so they fall back to the built-in default rather than
   # overriding it (modifyList keeps NAs from stored, which would persist blanks).
   stored <- stored[
