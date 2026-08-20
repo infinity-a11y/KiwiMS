@@ -5076,37 +5076,44 @@ checkboxColumn <- function(len, col, ...) {
 }
 
 # Compute replicate group labels for a vector of sample names.
-# Priority: (1) config Replicate column, (2) _R<n> filename suffix detection,
-# (3) unique _R<n> placeholders for samples without a detected group.
+# Priority is resolved per sample (not globally), so a config that only
+# covers some of the current samples doesn't blind the fallbacks for the
+# rest: (1) config Replicate value for that sample, (2) _R<n> filename
+# suffix detection, (3) a unique R<n> placeholder for samples with no
+# detectable suffix at all.
 #' @export
 compute_replicate_labels <- function(sample_names, config = NULL) {
   labels <- rep(NA_character_, length(sample_names))
-  config_mode <- FALSE
 
-  # Priority 1: config supplies at least one non-empty Replicate value
+  # Priority 1: config supplies a non-empty Replicate value for this sample
   if (!is.null(config) && "Replicate" %in% names(config)) {
     cfg_key <- gsub("\\.raw$", "", config$Sample, ignore.case = TRUE)
     samp_key <- gsub("\\.raw$", "", sample_names, ignore.case = TRUE)
     matched <- config$Replicate[match(samp_key, cfg_key)]
     non_empty <- !is.na(matched) & trimws(matched) != ""
-    if (any(non_empty)) {
-      config_mode <- TRUE
-      labels[non_empty] <- trimws(matched[non_empty])
-    }
+    labels[non_empty] <- trimws(matched[non_empty])
   }
 
-  # Priority 2: filename suffix detection (_R<n> before optional .raw)
-  if (!config_mode) {
+  # Priority 2: filename suffix detection (_R<n> before optional .raw), for
+  # any sample not already labeled from config. Assign the shared base name
+  # to every sample carrying an _R<n> suffix, even when its partner
+  # replicate(s) are missing (e.g. a failed deconvolution dropped one file
+  # from the set). A singleton still gets a label derived from its own
+  # filename instead of falling through to the arbitrary global counter
+  # below, which would otherwise hand out meaningless, order-dependent
+  # "R1"/"R2"/... tags with no relation to the sample's actual _R<n> suffix
+  # or to which other rows it belongs with.
+  remaining <- is.na(labels)
+  if (any(remaining)) {
     has_rn <- grepl("_[Rr]\\d+(\\.raw)?$", sample_names)
     base_names <- gsub("_[Rr]\\d+(\\.raw)?$", "", sample_names)
     base_names <- gsub("\\.raw$", "", base_names, ignore.case = TRUE)
-    for (base in unique(base_names[has_rn])) {
-      idx <- which(has_rn & base_names == base)
-      if (length(idx) >= 2L) labels[idx] <- base
-    }
+    fill_idx <- remaining & has_rn
+    labels[fill_idx] <- base_names[fill_idx]
   }
 
-  # Fill remaining NAs with R<n>, avoiding clashes with existing R<n> labels
+  # Fill remaining NAs (samples with no config value and no _R<n> suffix)
+  # with R<n>, avoiding clashes with existing R<n>-shaped labels
   existing <- labels[!is.na(labels)]
   used_ints <- suppressWarnings(stats::na.omit(as.integer(
     regmatches(
