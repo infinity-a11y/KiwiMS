@@ -38,7 +38,7 @@ ps2exe `
     -inputFile "dev\launch.ps1" `
     -outputFile "KiwiMS.exe" `
     -iconFile "resources\favicon.ico" `
-    -version "0.7.1" `
+    -version "0.7.2" `
     -product "KiwiMS" `
     -description "KiwiMS Launch" `
     -copyright "Marian Freisleben" `
