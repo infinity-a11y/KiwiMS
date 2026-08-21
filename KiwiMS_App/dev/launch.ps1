@@ -10,9 +10,14 @@ else {
 }
 Set-Location $appRoot
 
-# Get version info
+# Get version info from the single source of truth. Never hard-code a fallback
+# version here - a stale literal is worse than admitting the file is missing.
 $versionPath = Join-Path $appRoot "resources\version.txt"
-$versionFile = if (Test-Path $versionPath) { Get-Content -Path $versionPath | Select-Object -First 1 } else { "0.7.1" }
+$versionFile = "unknown"
+if (Test-Path $versionPath) {
+    $line = Get-Content -Path $versionPath | Where-Object { $_ -match '^\s*version\s*=' } | Select-Object -First 1
+    if ($line) { $versionFile = ($line -replace '^\s*version\s*=', '').Trim() }
+}
 
 # Headless check
 $Headless = $args -contains "--headless"

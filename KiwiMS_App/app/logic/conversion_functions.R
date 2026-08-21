@@ -16,6 +16,247 @@ box::use(
     ],
 )
 
+# Concentration conversion
+#' @export
+get_conversion_factor <- function(from, to) {
+  scales <- c("M" = 0, "mM" = -3, "μM" = -6, "nM" = -9, "pM" = -12)
+
+  if (!all(from %in% names(scales)) || !all(to %in% names(scales))) {
+    stop(
+      "Invalid unit. Supported units: ",
+      paste(names(scales), collapse = ", ")
+    )
+  }
+
+  unname(10^(scales[from] - scales[to]))
+}
+
+# Time conversion
+#' @export
+get_time_factor <- function(from, to) {
+  scales <- c("s" = 1, "min" = 60)
+
+  if (!all(from %in% names(scales)) || !all(to %in% names(scales))) {
+    stop(
+      "Invalid unit. Supported units: ",
+      paste(names(scales), collapse = ", ")
+    )
+  }
+
+  unname(scales[from] / scales[to])
+}
+
+# Extract the bare unit out of a column label such as "Conc. [M]"
+#' @export
+unit_symbol <- function(label) {
+  gsub(".*\\[(.+)\\].*", "\\1", label)
+}
+
+# Replace the unit inside a column label, keeping the label prefix
+swap_unit_symbol <- function(label, unit) {
+  sub("\\[.*\\]", paste0("[", unit, "]"), label)
+}
+
+# Describes how the results are displayed relative to the units the samples
+# were declared in. `units` are the source column labels, e.g.
+# c(Concentration = "Conc. [M]", Time = "Time [min]"); `conc_unit`/`time_unit`
+# are the units picked in the results interface (NULL = keep source unit).
+#' @export
+make_unit_view <- function(units, conc_unit = NULL, time_unit = NULL) {
+  source_conc <- unit_symbol(units[["Concentration"]])
+  source_time <- unit_symbol(units[["Time"]])
+
+  if (is.null(conc_unit) || !nzchar(conc_unit)) {
+    conc_unit <- source_conc
+  }
+  if (is.null(time_unit) || !nzchar(time_unit)) {
+    time_unit <- source_time
+  }
+
+  conc_factor <- get_conversion_factor(from = source_conc, to = conc_unit)
+  time_factor <- get_time_factor(from = source_time, to = time_unit)
+
+  list(
+    source_units = units,
+    units = c(
+      Concentration = swap_unit_symbol(units[["Concentration"]], conc_unit),
+      Time = swap_unit_symbol(units[["Time"]], time_unit)
+    ),
+    conc_unit = conc_unit,
+    time_unit = time_unit,
+    conc_factor = conc_factor,
+    time_factor = time_factor,
+    identity = conc_factor == 1 && time_factor == 1
+  )
+}
+
+# Concentrations double as list names, factor levels and row names across the
+# result objects — convert them the same way everywhere so the keys stay in
+# sync with the converted concentration column of the hits table.
+#' @export
+convert_conc_keys <- function(keys, view) {
+  # Nothing to convert: hand back the keys verbatim so they keep matching the
+  # untouched result objects, even when they are not in canonical numeric form
+  if (view$identity) {
+    return(stats::setNames(keys, keys))
+  }
+
+  stats::setNames(
+    as.character(as.numeric(keys) * view$conc_factor),
+    keys
+  )
+}
+
+# Rescale and relabel the concentration/time columns of a hits table
+#' @export
+convert_hits_units <- function(hits, units, view) {
+  if (is.null(hits) || view$identity) {
+    return(hits)
+  }
+
+  conc_col <- units[["Concentration"]]
+  time_col <- units[["Time"]]
+
+  hits[[conc_col]] <- as.numeric(hits[[conc_col]]) * view$conc_factor
+  hits[[time_col]] <- as.numeric(hits[[time_col]]) * view$time_factor
+
+  names(hits)[names(hits) == conc_col] <- view$units[["Concentration"]]
+  names(hits)[names(hits) == time_col] <- view$units[["Time"]]
+
+  hits
+}
+
+# Rescale the binding/kobs result object. k_obs and v are rates (per unit
+# time), the plateau (100 * v / kobs) is dimensionless and stays untouched.
+#' @export
+convert_kobs_result_units <- function(binding_kobs_result, view) {
+  if (is.null(binding_kobs_result) || view$identity) {
+    return(binding_kobs_result)
+  }
+
+  time_factor <- view$time_factor
+
+  conc_names <- setdiff(
+    names(binding_kobs_result),
+    c("binding_table", "binding_plot", "kobs_result_table")
+  )
+
+  for (i in conc_names) {
+    entry <- binding_kobs_result[[i]]
+    entry$kobs <- entry$kobs / time_factor
+    entry$kobs_se <- entry$kobs_se / time_factor
+    entry$v <- entry$v / time_factor
+    if (!is.null(entry$predictions)) {
+      entry$predictions$time <- entry$predictions$time * time_factor
+    }
+    binding_kobs_result[[i]] <- entry
+  }
+
+  # Rename the per-concentration entries to the converted keys
+  nms <- names(binding_kobs_result)
+  nms[nms %in% conc_names] <- unname(convert_conc_keys(
+    nms[nms %in% conc_names],
+    view
+  ))
+  names(binding_kobs_result) <- nms
+
+  binding_table <- binding_kobs_result$binding_table
+  if (!is.null(binding_table) && nrow(binding_table) > 0) {
+    binding_table$time <- binding_table$time * time_factor
+    binding_table$kobs <- binding_table$kobs / time_factor
+    binding_table$kobs_se <- binding_table$kobs_se / time_factor
+
+    if (is.factor(binding_table$concentration)) {
+      levels(binding_table$concentration) <- unname(convert_conc_keys(
+        levels(binding_table$concentration),
+        view
+      ))
+    } else {
+      binding_table$concentration <- unname(convert_conc_keys(
+        as.character(binding_table$concentration),
+        view
+      ))
+    }
+
+    binding_kobs_result$binding_table <- binding_table
+  }
+
+  kobs_result_table <- binding_kobs_result$kobs_result_table
+  if (!is.null(kobs_result_table) && nrow(kobs_result_table) > 0) {
+    kobs_result_table$kobs <- kobs_result_table$kobs / time_factor
+    kobs_result_table$kobs_se <- kobs_result_table$kobs_se / time_factor
+    kobs_result_table$v <- kobs_result_table$v / time_factor
+    rownames(kobs_result_table) <- unname(convert_conc_keys(
+      rownames(kobs_result_table),
+      view
+    ))
+
+    binding_kobs_result$kobs_result_table <- kobs_result_table
+  }
+
+  binding_kobs_result
+}
+
+# Rescale the kinact/Ki parameter matrix: kinact is a rate, KI a
+# concentration; t value and Pr(>|t|) are dimensionless.
+#' @export
+convert_kinact_ki_params <- function(params, view) {
+  if (is.null(params) || view$identity) {
+    return(params)
+  }
+
+  params[1, 1:2] <- params[1, 1:2] / view$time_factor
+  params[2, 1:2] <- params[2, 1:2] * view$conc_factor
+
+  params
+}
+
+# Rescale the complete kinact/Ki result (parameters and fitted kobs curve)
+#' @export
+convert_kinact_ki_units <- function(kinact_ki_result, view) {
+  if (is.null(kinact_ki_result) || view$identity) {
+    return(kinact_ki_result)
+  }
+
+  kinact_ki_result$Params <- convert_kinact_ki_params(
+    kinact_ki_result$Params,
+    view
+  )
+
+  kobs_data <- kinact_ki_result$Kobs_Data
+  if (!is.null(kobs_data) && nrow(kobs_data) > 0) {
+    kobs_data$conc <- kobs_data$conc * view$conc_factor
+    kobs_data$kobs <- kobs_data$kobs / view$time_factor
+    kobs_data$kobs_se <- kobs_data$kobs_se / view$time_factor
+    if ("predicted_kobs" %in% names(kobs_data)) {
+      kobs_data$predicted_kobs <- kobs_data$predicted_kobs / view$time_factor
+    }
+
+    kinact_ki_result$Kobs_Data <- kobs_data
+  }
+
+  kinact_ki_result
+}
+
+# Rescale every unit-bearing part of a result list
+#' @export
+convert_result_list_units <- function(result_list, view) {
+  if (is.null(result_list) || view$identity) {
+    return(result_list)
+  }
+
+  result_list$binding_kobs_result <- convert_kobs_result_units(
+    result_list$binding_kobs_result,
+    view
+  )
+  result_list$kinact_ki_result <- convert_kinact_ki_units(
+    result_list$kinact_ki_result,
+    view
+  )
+
+  result_list
+}
+
 # Empty default tables
 #' @export
 empty_prot_comp_tbl <- function(type) {
@@ -2265,6 +2506,15 @@ add_kinact_ki_result <- function(result_list, units) {
   return(kinact_ki_result)
 }
 
+# Tick formatting shared by the kinetics plot axes. Plotly's default renders
+# magnitudes as SI prefixes ("5µ", "3.6k"), which reads as a unit on axes that
+# already carry one. Powers of ten instead, matching how the result cards
+# render values via format_scientific().
+sci_axis_ticks <- list(
+  exponentformat = "power",
+  showexponent = "all"
+)
+
 # Function to generate and display binding plot
 #' @export
 make_binding_plot <- function(
@@ -2443,12 +2693,19 @@ make_binding_plot <- function(
         bordercolor = "rgba(0,0,0,0)",
         font = list(color = font_color)
       ),
-      xaxis = list(
-        title = "Time [min]",
-        color = font_color,
-        showgrid = TRUE,
-        gridcolor = grid_color,
-        zerolinecolor = zeroline_color
+      xaxis = c(
+        list(
+          title = paste0(
+            "Time [",
+            gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+            "]"
+          ),
+          color = font_color,
+          showgrid = TRUE,
+          gridcolor = grid_color,
+          zerolinecolor = zeroline_color
+        ),
+        sci_axis_ticks
       ),
       yaxis = list(
         title = "Binding [%]",
@@ -2603,23 +2860,29 @@ make_kobs_plot <- function(kinact_ki_result, colors, units, theme = "dark") {
         bordercolor = "rgba(0,0,0,0)",
         font = list(color = font_color)
       ),
-      xaxis = list(
-        title = paste0(
-          "Compound [",
-          gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
-          "]"
+      xaxis = c(
+        list(
+          title = paste0(
+            "Compound [",
+            gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
+            "]"
+          ),
+          color = font_color,
+          showgrid = TRUE,
+          gridcolor = grid_color,
+          zerolinecolor = zeroline_color
         ),
-        color = font_color,
-        showgrid = TRUE,
-        gridcolor = grid_color,
-        zerolinecolor = zeroline_color
+        sci_axis_ticks
       ),
-      yaxis = list(
-        title = "k<sub>obs</sub> [s⁻¹]",
-        color = font_color,
-        showgrid = TRUE,
-        gridcolor = grid_color,
-        zerolinecolor = zeroline_color
+      yaxis = c(
+        list(
+          title = paste0("k<sub>obs</sub> [", time_unit, "⁻¹]"),
+          color = font_color,
+          showgrid = TRUE,
+          gridcolor = grid_color,
+          zerolinecolor = zeroline_color
+        ),
+        sci_axis_ticks
       )
     )
 
@@ -3568,6 +3831,7 @@ multiple_spectra <- function(
   color_variable = NULL,
   hits_summary = NULL,
   units = NULL,
+  time_factor = 1,
   theme = "dark"
 ) {
   # Omit NA in samples
@@ -3586,7 +3850,10 @@ multiple_spectra <- function(
     }
 
     if (time) {
-      add_df <- dplyr::mutate(add_df, z = extract_minutes(samples[i]))
+      add_df <- dplyr::mutate(
+        add_df,
+        z = extract_minutes(samples[i]) * time_factor
+      )
     } else {
       add_df <- dplyr::mutate(add_df, z = samples[i])
     }
@@ -3652,7 +3919,10 @@ multiple_spectra <- function(
     }
 
     if (time) {
-      add_df <- dplyr::mutate(add_df, z = extract_minutes(samples[i]))
+      add_df <- dplyr::mutate(
+        add_df,
+        z = extract_minutes(samples[i]) * time_factor
+      )
     } else {
       add_df <- dplyr::mutate(add_df, z = samples[i])
     }
@@ -3737,7 +4007,11 @@ multiple_spectra <- function(
         marker_color <- font_color
       }
 
-      peaks_data$mk_color <- if (is.character(marker_color)) marker_color else peaks_data$color
+      peaks_data$mk_color <- if (is.character(marker_color)) {
+        marker_color
+      } else {
+        peaks_data$color
+      }
 
       # Declare coloring variables for graph elements
       color <- NULL
@@ -3954,8 +4228,18 @@ multiple_spectra <- function(
         paper_bgcolor = "rgba(0,0,0,0)",
         plot_bgcolor = "rgba(0,0,0,0)",
         font = list(size = 14, color = font_color),
-        xaxis = list(visible = FALSE, showgrid = FALSE, zeroline = FALSE, range = c(1, 2)),
-        yaxis = list(visible = FALSE, showgrid = FALSE, zeroline = FALSE, range = c(1, 2)),
+        xaxis = list(
+          visible = FALSE,
+          showgrid = FALSE,
+          zeroline = FALSE,
+          range = c(1, 2)
+        ),
+        yaxis = list(
+          visible = FALSE,
+          showgrid = FALSE,
+          zeroline = FALSE,
+          range = c(1, 2)
+        ),
         legend = list(
           bgcolor = "rgba(0,0,0,0)",
           bordercolor = "rgba(0,0,0,0)",
@@ -4379,7 +4663,13 @@ filter_table_view <- function(table, colors, inputs, units) {
       )]),
       `Binding [%]` = `Binding [%]`,
       `Total %` = `Total %`,
-      col_var = !!rlang::sym(
+      # As.character, because the row colour is applied browser side by
+      # DT::styleEqual(): a numeric cell is compared against the level string,
+      # which JavaScript parses back into a double. After a unit conversion
+      # that round trip loses the last bit (0.9375 μM -> 9.375e-07 M reads back
+      # one ULP off) and the row silently loses its colour. Comparing the
+      # canonical strings on both sides sidesteps the float entirely.
+      col_var = as.character(!!rlang::sym(
         if (
           length(units) == 2 &&
             inputs$color_variable == units[["Concentration"]]
@@ -4390,8 +4680,18 @@ filter_table_view <- function(table, colors, inputs, units) {
         } else if (inputs$color_variable == "Samples") {
           "trunc_label"
         }
-      )
+      ))
     )
+
+  # Show the concentration in the same canonical form. Besides matching the
+  # colour key it keeps the column short: the raw double reaches the browser at
+  # full precision and renders as 9.374999999999999e-7.
+  if (length(units) == 2) {
+    conc_col <- units[["Concentration"]]
+    if (conc_col %in% names(tbl)) {
+      tbl[[conc_col]] <- as.character(tbl[[conc_col]])
+    }
+  }
 
   return(tbl)
 }
@@ -5063,12 +5363,17 @@ js_code_gen <- function(dtid, cols, ns = identity) {
 
 # Define checkbox generator
 #' @export
-checkboxColumn <- function(len, col, ...) {
+checkboxColumn <- function(len, col, value = TRUE, ...) {
+  # Recycled so a per-row state (e.g. included concentrations) survives a
+  # re-render of the table
+  value <- rep_len(value, len)
+
   inputs <- character(len)
   for (i in seq_len(len)) {
     inputs[i] <- as.character(shiny::checkboxInput(
       paste0("checkb_", col, "_", i),
       label = NULL,
+      value = value[i],
       ...
     ))
   }
@@ -5076,37 +5381,44 @@ checkboxColumn <- function(len, col, ...) {
 }
 
 # Compute replicate group labels for a vector of sample names.
-# Priority: (1) config Replicate column, (2) _R<n> filename suffix detection,
-# (3) unique _R<n> placeholders for samples without a detected group.
+# Priority is resolved per sample (not globally), so a config that only
+# covers some of the current samples doesn't blind the fallbacks for the
+# rest: (1) config Replicate value for that sample, (2) _R<n> filename
+# suffix detection, (3) a unique R<n> placeholder for samples with no
+# detectable suffix at all.
 #' @export
 compute_replicate_labels <- function(sample_names, config = NULL) {
   labels <- rep(NA_character_, length(sample_names))
-  config_mode <- FALSE
 
-  # Priority 1: config supplies at least one non-empty Replicate value
+  # Priority 1: config supplies a non-empty Replicate value for this sample
   if (!is.null(config) && "Replicate" %in% names(config)) {
     cfg_key <- gsub("\\.raw$", "", config$Sample, ignore.case = TRUE)
     samp_key <- gsub("\\.raw$", "", sample_names, ignore.case = TRUE)
     matched <- config$Replicate[match(samp_key, cfg_key)]
     non_empty <- !is.na(matched) & trimws(matched) != ""
-    if (any(non_empty)) {
-      config_mode <- TRUE
-      labels[non_empty] <- trimws(matched[non_empty])
-    }
+    labels[non_empty] <- trimws(matched[non_empty])
   }
 
-  # Priority 2: filename suffix detection (_R<n> before optional .raw)
-  if (!config_mode) {
+  # Priority 2: filename suffix detection (_R<n> before optional .raw), for
+  # any sample not already labeled from config. Assign the shared base name
+  # to every sample carrying an _R<n> suffix, even when its partner
+  # replicate(s) are missing (e.g. a failed deconvolution dropped one file
+  # from the set). A singleton still gets a label derived from its own
+  # filename instead of falling through to the arbitrary global counter
+  # below, which would otherwise hand out meaningless, order-dependent
+  # "R1"/"R2"/... tags with no relation to the sample's actual _R<n> suffix
+  # or to which other rows it belongs with.
+  remaining <- is.na(labels)
+  if (any(remaining)) {
     has_rn <- grepl("_[Rr]\\d+(\\.raw)?$", sample_names)
     base_names <- gsub("_[Rr]\\d+(\\.raw)?$", "", sample_names)
     base_names <- gsub("\\.raw$", "", base_names, ignore.case = TRUE)
-    for (base in unique(base_names[has_rn])) {
-      idx <- which(has_rn & base_names == base)
-      if (length(idx) >= 2L) labels[idx] <- base
-    }
+    fill_idx <- remaining & has_rn
+    labels[fill_idx] <- base_names[fill_idx]
   }
 
-  # Fill remaining NAs with R<n>, avoiding clashes with existing R<n> labels
+  # Fill remaining NAs (samples with no config value and no _R<n> suffix)
+  # with R<n>, avoiding clashes with existing R<n>-shaped labels
   existing <- labels[!is.na(labels)]
   used_ints <- suppressWarnings(stats::na.omit(as.integer(
     regmatches(
@@ -5897,7 +6209,10 @@ prot_compound_distribution <- function(
     dplyr::mutate(.sid = .sid_raw) |>
     dplyr::group_by(.sid) |>
     dplyr::summarize(
-      .mean_tb = mean(as.numeric(as.character(`Tot. Binding [%]`)), na.rm = TRUE),
+      .mean_tb = mean(
+        as.numeric(as.character(`Tot. Binding [%]`)),
+        na.rm = TRUE
+      ),
       .groups = "drop"
     ) |>
     dplyr::arrange(.mean_tb, .sid) |>
@@ -6424,7 +6739,11 @@ cmp_compound_distribution <- function(
         showgrid = FALSE,
         zeroline = FALSE,
         color = axis_color,
-        showticklabels = if (!is.null(distribution_labels)) distribution_labels else TRUE
+        showticklabels = if (!is.null(distribution_labels)) {
+          distribution_labels
+        } else {
+          TRUE
+        }
       ),
       yaxis = list(
         range = range,
@@ -6745,38 +7064,88 @@ stats_boxplot <- function(
   metric_vals_bp <- if (show_unmatched) df$`% Unmatched` else df$`% Correct`
 
   # Pre-compute with R's quantile() for the annotations and box shapes
-  q1_bp   <- unname(stats::quantile(metric_vals_bp, 0.25, na.rm = TRUE))
-  med_bp  <- stats::median(metric_vals_bp, na.rm = TRUE)
+  q1_bp <- unname(stats::quantile(metric_vals_bp, 0.25, na.rm = TRUE))
+  med_bp <- stats::median(metric_vals_bp, na.rm = TRUE)
   mean_bp <- mean(metric_vals_bp, na.rm = TRUE)
-  q3_bp   <- unname(stats::quantile(metric_vals_bp, 0.75, na.rm = TRUE))
-  iqr_bp      <- q3_bp - q1_bp
+  q3_bp <- unname(stats::quantile(metric_vals_bp, 0.75, na.rm = TRUE))
+  iqr_bp <- q3_bp - q1_bp
   lo_fence_bp <- min(metric_vals_bp[metric_vals_bp >= q1_bp - 1.5 * iqr_bp])
   hi_fence_bp <- max(metric_vals_bp[metric_vals_bp <= q3_bp + 1.5 * iqr_bp])
 
   # Box is drawn as layout shapes so Plotly's quartile algorithm is bypassed entirely
   whisk_half <- box_half_width * 0.5
   box_shapes <- list(
-    list(type = "rect", xref = "x", yref = "y",
-         x0 = -box_half_width, x1 = box_half_width, y0 = q1_bp, y1 = q3_bp,
-         fillcolor = box_fill, line = list(color = box_col, width = 1.5)),
-    list(type = "line", xref = "x", yref = "y",
-         x0 = -box_half_width, x1 = box_half_width, y0 = med_bp, y1 = med_bp,
-         line = list(color = box_col, width = 2)),
-    list(type = "line", xref = "x", yref = "y",
-         x0 = -box_half_width, x1 = box_half_width, y0 = mean_bp, y1 = mean_bp,
-         line = list(color = box_col, width = 1.5, dash = "dot")),
-    list(type = "line", xref = "x", yref = "y",
-         x0 = 0, x1 = 0, y0 = q3_bp, y1 = hi_fence_bp,
-         line = list(color = box_col, width = 1.5)),
-    list(type = "line", xref = "x", yref = "y",
-         x0 = -whisk_half, x1 = whisk_half, y0 = hi_fence_bp, y1 = hi_fence_bp,
-         line = list(color = box_col, width = 1.5)),
-    list(type = "line", xref = "x", yref = "y",
-         x0 = 0, x1 = 0, y0 = lo_fence_bp, y1 = q1_bp,
-         line = list(color = box_col, width = 1.5)),
-    list(type = "line", xref = "x", yref = "y",
-         x0 = -whisk_half, x1 = whisk_half, y0 = lo_fence_bp, y1 = lo_fence_bp,
-         line = list(color = box_col, width = 1.5))
+    list(
+      type = "rect",
+      xref = "x",
+      yref = "y",
+      x0 = -box_half_width,
+      x1 = box_half_width,
+      y0 = q1_bp,
+      y1 = q3_bp,
+      fillcolor = box_fill,
+      line = list(color = box_col, width = 1.5)
+    ),
+    list(
+      type = "line",
+      xref = "x",
+      yref = "y",
+      x0 = -box_half_width,
+      x1 = box_half_width,
+      y0 = med_bp,
+      y1 = med_bp,
+      line = list(color = box_col, width = 2)
+    ),
+    list(
+      type = "line",
+      xref = "x",
+      yref = "y",
+      x0 = -box_half_width,
+      x1 = box_half_width,
+      y0 = mean_bp,
+      y1 = mean_bp,
+      line = list(color = box_col, width = 1.5, dash = "dot")
+    ),
+    list(
+      type = "line",
+      xref = "x",
+      yref = "y",
+      x0 = 0,
+      x1 = 0,
+      y0 = q3_bp,
+      y1 = hi_fence_bp,
+      line = list(color = box_col, width = 1.5)
+    ),
+    list(
+      type = "line",
+      xref = "x",
+      yref = "y",
+      x0 = -whisk_half,
+      x1 = whisk_half,
+      y0 = hi_fence_bp,
+      y1 = hi_fence_bp,
+      line = list(color = box_col, width = 1.5)
+    ),
+    list(
+      type = "line",
+      xref = "x",
+      yref = "y",
+      x0 = 0,
+      x1 = 0,
+      y0 = lo_fence_bp,
+      y1 = q1_bp,
+      line = list(color = box_col, width = 1.5)
+    ),
+    list(
+      type = "line",
+      xref = "x",
+      yref = "y",
+      x0 = -whisk_half,
+      x1 = whisk_half,
+      y0 = lo_fence_bp,
+      y1 = lo_fence_bp,
+      line = list(color = box_col, width = 1.5)
+    )
   )
 
   if (show_points) {
@@ -6866,27 +7235,27 @@ stats_boxplot <- function(
     min_gap <- 5
     raw <- c(q1_bp, med_bp, mean_bp, q3_bp)
     idx <- order(raw)
-    s   <- raw[idx]
+    s <- raw[idx]
     for (iter in seq_len(50)) {
       changed <- FALSE
       for (i in seq_len(3)) {
         if (s[i + 1] - s[i] < min_gap) {
-          mid    <- (s[i] + s[i + 1]) / 2
-          s[i]   <- mid - min_gap / 2
+          mid <- (s[i] + s[i + 1]) / 2
+          s[i] <- mid - min_gap / 2
           s[i + 1] <- mid + min_gap / 2
           changed <- TRUE
         }
       }
       if (!changed) break
     }
-    result      <- raw
+    result <- raw
     result[idx] <- s
     result
   })
-  q1_y   <- spread_ys[1]
-  med_y  <- spread_ys[2]
+  q1_y <- spread_ys[1]
+  med_y <- spread_ys[2]
   mean_y <- spread_ys[3]
-  q3_y   <- spread_ys[4]
+  q3_y <- spread_ys[4]
 
   bp_annots <- c(
     bp_annots,
@@ -7268,7 +7637,11 @@ stats_violin <- function(
     )
     if (is_degenerate) {
       # Single-member groups stay centered; multi-member degenerate groups get jitter
-      x_jit <- if (nrow(sub_df) == 1) cat_idx else cat_idx + stats::runif(nrow(sub_df), -0.25, 0.25)
+      x_jit <- if (nrow(sub_df) == 1) {
+        cat_idx
+      } else {
+        cat_idx + stats::runif(nrow(sub_df), -0.25, 0.25)
+      }
       p <- plotly::add_trace(
         p,
         type = "scatter",

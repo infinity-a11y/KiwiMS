@@ -9,8 +9,6 @@ box::use(
   app /
     logic /
     conversion_ui[
-      conc_unit_input_ui,
-      time_unit_input_ui,
       keybind_menu_ui,
       table_legend,
       sample_table_legend,
@@ -67,6 +65,12 @@ box::use(
       stats_scatter,
       stats_violin,
       batch_plate_heatmap,
+      make_unit_view,
+      convert_conc_keys,
+      convert_hits_units,
+      convert_kobs_result_units,
+      convert_kinact_ki_params,
+      convert_result_list_units
     ],
   app /
     logic /
@@ -240,6 +244,12 @@ server <- function(
     stats_violin_pending_sample <- shiny::reactiveVal(NULL)
     manual_render_cmp_spectrum <- shiny::reactiveVal(0L)
 
+    # Last unit selection of the declaration interface. Held separately from
+    # the inputs because a reset re-renders the pickers, which would otherwise
+    # fall back to their first choice instead of what was analysed.
+    conc_unit_selected <- shiny::reactiveVal(NULL)
+    time_unit_selected <- shiny::reactiveVal(NULL)
+
     # Apply initial disabled styling for samples_fileinput after DOM is ready
     session$onFlushed(
       function() {
@@ -366,6 +376,25 @@ server <- function(
     }
 
     ## Concentration/Time UI ----
+    # Remember the picked units so they survive the re-render on reset
+    safe_observe(
+      event_expr = input$conc_unit,
+      observer_name = "Concentration Unit Memory",
+      handler_fn = function() {
+        shiny::req(input$conc_unit)
+        conc_unit_selected(input$conc_unit)
+      }
+    )
+
+    safe_observe(
+      event_expr = input$time_unit,
+      observer_name = "Time Unit Memory",
+      handler_fn = function() {
+        shiny::req(input$time_unit)
+        time_unit_selected(input$time_unit)
+      }
+    )
+
     # Conditional adaption of concentration/time input UI
     safe_observe(
       observer_name = "Conditional Adaption of Concentration/Time Input UI",
@@ -466,9 +495,7 @@ server <- function(
         } else {
           ""
         },
-        compounds_status = if (
-          isTRUE(declaration_vars$compound_table_status)
-        ) {
+        compounds_status = if (isTRUE(declaration_vars$compound_table_status)) {
           "confirmed"
         } else {
           ""
@@ -477,7 +504,9 @@ server <- function(
           "confirmed"
         } else {
           ""
-        }
+        },
+        conc_unit = conc_unit_selected(),
+        time_unit = time_unit_selected()
       ))
     })
 
@@ -1565,7 +1594,9 @@ server <- function(
             conversion_declaration_ui(
               ns,
               proteins_status = "confirmed",
-              compounds_status = "confirmed"
+              compounds_status = "confirmed",
+              conc_unit = shiny::isolate(conc_unit_selected()),
+              time_unit = shiny::isolate(time_unit_selected())
             )
           )
 
@@ -1849,7 +1880,9 @@ server <- function(
               ns,
               proteins_status = "confirmed",
               compounds_status = "confirmed",
-              samples_status = "confirmed"
+              samples_status = "confirmed",
+              conc_unit = shiny::isolate(conc_unit_selected()),
+              time_unit = shiny::isolate(time_unit_selected())
             )
           )
 
@@ -3390,8 +3423,56 @@ server <- function(
             names(conc_selected) <- all_fitted_conc
             conversion_vars$select_concentration <- conc_selected
 
-            # Define a set of IDs for the dynamic concentration tabs
+            # Define a set of IDs for the dynamic concentration tabs.
+            # Derived from the declared units so the IDs stay stable while the
+            # user switches the displayed unit.
             dynamic_ui_ids <- paste0("concentration_tab_", all_fitted_conc)
+
+            ##### Unit view ----
+            # The "Unit View" pickers let the user read the results in units
+            # other than the ones the samples were declared in. The fitted
+            # result objects stay in the declared units; everything rendered
+            # below goes through these converted views.
+            unit_view <- shiny::reactive({
+              make_unit_view(
+                units,
+                conc_unit = input$conc_unit_results,
+                time_unit = input$time_unit_results
+              )
+            })
+
+            view_units <- shiny::reactive(unit_view()$units)
+
+            view_hits <- shiny::reactive({
+              convert_hits_units(hits_summary, units, unit_view())
+            })
+
+            view_colors <- shiny::reactive({
+              stats::setNames(
+                concentration_colors,
+                unname(convert_conc_keys(
+                  names(concentration_colors),
+                  unit_view()
+                ))
+              )
+            })
+
+            view_fitted_conc <- shiny::reactive({
+              convert_conc_keys(all_fitted_conc, unit_view())
+            })
+
+            # Results currently on display: the recomputed ones when
+            # concentrations were excluded, otherwise the original fit
+            view_results <- shiny::reactive({
+              convert_result_list_units(
+                if (is.null(conversion_vars$modified_results)) {
+                  result_list
+                } else {
+                  conversion_vars$modified_results
+                },
+                unit_view()
+              )
+            })
 
             # Call function to render kinact/Ki results interface
             output$conversion_ui <- shiny::renderUI({
@@ -3399,7 +3480,8 @@ server <- function(
                 ns,
                 hits_summary,
                 all_fitted_conc,
-                dynamic_ui_ids
+                dynamic_ui_ids,
+                units = units
               )
             })
 
@@ -3407,20 +3489,25 @@ server <- function(
 
             ###### Calculated kinact value ----
             output$kinact <- shiny::renderUI({
+              params <- convert_kinact_ki_params(
+                kinact_ki_result(),
+                unit_view()
+              )
+
               shiny::div(
                 class = "result-card-content",
                 shiny::div(
                   class = "main-result",
                   shiny::HTML(paste(
-                    format_scientific(kinact_ki_result()[1, 1]),
-                    paste0(gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]), "⁻¹")
+                    format_scientific(params[1, 1]),
+                    paste0(unit_view()$time_unit, "⁻¹")
                   ))
                 ),
                 shiny::div(
                   class = "error-result",
                   shiny::HTML(paste(
                     "±",
-                    format_scientific(kinact_ki_result()[1, 2])
+                    format_scientific(params[1, 2])
                   ))
                 ),
                 shiny::div(
@@ -3428,7 +3515,7 @@ server <- function(
                   shiny::HTML(
                     paste(
                       "<b>t value</b>&nbsp;",
-                      format_scientific(kinact_ki_result()[1, 3])
+                      format_scientific(params[1, 3])
                     )
                   )
                 ),
@@ -3437,7 +3524,7 @@ server <- function(
                   shiny::HTML(
                     paste(
                       "<b>Pr(>|t|)</b>&nbsp;",
-                      format_scientific(kinact_ki_result()[1, 4])
+                      format_scientific(params[1, 4])
                     )
                   )
                 )
@@ -3446,22 +3533,25 @@ server <- function(
 
             ###### Calculated Ki value ----
             output$Ki <- shiny::renderUI({
+              params <- convert_kinact_ki_params(
+                kinact_ki_result(),
+                unit_view()
+              )
+
               shiny::div(
                 class = "result-card-content",
                 shiny::div(
                   class = "main-result",
                   shiny::HTML(paste(
-                    format_scientific(kinact_ki_result()[2, 1]),
-                    paste0(
-                      gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]])
-                    )
+                    format_scientific(params[2, 1]),
+                    unit_view()$conc_unit
                   ))
                 ),
                 shiny::div(
                   class = "error-result",
                   shiny::HTML(paste(
                     "±",
-                    format_scientific(kinact_ki_result()[2, 2])
+                    format_scientific(params[2, 2])
                   ))
                 ),
                 shiny::div(
@@ -3469,7 +3559,7 @@ server <- function(
                   shiny::HTML(
                     paste(
                       "<b>t value</b>&nbsp;",
-                      format_scientific(kinact_ki_result()[2, 3])
+                      format_scientific(params[2, 3])
                     )
                   )
                 ),
@@ -3478,7 +3568,7 @@ server <- function(
                   shiny::HTML(
                     paste(
                       "<b>Pr(>|t|)</b>&nbsp;",
-                      format_scientific(kinact_ki_result()[2, 4])
+                      format_scientific(params[2, 4])
                     )
                   )
                 )
@@ -3487,19 +3577,22 @@ server <- function(
 
             ###### Calculated kinact/Ki value ----
             output$Kinact_Ki <- shiny::renderUI({
+              params <- convert_kinact_ki_params(
+                kinact_ki_result(),
+                unit_view()
+              )
+
               shiny::div(
                 class = "result-card-content",
                 shiny::div(
                   class = "main-result",
                   shiny::HTML(paste(
-                    format_scientific(
-                      kinact_ki_result()[1, 1] / kinact_ki_result()[2, 1]
-                    ),
+                    format_scientific(params[1, 1] / params[2, 1]),
                     "<br>",
                     paste0(
-                      gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
+                      unit_view()$time_unit,
                       "⁻¹ ",
-                      gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+                      unit_view()$conc_unit,
                       "⁻¹"
                     )
                   ))
@@ -3514,8 +3607,16 @@ server <- function(
                   result_list
                 )
 
-                # Get results
-                kobs_results <- result_list$binding_kobs_result$kobs_result_table
+                view <- unit_view()
+
+                # Get results - always the full fit, exclusions are applied
+                # through the checkbox column
+                kobs_results <- convert_kobs_result_units(
+                  result_list$binding_kobs_result,
+                  view
+                )$kobs_result_table
+
+                conc_col <- paste0("Conc. [", view$conc_unit, "]")
 
                 kobs_results <- kobs_results |>
                   dplyr::mutate(
@@ -3531,42 +3632,39 @@ server <- function(
                   ) |>
                   dplyr::relocate(concentration, .before = kobs) |>
                   stats::setNames(c(
-                    paste0(
-                      "Conc. [",
-                      gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
-                      "]"
-                    ),
-                    paste0(
-                      "kobs [",
-                      gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
-                      "\u207b\u00b9]"
-                    ),
-                    paste0(
-                      "SE [",
-                      gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
-                      "\u207b\u00b9]"
-                    ),
+                    conc_col,
+                    paste0("kobs [", view$time_unit, "\u207b\u00b9]"),
+                    paste0("SE [", view$time_unit, "\u207b\u00b9]"),
                     "Velocity",
                     "Plateau [%]"
                   ))
 
                 kobs_result_raw(kobs_results)
 
+                # Preserve the current exclusions across a re-render (e.g. when
+                # the displayed unit changes)
+                included <- shiny::isolate(
+                  conversion_vars$select_concentration
+                )
+                included <- if (is.null(included)) {
+                  rep(TRUE, nrow(kobs_results))
+                } else {
+                  selected <- unname(included[all_fitted_conc])
+                  ifelse(is.na(selected), TRUE, selected)
+                }
+
                 kobs_results <- kobs_results |>
                   dplyr::mutate(
                     Included = checkboxColumn(
                       nrow(kobs_results),
                       6,
-                      value = TRUE
+                      value = included
                     )
                   )
 
                 # Kobs present concentrations
-                kobs_conc <- kobs_results[[paste0(
-                  "Conc. [",
-                  gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
-                  "]"
-                )]]
+                kobs_conc <- kobs_results[[conc_col]]
+                conc_colors <- view_colors()
 
                 DT::datatable(
                   data = kobs_results,
@@ -3596,24 +3694,20 @@ server <- function(
                   ))
                 ) |>
                   DT::formatStyle(
-                    columns = paste0(
-                      "Conc. [",
-                      gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
-                      "]"
-                    ),
+                    columns = conc_col,
                     target = 'row',
                     backgroundColor = DT::styleEqual(
                       levels = as.character(kobs_conc),
-                      values = unname(concentration_colors[match(
+                      values = unname(conc_colors[match(
                         kobs_conc,
-                        names(concentration_colors)
+                        names(conc_colors)
                       )])
                     ),
                     color = DT::styleEqual(
                       levels = as.character(kobs_conc),
-                      values = unname(get_contrast_color(concentration_colors[match(
+                      values = unname(get_contrast_color(conc_colors[match(
                         kobs_conc,
-                        names(concentration_colors)
+                        names(conc_colors)
                       )]))
                     )
                   ) |>
@@ -3629,16 +3723,10 @@ server <- function(
             output$binding_plot <- plotly::renderPlotly({
               shiny::req(result_list)
 
-              rl <- if (is.null(conversion_vars$modified_results)) {
-                result_list
-              } else {
-                conversion_vars$modified_results
-              }
-
               make_binding_plot(
-                kobs_result = rl$binding_kobs_result,
-                colors = concentration_colors,
-                units = units
+                kobs_result = view_results()$binding_kobs_result,
+                colors = view_colors(),
+                units = view_units()
               )
             })
 
@@ -3646,16 +3734,10 @@ server <- function(
             output$kobs_plot <- plotly::renderPlotly({
               shiny::req(result_list)
 
-              if (is.null(conversion_vars$modified_results)) {
-                result_list <- result_list
-              } else {
-                result_list <- conversion_vars$modified_results
-              }
-
               make_kobs_plot(
-                kinact_ki_result = result_list$kinact_ki_result,
-                colors = concentration_colors,
-                units = units
+                kinact_ki_result = view_results()$kinact_ki_result,
+                colors = view_colors(),
+                units = view_units()
               )
             })
 
@@ -3667,9 +3749,12 @@ server <- function(
               build_fn = function(theme) {
                 shiny::req(result_list)
                 make_binding_plot(
-                  kobs_result = result_list$binding_kobs_result,
-                  colors = concentration_colors,
-                  units = units,
+                  kobs_result = convert_kobs_result_units(
+                    result_list$binding_kobs_result,
+                    unit_view()
+                  ),
+                  colors = view_colors(),
+                  units = view_units(),
                   theme = theme
                 )
               },
@@ -3685,15 +3770,10 @@ server <- function(
               "kobs",
               build_fn = function(theme) {
                 shiny::req(result_list)
-                rl <- if (is.null(conversion_vars$modified_results)) {
-                  result_list
-                } else {
-                  conversion_vars$modified_results
-                }
                 make_kobs_plot(
-                  kinact_ki_result = rl$kinact_ki_result,
-                  colors = concentration_colors,
-                  units = units,
+                  kinact_ki_result = view_results()$kinact_ki_result,
+                  colors = view_colors(),
+                  units = view_units(),
                   theme = theme
                 )
               },
@@ -3744,6 +3824,11 @@ server <- function(
                   local_concentration
                 ]]
 
+                # Same concentration expressed in the displayed unit
+                view_concentration <- shiny::reactive({
+                  unname(view_fitted_conc()[local_concentration])
+                })
+
                 ###### Render concentration interface UI ----
                 output[[local_ui_id]] <- shiny::renderUI({
                   kinact_ki_concentrations_tabs(
@@ -3754,18 +3839,60 @@ server <- function(
                   )
                 })
 
+                ###### Calculated kobs value ----
+                output[[paste0(
+                  local_ui_id,
+                  "_kobs_value"
+                )]] <- shiny::renderUI({
+                  view <- unit_view()
+                  kobs <- conc_result$kobs / view$time_factor
+                  kobs_se <- conc_result$kobs_se / view$time_factor
+
+                  shiny::div(
+                    class = "result-card-content",
+                    shiny::div(
+                      class = "main-result",
+                      shiny::HTML(paste(
+                        format_scientific(kobs),
+                        paste0(view$time_unit, "⁻¹")
+                      ))
+                    ),
+                    shiny::div(
+                      class = "error-result",
+                      shiny::HTML(paste(
+                        "±",
+                        if (is.na(kobs_se)) {
+                          "n.a."
+                        } else {
+                          format_scientific(kobs_se)
+                        }
+                      ))
+                    )
+                  )
+                })
+
+                ###### Velocity v value ----
+                output[[paste0(local_ui_id, "_v_value")]] <- shiny::renderUI({
+                  shiny::div(
+                    class = "kobs-val",
+                    format_scientific(conc_result$v / unit_view()$time_factor)
+                  )
+                })
+
                 ###### Table view ----
                 output[[paste0(local_ui_id, "_hits")]] <- DT::renderDT({
-                  tbl <- hits_summary |>
+                  view_units_local <- view_units()
+
+                  tbl <- view_hits() |>
                     dplyr::filter(
-                      !!rlang::sym(units["Concentration"]) ==
-                        local_concentration
+                      !!rlang::sym(view_units_local["Concentration"]) ==
+                        view_concentration()
                     )
 
                   # Summarize inputs
                   inputs <- list(
                     truncate_names = TRUE,
-                    color_variable = units["Concentration"],
+                    color_variable = view_units_local["Concentration"],
                     binding_bar = input[[paste0(
                       local_ui_id,
                       "concentrations_table_view_binding_bar"
@@ -3779,12 +3906,12 @@ server <- function(
                   # Prefiltering of table
                   tbl <- filter_table_view(
                     table = tbl,
-                    colors = conversion_vars$conc_colors,
+                    colors = view_colors(),
                     inputs = inputs,
-                    units = units
+                    units = view_units_local
                   ) |>
                     dplyr::arrange(
-                      as.numeric(!!rlang::sym(units[["Time"]]))
+                      as.numeric(!!rlang::sym(view_units_local[["Time"]]))
                     )
 
                   # Assign filtered table to reactive for eventual export
@@ -3793,10 +3920,10 @@ server <- function(
                   # Create DT table
                   render_table_view(
                     table = tbl,
-                    colors = conversion_vars$conc_colors,
+                    colors = view_colors(),
                     tab = "Concentration",
                     inputs = inputs,
-                    units = units
+                    units = view_units_local
                   )
                 }) |>
                   shiny::bindEvent(
@@ -3807,7 +3934,8 @@ server <- function(
                     input[[paste0(
                       local_ui_id,
                       "concentrations_table_view_tot_binding_bar"
-                    )]]
+                    )]],
+                    unit_view()
                   )
 
                 ###### Concentration table export ----
@@ -3832,10 +3960,13 @@ server <- function(
                   "_binding_plot"
                 )]] <- plotly::renderPlotly({
                   make_binding_plot(
-                    kobs_result = result_list$binding_kobs_result,
-                    filter_conc = local_concentration,
-                    colors = concentration_colors,
-                    units = units
+                    kobs_result = convert_kobs_result_units(
+                      result_list$binding_kobs_result,
+                      unit_view()
+                    ),
+                    filter_conc = view_concentration(),
+                    colors = view_colors(),
+                    units = view_units()
                   )
                 })
 
@@ -3861,14 +3992,15 @@ server <- function(
                       FALSE
                     ),
                     time = TRUE,
-                    hits_summary = hits_summary,
-                    units = units
+                    hits_summary = view_hits(),
+                    units = view_units(),
+                    time_factor = unit_view()$time_factor
                   )
                 }) |>
-                  shiny::bindEvent(input[[paste0(
-                    local_ui_id,
-                    "_kind"
-                  )]])
+                  shiny::bindEvent(
+                    input[[paste0(local_ui_id, "_kind")]],
+                    unit_view()
+                  )
 
                 setup_plot_dl(
                   input,
@@ -3877,10 +4009,13 @@ server <- function(
                   paste0(local_ui_id, "_binding"),
                   build_fn = function(theme) {
                     make_binding_plot(
-                      kobs_result = result_list$binding_kobs_result,
-                      filter_conc = local_concentration,
-                      colors = concentration_colors,
-                      units = units,
+                      kobs_result = convert_kobs_result_units(
+                        result_list$binding_kobs_result,
+                        unit_view()
+                      ),
+                      filter_conc = view_concentration(),
+                      colors = view_colors(),
+                      units = view_units(),
                       theme = theme
                     )
                   },
@@ -3911,8 +4046,9 @@ server <- function(
                         FALSE
                       ),
                       time = TRUE,
-                      hits_summary = hits_summary,
-                      units = units,
+                      hits_summary = view_hits(),
+                      units = view_units(),
+                      time_factor = unit_view()$time_factor,
                       theme = theme
                     )
                   },
@@ -4876,7 +5012,7 @@ server <- function(
                 ),
                 shiny::div(
                   class = "protocol-stat-sub",
-                  "maximum acceptale mass deviation"
+                  "maximum acceptable mass deviation"
                 )
               )
             })
