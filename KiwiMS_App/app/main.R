@@ -1596,11 +1596,11 @@ server <- function(id) {
     )
 
     # Check update availability
-    version_info <- readLines("resources/version.txt", warn = FALSE)
+    version_info <- get_kiwims_version()
 
-    local_version <- sub(".*=", "", version_info[1])
-    release <- sub(".*=", "", version_info[2])
-    url <- sub(".*=", "", version_info[3])
+    local_version <- unname(version_info["version"])
+    release <- unname(version_info["date"])
+    url <- unname(version_info["url"])
     remote_version <- sub(".*=", "", check_github_version())
 
     if (identical(local_version, remote_version)) {

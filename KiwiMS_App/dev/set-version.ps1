@@ -19,6 +19,11 @@
         - README.md   version badge, release links, citation blocks
         - CITATION    version and date-released
 
+    version.txt also holds the Zenodo concept DOI. That DOI is minted once and
+    always resolves to the latest release, so it is a constant rather than
+    something to bump - it lives there so -Check can catch a version-specific
+    DOI being pasted in by mistake.
+
 .EXAMPLE
     .\KiwiMS_App\dev\set-version.ps1 -Version 0.7.3
     Bumps to 0.7.3, dated today.
@@ -85,9 +90,23 @@ function Get-VersionInfo {
 # Every literal copy of the version that lives outside version.txt.
 # Each rule captures the value in group 2, so the same rule serves both the
 # comparison and the replacement without needing to know the previous value.
-function Get-Rules([string] $ExpectedVersion, [string] $ExpectedDate) {
+function Get-Rules([string] $ExpectedVersion, [string] $ExpectedDate, [string] $ExpectedDoi) {
     $d = [datetime]::ParseExact($ExpectedDate, 'yyyy-MM-dd', $null)
+
+    # The Zenodo concept DOI. Unlike a version DOI it is minted once and always
+    # resolves to the latest release, so it is a constant that must never change -
+    # these rules exist to stop a version-specific DOI from creeping back in.
+    $doiId = if ($ExpectedDoi -match 'zenodo\.(\d+)') { $Matches[1] } else { $null }
+    if (-not $doiId) { throw "Could not read a Zenodo record id from doi '$ExpectedDoi'" }
+
     @(
+        # Matches every zenodo.<id> in the badge, the links, the prose and the
+        # BibTeX block. Anchored on "zenodo." so the UniDec DOI is never touched.
+        @{ File = 'README.md'; Label = 'zenodo DOI'; Regex = "(zenodo\.)(\d+)()"; Value = $doiId }
+        @{ File = 'CITATION'; Label = 'zenodo DOI'; Regex = "(zenodo\.)(\d+)()"; Value = $doiId }
+        # The BibTeX key Zenodo generates embeds the record id and the year.
+        @{ File = 'README.md'; Label = 'bibtex key year'; Regex = "(@software\{[a-z_]+?_)(\d{4})(_)"; Value = $d.Year.ToString() }
+        @{ File = 'README.md'; Label = 'bibtex key DOI id'; Regex = "(@software\{[a-z_]+?_\d{4}_)(\d+)(,)"; Value = $doiId }
         @{ File = 'README.md'; Label = 'version badge'; Regex = "(badge/Version-)($semver)(-E8CB98)"; Value = $ExpectedVersion }
         @{ File = 'README.md'; Label = 'release tag link'; Regex = "(releases/tag/)($semver)()"; Value = $ExpectedVersion }
         @{ File = 'README.md'; Label = 'current version heading'; Regex = "(<b>KiwiMS )($semver)(</b>)"; Value = $ExpectedVersion }
@@ -108,11 +127,12 @@ if ($Check) {
     $info = Get-VersionInfo
     $expectedVersion = $info['version']
     $expectedDate = if ($info.ContainsKey('release_date')) { $info['release_date'] } else { (Get-Date -Format 'yyyy-MM-dd') }
+    $expectedDoi = $info['doi']
 
-    Write-Host "version.txt : $expectedVersion (released $expectedDate)" -ForegroundColor Cyan
+    Write-Host "version.txt : $expectedVersion (released $expectedDate, doi $expectedDoi)" -ForegroundColor Cyan
 
     $problems = @()
-    foreach ($rule in (Get-Rules $expectedVersion $expectedDate)) {
+    foreach ($rule in (Get-Rules $expectedVersion $expectedDate $expectedDoi)) {
         $text = Read-TextFile (Join-Path $repoRoot $rule.File)
         $found = [regex]::Matches($text, $rule.Regex)
         if ($found.Count -eq 0) {
@@ -157,7 +177,7 @@ Write-TextFile $versionFile (($updated -join "`r`n") + "`r`n")
 Write-Host "  resources\version.txt" -ForegroundColor Green
 
 # 2. The static documents that cannot read it.
-foreach ($group in (Get-Rules $Version $ReleaseDate | Group-Object { $_.File })) {
+foreach ($group in (Get-Rules $Version $ReleaseDate $info['doi'] | Group-Object { $_.File })) {
     $path = Join-Path $repoRoot $group.Name
     $text = Read-TextFile $path
     $changed = 0
@@ -179,7 +199,4 @@ foreach ($group in (Get-Rules $Version $ReleaseDate | Group-Object { $_.File }))
 Write-Host ""
 Write-Host "Done. KiwiMS.exe and the installer pick the version up automatically on the" -ForegroundColor Gray
 Write-Host "next build - nothing else to edit." -ForegroundColor Gray
-Write-Host ""
-Write-Host "Note: the Zenodo DOI in README.md and CITATION is minted per release and" -ForegroundColor Gray
-Write-Host "      still has to be updated by hand." -ForegroundColor Gray
 Write-Host ""

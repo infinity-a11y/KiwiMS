@@ -1,9 +1,24 @@
 #define KiwiMSLogFile "{localappdata}\KiwiMS\kiwims_setup.log"
 
+; The app version is read at compile time from the single source of truth,
+; KiwiMS_App\resources\version.txt (first line, "version=x.y.z").
+; Never hard-code it here - bump it with KiwiMS_App\dev\set-version.ps1.
+#define VersionFilePath AddBackslash(SourcePath) + "KiwiMS_App\resources\version.txt"
+#define VersionHandle FileOpen(VersionFilePath)
+#if VersionHandle == 0
+  #error Cannot open KiwiMS_App\resources\version.txt
+#endif
+#define VersionLine FileRead(VersionHandle)
+#expr FileClose(VersionHandle)
+#define AppVer Trim(Copy(VersionLine, Pos("=", VersionLine) + 1, Len(VersionLine)))
+#if AppVer == ""
+  #error Could not parse a version from KiwiMS_App\resources\version.txt
+#endif
+
 [Setup]
 AppName=KiwiMS
 AppId=KiwiMS
-AppVersion=0.7.2
+AppVersion={#AppVer}
 AppPublisher=Marian Freisleben
 DefaultDirName={autopf}\KiwiMS
 DefaultGroupName=KiwiMS

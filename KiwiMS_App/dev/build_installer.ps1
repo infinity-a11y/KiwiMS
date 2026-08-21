@@ -95,8 +95,20 @@ else {
     Write-Host "[WARN] conda-unpack-script.py not found - skipping manifest check." -ForegroundColor Yellow
 }
 
+# --- Version ---------------------------------------------------------------------
+# KiwiMS.exe and the .iss both read resources\version.txt themselves, so they cannot
+# drift. README.md and CITATION carry literal copies and can, so warn about it here
+# rather than discovering it after the release is tagged. Not fatal: the mismatch
+# never reaches the installer.
+& (Join-Path $PSScriptRoot 'set-version.ps1') -Check
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[WARN] Continuing with the build - fix the documents before tagging." -ForegroundColor Yellow
+}
+Write-Host ""
+
 # --- Launcher --------------------------------------------------------------------
 Write-Host "[2/3] Compiling KiwiMS.exe" -ForegroundColor Cyan
+$global:LASTEXITCODE = 0
 & (Join-Path $appRoot 'build-launcher.ps1') -NoPause
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] Launcher compilation failed." -ForegroundColor Red

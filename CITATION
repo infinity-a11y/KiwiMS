@@ -5,8 +5,8 @@ authors:
     given-names: "Marian"
 title: "KiwiMS"
 version: "0.7.2"
-doi: "10.5281/zenodo.18552188"
-date-released: 2026-02-25
+doi: "10.5281/zenodo.16575976"
+date-released: 2026-08-21
 url: "https://github.com/infinity-a11y/KiwiMS"
 references:
   - type: article

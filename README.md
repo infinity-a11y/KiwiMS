@@ -22,10 +22,10 @@ Please cite both **KiwiMS** and **UniDec** if you used this software in your wor
 <br><br>
 Marian Freisleben. (2026). infinity-a11y/KiwiMS: KiwiMS 0.7.2. Zenodo. DOI: https://doi.org/10.5281/zenodo.16575976
 ```    
-@software{marian_freisleben_2026_18552188,
+@software{marian_freisleben_2026_16575976,
   author       = {Marian Freisleben},
   title        = {infinity-a11y/KiwiMS: KiwiMS 0.7.2},
-  month        = feb,
+  month        = aug,
   year         = 2026,
   publisher    = {Zenodo},
   version      = {0.7.2},

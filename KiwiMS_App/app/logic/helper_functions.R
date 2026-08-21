@@ -105,19 +105,25 @@ safe_observe <- function(
 }
 
 #' @export
-get_kiwims_version <- function() {
-  # Get version file from static directory
-  version_file <- readLines("app/static/version.txt")
+get_kiwims_version <- function(
+  path = "resources/version.txt"
+) {
+  # resources/version.txt is the single source of truth for the app version.
+  # Parse it as key=value so the caller is not tied to the line order, and so
+  # extra keys can be added later without breaking anything.
+  lines <- readLines(path, warn = FALSE)
+  lines <- lines[nzchar(trimws(lines))]
 
-  # Assign names
-  names(version_file) <- c("version", "date", "url")
+  keys <- trimws(sub("=.*$", "", lines))
+  values <- trimws(sub("^[^=]*=", "", lines))
+  names(values) <- keys
 
-  # Clean values
-  version_file[1] <- gsub("version=", "", version_file[1])
-  version_file[2] <- gsub("release_date=", "", version_file[2])
-  version_file[3] <- gsub("zip_url=", "", version_file[1])
-
-  return(version_file)
+  # Expose the keys under the short names the app has always used.
+  c(
+    version = unname(values["version"]),
+    date = unname(values["release_date"]),
+    url = unname(values["zip_url"])
+  )
 }
 
 #' @export
