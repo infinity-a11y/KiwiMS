@@ -5289,3 +5289,24 @@ sample-file-row .form-group {
   margin-bottom: 0px;
   font-size: 15px;
 }
+
+.unit-inputs {
+  display: flex;
+  gap: 1rem;
+}
+
+.unit-inputs div:first-child {
+  white-space: nowrap;
+  align-content: center;
+  font-weight: normal;
+}
+
+.unit-inputs .bootstrap-select > .dropdown-toggle {
+  height: 30px;
+  font-size: 13px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  align-items: center;
+  width: 5rem;
+  min-width: fit-content;
+}

@@ -10,6 +10,7 @@ box::use(
     logic /
     conversion_functions[
       format_scientific,
+      unit_symbol,
       stats_histogram,
       stats_boxplot,
       stats_scatter,
@@ -146,30 +147,7 @@ kinact_ki_concentrations_tabs <- function(ns, local_ui_id, conc_result, units) {
               placement = "top"
             )
           ),
-          shiny::div(
-            class = "result-card-content",
-            shiny::div(
-              class = "main-result",
-              shiny::HTML(paste(
-                format_scientific(conc_result$kobs),
-                paste0(
-                  gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
-                  "⁻¹"
-                )
-              ))
-            ),
-            shiny::div(
-              class = "error-result",
-              shiny::HTML(paste(
-                "±",
-                if (is.na(conc_result$kobs_se)) {
-                  "n.a."
-                } else {
-                  format_scientific(conc_result$kobs_se)
-                }
-              ))
-            )
-          )
+          shiny::uiOutput(ns(paste0(local_ui_id, "_kobs_value")))
         )
       ),
       shiny::div(
@@ -216,10 +194,7 @@ kinact_ki_concentrations_tabs <- function(ns, local_ui_id, conc_result, units) {
               placement = "top"
             )
           ),
-          shiny::div(
-            class = "kobs-val",
-            format_scientific(conc_result$v)
-          )
+          shiny::uiOutput(ns(paste0(local_ui_id, "_v_value")))
         )
       )
     ),
@@ -289,7 +264,8 @@ kinact_ki_results_ui <- function(
   ns,
   hits_summary,
   concentrations,
-  dynamic_ui_ids
+  dynamic_ui_ids,
+  units = NULL
 ) {
   # Generate the dynamic concentration panels
   concentration_panels <- lapply(seq_along(concentrations), function(i) {
@@ -297,6 +273,8 @@ kinact_ki_results_ui <- function(
     ui_id <- dynamic_ui_ids[[i]]
 
     bslib::nav_panel(
+      # Kept in the declared unit — the tab labels stay fixed while the unit
+      # view changes
       title = paste0("[", concentration, "]"),
       shiny::div(
         class = "conversion-result-wrapper",
@@ -306,8 +284,6 @@ kinact_ki_results_ui <- function(
     )
   })
 
-  # bslib::navset_card_tab(
-  #   id = ns("tabs"),
   static_panels <- list(
     bslib::nav_panel(
       title = "Binding",
@@ -547,7 +523,30 @@ kinact_ki_results_ui <- function(
     bslib::navset_card_tab,
     c(
       list(id = ns("tabs")),
-      all_tabs
+      all_tabs,
+      list(
+        bslib::nav_item(
+          class = "conversion-tab-item-wrapper",
+          shiny::div(
+            class = "unit-inputs",
+            shiny::div("Unit View"),
+            conc_unit_input_ui(
+              ns,
+              id = "conc_unit_results",
+              label = FALSE,
+              selected = if (!is.null(units)) {
+                unit_symbol(units[["Concentration"]])
+              }
+            ),
+            time_unit_input_ui(
+              ns,
+              id = "time_unit_results",
+              label = FALSE,
+              selected = if (!is.null(units)) unit_symbol(units[["Time"]])
+            )
+          )
+        )
+      )
     )
   )
 }
@@ -2350,7 +2349,9 @@ conversion_declaration_ui <- function(
   ns,
   proteins_status = "",
   compounds_status = "",
-  samples_status = ""
+  samples_status = "",
+  conc_unit = NULL,
+  time_unit = NULL
 ) {
   if (proteins_status == "confirmed") {
     proteins_control_buttons <- shiny::div(
@@ -2758,14 +2759,14 @@ conversion_declaration_ui <- function(
             width = 1,
             shiny::div(
               class = "unit-selectors",
-              conc_unit_input_ui(ns)
+              conc_unit_input_ui(ns, id = "conc_unit", selected = conc_unit)
             )
           ),
           shiny::column(
             width = 1,
             shiny::div(
               class = "unit-selectors",
-              time_unit_input_ui(ns)
+              time_unit_input_ui(ns, id = "time_unit", selected = time_unit)
             )
           )
         )
@@ -2796,11 +2797,12 @@ conversion_declaration_ui <- function(
 
 # Time unit choices
 #' @export
-time_unit_input_ui <- function(ns) {
+time_unit_input_ui <- function(ns, id, label = TRUE, selected = NULL) {
   shinyWidgets::pickerInput(
-    inputId = ns("time_unit"),
-    label = "Time Unit",
+    inputId = ns(id),
+    label = if (label) "Time Unit" else NULL,
     choices = c("s", "min"),
+    selected = selected,
     choicesOpt = list(
       content = {
         w_col1 <- "45px"
@@ -2829,11 +2831,12 @@ time_unit_input_ui <- function(ns) {
 
 # Concentration unit choices
 #' @export
-conc_unit_input_ui <- function(ns) {
+conc_unit_input_ui <- function(ns, id, label = TRUE, selected = NULL) {
   shinyWidgets::pickerInput(
-    inputId = ns("conc_unit"),
-    label = "Conc. Unit",
+    inputId = ns(id),
+    label = if (label) "Conc. Unit" else NULL,
     choices = c("M", "mM", "μM", "nM", "pM"),
+    selected = selected,
     choicesOpt = list(
       content = {
         w_col1 <- "50px"
