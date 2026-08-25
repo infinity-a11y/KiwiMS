@@ -3,7 +3,15 @@
 box::use(
   bslib,
   htmlwidgets[saveWidget],
-  openxlsx[write.xlsx],
+  openxlsx[
+    addStyle,
+    addWorksheet,
+    createStyle,
+    createWorkbook,
+    saveWorkbook,
+    setColWidths,
+    writeData
+  ],
   plotly[as_widget, plotly_json],
   shiny,
   shinyWidgets[show_toast],
@@ -254,12 +262,28 @@ table_dl_buttons <- function(ns, prefix) {
   )
 }
 
-# Prepares a hits table data.frame for export: replaces NA with "N/A" and
-# drops the internal truncSample_ID column.
+# Columns that stay text on export even when every value happens to parse as a
+# number (well IDs, replicate group labels and sample names can look numeric).
+export_text_cols <- c(
+  "Sample ID",
+  "Protein",
+  "Cmp Name",
+  "Well",
+  "Replicate",
+  "Preferred"
+)
+
+# Prepares a hits table data.frame for export: drops the internal helper
+# columns and restores the numeric type of every fully numeric column.
+#
+# transform_hits() stringifies most columns for the DT display while leaving a
+# few (concentration, time, binding percentages, theoretical protein mass) as
+# doubles. Exporting that mix writes half the numbers as text and half as real
+# numbers, so a spreadsheet localises only the latter — the reason percentages
+# showed up with a decimal comma while the neighbouring columns kept the dot.
 #' @export
 prepare_hits_export <- function(table) {
-  table[is.na(table)] <- "N/A"
-  table[,
+  table <- table[,
     !names(table) %in%
       c(
         "truncSample_ID",
@@ -267,8 +291,32 @@ prepare_hits_export <- function(table) {
         "col_var",
         "trunc_label",
         "Mass Shift"
-      )
+      ),
+    drop = FALSE
   ]
+
+  for (col in setdiff(names(table), export_text_cols)) {
+    values <- table[[col]]
+    if (!is.character(values)) {
+      next
+    }
+    blank <- is.na(values) | trimws(values) %in% c("", "N/A")
+    numbers <- suppressWarnings(as.numeric(values[!blank]))
+    if (!length(numbers) || anyNA(numbers)) {
+      next
+    }
+    table[[col]] <- replace(rep(NA_real_, length(values)), !blank, numbers)
+  }
+
+  # Missing values keep reading as "N/A" in the text columns; numeric columns
+  # keep a real NA so the type survives (the writers spell it "N/A" again).
+  for (col in names(table)) {
+    if (is.character(table[[col]])) {
+      table[[col]][is.na(table[[col]])] <- "N/A"
+    }
+  }
+
+  table
 }
 
 # Registers CSV/Excel download handlers for a DT table.
@@ -293,7 +341,7 @@ setup_table_dl <- function(
         timer = 3000,
         timerProgressBar = TRUE
       )
-      utils::write.csv(data_fn(), file, row.names = FALSE)
+      write_export_csv(data_fn(), file)
     }
   )
 
@@ -307,7 +355,68 @@ setup_table_dl <- function(
         timer = 3000,
         timerProgressBar = TRUE
       )
-      write.xlsx(data_fn(), file)
+      write_export_xlsx(data_fn(), file)
     }
   )
+}
+
+# Writes a table as UTF-8 CSV with a byte order mark. Without the BOM Excel
+# falls back to the system code page, which turns the "Δ" of the mass delta
+# headers into mojibake.
+#' @export
+write_export_csv <- function(table, path) {
+  chr <- vapply(table, is.character, logical(1))
+  table[chr] <- lapply(table[chr], enc2utf8)
+  names(table) <- enc2utf8(names(table))
+
+  con <- file(path, open = "wb")
+  on.exit(close(con), add = TRUE)
+  writeBin(as.raw(c(0xef, 0xbb, 0xbf)), con)
+  utils::write.table(
+    table,
+    file = con,
+    sep = ",",
+    dec = ".",
+    qmethod = "double",
+    quote = TRUE,
+    row.names = FALSE,
+    col.names = TRUE,
+    na = "N/A"
+  )
+}
+
+# Writes a table as .xlsx with display formats attached to the numeric columns.
+# Excel renders unformatted (General) cells in scientific notation as soon as
+# the value carries more digits than the column is wide, which is what turned
+# full precision percentages into "1,05E+01".
+#' @export
+write_export_xlsx <- function(table, path) {
+  wb <- createWorkbook()
+  addWorksheet(wb, "Table")
+  writeData(wb, 1, table, keepNA = TRUE, na.string = "N/A")
+
+  # Percentages and masses. The adduct view's "Mass 1", "Mass 2", … columns
+  # carry no [Da] suffix but hold compound masses all the same, so match them
+  # by name rather than leaving them on the General format.
+  numeric_cols <- which(vapply(table, is.numeric, logical(1)))
+  decimal_cols <- intersect(
+    numeric_cols,
+    grep("\\[%\\]|\\[Da\\]|^Mass [0-9]+$", names(table))
+  )
+  if (length(decimal_cols) && nrow(table)) {
+    addStyle(
+      wb,
+      1,
+      style = createStyle(numFmt = "0.00"),
+      rows = seq_len(nrow(table)) + 1L,
+      cols = decimal_cols,
+      gridExpand = TRUE
+    )
+  }
+
+  # Concentration and time keep the General format — a molar concentration is
+  # legitimately scientific — but every column gets a width that fits its
+  # content so nothing collapses into an exponent for want of space.
+  setColWidths(wb, 1, cols = seq_along(table), widths = "auto")
+  saveWorkbook(wb, path, overwrite = TRUE)
 }

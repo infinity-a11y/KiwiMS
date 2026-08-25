@@ -3818,6 +3818,150 @@ label_smart_clean <- function(files) {
   return(result)
 }
 
+# Marker traces (the peak symbols and the legend rows that name them) carry
+# this tag in their `meta` attribute so a plotlyProxy can find them again in
+# the rendered figure without rebuilding it.
+#' @export
+peaks_trace_tag <- "kiwims-peak-symbols"
+
+# 0-based indices of the tagged traces in a built plotly figure, ready to hand
+# to plotlyProxyInvoke("restyle", ...), which indexes traces the JS way.
+#' @export
+peaks_trace_indices <- function(built_plot) {
+  traces <- built_plot$x$data
+
+  if (is.null(traces) || length(traces) == 0) {
+    return(integer(0))
+  }
+
+  # plotly treats `meta` as arrayOk and recycles a scalar along the trace's
+  # points, so the tag comes back as a vector on multi-point traces.
+  tagged <- vapply(
+    traces,
+    function(trace) {
+      tag <- as.character(trace$meta)
+      length(tag) > 0 && all(tag == peaks_trace_tag)
+    },
+    logical(1)
+  )
+
+  which(tagged) - 1L
+}
+
+# A 3D scene keeps its full domain when a legend is shown — the legend simply
+# overlays the right-hand side — so the camera is nudged left to clear it.
+#' @export
+spectrum_legend_camera_x <- 0.33
+
+# The three settings below only change how the figure is presented, never the
+# data behind it, so they are pushed to the figure that is already on screen
+# with plotlyProxy rather than costing a full rebuild and re-serialization.
+
+# Show or hide the peak symbols and the legend rows that name them. The traces
+# are always built, so this only flips their `visible` flag.
+#' @export
+restyle_peak_symbols <- function(session, output_id, plot_reactive, show) {
+  # The figure is behind bindEvent(), so this returns the last built value and
+  # never kicks off a build of its own; before the first render there is no
+  # value and nothing to patch.
+  indices <- tryCatch(
+    peaks_trace_indices(shiny::isolate(plot_reactive())),
+    error = function(e) integer(0)
+  )
+
+  if (length(indices) == 0) {
+    return(invisible(NULL))
+  }
+
+  plotly::plotlyProxyInvoke(
+    plotly::plotlyProxy(output_id, session),
+    "restyle",
+    list(visible = isTRUE(show)),
+    as.list(indices)
+  )
+
+  invisible(NULL)
+}
+
+# Show or hide the legend, recentring a cubic spectrum once nothing needs
+# dodging. Patching center.x alone leaves whatever rotation the user has
+# dialled in untouched.
+#' @export
+relayout_spectrum_legend <- function(session, output_id, show, cubic = TRUE) {
+  update <- list(showlegend = isTRUE(show))
+
+  if (isTRUE(cubic)) {
+    update[["scene.camera.center.x"]] <- if (isTRUE(show)) {
+      spectrum_legend_camera_x
+    } else {
+      0
+    }
+  }
+
+  plotly::plotlyProxyInvoke(
+    plotly::plotlyProxy(output_id, session),
+    "relayout",
+    update
+  )
+
+  invisible(NULL)
+}
+
+# Show or hide the sample tick labels. Only the cubic view has a sample axis;
+# the planar view plots every sample against the same two axes.
+#' @export
+relayout_spectrum_labels <- function(session, output_id, show, cubic = TRUE) {
+  if (!isTRUE(cubic)) {
+    return(invisible(NULL))
+  }
+
+  plotly::plotlyProxyInvoke(
+    plotly::plotlyProxy(output_id, session),
+    "relayout",
+    list("scene.zaxis.showticklabels" = isTRUE(show))
+  )
+
+  invisible(NULL)
+}
+
+# Reduce one spectrum to at most `max_points` points before plotting.
+#
+# Min/max decimation: the trace is cut into buckets and only the lowest and
+# highest intensity point of each bucket survives. Unlike plain thinning this
+# never shaves a peak apex — the maximum of every bucket is kept by
+# construction — so the envelope on screen is the same one the full trace
+# would draw, while the baseline points that overplot each other anyway are
+# dropped. Peak markers are annotated from `highlight_peaks` and are never
+# downsampled, so hit positions stay exact.
+downsample_spectrum <- function(df, max_points = 4000) {
+  n <- nrow(df)
+
+  if (
+    !is.finite(max_points) ||
+      max_points <= 0 ||
+      n <= max_points ||
+      !all(c("mass", "intensity") %in% names(df))
+  ) {
+    return(df)
+  }
+
+  # Two points survive per bucket, so ask for half as many buckets.
+  n_buckets <- max(1L, as.integer(max_points %/% 2))
+  bucket <- as.integer(cut(seq_len(n), breaks = n_buckets, labels = FALSE))
+
+  keep <- unlist(
+    lapply(split(seq_len(n), bucket), function(idx) {
+      intensity <- df$intensity[idx]
+      c(idx[which.min(intensity)], idx[which.max(intensity)])
+    }),
+    use.names = FALSE
+  )
+
+  # Keep the original mass order and both endpoints so the trace still spans
+  # the full mass range.
+  df[sort(unique(c(1L, keep, n))), , drop = FALSE]
+}
+
 # Generate spectrum with multiple traces
 #' @export
 multiple_spectra <- function(
@@ -3825,6 +3969,8 @@ multiple_spectra <- function(
   samples,
   cubic = TRUE,
   labels_show = NULL,
+  symbols_show = TRUE,
+  legend_show = TRUE,
   time = FALSE,
   color_cmp = NULL,
   truncated = FALSE,
@@ -3832,34 +3978,51 @@ multiple_spectra <- function(
   hits_summary = NULL,
   units = NULL,
   time_factor = 1,
+  max_points = 4000,
   theme = "dark"
 ) {
   # Omit NA in samples
   samples <- samples[!is.na(samples)]
 
-  # Get spectrum data
-  spectrum_data <- data.frame()
+  # Treat unset toggles as enabled
+  symbols_show <- !isFALSE(symbols_show)
+  legend_show <- !isFALSE(legend_show)
+
+  # Get spectrum and peaks data. process_plot_data() parses the whole sample,
+  # so call it once and take both pieces from the same result. Collecting the
+  # per-sample frames in a list and binding once at the end avoids the
+  # quadratic reallocation of growing a data.frame with rbind() in a loop.
+  spectrum_parts <- vector("list", length(samples))
+  peaks_parts <- vector("list", length(samples))
+
   for (i in seq_along(samples)) {
-    add_df <- process_plot_data(
+    plot_data <- process_plot_data(
       results_list$deconvolution[[samples[i]]],
       result_path = NULL
-    )$mass
+    )
 
-    if (is.null(add_df) || nrow(add_df) == 0) {
-      next
-    }
-
-    if (time) {
-      add_df <- dplyr::mutate(
-        add_df,
-        z = extract_minutes(samples[i]) * time_factor
-      )
+    z_value <- if (time) {
+      extract_minutes(samples[i]) * time_factor
     } else {
-      add_df <- dplyr::mutate(add_df, z = samples[i])
+      samples[i]
     }
 
-    spectrum_data <- rbind(spectrum_data, add_df)
+    mass_df <- plot_data$mass
+    if (!is.null(mass_df) && nrow(mass_df) > 0) {
+      spectrum_parts[[i]] <- dplyr::mutate(
+        downsample_spectrum(mass_df, max_points = max_points),
+        z = z_value
+      )
+    }
+
+    peaks_df <- plot_data$highlight_peaks
+    if (!is.null(peaks_df) && nrow(peaks_df) > 0) {
+      peaks_parts[[i]] <- dplyr::mutate(peaks_df, z = z_value)
+    }
   }
+
+  spectrum_data <- as.data.frame(dplyr::bind_rows(spectrum_parts))
+  peaks_data <- as.data.frame(dplyr::bind_rows(peaks_parts))
 
   if (nrow(spectrum_data) == 0 || !("mass" %in% names(spectrum_data))) {
     return(
@@ -3905,30 +4068,6 @@ multiple_spectra <- function(
       rev(unique(spectrum_data$z))
     }
   )
-
-  # Get peaks data
-  peaks_data <- data.frame()
-  for (i in seq_along(samples)) {
-    add_df <- process_plot_data(
-      results_list$deconvolution[[samples[i]]],
-      result_path = NULL
-    )$highlight_peaks
-
-    if (is.null(add_df) || nrow(add_df) == 0) {
-      next
-    }
-
-    if (time) {
-      add_df <- dplyr::mutate(
-        add_df,
-        z = extract_minutes(samples[i]) * time_factor
-      )
-    } else {
-      add_df <- dplyr::mutate(add_df, z = samples[i])
-    }
-
-    peaks_data <- rbind(peaks_data, add_df)
-  }
 
   # If truncated active adapt z variable
   if (!isFALSE(truncated)) {
@@ -4112,57 +4251,61 @@ multiple_spectra <- function(
       )
     )
 
-    # Add hit markers
+    # Add hit markers. marker.color and marker.symbol are both arrayOk, so a
+    # whole sample's peaks fit into one trace instead of the one-trace-per-peak
+    # fan-out this used to build. Splitting at the sample level rather than
+    # collapsing to a single trace keeps the legendgroup link intact, so
+    # hiding a sample in the legend still hides its markers.
     if (nrow(peaks_data) > 0) {
-      if (time) {
-        marker_list <- list(
-          size = 5,
-          zindex = 100,
-          line = list(color = inv_color, width = 3)
-        )
-      } else {
-        marker_list <- list(
-          color = marker_color,
-          symbol = ~ I(symbol),
-          size = 5,
-          zindex = 100,
-          line = list(color = inv_color, width = 3)
-        )
-      }
+      for (lvl in levels(peaks_data$z)) {
+        peaks_lvl <- peaks_data[
+          !is.na(peaks_data$z) & peaks_data$z == lvl, ,
+          drop = FALSE
+        ]
 
-      plot <- plot |>
-        plotly::add_markers(
-          data = peaks_data,
-          x = ~mass,
-          y = ~intensity,
-          z = ~z,
-          split = ~ seq_len(nrow(peaks_data)),
-          legendgroup = ~z,
-          color = marker_color,
-          symbol = ~ I(symbol),
-          mode = "markers",
-          inherit = FALSE,
-          marker = marker_list,
-          hoverinfo = "text",
-          text = ~ paste0(
-            "Name: ",
-            name,
-            "\nMeasured: ",
-            mass,
-            " Da\nIntensity: ",
-            round(intensity, 2),
-            ifelse(time, "%\nTime: ", "%\nSample: "),
-            z,
-            ifelse(
-              time,
-              paste0(" ", gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])),
-              ""
+        if (nrow(peaks_lvl) == 0) {
+          next
+        }
+
+        plot <- plot |>
+          plotly::add_markers(
+            data = peaks_lvl,
+            x = ~mass,
+            y = ~intensity,
+            z = ~z,
+            legendgroup = lvl,
+            mode = "markers",
+            inherit = FALSE,
+            visible = symbols_show,
+            meta = peaks_trace_tag,
+            marker = list(
+              color = peaks_lvl$mk_color,
+              symbol = peaks_lvl$symbol,
+              size = 5,
+              zindex = 100,
+              line = list(color = inv_color, width = 3)
             ),
-            "\nTheor. Mw: ",
-            mw
-          ),
-          showlegend = FALSE
-        )
+            hoverinfo = "text",
+            text = ~ paste0(
+              "Name: ",
+              name,
+              "\nMeasured: ",
+              mass,
+              " Da\nIntensity: ",
+              round(intensity, 2),
+              ifelse(time, "%\nTime: ", "%\nSample: "),
+              z,
+              ifelse(
+                time,
+                paste0(" ", gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])),
+                ""
+              ),
+              "\nTheor. Mw: ",
+              mw
+            ),
+            showlegend = FALSE
+          )
+      }
     }
 
     if (nrow(peaks_data) > 0 && !time) {
@@ -4197,7 +4340,8 @@ multiple_spectra <- function(
             symbol = paste0(sym, "-open"),
             size = 8
           ),
-          visible = TRUE,
+          visible = symbols_show,
+          meta = peaks_trace_tag,
           showlegend = TRUE,
           legendrank = i,
           hoverinfo = "skip"
@@ -4228,6 +4372,7 @@ multiple_spectra <- function(
         paper_bgcolor = "rgba(0,0,0,0)",
         plot_bgcolor = "rgba(0,0,0,0)",
         font = list(size = 14, color = font_color),
+        showlegend = legend_show,
         xaxis = list(
           visible = FALSE,
           showgrid = FALSE,
@@ -4322,7 +4467,9 @@ multiple_spectra <- function(
           camera = list(
             # center = list(x = 0.33, y = -0.05, z = 0.05),
             center = list(
-              x = 0.33,
+              # With no legend there is nothing to dodge and the spectrum sits
+              # centred; see spectrum_legend_camera_x.
+              x = if (legend_show) spectrum_legend_camera_x else 0,
               y = ifelse(length(unique(peaks_data$z)) < 4, 0.075, -0.05),
               z = 0.05
             ),
@@ -4369,7 +4516,11 @@ multiple_spectra <- function(
       color = ~z,
       colors = planar_colors,
       legendgroup = ~z,
-      type = "scatter",
+      # WebGL rather than SVG: a spectrum runs to thousands of points per
+      # sample, which the SVG renderer draws one path node at a time. The
+      # single-sample spectrum_plot() already uses scattergl for the same
+      # reason. Downloads go out via saveWidget(), so WebGL traces export fine.
+      type = "scattergl",
       mode = "lines",
       hoverinfo = "text",
       text = ~ paste0(
@@ -4391,46 +4542,65 @@ multiple_spectra <- function(
         )
       ),
       showlegend = TRUE
-    ) |>
-      plotly::add_markers(
-        data = peaks_data,
-        x = ~mass,
-        y = ~intensity,
-        split = ~ seq_len(nrow(peaks_data)),
-        legendgroup = ~z,
-        mode = "markers",
-        symbol = ~ I(symbol),
-        inherit = FALSE,
-        marker = list(
-          color = ~ I(mk_color),
-          size = 10,
-          zindex = 100,
-          line = list(color = inv_color, width = 1.5)
-        ),
-        hoverinfo = "text",
-        text = ~ paste0(
-          "Name: ",
-          name,
-          "\nMeasured: ",
-          mass,
-          " Da\nIntensity: ",
-          round(intensity, 2),
-          ifelse(
-            time,
-            "%\nTime: ",
-            "%\nSample: "
-          ),
-          z,
-          ifelse(
-            time,
-            paste0(" ", gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])),
-            ""
-          ),
-          "\nTheor. Mw: ",
-          mw
-        ),
-        showlegend = FALSE
-      )
+    )
+
+    # One marker trace per sample rather than one per peak — see the cubic
+    # branch above for why the split stays at the sample level.
+    if (nrow(peaks_data) > 0) {
+      for (lvl in levels(peaks_data$z)) {
+        peaks_lvl <- peaks_data[
+          !is.na(peaks_data$z) & peaks_data$z == lvl, ,
+          drop = FALSE
+        ]
+
+        if (nrow(peaks_lvl) == 0) {
+          next
+        }
+
+        plot_2d <- plot_2d |>
+          plotly::add_markers(
+            data = peaks_lvl,
+            x = ~mass,
+            y = ~intensity,
+            legendgroup = lvl,
+            type = "scattergl",
+            mode = "markers",
+            inherit = FALSE,
+            visible = symbols_show,
+            meta = peaks_trace_tag,
+            marker = list(
+              color = peaks_lvl$mk_color,
+              symbol = peaks_lvl$symbol,
+              size = 10,
+              zindex = 100,
+              line = list(color = inv_color, width = 1.5)
+            ),
+            hoverinfo = "text",
+            text = ~ paste0(
+              "Name: ",
+              name,
+              "\nMeasured: ",
+              mass,
+              " Da\nIntensity: ",
+              round(intensity, 2),
+              ifelse(
+                time,
+                "%\nTime: ",
+                "%\nSample: "
+              ),
+              z,
+              ifelse(
+                time,
+                paste0(" ", gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])),
+                ""
+              ),
+              "\nTheor. Mw: ",
+              mw
+            ),
+            showlegend = FALSE
+          )
+      }
+    }
 
     if (nrow(peaks_data) > 0) {
       name_entries <- peaks_data |>
@@ -4466,7 +4636,8 @@ multiple_spectra <- function(
             symbol = if (is_protein) sym else paste0(sym, "-open"),
             size = 8
           ),
-          visible = TRUE,
+          visible = symbols_show,
+          meta = peaks_trace_tag,
           showlegend = TRUE,
           legendrank = i,
           hoverinfo = "skip"
@@ -4497,6 +4668,7 @@ multiple_spectra <- function(
         paper_bgcolor = "rgba(0,0,0,0)",
         plot_bgcolor = "rgba(0,0,0,0)",
         font = list(size = 14, color = font_color),
+        showlegend = legend_show,
         xaxis = list(
           title = "Mass [Da]",
           color = font_color,
@@ -6143,6 +6315,48 @@ filter_color_list <- function(color_list, min_n) {
 
   # Drop entirely-empty groups so they don't appear as orphan headers
   Filter(function(g) length(g) > 0, filtered_list)
+}
+
+# Palette groups offered for a variable with n distinct levels. Brewer scales
+# that cannot supply n colors are dropped; the gradient scales are continuous
+# and stay available regardless of n.
+#' @export
+color_scale_choices <- function(n) {
+  scales <- filter_color_list(
+    list(
+      Qualitative = qualitative_scales,
+      Sequential = sequential_scales
+    ),
+    n
+  )
+  scales[["Gradient"]] <- gradient_scales
+  scales
+}
+
+# Palette used until the user picks one: Set3 while it still holds enough
+# distinct colors, a continuous scale beyond that.
+#' @export
+default_color_scale <- function(n) {
+  if (n <= RColorBrewer::brewer.pal.info["Set3", "maxcolors"]) {
+    "Set3"
+  } else {
+    "turbo"
+  }
+}
+
+# Palette a color-scale input should currently use: the user's pick while it
+# is still offered for n levels, otherwise the default.
+#' @export
+resolve_color_scale <- function(scale, n) {
+  if (
+    length(scale) == 1 &&
+      nzchar(scale) &&
+      scale %in% unlist(color_scale_choices(n))
+  ) {
+    scale
+  } else {
+    default_color_scale(n)
+  }
 }
 
 # Make compound distribution plot for proteins tab

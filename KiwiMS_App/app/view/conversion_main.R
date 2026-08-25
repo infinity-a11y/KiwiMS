@@ -30,6 +30,10 @@ box::use(
       format_scientific,
       make_binding_plot,
       multiple_spectra,
+      peaks_trace_indices,
+      restyle_peak_symbols,
+      relayout_spectrum_legend,
+      relayout_spectrum_labels,
       render_hits_table,
       filter_hits_table,
       transform_per_adduct,
@@ -50,6 +54,9 @@ box::use(
       get_contrast_color,
       label_smart_clean,
       filter_color_list,
+      color_scale_choices,
+      default_color_scale,
+      resolve_color_scale,
       render_table_view,
       filter_table_view,
       make_kobs_plot,
@@ -76,6 +83,7 @@ box::use(
     logic /
     helper_functions[
       safe_observe,
+      config_units,
     ],
   app / logic / deconvolution_functions[spectrum_plot, ],
   app /
@@ -243,6 +251,13 @@ server <- function(
     stats_boxplot_pending_sample <- shiny::reactiveVal(NULL)
     stats_violin_pending_sample <- shiny::reactiveVal(NULL)
     manual_render_cmp_spectrum <- shiny::reactiveVal(0L)
+
+    # Built annotated-spectrum figures, so returning to a compound or protein
+    # that was already drawn is instant. Per session on purpose: the cache key
+    # describes the selection, not the dataset, so a shared cache could hand a
+    # second session a figure built from someone else's results. Bounded, since
+    # a built figure is several MB.
+    spectrum_cache <- cachem::cache_mem(max_size = 256 * 1024^2)
 
     # Last unit selection of the declaration interface. Held separately from
     # the inputs because a reset re-renders the pickers, which would otherwise
@@ -937,6 +952,43 @@ server <- function(
       }
     )
 
+    ## Unit selection — adopt the units declared in the config ----
+    # The config carries concentration and time as bare numbers, so its
+    # optional unit columns are the only way it can say what they mean.
+    safe_observe(
+      event_expr = config_file(),
+      observer_name = "Unit Selection — Config Change",
+      handler_fn = function() {
+        cfg_units <- config_units(config_file())
+        if (!is.null(cfg_units$conc)) {
+          conc_unit_selected(cfg_units$conc)
+          shinyWidgets::updatePickerInput(
+            session,
+            "conc_unit",
+            selected = cfg_units$conc
+          )
+        }
+        if (!is.null(cfg_units$time)) {
+          time_unit_selected(cfg_units$time)
+          shinyWidgets::updatePickerInput(
+            session,
+            "time_unit",
+            selected = cfg_units$time
+          )
+        }
+        declared <- c(
+          if (!is.null(cfg_units$conc)) cfg_units$conc,
+          if (!is.null(cfg_units$time)) cfg_units$time
+        )
+        if (length(declared) > 0) {
+          write_log(paste(
+            "Units adopted from config:",
+            paste(declared, collapse = " / ")
+          ))
+        }
+      }
+    )
+
     ## Table status observer ----
     ### Observe table status for protein table ----
     safe_observe(
@@ -1400,14 +1452,57 @@ server <- function(
               ]]))
             }
           }
+          # Concentration/time are declared as bare numbers, so the picked
+          # units are the only record of what they mean — they end up in the
+          # column labels and travel through every result table and export.
+          # Refuse to confirm rather than stamping a default onto the data.
+          conc_time_cols <- grep(
+            "^Concentration|^Time",
+            names(raw_input),
+            value = TRUE
+          )
+          if (length(conc_time_cols) == 2) {
+            missing_units <- c(
+              if (!shiny::isTruthy(input$conc_unit)) "concentration",
+              if (!shiny::isTruthy(input$time_unit)) "time"
+            )
+            if (length(missing_units) > 0) {
+              shinyWidgets::show_toast(
+                "Unit missing",
+                text = paste0(
+                  "Select the ",
+                  paste(missing_units, collapse = " and "),
+                  " unit before confirming the sample table."
+                ),
+                type = "warning",
+                timer = 6000,
+                timerProgressBar = TRUE
+              )
+              # Release the overlay the handler put up before bailing out
+              shinyjs::runjs(paste0(
+                'document.getElementById("blocking-overlay").style.display ',
+                '= "none";'
+              ))
+              return()
+            }
+          }
+
           sample_table <- clean_sample_table(
             raw_input,
             units = list(conc = input$conc_unit, time = input$time_unit)
           )
-          write_log(paste(
-            "Sample table confirmed:",
+          write_log(paste0(
+            "Sample table confirmed: ",
             nrow(sample_table),
-            "sample(s)"
+            " sample(s)",
+            if (length(conc_time_cols) == 2) {
+              paste0(
+                " · units: ",
+                input$conc_unit,
+                " / ",
+                input$time_unit
+              )
+            }
           ))
 
           # Assign table to reactive variables
@@ -2630,7 +2725,10 @@ server <- function(
               }
             })
 
-            output$compounds_annotated_spectrum <- plotly::renderPlotly({
+            # Built figure kept in its own reactive so the proxy observers
+            # below can look up the peak-symbol trace indices without
+            # rebuilding, and so the result can be cached.
+            compounds_spectrum_plot <- shiny::reactive({
               shiny::req(
                 hits_summary,
                 input$conversion_compound_picker,
@@ -2692,9 +2790,22 @@ server <- function(
                   truncated = if (truncate_names) mapping else FALSE,
                   color_variable = color_variable,
                   hits_summary = hits_summary,
-                  labels_show = compounds_labels_val()
+                  # View-only settings are isolated: they are applied to the
+                  # live figure by the proxy observers below, so reading them
+                  # here must not schedule a rebuild. They are still read, so
+                  # that a rebuild triggered by something else starts from the
+                  # view the user is currently looking at.
+                  labels_show = shiny::isolate(compounds_labels_val()),
+                  symbols_show = shiny::isolate(
+                    input$compounds_spectrum_symbols
+                  ),
+                  legend_show = shiny::isolate(input$compounds_spectrum_legend)
                 )
               }
+
+              # Build here rather than letting renderPlotly do it, so the proxy
+              # observers can address traces by index without a second build.
+              built <- plotly::plotly_build(plot)
 
               # Unblock UI
               shinyjs::runjs(paste0(
@@ -2702,17 +2813,81 @@ server <- function(
                 '= "none";'
               ))
 
-              return(plot)
+              built
             }) |>
+              # The key has to name everything the body reads, not just what
+              # triggers it — color_variable in particular changes the figure
+              # without being an event trigger. The cache is per session, so
+              # entries can never leak across datasets.
+              shiny::bindCache(
+                input$conversion_compound_picker,
+                render_trigger(),
+                input$truncate_names,
+                input$color_scale,
+                input$color_variable,
+                input$compounds_spectrum_kind,
+                manual_render_cmp_spectrum(),
+                shiny::isolate(compounds_labels_val()),
+                shiny::isolate(input$compounds_spectrum_symbols),
+                shiny::isolate(input$compounds_spectrum_legend),
+                cache = spectrum_cache
+              ) |>
               shiny::bindEvent(
                 input$conversion_compound_picker,
                 render_trigger(),
                 input$truncate_names,
                 input$color_scale,
                 input$compounds_spectrum_kind,
-                compounds_labels_val(),
                 manual_render_cmp_spectrum()
               )
+
+            output$compounds_annotated_spectrum <- plotly::renderPlotly({
+              compounds_spectrum_plot()
+            })
+
+            # Show/hide the peak symbols and their legend rows on the figure
+            # that is already on screen. The traces are always built; only
+            # their visibility changes, so this never touches the data.
+            shiny::observeEvent(
+              input$compounds_spectrum_symbols,
+              {
+                restyle_peak_symbols(
+                  session,
+                  "compounds_annotated_spectrum",
+                  compounds_spectrum_plot,
+                  input$compounds_spectrum_symbols
+                )
+              },
+              ignoreInit = TRUE
+            )
+
+            shiny::observeEvent(
+              input$compounds_spectrum_legend,
+              {
+                relayout_spectrum_legend(
+                  session,
+                  "compounds_annotated_spectrum",
+                  input$compounds_spectrum_legend,
+                  cubic = is.null(input$compounds_spectrum_kind) ||
+                    input$compounds_spectrum_kind == "Cubic"
+                )
+              },
+              ignoreInit = TRUE
+            )
+
+            shiny::observeEvent(
+              compounds_labels_val(),
+              {
+                relayout_spectrum_labels(
+                  session,
+                  "compounds_annotated_spectrum",
+                  compounds_labels_val(),
+                  cubic = is.null(input$compounds_spectrum_kind) ||
+                    input$compounds_spectrum_kind == "Cubic"
+                )
+              },
+              ignoreInit = TRUE
+            )
 
             ####### Show label input UI ----
             shiny::observe({
@@ -3151,7 +3326,9 @@ server <- function(
               }
             })
 
-            output$proteins_annotated_spectrum <- plotly::renderPlotly({
+            # See the Compounds view above for why the figure lives in its own
+            # cached reactive rather than directly in the output.
+            proteins_spectrum_plot <- shiny::reactive({
               shiny::req(
                 hits_summary,
                 input$conversion_protein_picker,
@@ -3221,9 +3398,15 @@ server <- function(
                   truncated = if (truncate_names) mapping else FALSE,
                   color_variable = color_variable,
                   hits_summary = hits_summary,
-                  labels_show = proteins_labels_val()
+                  labels_show = shiny::isolate(proteins_labels_val()),
+                  symbols_show = shiny::isolate(
+                    input$proteins_spectrum_symbols
+                  ),
+                  legend_show = shiny::isolate(input$proteins_spectrum_legend)
                 )
               }
+
+              built <- plotly::plotly_build(plot)
 
               # Unblock UI
               shinyjs::runjs(paste0(
@@ -3231,17 +3414,74 @@ server <- function(
                 '= "none";'
               ))
 
-              return(plot)
+              built
             }) |>
+              shiny::bindCache(
+                input$conversion_protein_picker,
+                render_trigger(),
+                input$truncate_names,
+                input$color_scale,
+                input$color_variable,
+                input$proteins_spectrum_kind,
+                manual_render_spectrum(),
+                shiny::isolate(proteins_labels_val()),
+                shiny::isolate(input$proteins_spectrum_symbols),
+                shiny::isolate(input$proteins_spectrum_legend),
+                cache = spectrum_cache
+              ) |>
               shiny::bindEvent(
                 render_trigger(),
                 input$color_scale,
                 input$conversion_protein_picker,
                 input$truncate_names,
                 input$proteins_spectrum_kind,
-                proteins_labels_val(),
                 manual_render_spectrum()
               )
+
+            output$proteins_annotated_spectrum <- plotly::renderPlotly({
+              proteins_spectrum_plot()
+            })
+
+            shiny::observeEvent(
+              input$proteins_spectrum_symbols,
+              {
+                restyle_peak_symbols(
+                  session,
+                  "proteins_annotated_spectrum",
+                  proteins_spectrum_plot,
+                  input$proteins_spectrum_symbols
+                )
+              },
+              ignoreInit = TRUE
+            )
+
+            shiny::observeEvent(
+              input$proteins_spectrum_legend,
+              {
+                relayout_spectrum_legend(
+                  session,
+                  "proteins_annotated_spectrum",
+                  input$proteins_spectrum_legend,
+                  cubic = is.null(input$proteins_spectrum_kind) ||
+                    input$proteins_spectrum_kind == "Cubic"
+                )
+              },
+              ignoreInit = TRUE
+            )
+
+            shiny::observeEvent(
+              proteins_labels_val(),
+              {
+                relayout_spectrum_labels(
+                  session,
+                  "proteins_annotated_spectrum",
+                  proteins_labels_val(),
+                  cubic = is.null(input$proteins_spectrum_kind) ||
+                    input$proteins_spectrum_kind == "Cubic"
+                )
+              },
+              ignoreInit = TRUE
+            )
 
             ####### Show label input UI ----
             shiny::observe({
@@ -3385,20 +3625,45 @@ server <- function(
             # Assign formatted hits to reactive variable
             conversion_vars$formatted_hits <- hits_summary
 
-            # Get concentration colors
-            concentration_colors <- RColorBrewer::brewer.pal(
-              n = length(unique(hits_summary[[units[[
-                "Concentration"
-              ]]]])),
-              name = "Set3"
-            )
+            # Get concentration colors. The palette follows the "Color
+            # palette" picker next to the unit selectors; everything keyed by
+            # concentration (curves, tables, cards) reads from here.
+            conc_levels <- unique(hits_summary[[units[["Concentration"]]]])
 
-            names(concentration_colors) <- unique(hits_summary[[units[[
-              "Concentration"
-            ]]]])
+            concentration_colors <- shiny::reactive({
+              get_cmp_colorScale(
+                filtered_table = hits_summary,
+                scale = resolve_color_scale(
+                  input$kinetics_color_scale,
+                  length(conc_levels)
+                ),
+                variable = "Concentration",
+                trunc = TRUE,
+                conc_col = units[["Concentration"]]
+              )
+            })
 
             # Assign colors to reactive variable
-            conversion_vars$conc_colors <- concentration_colors
+            shiny::observe({
+              conversion_vars$conc_colors <- concentration_colors()
+            })
+
+            # Offer only palettes that can supply one color per concentration,
+            # keeping the user's pick whenever it survives the filter. Gated on
+            # a sibling input so the picker exists before it is populated.
+            shiny::observe({
+              shiny::req(input$conc_unit_results)
+
+              shiny::updateSelectInput(
+                session = session,
+                "kinetics_color_scale",
+                choices = color_scale_choices(length(conc_levels)),
+                selected = resolve_color_scale(
+                  input$kinetics_color_scale,
+                  length(conc_levels)
+                )
+              )
+            })
 
             # Assign concentrations to reactive variable
             conversion_vars$concentrations <- concentrations <- dplyr::filter(
@@ -3448,10 +3713,12 @@ server <- function(
             })
 
             view_colors <- shiny::reactive({
+              conc_colors <- concentration_colors()
+
               stats::setNames(
-                concentration_colors,
+                conc_colors,
                 unname(convert_conc_keys(
-                  names(concentration_colors),
+                  names(conc_colors),
                   unit_view()
                 ))
               )
@@ -3935,7 +4202,8 @@ server <- function(
                       local_ui_id,
                       "concentrations_table_view_tot_binding_bar"
                     )]],
-                    unit_view()
+                    unit_view(),
+                    view_colors()
                   )
 
                 ###### Concentration table export ----
@@ -5572,27 +5840,11 @@ server <- function(
                 }
               ))
 
-              scales <- filter_color_list(
-                list(
-                  Qualitative = qualitative_scales,
-                  Sequential = sequential_scales
-                ),
-                n
-              )
-              scales[["Gradient"]] <- gradient_scales
-
-              if (!is.null(color_scale) && color_scale %in% unlist(scales)) {
-                selected <- color_scale
-              } else {
-                set3_max <- RColorBrewer::brewer.pal.info["Set3", "maxcolors"]
-                selected <- if (n <= set3_max) "Set3" else "turbo"
-              }
-
               shiny::updateSelectInput(
                 session = session,
                 "hits_color_scale",
-                choices = scales,
-                selected = selected
+                choices = color_scale_choices(n),
+                selected = resolve_color_scale(color_scale, n)
               )
             })
           }
@@ -5824,6 +6076,8 @@ server <- function(
             color_variable = input$color_variable,
             hits_summary = hits_summary,
             labels_show = input$compounds_spectrum_labels,
+            symbols_show = input$compounds_spectrum_symbols,
+            legend_show = input$compounds_spectrum_legend,
             theme = theme
           )
         }
@@ -5918,6 +6172,8 @@ server <- function(
             color_variable = input$color_variable,
             hits_summary = hits_summary,
             labels_show = input$proteins_spectrum_labels,
+            symbols_show = input$proteins_spectrum_symbols,
+            legend_show = input$proteins_spectrum_legend,
             theme = theme
           )
         }

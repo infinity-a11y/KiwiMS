@@ -5293,6 +5293,7 @@ sample-file-row .form-group {
 .unit-inputs {
   display: flex;
   gap: 1rem;
+  align-items: center;
 }
 
 .unit-inputs div:first-child {
@@ -5302,11 +5303,58 @@ sample-file-row .form-group {
 }
 
 .unit-inputs .bootstrap-select > .dropdown-toggle {
-  height: 30px;
+  height: 33px;
   font-size: 13px;
   padding-top: 5px;
   padding-bottom: 5px;
   align-items: center;
   width: 5rem;
   min-width: fit-content;
+}
+
+/* Concentration palette picker sitting beside the unit selectors */
+.unit-inputs .selectize-control {
+  min-height: unset;
+  margin-bottom: 0;
+}
+
+/* No background here: the .palette-select gradient previews carry the same
+   specificity and would lose to a later rule */
+.unit-inputs .selectize-control.single .selectize-input {
+  height: 30px;
+  min-height: fit-content;
+  padding: 3px 3px 3px 5px;
+  border: 1px solid #e5e5e5;
+  text-align: left;
+  align-content: center;
+  width: 100%;
+  min-width: 100px;
+}
+
+.unit-inputs .selectize-input > * {
+  font-weight: 400;
+  font-size: 13px;
+}
+
+.unit-inputs .selectize-control.single .selectize-input:not(.no-arrow):after {
+  border-width: 4px 4px 0 4px;
+  right: 5px;
+}
+
+.unit-inputs .selectize-dropdown {
+  border: none;
+}
+
+.unit-inputs .selectize-dropdown-content {
+  min-width: 100%;
+}
+
+.unit-inputs .selectize-dropdown .optgroup-header {
+  background: unset;
+  color: black;
+}
+
+.unit-inputs .selectize-dropdown [data-selectable].option {
+  padding-left: 3px;
+  font-weight: 400;
 }

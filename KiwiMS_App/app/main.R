@@ -1700,7 +1700,9 @@ server <- function(id) {
           Replicate = c("Rep1", "Rep1", "Rep2"),
           Well = c("A1", "A2", "A3"),
           Compound_Concentration = c(100, 200, 100),
+          Concentration_Unit = c("nM", "nM", "nM"),
           Incubation_Time = c(120, 120, 60),
+          Time_Unit = c("s", "s", "s"),
           Protein = c("RACA", "RACA", "RACA"),
           Compound_1 = c("Cmp1", "Cmp1", "Cmp2"),
           Compound_2 = c("Cmp2", "Cmp2", "Cmp3"),
@@ -1769,10 +1771,24 @@ server <- function(id) {
                 )
               ),
               shiny$tags$tr(
+                shiny$tags$td(shiny$tags$code("Concentration_Unit")),
+                shiny$tags$td(class = "config-col-optional", "Optional"),
+                shiny$tags$td(
+                  "M \u00b7 mM \u00b7 \u03bcM \u00b7 nM \u00b7 pM \u00b7 same value in every row \u00b7 preselects the Conc. Unit picker"
+                )
+              ),
+              shiny$tags$tr(
                 shiny$tags$td(shiny$tags$code("Incubation_Time")),
                 shiny$tags$td(class = "config-col-optional", "Optional"),
                 shiny$tags$td(
                   "Numeric \u00b7 all filled or all empty \u00b7 displayed as \u201cTime\u201d"
+                )
+              ),
+              shiny$tags$tr(
+                shiny$tags$td(shiny$tags$code("Time_Unit")),
+                shiny$tags$td(class = "config-col-optional", "Optional"),
+                shiny$tags$td(
+                  "s \u00b7 min \u00b7 same value in every row \u00b7 preselects the Time Unit picker"
                 )
               ),
               shiny$tags$tr(
@@ -1919,7 +1935,9 @@ server <- function(id) {
       })]
       df <- df[, setdiff(names(df), empty_cols), drop = FALSE]
       names(df)[names(df) == "Compound_Concentration"] <- "Concentration"
+      names(df)[names(df) == "Concentration_Unit"] <- "Conc. Unit"
       names(df)[names(df) == "Incubation_Time"] <- "Time"
+      names(df)[names(df) == "Time_Unit"] <- "Time Unit"
       df
     }
 

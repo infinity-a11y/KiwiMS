@@ -543,6 +543,17 @@ kinact_ki_results_ui <- function(
               id = "time_unit_results",
               label = FALSE,
               selected = if (!is.null(units)) unit_symbol(units[["Time"]])
+            ),
+            bslib::tooltip(
+              shiny::selectInput(
+                ns("kinetics_color_scale"),
+                label = NULL,
+                choices = NULL,
+                width = "120px"
+              ) |>
+                shiny::tagAppendAttributes(class = "palette-select"),
+              "Color palette",
+              placement = "top"
             )
           )
         )
@@ -1832,6 +1843,18 @@ binding_results_ui <- function(ns, hits_summary) {
                         }),
                         right = TRUE
                       ),
+                      shinyWidgets::materialSwitch(
+                        ns("compounds_spectrum_symbols"),
+                        label = "Show Symbols",
+                        value = TRUE,
+                        right = TRUE
+                      ),
+                      shinyWidgets::materialSwitch(
+                        ns("compounds_spectrum_legend"),
+                        label = "Show Legend",
+                        value = TRUE,
+                        right = TRUE
+                      ),
                       style = "margin-right: 20px;"
                     )
                   ),
@@ -2120,6 +2143,18 @@ binding_results_ui <- function(ns, hits_summary) {
                           length(unique(ids)) <= 8 &
                             max(nchar(as.character(ids))) <= 20
                         }),
+                        right = TRUE
+                      ),
+                      shinyWidgets::materialSwitch(
+                        ns("proteins_spectrum_symbols"),
+                        label = "Show Symbols",
+                        value = TRUE,
+                        right = TRUE
+                      ),
+                      shinyWidgets::materialSwitch(
+                        ns("proteins_spectrum_legend"),
+                        label = "Show Legend",
+                        value = TRUE,
                         right = TRUE
                       ),
                       style = "margin-right: 20px;"
@@ -2759,14 +2794,24 @@ conversion_declaration_ui <- function(
             width = 1,
             shiny::div(
               class = "unit-selectors",
-              conc_unit_input_ui(ns, id = "conc_unit", selected = conc_unit)
+              conc_unit_input_ui(
+                ns,
+                id = "conc_unit",
+                selected = conc_unit,
+                allow_empty = TRUE
+              )
             )
           ),
           shiny::column(
             width = 1,
             shiny::div(
               class = "unit-selectors",
-              time_unit_input_ui(ns, id = "time_unit", selected = time_unit)
+              time_unit_input_ui(
+                ns,
+                id = "time_unit",
+                selected = time_unit,
+                allow_empty = TRUE
+              )
             )
           )
         )
@@ -2795,32 +2840,57 @@ conversion_declaration_ui <- function(
   )
 }
 
+# A plain <select> always reports its first option, so a picker rendered
+# without a selection silently hands back the first unit. Prepending an empty
+# placeholder keeps "nothing picked yet" distinguishable from a real choice.
+unit_placeholder_label <- "—"
+
+unit_placeholder_content <- paste0(
+  "<span style='display: inline-block; font-style: italic; opacity: 0.6;'>",
+  "Select unit</span>"
+)
+
 # Time unit choices
 #' @export
-time_unit_input_ui <- function(ns, id, label = TRUE, selected = NULL) {
+time_unit_input_ui <- function(
+  ns,
+  id,
+  label = TRUE,
+  selected = NULL,
+  allow_empty = FALSE
+) {
+  units <- c("s", "min")
+  names <- c("seconds", "minutes")
+  content <- {
+    w_col1 <- "45px"
+    w_col2 <- "95px"
+    sprintf(
+      paste0(
+        "<span style='display: inline-block; width: %s; font-weight: 700; text-align: left;'>%s</span>",
+        "<span style='display: inline-block; width: %s; font-style: italic; text-align: right;'>%s</span>"
+      ),
+      w_col1,
+      units,
+      w_col2,
+      names
+    )
+  }
+
+  choices <- units
+  if (allow_empty) {
+    choices <- c(stats::setNames("", unit_placeholder_label), choices)
+    content <- c(unit_placeholder_content, content)
+    if (is.null(selected)) {
+      selected <- ""
+    }
+  }
+
   shinyWidgets::pickerInput(
     inputId = ns(id),
     label = if (label) "Time Unit" else NULL,
-    choices = c("s", "min"),
+    choices = choices,
     selected = selected,
-    choicesOpt = list(
-      content = {
-        w_col1 <- "45px"
-        w_col2 <- "95px"
-        units <- c("s", "min")
-        names <- c("seconds", "minutes")
-        sprintf(
-          paste0(
-            "<span style='display: inline-block; width: %s; font-weight: 700; text-align: left;'>%s</span>",
-            "<span style='display: inline-block; width: %s; font-style: italic; text-align: right;'>%s</span>"
-          ),
-          w_col1,
-          units,
-          w_col2,
-          names
-        )
-      }
-    ),
+    choicesOpt = list(content = content),
     options = shinyWidgets::pickerOptions(
       size = 10,
       showContent = FALSE,
@@ -2831,42 +2901,57 @@ time_unit_input_ui <- function(ns, id, label = TRUE, selected = NULL) {
 
 # Concentration unit choices
 #' @export
-conc_unit_input_ui <- function(ns, id, label = TRUE, selected = NULL) {
+conc_unit_input_ui <- function(
+  ns,
+  id,
+  label = TRUE,
+  selected = NULL,
+  allow_empty = FALSE
+) {
+  units <- c("M", "mM", "μM", "nM", "pM")
+  content <- {
+    w_col1 <- "50px"
+    w_col2 <- "95px"
+    w_col3 <- "40px"
+    names <- c(
+      "molar",
+      "millimolar",
+      "micromolar",
+      "nanomolar",
+      "picomolar"
+    )
+    powers <- c("10⁰", "10⁻³", "10⁻⁶", "10⁻⁹", "10⁻¹²")
+
+    sprintf(
+      paste0(
+        "<span style='display: inline-block; width: %s; font-weight: 700;'>%s</span>",
+        "<span style='display: inline-block; width: %s; font-style: italic;'>%s</span>",
+        "<span style='display: inline-block; width: %s; text-align: right;'>%s</span>"
+      ),
+      w_col1,
+      units,
+      w_col2,
+      names,
+      w_col3,
+      powers
+    )
+  }
+
+  choices <- units
+  if (allow_empty) {
+    choices <- c(stats::setNames("", unit_placeholder_label), choices)
+    content <- c(unit_placeholder_content, content)
+    if (is.null(selected)) {
+      selected <- ""
+    }
+  }
+
   shinyWidgets::pickerInput(
     inputId = ns(id),
     label = if (label) "Conc. Unit" else NULL,
-    choices = c("M", "mM", "μM", "nM", "pM"),
+    choices = choices,
     selected = selected,
-    choicesOpt = list(
-      content = {
-        w_col1 <- "50px"
-        w_col2 <- "95px"
-        w_col3 <- "40px"
-        units <- c("M", "mM", "μM", "nM", "pM")
-        names <- c(
-          "molar",
-          "millimolar",
-          "micromolar",
-          "nanomolar",
-          "picomolar"
-        )
-        powers <- c("10⁰", "10⁻³", "10⁻⁶", "10⁻⁹", "10⁻¹²")
-
-        sprintf(
-          paste0(
-            "<span style='display: inline-block; width: %s; font-weight: 700;'>%s</span>",
-            "<span style='display: inline-block; width: %s; font-style: italic;'>%s</span>",
-            "<span style='display: inline-block; width: %s; text-align: right;'>%s</span>"
-          ),
-          w_col1,
-          units,
-          w_col2,
-          names,
-          w_col3,
-          powers
-        )
-      }
-    ),
+    choicesOpt = list(content = content),
     options = shinyWidgets::pickerOptions(
       size = 10,
       showContent = FALSE,

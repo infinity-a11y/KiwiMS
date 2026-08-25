@@ -914,6 +914,13 @@ normalize_colnames <- function(df) {
   df
 }
 
+# Optional config columns naming the unit of the numeric column they belong to.
+#' @export
+config_unit_choices <- list(
+  Concentration_Unit = c("M", "mM", "μM", "nM", "pM"),
+  Time_Unit = c("s", "min")
+)
+
 #' @export
 validate_config <- function(df) {
   issues <- character()
@@ -986,9 +993,53 @@ validate_config <- function(df) {
     }
   }
 
+  # Concentration/time are plain numbers, so the config may name the unit they
+  # were measured in. One value for the whole file — a config mixing units in
+  # one column would silently misscale the kinetics.
+  for (col in names(config_unit_choices)) {
+    if (!col %in% names(df)) {
+      next
+    }
+    vals <- trimws(as.character(df[[col]]))
+    vals <- vals[!is.na(vals) & vals != ""]
+    if (length(vals) == 0) {
+      next
+    }
+    allowed <- config_unit_choices[[col]]
+    if (length(unique(vals)) > 1) {
+      issues <- c(issues, paste0(
+        "'", col, "': must be the same for every row (found ",
+        paste(unique(vals), collapse = ", "), ")."
+      ))
+    } else if (!unique(vals) %in% allowed) {
+      issues <- c(issues, paste0(
+        "'", col, "': unknown unit '", unique(vals), "' (allowed: ",
+        paste(allowed, collapse = ", "), ")."
+      ))
+    }
+  }
+
   # Replicate: optional free-text group label; partial fill is allowed.
 
   issues
+}
+
+# Pulls the declared units out of a confirmed config, as
+# list(conc = <symbol or NULL>, time = <symbol or NULL>).
+#' @export
+config_units <- function(cfg) {
+  pick <- function(col) {
+    if (is.null(cfg) || !col %in% names(cfg)) {
+      return(NULL)
+    }
+    vals <- trimws(as.character(cfg[[col]]))
+    vals <- unique(vals[!is.na(vals) & vals != ""])
+    if (length(vals) != 1 || !vals %in% config_unit_choices[[col]]) {
+      return(NULL)
+    }
+    vals
+  }
+  list(conc = pick("Concentration_Unit"), time = pick("Time_Unit"))
 }
 
 #' @export
