@@ -146,6 +146,44 @@ server <- function(
       }
     })
 
+    # The .raw directories the current run targets.
+    #
+    # With a config attached the targets come from its Sample column and the
+    # target selector is never filled in — so anything that reads
+    # target_selector_sel() to find the run's samples comes up empty in config
+    # mode, however many samples the engine actually finished.
+    run_target_files <- function() {
+      dir_path <- deconvolution_sidebar_vars$dir()
+
+      if (is.null(dir_path) || !nzchar(dir_path)) {
+        return(character(0))
+      }
+
+      if (
+        grepl("\\.raw$", dir_path, ignore.case = TRUE) && dir.exists(dir_path)
+      ) {
+        return(dir_path)
+      }
+
+      if (!dir.exists(dir_path)) {
+        return(character(0))
+      }
+
+      if (
+        isTRUE(deconvolution_sidebar_vars$use_config()) &&
+          length(config_file()) &&
+          "Sample" %in% names(config_file())
+      ) {
+        raw_bases <- basename(dir_ls(dir_path, glob = "*.raw"))
+        samples <- config_file()[["Sample"]]
+        samples <- samples[samples %in% raw_bases]
+
+        return(file.path(dir_path, samples))
+      }
+
+      file.path(dir_path, target_selector_sel())
+    }
+
     decon_process_data <- shiny$reactiveVal(NULL)
 
     ### Smart analysis name suggestion ----
@@ -1792,14 +1830,7 @@ server <- function(
                 }
               }
             } else {
-              dir_sel_res <- deconvolution_sidebar_vars$dir()
-              is_raw_res <- grepl("\\.raw$", dir_sel_res, ignore.case = TRUE) &&
-                dir.exists(dir_sel_res)
-              selected_files <- if (is_raw_res) {
-                dir_sel_res
-              } else {
-                file.path(dir_sel_res, target_selector_sel())
-              }
+              selected_files <- run_target_files()
               sel_base <- gsub(
                 "\\.raw$",
                 "",
@@ -2112,21 +2143,12 @@ server <- function(
                   saveRDS(heatmap, file.path(temp, "heatmap.rds"))
                 }
               } else {
-                if (deconvolution_sidebar_vars$selected() == "folder") {
-                  dir_sel_res2 <- deconvolution_sidebar_vars$dir()
-                  is_raw_res2 <- grepl(
-                    "\\.raw$",
-                    dir_sel_res2,
-                    ignore.case = TRUE
-                  ) &&
-                    dir.exists(dir_sel_res2)
-                  selected_files <- if (is_raw_res2) {
-                    dir_sel_res2
-                  } else {
-                    file.path(dir_sel_res2, target_selector_sel())
-                  }
+                selected_files <- if (
+                  deconvolution_sidebar_vars$selected() == "folder"
+                ) {
+                  run_target_files()
                 } else {
-                  selected_files <- raw_dirs
+                  raw_dirs
                 }
 
                 # Build picker: successful samples + failed samples (labelled)

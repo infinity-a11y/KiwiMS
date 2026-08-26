@@ -30,6 +30,8 @@ box::use(
       format_scientific,
       make_binding_plot,
       multiple_spectra,
+      spectrum_sample_ids,
+      binding_ordered_hits,
       peaks_trace_indices,
       restyle_peak_symbols,
       relayout_spectrum_legend,
@@ -2083,11 +2085,24 @@ server <- function(
             value = nrow(hits_summary) <= 100
           )
 
+          # Without concentrations the spectra are never grouped by
+          # concentration, so the switch that undoes that grouping has nothing
+          # to offer and stays out of the settings popovers.
+          conc_col <- names(hits_summary)[
+            grep("Conc.", names(hits_summary), fixed = TRUE)
+          ][1]
+          has_concentration <- !is.na(conc_col) &&
+            any(!is.na(suppressWarnings(as.numeric(hits_summary[[conc_col]]))))
+
           ### Render result interfaces ----
           if (analysis_select == 2) {
             #### Render relative binding interface ----
             output$conversion_ui <- shiny::renderUI({
-              binding_results_ui(ns, hits_summary)
+              binding_results_ui(
+                ns,
+                hits_summary,
+                show_sort_binding = has_concentration || isTRUE(run_kinact_ki)
+              )
             })
 
             ##### Sample view tab ----
@@ -2646,6 +2661,12 @@ server <- function(
 
             ###### Annotated spectrum ----
 
+            # The switch is absent from the settings popover when there is no
+            # concentration grouping to undo, so an unset input means "on".
+            compounds_sort_binding <- shiny::reactive({
+              !isFALSE(input$compounds_spectrum_sort_binding)
+            })
+
             compounds_labels_val <- shiny::reactiveVal(local({
               cmp <- unique(hits_summary$`Cmp Name`)[1]
               tbl <- hits_summary[hits_summary$`Cmp Name` == cmp, ]
@@ -2761,9 +2782,15 @@ server <- function(
                 `Cmp Name` == conversion_compound_picker
               )
 
-              # Make compound color scale
+              # Make compound color scale. Sample colours follow total binding
+              # regardless of the trace order, so a sample keeps the colour the
+              # Compound Distribution plot gives it.
               colors <- get_cmp_colorScale(
-                filtered_table = tbl,
+                filtered_table = if (color_variable == "Samples") {
+                  binding_ordered_hits(tbl, truncate_names)
+                } else {
+                  tbl
+                },
                 scale = color_scale,
                 variable = color_variable,
                 trunc = truncate_names
@@ -2781,9 +2808,12 @@ server <- function(
               } else {
                 plot <- multiple_spectra(
                   results_list = result_list,
-                  samples = unique(hits_summary$`Sample ID`[
-                    hits_summary$`Cmp Name` == conversion_compound_picker
-                  ]),
+                  samples = spectrum_sample_ids(
+                    hits_summary,
+                    "Cmp Name",
+                    conversion_compound_picker,
+                    sort_by_binding = compounds_sort_binding()
+                  ),
                   cubic = is.null(input$compounds_spectrum_kind) ||
                     input$compounds_spectrum_kind == "Cubic",
                   color_cmp = colors,
@@ -2826,6 +2856,7 @@ server <- function(
                 input$color_scale,
                 input$color_variable,
                 input$compounds_spectrum_kind,
+                compounds_sort_binding(),
                 manual_render_cmp_spectrum(),
                 shiny::isolate(compounds_labels_val()),
                 shiny::isolate(input$compounds_spectrum_symbols),
@@ -2838,6 +2869,7 @@ server <- function(
                 input$truncate_names,
                 input$color_scale,
                 input$compounds_spectrum_kind,
+                compounds_sort_binding(),
                 manual_render_cmp_spectrum()
               )
 
@@ -2895,6 +2927,13 @@ server <- function(
 
               tbl <- hits_summary |>
                 dplyr::filter(`Cmp Name` == input$conversion_compound_picker)
+
+              # Peak markers clutter the figure once many spectra are stacked
+              shinyWidgets::updateMaterialSwitch(
+                session,
+                "compounds_spectrum_symbols",
+                value = length(unique(tbl$`Sample ID`)) <= 20
+              )
 
               if (nrow(tbl) < 2) {
                 compounds_labels_val(TRUE)
@@ -3253,6 +3292,12 @@ server <- function(
 
             ###### Annotated spectrum ----
 
+            # The switch is absent from the settings popover when there is no
+            # concentration grouping to undo, so an unset input means "on".
+            proteins_sort_binding <- shiny::reactive({
+              !isFALSE(input$proteins_spectrum_sort_binding)
+            })
+
             proteins_labels_val <- shiny::reactiveVal(local({
               prot <- unique(hits_summary$`Protein`)[1]
               tbl <- hits_summary[hits_summary$`Protein` == prot, ]
@@ -3360,9 +3405,15 @@ server <- function(
               )
 
               if (nrow(tbl)) {
-                # Make compound color scale
+                # Make compound color scale. Sample colours follow total
+                # binding regardless of the trace order, so a sample keeps the
+                # colour the Compound Distribution plot gives it.
                 colors <- get_cmp_colorScale(
-                  filtered_table = tbl,
+                  filtered_table = if (color_variable == "Samples") {
+                    binding_ordered_hits(tbl, truncate_names, by_mean = TRUE)
+                  } else {
+                    tbl
+                  },
                   scale = color_scale,
                   variable = color_variable,
                   trunc = truncate_names
@@ -3387,11 +3438,13 @@ server <- function(
               } else {
                 plot <- multiple_spectra(
                   results_list = result_list,
-                  samples = unique(hits_summary$`Sample ID`[
-                    hits_summary$`Protein` == input$conversion_protein_picker
-                    # &
-                    #   hits_summary$`Meas. Prot.` != "N/A"
-                  ]),
+                  samples = spectrum_sample_ids(
+                    hits_summary,
+                    "Protein",
+                    input$conversion_protein_picker,
+                    sort_by_binding = proteins_sort_binding(),
+                    by_mean = TRUE
+                  ),
                   cubic = is.null(input$proteins_spectrum_kind) ||
                     input$proteins_spectrum_kind == "Cubic",
                   color_cmp = colors,
@@ -3423,6 +3476,7 @@ server <- function(
                 input$color_scale,
                 input$color_variable,
                 input$proteins_spectrum_kind,
+                proteins_sort_binding(),
                 manual_render_spectrum(),
                 shiny::isolate(proteins_labels_val()),
                 shiny::isolate(input$proteins_spectrum_symbols),
@@ -3435,6 +3489,7 @@ server <- function(
                 input$conversion_protein_picker,
                 input$truncate_names,
                 input$proteins_spectrum_kind,
+                proteins_sort_binding(),
                 manual_render_spectrum()
               )
 
@@ -3489,6 +3544,13 @@ server <- function(
 
               tbl <- hits_summary |>
                 dplyr::filter(`Protein` == input$conversion_protein_picker)
+
+              # Peak markers clutter the figure once many spectra are stacked
+              shinyWidgets::updateMaterialSwitch(
+                session,
+                "proteins_spectrum_symbols",
+                value = length(unique(tbl$`Sample ID`)) <= 20
+              )
 
               if (nrow(tbl) < 2) {
                 proteins_labels_val(TRUE)
@@ -3630,7 +3692,12 @@ server <- function(
             # concentration (curves, tables, cards) reads from here.
             conc_levels <- unique(hits_summary[[units[["Concentration"]]]])
 
-            concentration_colors <- shiny::reactive({
+            # Kept as a plain function alongside the reactive so the export
+            # builders can rebuild the palette rather than read the reactive's
+            # cache: with_export_palette() only affects palettes built while
+            # it is in scope, and a cached reactive hands back the brightened
+            # colours it computed during the on-screen render.
+            build_concentration_colors <- function() {
               get_cmp_colorScale(
                 filtered_table = hits_summary,
                 scale = resolve_color_scale(
@@ -3641,7 +3708,11 @@ server <- function(
                 trunc = TRUE,
                 conc_col = units[["Concentration"]]
               )
-            })
+            }
+
+            concentration_colors <- shiny::reactive(
+              build_concentration_colors()
+            )
 
             # Assign colors to reactive variable
             shiny::observe({
@@ -3712,8 +3783,11 @@ server <- function(
               convert_hits_units(hits_summary, units, unit_view())
             })
 
-            view_colors <- shiny::reactive({
-              conc_colors <- concentration_colors()
+            # See build_concentration_colors(): the function is what the
+            # export builders call, the reactive is what the on-screen renders
+            # read.
+            build_view_colors <- function() {
+              conc_colors <- build_concentration_colors()
 
               stats::setNames(
                 conc_colors,
@@ -3722,7 +3796,9 @@ server <- function(
                   unit_view()
                 ))
               )
-            })
+            }
+
+            view_colors <- shiny::reactive(build_view_colors())
 
             view_fitted_conc <- shiny::reactive({
               convert_conc_keys(all_fitted_conc, unit_view())
@@ -4020,7 +4096,7 @@ server <- function(
                     result_list$binding_kobs_result,
                     unit_view()
                   ),
-                  colors = view_colors(),
+                  colors = build_view_colors(),
                   units = view_units(),
                   theme = theme
                 )
@@ -4039,7 +4115,7 @@ server <- function(
                 shiny::req(result_list)
                 make_kobs_plot(
                   kinact_ki_result = view_results()$kinact_ki_result,
-                  colors = view_colors(),
+                  colors = build_view_colors(),
                   units = view_units(),
                   theme = theme
                 )
@@ -4282,7 +4358,7 @@ server <- function(
                         unit_view()
                       ),
                       filter_conc = view_concentration(),
-                      colors = view_colors(),
+                      colors = build_view_colors(),
                       units = view_units(),
                       theme = theme
                     )
@@ -6044,14 +6120,21 @@ server <- function(
           `Cmp Name` == input$conversion_compound_picker
         )
         colors <- get_cmp_colorScale(
-          filtered_table = tbl,
+          filtered_table = if (input$color_variable == "Samples") {
+            binding_ordered_hits(tbl, input$truncate_names)
+          } else {
+            tbl
+          },
           scale = input$color_scale,
           variable = input$color_variable,
           trunc = input$truncate_names
         )
-        samples <- unique(hits_summary$`Sample ID`[
-          hits_summary$`Cmp Name` == input$conversion_compound_picker
-        ])
+        samples <- spectrum_sample_ids(
+          hits_summary,
+          "Cmp Name",
+          input$conversion_compound_picker,
+          sort_by_binding = !isFALSE(input$compounds_spectrum_sort_binding)
+        )
         if (length(samples) == 1) {
           spectrum_plot(
             sample = result_list$deconvolution[[samples]],
@@ -6137,7 +6220,11 @@ server <- function(
         )
         colors <- if (nrow(tbl)) {
           get_cmp_colorScale(
-            filtered_table = tbl,
+            filtered_table = if (input$color_variable == "Samples") {
+              binding_ordered_hits(tbl, input$truncate_names, by_mean = TRUE)
+            } else {
+              tbl
+            },
             scale = input$color_scale,
             variable = input$color_variable,
             trunc = input$truncate_names
@@ -6145,9 +6232,13 @@ server <- function(
         } else {
           NULL
         }
-        samples <- unique(hits_summary$`Sample ID`[
-          hits_summary$`Protein` == input$conversion_protein_picker
-        ])
+        samples <- spectrum_sample_ids(
+          hits_summary,
+          "Protein",
+          input$conversion_protein_picker,
+          sort_by_binding = !isFALSE(input$proteins_spectrum_sort_binding),
+          by_mean = TRUE
+        )
         if (length(samples) == 1) {
           spectrum_plot(
             sample = result_list$deconvolution[[samples]],

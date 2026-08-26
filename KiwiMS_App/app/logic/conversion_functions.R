@@ -3962,6 +3962,75 @@ downsample_spectrum <- function(df, max_points = 4000) {
   df[sort(unique(c(1L, keep, n))), , drop = FALSE]
 }
 
+# Order hit rows so that their samples run from least to most bound
+#
+# This is the order the Compound Distribution plots put their samples in, and
+# the one the sample colour scale is built from, so total binding stays the
+# single source of truth for which sample gets which colour. `by_mean` picks
+# the Proteins View variant: a sample there carries several compounds, so its
+# rank comes from the mean of its total binding rather than from a single row.
+#' @export
+binding_ordered_hits <- function(
+  tbl,
+  truncate_names = FALSE,
+  by_mean = FALSE
+) {
+  if (nrow(tbl) == 0) {
+    return(tbl)
+  }
+
+  if (!isTRUE(by_mean)) {
+    return(dplyr::arrange(
+      tbl,
+      `Tot. Binding [%]`,
+      `Binding [%]`,
+      `Sample ID`
+    ))
+  }
+
+  sid <- if (isTRUE(truncate_names) && "truncSample_ID" %in% names(tbl)) {
+    tbl$truncSample_ID
+  } else {
+    tbl$`Sample ID`
+  }
+
+  mean_tb <- tapply(
+    as.numeric(as.character(tbl$`Tot. Binding [%]`)),
+    sid,
+    mean,
+    na.rm = TRUE
+  )
+  sample_order <- names(mean_tb)[order(mean_tb, names(mean_tb))]
+
+  tbl[order(match(sid, sample_order)), , drop = FALSE]
+}
+
+# Sample order for the annotated spectrum traces
+#
+# `hits_summary` is arranged by concentration and time whenever both units are
+# available, so the plain row order groups the spectra by concentration. With
+# `sort_by_binding = TRUE` that grouping is dropped and the samples are ordered
+# the way the Compound Distribution plot and the Table View order them, by
+# total and per-hit binding.
+#' @export
+spectrum_sample_ids <- function(
+  hits_summary,
+  column,
+  value,
+  sort_by_binding = FALSE,
+  by_mean = FALSE
+) {
+  keep <- hits_summary[[column]] == value
+  keep[is.na(keep)] <- FALSE
+  tbl <- hits_summary[keep, , drop = FALSE]
+
+  if (isTRUE(sort_by_binding)) {
+    tbl <- binding_ordered_hits(tbl, by_mean = by_mean)
+  }
+
+  unique(tbl$`Sample ID`)
+}
+
 # Generate spectrum with multiple traces
 #' @export
 multiple_spectra <- function(
@@ -4563,7 +4632,12 @@ multiple_spectra <- function(
             x = ~mass,
             y = ~intensity,
             legendgroup = lvl,
-            type = "scattergl",
+            # SVG, not WebGL, even though the lines above are scattergl:
+            # plotly.js draws the WebGL canvas underneath the SVG layers, so an
+            # SVG marker trace is always in front of the spectrum lines no
+            # matter how the traces are ordered. There are only a handful of
+            # peaks per sample, so nothing is lost by drawing them as SVG.
+            type = "scatter",
             mode = "markers",
             inherit = FALSE,
             visible = symbols_show,
@@ -6134,8 +6208,24 @@ get_contrast_color <- function(hex_codes) {
   ifelse(brightness > 128, "#000000", "#ffffff")
 }
 
-# Adjust brightness
+# Adjust brightness.
+#
+# The brightening exists so the dark end of a palette stays legible against
+# the app's dark plot background. An exported figure is looked at on its own -
+# on white paper, in a slide deck - where that lift only distorts the palette,
+# so exports opt out via the option below (see with_export_palette() in
+# app/logic/plot_download.R). It is deliberately keyed on "is this an export"
+# rather than on the theme argument: a dark-themed export should still carry
+# the palette's true colours.
 brighten_hex <- function(hex_colors, factor = 1.2) {
+  # Neutralise the factor rather than returning early, so the round trip
+  # through col2rgb()/hsv() still happens: it normalises viridisLite's 8-digit
+  # "#RRGGBBFF" down to "#RRGGBB", and callers downstream compare and index
+  # these strings.
+  if (isTRUE(getOption("kiwims.export_palette", FALSE))) {
+    factor <- 1
+  }
+
   # Convert Hex to HSV
   rgb_vals <- grDevices::col2rgb(hex_colors)
   hsv_vals <- grDevices::rgb2hsv(rgb_vals)
@@ -7929,9 +8019,10 @@ stats_violin <- function(
         tickmode = "array",
         tickvals = as.list(seq_along(groups) - 1L),
         ticktext = as.list(groups),
+        range = c(-0.5, length(groups) - 0.5),
         color = font_color,
         gridcolor = grid_color,
-        zerolinecolor = zeroline_color
+        zeroline = FALSE
       ),
       yaxis = list(
         title = metric_label,

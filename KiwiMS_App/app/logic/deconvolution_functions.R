@@ -1155,6 +1155,13 @@ spectrum_plot <- function(
       annotations <- NULL
       unique_masses <- sort(unique(plot_data$highlight_peaks$mass))
 
+      # The mass-difference label is anchored just above its connector, which
+      # sits at the very top of the y range - and the layout below asks for a
+      # top margin of 0, which leaves no paper above the plot area for the
+      # label to be drawn on, so it is cut off at the edge of the figure.
+      # Reserve a strip for it whenever that label is going to be drawn.
+      top_margin <- if (show_mass_diff && length(unique_masses) >= 2) 28 else 0
+
       # Mass difference connector (if enabled and two or more unique masses)
       if (show_mass_diff && length(unique_masses) >= 2) {
         base_mass <- unique_masses[1]
@@ -1213,13 +1220,21 @@ spectrum_plot <- function(
             line = list(color = font_color, width = 1, dash = "dot")
           )
 
-          # Text annotation above the horizontal line
-          y_text <- y_line + 1.5 # Adjust this offset if needed to position text nicely
+          # Text annotation above the horizontal line.
+          #
+          # Anchored by its bottom edge to the connector rather than centred on
+          # a fixed data-space offset above it. The old +1.5 offset was a
+          # constant in y units while the text height is set by the font, so a
+          # larger label grew down past the offset and sat on the very line it
+          # labels. yshift is a pixel gap, which keeps clear of the line at any
+          # font size and scales with the label size on export.
           annotations[[length(annotations) + 1]] <- list(
             x = mid_x,
-            y = y_text,
+            y = y_line,
             text = diff_text,
             showarrow = FALSE,
+            yanchor = "bottom",
+            yshift = 3,
             font = list(color = font_color, size = 12)
           )
         }
@@ -1348,6 +1363,7 @@ spectrum_plot <- function(
 
       yaxis_list$range <- c(0, max(max_y_needed, 105))
     } else {
+      top_margin <- 0
       all_shapes <- NULL
       all_annotations <- NULL
     }
@@ -1369,7 +1385,7 @@ spectrum_plot <- function(
         itemclick = FALSE,
         itemdoubleclick = FALSE
       ),
-      margin = list(t = 0, r = 0, b = 0, l = 50)
+      margin = list(t = top_margin, r = 0, b = 0, l = 50)
     ) |>
       plotly::config(
         displayModeBar = "hover",

@@ -897,12 +897,41 @@ make_KI_plots_png <- function(
 #' @export
 read_config_file <- function(path, ext) {
   if (ext == "xlsx") {
-    as.data.frame(read_excel(path))
-  } else {
-    first_line <- readLines(path, n = 1, warn = FALSE)
-    sep <- if (grepl(";", first_line)) ";" else ","
-    utils::read.csv(path, sep = sep, stringsAsFactors = FALSE)
+    return(as.data.frame(read_excel(path)))
   }
+
+  # Excel on Windows commonly saves CSVs in the system codepage (e.g.
+  # Windows-1252) rather than UTF-8, so bytes like the micro sign are not
+  # valid UTF-8 continuation sequences on their own. read.csv() errors out
+  # ("invalid multibyte string") on such files instead of just reading them,
+  # so detect that up front and re-decode as Latin-1/CP1252 before parsing.
+  raw <- readBin(path, "raw", file.info(path)$size)
+  txt <- rawToChar(raw, multiple = FALSE)
+  if (validUTF8(txt)) {
+    Encoding(txt) <- "UTF-8"
+  } else {
+    Encoding(txt) <- "latin1"
+    txt <- enc2utf8(txt)
+  }
+
+  first_line <- strsplit(txt, "\r?\n")[[1]][1]
+  sep <- if (grepl(";", first_line)) ";" else ","
+  utils::read.csv(text = txt, sep = sep, stringsAsFactors = FALSE)
+}
+
+# Excel and most keyboards produce the micro sign (U+00B5) for "µ", not
+# the Greek mu (U+03BC) that config_unit_choices matches against — the two
+# render identically, so uploads were silently rejected as "unknown unit".
+# Normalize both unit columns right after read so the rest of the app only
+# ever sees the Greek mu.
+#' @export
+normalize_config_units <- function(df) {
+  for (col in c("Concentration_Unit", "Time_Unit")) {
+    if (col %in% names(df)) {
+      df[[col]] <- gsub("µ", "μ", as.character(df[[col]]))
+    }
+  }
+  df
 }
 
 #' @export
@@ -911,6 +940,21 @@ normalize_colnames <- function(df) {
   nms <- gsub("\\s+", "_", nms)
   nms <- gsub("_+", "_", nms)
   names(df) <- nms
+  df
+}
+
+# Excel and most keyboards produce the micro sign (U+00B5) for "µ", not
+# the Greek mu (U+03BC) that config_unit_choices matches against — the two
+# render identically, so real-world uploads were silently rejected as
+# "unknown unit". Normalize both unit columns before validation so the rest
+# of the app only ever sees the Greek mu.
+#' @export
+normalize_config_units <- function(df) {
+  for (col in c("Concentration_Unit", "Time_Unit")) {
+    if (col %in% names(df)) {
+      df[[col]] <- gsub("µ", "μ", as.character(df[[col]]))
+    }
+  }
   df
 }
 

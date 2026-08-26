@@ -1313,7 +1313,22 @@ summary_results_ui <- function(ns, batch_control) {
 
 # Binding results interface
 #' @export
-binding_results_ui <- function(ns, hits_summary) {
+binding_results_ui <- function(ns, hits_summary, show_sort_binding = TRUE) {
+  # The switch only has something to undo while the spectra are grouped by
+  # concentration, so it is left out entirely when there is no concentration
+  # to group by.
+  sort_binding_switch <- function(id) {
+    if (!isTRUE(show_sort_binding)) {
+      return(NULL)
+    }
+    shinyWidgets::materialSwitch(
+      ns(id),
+      label = "Sort by Binding",
+      value = TRUE,
+      right = TRUE
+    )
+  }
+
   bslib::navset_card_tab(
     id = ns("tabs"),
     bslib::nav_panel(
@@ -1827,6 +1842,7 @@ binding_results_ui <- function(ns, hits_summary) {
                           choices = c("Cubic", "Planar")
                         )
                       ),
+                      sort_binding_switch("compounds_spectrum_sort_binding"),
                       shinyWidgets::materialSwitch(
                         ns("compounds_spectrum_labels"),
                         label = "Show Labels",
@@ -1846,7 +1862,18 @@ binding_results_ui <- function(ns, hits_summary) {
                       shinyWidgets::materialSwitch(
                         ns("compounds_spectrum_symbols"),
                         label = "Show Symbols",
-                        value = TRUE,
+                        # Peak markers get unreadable once many spectra are
+                        # stacked, so start them off for large selections.
+                        value = local({
+                          cmp <- unique(hits_summary$`Cmp Name`)[1]
+                          if (is.na(cmp)) {
+                            return(TRUE)
+                          }
+                          ids <- hits_summary$`Sample ID`[
+                            hits_summary$`Cmp Name` == cmp
+                          ]
+                          length(unique(ids[!is.na(ids)])) <= 20
+                        }),
                         right = TRUE
                       ),
                       shinyWidgets::materialSwitch(
@@ -2129,6 +2156,7 @@ binding_results_ui <- function(ns, hits_summary) {
                           choices = c("Cubic", "Planar")
                         )
                       ),
+                      sort_binding_switch("proteins_spectrum_sort_binding"),
                       shinyWidgets::materialSwitch(
                         ns("proteins_spectrum_labels"),
                         label = "Show Labels",
@@ -2148,7 +2176,18 @@ binding_results_ui <- function(ns, hits_summary) {
                       shinyWidgets::materialSwitch(
                         ns("proteins_spectrum_symbols"),
                         label = "Show Symbols",
-                        value = TRUE,
+                        # Peak markers get unreadable once many spectra are
+                        # stacked, so start them off for large selections.
+                        value = local({
+                          prot <- unique(hits_summary$`Protein`)[1]
+                          if (is.na(prot)) {
+                            return(TRUE)
+                          }
+                          ids <- hits_summary$`Sample ID`[
+                            hits_summary$`Protein` == prot
+                          ]
+                          length(unique(ids[!is.na(ids)])) <= 20
+                        }),
                         right = TRUE
                       ),
                       shinyWidgets::materialSwitch(

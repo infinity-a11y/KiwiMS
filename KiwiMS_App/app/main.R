@@ -40,6 +40,7 @@ box::use(
       get_latest_release_url,
       get_volumes,
       normalize_colnames,
+      normalize_config_units,
       read_config_file,
       validate_config,
     ],
@@ -90,6 +91,227 @@ ui <- function(id) {
     )),
     shiny$tags$script(shiny$HTML(
       "
+      // Captured from the on-screen plot at click time (see the click handler
+      // below) so a zoomed-in export matches what the user is looking at
+      // instead of always re-rendering the full, unzoomed figure — the
+      // server only ever knows the plot's default view, never the client-side
+      // zoom state, so this has to be read out of the live Plotly DOM node.
+      var _kiwiPendingZoomRange = null;
+      var _kiwiPendingCamera = null;
+
+      // Annotations and axis titles are cut off by the SVG viewport as soon as
+      // they're drawn past the edge of the paper - a label anchored above a
+      // plot area whose top margin is 0, for one. Estimating how much room
+      // those need from font size and text length is guesswork, so instead
+      // render once, measure what actually overflowed, and hand back exactly
+      // that much. Deliberately left/top/bottom only: a legend at x > 1 is
+      // NOT part of this - see kiwiFitLegend for why measuring its right-edge
+      // overflow the same way is actively misleading.
+      function kiwiFitPaper(div) {
+        var paper = div.getBoundingClientRect();
+        if (!paper.width || !paper.height) return Promise.resolve();
+        var grow = { l: 0, t: 0, b: 0 };
+        var nodes = div.querySelectorAll('.infolayer .annotation, .infolayer .g-gtitle');
+        Array.prototype.forEach.call(nodes, function(node) {
+          var b = node.getBoundingClientRect();
+          if (!b.width && !b.height) return;
+          grow.l = Math.max(grow.l, paper.left - b.left);
+          grow.t = Math.max(grow.t, paper.top - b.top);
+          grow.b = Math.max(grow.b, b.bottom - paper.bottom);
+        });
+        var m = (div._fullLayout && div._fullLayout.margin) || {};
+        var update = {}, any = false;
+        ['l', 't', 'b'].forEach(function(side) {
+          if (grow[side] > 1) {
+            update['margin.' + side] = Math.ceil((m[side] || 0) + grow[side] + 8);
+            any = true;
+          }
+        });
+        return any ? Plotly.relayout(div, update) : Promise.resolve();
+      }
+
+      // A legend at the default x=1.02/xref='paper' is NOT positioned relative
+      // to margin.r at all - it is paper-relative, and Plotly clamps it to
+      // paperWidth - legend._width so it never draws past the right edge of the
+      // canvas. That clamp is why measuring whether the legend crosses
+      // paper.right always reads ~0: it can't not be true, whatever margin.r
+      // is set to.
+      // Confirmed against the real renderer (not just this comment): growing
+      // margin.r from 0 to several thousand px moved the legend's rendered
+      // position by exactly zero pixels.
+      //
+      // What actually happens when the legend is wider than the room left of
+      // that clamp point is it lands on top of the plot instead of past its
+      // edge - spectrum_plot() sets margin.r = 0 outright, so this is the
+      // normal case for any legend entry longer than a couple of characters
+      // once the label-size scaling below is applied. The only lever that
+      // moves a paper-relative legend is the paper's own width, so this grows
+      // it by exactly the legend's measured width and reserves that same
+      // amount as margin.r, which keeps the plot itself the same size and
+      // simply appends a legend-width gutter to its right.
+      function kiwiFitLegend(div, width) {
+        if (div._fullLayout.showlegend === false) return Promise.resolve(width);
+        var legend = div.querySelector('.infolayer .legend');
+        if (!legend) return Promise.resolve(width);
+        var legendWidth = kiwiLegendWidth(div);
+        if (!(legendWidth > 0)) return Promise.resolve(width);
+        var domainRight = div.getBoundingClientRect().right -
+          ((div._fullLayout.margin && div._fullLayout.margin.r) || 0);
+        if (legend.getBoundingClientRect().left >= domainRight - 1) {
+          return Promise.resolve(width);
+        }
+        // Room for the safety margin kiwiFitLegendClip takes, plus a visible
+        // gap: at export sizes a fixed 12px gutter is invisible and the last
+        // glyph ends up flush against the edge of the page.
+        var neededR = Math.ceil(legendWidth + kiwiLegendSafetyPad(div) + 12);
+        var newWidth = width + neededR;
+        div.style.width = newWidth + 'px';
+        return Plotly.relayout(div, { width: newWidth, 'margin.r': neededR })
+          .then(function() { return newWidth; });
+      }
+
+      // How wide the legend really is, which is not always what Plotly thinks.
+      // legend._width is Plotly's own estimate and it is what the legend's clip
+      // rectangle is cut to, so when the estimate falls short of the text that
+      // actually got drawn the last characters are shaved off - the compound
+      // name ending mid-glyph at the edge of an export. Measuring the rendered
+      // contents gives the true number; the bigger of the two is the one to
+      // reserve room for.
+      function kiwiLegendWidth(div) {
+        var declared = (div._fullLayout.legend && div._fullLayout.legend._width) || 0;
+        return Math.max(declared, kiwiLegendContentWidth(div));
+      }
+
+      function kiwiLegendContentWidth(div) {
+        var scrollbox = div.querySelector('.infolayer .legend .scrollbox');
+        if (!scrollbox || !scrollbox.getBBox) return 0;
+        try {
+          var box = scrollbox.getBBox();
+          return Math.ceil(box.x + box.width + 4);
+        } catch (e) {
+          return 0;
+        }
+      }
+
+      // Roughly one character at the legend's own type size. Both the measured
+      // content width and Plotly's own estimate come from text metrics, and a
+      // shortfall of a few percent is the difference between a compound name
+      // ending in a digit and one ending in half a digit - so the legend gets
+      // a character of slack on top of whatever was measured rather than being
+      // trusted to the pixel.
+      function kiwiLegendSafetyPad(div) {
+        var size = (div._fullLayout.legend && div._fullLayout.legend.font &&
+                    div._fullLayout.legend.font.size) || 12;
+        return Math.max(12, Math.ceil(size * 0.75));
+      }
+
+      // Widens the legend's clip rectangle past whatever was actually drawn and
+      // slides the legend left by the same amount, so the extra width comes out
+      // of the gutter kiwiFitLegend reserved rather than off the edge of the
+      // page. Has to run after the final relayout, because a relayout redraws
+      // the legend and puts the original clip back.
+      function kiwiFitLegendClip(div) {
+        var legend = div.querySelector('.infolayer .legend');
+        if (!legend) return;
+        var scrollbox = legend.querySelector('.scrollbox');
+        if (!scrollbox) return;
+        var declared = (div._fullLayout.legend && div._fullLayout.legend._width) || 0;
+        var extra = Math.max(0, kiwiLegendContentWidth(div) - declared) +
+                    kiwiLegendSafetyPad(div);
+        var clip = scrollbox.getAttribute('clip-path') || '';
+        var id = clip.replace(/^url\\(['\"]?#?/, '').replace(/['\"]?\\)$/, '');
+        if (id) {
+          var clipRect = div.querySelector('[id=\"' + id + '\"] rect');
+          if (clipRect)
+            clipRect.setAttribute(
+              'width', parseFloat(clipRect.getAttribute('width') || 0) + extra);
+        }
+        var bg = legend.querySelector('rect.bg');
+        if (bg)
+          bg.setAttribute('width', parseFloat(bg.getAttribute('width') || 0) + extra);
+        var move = /translate\\(\\s*([-0-9.]+)[ ,]\\s*([-0-9.]+)\\s*\\)/.exec(
+          legend.getAttribute('transform') || '');
+        if (!move) return;
+        var legendX = parseFloat(move[1]);
+        var paperWidth = div._fullLayout.width || 0;
+        // Plotly does not always pull the legend back onto the canvas: left to
+        // itself it can sit at x = 1.02 of the plot area and hang off the right
+        // edge, which is the last glyph of a compound name going missing. Slide
+        // it by whatever that overhang actually measures, never less than the
+        // safety margin...
+        var rightEdge = legendX + Math.max(declared, kiwiLegendContentWidth(div));
+        var pad = kiwiLegendSafetyPad(div);
+        var shift = Math.max(pad, rightEdge + pad - paperWidth);
+        // ...and never more than the gutter kiwiFitLegend reserved, or the
+        // legend backs out of it and onto the plot.
+        var domainRight = paperWidth -
+                          ((div._fullLayout.margin && div._fullLayout.margin.r) || 0);
+        shift = Math.min(shift, Math.max(0, legendX - domainRight));
+        legend.setAttribute(
+          'transform', 'translate(' + (legendX - shift) + ',' + move[2] + ')');
+      }
+
+      // The only way past Plotly's 16px clamp on legend key symbols: resize
+      // them in the rendered SVG. The symbol paths are drawn centred on their
+      // own translate origin, so appending a scale keeps each one centred where
+      // it already sits. Runs after the last relayout, since a relayout redraws
+      // the legend.
+      function kiwiScaleLegendSymbols(div, scale) {
+        if (!(scale > 1)) return;
+        var nodes = div.querySelectorAll('.legend .legendpoints path');
+        Array.prototype.forEach.call(nodes, function(p) {
+          var t = p.getAttribute('transform') || '';
+          p.setAttribute('transform', t + ' scale(' + scale + ')');
+          // A scale multiplies the outline along with the shape, so the key
+          // came out ringed in a border several times heavier than the same
+          // marker carries inside the plot. Dividing it back out leaves the
+          // stroke at the width-to-size ratio the in-plot markers hold, which
+          // is constant across label sizes.
+          var w = parseFloat(p.style.strokeWidth || p.getAttribute('stroke-width'));
+          if (w > 0) p.style.strokeWidth = (w / scale) + 'px';
+        });
+      }
+
+      // Plotly.downloadImage does NOT serialise the plot it is handed: it
+      // clones the figure into a fresh element, re-plots it from layout/data and
+      // serialises the clone. Anything written into the rendered SVG - the
+      // enlarged legend key symbols, the widened legend clip - is on the
+      // original node and is simply thrown away, which is why those fixes kept
+      // looking correct on screen and kept coming out wrong in the file.
+      // Snapshot.toSVG serialises the node it is given, so this hands it the
+      // node that was actually measured and adjusted. It bakes any WebGL canvas
+      // into the SVG as a raster image on the way, so 3D scenes survive too.
+      function kiwiSaveImage(div, format, width, height, scale, filename) {
+        var svg = Plotly.Snapshot.toSVG(div, format, 1);
+        if (format === 'svg') {
+          kiwiSaveBlob(new Blob([svg], { type: 'image/svg+xml' }), filename + '.svg');
+          return Promise.resolve();
+        }
+        return Plotly.Snapshot.svgToImg({
+          format: format, width: width, height: height, scale: scale,
+          svg: svg, canvas: document.createElement('canvas'), promise: true
+        }).then(function(url) {
+          // An export at print resolution runs to tens of megabytes, past what
+          // a browser will follow as a data: URL, so it goes out as a blob.
+          var parts = url.split(',');
+          var bytes = atob(parts[1]);
+          var buf = new Uint8Array(bytes.length);
+          for (var i = 0; i < bytes.length; i++) buf[i] = bytes.charCodeAt(i);
+          kiwiSaveBlob(new Blob([buf], { type: 'image/' + format }), filename + '.' + format);
+        });
+      }
+
+      function kiwiSaveBlob(blob, name) {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function() { URL.revokeObjectURL(url); }, 10000);
+      }
+
       Shiny.addCustomMessageHandler('downloadPlot', function(msg) {
         var qualityMap = {
           low:    { width: 1280, height: 720,  scale: 1 },
@@ -97,8 +319,68 @@ ui <- function(id) {
           high:   { width: 2560, height: 1440, scale: 4 }
         };
         var q = qualityMap[msg.quality] || qualityMap.normal;
-        var contextScale = { small: 0.75, normal: 1.0, large: 1.5, xlarge: 2.0 }[msg.context] || 1.0;
+        // Font sizes are absolute px on a logical canvas whose width is set by
+        // the Quality setting, so an unadjusted size covers a bigger share of
+        // the small canvas than of the large one - Quality was silently
+        // changing how large the labels read. Normalise against the
+        // normal-quality canvas so Label Size means the same thing at every
+        // quality; normal is the reference, so it renders exactly as before.
+        var qualityFontScale = q.width / 1920;
+        // Every level doubled: the old ladder read far too small in an
+        // exported figure, where the plot is viewed at print size rather than
+        // in a card. The old top level (2.0) is now the second step down.
+        var contextScale = ({ small: 1.5, normal: 2.0, large: 3.0, xlarge: 4.0 }[msg.context] || 2.0)
+          * qualityFontScale;
+        // Line widths keep one decimal rather than rounding to whole pixels:
+        // the spectrum's dotted connectors (1) and its peak leader lines (1.5)
+        // are deliberately different weights, and integer rounding collapses
+        // them onto each other at some scales.
+        function roundW(v) { return Math.round(v * 10) / 10; }
         var fig = JSON.parse(JSON.stringify(msg.json));
+        if (_kiwiPendingZoomRange) {
+          Object.keys(_kiwiPendingZoomRange).forEach(function(axisKey) {
+            if (!fig.layout[axisKey]) return;
+            fig.layout[axisKey] = Object.assign({}, fig.layout[axisKey], {
+              autorange: false,
+              range: _kiwiPendingZoomRange[axisKey]
+            });
+          });
+          _kiwiPendingZoomRange = null;
+        }
+        if (_kiwiPendingCamera) {
+          Object.keys(_kiwiPendingCamera).forEach(function(sceneKey) {
+            if (!fig.layout[sceneKey]) return;
+            fig.layout[sceneKey].camera = _kiwiPendingCamera[sceneKey];
+          });
+          _kiwiPendingCamera = null;
+        }
+        // Every plot builder draws on a transparent background so the card
+        // shows through in the app. An empty string means the export keeps
+        // that; otherwise the transparency switch is off and this is the solid
+        // colour that goes with the chosen theme. 3D scenes are covered too -
+        // their axes set showbackground false, so the paper is what shows.
+        if (msg.background) {
+          fig.layout.paper_bgcolor = msg.background;
+          fig.layout.plot_bgcolor = msg.background;
+        }
+        // Snapshot the 3D scene axis fonts before the generic walk below
+        // scales every size in the layout, so the scene sizes can be set from
+        // the figure's own values instead of being unwound back out of an
+        // already-scaled number.
+        var sceneAxes = [];
+        Object.keys(fig.layout).forEach(function(key) {
+          if (!/^scene[0-9]*$/.test(key)) return;
+          ['xaxis', 'yaxis', 'zaxis'].forEach(function(ax) {
+            var axis = fig.layout[key] && fig.layout[key][ax];
+            if (!axis) return;
+            sceneAxes.push({
+              axis: axis,
+              tick: axis.tickfont && axis.tickfont.size,
+              title: (axis.titlefont && axis.titlefont.size) ||
+                     (axis.title && axis.title.font && axis.title.font.size)
+            });
+          });
+        });
         if (contextScale !== 1.0) {
           (function scaleFonts(obj) {
             if (!obj || typeof obj !== 'object') return;
@@ -108,8 +390,28 @@ ui <- function(id) {
           fig.data.forEach(function(trace) {
             if (trace.marker && typeof trace.marker.size === 'number')
               trace.marker.size = Math.round(trace.marker.size * contextScale);
+            // The single-sample spectrum never sets a line width, so it draws
+            // at Plotly's scatter default of 2 and there was no number here to
+            // scale - the trace stayed hairline-thin while every label around
+            // it grew. Fill the default in so the scaling below applies to it.
+            if (trace.line && typeof trace.line.width !== 'number' &&
+                typeof trace.mode === 'string' && trace.mode.indexOf('lines') !== -1)
+              trace.line.width = 2;
             if (trace.line && typeof trace.line.width === 'number')
-              trace.line.width = Math.round(trace.line.width * contextScale);
+              trace.line.width = roundW(trace.line.width * contextScale);
+            // Marker outlines are nested one level deeper than marker.size, so
+            // they were missed as well.
+            if (trace.marker && trace.marker.line &&
+                typeof trace.marker.line.width === 'number')
+              trace.marker.line.width = roundW(trace.marker.line.width * contextScale);
+            ['error_x', 'error_y'].forEach(function(key) {
+              var err = trace[key];
+              if (!err) return;
+              if (typeof err.thickness === 'number')
+                err.thickness = err.thickness * contextScale;
+              if (typeof err.width === 'number')
+                err.width = err.width * contextScale;
+            });
             ['textfont', 'outsidetextfont', 'insidetextfont'].forEach(function(key) {
               if (trace[key] && typeof trace[key].size === 'number')
                 trace[key].size = Math.round(trace[key].size * contextScale);
@@ -131,19 +433,112 @@ ui <- function(id) {
                 fig.layout.margin[side] = Math.round(fig.layout.margin[side] * contextScale);
             });
           }
-
-        }
-        var isCubicSpectra = fig.data.some(function(t) { return t.type === 'scatter3d'; });
-        var tickDampen3D = { small: 1.0, normal: 1.0, large: 0.75, xlarge: 0.6 }[msg.context] || 1.0;
-        if (isCubicSpectra && tickDampen3D !== 1.0) {
-          Object.keys(fig.layout).forEach(function(key) {
-            if (!/^scene/.test(key)) return;
-            ['xaxis', 'yaxis', 'zaxis'].forEach(function(ax) {
-              var axis = fig.layout[key] && fig.layout[key][ax];
-              if (!axis || !axis.tickfont || typeof axis.tickfont.size !== 'number') return;
-              axis.tickfont.size = Math.round(axis.tickfont.size * tickDampen3D);
+          // Shapes carry a `width`, not a `size`, so the font walk above never
+          // reached them: the single spectrum draws its mass-difference
+          // connectors and its peak leader lines as layout shapes, and they
+          // stayed hairline while their labels grew. arrowsize is deliberately
+          // left alone - it is a multiplier on arrowwidth, so scaling both
+          // would grow the arrowhead quadratically.
+          (fig.layout.shapes || []).forEach(function(shape) {
+            if (shape.line && typeof shape.line.width === 'number')
+              shape.line.width = roundW(shape.line.width * contextScale);
+            ['arrowwidth', 'standoff'].forEach(function(key) {
+              if (typeof shape[key] === 'number')
+                shape[key] = roundW(shape[key] * contextScale);
             });
           });
+          // xshift/yshift are the pixel gaps that hold a label clear of what it
+          // labels - the mass-difference text sitting above its connector, for
+          // one - so they have to grow with the text or it lands back on it.
+          (fig.layout.annotations || []).forEach(function(anno) {
+            ['arrowwidth', 'standoff', 'xshift', 'yshift'].forEach(function(key) {
+              if (typeof anno[key] === 'number')
+                anno[key] = Math.round(anno[key] * contextScale);
+            });
+          });
+        }
+        var isCubicSpectra = fig.data.some(function(t) { return t.type === 'scatter3d'; });
+        // 3D scene labels get their own, much shallower ladder rather than the
+        // 2D contextScale above. Two things make the same pixel size read far
+        // bigger inside a scene: Plotly puts a scene axis title at a fixed
+        // offset that does NOT grow with its tick labels, so scaling the ticks
+        // up walks them straight over the title; and the scene only gets the
+        // slice of the canvas the legend leaves it, so it is drawn much
+        // smaller than the figure it sits in. These factors are relative to
+        // the figure's own sizes, not multiplied onto contextScale.
+        var scene3DScale = ({ small: 1.0, normal: 1.25, large: 1.5, xlarge: 1.75 }[msg.context] || 1.25)
+          * qualityFontScale;
+        if (isCubicSpectra) {
+          sceneAxes.forEach(function(rec) {
+            var axis = rec.axis;
+            var scale = scene3DScale;
+            // The cubic spectrum's sample axis is a category axis carrying one
+            // tick per sample, all packed along a single receding edge, so its
+            // labels crowd long before the numeric mass and intensity ticks do.
+            // multiple_spectra() only turns these labels on by itself up to 8
+            // samples — past that they already fill the axis at their
+            // on-screen size, so hold them there rather than letting the
+            // label-size setting push them into one another.
+            var ticks = Array.isArray(axis.tickvals) ? axis.tickvals.length : 0;
+            if (axis.type === 'category' && ticks > 0) {
+              // Quality-normalised like scene3DScale: the ceiling is a share
+              // of the axis, not a pixel count, so it moves with the canvas.
+              scale = Math.min(scale, Math.max(1.0, 8 / ticks) * qualityFontScale);
+            }
+            if (typeof rec.tick === 'number')
+              axis.tickfont.size = Math.max(1, Math.round(rec.tick * scale));
+            // Keep the title on the same factor as its ticks so the gap the
+            // on-screen figure already reads cleanly at is preserved.
+            if (typeof rec.title === 'number') {
+              var titleSize = Math.max(1, Math.round(rec.title * scale));
+              if (axis.titlefont) axis.titlefont.size = titleSize;
+              if (axis.title && axis.title.font) axis.title.font.size = titleSize;
+            }
+            // Thin the numeric axes out as well: the mass axis defaults to
+            // enough ticks that 21.2K / 21.4K / 21.6K … already run together
+            // along the receding edge before any scaling is applied.
+            if (axis.type !== 'category' && typeof axis.nticks !== 'number')
+              axis.nticks = 5;
+          });
+          // multiple_spectra() sets no margin, so the figure falls back to
+          // Plotly's defaults - a fixed pixel count that does not grow with
+          // the labels and does not know how big this canvas is. The tick
+          // labels at the ends of the mass axis sit right on the scene edge,
+          // so as soon as they are scaled up they run past it and come out
+          // clipped mid-glyph. Give the figure room in proportion to the
+          // labels it is actually drawing; an explicit margin from R still
+          // wins.
+          var pad = Math.round(90 * scene3DScale);
+          fig.layout.margin = Object.assign(
+            { l: pad, r: pad, t: pad, b: pad, pad: 0 },
+            fig.layout.margin || {}
+          );
+        }
+
+        // Plotly hard-clamps a legend key symbol to 16px whatever the trace's
+        // marker size is - legend/style.js does
+        //   y('marker.size', mean, [2, 16], 12)
+        // and that helper clamps to the range on both branches of itemsizing,
+        // so there is no figure-level setting that makes the symbols follow
+        // the label size. They get rescaled in the rendered SVG instead (see
+        // kiwiScaleLegendSymbols, and kiwiSaveImage for why that rescaling now
+        // survives into the file). What has to happen here, before the legend
+        // is laid out, is reserving the wider horizontal slot they will need.
+        var legendSymbolScale = 1;
+        if (fig.layout.showlegend !== false) {
+          var legend = fig.layout.legend = fig.layout.legend || {};
+          var legendFont = (legend.font && legend.font.size) ||
+                           (fig.layout.font && fig.layout.font.size) || 12;
+          var LEGEND_MARKER_MAX = 16;
+          // On screen a key symbol and its label are the same size; hold that
+          // relationship at every label size.
+          legendSymbolScale = Math.max(1, legendFont / LEGEND_MARKER_MAX);
+          // 2.2x rather than a snug fit: the symbol is drawn centred in this
+          // slot, so the slack is what keeps an enlarged key clear of the text
+          // beside it.
+          if (typeof legend.itemwidth !== 'number')
+            legend.itemwidth = Math.max(
+              30, Math.round(LEGEND_MARKER_MAX * legendSymbolScale * 2.2));
         }
         document.body.style.cursor = 'progress';
         var div = document.createElement('div');
@@ -167,19 +562,85 @@ ui <- function(id) {
           // For WebGL/3D, wait for the GPU to finish rendering before screenshotting.
           return new Promise(function(resolve) { setTimeout(resolve, isCubicSpectra ? 800 : 0); });
         }).then(function() {
-          return Plotly.downloadImage(div, {
-            format: msg.format, width: q.width, height: q.height,
-            scale: msg.format === 'svg' ? 1 : q.scale, filename: msg.filename
-          });
+          return kiwiFitPaper(div);
         }).then(function() {
-          document.body.removeChild(div);
+          return kiwiFitLegend(div, q.width);
+        }).then(function(finalWidth) {
+          kiwiScaleLegendSymbols(div, legendSymbolScale);
+          // After the symbols, so the clip is fitted to the final contents.
+          kiwiFitLegendClip(div);
+          return kiwiSaveImage(
+            div, msg.format, finalWidth, q.height,
+            msg.format === 'svg' ? 1 : q.scale, msg.filename);
+        }).catch(function(err) {
+          // Without this a failed export leaves the busy cursor up for good and
+          // the offscreen figure attached to the page, with nothing said.
+          console.error('KiwiMS plot export failed:', err);
+        }).then(function() {
+          if (div.parentNode) document.body.removeChild(div);
           document.body.style.cursor = '';
         });
       });
 
-      // Set loading cursor immediately on plot export button click
+      // Reads the plot's current on-screen view out of the live Plotly node so
+      // the export can reproduce it.
+      //
+      // Timing matters here. bslib::popover() keeps its content in a
+      // <template> and Bootstrap instantiates it into a popover attached to
+      // document.body, so by the time an export button is clicked that button
+      // is no longer inside the card and closest('.card') finds nothing. (Same
+      // reason applyExportState() has to re-run on shown.bs.popover and search
+      // for its buttons by id across the whole document.) The trigger IS still
+      // in the card while the popover is opening, so that is when the view
+      // gets captured; the click is only a fallback for a button reached some
+      // other way.
+      function kiwiCaptureView(fromEl) {
+        var card = fromEl && fromEl.closest && fromEl.closest('.card');
+        var gd = card && card.querySelector('.js-plotly-plot');
+        if (!gd || !gd._fullLayout) return false;
+
+        // 2D: a box zoom or pan leaves the axis on a fixed range.
+        var ranges = {};
+        Object.keys(gd._fullLayout).forEach(function(key) {
+          if (!/^[xy]axis[0-9]*$/.test(key)) return;
+          var axis = gd._fullLayout[key];
+          if (axis && axis.autorange === false && Array.isArray(axis.range)) {
+            ranges[key] = axis.range.slice();
+          }
+        });
+
+        // 3D (the cubic spectrum): dragging rotates and scroll-zooms the scene
+        // camera - the axis ranges never move, so the 2D branch above sees
+        // nothing to carry over. getCamera() is the live value; _fullLayout
+        // .camera only holds what the plot was last laid out with.
+        var cameras = {};
+        Object.keys(gd._fullLayout).forEach(function(key) {
+          if (!/^scene[0-9]*$/.test(key)) return;
+          var sc = gd._fullLayout[key];
+          if (!sc) return;
+          var cam = (sc._scene && sc._scene.getCamera && sc._scene.getCamera()) ||
+                    (gd.layout && gd.layout[key] && gd.layout[key].camera) ||
+                    sc.camera;
+          if (cam) cameras[key] = JSON.parse(JSON.stringify(cam));
+        });
+
+        _kiwiPendingZoomRange = Object.keys(ranges).length ? ranges : null;
+        _kiwiPendingCamera = Object.keys(cameras).length ? cameras : null;
+        return true;
+      }
+
+      // Opening any popover on a plot card re-reads that card's view, which
+      // also drops whatever a previous card left behind.
+      $(document).on('shown.bs.popover', function(e) {
+        if (e && e.target) kiwiCaptureView(e.target);
+      });
+
+      // Set loading cursor immediately on plot export button click.
       $(document).on('click', '.plot-dl-buttons button, .plot-dl-buttons a', function() {
         document.body.style.cursor = 'progress';
+        // Only overwrites when the button can still see its card; otherwise the
+        // capture taken as the popover opened is the one that stands.
+        kiwiCaptureView(this);
       });
       $(window).on('focus', function() {
         if (document.body.style.cursor === 'progress')
@@ -1698,12 +2159,12 @@ server <- function(id) {
         example <- data.frame(
           Sample = c("sample_1.raw", "sample_2.raw", "sample_3.raw"),
           Replicate = c("Rep1", "Rep1", "Rep2"),
+          Protein = c("RACA", "RACA", "RACA"),
           Well = c("A1", "A2", "A3"),
           Compound_Concentration = c(100, 200, 100),
           Concentration_Unit = c("nM", "nM", "nM"),
           Incubation_Time = c(120, 120, 60),
           Time_Unit = c("s", "s", "s"),
-          Protein = c("RACA", "RACA", "RACA"),
           Compound_1 = c("Cmp1", "Cmp1", "Cmp2"),
           Compound_2 = c("Cmp2", "Cmp2", "Cmp3"),
           Compound_3 = c("Cmp3", "Cmp3", "Cmp4"),
@@ -1994,6 +2455,7 @@ server <- function(id) {
       }
 
       df <- normalize_colnames(df)
+      df <- normalize_config_units(df)
       issues <- validate_config(df)
 
       if (length(issues) > 0) {
