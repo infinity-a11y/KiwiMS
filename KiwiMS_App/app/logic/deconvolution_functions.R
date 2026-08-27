@@ -13,15 +13,15 @@ box::use(
   dplyr[left_join, mutate, n_distinct],
   ggplot2,
   parallel[
+    clusterApplyLB,
+    clusterCall,
     clusterExport,
-    clusterEvalQ,
     detectCores,
-    makeCluster,
-    parLapply,
+    makePSOCKcluster,
     stopCluster
   ],
   plotly[config, event_register, layout],
-  reticulate[use_python, py_config, py_run_string],
+  reticulate[py_config, py_last_error, py_run_string],
   RSQLite[SQLite, SQLITE_RO],
   scales[percent_format],
   utils[read.delim, read.table],
@@ -29,7 +29,13 @@ box::use(
 
 # db_with_retry(): BEGIN IMMEDIATE + body + COMMIT with R-level retry ----
 # Retries the full transaction cycle on any lock/busy error, with random jitter.
+# The body is captured unevaluated and re-evaluated on every attempt: forcing a
+# promise runs it only once, so a COMMIT that lost the race would otherwise be
+# retried around an empty transaction and the writes would vanish silently.
+#' @export
 db_with_retry <- function(con, expr, max_wait_s = 300) {
+  body <- substitute(expr)
+  body_env <- parent.frame()
   deadline <- proc.time()[["elapsed"]] + max_wait_s
   repeat {
     ok <- tryCatch(
@@ -37,7 +43,7 @@ db_with_retry <- function(con, expr, max_wait_s = 300) {
         DBI::dbExecute(con, "BEGIN IMMEDIATE")
         tryCatch(
           {
-            force(expr)
+            eval(body, body_env)
             DBI::dbExecute(con, "COMMIT")
           },
           error = function(e) {
@@ -52,7 +58,10 @@ db_with_retry <- function(con, expr, max_wait_s = 300) {
           grepl("locked|busy", e$message, ignore.case = TRUE) &&
             proc.time()[["elapsed"]] < deadline
         ) {
-          Sys.sleep(runif(1, 0.3, 1.2))
+          # stats:: qualified: box modules do not attach stats, so a bare runif()
+          # would turn the very lock contention this loop exists for into an
+          # immediate "could not find function" error.
+          Sys.sleep(stats::runif(1, 0.3, 1.2))
           FALSE
         } else {
           stop(e)
@@ -100,6 +109,13 @@ write_sample_status <- function(
 `%||%` <- function(x, y) if (is.null(x)) y else x
 
 # process_single_dir(): Processing a single waters dir ----
+# Deconvolutes one sample and writes its rows plus a status record into the
+# shared DB.  Never signals: every outcome is recorded as "done" or "failed".
+#
+# max_attempts: UniDec runs as an external .exe and occasionally dies with an
+# access violation when many copies run at once.  Those crashes are transient --
+# the same sample succeeds on a second run -- so one retry is worth far more
+# than a spurious failed sample in the results.
 #' @export
 process_single_dir <- function(
   waters_dir,
@@ -117,12 +133,13 @@ process_single_dir <- function(
   time_start,
   time_end,
   db_path,
-  keep_raw_output = FALSE
+  keep_raw_output = FALSE,
+  max_attempts = 2L
 ) {
   input_path <- gsub("\\\\", "/", waters_dir)
   result_dir <- gsub("\\\\", "/", result_dir)
 
-  # Derive sample base name before tryCatch so it is available in the error handler
+  # Derive sample base name up front so it is available in every error path
   sample_basename <- gsub(
     "\\.raw$",
     "",
@@ -140,6 +157,9 @@ process_single_dir <- function(
   } else {
     work_dir <- result_dir
   }
+
+  raw_name <- paste0(sample_basename, "_rawdata")
+  result <- file.path(work_dir, paste0(raw_name, "_unidecfiles"))
 
   # Function to properly format parameters for Python
   format_param <- function(x) {
@@ -171,64 +191,33 @@ process_single_dir <- function(
     format_param(time_end)
   )
 
-  # Set up Conda environment
-  tryCatch(
-    {
-      #       # 1. Dynamically locate the environment path
-      #       base_system <- "C:/ProgramData/miniconda3/envs/kiwims"
-      #       base_user <- file.path(
-      #         Sys.getenv("LOCALAPPDATA"),
-      #         "miniconda3/envs/kiwims"
-      #       )
-
-      #       # Choose the one that actually exists
-      #       if (dir.exists(base_system)) {
-      #         env_base <- base_system
-      #       } else if (dir.exists(base_user)) {
-      #         env_base <- base_user
-      #       } else {
-      #         stop("Kiwims environment not found in ProgramData or Local AppData.")
-      #       }
-
-      #       # Construct the bin path
-      #       envBin <- file.path(env_base, "Library/bin")
-
-      #       # 2. Update PATH
-      #       Sys.setenv(PATH = paste(Sys.getenv("PATH"), envBin, sep = ";"))
-
-      #       # 3. Tell Python where to look for DLLs
-      #       # We use shQuote to handle spaces in folder names safely
-      #       reticulate::py_run_string(sprintf(
-      #         "
-      # import os
-      # os.add_dll_directory(r'%s')
-      # ",
-      #         envBin
-      #       ))
-
-      #       # 3. Optional DLL search env variable
-      #       Sys.setenv(CONDA_DLL_SEARCH_MODIFICATION_ENABLE = "1")
-
-      # Run unidec with python
-      reticulate::py_run_string(sprintf(
-        '
+  # attempt(): One full UniDec run plus DB write for this sample ----
+  # Returns list(ok, reason, detail); it writes the "done" status itself but
+  # leaves failure reporting to the caller so a retry is not recorded as a
+  # failure.
+  attempt <- function() {
+    tryCatch(
+      {
+        # Run unidec with python
+        reticulate::py_run_string(sprintf(
+          '
 import sys
 import unidec
 import re
 import os
 import shutil
-      
+
 # Parameters passed from R
 params = {%s}
 input_file = r"%s"
 result_dir = r"%s"
-      
+
 # Initialize UniDec engine
 engine = unidec.UniDec()
 
 # Convert Waters .raw to txt
 engine.raw_process(input_file)
-    
+
 # Move processed file to output directory
 txt_file = input_file.removesuffix(".raw") + "_rawdata.txt"
 output = os.path.join(result_dir, os.path.basename(txt_file))
@@ -256,23 +245,28 @@ engine.process_data()
 engine.run_unidec()
 engine.pick_peaks()
 ',
-        params_string,
-        input_path,
-        work_dir
-      ))
+          params_string,
+          input_path,
+          work_dir
+        ))
 
-      # Write per-sample data to DB or record failure if output is missing/incomplete
-      result <- file.path(
-        work_dir,
-        gsub(".raw", "_rawdata_unidecfiles", basename(input_path))
-      )
-      raw_name <- paste0(sample_basename, "_rawdata")
-      mass_file <- file.path(result, paste0(raw_name, "_mass.txt"))
-      peaks_file <- file.path(result, paste0(raw_name, "_peaks.dat"))
+        # Write per-sample data to DB, or report failure if output is
+        # missing/incomplete
+        mass_file <- file.path(result, paste0(raw_name, "_mass.txt"))
+        peaks_file <- file.path(result, paste0(raw_name, "_peaks.dat"))
 
-      if (
-        dir.exists(result) && file.exists(mass_file) && file.exists(peaks_file)
-      ) {
+        if (
+          !dir.exists(result) ||
+            !file.exists(mass_file) ||
+            !file.exists(peaks_file)
+        ) {
+          return(list(
+            ok = FALSE,
+            reason = "no_output_dir",
+            detail = NA_character_
+          ))
+        }
+
         conf_df <- read_file_safe(file.path(
           result,
           paste0(raw_name, "_conf.dat")
@@ -283,10 +277,7 @@ engine.pick_peaks()
           data.table::setnames(conf_df, as.character(conf_df[1, ]))
           conf_df <- conf_df[-1, , drop = FALSE]
         }
-        peaks_df <- read_file_safe(
-          file.path(result, paste0(raw_name, "_peaks.dat")),
-          c("mass", "intensity")
-        )
+        peaks_df <- read_file_safe(peaks_file, c("mass", "intensity"))
         error_df <- read_file_safe(file.path(
           result,
           paste0(raw_name, "_error.txt")
@@ -297,10 +288,7 @@ engine.pick_peaks()
             Value = as.numeric(error_df$V3)
           )
         }
-        mass_df <- read_file_safe(
-          file.path(result, paste0(raw_name, "_mass.txt")),
-          c("mass", "intensity")
-        )
+        mass_df <- read_file_safe(mass_file, c("mass", "intensity"))
 
         con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
         on.exit(DBI::dbDisconnect(con), add = TRUE)
@@ -358,46 +346,298 @@ engine.pick_peaks()
             )
           )
         })
-      } else {
-        write_sample_status(db_path, sample_basename, "failed", "no_output_dir")
+
+        list(ok = TRUE, reason = NA_character_, detail = NA_character_)
+      },
+      error = function(e) {
+        py_err <- reticulate::py_last_error()
+        err_detail <- if (!is.null(py_err)) {
+          paste(c(e$message, as.character(py_err)), collapse = "\n")
+        } else {
+          e$message
+        }
+
+        message("Error in single deconvolution processing: ", err_detail)
+        cat(
+          "Error in process_single_dir for",
+          waters_dir,
+          ":\n",
+          err_detail,
+          "\n"
+        )
+
+        list(ok = FALSE, reason = "error", detail = err_detail)
       }
+    )
+  }
+
+  outcome <- list(ok = FALSE, reason = "error", detail = NA_character_)
+  for (i in seq_len(max(1L, as.integer(max_attempts)))) {
+    if (i > 1L) {
+      message(
+        "Retrying ",
+        sample_basename,
+        " (attempt ",
+        i,
+        " of ",
+        max_attempts,
+        ") after: ",
+        outcome$reason
+      )
+      # Drop only this sample's leftovers.  With keep_raw_output = TRUE the
+      # work directory is the shared result directory, so a blanket wipe would
+      # destroy other samples' output.
+      unlink(result, recursive = TRUE)
+      unlink(file.path(work_dir, paste0(raw_name, ".txt")))
+    }
+    outcome <- attempt()
+    if (isTRUE(outcome$ok)) {
+      return(invisible(TRUE))
+    }
+  }
+
+  write_sample_status(
+    db_path,
+    sample_basename,
+    "failed",
+    outcome$reason,
+    outcome$detail
+  )
+  invisible(FALSE)
+}
+
+# decon_worker_count(): Worker count for a run ----
+# Never spawn more workers than there are samples, always leave two logical
+# cores for the Shiny app and the OS, and allow an override for testing/support.
+#' @export
+decon_worker_count <- function(n_samples, num_cores = NULL) {
+  override <- suppressWarnings(as.integer(Sys.getenv("KIWIMS_DECON_WORKERS")))
+  if (!is.na(override) && override > 0) {
+    num_cores <- override
+  } else if (is.null(num_cores)) {
+    num_cores <- parallel::detectCores() - 2
+  }
+  if (is.na(num_cores)) {
+    num_cores <- 1L
+  }
+  max(1L, min(as.integer(num_cores), as.integer(n_samples)))
+}
+
+# decon_worker_init(): One-shot bring-up of a parallel worker ----
+# Runs INSIDE a worker.  Returns "ok" or an "error: ..." string and never
+# signals a condition, so a single bad worker cannot abort the whole run.
+#' @export
+decon_worker_init <- function(python_exe, lib_paths) {
+  tryCatch(
+    {
+      .libPaths(lib_paths)
+
+      # Give every worker its own Windows TEMP before Python is touched.
+      # Conda DLL activation hooks call GetTempFileName() during
+      # PyInitialize(); on a shared TEMP, simultaneous initialisation across
+      # workers can collide (seen as "Error 127").  tempdir() is already unique
+      # per R process, so a subdirectory of it is collision-free by design and
+      # is cleaned up automatically when the worker exits.
+      py_tmp <- file.path(tempdir(), "pytmp")
+      dir.create(py_tmp, showWarnings = FALSE, recursive = TRUE)
+      Sys.setenv(TMP = py_tmp, TEMP = py_tmp, TMPDIR = py_tmp)
+
+      # Bind reticulate through RETICULATE_PYTHON instead of use_python().
+      # use_python(required = TRUE) probes the interpreter in a subprocess and
+      # reticulate probes it again on first use; the env var skips that
+      # duplicate probe (~4 s per worker).  The binding is verified below.
+      Sys.setenv(RETICULATE_PYTHON = python_exe, PYTHONNOUSERSITE = "1")
+      Sys.unsetenv("PYTHONHOME")
+
+      suppressMessages({
+        library(reticulate)
+        library(DBI)
+        library(RSQLite)
+        library(data.table)
+      })
+
+      # Forces PyInitialize() and warms the UniDec import so the first sample
+      # this worker handles pays no interpreter or import cost.
+      reticulate::py_run_string("import unidec")
+
+      canon <- function(p) {
+        tolower(normalizePath(p, winslash = "/", mustWork = FALSE))
+      }
+      bound <- tryCatch(
+        canon(reticulate::py_config()$python),
+        error = function(e) ""
+      )
+      if (nzchar(bound) && !identical(bound, canon(python_exe))) {
+        message(
+          "Worker bound to Python '",
+          bound,
+          "' rather than the requested '",
+          python_exe,
+          "'."
+        )
+      }
+
+      "ok"
+    },
+    error = function(e) paste0("error: ", conditionMessage(e))
+  )
+}
+
+# decon_start_cluster(): Build and initialise the worker pool ----
+# Returns list(cl = <full cluster>, healthy = <indices ready for work>).
+# The caller must stop `cl` (the full pool) even when only a subset is used.
+#
+# Bring-up is concurrent by default.  It falls back to one-worker-at-a-time
+# initialisation if the concurrent pass fails outright, retries individual
+# workers that reported an error, and finally reports which workers are usable
+# so the run can continue on a reduced pool instead of failing.
+#' @export
+decon_start_cluster <- function(n_workers, python_exe, lib_paths, outfile) {
+  make_pool <- function() {
+    # --vanilla: workers skip the project .Rprofile (renv activation) and the
+    # site profile.  Both are pure overhead here -- .libPaths() is set
+    # explicitly during init -- and renv activation alone costs several seconds
+    # across a full pool.
+    # useXDR = FALSE: no byte-order conversion needed for a local pool.
+    parallel::makePSOCKcluster(
+      n_workers,
+      outfile = outfile,
+      rscript_args = "--vanilla",
+      useXDR = FALSE
+    )
+  }
+
+  init_all <- function(cl) {
+    tryCatch(
+      parallel::clusterCall(cl, decon_worker_init, python_exe, lib_paths),
+      error = function(e) e
+    )
+  }
+
+  init_one <- function(cl, i) {
+    tryCatch(
+      parallel::clusterCall(cl[i], decon_worker_init, python_exe, lib_paths)[[1]],
+      error = function(e) paste0("error: ", conditionMessage(e))
+    )
+  }
+
+  cl <- make_pool()
+  report <- init_all(cl)
+
+  if (inherits(report, "error")) {
+    # A worker connection dropped mid-bring-up.  Rebuild the pool and
+    # initialise sequentially, which is immune to whatever raced.
+    message(
+      "Concurrent worker start-up failed (",
+      conditionMessage(report),
+      "); retrying one worker at a time ..."
+    )
+    try(parallel::stopCluster(cl), silent = TRUE)
+    cl <- make_pool()
+    report <- lapply(seq_along(cl), function(i) init_one(cl, i))
+  }
+
+  status <- vapply(
+    report,
+    function(x) {
+      if (is.character(x) && length(x) == 1L) x else "error: bad init result"
+    },
+    character(1)
+  )
+
+  # Give any worker that reported an error one serialised second chance.
+  for (i in which(status != "ok")) {
+    status[i] <- init_one(cl, i)
+  }
+
+  healthy <- which(status == "ok")
+  if (length(healthy) < length(cl)) {
+    for (i in setdiff(seq_along(cl), healthy)) {
+      message("Worker ", i, " unavailable: ", status[i])
+    }
+  }
+
+  list(cl = cl, healthy = healthy, status = status)
+}
+
+# decon_mark_unprocessed(): Record samples the run never reached ----
+# A worker that dies outright leaves its sample without a status row.  Marking
+# those explicitly keeps the DB a complete record of the run, so the UI reports
+# a definite outcome for every requested sample instead of stalling.
+#' @export
+decon_mark_unprocessed <- function(
+  db_path,
+  sample_names,
+  reason = "not_processed"
+) {
+  tryCatch(
+    {
+      if (length(sample_names) == 0) {
+        return(invisible(0L))
+      }
+      con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+      on.exit(DBI::dbDisconnect(con), add = TRUE)
+      DBI::dbExecute(con, "PRAGMA busy_timeout=300000")
+      if (!DBI::dbExistsTable(con, "status")) {
+        return(invisible(0L))
+      }
+      known <- DBI::dbGetQuery(con, "SELECT sample FROM status")$sample
+      missing <- setdiff(sample_names, known)
+      if (length(missing) == 0) {
+        return(invisible(0L))
+      }
+      db_with_retry(con, {
+        for (s in missing) {
+          DBI::dbExecute(
+            con,
+            "INSERT OR REPLACE INTO status(sample,state,reason,error_msg,timestamp)
+             VALUES (?,?,?,?,?)",
+            params = list(
+              s,
+              "failed",
+              reason,
+              NA_character_,
+              format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+            )
+          )
+        }
+      })
+      invisible(length(missing))
     },
     error = function(e) {
-      py_err <- reticulate::py_last_error()
-      err_detail <- if (!is.null(py_err)) {
-        paste(c(e$message, as.character(py_err)), collapse = "\n")
-      } else {
-        e$message
-      }
-
-      message("Error in single deconvolution processing: ", err_detail)
-      cat(
-        "Error in process_single_dir for",
-        waters_dir,
-        ":\n",
-        err_detail,
-        "\n"
-      )
-
-      write_sample_status(
-        db_path,
-        sample_basename,
-        "failed",
-        "error",
-        err_detail
-      )
+      message("Could not mark unprocessed samples: ", e$message)
+      invisible(0L)
     }
   )
 }
 
+# decon_python_exe(): Resolve and validate the portable interpreter ----
+decon_python_exe <- function() {
+  python_exe <- Sys.getenv("RETICULATE_PYTHON")
+  if (!nzchar(python_exe) || !file.exists(python_exe)) {
+    stop(
+      "Python interpreter not found. RETICULATE_PYTHON is not set or points to a missing file."
+    )
+  }
+  message("Python found: ", python_exe)
+  python_exe
+}
+
 # deconvolute(): Deconvolution ----
+# Runs every sample through UniDec, writing results into the shared SQLite DB.
+#
+# num_cores    NULL uses the machine size (see decon_worker_count()).
+# min_parallel Sample count from which the worker pool is worth starting.  One
+#              sample costs tens of seconds of UniDec time while the pool costs
+#              a few seconds to bring up, so two samples already pay for it.
 #' @export
 deconvolute <- function(
   raw_dirs,
   result_dir,
   db_path,
   keep_raw_output = FALSE,
-  num_cores = detectCores() - 2,
+  num_cores = NULL,
+  min_parallel = 2,
   startz = 1,
   endz = 50,
   minmz = "",
@@ -411,130 +651,181 @@ deconvolute <- function(
   time_start = "",
   time_end = ""
 ) {
-  # Evaluate processing mode: parallel or sequential
-  if (length(raw_dirs) > 40 && num_cores > 1) {
-    message("Initiating ", num_cores, " cores for parallel processing ...")
+  python_exe <- decon_python_exe()
 
-    # Validate portable Python environment
-    python_exe <- Sys.getenv("RETICULATE_PYTHON")
-    if (!nzchar(python_exe) || !file.exists(python_exe)) {
-      stop(
-        "Python interpreter not found. RETICULATE_PYTHON is not set or points to a missing file."
+  sample_bases <- gsub("\\.raw$", "", basename(raw_dirs), ignore.case = TRUE)
+
+  # Parameters shared by every sample, identical in both processing modes.
+  params_list <- list(
+    result_dir = result_dir,
+    db_path = db_path,
+    keep_raw_output = keep_raw_output,
+    startz = startz,
+    endz = endz,
+    minmz = minmz,
+    maxmz = maxmz,
+    masslb = masslb,
+    massub = massub,
+    massbins = massbins,
+    peakthresh = peakthresh,
+    peakwindow = peakwindow,
+    peaknorm = peaknorm,
+    time_start = time_start,
+    time_end = time_end
+  )
+
+  run_sequential <- function(dirs) {
+    if (length(dirs) == 0) {
+      return(invisible(NULL))
+    }
+    message("Sequential processing started ...")
+    # Same interpreter hygiene the workers apply: reticulate binds through
+    # RETICULATE_PYTHON, and a stale PYTHONHOME breaks a conda-style env with
+    # "No module named 'encodings'".
+    Sys.setenv(RETICULATE_PYTHON = python_exe, PYTHONNOUSERSITE = "1")
+    Sys.unsetenv("PYTHONHOME")
+    for (dir in dirs) {
+      tryCatch(
+        do.call(process_single_dir, c(list(waters_dir = dir), params_list)),
+        error = function(e) {
+          message("Error processing ", dir, ": ", e$message)
+        }
       )
-    } else {
-      message("Python found: ", python_exe)
     }
+    message("Sequential processing finalized.")
+  }
 
-    # Create log directory and define outfile
-    outfile <- file.path(
-      Sys.getenv("LOCALAPPDATA"),
-      "KiwiMS",
-      "last_cluster_log.txt"
-    )
-    writeLines(paste("Deconvolution Cluster Output", Sys.time()), outfile)
+  n_workers <- decon_worker_count(length(raw_dirs), num_cores)
+  use_parallel <- length(raw_dirs) >= min_parallel && n_workers > 1
 
-    # Set up the cluster
-    message("Inducing cluster ...")
-    cl <- parallel::makeCluster(num_cores, outfile = outfile)
-    on.exit(parallel::stopCluster(cl), add = TRUE)
+  if (!use_parallel) {
+    run_sequential(raw_dirs)
+    decon_mark_unprocessed(db_path, sample_bases)
+    return(invisible(NULL))
+  }
 
-    # Initialize reticulate and Conda environment in each worker
-    message("Setting python environment for each worker ...")
-    worker_lib_paths <- .libPaths()
-    clusterExport(cl, "worker_lib_paths", envir = environment())
-    clusterEvalQ(cl, .libPaths(worker_lib_paths))
-    clusterEvalQ(cl, {
-      library(reticulate)
-      library(DBI)
-      library(RSQLite)
-      library(data.table)
-    })
+  message("Initiating ", n_workers, " cores for parallel processing ...")
 
-    # Initialize Python fully in each worker, one at a time.
-    #
-    # Python initialization across workers.
-    #
-    # conda DLL activation hooks write __conda_tmp_*.txt on every PyInitialize().
-    # Simultaneous init across workers causes GetTempFileName collisions (Error 127).
-    # The hook fires inside the DLL load itself and cannot be suppressed via env vars.
-    # Workers must be initialized one at a time: clusterEvalQ on a single-node
-    # cluster subset is synchronous and blocks until that worker finishes before
-    # moving to the next.
-    worker_python <- python_exe
-    clusterExport(cl, "worker_python", envir = environment())
-    for (i in seq_along(cl)) {
-      clusterEvalQ(cl[i], {
-        reticulate::use_python(worker_python, required = TRUE)
-        reticulate::py_run_string("None") # force PyInitialize() now, not lazily
-      })
+  outfile <- file.path(
+    Sys.getenv("LOCALAPPDATA"),
+    "KiwiMS",
+    "last_cluster_log.txt"
+  )
+  outfile <- tryCatch(
+    {
+      dir.create(dirname(outfile), showWarnings = FALSE, recursive = TRUE)
+      writeLines(paste("Deconvolution Cluster Output", Sys.time()), outfile)
+      outfile
+    },
+    error = function(e) {
+      message("Could not prepare cluster log: ", e$message)
+      ""
     }
+  )
 
-    # Create wrapper function that includes all parameters
-    process_wrapper <- function(dir, params) {
-      do.call(process_single_dir, c(list(waters_dir = dir), params))
-    }
+  t_start <- proc.time()[["elapsed"]]
+  message("Starting worker pool ...")
+  pool <- decon_start_cluster(n_workers, python_exe, .libPaths(), outfile)
+  cl <- pool$cl
+  on.exit(try(parallel::stopCluster(cl), silent = TRUE), add = TRUE)
 
-    # List of all parameters to pass to workers
-    params_list <- list(
-      result_dir = result_dir,
-      db_path = db_path,
-      keep_raw_output = keep_raw_output,
-      startz = startz,
-      endz = endz,
-      minmz = minmz,
-      maxmz = maxmz,
-      masslb = masslb,
-      massub = massub,
-      massbins = massbins,
-      peakthresh = peakthresh,
-      peakwindow = peakwindow,
-      peaknorm = peaknorm,
-      time_start = time_start,
-      time_end = time_end
+  if (length(pool$healthy) == 0) {
+    message("No worker could be initialised; falling back to sequential run.")
+    try(parallel::stopCluster(cl), silent = TRUE)
+    run_sequential(raw_dirs)
+    decon_mark_unprocessed(db_path, sample_bases)
+    return(invisible(NULL))
+  }
+
+  cl_use <- cl[pool$healthy]
+  message(sprintf(
+    "%d of %d worker(s) ready after %.1f s.",
+    length(pool$healthy),
+    n_workers,
+    proc.time()[["elapsed"]] - t_start
+  ))
+
+  parallel::clusterExport(
+    cl_use,
+    c(
+      "process_single_dir",
+      "write_sample_status",
+      "db_with_retry",
+      "read_file_safe",
+      "%||%",
+      "params_list"
+    ),
+    envir = environment()
+  )
+
+  # clusterApplyLB hands out one sample at a time, so a slow sample cannot stall
+  # a whole pre-assigned chunk the way parLapply's static split does.
+  # capture.output suppresses worker stdout; par_results holds the return values
+  # (NULL when the worker-side tryCatch caught an error).
+  message("Running parallel deconvolution ...")
+  par_results <- NULL
+  dispatch_error <- NULL
+  invisible(capture.output(
+    {
+      dispatch_error <- tryCatch(
+        {
+          par_results <- parallel::clusterApplyLB(cl_use, raw_dirs, function(d) {
+            tryCatch(
+              {
+                do.call(
+                  process_single_dir,
+                  c(list(waters_dir = d), params_list)
+                )
+                TRUE
+              },
+              error = function(e) {
+                message("Error processing ", d, ": ", e$message)
+                NULL
+              }
+            )
+          })
+          NULL
+        },
+        error = function(e) e
+      )
+    },
+    type = "output"
+  ))
+
+  if (!is.null(dispatch_error)) {
+    # The pool broke down mid-run.  Every sample already written to the DB is
+    # kept; the rest are retried sequentially in this process so the run still
+    # completes instead of aborting with a half-filled database.
+    message(
+      "Parallel dispatch failed (",
+      conditionMessage(dispatch_error),
+      "); completing the remaining samples sequentially ..."
     )
-
-    # Export environment
-    message("Passing functions and parameter to the workers ...")
-    parallel::clusterExport(
-      cl,
-      c(
-        "process_single_dir",
-        "write_sample_status",
-        "db_with_retry",
-        "read_file_safe",
-        "%||%",
-        "process_wrapper",
-        "params_list"
-      ),
-      envir = environment()
-    )
-
-    # Run parLapply with error handling and collect results.
-    # capture.output suppresses worker stdout; par_results holds the actual
-    # return values (NULL on error, non-NULL on success).
-    message("Running parallel deconvolution ...")
-    par_results <- NULL
-    invisible(capture.output(
+    try(parallel::stopCluster(cl), silent = TRUE)
+    done <- tryCatch(
       {
-        par_results <- parallel::parLapply(cl, raw_dirs, function(dir) {
-          tryCatch(
-            {
-              process_wrapper(dir, params_list)
-              TRUE
-            },
-            error = function(e) {
-              message("Error processing ", dir, ": ", e$message)
-              NULL
-            }
-          )
-        })
+        con_chk <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+        # Closed here rather than via on.exit(), which would hold the
+        # connection open for the whole sequential catch-up below.
+        rows <- if (DBI::dbExistsTable(con_chk, "status")) {
+          DBI::dbGetQuery(con_chk, "SELECT sample FROM status")$sample
+        } else {
+          character(0)
+        }
+        DBI::dbDisconnect(con_chk)
+        rows
       },
-      type = "output"
-    ))
-
+      error = function(e) {
+        tryCatch(
+          if (DBI::dbIsValid(con_chk)) DBI::dbDisconnect(con_chk),
+          error = function(e2) NULL
+        )
+        character(0)
+      }
+    )
+    run_sequential(raw_dirs[!sample_bases %in% done])
+  } else {
     message("Parallel processing finalized.")
-
-    # Check for errors: NULL return means the worker's tryCatch caught an error.
     failed_idx <- vapply(par_results, is.null, logical(1))
     if (any(failed_idx)) {
       warning(
@@ -544,59 +835,10 @@ deconvolute <- function(
         paste(basename(raw_dirs[failed_idx]), collapse = ", ")
       )
     }
-  } else {
-    # Validate portable Python environment
-    python_exe <- Sys.getenv("RETICULATE_PYTHON")
-    if (!nzchar(python_exe) || !file.exists(python_exe)) {
-      stop(
-        "Python interpreter not found. RETICULATE_PYTHON is not set or points to a missing file."
-      )
-    } else {
-      message("Python found: ", python_exe)
-    }
-
-    tryCatch(
-      {
-        use_python(python_exe, required = TRUE)
-      },
-      error = function(e) {
-        message("Error initialising Python: ", e$message)
-        return(NULL)
-      }
-    )
-
-    message("Sequential processing started ...")
-    tryCatch(
-      {
-        for (dir in seq_along(raw_dirs)) {
-          process_single_dir(
-            waters_dir = raw_dirs[dir],
-            result_dir = result_dir,
-            db_path = db_path,
-            keep_raw_output = keep_raw_output,
-            startz,
-            endz,
-            minmz,
-            maxmz,
-            masslb,
-            massub,
-            massbins,
-            peakthresh,
-            peakwindow,
-            peaknorm,
-            time_start,
-            time_end
-          )
-        }
-
-        message("Sequential processing finalized.")
-      },
-      error = function(e) {
-        message("Error in sequential processing for dir ", dir, ": ", e$message)
-        return(NULL)
-      }
-    )
   }
+
+  decon_mark_unprocessed(db_path, sample_bases)
+  invisible(NULL)
 }
 
 # plate_heatmap(): Well plate occupancy heatmap ----

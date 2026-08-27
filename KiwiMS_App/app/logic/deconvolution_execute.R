@@ -73,17 +73,20 @@ tryCatch(
     sample_bases <- gsub("\\.raw$", "", basename(conf$dirs), ignore.case = TRUE)
 
     con_init <- DBI::dbConnect(RSQLite::SQLite(), db_path)
-    on.exit(
-      if (exists("con_init") && DBI::dbIsValid(con_init)) {
-        DBI::dbDisconnect(con_init)
-      },
-      add = TRUE
-    )
     DBI::dbExecute(con_init, "PRAGMA journal_mode=WAL")
     DBI::dbExecute(con_init, "PRAGMA busy_timeout=5000")
     # Checkpoint + truncate any stale WAL left by a prior aborted run.
     # Safe no-op when no WAL exists or when readers hold a shared lock.
     DBI::dbExecute(con_init, "PRAGMA wal_checkpoint(TRUNCATE)")
+
+    # One transaction for the whole reset: an interrupted init can then only
+    # leave the DB fully reset or fully untouched, never half-way.
+    #
+    # con_init is closed explicitly at the end of this block and in the error
+    # handler: on.exit() is a no-op at script top level, and leaving the
+    # connection open kept the database locked for the rest of the run, which
+    # made the closing WAL checkpoint fail.
+    DBI::dbExecute(con_init, "BEGIN IMMEDIATE")
 
     # run_info: always overwrite (records this run's start time)
     DBI::dbWriteTable(
@@ -143,6 +146,30 @@ tryCatch(
       }
     }
 
+    # A UNIQUE index on status(sample) is what makes the INSERT OR REPLACE
+    # writes further down the pipeline behave as upserts; dbWriteTable creates
+    # no constraints, so without it a second write for the same sample would
+    # add a row and inflate the progress count.  Databases written by earlier
+    # versions may already hold duplicates, so collapse them to the newest row
+    # first.  Non-fatal: a run must not be blocked by an odd legacy database.
+    tryCatch(
+      {
+        DBI::dbExecute(
+          con_init,
+          "DELETE FROM status WHERE rowid NOT IN
+             (SELECT MAX(rowid) FROM status GROUP BY sample)"
+        )
+        DBI::dbExecute(
+          con_init,
+          "CREATE UNIQUE INDEX IF NOT EXISTS idx_status_sample
+             ON status(sample)"
+        )
+      },
+      error = function(e) {
+        message("Note: could not enforce unique status rows: ", e$message)
+      }
+    )
+
     # For samples being (re)processed: clear any existing per-sample data rows
     # so a clean overwrite is written (avoids duplicate rows in peaks/mass_data/etc.)
     per_sample_tbls <- c(
@@ -170,8 +197,18 @@ tryCatch(
     if (DBI::dbExistsTable(con_init, "completed")) {
       DBI::dbExecute(con_init, "DROP TABLE completed")
     }
+
+    DBI::dbExecute(con_init, "COMMIT")
+    DBI::dbDisconnect(con_init)
+    invisible(NULL)
   },
   error = function(e) {
+    # Release the connection so the rest of the run (and the closing WAL
+    # checkpoint) is not blocked by a half-finished initialisation.
+    if (exists("con_init") && DBI::dbIsValid(con_init)) {
+      tryCatch(DBI::dbExecute(con_init, "ROLLBACK"), error = function(e2) NULL)
+      tryCatch(DBI::dbDisconnect(con_init), error = function(e2) NULL)
+    }
     message("Error initialising SQLite database: ", e$message)
     stop("DB initialisation failed.")
   }
@@ -251,19 +288,40 @@ if (commandArgs(trailingOnly = TRUE)[5] != "testing") {
   )
 }
 
-# Force a full WAL checkpoint and explicitly remove WAL/SHM files
-tryCatch(
-  {
-    con_wal <- DBI::dbConnect(RSQLite::SQLite(), db_path)
-    DBI::dbExecute(con_wal, "PRAGMA wal_checkpoint(TRUNCATE)")
-    DBI::dbExecute(con_wal, "PRAGMA journal_mode=DELETE")
-    DBI::dbDisconnect(con_wal)
-    for (f in paste0(db_path, c("-wal", "-shm"))) {
-      if (file.exists(f)) file.remove(f)
+# Force a full WAL checkpoint and explicitly remove WAL/SHM files.
+# stopCluster() returns as soon as the worker sockets close, so a worker R
+# process can still hold a shared lock for a moment afterwards.  Retry for a few
+# seconds instead of leaving -wal/-shm sidecars next to the result database.
+wal_deadline <- Sys.time() + 15
+repeat {
+  wal_done <- tryCatch(
+    {
+      con_wal <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+      DBI::dbExecute(con_wal, "PRAGMA busy_timeout=5000")
+      DBI::dbExecute(con_wal, "PRAGMA wal_checkpoint(TRUNCATE)")
+      DBI::dbExecute(con_wal, "PRAGMA journal_mode=DELETE")
+      DBI::dbDisconnect(con_wal)
+      for (f in paste0(db_path, c("-wal", "-shm"))) {
+        if (file.exists(f)) file.remove(f)
+      }
+      !any(file.exists(paste0(db_path, c("-wal", "-shm"))))
+    },
+    error = function(e) {
+      tryCatch(
+        if (DBI::dbIsValid(con_wal)) DBI::dbDisconnect(con_wal),
+        error = function(e2) NULL
+      )
+      message("Note: WAL cleanup attempt failed: ", e$message)
+      FALSE
     }
+  )
+  if (isTRUE(wal_done)) {
     message("WAL cleanup complete.")
-  },
-  error = function(e) {
-    message("Note: WAL cleanup skipped: ", e$message)
+    break
   }
-)
+  if (Sys.time() >= wal_deadline) {
+    message("Note: WAL cleanup incomplete; sidecar files left in place.")
+    break
+  }
+  Sys.sleep(0.5)
+}
