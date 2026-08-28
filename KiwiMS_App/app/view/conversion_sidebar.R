@@ -373,6 +373,14 @@ server <- function(
         shinyjs::enable("peak_tolerance")
         shinyjs::enable("max_multiples")
         analysis_status("pending")
+
+        # New deconvolution results invalidate any prior conversion run —
+        # without this, result_list() stays populated with the previous
+        # dataset's results and kinact_ki_available() stays TRUE, so the
+        # Results Menu keeps offering (and rendering) stale interfaces,
+        # including Ki/kinact when the new dataset was never run with it.
+        result_list(NULL)
+        kinact_ki_available(FALSE)
       }
     )
 
@@ -409,6 +417,12 @@ server <- function(
           # Preset logical flags
           kinact_ki_check <- FALSE
           no_hits_found <- FALSE
+
+          # Clear any kinact/Ki availability left over from a previous run —
+          # it is only ever set back to TRUE below when this run both
+          # requests and successfully computes it, so an unchecked run must
+          # not inherit an earlier "available" state.
+          kinact_ki_available(FALSE)
 
           # Accumulate messages for protocol log snapshot
           log_lines <- character(0)

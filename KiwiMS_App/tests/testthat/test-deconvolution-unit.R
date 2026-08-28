@@ -13,7 +13,8 @@ box::use(
     decon_samples_with_state,
     decon_worker_count,
     deconvolute,
-    generate_decon_rslt
+    generate_decon_rslt,
+    plate_heatmap
   ],
 )
 
@@ -287,4 +288,85 @@ test_that("WAL cleanup leaves the database readable and the sidecars gone", {
   expect_false(file.exists(paste0(db, "-wal")))
   expect_false(file.exists(paste0(db, "-shm")))
   expect_equal(nrow(kiwims_db_query(db, "SELECT * FROM peaks")), 1L)
+})
+
+test_that("plate_heatmap marks failed wells distinctly from empty ones", {
+  hm <- plate_heatmap(
+    data.frame(sample = "s1", well_id = "A1", value = 100),
+    all_wells = c("A1", "A2", "A3"),
+    failed_wells = data.frame(sample = "s2", well_id = "A2")
+  )
+  built <- plotly::plotly_build(hm)
+  trace <- built$x$data[[1]]
+  rows <- trace$y
+  cols <- as.character(trace$x)
+
+  at <- function(well, mat) {
+    row <- sub("[0-9]+$", "", well)
+    col <- sub("^[A-Za-z]+", "", well)
+    mat[match(row, rows), match(col, cols)]
+  }
+
+  expect_equal(at("A1", trace$z), 1) # done
+  expect_equal(at("A2", trace$z), 2) # failed
+  expect_equal(at("A3", trace$z), 0) # empty
+  expect_match(at("A1", trace$text), "Sample: s1")
+  # A failed well must carry its sample name too, not just "Failed" -- that's
+  # what lets a viewer identify which sample it was, and what the click
+  # handler needs to jump the selection there.
+  expect_match(at("A2", trace$text), "Sample: s2")
+  expect_match(at("A2", trace$text), "Failed")
+  expect_match(at("A3", trace$text), "Empty")
+
+  # A well can't be both: a done result takes precedence in the unlikely case
+  # a well is listed in both `data` and `failed_wells`.
+  hm2 <- plate_heatmap(
+    data.frame(sample = "s1", well_id = "A1", value = 100),
+    all_wells = "A1",
+    failed_wells = data.frame(sample = "s1", well_id = "A1")
+  )
+  trace2 <- plotly::plotly_build(hm2)$x$data[[1]]
+  expect_equal(as.numeric(trace2$z)[1], 1)
+})
+
+test_that("plate_heatmap tolerates a malformed or empty failed_wells", {
+  for (bad in list(NULL, data.frame(), "A1", data.frame(well_id = "A1"))) {
+    hm <- plate_heatmap(
+      data.frame(sample = "s1", well_id = "A1", value = 100),
+      all_wells = c("A1", "A2"),
+      failed_wells = bad
+    )
+    trace <- plotly::plotly_build(hm)$x$data[[1]]
+    expect_true(all(trace$z %in% c(0, 1)))
+  }
+})
+
+test_that("plate_heatmap tolerates no failed wells (default behaviour unchanged)", {
+  hm <- plate_heatmap(
+    data.frame(sample = "s1", well_id = "A1", value = 100),
+    all_wells = c("A1", "A2")
+  )
+  trace <- plotly::plotly_build(hm)$x$data[[1]]
+  expect_true(all(trace$z %in% c(0, 1)))
+})
+
+test_that("plate_heatmap accepts a columnless data.frame (nothing done yet)", {
+  # This is exactly what reactVars$rslt_df is before any sample completes
+  # (reset_progress() sets it to data.frame()) -- output$heatmap can reach
+  # plate_heatmap() with it as soon as there's a failed sample to show, even
+  # if nothing has succeeded yet.
+  for (empty_data in list(data.frame(), NULL)) {
+    hm <- plate_heatmap(
+      empty_data,
+      all_wells = c("A1", "A2"),
+      failed_wells = data.frame(sample = "s1", well_id = "A1")
+    )
+    trace <- plotly::plotly_build(hm)$x$data[[1]]
+    rows <- trace$y
+    cols <- as.character(trace$x)
+    z_a1 <- trace$z[match("A", rows), match("1", cols)]
+    z_a2 <- trace$z[match("A", rows), match("2", cols)]
+    expect_equal(z_a1, 2) # failed
+    expect_equal(z_a2, 0) # empty
+  }
 })

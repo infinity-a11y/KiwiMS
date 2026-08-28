@@ -776,6 +776,24 @@ server <- function(
       count
     }
 
+    #### current_failed_wells ----
+    # data.frame(sample, well_id) for samples currently on record as failed --
+    # plate_heatmap()'s failed_wells argument, and reused by the heatmap click
+    # and selection-highlight observers to resolve a failed well back to its
+    # sample.
+    current_failed_wells <- function() {
+      well_id <- reactVars$wells[match(
+        reactVars$failed_samples,
+        reactVars$sample_names
+      )]
+      keep <- !is.na(well_id)
+      data.frame(
+        sample = reactVars$failed_samples[keep],
+        well_id = well_id[keep],
+        stringsAsFactors = FALSE
+      )
+    }
+
     #### reset_progress ----
     reset_progress <- function() {
       reactVars$is_running <- FALSE
@@ -800,7 +818,9 @@ server <- function(
         server = FALSE
       )
       output$result_picker_ui <- shiny$renderUI(NULL)
-      output$spectrum_failure_msg <- shiny$renderUI(NULL)
+      output$spectrum_container <- shiny$renderUI(
+        withWaiter(plotlyOutput(ns("spectrum"), height = "100%"))
+      )
       output$metrics_failure_msg <- shiny$renderUI(NULL)
       result_files_sel(NULL)
 
@@ -2139,7 +2159,8 @@ server <- function(
                 if (!file.exists(file.path(temp, "heatmap.rds"))) {
                   heatmap <- plate_heatmap(
                     reactVars$rslt_df,
-                    all_wells = config_file()[["Well"]]
+                    all_wells = config_file()[["Well"]],
+                    failed_wells = current_failed_wells()
                   )
                   saveRDS(heatmap, file.path(temp, "heatmap.rds"))
                 }
@@ -2371,6 +2392,14 @@ server <- function(
                 clicked_sample <-
                   reactVars$rslt_df$sample[reactVars$rslt_df$well_id == well_id]
               )
+              # Not a done well -- try a failed one, so clicking a failed
+              # well jumps the selection there too, same as a done one.
+              if (length(clicked_sample) == 0) {
+                shiny$isolate({
+                  fw <- current_failed_wells()
+                  clicked_sample <- fw$sample[fw$well_id == well_id]
+                })
+              }
 
               message(
                 "  clicked_sample: ",
@@ -2405,6 +2434,13 @@ server <- function(
           well_id <- shiny$isolate(
             reactVars$rslt_df$well_id[reactVars$rslt_df$sample == sample_name]
           )
+          # Not a done sample -- the selection may be a failed one instead.
+          if (length(well_id) == 0) {
+            well_id <- shiny$isolate({
+              fw <- current_failed_wells()
+              fw$well_id[fw$sample == sample_name]
+            })
+          }
 
           if (length(well_id) > 0 && nzchar(well_id[1])) {
             row_letter <- substring(well_id[1], 1, 1)
@@ -2528,12 +2564,6 @@ server <- function(
 
       output$spectrum <- renderPlotly({
         shiny$req(result_files_sel())
-        waiter_show(id = ns("spectrum"), html = spin_wave())
-
-        result_dir <- file.path(
-          analysis_dest(),
-          gsub(".raw", "_rawdata_unidecfiles", result_files_sel())
-        )
 
         # Check DB for failure / get plot data
         sel_base <- gsub("\\.raw$", "", result_files_sel(), ignore.case = TRUE)
@@ -2541,24 +2571,24 @@ server <- function(
           analysis_dest(),
           paste0(trimws(input$analysis_name), ".db")
         )
+        # spectrum_container decides whether to mount this output at all --
+        # a failed sample gets the failure message in its place instead
+        # (see below). This is just a defensive backstop against a stale
+        # binding rather than something expected to fire in normal use.
+        shiny$req(!(file.exists(db_sp) && sel_base %in% decon_failed_samples(db_sp)))
+
+        waiter_show(id = ns("spectrum"), html = spin_wave())
+
+        result_dir <- file.path(
+          analysis_dest(),
+          gsub(".raw", "_rawdata_unidecfiles", result_files_sel())
+        )
+
         is_raw_toggle <- as.logical(ifelse(
           !is.null(input$toggle_result),
           input$toggle_result,
           FALSE
         ))
-
-        if (file.exists(db_sp) && sel_base %in% decon_failed_samples(db_sp)) {
-          waiter_hide(id = ns("spectrum"))
-          return(
-            plotly::plot_ly(type = "scatter", mode = "markers") |>
-              plotly::layout(
-                paper_bgcolor = "rgba(0,0,0,0)",
-                plot_bgcolor = "rgba(0,0,0,0)",
-                xaxis = list(visible = FALSE),
-                yaxis = list(visible = FALSE)
-              )
-          )
-        }
 
         # Try DB first (works even when raw files were cleaned up)
         plot_data <- if (file.exists(db_sp)) {
@@ -2839,40 +2869,96 @@ server <- function(
         }
       )
 
-      ### Failure overlay messages for Spectrum and Metrics cards
-      failure_msg_ui <- function(output_id) {
-        shiny$renderUI({
-          shiny$req(result_files_sel())
-          sel <- gsub("\\.raw$", "", result_files_sel(), ignore.case = TRUE)
-          db_fm <- file.path(
-            analysis_dest(),
-            paste0(trimws(input$analysis_name), ".db")
-          )
-          is_failed <- file.exists(db_fm) &&
-            sel %in% decon_failed_samples(db_fm)
-          if (is_failed) {
-            info <- decon_failure_detail(db_fm, sel)
-            shiny$div(
-              class = "sample-failed-msg",
-              shiny$div(
-                class = "sample-failed-msg-title",
-                "Sample failed to deconvolute"
-              ),
-              if (!is.null(info)) {
-                shiny$div(class = "sample-failed-msg-cause", info$cause)
-              },
-              if (!is.null(info) && !is.null(info$detail)) {
-                shiny$tags$pre(
-                  class = "sample-failed-msg-detail",
-                  info$detail
-                )
-              }
-            )
-          }
-        })
+      ### Failure state for the Spectrum and Metrics cards ----
+
+      # current_failed_selection(): (sample, cause, detail) for whichever
+      # sample is selected right now, or NULL if it did not fail ----
+      # A single cheap SQLite read; called fresh wherever it's needed rather
+      # than cached, so it always reflects what is currently selected.
+      current_failed_selection <- function() {
+        shiny$req(result_files_sel())
+        sel <- gsub("\\.raw$", "", result_files_sel(), ignore.case = TRUE)
+        db_fm <- file.path(
+          analysis_dest(),
+          paste0(trimws(input$analysis_name), ".db")
+        )
+        if (!file.exists(db_fm) || !(sel %in% decon_failed_samples(db_fm))) {
+          return(NULL)
+        }
+        list(sample = sel, info = decon_failure_detail(db_fm, sel))
       }
-      output$spectrum_failure_msg <- failure_msg_ui("spectrum_failure_msg")
-      output$metrics_failure_msg <- failure_msg_ui("metrics_failure_msg")
+
+      #### Spectrum card: plot, or the failure message in its place ----
+      # A failed sample's plotlyOutput is never mounted at all (rather than
+      # mounted-but-blank with the message overlaid on top of it): plotly
+      # builds its own layered DOM under the hood, and that layering was
+      # swallowing clicks on the Copy button placed over it. Showing one or
+      # the other as the card's only content sidesteps that entirely.
+      shiny$observeEvent(input$spectrum_copy_error, {
+        current <- current_failed_selection()
+        shiny$req(current)
+        text <- paste(
+          c(
+            paste("Sample failed to deconvolute:", current$sample),
+            if (!is.null(current$info)) current$info$cause,
+            if (!is.null(current$info) && !is.null(current$info$detail)) {
+              c("", current$info$detail)
+            }
+          ),
+          collapse = "\n"
+        )
+        write_clip(text, allow_non_interactive = TRUE)
+        runjs("alert('Error message copied to clipboard!');")
+      })
+
+      output$spectrum_container <- shiny$renderUI({
+        current <- current_failed_selection()
+        if (is.null(current)) {
+          return(withWaiter(plotlyOutput(ns("spectrum"), height = "100%")))
+        }
+        info <- current$info
+        shiny$div(
+          class = "sample-failed-msg",
+          shiny$div(
+            class = "sample-failed-msg-title",
+            "Sample failed to deconvolute"
+          ),
+          if (!is.null(info)) {
+            shiny$div(class = "sample-failed-msg-cause", info$cause)
+          },
+          if (!is.null(info) && !is.null(info$detail)) {
+            shiny$tags$pre(class = "sample-failed-msg-detail", info$detail)
+          },
+          shiny$actionButton(
+            ns("spectrum_copy_error"),
+            "Copy",
+            icon = shiny$icon("clipboard"),
+            class = "sample-failed-copy-btn"
+          )
+        )
+      })
+
+      #### Metrics card: table, or a bare failure message ----
+      # No cause/detail/button here -- the Spectrum card is the one place
+      # that carries the diagnostic detail, so it isn't duplicated across
+      # cards for the same sample.
+      output$metrics_failure_msg <- shiny$renderUI({
+        shiny$req(result_files_sel())
+        sel <- gsub("\\.raw$", "", result_files_sel(), ignore.case = TRUE)
+        db_fm <- file.path(
+          analysis_dest(),
+          paste0(trimws(input$analysis_name), ".db")
+        )
+        if (file.exists(db_fm) && sel %in% decon_failed_samples(db_fm)) {
+          shiny$div(
+            class = "sample-failed-msg",
+            shiny$div(
+              class = "sample-failed-msg-title",
+              "Sample failed to deconvolute"
+            )
+          )
+        }
+      })
 
       ### Render heatmap when config has wells specified
       if (
@@ -2886,12 +2972,18 @@ server <- function(
           )
       ) {
         output$heatmap <- renderPlotly({
-          shiny$req(nrow(reactVars$rslt_df) > 0)
+          # Render as soon as there is either a done or a failed sample to
+          # show, not only once something has succeeded -- otherwise a run
+          # that fails early leaves the card blank instead of flagging it.
+          shiny$req(
+            nrow(reactVars$rslt_df) > 0 || length(reactVars$failed_samples) > 0
+          )
           waiter_show(id = ns("heatmap"), html = spin_wave())
 
           heatmap <- plate_heatmap(
             reactVars$rslt_df,
-            all_wells = config_file()[["Well"]]
+            all_wells = config_file()[["Well"]],
+            failed_wells = current_failed_wells()
           ) |>
             event_register("plotly_click")
 

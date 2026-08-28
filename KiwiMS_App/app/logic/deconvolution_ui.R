@@ -947,8 +947,9 @@ deconvolution_results_ui <- function(ns, show_heatmap = FALSE) {
       ),
       shiny$div(
         class = "spectrum-plot",
-        withWaiter(plotlyOutput(ns("spectrum"), height = "100%")),
-        shiny$uiOutput(ns("spectrum_failure_msg"))
+        # Holds either the plot or the failure message, never both -- see
+        # output$spectrum_container in deconvolution_main.R for why.
+        shiny$uiOutput(ns("spectrum_container"), style = "height: 100%;")
       ),
       full_screen = TRUE
     )

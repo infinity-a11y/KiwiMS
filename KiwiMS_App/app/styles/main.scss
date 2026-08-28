@@ -1378,6 +1378,12 @@ td.listbox.htDimmed.current.highlight {
   color: rgba(255, 255, 255, 0.85);
 }
 
+.sample-failed-copy-btn {
+  pointer-events: auto;
+  font-size: 0.8em;
+  padding: 4px 12px;
+}
+
 .deconvolution-result-content {
   display: flex;
   gap: 10px;

@@ -907,8 +907,19 @@ deconvolute <- function(
 }
 
 # plate_heatmap(): Well plate occupancy heatmap ----
+# failed_wells: data.frame(sample, well_id) for samples that failed to
+# deconvolute (well_id in the same format as `data$well_id` / `all_wells`,
+# e.g. "A1"). Rendered in a distinct colour with the sample name on hover, so
+# a failure is visible -- and identifiable -- across the whole plate at a
+# glance, rather than being indistinguishable from a well nothing was ever
+# run for.
 #' @export
-plate_heatmap <- function(data, all_wells = NULL, theme = "dark") {
+plate_heatmap <- function(
+  data,
+  all_wells = NULL,
+  failed_wells = NULL,
+  theme = "dark"
+) {
   font_color <- if (theme == "light") "black" else "white"
   empty_color <- if (theme == "light") {
     "rgba(195,197,205,1)"
@@ -919,6 +930,21 @@ plate_heatmap <- function(data, all_wells = NULL, theme = "dark") {
     "rgba(148,150,158,0.35)"
   } else {
     "rgba(118,120,128,0.55)"
+  }
+  # Matches the app's existing error accent (.table-info-red / .table-hint-red
+  # in main.scss) so a failed well reads the same as other failure cues.
+  failed_color <- "#ff5a23"
+
+  # A caller with nothing done yet (e.g. every sample so far has failed) may
+  # pass a bare, columnless data.frame() rather than one shaped like a real
+  # result set -- normalise so the join below always has a well_id column to
+  # join on instead of erroring.
+  if (is.null(data) || !is.data.frame(data) || !"well_id" %in% names(data)) {
+    data <- data.frame(
+      sample = character(0),
+      well_id = character(0),
+      value = numeric(0)
+    )
   }
 
   all_rows <- LETTERS[1:16]
@@ -957,6 +983,30 @@ plate_heatmap <- function(data, all_wells = NULL, theme = "dark") {
 
   plate_data <- dplyr::left_join(plate_layout, data, by = "well_id")
 
+  # failed_lookup: normalised well_id -> sample, for the failed branch below.
+  if (
+    is.null(failed_wells) ||
+      !is.data.frame(failed_wells) ||
+      nrow(failed_wells) == 0 ||
+      !all(c("sample", "well_id") %in% names(failed_wells))
+  ) {
+    failed_lookup <- stats::setNames(character(0), character(0))
+  } else {
+    fw_id <- norm_well_id(as.character(failed_wells$well_id))
+    keep <- nzchar(fw_id) & !is.na(fw_id)
+    failed_lookup <- stats::setNames(
+      as.character(failed_wells$sample[keep]),
+      fw_id[keep]
+    )
+    # A well listed more than once keeps its first sample; duplicates are not
+    # expected, but must not error.
+    failed_lookup <- failed_lookup[!duplicated(names(failed_lookup))]
+  }
+
+  # z: 0 = empty/untargeted, 1 = done (drawn white), 2 = failed (drawn in
+  # failed_color).  A well present in both `data` and `failed_wells` -- not
+  # expected, but not impossible if a well maps to more than one sample --
+  # shows as done, since that reflects a completed result existing for it.
   z_mat <- matrix(
     0,
     nrow = nr,
@@ -982,13 +1032,26 @@ plate_heatmap <- function(data, all_wells = NULL, theme = "dark") {
           "<br>Sample: ",
           d$sample[1]
         )
+      } else if (wid %in% names(failed_lookup)) {
+        z_mat[r, as.character(c)] <- 2
+        text_mat[r, as.character(c)] <- paste0(
+          "Well: ",
+          wid,
+          "<br>Sample: ",
+          failed_lookup[[wid]],
+          "<br>Failed"
+        )
       } else {
         text_mat[r, as.character(c)] <- paste0("Well: ", wid, "<br>Empty")
       }
     }
   }
 
-  colorscale <- list(c(0, empty_color), c(1, "white"))
+  colorscale <- list(
+    c(0, empty_color),
+    c(0.5, "white"),
+    c(1, failed_color)
+  )
 
   plotly::plot_ly(
     z = z_mat,
@@ -998,7 +1061,7 @@ plate_heatmap <- function(data, all_wells = NULL, theme = "dark") {
     colorscale = colorscale,
     showscale = FALSE,
     zmin = 0,
-    zmax = 1,
+    zmax = 2,
     xgap = 3,
     ygap = 3,
     text = text_mat,
