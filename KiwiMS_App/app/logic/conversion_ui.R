@@ -522,7 +522,9 @@ kinact_ki_results_ui <- function(
   do.call(
     bslib::navset_card_tab,
     c(
-      list(id = ns("tabs")),
+      # Kept distinct from the declaration/binding navsets: the result
+      # interfaces now coexist in the DOM, so their tab ids have to be unique.
+      list(id = ns("kinetics_tabs")),
       all_tabs,
       list(
         bslib::nav_item(

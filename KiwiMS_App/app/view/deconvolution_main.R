@@ -37,6 +37,7 @@ box::use(
       decon_progress_count,
       decon_is_complete,
       decon_failed_samples,
+      decon_failure_detail,
       process_plot_data_db,
       cleanup_wal
     ],
@@ -2850,9 +2851,22 @@ server <- function(
           is_failed <- file.exists(db_fm) &&
             sel %in% decon_failed_samples(db_fm)
           if (is_failed) {
+            info <- decon_failure_detail(db_fm, sel)
             shiny$div(
               class = "sample-failed-msg",
-              "Sample failed to deconvolute."
+              shiny$div(
+                class = "sample-failed-msg-title",
+                "Sample failed to deconvolute"
+              ),
+              if (!is.null(info)) {
+                shiny$div(class = "sample-failed-msg-cause", info$cause)
+              },
+              if (!is.null(info) && !is.null(info$detail)) {
+                shiny$tags$pre(
+                  class = "sample-failed-msg-detail",
+                  info$detail
+                )
+              }
             )
           }
         })

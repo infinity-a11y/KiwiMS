@@ -72,12 +72,28 @@ try {
     $env:RETICULATE_PYTHON = Join-Path $appRoot "env_kiwims\python.exe"
     # Prevent renv from auto-snapshotting on startup
     $env:RENV_CONFIG_AUTO_SNAPSHOT = "FALSE"
+    # An installed KiwiMS has a frozen library, so renv's project consistency
+    # check can only ever confirm what the installer just wrote. It costs ~3 s
+    # of the launch by stat-ing renv.lock against every installed DESCRIPTION,
+    # which is most of the wait before "Listening on" appears.
+    $env:RENV_CONFIG_SYNCHRONIZED_CHECK = "FALSE"
+    # Never build the system-library sandbox. It links (or, where links are not
+    # permitted, copies) all of R-Portable\library into %LOCALAPPDATA% on the
+    # first launch. The project .Renviron sets this too; repeated here so a
+    # damaged install still starts quickly.
+    $env:RENV_CONFIG_SANDBOX_ENABLED = "FALSE"
 
     # Separate log for R stdout/stderr so the launcher log is not truncated.
     $appLog = Join-Path $logDirectory "app_output.log"
     $appErrLog = Join-Path $logDirectory "app_error.log"
     "" | Set-Content $appLog
     "" | Set-Content $appErrLog
+
+    # Timed so launch.log records where a slow start went. The first launch
+    # after an install is expected to be the slowest: Windows Defender scans
+    # every R and Python binary the first time it is opened, and the install
+    # tree is roughly 3.6 GB across 60,000 files.
+    $startupTimer = [System.Diagnostics.Stopwatch]::StartNew()
 
     # Start R in a background process (non-blocking).
     $shinyCmd = "shiny::runApp('app.R', launch.browser = FALSE)"
@@ -114,7 +130,7 @@ try {
         }
 
         if ($appUrl) {
-            "$(Get-Date) - INFO: App listening at $appUrl" | Add-Content $logFile
+            "$(Get-Date) - INFO: App listening at $appUrl after $([math]::Round($startupTimer.Elapsed.TotalSeconds, 1)) s" | Add-Content $logFile
             Write-Host "Opening browser: $appUrl" -ForegroundColor Green
             Start-Process $appUrl
         }

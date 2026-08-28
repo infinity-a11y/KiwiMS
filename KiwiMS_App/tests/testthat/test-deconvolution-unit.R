@@ -6,9 +6,11 @@ box::use(
     cleanup_wal,
     db_with_retry,
     decon_failed_samples,
+    decon_failure_detail,
     decon_is_complete,
     decon_mark_unprocessed,
     decon_progress_count,
+    decon_samples_with_state,
     decon_worker_count,
     deconvolute,
     generate_decon_rslt
@@ -33,12 +35,17 @@ make_status_db <- function(path, status = NULL) {
   path
 }
 
-status_row <- function(sample, state, reason = NA_character_) {
+status_row <- function(
+  sample,
+  state,
+  reason = NA_character_,
+  error_msg = NA_character_
+) {
   data.frame(
     sample = sample,
     state = state,
     reason = reason,
-    error_msg = NA_character_,
+    error_msg = error_msg,
     timestamp = "2026-01-01 00:00:00",
     stringsAsFactors = FALSE
   )
@@ -126,6 +133,79 @@ test_that("progress helpers report per-run counts and completion", {
   generate_decon_rslt(log = "log line", output = "output line", db_path = db)
   expect_true(decon_is_complete(db))
   expect_equal(kiwims_db_query(db, "SELECT line FROM session")$line, "log line")
+})
+
+test_that("decon_samples_with_state scopes to the requested samples and state", {
+  db <- make_status_db(
+    withr::local_tempfile(fileext = ".db"),
+    rbind(
+      status_row("old_run", "failed", "error"), # not in sample_bases: ignored
+      status_row("a", "done"),
+      status_row("b", "failed", "error"),
+      status_row("c", "failed", "no_output_dir")
+    )
+  )
+
+  expect_setequal(
+    decon_samples_with_state(db, c("a", "b", "c"), "failed"),
+    c("b", "c")
+  )
+  expect_equal(decon_samples_with_state(db, c("a", "b", "c"), "done"), "a")
+  expect_equal(
+    decon_samples_with_state(db, c("a", "b", "c"), "not_processed"),
+    character(0)
+  )
+  expect_equal(decon_samples_with_state(db, character(0), "failed"), character(0))
+  expect_equal(
+    decon_samples_with_state(tempfile(fileext = ".db"), "a", "failed"),
+    character(0)
+  )
+})
+
+test_that("decon_failure_detail turns a failure code into a readable cause", {
+  db <- make_status_db(
+    withr::local_tempfile(fileext = ".db"),
+    rbind(
+      status_row("a", "done"),
+      status_row("b", "failed", "no_output_dir"),
+      status_row("c", "failed", "error", "boom: something broke\nsecond line"),
+      status_row("d", "failed", "not_processed"),
+      status_row("e", "failed", NA_character_),
+      status_row("f", "failed", "path_too_long", "Working path is 287 characters, over Windows' 260-character limit: X")
+    )
+  )
+
+  expect_null(decon_failure_detail(db, "a")) # not failed
+  expect_null(decon_failure_detail(db, "does_not_exist"))
+
+  no_output <- decon_failure_detail(db, "b")
+  expect_match(no_output$cause, "no output")
+  expect_null(no_output$detail)
+
+  with_detail <- decon_failure_detail(db, "c")
+  expect_match(with_detail$cause, "error")
+  expect_equal(with_detail$detail, "boom: something broke\nsecond line")
+
+  not_processed <- decon_failure_detail(db, "d")
+  expect_match(not_processed$cause, "never picked up")
+
+  # A NULL/NA reason must still produce something rather than erroring.
+  unknown <- decon_failure_detail(db, "e")
+  expect_true(nzchar(unknown$cause))
+
+  path_too_long <- decon_failure_detail(db, "f")
+  expect_match(path_too_long$cause, "260-character")
+  expect_match(path_too_long$detail, "287 characters")
+})
+
+test_that("a long failure detail is capped rather than laid out in full", {
+  db <- make_status_db(
+    withr::local_tempfile(fileext = ".db"),
+    status_row("a", "failed", "error", strrep("x", 5000))
+  )
+  info <- decon_failure_detail(db, "a")
+  expect_lt(nchar(info$detail), 5000)
+  expect_match(info$detail, "truncated")
 })
 
 test_that("a missing Python interpreter fails fast with a clear message", {

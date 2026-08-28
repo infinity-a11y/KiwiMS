@@ -107,6 +107,32 @@ test_that("a parallel run deconvolutes every sample and finalises the database",
   expect_false(file.exists(paste0(res$db_path, "-shm")))
 })
 
+test_that("a long sample name does not hit Windows' path length limit", {
+  skip_unless_runnable()
+
+  # This exact sample reproduced the bug deterministically, every run: UniDec
+  # derives every intermediate filename it writes from the name of the file it
+  # opens, nested three levels deep under a scratch directory
+  # (<tmp>/<name>/<name>_rawdata_unidecfiles/<name>_rawdata_conf.dat, etc.),
+  # and this sample's ~65-character name was enough to cross Windows' 260-
+  # character MAX_PATH there.  UniDec enforces that limit itself and, having
+  # nothing to report on, fails with no R or Python exception: the pipeline
+  # just found no output, with no clue in the DB as to why.
+  long_dir <- file.path(
+    kiwims_test_data_root(),
+    "HiDrive-2025-09-04_New-Test-data",
+    "2025-08-12_RACA+P2-11_20250731_50_3h_01+P2-11_20250731_50_3h_01.raw"
+  )
+  skip_if(!dir.exists(long_dir), "Regression fixture sample not present")
+
+  work <- withr::local_tempdir("kiwims-longname")
+  res <- kiwims_run_deconvolution(long_dir, work)
+  expect_run_succeeded(res, long_dir)
+
+  reason <- kiwims_db_query(res$db_path, "SELECT reason FROM status")$reason
+  expect_true(is.na(reason[1]))
+})
+
 test_that("a broken sample is recorded as failed without taking the run down", {
   skip_unless_runnable()
 

@@ -1169,6 +1169,8 @@ td.listbox.htDimmed.current.highlight {
 
 .conversion-main-spinner {
   height: 100%;
+  // Anchors the result interface stack while it is parked out of the flow
+  position: relative;
 }
 
 .deconv-pre-init .shiny-spinner-placeholder,
@@ -1342,7 +1344,38 @@ td.listbox.htDimmed.current.highlight {
   color: white;
   text-align: center;
   pointer-events: none;
+  max-width: 85%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.sample-failed-msg-title {
+  font-weight: 600;
   white-space: nowrap;
+}
+
+.sample-failed-msg-cause {
+  font-size: 0.9em;
+  opacity: 0.85;
+  white-space: normal;
+}
+
+.sample-failed-msg-detail {
+  max-width: 100%;
+  max-height: 160px;
+  overflow: auto;
+  font-size: 0.75em;
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin: 0;
+  pointer-events: auto;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .deconvolution-result-content {
@@ -1755,7 +1788,41 @@ decon-report-modal .btn-default {
    8. MODULE: CONVERSION
    ========================================================================== */
 
-#app-conversion_main-conversion_ui > .card {
+/* Result interface panels
+   Every Results Menu entry keeps its own panel so switching entries does not
+   re-render its plots and tables. Inactive panels are only hidden visually and
+   keep their box, which is what stops Shiny from suspending the outputs inside
+   them and re-running them on the way back. */
+.result-interface-stack {
+  position: relative;
+  height: 100%;
+}
+
+/* While no interface is active the stack steps out of the flow instead of
+   being display:none — Shiny suspends outputs inside display:none subtrees,
+   which would defeat the whole point of keeping the panels mounted. */
+.result-interface-stack:not(:has(> .result-interface-panel--active)) {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.result-interface-panel,
+.result-interface-panel > .conversion-result-surface {
+  height: 100%;
+}
+
+.result-interface-panel:not(.result-interface-panel--active) {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.conversion-result-surface > .card {
   height: 100%;
   margin: 0;
   border: 1px solid rgb(0 0 0 / 10%);
@@ -1763,22 +1830,22 @@ decon-report-modal .btn-default {
   flex-direction: column;
 }
 
-#app-conversion_main-conversion_ui > .card > .tab-content {
+.conversion-result-surface > .card > .tab-content {
   flex: 1 1 0;
   min-height: 0;
 }
 
-#app-conversion_main-conversion_ui > .card > .tab-content > .tab-pane:has(.hits-tab) {
+.conversion-result-surface > .card > .tab-content > .tab-pane:has(.hits-tab) {
   height: 100%;
   overflow: hidden;
 }
 
-#app-conversion_main-conversion_ui > .card > .tab-content > .tab-pane > .card-body {
+.conversion-result-surface > .card > .tab-content > .tab-pane > .card-body {
   padding: 1%;
   overflow: hidden;
 }
 
-#app-conversion_main-conversion_ui > .hits-unified-card {
+.conversion-result-surface > .hits-unified-card {
   flex: 1 1 0;
   min-height: 0;
   display: flex;
@@ -2622,7 +2689,7 @@ div[data-value="Protein Conversion"] .tab-pane {
   font-weight: normal;
 }
 
-#app-conversion_main-conversion_ui .bslib-card .card-header {
+.conversion-result-surface .bslib-card .card-header {
   border-bottom: none;
 }
 
@@ -5222,7 +5289,7 @@ sample-file-row .form-group {
   padding: 1% !important;
 }
 
-#app-conversion_main-conversion_ui .form-group {
+.conversion-result-surface .form-group {
   margin-bottom: unset;
   width: revert-rule;
 }

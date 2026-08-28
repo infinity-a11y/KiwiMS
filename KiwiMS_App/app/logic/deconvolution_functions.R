@@ -150,15 +150,29 @@ process_single_dir <- function(
   # When discarding raw output, route UniDec intermediates to a per-sample
   # temp dir so the target directory stays clean throughout the run.
   # The temp dir is deleted after the DB write regardless of success/failure.
+  #
+  # raw_stub names the scratch files UniDec writes.  When output is kept it
+  # must be sample_basename, because deconvolution_main.R's result picker
+  # matches result folders back to samples by that name.  When output is
+  # discarded it is a short synthetic id instead: UniDec derives every
+  # intermediate filename from it, nested three levels deep under a temp dir
+  # (<tmp>/<stub>/<stub>_rawdata_unidecfiles/<stub>_rawdata_conf.dat, etc.),
+  # and a long sample name easily pushes that past Windows' legacy 260-
+  # character MAX_PATH. UniDec enforces that limit itself and, having no
+  # output to report on, fails silently -- no R or Python exception, just a
+  # generic "no output produced" a few lines down. A short id sidesteps the
+  # limit regardless of how the operator names their samples.
   if (!isTRUE(keep_raw_output)) {
-    work_dir <- file.path(tempdir(), paste0("kiwims_", sample_basename))
+    raw_stub <- paste0("s", Sys.getpid())
+    work_dir <- file.path(tempdir(), raw_stub)
     dir.create(work_dir, showWarnings = FALSE, recursive = TRUE)
     on.exit(unlink(work_dir, recursive = TRUE), add = TRUE)
   } else {
+    raw_stub <- sample_basename
     work_dir <- result_dir
   }
 
-  raw_name <- paste0(sample_basename, "_rawdata")
+  raw_name <- paste0(raw_stub, "_rawdata")
   result <- file.path(work_dir, paste0(raw_name, "_unidecfiles"))
 
   # Function to properly format parameters for Python
@@ -211,6 +225,7 @@ import shutil
 params = {%s}
 input_file = r"%s"
 result_dir = r"%s"
+out_stub = r"%s"
 
 # Initialize UniDec engine
 engine = unidec.UniDec()
@@ -218,9 +233,10 @@ engine = unidec.UniDec()
 # Convert Waters .raw to txt
 engine.raw_process(input_file)
 
-# Move processed file to output directory
+# Move processed file to output directory under the out_stub name (not the
+# source file own name -- see the R-side comment on raw_stub for why).
 txt_file = input_file.removesuffix(".raw") + "_rawdata.txt"
-output = os.path.join(result_dir, os.path.basename(txt_file))
+output = os.path.join(result_dir, out_stub + "_rawdata.txt")
 shutil.move(txt_file, output)
 
 # Make result directory
@@ -247,7 +263,8 @@ engine.pick_peaks()
 ',
           params_string,
           input_path,
-          work_dir
+          work_dir,
+          raw_stub
         ))
 
         # Write per-sample data to DB, or report failure if output is
@@ -260,6 +277,23 @@ engine.pick_peaks()
             !file.exists(mass_file) ||
             !file.exists(peaks_file)
         ) {
+          # With output kept (raw_stub = sample_basename), a long sample name
+          # can still push this path over Windows' legacy 260-character
+          # MAX_PATH -- the scratch case above sidesteps it with a short id,
+          # but a kept result still has to live under a sample-named file.
+          # Flag that specific, actionable cause when it applies.
+          longest <- max(nchar(mass_file), nchar(peaks_file))
+          if (longest > 259) {
+            return(list(
+              ok = FALSE,
+              reason = "path_too_long",
+              detail = sprintf(
+                "Working path is %d characters, over Windows' 260-character limit: %s",
+                longest,
+                mass_file
+              )
+            ))
+          }
           return(list(
             ok = FALSE,
             reason = "no_output_dir",
@@ -611,6 +645,39 @@ decon_mark_unprocessed <- function(
   )
 }
 
+# decon_samples_with_state(): Which of `sample_bases` are in a given state ----
+# Internal helper shared by deconvolute()'s pool-recovery paths, so "which of
+# *these* samples ended up done/failed" is read the same way everywhere.
+#' @export
+decon_samples_with_state <- function(db_path, sample_bases, state) {
+  tryCatch(
+    {
+      if (length(sample_bases) == 0) {
+        return(character(0))
+      }
+      con <- DBI::dbConnect(
+        RSQLite::SQLite(),
+        db_path,
+        flags = RSQLite::SQLITE_RO
+      )
+      on.exit(DBI::dbDisconnect(con), add = TRUE)
+      if (!DBI::dbExistsTable(con, "status")) {
+        return(character(0))
+      }
+      ph <- paste(rep("?", length(sample_bases)), collapse = ",")
+      DBI::dbGetQuery(
+        con,
+        sprintf(
+          "SELECT sample FROM status WHERE state = ? AND sample IN (%s)",
+          ph
+        ),
+        params = c(list(state), as.list(sample_bases))
+      )$sample
+    },
+    error = function(e) character(0)
+  )
+}
+
 # decon_python_exe(): Resolve and validate the portable interpreter ----
 decon_python_exe <- function() {
   python_exe <- Sys.getenv("RETICULATE_PYTHON")
@@ -793,36 +860,17 @@ deconvolute <- function(
   ))
 
   if (!is.null(dispatch_error)) {
-    # The pool broke down mid-run.  Every sample already written to the DB is
-    # kept; the rest are retried sequentially in this process so the run still
-    # completes instead of aborting with a half-filled database.
+    # The pool broke down mid-run.  Every sample already marked "done" is
+    # kept; everything else -- including samples a worker had already given
+    # up on -- is retried sequentially so the run still completes instead of
+    # aborting with a half-filled database.
     message(
       "Parallel dispatch failed (",
       conditionMessage(dispatch_error),
       "); completing the remaining samples sequentially ..."
     )
     try(parallel::stopCluster(cl), silent = TRUE)
-    done <- tryCatch(
-      {
-        con_chk <- DBI::dbConnect(RSQLite::SQLite(), db_path)
-        # Closed here rather than via on.exit(), which would hold the
-        # connection open for the whole sequential catch-up below.
-        rows <- if (DBI::dbExistsTable(con_chk, "status")) {
-          DBI::dbGetQuery(con_chk, "SELECT sample FROM status")$sample
-        } else {
-          character(0)
-        }
-        DBI::dbDisconnect(con_chk)
-        rows
-      },
-      error = function(e) {
-        tryCatch(
-          if (DBI::dbIsValid(con_chk)) DBI::dbDisconnect(con_chk),
-          error = function(e2) NULL
-        )
-        character(0)
-      }
-    )
+    done <- decon_samples_with_state(db_path, sample_bases, "done")
     run_sequential(raw_dirs[!sample_bases %in% done])
   } else {
     message("Parallel processing finalized.")
@@ -834,6 +882,23 @@ deconvolute <- function(
         " sample(s): ",
         paste(basename(raw_dirs[failed_idx]), collapse = ", ")
       )
+    }
+
+    # A sample can still be marked failed here purely from contention: UniDec
+    # runs as an external .exe, and process_single_dir's own in-worker retry
+    # can land while every other worker is still saturating the machine, so a
+    # second attempt fails for the same reason as the first.  The pool is idle
+    # the moment this run finishes, so give those samples one more attempt
+    # with the machine to themselves before accepting the result.
+    still_failed <- decon_samples_with_state(db_path, sample_bases, "failed")
+    if (length(still_failed) > 0) {
+      message(
+        length(still_failed),
+        " sample(s) still failed after the parallel pass; ",
+        "retrying sequentially now that the pool is free ..."
+      )
+      try(parallel::stopCluster(cl), silent = TRUE)
+      run_sequential(raw_dirs[sample_bases %in% still_failed])
     }
   }
 
@@ -1739,6 +1804,72 @@ decon_failed_samples <- function(db_path) {
       )$sample
     },
     error = function(e) character(0)
+  )
+}
+
+# decon_failure_detail(): Human-readable reason a sample failed ----
+# Turns the status table's `reason` code and raw `error_msg` (which can be a
+# multi-line R + Python traceback) into a short cause line plus an optional
+# detail block, so the UI can show something more useful than a generic
+# "failed" message.  Returns NULL when the sample is not on record as failed.
+#' @export
+decon_failure_detail <- function(db_path, sample) {
+  tryCatch(
+    {
+      con <- DBI::dbConnect(
+        RSQLite::SQLite(),
+        db_path,
+        flags = RSQLite::SQLITE_RO
+      )
+      on.exit(DBI::dbDisconnect(con), add = TRUE)
+      if (!DBI::dbExistsTable(con, "status")) {
+        return(NULL)
+      }
+      row <- DBI::dbGetQuery(
+        con,
+        "SELECT reason, error_msg FROM status WHERE sample = ? AND state = 'failed'",
+        params = list(sample)
+      )
+      if (nrow(row) == 0) {
+        return(NULL)
+      }
+
+      reason <- row$reason[1]
+      reason <- if (is.na(reason)) "" else reason
+      detail <- row$error_msg[1]
+      detail <- if (is.na(detail)) "" else trimws(detail)
+      # Python tracebacks can run long; cap what the UI has to lay out. The
+      # full text is always still available via the downloadable session log.
+      if (nchar(detail) > 4000) {
+        detail <- paste0(substr(detail, 1, 4000), "\n... (truncated)")
+      }
+
+      cause <- switch(
+        reason,
+        no_output_dir = paste(
+          "UniDec produced no output for this sample.",
+          "The .raw file may be empty, corrupted, or in an unsupported format."
+        ),
+        path_too_long = paste(
+          "The output path for this sample exceeded Windows' 260-character",
+          "path limit. Shorten the sample's file name, choose a shorter",
+          "destination folder, or move the destination closer to the drive",
+          "root, then rerun this sample."
+        ),
+        not_processed = paste(
+          "This sample was never picked up by a worker",
+          "(the worker pool broke down before reaching it)."
+        ),
+        error = "UniDec raised an error while processing this sample.",
+        if (nzchar(reason)) reason else "Deconvolution failed for this sample."
+      )
+
+      list(
+        cause = cause,
+        detail = if (nzchar(detail)) detail else NULL
+      )
+    },
+    error = function(e) NULL
   )
 }
 

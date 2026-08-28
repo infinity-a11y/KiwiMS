@@ -581,9 +581,9 @@ read_uploaded_file <- function(file_path, ext) {
 
 # Function to set the selected tab
 #' @export
-set_selected_tab <- function(tab_name, session) {
+set_selected_tab <- function(tab_name, session, id = "tabs") {
   bslib::nav_select(
-    id = "tabs",
+    id = id,
     selected = tab_name,
     session = session
   )

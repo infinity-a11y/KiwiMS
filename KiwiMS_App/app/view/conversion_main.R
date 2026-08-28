@@ -199,9 +199,31 @@ ui <- function(id) {
     "
     )),
     shinycssloaders::withSpinner(
-      shiny::uiOutput(ns("conversion_ui")),
+      shiny::uiOutput(ns("conversion_ui"), class = "conversion-result-surface"),
       type = 1,
       color = "#7777f9"
+    ),
+    # Persistent host for the result interfaces. Each Results Menu entry gets
+    # its own panel that is filled the first time the entry is selected and
+    # then kept in the DOM, so switching entries only moves the active class
+    # instead of re-rendering the plots and tables. The panels are emptied
+    # again when the results are reset.
+    shiny::div(
+      id = ns("result_interface_stack"),
+      class = "result-interface-stack",
+      lapply(
+        c("binding", "kinetics", "summary", "hits"),
+        function(key) {
+          shiny::div(
+            class = "result-interface-panel",
+            `data-iface` = key,
+            shiny::uiOutput(
+              ns(paste0("iface_", key)),
+              class = "conversion-result-surface"
+            )
+          )
+        }
+      )
     )
   )
 }
@@ -1686,6 +1708,10 @@ server <- function(
         result_list <- conversion_sidebar_vars$result_list()
 
         if (!is.null(result_list)) {
+          # Drop the result panels before the declaration interface takes the
+          # stage again — the two must not share the DOM
+          reset_result_interfaces()
+
           # Show declaration interface
           output$conversion_ui <- shiny::renderUI(
             conversion_declaration_ui(
@@ -1877,6 +1903,77 @@ server <- function(
 
     ## Render conversion results interface ----
 
+    ### Result interface panels ----
+    # The four Results Menu entries each own a panel in the persistent
+    # #result_interface_stack container. A panel is filled the first time its
+    # entry is selected and then stays in the DOM; every later switch only
+    # moves the active class, so the plots, tables and spectra behind it are
+    # never recomputed. The panels are emptied again when the results are
+    # reset, which also keeps stale figures from flashing up while the next
+    # analysis renders.
+    iface_keys <- c("binding", "kinetics", "summary", "hits")
+
+    iface_state <- new.env(parent = emptyenv())
+    iface_state$built <- character(0)
+
+    iface_key <- function(analysis_select) {
+      switch(
+        as.character(analysis_select),
+        "1" = "summary",
+        "2" = "binding",
+        "3" = "kinetics",
+        "4" = "hits",
+        NULL
+      )
+    }
+
+    # The panel outputs are never suspended: an unfilled panel has no size and
+    # an inactive one is only hidden visually, and in both cases Shiny would
+    # otherwise refuse to render (or re-render) their content.
+    lapply(iface_keys, function(key) {
+      output[[paste0("iface_", key)]] <- shiny::renderUI(NULL)
+      shiny::outputOptions(
+        output,
+        paste0("iface_", key),
+        suspendWhenHidden = FALSE
+      )
+    })
+
+    # Inactive panels keep their box size and stay "visible" to Shiny (they are
+    # only made transparent to the eye and to the pointer) so the outputs they
+    # contain are not suspended and do not re-execute when shown again.
+    set_active_result_interface <- function(key) {
+      shinyjs::runjs(sprintf(
+        paste0(
+          "(function(){var s=document.getElementById('%s'); if(!s) return;",
+          "Array.prototype.forEach.call(s.children,function(c){",
+          "c.classList.toggle('result-interface-panel--active',",
+          "c.getAttribute('data-iface') === '%s');});",
+          "window.dispatchEvent(new Event('resize'));})();"
+        ),
+        ns("result_interface_stack"),
+        if (is.null(key)) "" else key
+      ))
+    }
+
+    render_result_interface <- function(key, ui) {
+      # The declaration interface and the result panels are mutually
+      # exclusive; clearing it here also keeps its tab ids unique.
+      output$conversion_ui <- shiny::renderUI(NULL)
+      output[[paste0("iface_", key)]] <- shiny::renderUI(ui)
+      iface_state$built <- unique(c(iface_state$built, key))
+      set_active_result_interface(key)
+    }
+
+    reset_result_interfaces <- function() {
+      iface_state$built <- character(0)
+      lapply(iface_keys, function(key) {
+        output[[paste0("iface_", key)]] <- shiny::renderUI(NULL)
+      })
+      set_active_result_interface(NULL)
+      invisible(NULL)
+    }
+
     # Activate observer on analysis launch
     safe_observe(
       observer_name = "Results Observer Activation",
@@ -1895,16 +1992,29 @@ server <- function(
     results_observer <- safe_observe(
       observer_name = "Conditional Results Rendering",
       handler_fn = function() {
+        result_list <- conversion_sidebar_vars$result_list()
+
+        analysis_select <- conversion_sidebar_vars$analysis_select()
+        shiny::req(length(analysis_select) > 0)
+
+        iface <- iface_key(analysis_select)
+
+        # Nothing to build: the selected interface is already rendered, so the
+        # switch is a pure visibility change and needs no blocking overlay.
+        if (
+          !is.null(result_list) &&
+            !is.null(iface) &&
+            iface %in% iface_state$built
+        ) {
+          set_active_result_interface(iface)
+          return(invisible(NULL))
+        }
+
         # Block UI
         shinyjs::runjs(paste0(
           'document.getElementById("blocking-overlay").style.display ',
           '= "block";'
         ))
-
-        result_list <- conversion_sidebar_vars$result_list()
-
-        analysis_select <- conversion_sidebar_vars$analysis_select()
-        shiny::req(length(analysis_select) > 0)
 
         shiny::isolate({
           run_kinact_ki <- conversion_sidebar_vars$run_kinact_ki()
@@ -1913,6 +2023,10 @@ server <- function(
 
         if (is.null(result_list)) {
           #### Reset results ui elements ----
+
+          # Drop the mounted result panels so their figures cannot flash up
+          # again when the next analysis renders
+          reset_result_interfaces()
 
           # Null kinetics interface
           output$kinact <- NULL
@@ -1924,7 +2038,9 @@ server <- function(
 
           if (!is.null(conversion_vars$select_concentration)) {
             lapply(names(conversion_vars$select_concentration), function(id) {
-              output[[paste0("concentration_tab", id)]] <- NULL
+              # Matches dynamic_ui_ids below — the panel output is
+              # "concentration_tab_<conc>", not "concentration_tab<conc>"
+              output[[paste0("concentration_tab_", id)]] <- NULL
               output[[paste0("concentration_tab_", id, "_hits")]] <- NULL
               output[[paste0(
                 "concentration_tab_",
@@ -1970,6 +2086,42 @@ server <- function(
           output$proteins_spectrum_labels_ui <- NULL
           output$proteins_table_view <- NULL
           output$color_variable_ui <- NULL
+
+          # Null summary interface
+          output$summary_protocol <- NULL
+          output$stats_histogram <- NULL
+          output$stats_boxplot <- NULL
+          output$stats_scatter <- NULL
+          output$stats_violin <- NULL
+          output$batch_heatmap_cards <- NULL
+          lapply(
+            c(
+              "batch_heatmap_total_pct",
+              "batch_heatmap_pct_cmp",
+              "batch_heatmap_compound",
+              "batch_heatmap_protein",
+              "batch_heatmap_concentration",
+              "batch_heatmap_time"
+            ),
+            function(id) output[[id]] <- NULL
+          )
+          lapply(
+            c(
+              "pstat_n_samples",
+              "pstat_n_proteins",
+              "pstat_n_compounds",
+              "pstat_n_hits",
+              "pstat_correct",
+              "pstat_correct_stat",
+              "pstat_unmatched",
+              "pstat_unmatched_stat",
+              "pstat_peak_tol",
+              "pstat_max_stoich",
+              "pstat_alerts",
+              "pstat_warnings"
+            ),
+            function(id) output[[id]] <- NULL
+          )
 
           #### Render declaration ui ----
           output$conversion_ui <- shiny::renderUI(
@@ -2028,6 +2180,8 @@ server <- function(
           # Select samples tab
           set_selected_tab("Samples", session)
         } else if (!is.null(result_list)) {
+          shiny::req(!is.null(iface))
+
           ### Compute hits summary ----
           hits_summary <- transform_hits(result_list$"hits_summary")
 
@@ -2095,15 +2249,16 @@ server <- function(
             any(!is.na(suppressWarnings(as.numeric(hits_summary[[conc_col]]))))
 
           ### Render result interfaces ----
-          if (analysis_select == 2) {
+          if (iface == "binding") {
             #### Render relative binding interface ----
-            output$conversion_ui <- shiny::renderUI({
+            render_result_interface(
+              "binding",
               binding_results_ui(
                 ns,
                 hits_summary,
                 show_sort_binding = has_concentration || isTRUE(run_kinact_ki)
               )
-            })
+            )
 
             ##### Sample view tab ----
 
@@ -3679,7 +3834,7 @@ server <- function(
                 placement = "top"
               )
             })
-          } else if (analysis_select == 3) {
+          } else if (iface == "kinetics") {
             #### Render kinact/Ki interface ----
             # Reset any prior concentration exclusions so plots match the table
             conversion_vars$modified_results <- NULL
@@ -3818,7 +3973,8 @@ server <- function(
             })
 
             # Call function to render kinact/Ki results interface
-            output$conversion_ui <- shiny::renderUI({
+            render_result_interface(
+              "kinetics",
               kinact_ki_results_ui(
                 ns,
                 hits_summary,
@@ -3826,7 +3982,7 @@ server <- function(
                 dynamic_ui_ids,
                 units = units
               )
-            })
+            )
 
             ##### Binding tab ----
 
@@ -4402,9 +4558,10 @@ server <- function(
                 )
               })
             }
-          } else if (analysis_select == 1) {
+          } else if (iface == "summary") {
             #### Render Summary interface ----
-            output$conversion_ui <- shiny::renderUI({
+            render_result_interface(
+              "summary",
               summary_results_ui(
                 ns,
                 batch_control = "Well" %in%
@@ -4415,7 +4572,7 @@ server <- function(
                       c("", "NA", "N/A")
                   )
               )
-            })
+            )
 
             output$summary_protocol <- shiny::renderUI({
               snapshot <- conversion_sidebar_vars$console_log_snapshot()
@@ -5556,12 +5713,13 @@ server <- function(
               }
             })
 
-            set_selected_tab("Protocol", session)
-          } else if (analysis_select == 4) {
+            set_selected_tab("Protocol", session, id = "summary_tabs")
+          } else if (iface == "hits") {
             #### Render unified Hits interface ----
-            output$conversion_ui <- shiny::renderUI({
+            render_result_interface(
+              "hits",
               hits_results_ui(ns, hits_summary, units)
-            })
+            )
 
             ##### Hits unified table ----
             hits_col_selection <- shiny::reactiveVal(NULL)
@@ -5997,7 +6155,8 @@ server <- function(
         shiny::req(conversion_sidebar_vars$analysis_select() == 3)
         set_selected_tab(
           paste0("[", gsub(" µM|mM", "", nav$value), "]"),
-          session
+          session,
+          id = "kinetics_tabs"
         )
         hits_pending_nav(NULL)
       }

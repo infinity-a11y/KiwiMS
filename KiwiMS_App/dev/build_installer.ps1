@@ -1,7 +1,7 @@
 <#
     Builds KiwiMS-Windows-x86_64.exe end to end.
 
-        1. build-launcher.ps1   compile KiwiMS.exe (ps2exe)
+        1. dev\build-launcher.ps1   compile KiwiMS.exe (ps2exe)
         2. ISCC setup_script.iss
 
     Prerequisites, none of which this script creates:
@@ -109,7 +109,7 @@ Write-Host ""
 # --- Launcher --------------------------------------------------------------------
 Write-Host "[2/3] Compiling KiwiMS.exe" -ForegroundColor Cyan
 $global:LASTEXITCODE = 0
-& (Join-Path $appRoot 'build-launcher.ps1') -NoPause
+& (Join-Path $appRoot 'dev\build-launcher.ps1') -NoPause
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] Launcher compilation failed." -ForegroundColor Red
     exit 1

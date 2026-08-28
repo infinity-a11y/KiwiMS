@@ -4,7 +4,7 @@ box::use(
   fs[path_home, dir_ls],
   ggplot2,
   grid[gpar, grid.text, unit],
-  httr[add_headers, content, GET, status_code],
+  httr[add_headers, content, GET, status_code, timeout],
   minpack.lm[nlsLM],
   plyr[ddply, rename],
   readxl[read_excel],
@@ -138,22 +138,15 @@ get_volumes <- function() {
   os <- Sys.info()['sysname']
 
   if (os == "Windows") {
-    # Use PowerShell with Get-CimInstance to get logical disk drives
-    drives_raw <- system(
-      "powershell -command \"Get-CimInstance Win32_LogicalDisk | Select-Object DeviceID | ForEach-Object { $_.DeviceID }\"",
-      intern = TRUE
-    )
+    # Probe the drive letters directly instead of shelling out to
+    # "powershell -command Get-CimInstance Win32_LogicalDisk". That subprocess
+    # cost 2-4 s on every session start (a cold PowerShell plus a WMI query),
+    # and considerably more on the first run of a fresh machine, where the WMI
+    # repository still has to warm up. dir.exists() is one stat() per letter
+    # and returns the same set in well under a millisecond.
+    drive_names <- LETTERS[dir.exists(paste0(LETTERS, ":/"))]
 
-    # Clean the output to get just the drive letters (e.g., "C:")
-    drives_list <- drives_raw[drives_raw != ""]
-    drives_list <- trimws(drives_list)
-    drives_list <- drives_list[grepl("^[A-Z]:$", drives_list)]
-
-    # Create a named vector from the list of drives
-    drive_names <- substr(drives_list, 1, 1)
-    drive_values <- paste0(drives_list, "/")
-
-    # Set the names and append to the roots vector
+    drive_values <- paste0(drive_names, ":/")
     names(drive_values) <- drive_names
     roots <- c(roots, drive_values)
   } else {
@@ -181,6 +174,12 @@ fill_empty <- function(string) {
   }
 }
 
+# Both version checks below run synchronously in the server function, so the
+# user stares at the loading screen until they return. curl has no connect
+# timeout by default: on a machine that is offline behind a firewall that
+# drops packets rather than refusing them, that is minutes of dead wait. Cap
+# it - a failed check just means the update banner is skipped.
+
 #' @export
 check_github_version <- function(
   repo_url = "https://raw.githubusercontent.com/infinity-a11y/KiwiMS/master/KiwiMS_App/resources/version.txt"
@@ -188,7 +187,7 @@ check_github_version <- function(
   tryCatch(
     {
       # Fetch the version.txt file from the GitHub repository
-      response <- GET(repo_url)
+      response <- GET(repo_url, timeout(5))
 
       # Check if the request was successful
       if (status_code(response) != 200) {
@@ -230,7 +229,8 @@ get_latest_release_url <- function(repo = "infinity-a11y/KiwiMS") {
 
       # Fetch the latest release data
       response <- httr::GET(
-        api_url
+        api_url,
+        httr::timeout(5)
       )
 
       # Check if the request was successful

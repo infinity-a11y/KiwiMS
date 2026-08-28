@@ -10,7 +10,7 @@
 
         - the Shiny app         app\logic\helper_functions.R  get_kiwims_version()
         - the launcher banner   dev\launch.ps1
-        - KiwiMS.exe            build-launcher.ps1 (ps2exe -version)
+        - KiwiMS.exe            dev\build-launcher.ps1 (ps2exe -version)
         - the installer         setup_script.iss (ISPP FileRead at compile time)
 
     Only static documents have to carry a literal copy, so only those are

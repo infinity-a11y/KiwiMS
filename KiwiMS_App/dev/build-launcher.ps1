@@ -1,9 +1,29 @@
 # =============================================
 # KiwiMS Launcher Compiler
 #
-# Compiles dev\launch.ps1 into KiwiMS.exe with ps2exe.
+# Compiles launch.ps1 into KiwiMS.exe with ps2exe.
 # The version stamped into the exe comes from resources\version.txt,
 # the single source of truth for the app version.
+#
+# Usage:
+#   Run from ANY directory - the script locates KiwiMS_App itself from its
+#   own location (dev\build-launcher.ps1), so the current working directory
+#   does not matter. From a PowerShell prompt:
+#
+#       .\build-launcher.ps1
+#
+#   or, from elsewhere, with a full or relative path:
+#
+#       C:\Projects\KiwiMS\KiwiMS_App\dev\build-launcher.ps1
+#
+#   Output: KiwiMS_App\KiwiMS.exe (overwritten in place).
+#
+#   Prerequisite: the ps2exe module.
+#       Install-Module ps2exe -Scope CurrentUser -Force
+#
+#   Normally you do not run this directly - dev\build_installer.ps1 calls it
+#   as step 1 of the full installer build and passes -NoPause to skip the
+#   "Press Enter" prompts below.
 #
 # Kept ASCII-only on purpose: this file is read by Windows PowerShell 5.1,
 # which decodes BOM-less files as ANSI and would mangle non-ASCII output.
@@ -15,9 +35,12 @@ param(
     [switch] $NoPause
 )
 
-# Go to the folder where this script is located
+# This script lives in KiwiMS_App\dev; the launcher inputs and outputs
+# (dev\launch.ps1, resources\favicon.ico, KiwiMS.exe) are all relative to
+# KiwiMS_App itself, so resolve and move to that parent directory.
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-Set-Location $scriptDir
+$appRoot = Split-Path -Parent $scriptDir
+Set-Location $appRoot
 
 function Fail([string] $Message) {
     Write-Host ""
@@ -46,7 +69,7 @@ if (-not (Get-Command ps2exe -ErrorAction SilentlyContinue)) {
 # Read the app version from the single source of truth. ps2exe only accepts a
 # numeric dotted version for the Win32 file-version resource, so strip any
 # pre-release suffix (0.8.0-rc1 -> 0.8.0) before handing it over.
-$versionPath = Join-Path $scriptDir 'resources\version.txt'
+$versionPath = Join-Path $appRoot 'resources\version.txt'
 if (-not (Test-Path $versionPath)) { Fail "Version file not found: $versionPath" }
 
 $versionLine = Get-Content -Path $versionPath | Where-Object { $_ -match '^\s*version\s*=' } | Select-Object -First 1
@@ -63,7 +86,7 @@ Write-Host ""
 # --- Compile -----------------------------------------------------------------
 # ps2exe is a module function, not a native executable, so it never sets
 # $LASTEXITCODE. Detect success from the output file itself instead.
-$outputFile = Join-Path $scriptDir 'KiwiMS.exe'
+$outputFile = Join-Path $appRoot 'KiwiMS.exe'
 $before = if (Test-Path $outputFile) { (Get-Item $outputFile).LastWriteTimeUtc } else { [datetime]::MinValue }
 
 $compileError = $null
