@@ -2,7 +2,8 @@
     Builds KiwiMS-Windows-x86_64.exe end to end.
 
         1. dev\build-launcher.ps1   compile KiwiMS.exe (ps2exe)
-        2. ISCC setup_script.iss
+        2. compileall               refresh env_kiwims bytecode
+        3. ISCC setup_script.iss
 
     Prerequisites, none of which this script creates:
         - KiwiMS_App\env_kiwims\   conda-pack output of the kiwims environment
@@ -68,7 +69,7 @@ if (-not $Iscc) {
 # time, instead of on a user's machine.
 $unpackScript = Join-Path $appRoot 'env_kiwims\Scripts\conda-unpack-script.py'
 if (Test-Path $unpackScript) {
-    Write-Host "[1/3] Checking conda-unpack manifest" -ForegroundColor Cyan
+    Write-Host "[1/4] Checking conda-unpack manifest" -ForegroundColor Cyan
     $entryPattern = [regex]"^\('([^']+)',\s*'"
     $envRoot = Join-Path $appRoot 'env_kiwims'
     $total = 0
@@ -107,7 +108,7 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host ""
 
 # --- Launcher --------------------------------------------------------------------
-Write-Host "[2/3] Compiling KiwiMS.exe" -ForegroundColor Cyan
+Write-Host "[2/4] Compiling KiwiMS.exe" -ForegroundColor Cyan
 $global:LASTEXITCODE = 0
 & (Join-Path $appRoot 'dev\build-launcher.ps1') -NoPause
 if ($LASTEXITCODE -ne 0) {
@@ -115,9 +116,64 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+# --- Python bytecode -------------------------------------------------------------
+# Ship bytecode that does not depend on file timestamps. Python validates a .pyc
+# against the mtime of its .py, and nothing in this pipeline preserves those
+# exactly: roughly 3,700 of the ~9,800 .pyc files in env_kiwims are already stale
+# here, because conda stamped the .py files with the env-creation date while the
+# .pyc came from the upstream package build, and the installer's coarser
+# timestamps invalidate a further ~4,500 on the way in. The environment then
+# recompiles about 90% of itself in every process that imports it - 6.2 s against
+# 1.8 s for the UniDec import chain, paid by every worker on every run.
+#
+# --invalidation-mode unchecked-hash stamps each .pyc with the hash of its source
+# rather than its mtime and never revalidates it, so the cache survives any copy.
+# setup_script.iss runs this again after conda-unpack, which is the authoritative
+# pass (conda-unpack rewrites prefixes inside some sources, and hash-based
+# bytecode is never rechecked). Doing it here as well means the shipped payload is
+# already correct should that step ever be skipped or fail.
+Write-Host ""
+Write-Host "[3/4] Pre-compiling the Python environment" -ForegroundColor Cyan
+$envPython = Join-Path $appRoot 'env_kiwims\python.exe'
+$envLib = Join-Path $appRoot 'env_kiwims\Lib'
+if (Test-Path $envPython) {
+    # -W ignore silences some sixty upstream SyntaxWarnings for invalid escape
+    # sequences ("C:\Data\..." paths, unescaped regexes) in UniDec, multiplierz and
+    # pyteomics. They are noise from third-party source, and the modules they come
+    # from compile correctly. That they appear at this step at all is the point of
+    # it: they used to be emitted at run time, in every worker, because those
+    # modules were being recompiled on every single import.
+    #
+    # -x skips the three files no Python 3 can compile: contrib\netpubsub.py holds
+    # pseudo-code and contrib\wx_monitor.py uses the Python 2 "raise Error, msg"
+    # form (both are relics shipped inside pubsub), and
+    # multiplierz\mzTools\chargeTransform.py declares a global after using it. None
+    # of them is reachable from `import unidec` and none could ever be imported, so
+    # excluding them costs nothing and makes a non-zero exit code meaningful again.
+    $previousEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    & $envPython -W ignore -m compileall -q -f -j 0 `
+        --invalidation-mode unchecked-hash `
+        -x '(netpubsub|wx_monitor|chargeTransform)\.py$' $envLib
+    $compileExit = $LASTEXITCODE
+    $ErrorActionPreference = $previousEap
+    $global:LASTEXITCODE = 0
+    if ($compileExit -eq 0) {
+        Write-Host "      Bytecode regenerated for the whole environment." -ForegroundColor Green
+    }
+    else {
+        Write-Host "[WARN] compileall exited $compileExit - a module failed to compile." -ForegroundColor Yellow
+        Write-Host "       Not fatal, but worth reading: the environment starts slower" -ForegroundColor Yellow
+        Write-Host "       for whatever no longer has cached bytecode." -ForegroundColor Yellow
+    }
+}
+else {
+    Write-Host "[WARN] $envPython not found - skipping pre-compilation." -ForegroundColor Yellow
+}
+
 # --- Installer -------------------------------------------------------------------
 Write-Host ""
-Write-Host "[3/3] Compiling the installer (this takes a while)" -ForegroundColor Cyan
+Write-Host "[4/4] Compiling the installer (this takes a while)" -ForegroundColor Cyan
 & $Iscc $issFile
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] ISCC failed." -ForegroundColor Red

@@ -223,7 +223,7 @@ end;
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   ResultCode: Integer;
-  LogFile, PsArgs, UnpackCmd: string;
+  LogFile, PsArgs, UnpackCmd, CompileCmd: string;
 begin
   LogFile := ExpandConstant('{#KiwiMSLogFile}');
 
@@ -268,6 +268,62 @@ begin
     begin
       SaveStringToFile(LogFile, '[OK] conda-unpack.exe completed successfully.' + #13#10, True);
     end;
+
+    // Step 2.5: Pre-compile the Python environment to bytecode.
+    //
+    // Python validates a cached .pyc against the mtime of its .py, and that check
+    // does not survive being installed. The installer writes destination timestamps
+    // at a coarser resolution than the source tree carries, so roughly 4,500 of the
+    // ~9,800 shipped .pyc files land one second off their source and are discarded
+    // on first import; a further ~3,700 are already stale in the packed environment,
+    // where conda stamped the .py files with the env-creation date while the .pyc
+    // came from the upstream package build. About 90% of the environment therefore
+    // recompiles from source, in every process that imports it. Measured on the
+    // UniDec import chain (1,589 modules): 6.2 s recompiling versus 1.8 s cached,
+    // paid by every worker in the pool, concurrently, on every run.
+    //
+    // --invalidation-mode unchecked-hash writes bytecode stamped with the source
+    // hash rather than its mtime, and never revalidated. That makes it immune to
+    // however a copy treats timestamps, and it matters most for an all-users
+    // install: %ProgramFiles% is read-only for a normal user, so Python cannot
+    // silently repair the cache on first run the way it can under %LOCALAPPDATA%,
+    // and without this the full compile cost is paid on every run forever.
+    //
+    // Ordering is load-bearing. This must run AFTER conda-unpack: hash-based
+    // bytecode is never rechecked, so a source file conda-unpack rewrites has to be
+    // compiled afterwards or the rewritten prefix is silently ignored. Stale
+    // bytecode cannot survive an upgrade either, because [InstallDelete] clears
+    // env_kiwims before the new payload is written.
+    //
+    // -W ignore drops some sixty upstream SyntaxWarnings for invalid escape
+    // sequences in UniDec, multiplierz and pyteomics; the modules they come from
+    // compile correctly, and the warnings would otherwise fill the install log.
+    // -x skips the three files no Python 3 can compile - contrib\netpubsub.py,
+    // contrib\wx_monitor.py (both Python 2 relics inside pubsub) and
+    // multiplierz\mzTools\chargeTransform.py - none of which is reachable from
+    // `import unidec` or could ever be imported. With those excluded a clean run
+    // exits 0, so a non-zero code in the log is a real signal rather than noise.
+    // Either way the install continues: worst case the environment starts slower.
+    UpdateStatus('Pre-compiling the Python environment ...');
+    UpdateProgress(94);
+    CompileCmd := '& ' + Chr(39) + ExpandConstant('{app}\env_kiwims\python.exe') + Chr(39)
+                + ' -W ignore -m compileall -q -f -j 0 --invalidation-mode unchecked-hash'
+                + ' -x ' + Chr(39) + '(netpubsub|wx_monitor|chargeTransform)\.py$' + Chr(39)
+                + ' ' + Chr(39) + ExpandConstant('{app}\env_kiwims\Lib') + Chr(39)
+                + ' *>&1 | Add-Content -Path ' + Chr(39) + LogFile + Chr(39)
+                + '; exit $LASTEXITCODE';
+    PsArgs := '-NonInteractive -ExecutionPolicy Bypass -Command ' + Chr(34) + CompileCmd + Chr(34);
+
+    if not Exec('powershell.exe', PsArgs, ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+      SaveStringToFile(LogFile,
+        '[WARN] compileall could not be started; the first deconvolution will be slow.' + #13#10, True)
+    else if ResultCode = 0 then
+      SaveStringToFile(LogFile,
+        '[OK] compileall regenerated the environment bytecode.' + #13#10, True)
+    else
+      SaveStringToFile(LogFile,
+        '[WARN] compileall exited ' + IntToStr(ResultCode) +
+        '; a module failed to compile and will be recompiled on every run.' + #13#10, True);
 
     // Remove conda-meta/ so reticulate does not detect env_kiwims as a conda environment
     UpdateStatus('Cleaning up environment metadata ...');

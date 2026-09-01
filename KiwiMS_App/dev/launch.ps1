@@ -133,6 +133,45 @@ try {
             "$(Get-Date) - INFO: App listening at $appUrl after $([math]::Round($startupTimer.Elapsed.TotalSeconds, 1)) s" | Add-Content $logFile
             Write-Host "Opening browser: $appUrl" -ForegroundColor Green
             Start-Process $appUrl
+
+            # Warm the Python side while the user is still choosing files. The
+            # deconvolution worker pool is the first thing to touch python.exe,
+            # and on a fresh machine it pays for all of it at once: Defender's
+            # first scan of the environment, matplotlib's font cache under
+            # %USERPROFILE%\.matplotlib, and multiplierz's one-off
+            # %USERPROFILE%\.multiplierz set-up. Both caches are written at import
+            # time with no locking, so every worker starting at the same moment
+            # races the others for them.
+            #
+            # Started after the browser opens, and detached, on purpose: run any
+            # earlier it would compete with R for disk while Defender is still
+            # scanning R's own DLLs, which is exactly the wait the timer above
+            # measures.
+            #
+            # python.exe needs the conda DLL directories on PATH to import the
+            # compiled extensions; without them the import dies with 0xC06D007E,
+            # "the specified module could not be found". The workers need no such
+            # thing, because reticulate loads Python in-process and manages the
+            # DLL search itself. The arguments are passed as one pre-quoted string
+            # because Start-Process joins ArgumentList entries with spaces without
+            # quoting them, which would split "import unidec" in two.
+            if (Test-Path $localPython) {
+                try {
+                    $envRoot = Split-Path -Parent $localPython
+                    $originalPath = $env:PATH
+                    $env:PATH = "$envRoot;$envRoot\Library\bin;$originalPath"
+                    $env:PYTHONNOUSERSITE = "1"
+                    Start-Process -FilePath $localPython `
+                        -ArgumentList '-W ignore -c "import unidec"' `
+                        -WindowStyle Hidden | Out-Null
+                    $env:PATH = $originalPath
+                    "$(Get-Date) - INFO: Python pre-warm started." | Add-Content $logFile
+                }
+                catch {
+                    "$(Get-Date) - WARN: Python pre-warm not started: $($_.Exception.Message)" |
+                        Add-Content $logFile
+                }
+            }
         }
         else {
             "$(Get-Date) - WARN: App URL not detected within $maxWait s. Check: $appLog" | Add-Content $logFile

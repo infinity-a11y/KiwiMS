@@ -517,6 +517,90 @@ decon_worker_init <- function(python_exe, lib_paths) {
   )
 }
 
+# decon_prepare_python_home(): Serialise the one-off per-user Python set-up ----
+# The UniDec import chain writes two caches into the user profile the first time
+# it ever runs on a machine: matplotlib's font list (.matplotlib) and
+# multiplierz's data directory (.multiplierz).  Neither is written under a lock,
+# and multiplierz does the unguarded
+#
+#     if not os.path.exists(myData): os.mkdir(myData)
+#
+# at import time.  Starting the whole pool at once therefore loses that race for
+# every worker but the first: the losers raise FileExistsError out of
+# `import multiplierz`, which unidec/tools.py swallows in a bare `except:` and
+# surfaces only as "Could not import data reader: unidectools", leaving those
+# workers without multiplierz for the rest of the run.
+#
+# One import here, before any worker exists, creates both caches single-threaded.
+# It runs only while a cache is still missing, so it costs nothing from the
+# second run onwards and never delays the concurrent pool bring-up.
+#
+# The home directory comes from USERPROFILE rather than path.expand("~"): on
+# Windows R expands "~" to the user's Documents folder, while both libraries use
+# Python's os.path.expanduser(), which returns USERPROFILE.  Testing "~" would
+# check a directory that is never the one being written.
+#
+# python.exe also needs the conda DLL directories on PATH to import compiled
+# extensions -- without them the import dies with 0xC06D007E, "the specified
+# module could not be found".  The workers need no such thing, because reticulate
+# loads Python in-process and manages the DLL search itself.
+#' @export
+decon_prepare_python_home <- function(python_exe) {
+  home <- Sys.getenv("USERPROFILE")
+  if (!nzchar(home)) {
+    return(invisible(FALSE))
+  }
+  if (
+    dir.exists(file.path(home, ".multiplierz")) &&
+      dir.exists(file.path(home, ".matplotlib"))
+  ) {
+    return(invisible(FALSE))
+  }
+
+  message("Creating the one-off Python user caches ...")
+  env_root <- dirname(python_exe)
+  old_path <- Sys.getenv("PATH")
+  on.exit(Sys.setenv(PATH = old_path), add = TRUE)
+  Sys.setenv(
+    PATH = paste(
+      env_root,
+      file.path(env_root, "Library", "bin"),
+      old_path,
+      sep = ";"
+    )
+  )
+
+  t0 <- proc.time()[["elapsed"]]
+  # Only the two cache-writing imports, not the whole UniDec chain: the workers
+  # already warm that themselves, and this runs on the critical path.
+  status <- tryCatch(
+    system2(
+      python_exe,
+      c("-W", "ignore", "-c", shQuote("import multiplierz, matplotlib.pyplot")),
+      stdout = FALSE,
+      stderr = FALSE
+    ),
+    error = function(e) -1L
+  )
+
+  if (identical(as.integer(status), 0L)) {
+    message(sprintf(
+      "Python user caches ready after %.1f s.",
+      proc.time()[["elapsed"]] - t0
+    ))
+    return(invisible(TRUE))
+  }
+
+  # Not fatal.  The workers still create the caches themselves; they just race
+  # for them, and a worker that loses only forfeits multiplierz.
+  message(
+    "Could not pre-create the Python user caches (exit ",
+    status,
+    "); workers will create them on first import."
+  )
+  invisible(FALSE)
+}
+
 # decon_start_cluster(): Build and initialise the worker pool ----
 # Returns list(cl = <full cluster>, healthy = <indices ready for work>).
 # The caller must stop `cl` (the full pool) even when only a subset is used.
@@ -772,6 +856,11 @@ deconvolute <- function(
   }
 
   message("Initiating ", n_workers, " cores for parallel processing ...")
+
+  # Create the per-user Python caches before the pool exists, so the workers do
+  # not race each other for them.  Deliberately ahead of the bring-up timer
+  # below, so a one-off first-run cost is not reported as pool start-up time.
+  decon_prepare_python_home(python_exe)
 
   outfile <- file.path(
     Sys.getenv("LOCALAPPDATA"),
