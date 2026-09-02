@@ -1,8 +1,6 @@
 #define KiwiMSLogFile "{localappdata}\KiwiMS\kiwims_setup.log"
 
-; The app version is read at compile time from the single source of truth,
-; KiwiMS_App\resources\version.txt (first line, "version=x.y.z").
-; Never hard-code it here - bump it with KiwiMS_App\dev\set-version.ps1.
+; The app version is read at compile time
 #define VersionFilePath AddBackslash(SourcePath) + "KiwiMS_App\resources\version.txt"
 #define VersionHandle FileOpen(VersionFilePath)
 #if VersionHandle == 0
@@ -62,15 +60,6 @@ Source: "setup\config.ps1"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "LICENSE"; DestDir: "{app}";
 
 [InstallDelete]
-; Inno overwrites files but never removes ones the new payload no longer contains, so an
-; in-place upgrade merges two releases. That matters here: the conda environment changes
-; between versions (plotly 5's 27,200-file validators tree, wx, pythonwin all vanished in
-; one release), and a stale numpy or scipy module left behind stays importable alongside
-; its replacement. conda-unpack cannot detect it either - every file in the new manifest
-; is present, so it reports success on a merged environment. Clear these first.
-;
-; Runs before any file is copied, and only costs time on an upgrade - on a fresh install
-; the directories do not exist. User data lives outside {app} and is untouched.
 Type: filesandordirs; Name: "{app}\env_kiwims"
 Type: filesandordirs; Name: "{app}\renv"
 Type: filesandordirs; Name: "{app}\R-Portable"

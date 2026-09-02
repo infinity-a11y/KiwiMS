@@ -47,6 +47,50 @@ foreach ($required in @(
     }
 }
 
+# --- VC++ redistributable ------------------------------------------------------
+# setup_script.iss bundles setup\VC_redist.x64.exe into the installer and runs it
+# during post-install - the portable Python and conda-unpack.exe need
+# VCRUNTIME140.dll. It is a ~24 MB Microsoft binary and is deliberately not
+# committed (.gitignore); this step fetches it so the installer stays
+# self-contained for offline end-user installs. To build without network access,
+# place the file at setup\VC_redist.x64.exe by hand beforehand.
+#
+# The aka.ms link always serves the current 14.4x redistributable. Note that
+# 14.40+ requires Windows 10 or later; if support for an older OS floor is ever
+# needed, pin this URL to a specific redist version instead of "release".
+$vcRedist = Join-Path $repoRoot 'setup\VC_redist.x64.exe'
+if (-not (Test-Path $vcRedist)) {
+    Write-Host "[0/4] Downloading VC++ 2015-2022 redistributable" -ForegroundColor Cyan
+    $vcUrl = 'https://aka.ms/vs/17/release/vc_redist.x64.exe'
+    $vcTmp = "$vcRedist.download"
+    try {
+        # Windows PowerShell 5.1 does not reliably negotiate TLS 1.2, which the
+        # Microsoft CDN requires.
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $previousProgress = $ProgressPreference
+        $ProgressPreference = 'SilentlyContinue'   # ~10x faster for a 24 MB file in PS 5.1
+        Invoke-WebRequest -Uri $vcUrl -OutFile $vcTmp -UseBasicParsing
+        $ProgressPreference = $previousProgress
+
+        # Guard against a truncated or tampered download without pinning a hash
+        # (the URL intentionally tracks the latest release).
+        $sig = Get-AuthenticodeSignature -LiteralPath $vcTmp
+        if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'Microsoft Corporation') {
+            throw "Authenticode check failed (status: $($sig.Status); signer: $($sig.SignerCertificate.Subject))"
+        }
+        Move-Item -Force -LiteralPath $vcTmp -Destination $vcRedist
+        $vcVer = (Get-Item $vcRedist).VersionInfo.ProductVersion
+        Write-Host ("      vc_redist.x64.exe $vcVer ({0:N1} MB)" -f ((Get-Item $vcRedist).Length / 1MB)) -ForegroundColor Green
+    }
+    catch {
+        if (Test-Path $vcTmp) { Remove-Item -Force -LiteralPath $vcTmp }
+        Write-Host "[ERROR] Could not obtain vc_redist.x64.exe: $_" -ForegroundColor Red
+        Write-Host "        Download it from $vcUrl" -ForegroundColor Red
+        Write-Host "        and place it at $vcRedist" -ForegroundColor Red
+        exit 1
+    }
+}
+
 if (-not $Iscc) {
     $candidates = @(
         'ISCC.exe',

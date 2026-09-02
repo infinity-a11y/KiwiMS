@@ -23,3 +23,6 @@ KiwiMS_App/env_kiwims.zip
 # Ignore the installer output
 KiwiMS-Windows-x86_64.exe
 Output/
+
+# Ignore the VC++ redistributable (fetched at build time by dev/build_installer.ps1)
+setup/VC_redist.x64.exe
