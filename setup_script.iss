@@ -29,7 +29,15 @@ UninstallDisplayIcon={app}\favicon.ico
 WizardImageFile=setup\kiwims_banner.bmp
 WizardSmallImageFile=setup\kiwims_small.bmp
 PrivilegesRequired=none
-PrivilegesRequiredOverridesAllowed=commandline
+; "dialog" adds Inno's own built-in install-mode page (shown right after
+; Welcome, in both English and German - it ships translated). Picking "all
+; users" there while unelevated makes Setup silently relaunch itself with a
+; UAC prompt and continue in that same admin session; IsAdminInstallMode
+; therefore reflects the user's actual choice for the rest of the run. That
+; used to not be true here: the previous custom scope page only repainted
+; WizardForm.DirEdit.Text, so a "current user" install made from an
+; already-elevated shell still landed under HKLM - see GetInstallScope below.
+PrivilegesRequiredOverridesAllowed=commandline dialog
 WizardStyle=modern
 SetupLogging=yes
 CloseApplications=no
@@ -80,17 +88,15 @@ Type: dirifempty;     Name: "{commondocs}\KiwiMS"
 Description_Launch=Launch KiwiMS
 RemoveUserData=Do you also want to remove your KiwiMS settings and log files?%n%nChoose No to keep them for a future installation.
 de.RemoveUserData=Möchten Sie auch Ihre KiwiMS-Einstellungen und Protokolldateien entfernen?%n%nWählen Sie Nein, um sie für eine spätere Installation zu behalten.
-ScopeTitle=Select Installation Type
-ScopeSub=Who should this application be installed for?
-ScopeDesc=Choose how you want to install KiwiMS.
-ScopeAllUsers=System-wide for all users (requires admin)
-ScopeCurrUser=Current user only
+OtherScopeAllUsers=KiwiMS is already installed for all users on this computer.%n%nKeeping both would leave you with two versions and two Start Menu entries, with no way to tell which one you are launching. Remove the existing installation now?%n%nThis needs administrator permission.
+OtherScopeCurrUser=KiwiMS is already installed for the current user only.%n%nKeeping both would leave you with two versions and two Start Menu entries, with no way to tell which one you are launching. Remove the existing installation now?
+OtherScopeAborted=Setup was cancelled so that the existing KiwiMS installation is left untouched. Uninstall it first, or re-run Setup and choose the same installation type it uses.
+OtherScopeFailed=The existing KiwiMS installation could not be removed. Please uninstall KiwiMS from Settings > Apps, then run Setup again.
 de.Description_Launch=KiwiMS starten
-de.ScopeTitle=Installationstyp auswählen
-de.ScopeSub=Für wen soll diese Anwendung installiert werden?
-de.ScopeDesc=Wählen Sie aus, wie Sie KiwiMS installieren möchten.
-de.ScopeAllUsers=Systemweit für alle Benutzer (erfordert Admin)
-de.ScopeCurrUser=Nur für den aktuellen Benutzer
+de.OtherScopeAllUsers=KiwiMS ist auf diesem Computer bereits für alle Benutzer installiert.%n%nBeide Installationen nebeneinander würden zwei Versionen und zwei Startmenü-Einträge bedeuten, ohne erkennen zu können, welche gestartet wird. Soll die vorhandene Installation jetzt entfernt werden?%n%nDafür sind Administratorrechte erforderlich.
+de.OtherScopeCurrUser=KiwiMS ist bereits nur für den aktuellen Benutzer installiert.%n%nBeide Installationen nebeneinander würden zwei Versionen und zwei Startmenü-Einträge bedeuten, ohne erkennen zu können, welche gestartet wird. Soll die vorhandene Installation jetzt entfernt werden?
+de.OtherScopeAborted=Das Setup wurde abgebrochen, damit die vorhandene KiwiMS-Installation unverändert bleibt. Deinstallieren Sie diese zuerst, oder starten Sie das Setup erneut und wählen Sie denselben Installationstyp.
+de.OtherScopeFailed=Die vorhandene KiwiMS-Installation konnte nicht entfernt werden. Bitte deinstallieren Sie KiwiMS über Einstellungen > Apps und starten Sie das Setup erneut.
 
 [Run]
 Filename: "{app}\KiwiMS.exe"; Description: "{cm:Description_Launch}"; Flags: postinstall skipifsilent shellexec;
@@ -101,11 +107,11 @@ Name: "{userdesktop}\KiwiMS"; Filename: "{app}\KiwiMS.exe"; WorkingDir: "{app}";
 
 [Code]
 const
-  LegacyUninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\KiwiMS_is1';
+  // Inno derives this from AppId. The same subkey is written under HKCU for a
+  // per-user install and under HKLM for an all-users one.
+  UninstallSubKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\KiwiMS_is1';
 
 var
-  InstallScopePage: TInputOptionWizardPage;
-  SelectedScope: string;
   InstallationFailed: Boolean;
 
 procedure UpdateProgress(Position: Integer);
@@ -122,11 +128,16 @@ end;
 
 function GetInstallScope(Param: string): string;
 begin
-  if WizardSilent then
-  begin
-    if IsAdminInstallMode then Result := 'allusers' else Result := 'currentuser';
-  end
-  else Result := SelectedScope;
+  // IsAdminInstallMode is now authoritative for both silent installs (driven
+  // by /ALLUSERS or /CURRENTUSER) and interactive ones (driven by Inno's
+  // built-in privileges-override page - see PrivilegesRequiredOverridesAllowed
+  // above - which self-relaunches Setup elevated when the user picks all
+  // users). A hand-tracked SelectedScope variable used to be needed here
+  // because the interactive choice never actually changed the process's real
+  // elevation state; that gap is what let a "current user" install made from
+  // an already-elevated shell silently register itself under HKLM instead of
+  // HKCU, with nothing here able to tell.
+  if IsAdminInstallMode then Result := 'allusers' else Result := 'currentuser';
 end;
 
 function GetReportDir(Param: string): string;
@@ -142,13 +153,137 @@ var
   UninstallString, InstallLocation: string;
 begin
   Result := '';
-  if not RegQueryStringValue(HKCU, LegacyUninstallKey, 'InstallLocation', InstallLocation) then
+  if not RegQueryStringValue(HKCU, UninstallSubKey, 'InstallLocation', InstallLocation) then
     Exit;
   if CompareText(RemoveBackslashUnlessRoot(RemoveQuotes(Trim(InstallLocation))),
                  ExpandConstant('{localappdata}\KiwiMS')) <> 0 then
     Exit;
-  if RegQueryStringValue(HKCU, LegacyUninstallKey, 'UninstallString', UninstallString) then
+  if RegQueryStringValue(HKCU, UninstallSubKey, 'UninstallString', UninstallString) then
     Result := RemoveQuotes(Trim(UninstallString));
+end;
+
+// Inno records a per-user install under HKCU and an all-users install under
+// HKLM, and treats them as separate products even though they share an AppId.
+// Installing one scope therefore leaves the other untouched, with its own Start
+// Menu entry: two KiwiMS versions side by side, and no way for the user to tell
+// which shortcut launches which.
+//
+// Which hive Inno actually writes the uninstall entry to is decided entirely
+// by IsAdminInstallMode - i.e. whether Setup.exe itself is running elevated -
+// NOT by which option the scope page above set. That page only rewrites
+// WizardForm.DirEdit.Text; nothing here re-launches Setup elevated. So a
+// "current user" install made from an already-elevated shell (as testing the
+// all-users path typically requires) can still land under HKLM. A check that
+// trusts the scope label to pick a hive would then look in the empty one and
+// miss it entirely.
+//
+// So: check both hives unconditionally, and treat any existing entry whose
+// InstallLocation differs from where THIS install is about to write as "the
+// other install" - regardless of which scope either one claims to be. A
+// matching InstallLocation is a same-scope, same-folder upgrade instead, and
+// is left to Inno's normal in-place upgrade handling.
+//
+// Returns the uninstaller for the other install; OtherIsAllUsers reports which
+// hive it was actually found in, for the confirmation message.
+function GetOtherScopeUninstaller(var Location: string; var OtherIsAllUsers: Boolean): string;
+var
+  S, ThisAppDir, OtherLocation: string;
+begin
+  Result := '';
+  Location := '';
+  OtherIsAllUsers := False;
+  ThisAppDir := RemoveBackslashUnlessRoot(ExpandConstant('{app}'));
+
+  if RegQueryStringValue(HKCU, UninstallSubKey, 'UninstallString', S) then
+  begin
+    RegQueryStringValue(HKCU, UninstallSubKey, 'InstallLocation', OtherLocation);
+    if CompareText(RemoveBackslashUnlessRoot(RemoveQuotes(Trim(OtherLocation))), ThisAppDir) <> 0 then
+    begin
+      Result := RemoveQuotes(Trim(S));
+      Location := OtherLocation;
+      OtherIsAllUsers := False;
+    end;
+  end;
+
+  if Result = '' then
+  begin
+    // This installer is 32-bit, so a plain HKLM read is redirected through
+    // WOW6432Node. Check the native view first, then the redirected one.
+    if IsWin64 and RegQueryStringValue(HKLM64, UninstallSubKey, 'UninstallString', S) then
+    begin
+      RegQueryStringValue(HKLM64, UninstallSubKey, 'InstallLocation', OtherLocation);
+      if CompareText(RemoveBackslashUnlessRoot(RemoveQuotes(Trim(OtherLocation))), ThisAppDir) <> 0 then
+      begin
+        Result := RemoveQuotes(Trim(S));
+        Location := OtherLocation;
+        OtherIsAllUsers := True;
+      end;
+    end
+    else if RegQueryStringValue(HKLM, UninstallSubKey, 'UninstallString', S) then
+    begin
+      RegQueryStringValue(HKLM, UninstallSubKey, 'InstallLocation', OtherLocation);
+      if CompareText(RemoveBackslashUnlessRoot(RemoveQuotes(Trim(OtherLocation))), ThisAppDir) <> 0 then
+      begin
+        Result := RemoveQuotes(Trim(S));
+        Location := OtherLocation;
+        OtherIsAllUsers := True;
+      end;
+    end;
+  end;
+end;
+
+// Empty string on success, otherwise a message that aborts the install.
+function RemoveOtherScopeInstall(): String;
+var
+  Uninstaller, Location, Prompt: string;
+  OtherIsAllUsers: Boolean;
+  ResultCode, Waited: Integer;
+begin
+  Result := '';
+  Uninstaller := GetOtherScopeUninstaller(Location, OtherIsAllUsers);
+  if Uninstaller = '' then Exit;
+
+  // A registry entry with no uninstaller behind it is a half-removed install.
+  // There is nothing to run and nothing to gain from blocking over it.
+  if not FileExists(Uninstaller) then Exit;
+
+  if OtherIsAllUsers then
+    Prompt := CustomMessage('OtherScopeAllUsers')
+  else
+    Prompt := CustomMessage('OtherScopeCurrUser');
+
+  if Location <> '' then
+    Prompt := Prompt + #13#10#13#10 + RemoveQuotes(Trim(Location));
+
+  if SuppressibleMsgBox(Prompt, mbConfirmation, MB_YESNO or MB_DEFBUTTON1, IDYES) <> IDYES then
+  begin
+    Result := CustomMessage('OtherScopeAborted');
+    Exit;
+  end;
+
+  UpdateStatus('Removing the other KiwiMS installation ...');
+
+  // Removing an all-users install needs elevation, so this raises a UAC prompt
+  // that /VERYSILENT cannot suppress. SW_SHOW so the user is not staring at a
+  // stalled progress bar while the consent dialog waits behind the wizard.
+  if not Exec(Uninstaller, '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '',
+              SW_SHOW, ewWaitUntilTerminated, ResultCode) then
+  begin
+    Result := CustomMessage('OtherScopeFailed');
+    Exit;
+  end;
+
+  // The uninstaller hands off to a temporary copy of itself and returns before
+  // the registry entry is gone, so poll rather than trusting the exit code.
+  Waited := 0;
+  while (Waited < 600) and (GetOtherScopeUninstaller(Location, OtherIsAllUsers) <> '') do
+  begin
+    Sleep(500);
+    Waited := Waited + 1;
+  end;
+
+  if GetOtherScopeUninstaller(Location, OtherIsAllUsers) <> '' then
+    Result := CustomMessage('OtherScopeFailed');
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
@@ -156,7 +291,10 @@ var
   Uninstaller, LegacyDir: string;
   ResultCode, Waited: Integer;
 begin
-  Result := '';
+  // Clear a rival install in the other scope before touching anything else.
+  Result := RemoveOtherScopeInstall();
+  if Result <> '' then Exit;
+
   Uninstaller := GetLegacyUninstaller();
   if (Uninstaller = '') or (not FileExists(Uninstaller)) then Exit;
 
@@ -165,7 +303,7 @@ begin
               SW_HIDE, ewWaitUntilTerminated, ResultCode) then Exit;
 
   Waited := 0;
-  while (Waited < 600) and RegKeyExists(HKCU, LegacyUninstallKey) do
+  while (Waited < 600) and RegKeyExists(HKCU, UninstallSubKey) do
   begin
     Sleep(500);
     Waited := Waited + 1;
@@ -181,32 +319,13 @@ end;
 
 procedure InitializeWizard;
 begin
-  SelectedScope := 'currentuser';
   InstallationFailed := False;
-  if not WizardSilent then
-  begin
-    InstallScopePage := CreateInputOptionPage(wpWelcome, CustomMessage('ScopeTitle'), CustomMessage('ScopeSub'), CustomMessage('ScopeDesc'), True, False);
-    InstallScopePage.Add(CustomMessage('ScopeAllUsers'));
-    InstallScopePage.Add(CustomMessage('ScopeCurrUser'));
-    InstallScopePage.Values[1] := True;
-  end;
-end;
-
-function NextButtonClick(CurPageID: Integer): Boolean;
-begin
-  Result := True;
-  if (not WizardSilent) and (InstallScopePage <> nil) and (CurPageID = InstallScopePage.ID) then
-  begin
-    if InstallScopePage.Values[0] then
-    begin
-      SelectedScope := 'allusers';
-      WizardForm.DirEdit.Text := ExpandConstant('{commonpf}\KiwiMS');
-    end else
-    begin
-      WizardForm.DirEdit.Text := ExpandConstant('{localappdata}\Programs\KiwiMS');
-      SelectedScope := 'currentuser';
-    end;
-  end;
+  // No custom scope page to create any more - Inno's own privileges-override
+  // page (enabled by the "dialog" flag above) handles the all-users/current-
+  // user choice, including self-relaunching Setup elevated when needed. It is
+  // inserted automatically right after Welcome, in the same slot the old
+  // custom page used, so DefaultDirName={autopf}\KiwiMS still resolves
+  // correctly on the Select Destination page that follows it.
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -226,7 +345,7 @@ begin
             + ' -userDataPath "' + ExpandConstant('{localappdata}\KiwiMS') + '"'
             + ' -envName "kiwims"'
             + ' -logFile "' + LogFile + '"'
-            + ' -installScope "' + SelectedScope + '"';
+            + ' -installScope "' + GetInstallScope('') + '"';
     Exec('powershell.exe', PsArgs, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
     // Step 1.5: Install VC++ 2015-2022 Redistributable — required by Python and

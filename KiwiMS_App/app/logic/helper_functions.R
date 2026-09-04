@@ -126,42 +126,166 @@ get_kiwims_version <- function(
   )
 }
 
-#' @export
-get_volumes <- function() {
-  # Get the path to the user's home directory
-  home_path <- path_home()
+# Drive detection for the file pickers.
+#
+# The rule the whole section is built on: never touch a drive to find out that
+# it exists. A disconnected mapped network drive answers a stat() only after
+# Windows has given up on reconnecting the SMB session, which takes tens of
+# seconds, single-threaded, with the Shiny session blocked behind it. Both
+# earlier implementations broke that rule in different ways - one probed
+# A:/ through Z:/ with dir.exists(), the other shelled out to a WMI query with
+# no timeout and no fallback, so a machine where the query was slow or blocked
+# by policy either started slowly or silently ended up with no drives at all.
+#
+# Three layers, cheapest first:
+#   1. volumes.txt, written by the launcher before R starts (no cost here).
+#   2. A live query, capped by a timeout, for dev sessions and stale caches.
+#   3. Home alone, logged loudly, so the picker is never empty.
 
-  # Initialize an empty named vector for the roots
+# How long the launcher's file stays trustworthy. It is written seconds before
+# R starts, so this only has to cover launcher-write to first-session-init; a
+# generous window absorbs a slow first launch while Defender scans the install.
+volume_cache_max_age_mins <- 60
+
+volume_cache <- new.env(parent = emptyenv())
+
+# "<label>\t<path>" per line, as written by dev/launch.ps1.
+read_volume_file <- function(path) {
+  if (!file.exists(path)) {
+    return(NULL)
+  }
+
+  age <- difftime(Sys.time(), file.mtime(path), units = "mins")
+  if (is.na(age) || age > volume_cache_max_age_mins) {
+    return(NULL)
+  }
+
+  lines <- tryCatch(readLines(path, warn = FALSE), error = function(e) NULL)
+  lines <- lines[nzchar(trimws(lines))]
+  if (!length(lines)) {
+    return(NULL)
+  }
+
+  # The launcher writes ASCII precisely so there is no BOM, but strip one anyway
+  # rather than let a future encoding change produce a root named "<BOM>C:".
+  bom <- rawToChar(as.raw(c(0xEF, 0xBB, 0xBF)))
+  if (startsWith(lines[1], bom)) {
+    lines[1] <- substring(lines[1], nchar(bom) + 1L)
+  }
+
+  parts <- str_split_fixed(lines, "\t", 2)
+  keep <- nzchar(parts[, 1]) & nzchar(parts[, 2])
+  if (!any(keep)) {
+    return(NULL)
+  }
+
+  stats::setNames(parts[keep, 2], parts[keep, 1])
+}
+
+# [System.IO.DriveInfo]::GetDrives() wraps the Win32 GetLogicalDrives() bitmask:
+# it reads the mount table and touches no filesystem. IsReady does touch the
+# device, which is how an empty card reader or optical drive is filtered out -
+# cheap locally, but never called on a network drive, for the reason above.
+#
+# Run from a temp script rather than -Command so nothing has to survive two
+# levels of quoting. -NoProfile matters: a corporate PowerShell profile that
+# autoloads modules off a share can cost seconds on its own.
+query_windows_volumes <- function() {
+  script <- tempfile(fileext = ".ps1")
+  on.exit(unlink(script), add = TRUE)
+
+  writeLines(
+    c(
+      "$ErrorActionPreference = 'Stop'",
+      "foreach ($d in [System.IO.DriveInfo]::GetDrives()) {",
+      "  $t = $d.DriveType.ToString()",
+      "  if ($t -eq 'NoRootDirectory') { continue }",
+      "  if ($t -ne 'Network' -and -not $d.IsReady) { continue }",
+      "  $d.Name.TrimEnd('\\') + \"`t\" + ($d.Name -replace '\\\\$', '/')",
+      "}"
+    ),
+    script
+  )
+
+  out <- tryCatch(
+    system2(
+      "powershell",
+      c(
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        shQuote(script)
+      ),
+      stdout = TRUE,
+      stderr = FALSE,
+      timeout = 10
+    ),
+    error = function(e) NULL,
+    warning = function(w) NULL
+  )
+
+  out <- out[nzchar(trimws(out))]
+  if (!length(out)) {
+    return(NULL)
+  }
+
+  parts <- str_split_fixed(out, "\t", 2)
+  keep <- nzchar(parts[, 1]) & nzchar(parts[, 2])
+  if (!any(keep)) {
+    return(NULL)
+  }
+
+  stats::setNames(parts[keep, 2], parts[keep, 1])
+}
+
+#' @export
+get_volumes <- function(refresh = FALSE) {
+  # Resolved once per R process. The result has to be a plain named vector, not
+  # a function: shinyFiles 0.9.3 re-evaluates a function root in dirGetter() and
+  # parseDirPath() but subsets list(...)$roots directly inside shinyDirChoose(),
+  # which errors on a closure the first time the user navigates.
+  if (!refresh && !is.null(volume_cache$roots)) {
+    return(volume_cache$roots)
+  }
+
+  home_path <- path_home()
   roots <- c(Home = home_path)
 
-  # Detect the operating system
-  os <- Sys.info()['sysname']
+  if (Sys.info()[["sysname"]] == "Windows") {
+    drives <- read_volume_file(
+      file.path(Sys.getenv("LOCALAPPDATA"), "KiwiMS", "volumes.txt")
+    )
 
-  if (os == "Windows") {
-    # Probe the drive letters directly instead of shelling out to
-    # "powershell -command Get-CimInstance Win32_LogicalDisk". That subprocess
-    # cost 2-4 s on every session start (a cold PowerShell plus a WMI query),
-    # and considerably more on the first run of a fresh machine, where the WMI
-    # repository still has to warm up. dir.exists() is one stat() per letter
-    # and returns the same set in well under a millisecond.
-    drive_names <- LETTERS[dir.exists(paste0(LETTERS, ":/"))]
+    if (is.null(drives)) {
+      drives <- query_windows_volumes()
+    }
 
-    drive_values <- paste0(drive_names, ":/")
-    names(drive_values) <- drive_names
-    roots <- c(roots, drive_values)
+    if (is.null(drives)) {
+      # Home still works, so the app stays usable - but the user cannot reach
+      # anything off their profile drive, which is worth a line in the log
+      # rather than a picker that is quietly missing its drives.
+      message(
+        "[WARN] No drives detected; the file picker will only offer Home. ",
+        "See %LOCALAPPDATA%\\KiwiMS\\launch.log."
+      )
+    } else {
+      roots <- c(roots, drives)
+    }
   } else {
-    # For macOS/Linux, drives are at the root level
+    # macOS/Linux: drives are directories at the root level.
     drives_list <- dir_ls(path = "/", type = "directory")
-
-    # Base name of the path as the name for the vector
-    drives_names <- basename(drives_list)
-    names(drives_list) <- drives_names
-
-    # Append the detected drives to the roots vector
+    names(drives_list) <- basename(drives_list)
     roots <- c(roots, drives_list)
   }
 
-  return(roots)
+  # A duplicate root name makes shinyFiles resolve the wrong one, and Home is
+  # usually on a drive that is listed in its own right.
+  roots <- roots[!duplicated(names(roots))]
+
+  volume_cache$roots <- roots
+  roots
 }
 
 #' @export

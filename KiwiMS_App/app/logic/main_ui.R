@@ -5,6 +5,42 @@ box::use(
   shiny,
 )
 
+# GPL-3 requires KiwiMS to make its license text available to users of the
+# app, not just to whoever reads the repo - this is what backs the "License"
+# nav entry. The installer copies LICENSE next to the app (setup_script.iss,
+# [Files]) and launch.ps1 runs R with that directory as its working directory,
+# so an installed session always finds it. A missing file here therefore means
+# either a dev checkout running without KIWIMS_DEV_MODE set (LICENSE lives only
+# at the repo root, one level above KiwiMS_App) or a damaged install - read
+# defensively either way instead of letting readLines() throw a raw warning
+# into every session's log, and never leave the notice blank: falling back to
+# the canonical GPL text is itself part of satisfying the requirement.
+license_text <- function(path = "LICENSE") {
+  fallback <- paste(
+    "LICENSE file not found in the installation folder.",
+    "KiwiMS is distributed under the GNU General Public License v3.",
+    "The full license text is available at",
+    "https://www.gnu.org/licenses/gpl-3.0.txt",
+    "and in the project repository at",
+    "https://github.com/infinity-a11y/KiwiMS/blob/master/LICENSE",
+    sep = "\n"
+  )
+
+  if (!file.exists(path)) {
+    return(fallback)
+  }
+
+  # file()'s open step warns before readLines() errors on an unreadable path
+  # (permissions, or a directory where a file was expected) - catch both, the
+  # same gap noted in user_settings.R's readRDS() guard, or the warning still
+  # reaches the log even though the fallback text is correctly returned.
+  tryCatch(
+    paste(readLines(path, warn = FALSE), collapse = "\n"),
+    warning = function(w) fallback,
+    error = function(e) fallback
+  )
+}
+
 #' @export
 licence_modal_body <- function() {
   shiny$div(
@@ -17,7 +53,7 @@ licence_modal_body <- function() {
         " width: fit-content; margin: 0; justify-self: center;"
       ),
       if (Sys.getenv("KIWIMS_DEV_MODE") != "TRUE") {
-        paste(readLines("LICENSE"), collapse = "\n")
+        license_text()
       }
     )
   )
