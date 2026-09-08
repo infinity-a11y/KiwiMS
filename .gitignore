@@ -20,6 +20,9 @@ KiwiMS_App/renv.zip
 KiwiMS_App/env_kiwims/
 KiwiMS_App/env_kiwims.zip
 
+# Ignore the compiled launcher (built by dev/build-launcher.ps1)
+KiwiMS_App/KiwiMS.exe
+
 # Ignore the installer output
 KiwiMS-Windows-x86_64.exe
 Output/
