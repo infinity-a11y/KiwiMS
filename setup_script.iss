@@ -78,6 +78,10 @@ Type: filesandordirs; Name: "{app}\resources"
 Type: filesandordirs; Name: "{app}"
 Type: files;          Name: "{localappdata}\KiwiMS\*.log"
 Type: files;          Name: "{localappdata}\KiwiMS\last_cluster_log.txt"
+; Written by launchers up to 1.x for the shinyFiles picker roots; nothing reads
+; it since the picker became the native shell dialog. Listed so an upgrade from
+; such a version does not leave a stray file that blocks the dirifempty below.
+Type: files;          Name: "{localappdata}\KiwiMS\volumes.txt"
 Type: dirifempty;     Name: "{localappdata}\KiwiMS"
 Type: dirifempty;     Name: "{userdocs}\KiwiMS\report"
 Type: dirifempty;     Name: "{userdocs}\KiwiMS"

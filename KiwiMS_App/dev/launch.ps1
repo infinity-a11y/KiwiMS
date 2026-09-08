@@ -40,7 +40,6 @@ Write-Host "---------------------------------------------------" -ForegroundColo
 $logDirectory = "$env:LOCALAPPDATA\KiwiMS"
 $logFile = Join-Path $logDirectory "launch.log"
 $urlFile = Join-Path $logDirectory "current_url.txt"
-$volumeFile = Join-Path $logDirectory "volumes.txt"
 
 if (-Not (Test-Path $logDirectory)) { New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null }
 
@@ -158,48 +157,6 @@ try {
         Sort-Object LastWriteTime -Descending |
         Select-Object -Skip 6 |
         Remove-Item -Force -ErrorAction SilentlyContinue
-
-    # Enumerate the drives the file pickers offer as roots, and hand the result
-    # to R through a file. R used to do this itself at every session start by
-    # shelling out to PowerShell for a WMI query - a cold subprocess plus a WMI
-    # warm-up on the critical path, with no timeout and no fallback, so a
-    # machine where the query was slow or blocked by policy started slowly or
-    # silently ended up with no drives at all in the picker.
-    #
-    # [System.IO.DriveInfo]::GetDrives() wraps the Win32 GetLogicalDrives()
-    # bitmask: it reads the mount table and touches no filesystem, so it cannot
-    # block on a drive that is not there.
-    #
-    # IsReady is the opposite - it does touch the device. That is fine and cheap
-    # for local media (it is how an empty card reader slot or optical drive is
-    # detected), but it must never be called on a network drive: a disconnected
-    # mapping makes it hang on an SMB reconnect for tens of seconds. Network
-    # drives are therefore listed unprobed, and only fail when actually opened.
-    try {
-        $volumeLines = foreach ($drive in [System.IO.DriveInfo]::GetDrives()) {
-            $type = $drive.DriveType.ToString()
-            if ($type -eq 'NoRootDirectory') { continue }
-
-            $include = if ($type -eq 'Network') { $true } else { $drive.IsReady }
-            if (-not $include) { continue }
-
-            # "C:\" -> "C:/", the form shinyFiles expects for a root.
-            $path = $drive.Name -replace '\\$', '/'
-            $label = $drive.Name.TrimEnd('\')
-            "$label`t$path"
-        }
-
-        # ASCII, not utf8: drive names are always ASCII, and Set-Content -Encoding
-        # utf8 on PowerShell 5.1 writes a BOM that R would read as part of the
-        # first label, yielding a root literally named "<BOM>C:".
-        $volumeLines | Set-Content -Path $volumeFile -Encoding ascii
-        Write-LaunchLog "INFO: Volumes detected: $($volumeLines -join ' ')"
-    }
-    catch {
-        # A stale file would be worse than none - R falls back to probing.
-        Remove-Item $volumeFile -Force -ErrorAction SilentlyContinue
-        Write-LaunchLog "WARN: Volume detection failed: $($_.Exception.Message)"
-    }
 
     # Timed so launch.log records where a slow start went. The first launch
     # after an install is expected to be the slowest: Windows Defender scans

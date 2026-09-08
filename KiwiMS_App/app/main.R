@@ -38,7 +38,6 @@ box::use(
       config_badge,
       get_kiwims_version,
       get_latest_release_url,
-      get_volumes,
       normalize_colnames,
       normalize_config_units,
       read_config_file,

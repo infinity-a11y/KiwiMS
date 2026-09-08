@@ -11,18 +11,17 @@ box::use(
     icon,
     moduleServer,
     NS,
-    reactive,
     reactiveValues,
     renderUI,
     uiOutput,
   ],
-  shinyFiles[parseDirPath, shinyDirButton, shinyDirChoose],
   shinyjs[disable, disabled, enable, runjs],
   shinyWidgets[radioGroupButtons],
 )
 
 box::use(
-  app / logic / helper_functions[config_badge, get_volumes],
+  app / logic / folder_picker[folder_picker],
+  app / logic / helper_functions[config_badge],
   app / logic / logging[get_log],
 )
 
@@ -46,13 +45,11 @@ ui <- function(id) {
         shiny::tags$div(
           class = "sample-file-row",
           shiny::div(
-            shinyDirButton(
+            actionButton(
               ns("folder"),
               "Select Input",
               icon = shiny::icon("file-import"),
-              title = "Select a .raw folder or a directory containing multiple .raw folders",
-              buttonType = "default",
-              root = path_home()
+              title = "Select a .raw folder or a directory containing multiple .raw folders"
             ),
             bslib::tooltip(
               shiny::div(
@@ -74,13 +71,11 @@ ui <- function(id) {
         shiny::div(
           class = "dest-folder-row",
           shiny::div(
-            shinyDirButton(
+            actionButton(
               ns("target_folder"),
               "Select Output Path",
               icon = shiny::icon("file-export"),
-              title = "Select output path",
-              buttonType = "default",
-              root = path_home()
+              title = "Select output path"
             ),
             bslib::tooltip(
               shiny::div(
@@ -127,47 +122,44 @@ server <- function(
 
     selected <- shiny::reactiveVal("")
 
-    # Define roots for directory browsing
-    roots <- get_volumes()
-
-    # Initialize root folder selection
-    shinyDirChoose(
-      input,
-      id = "folder",
-      roots = roots,
-      defaultRoot = "Home",
-      session = session
-    )
-
-    # Specify output path for results
-    shinyDirChoose(
-      input,
-      id = "target_folder",
-      roots = roots,
-      defaultRoot = "Home",
-      session = session
-    )
-
-    # Get selected paths
-    root_dir <- reactive({
-      if (is.null(input$folder)) {
-        character()
-      } else {
-        parseDirPath(roots, input$folder)
-      }
-    })
-
-    target_path <- reactive({
-      if (is.null(input$target_folder)) {
-        character()
-      } else {
-        parseDirPath(roots, input$target_folder)
-      }
-    })
-
     # Collection of reactive vars
     rootdir <- shiny::reactiveVal(character())
     targetpath <- shiny::reactiveVal(character())
+
+    # Where the dialog opens: whatever is already chosen, else the configured
+    # default, else the user's profile. Deliberately not validated with
+    # dir.exists() - that is a stat, and a stat on a disconnected share is
+    # exactly the multi-second block this module exists to avoid. The shell
+    # treats an unreachable start folder as advisory and opens at This PC.
+    opening_dir <- function(current, configured) {
+      function() {
+        for (candidate in list(current, configured)) {
+          value <- shiny::isolate(candidate())
+          if (length(value) == 1L && !is.na(value) && nzchar(value)) {
+            return(value)
+          }
+        }
+        path_home()
+      }
+    }
+
+    # Native shell dialog rather than shinyFiles: the tree is enumerated by the
+    # OS in its own process, so browsing no longer blocks R. See folder_picker.R.
+    root_dir <- folder_picker(
+      input,
+      session,
+      "folder",
+      title = "Select a .raw folder or a directory containing .raw folders",
+      initial_dir = opening_dir(rootdir, default_input_path)
+    )
+
+    target_path <- folder_picker(
+      input,
+      session,
+      "target_folder",
+      title = "Select the output path",
+      initial_dir = opening_dir(targetpath, default_dest_path)
+    )
 
     # Apply default output path once on init (if configured)
     shiny::observe({
@@ -298,99 +290,16 @@ server <- function(
       if (length(tp) > 0 && nzchar(tp)) tp else "Nothing selected"
     })
 
-    shiny::observeEvent(input$folder, {
-      selected("folder")
-
-      # Render information field
-      output$dir_check <- shiny::renderUI({
-        rd <- root_dir()
-        if (!is.null(rd) && length(rd) > 0) {
-          # Check if selection itself is a .raw folder
-          if (
-            grepl("\\.raw$", rd, ignore.case = TRUE) &&
-              dir.exists(rd)
-          ) {
-            runjs(paste0(
-              '$("#app-deconvolution_pars-path_selected").css({"border-color": "#8BC34A"})'
-            ))
-
-            shiny::p(
-              shiny::HTML(
-                paste0(
-                  '<i class="fa-solid fa-circle-check" style="font-size:1em; c',
-                  'olor:#000000; margin-right: 10px;"></i>',
-                  "Selected folder is a valid .raw folder."
-                )
-              )
-            )
-          } else {
-            raw_dirs <- list.dirs(
-              rd,
-              full.names = TRUE,
-              recursive = FALSE
-            )
-            raw_dirs <- raw_dirs[grep("\\.raw$", raw_dirs)]
-
-            if (length(raw_dirs)) {
-              runjs(paste0(
-                '$("#app-deconvolution_pars-path_selected").css({"border-color": "#8BC34A"})'
-              ))
-
-              shiny::p(
-                shiny::HTML(
-                  paste0(
-                    '<i class="fa-solid fa-circle-check" style="font-size:1em; col',
-                    'or:#000000; margin-right: 10px;"></i>',
-                    paste(
-                      "<b>",
-                      length(raw_dirs),
-                      "</b> .raw folders in directory."
-                    )
-                  )
-                )
-              )
-            } else {
-              runjs(paste0(
-                '$("#app-deconvolution_pars-path_selected").css({"border-color": "#D17050"})'
-              ))
-
-              shiny::p(
-                shiny::HTML(
-                  paste0(
-                    '<i class="fa-solid fa-circle-exclamation" style="font-size:1e',
-                    'm; color:black; margin-right: 10px;"></i>',
-                    "<b>No</b> .raw folders found in directory."
-                  )
-                )
-              )
-            }
-          }
-        } else {
-          runjs(paste0(
-            '$("#app-deconvolution_pars-path_selected").css({"border-color": "#D17050"})'
-          ))
-
-          shiny::p(
-            shiny::HTML(
-              "Select a .raw folder or a directory containing multiple .raw folders."
-            )
-          )
-        }
-      })
-
-      # Adjust UI elements
-      output$path_selected <- shiny::renderPrint({
-        input$folder
-        rd_active <- root_dir()
-        if (!is.null(rd_active) && length(rd_active) > 0) {
-          cat(rd_active)
-        } else {
-          runjs(paste0(
-            '$("#app-deconvolution_pars-path_selected").css({"border-color": "#D17050"})'
-          ))
-          cat("Nothing selected")
-        }
-      })
+    # dir_check and path_selected above already re-render from rootdir(), so the
+    # click handler that used to re-assign both outputs here has been dropped.
+    # With shinyFiles, input$folder only changed once a directory was actually
+    # chosen; an actionButton fires on every click including Cancel, and the old
+    # handler would then have repainted the panel as "nothing selected" and
+    # wiped a configured default path off the screen.
+    shiny::observeEvent(root_dir(), {
+      if (length(root_dir()) && nzchar(root_dir())) {
+        selected("folder")
+      }
     })
 
     # Experiment configuration status panel
