@@ -1,4 +1,4 @@
-version=0.7.3
-release_date=2026-09-08
+version=0.7.4
+release_date=2026-09-11
 zip_url=https://github.com/infinity-a11y/KiwiMS/archive/refs/heads/master.zip
 doi=10.5281/zenodo.16575976
