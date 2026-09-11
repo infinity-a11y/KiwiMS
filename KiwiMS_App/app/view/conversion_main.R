@@ -6815,6 +6815,17 @@ server <- function(
           conc_time = conversion_vars$units
         )
 
+        # None of the remaining concentrations could be fitted — keep the
+        # previous results instead of replacing them with empty tables
+        if (nrow(result_list$binding_kobs_result$kobs_result_table) == 0) {
+          shinyWidgets::show_toast(
+            "No concentration could be fitted",
+            type = "warning",
+            timer = 3000
+          )
+          return(NULL)
+        }
+
         # Add kinact/Ki results to result list
         result_list$kinact_ki_result <- add_kinact_ki_result(
           result_list,

@@ -2115,16 +2115,26 @@ log_fit_failed <- function(last, reason) {
 # Pre-flight check: returns NULL if data is suitable for nlsLM, or a reason string if not
 can_fit_kobs <- function(data) {
   real <- data[data$time > 0 & !is.na(data$binding), ]
-  n <- nrow(real)
+
+  # No binding anywhere is a result rather than a fit failure: it is reported
+  # before the time point rule below so such a concentration still reaches the
+  # k_obs = 0 branch and stays visible in the result table and plot, however
+  # few time points it was measured at.
+  if (nrow(real) > 0 && all(real$binding == 0)) {
+    return("no response detected (binding = 0% at all time points)")
+  }
+
+  # Count distinct time points, not rows: replicates of the same condition
+  # share a time and add no information about the shape of the curve, so two
+  # rows at one time point cannot identify the two-parameter model.
+  n <- length(unique(real$time))
   if (n < 2) {
     tp_label <- if (n == 1) "1 time point" else "0 time points"
     return(sprintf("only %s available (minimum 2 required)", tp_label))
   }
+
   if (length(unique(real$binding)) < 2) {
     vals <- real$binding
-    if (all(vals == 0)) {
-      return("no response detected (binding = 0% at all time points)")
-    }
     if (all(vals >= 100)) {
       return("immediate saturation (binding = 100% at all time points)")
     }
@@ -2138,7 +2148,9 @@ can_fit_kobs <- function(data) {
 
 # Log timepoints
 log_timepoints <- function(data, unit, last) {
-  n <- nrow(data)
+  # Distinct times, matching what can_fit_kobs() counts — replicates sharing a
+  # time point must not be reported as separate time points.
+  n <- length(unique(data$time))
   tmin <- min(data$time)
   tmax <- max(data$time)
   tp_label <- if (n == 1) "time point" else "time points"
@@ -2395,9 +2407,26 @@ check_filter_hits <- function(result_list) {
     dplyr::filter(!is.na(binding))
 
   # Summarize filtered hits by concentration
+  time_col <- grep("^Time", names(hits_summary), value = TRUE)
+  time_col <- if (length(time_col) == 1) time_col else NA_character_
+
   tab <- hits_summary |>
     dplyr::group_by(dplyr::pick(dplyr::contains("Concentration"))) |>
-    dplyr::summarise(count = dplyr::n(), .groups = "drop")
+    dplyr::summarise(
+      count = dplyr::n(),
+      # Distinct non-zero incubation times behind those hits. Counting hit
+      # rows alone overstates the data available to the k_obs fit, because a
+      # single sample contributes one row per matched peak — three "hits" can
+      # all sit at the same time point.
+      timepoints = if (is.na(time_col)) {
+        NA_integer_
+      } else {
+        dplyr::n_distinct(.data[[time_col]][
+          !is.na(.data[[time_col]]) & .data[[time_col]] > 0
+        ])
+      },
+      .groups = "drop"
+    )
 
   # Assign concentration column
   conc_col <- names(tab)[1]
@@ -2425,6 +2454,26 @@ check_filter_hits <- function(result_list) {
       "  │  └─ Skipping binding kinetics analysis."
     )
     return(NULL)
+  }
+
+  # Check if concentrations cover enough distinct time points
+  # Requirement: k_obs is fitted against time with two free parameters, so at
+  # least 3 non-zero concentrations must carry >= 2 distinct non-zero times.
+  # Without this, a single-time-point design passes the hit count check above
+  # and then fails silently for every concentration inside compute_kobs().
+  if (!is.na(time_col)) {
+    valid_time_concs <- sum(tab$timepoints[nonzero_conc] >= 2, na.rm = TRUE)
+
+    if (valid_time_concs < 3) {
+      message(
+        "  │  ├─ 2 distinct non-zero time points per concentration are required.\n",
+        "  │  ├─ Only ",
+        valid_time_concs,
+        " non-zero concentrations meet this threshold.\n",
+        "  │  └─ Skipping binding kinetics analysis."
+      )
+      return(NULL)
+    }
   }
 
   return(hits_summary)
@@ -2464,21 +2513,28 @@ add_kobs_binding_result <- function(
   # Get concentration names
   conc_names <- names(binding_kobs_result[concentrations])
 
-  # Fill kobs result table
-  kobs_result_table <- data.frame()
+  # Fill kobs result table. Start from a typed zero-row frame so the four
+  # columns exist even when no concentration could be fitted — assigning
+  # colnames() to a 0x0 data.frame raised
+  # "'names' attribute [4] must be the same length as the vector [0]".
+  kobs_result_table <- data.frame(
+    kobs = numeric(0),
+    kobs_se = numeric(0),
+    v = numeric(0),
+    plateau = numeric(0)
+  )
   for (i in conc_names) {
     kobs_result_table <- rbind(
       kobs_result_table,
       data.frame(
-        binding_kobs_result[[i]]$kobs,
-        binding_kobs_result[[i]]$kobs_se,
-        binding_kobs_result[[i]]$v,
-        binding_kobs_result[[i]]$plateau
+        kobs = binding_kobs_result[[i]]$kobs,
+        kobs_se = binding_kobs_result[[i]]$kobs_se,
+        v = binding_kobs_result[[i]]$v,
+        plateau = binding_kobs_result[[i]]$plateau
       )
     )
   }
   rownames(kobs_result_table) <- conc_names
-  colnames(kobs_result_table) <- c("kobs", "kobs_se", "v", "plateau")
 
   # Add kobs result table
   binding_kobs_result$kobs_result_table <- kobs_result_table
@@ -2948,11 +3004,26 @@ compute_kobs <- function(hits, units) {
     raw_data <- hits |>
       dplyr::filter(!!rlang::sym(conc) == i)
 
+    # Nothing measured at this concentration (e.g. NA concentration slipped
+    # through) — there is nothing to fit, so move on instead of building a
+    # dummy row out of an empty frame.
+    if (nrow(raw_data) == 0) {
+      next
+    }
+
     if ("Replicate" %in% names(raw_data) && !all(is.na(raw_data$Replicate))) {
+      # Group by Replicate AND time. A sample contributes one row per matched
+      # peak, so collapsing by replicate is what removes those duplicates —
+      # but the replicate label is documented as a free-text *group* label and
+      # is regularly shared by every time point of one series (the example
+      # config ships "Rep1", "Rep1", "Rep2"). Grouping by the label alone then
+      # folded a whole time course into a single row stamped with
+      # first(time), leaving every concentration with < 2 usable time points
+      # and no fit at all. Keeping time in the key averages true replicates of
+      # the same condition while preserving the time course.
       data <- raw_data |>
-        dplyr::group_by(Replicate) |>
+        dplyr::group_by(Replicate, time) |>
         dplyr::summarise(
-          time = dplyr::first(time),
           binding = mean(binding, na.rm = TRUE),
           .groups = "drop"
         )

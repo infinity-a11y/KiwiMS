@@ -508,11 +508,30 @@ server <- function(
                     units = units
                   )
 
-                  # Add kinact/Ki results to result list
-                  result_with_hits$kinact_ki_result <- add_kinact_ki_result(
-                    result_with_hits,
-                    units = units
-                  )
+                  if (
+                    nrow(
+                      result_with_hits$binding_kobs_result$kobs_result_table
+                    ) ==
+                      0
+                  ) {
+                    # Every concentration was skipped or failed to converge —
+                    # the per-concentration reason was already logged above.
+                    # There is no k_obs to feed kinact/Ki, so drop the empty
+                    # result rather than hand it to the result interface.
+                    message(paste(
+                      "  │  └─ No concentration could be fitted.",
+                      "Skipping binding kinetics analysis."
+                    ))
+                    result_with_hits$binding_kobs_result <- NULL
+                    kinact_ki_check <- FALSE
+                    kinact_ki_available(FALSE)
+                  } else {
+                    # Add kinact/Ki results to result list
+                    result_with_hits$kinact_ki_result <- add_kinact_ki_result(
+                      result_with_hits,
+                      units = units
+                    )
+                  }
                 }
               }
             },
