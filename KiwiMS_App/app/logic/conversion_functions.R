@@ -14,6 +14,7 @@ box::use(
       paste_hook_js,
       hits_col_full_names
     ],
+  app / logic / ms_formats[ms_sample_base],
 )
 
 # Concentration conversion
@@ -2244,8 +2245,8 @@ add_hits <- function(
 
     log_start(samples[i])
 
-    st_key <- gsub("\\.raw$", "", sample_table$Sample, ignore.case = TRUE)
-    s_key <- gsub("\\.raw$", "", samples[i], ignore.case = TRUE)
+    st_key <- ms_sample_base(sample_table$Sample)
+    s_key <- ms_sample_base(samples[i])
     present_protein <- sample_table$Protein[st_key == s_key]
     present_cmp <- sample_table[
       st_key == s_key,
@@ -2259,7 +2260,7 @@ add_hits <- function(
         "Well" %in% names(config) &&
         "Sample" %in% names(config)
     ) {
-      cfg_key <- gsub("\\.raw$", "", config[["Sample"]], ignore.case = TRUE)
+      cfg_key <- ms_sample_base(config[["Sample"]])
       idx <- match(s_key, cfg_key)
       if (!is.na(idx)) {
         raw_well <- as.character(config[["Well"]][idx])
@@ -2352,8 +2353,8 @@ summarize_hits <- function(result_list, sample_table) {
   # Join Replicate from sample_table if available
   if ("Replicate" %in% names(sample_table)) {
     rep_join <- sample_table[, c("Sample", "Replicate"), drop = FALSE]
-    rep_join$Sample <- gsub("\\.raw$", "", rep_join$Sample, ignore.case = TRUE)
-    hs_key <- gsub("\\.raw$", "", hits_summarized$Sample, ignore.case = TRUE)
+    rep_join$Sample <- ms_sample_base(rep_join$Sample)
+    hs_key <- ms_sample_base(hits_summarized$Sample)
     hits_summarized$Replicate <- rep_join$Replicate[match(
       hs_key,
       rep_join$Sample
@@ -5638,14 +5639,15 @@ compute_replicate_labels <- function(sample_names, config = NULL) {
 
   # Priority 1: config supplies a non-empty Replicate value for this sample
   if (!is.null(config) && "Replicate" %in% names(config)) {
-    cfg_key <- gsub("\\.raw$", "", config$Sample, ignore.case = TRUE)
-    samp_key <- gsub("\\.raw$", "", sample_names, ignore.case = TRUE)
+    cfg_key <- ms_sample_base(config$Sample)
+    samp_key <- ms_sample_base(sample_names)
     matched <- config$Replicate[match(samp_key, cfg_key)]
     non_empty <- !is.na(matched) & trimws(matched) != ""
     labels[non_empty] <- trimws(matched[non_empty])
   }
 
-  # Priority 2: filename suffix detection (_R<n> before optional .raw), for
+  # Priority 2: filename suffix detection (_R<n>, after any format extension
+  # has been stripped), for
   # any sample not already labeled from config. Assign the shared base name
   # to every sample carrying an _R<n> suffix, even when its partner
   # replicate(s) are missing (e.g. a failed deconvolution dropped one file
@@ -5656,9 +5658,9 @@ compute_replicate_labels <- function(sample_names, config = NULL) {
   # or to which other rows it belongs with.
   remaining <- is.na(labels)
   if (any(remaining)) {
-    has_rn <- grepl("_[Rr]\\d+(\\.raw)?$", sample_names)
-    base_names <- gsub("_[Rr]\\d+(\\.raw)?$", "", sample_names)
-    base_names <- gsub("\\.raw$", "", base_names, ignore.case = TRUE)
+    bare <- ms_sample_base(sample_names)
+    has_rn <- grepl("_[Rr]\\d+$", bare)
+    base_names <- gsub("_[Rr]\\d+$", "", bare)
     fill_idx <- remaining & has_rn
     labels[fill_idx] <- base_names[fill_idx]
   }
@@ -5692,10 +5694,11 @@ new_sample_table <- function(
   compound_table,
   kinact_ki = FALSE
 ) {
-  sample_names <- sort(paste0(
-    result$samples %||% names(result$deconvolution),
-    ".raw"
-  ))
+  # Sample names are stored without an extension, and appending ".raw" here
+  # would label a Thermo, mzML or mzXML sample as a Waters folder. Every lookup
+  # that matches these against a config runs both sides through ms_sample_base(),
+  # so leaving them bare matches exactly as before.
+  sample_names <- sort(result$samples %||% names(result$deconvolution))
   sample_tab <- data.frame(
     Sample = sample_names,
     Protein = ifelse(

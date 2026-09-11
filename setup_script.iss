@@ -59,7 +59,7 @@ Source: "KiwiMS_App\renv.lock"; DestDir: "{app}";
 Source: "KiwiMS_App\renv\*"; DestDir: "{app}\renv"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "KiwiMS_App\rhino.yml"; DestDir: "{app}";
 Source: "KiwiMS_App\R-Portable\*"; DestDir: "{app}\R-Portable"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "KiwiMS_App\app\*"; DestDir: "{app}\app"; Excludes: "report"; Flags: ignoreversion recursesubdirs createallsubdirs;
+Source: "KiwiMS_App\app\*"; DestDir: "{app}\app"; Excludes: "report,__pycache__"; Flags: ignoreversion recursesubdirs createallsubdirs;
 Source: "KiwiMS_App\app\report\*"; DestDir: "{code:GetReportDir}"; Flags: ignoreversion recursesubdirs createallsubdirs uninsremovereadonly
 Source: "KiwiMS_App\resources\*"; DestDir: "{app}\resources"; Flags: ignoreversion recursesubdirs createallsubdirs;
 Source: "setup\favicon.ico"; DestDir: "{app}"; Flags: ignoreversion

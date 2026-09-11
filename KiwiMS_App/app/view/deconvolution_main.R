@@ -4,7 +4,6 @@ box::use(
   bslib[card, card_body, card_header, tooltip],
   DBI[dbConnect, dbDisconnect, dbExistsTable, dbGetQuery],
   RSQLite[SQLite, SQLITE_RO],
-  fs[dir_ls],
   plotly[
     event_data,
     event_register,
@@ -57,6 +56,22 @@ box::use(
     logging[
       write_log,
       get_session_id,
+    ],
+  app /
+    logic /
+    ms_formats[
+      is_ms_input,
+      list_ms_inputs,
+      ms_result_dirname,
+      ms_sample_base
+    ],
+  app /
+    logic /
+    ms_suggest[
+      aggregate_suggestions,
+      profile_ms_samples,
+      suggestion_summary,
+      window_covers_run
     ]
 )
 
@@ -161,7 +176,7 @@ server <- function(
       }
 
       if (
-        grepl("\\.raw$", dir_path, ignore.case = TRUE) && dir.exists(dir_path)
+        is_ms_input(dir_path)
       ) {
         return(dir_path)
       }
@@ -175,7 +190,7 @@ server <- function(
           length(config_file()) &&
           "Sample" %in% names(config_file())
       ) {
-        raw_bases <- basename(dir_ls(dir_path, glob = "*.raw"))
+        raw_bases <- basename(list_ms_inputs(dir_path))
         samples <- config_file()[["Sample"]]
         samples <- samples[samples %in% raw_bases]
 
@@ -280,17 +295,18 @@ server <- function(
         }
       }
 
+      # m/z and mass are continuous quantities and UniDec stores both as
+      # doubles -- its own fallback for an unset m/z range is the data's own
+      # min/max, which is fractional. Requiring whole numbers here rejected
+      # perfectly good bounds (a measured envelope starts at 512.4, not 512)
+      # for no reason on either side. Charge state above is different: a charge
+      # really is an integer count, so that check stays.
       if (!is.null(input$minmz) && !is.null(input$maxmz)) {
         if (is.na(input$minmz) || is.na(input$maxmz)) {
-          return("m/z range requires valid whole numbers ...")
+          return("m/z range requires valid numbers ...")
         }
         if (input$minmz < 1 || input$maxmz < 1) {
           return("m/z values must be at least 1 ...")
-        }
-        if (
-          input$minmz != floor(input$minmz) || input$maxmz != floor(input$maxmz)
-        ) {
-          return("m/z values must be whole numbers ...")
         }
         if (input$minmz >= input$maxmz) {
           return("High m/z must be greater than low m/z ...")
@@ -299,16 +315,10 @@ server <- function(
 
       if (!is.null(input$masslb) && !is.null(input$massub)) {
         if (is.na(input$masslb) || is.na(input$massub)) {
-          return("Mass Mw range requires valid whole numbers ...")
+          return("Mass Mw range requires valid numbers ...")
         }
         if (input$masslb < 1 || input$massub < 1) {
           return("Mass Mw values must be at least 1 Da ...")
-        }
-        if (
-          input$masslb != floor(input$masslb) ||
-            input$massub != floor(input$massub)
-        ) {
-          return("Mass Mw values must be whole numbers ...")
         }
         if (input$masslb >= input$massub) {
           return("High mass Mw must be greater than low mass Mw ...")
@@ -360,9 +370,8 @@ server <- function(
         if (length(dir_path) == 0 || !nzchar(dir_path)) {
           return("Select target file(s) from the sidebar to start ...")
         }
-        is_raw_itself <- grepl("\\.raw$", dir_path, ignore.case = TRUE) &&
-          dir.exists(dir_path)
-        if (!is_raw_itself && length(dir_ls(dir_path, glob = "*.raw")) == 0) {
+        is_raw_itself <- is_ms_input(dir_path)
+        if (!is_raw_itself && length(list_ms_inputs(dir_path)) == 0) {
           return("No valid target folder selected ...")
         }
       }
@@ -565,6 +574,224 @@ server <- function(
       ignoreInit = TRUE
     )
     shiny$observeEvent(
+      input$save_auto_peak_width_btn,
+      {
+        on_off <- isTRUE(input$auto_peak_width)
+        update_user_setting("deconv_auto_peak_width", on_off)
+        shinyWidgets::show_toast(
+          paste0(
+            "Peak width fitting ",
+            if (on_off) "on" else "off",
+            " by default"
+          ),
+          text = NULL,
+          type = "success",
+          timer = 3000,
+          timerProgressBar = TRUE
+        )
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+
+    ### Suggest parameters from the data ----
+    # Reads the selected acquisitions and proposes the parameters they actually
+    # support. It starts nothing and saves nothing: the numbers appear in the
+    # inputs and the operator edits or ignores them before pressing Start.
+    suggest_msg <- shiny$reactiveVal(NULL)
+
+    output$suggest_feedback <- shiny$renderUI({
+      m <- suggest_msg()
+      if (is.null(m)) {
+        return(NULL)
+      }
+      shiny$div(
+        class = paste0("suggest-feedback suggest-feedback--", m$type),
+        shiny$icon(
+          if (identical(m$type, "error")) {
+            "circle-exclamation"
+          } else {
+            "circle-info"
+          }
+        ),
+        shiny$HTML(paste0(" ", m$text))
+      )
+    })
+
+    shiny$observeEvent(
+      input$suggest_params,
+      {
+        write_log("Parameter suggestion requested.")
+        targets <- run_target_files()
+        targets <- targets[is_ms_input(targets)]
+
+        if (!length(targets)) {
+          # run_target_files() reads the target picker, which is only populated
+          # once its UI has rendered and Shiny has echoed the selection back.
+          # Pressing Suggest before that happens -- the common case, since it
+          # sits next to the parameters rather than the file list -- would
+          # otherwise be refused on a folder that plainly holds samples. What
+          # the operator means is "profile what I picked", so fall back to
+          # everything in the selected folder.
+          dir_path <- deconvolution_sidebar_vars$dir()
+          targets <- if (length(dir_path) == 1L && is_ms_input(dir_path)) {
+            dir_path
+          } else {
+            list_ms_inputs(dir_path)
+          }
+        }
+
+        if (!length(targets)) {
+          msg <- "Select a sample folder in the sidebar first."
+          suggest_msg(list(type = "error", text = msg))
+          shinyWidgets::show_toast(
+            title = msg,
+            text = NULL,
+            type = "error",
+            timer = 4000,
+            timerProgressBar = TRUE
+          )
+          write_log(paste("Parameter suggestion aborted:", msg))
+          return()
+        }
+
+        # The aggregate stops moving long before a full plate is read, and each
+        # sample costs a file read, so cap what one press will open.
+        capped <- head(targets, 12L)
+
+        disable("suggest_params")
+        on.exit(enable("suggest_params"), add = TRUE)
+
+        subset_used <- length(capped) < length(targets)
+        res <- shiny$withProgress(
+          message = if (subset_used) {
+            sprintf("Reading %d of %d samples ...", length(capped), length(targets))
+          } else {
+            sprintf("Reading %d sample(s) ...", length(capped))
+          },
+          # Saying "12 sample(s)" next to 119 selected reads like a bug. Name
+          # both numbers and say why a subset is enough: one parameter set is
+          # applied to the whole run, so reading every plate well would cost
+          # minutes to arrive at the same answer.
+          detail = if (subset_used) {
+            "One set of parameters covers the whole run, so a sample of them is enough."
+          } else {
+            NULL
+          },
+          value = 0.4,
+          profile_ms_samples(capped)
+        )
+
+        if (!isTRUE(res$ok)) {
+          detail <- res$error %||% "Could not read the selected samples."
+          suggest_msg(list(type = "error", text = detail))
+          shinyWidgets::show_toast(
+            title = "Could not read the selected samples.",
+            text = detail,
+            type = "error",
+            timer = 6000,
+            timerProgressBar = TRUE
+          )
+          write_log(paste("Parameter suggestion failed:", detail))
+          return()
+        }
+
+        # What the operator had configured before this press. Worth reporting
+        # when it did not fit the data: an elution window carried over from a
+        # 90-second run silently keeps almost nothing of a 10-minute gradient.
+        prev_start <- suppressWarnings(as.numeric(input$time_start))
+        prev_end <- suppressWarnings(as.numeric(input$time_end))
+        stale_window <- character(0)
+        if (isTRUE(is.finite(prev_start) && is.finite(prev_end))) {
+          stale_window <- Filter(
+            nzchar,
+            vapply(
+              res$samples,
+              function(s) {
+                window_covers_run(s, prev_start, prev_end)$msg %||% ""
+              },
+              character(1L)
+            )
+          )
+        }
+
+        agg <- aggregate_suggestions(res$samples)
+        for (field in names(agg)) {
+          value <- agg[[field]]
+          if (is.finite(value)) {
+            shiny$updateNumericInput(session, field, value = value)
+          }
+        }
+
+        lines <- vapply(res$samples, suggestion_summary, character(1L))
+        if (length(stale_window)) {
+          lines <- c(
+            lines,
+            paste0("<b>Replaced:</b> ", stale_window[1])
+          )
+        }
+        if (length(res$errors)) {
+          skipped <- vapply(
+            res$errors,
+            function(e) as.character(e$name),
+            character(1L)
+          )
+          lines <- c(
+            lines,
+            paste("Could not read:", paste(skipped, collapse = ", "))
+          )
+        }
+        if (subset_used) {
+          lines <- c(
+            lines,
+            sprintf(
+              paste(
+                "Read %d of the %d selected samples &mdash; one set of",
+                "parameters covers the whole run."
+              ),
+              length(capped),
+              length(targets)
+            )
+          )
+        }
+        suggest_msg(list(
+          type = "info",
+          text = paste(lines, collapse = "<br/>")
+        ))
+        resolved <- sum(vapply(
+          res$samples,
+          function(s) !identical(s$confidence %||% "low", "low"),
+          logical(1L)
+        ))
+        shinyWidgets::show_toast(
+          title = if (subset_used) {
+            sprintf(
+              "Parameters updated (read %d of %d samples)",
+              length(res$samples),
+              length(targets)
+            )
+          } else {
+            sprintf("Parameters updated from %d sample(s)", length(res$samples))
+          },
+          text = sprintf(
+            "%d of %d read gave a clear charge-state pattern.",
+            resolved,
+            length(res$samples)
+          ),
+          type = if (resolved > 0) "success" else "warning",
+          timer = 5000,
+          timerProgressBar = TRUE
+        )
+        write_log(paste(
+          "Parameter suggestion applied:",
+          paste(lines, collapse = " | ")
+        ))
+      },
+      ignoreNULL = TRUE,
+      ignoreInit = TRUE
+    )
+
+    shiny$observeEvent(
       input$save_masslb_btn,
       {
         if (!is.null(input$masslb) && !is.na(input$masslb)) {
@@ -765,12 +992,7 @@ server <- function(
         analysis_dest(),
         paste0(trimws(input$analysis_name), ".db")
       )
-      sample_bases <- gsub(
-        "\\.raw$",
-        "",
-        basename(raw_dirs),
-        ignore.case = TRUE
-      )
+      sample_bases <- ms_sample_base(basename(raw_dirs))
       count <- decon_progress_count(db, sample_bases)
       message("Done count from DB: ", count)
       count
@@ -885,12 +1107,11 @@ server <- function(
       # may still be NULL while the picker inside the modal is rendering.
       dir_path_modal <- deconvolution_sidebar_vars$dir()
       raw_dirs_all <- if (
-        grepl("\\.raw$", dir_path_modal, ignore.case = TRUE) &&
-          dir.exists(dir_path_modal)
+        is_ms_input(dir_path_modal)
       ) {
         dir_path_modal
       } else {
-        dir_ls(dir_path_modal, glob = "*.raw")
+        list_ms_inputs(dir_path_modal)
       }
       sample_bases <- if (
         isTRUE(deconvolution_sidebar_vars$use_config()) &&
@@ -898,11 +1119,11 @@ server <- function(
       ) {
         samps <- config_file()[["Sample"]]
         samps <- samps[samps %in% basename(raw_dirs_all)]
-        gsub("\\.raw$", "", samps, ignore.case = TRUE)
+        ms_sample_base(samps)
       } else {
         sel <- target_selector_sel()
         bases <- if (length(sel) > 0) sel else basename(raw_dirs_all)
-        gsub("\\.raw$", "", bases, ignore.case = TRUE)
+        ms_sample_base(bases)
       }
       if (length(sample_bases) == 0 || !nzchar(sample_bases[1])) {
         return(NULL)
@@ -1052,12 +1273,11 @@ server <- function(
       if (deconvolution_sidebar_vars$selected() == "folder") {
         dir_path_msg <- deconvolution_sidebar_vars$dir()
         raw_dirs <- if (
-          grepl("\\.raw$", dir_path_msg, ignore.case = TRUE) &&
-            dir.exists(dir_path_msg)
+          is_ms_input(dir_path_msg)
         ) {
           dir_path_msg
         } else {
-          dir_ls(dir_path_msg, glob = "*.raw")
+          list_ms_inputs(dir_path_msg)
         }
 
         if (
@@ -1123,8 +1343,7 @@ server <- function(
         } else {
           dir_path_msg <- deconvolution_sidebar_vars$dir()
           if (
-            grepl("\\.raw$", dir_path_msg, ignore.case = TRUE) &&
-              dir.exists(dir_path_msg)
+            is_ms_input(dir_path_msg)
           ) {
             message <- shiny$p(shiny$HTML(paste0(
               "<b>Single target file selected</b><br><br>",
@@ -1164,8 +1383,7 @@ server <- function(
       picker <- NULL
 
       dir_sel <- deconvolution_sidebar_vars$dir()
-      is_raw_itself <- grepl("\\.raw$", dir_sel, ignore.case = TRUE) &&
-        dir.exists(dir_sel)
+      is_raw_itself <- is_ms_input(dir_sel)
 
       if (
         !is_raw_itself &&
@@ -1173,7 +1391,7 @@ server <- function(
           (isFALSE(deconvolution_sidebar_vars$use_config()) ||
             length(config_file()) == 0)
       ) {
-        files <- basename(dir_ls(dir_sel, glob = "*.raw"))
+        files <- basename(list_ms_inputs(dir_sel))
         picker <- shiny$div(
           class = "kiwi-file-selector",
           shiny$div(
@@ -1207,7 +1425,7 @@ server <- function(
 
     shiny$observeEvent(input$target_select_all, {
       dir_sel <- deconvolution_sidebar_vars$dir()
-      files <- basename(dir_ls(dir_sel, glob = "*.raw"))
+      files <- basename(list_ms_inputs(dir_sel))
       shiny$updateCheckboxGroupInput(
         session,
         "target_selector",
@@ -1264,12 +1482,11 @@ server <- function(
       if (deconvolution_sidebar_vars$selected() == "folder") {
         dir_path <- deconvolution_sidebar_vars$dir()
         if (
-          grepl("\\.raw$", dir_path, ignore.case = TRUE) && dir.exists(dir_path)
+          is_ms_input(dir_path)
         ) {
           raw_dirs <- dir_path
         } else {
-          raw_dirs <- list.dirs(dir_path, full.names = TRUE, recursive = FALSE)
-          raw_dirs <- raw_dirs[grep("\\.raw$", raw_dirs)]
+          raw_dirs <- list_ms_inputs(dir_path)
         }
 
         if (
@@ -1283,12 +1500,7 @@ server <- function(
 
           # Prepare heatmap variables — restrict to samples present in folder
           present_in_folder <- sample_names %in% basename(raw_dirs)
-          reactVars$sample_names <- gsub(
-            "\\.raw$",
-            "",
-            sample_names[present_in_folder],
-            ignore.case = TRUE
-          )
+          reactVars$sample_names <- ms_sample_base(sample_names[present_in_folder])
           reactVars$sample_names <- reactVars$sample_names[nzchar(trimws(
             reactVars$sample_names
           ))]
@@ -1298,7 +1510,7 @@ server <- function(
             sub("^.*:", "", config_file()[["Well"]][present_in_folder])
           )
         } else if (
-          grepl("\\.raw$", dir_path, ignore.case = TRUE) && dir.exists(dir_path)
+          is_ms_input(dir_path)
         ) {
           write_log("Single target deconvolution mode")
         } else {
@@ -1324,7 +1536,7 @@ server <- function(
         if (choice == "Skip Samples") {
           # Remove already-done samples from the queue
           raw_dirs <- raw_dirs[
-            !gsub("\\.raw$", "", basename(raw_dirs), ignore.case = TRUE) %in%
+            !ms_sample_base(basename(raw_dirs)) %in%
               reactVars$overwrite
           ]
           write_log(paste(
@@ -1361,12 +1573,7 @@ server <- function(
       # samples that will actually be processed (never when all are skipped).
       stale_all <- reactVars$stale_unidec_output
       if (length(stale_all) > 0) {
-        active_bases <- gsub(
-          "\\.raw$",
-          "",
-          basename(raw_dirs),
-          ignore.case = TRUE
-        )
+        active_bases <- ms_sample_base(basename(raw_dirs))
         stale_active <- stale_all[
           gsub(
             "(_rawdata\\.txt|_rawdata_unidecfiles)$",
@@ -1432,7 +1639,8 @@ server <- function(
           peakwindow = input$peakwindow,
           peaknorm = input$peaknorm,
           time_start = input$time_start,
-          time_end = input$time_end
+          time_end = input$time_end,
+          auto_peak_width = isTRUE(input$auto_peak_width)
         ),
         dirs = raw_dirs,
         selected = deconvolution_sidebar_vars$selected()
@@ -1466,12 +1674,7 @@ server <- function(
             paste0(trimws(input$analysis_name), ".db")
           )
           if (file.exists(db_path_pre)) {
-            active_bases <- gsub(
-              "\\.raw$",
-              "",
-              basename(raw_dirs),
-              ignore.case = TRUE
-            )
+            active_bases <- ms_sample_base(basename(raw_dirs))
             con_pre <- DBI::dbConnect(RSQLite::SQLite(), db_path_pre)
             if (DBI::dbExistsTable(con_pre, "completed")) {
               DBI::dbExecute(con_pre, "DROP TABLE completed")
@@ -1795,11 +1998,7 @@ server <- function(
                 }
 
                 ##### Render result picker with updated choices ----
-                choices_ok <- gsub(
-                  "_rawdata_unidecfiles",
-                  ".raw",
-                  basename(results)
-                )
+                choices_ok <- gsub("_rawdata_unidecfiles", "", basename(results))
 
                 failed_in_run <- reactVars$failed_samples[
                   reactVars$failed_samples %in% reactVars$sample_names
@@ -1808,7 +2007,7 @@ server <- function(
 
                 choices_failed <- character(0)
                 if (length(failed_in_run)) {
-                  choices_failed <- paste0(failed_in_run, ".raw")
+                  choices_failed <- failed_in_run
                 }
 
                 named_choices <- character(0)
@@ -1852,12 +2051,7 @@ server <- function(
               }
             } else {
               selected_files <- run_target_files()
-              sel_base <- gsub(
-                "\\.raw$",
-                "",
-                basename(selected_files),
-                ignore.case = TRUE
-              )
+              sel_base <- ms_sample_base(basename(selected_files))
               db <- file.path(
                 analysis_dest(),
                 paste0(trimws(input$analysis_name), ".db")
@@ -1894,7 +2088,7 @@ server <- function(
                 named_choices <- c(named_choices, choices_failed)
                 names(named_choices)[prev_len + seq_along(choices_failed)] <-
                   paste0(
-                    gsub("\\.raw$", "", choices_failed, ignore.case = TRUE),
+                    ms_sample_base(choices_failed),
                     " (failed)"
                   )
               }
@@ -1951,12 +2145,7 @@ server <- function(
         if (difftime(Sys.time(), reactVars$last_check, units = "secs") >= 0.5) {
           # Scan only for sentinels that belong to the current raw_dirs so that
           # residual files from other runs in the same directory are ignored.
-          current_base_names <- gsub(
-            "\\.raw$",
-            "",
-            basename(raw_dirs),
-            ignore.case = TRUE
-          )
+          current_base_names <- ms_sample_base(basename(raw_dirs))
           db_pth <- file.path(
             analysis_dest(),
             paste0(trimws(input$analysis_name), ".db")
@@ -2005,7 +2194,7 @@ server <- function(
 
           result_files <- file.path(
             analysis_dest(),
-            basename(gsub(".raw", "_rawdata_unidecfiles", raw_dirs))
+            ms_result_dirname(raw_dirs)
           )
 
           # Poll completion sentinel on every cycle
@@ -2117,10 +2306,10 @@ server <- function(
                   reactVars$failed_samples %in% reactVars$sample_names
                 ]
                 failed_in_run <- failed_in_run[nzchar(failed_in_run)]
-                choices_ok <- paste0(done_bases, ".raw")
+                choices_ok <- done_bases
                 choices_failed <- character(0)
                 if (length(failed_in_run)) {
-                  choices_failed <- paste0(failed_in_run, ".raw")
+                  choices_failed <- failed_in_run
                 }
                 named_choices <- character(0)
                 if (length(choices_ok) > 0) {
@@ -2174,12 +2363,7 @@ server <- function(
                 }
 
                 # Build picker: successful samples + failed samples (labelled)
-                sel_base <- gsub(
-                  "\\.raw$",
-                  "",
-                  basename(selected_files),
-                  ignore.case = TRUE
-                )
+                sel_base <- ms_sample_base(basename(selected_files))
                 db_fin <- file.path(
                   analysis_dest(),
                   paste0(trimws(input$analysis_name), ".db")
@@ -2217,7 +2401,7 @@ server <- function(
                   named_choices <- c(named_choices, choices_failed)
                   names(named_choices)[prev_len + seq_along(choices_failed)] <-
                     paste0(
-                      gsub("\\.raw$", "", choices_failed, ignore.case = TRUE),
+                      ms_sample_base(choices_failed),
                       " (failed)"
                     )
                 }
@@ -2411,7 +2595,7 @@ server <- function(
                   'document.getElementById("blocking-overlay").styl',
                   'e.display = "block";'
                 ))
-                result_files_sel(paste0(clicked_sample[1], ".raw"))
+                result_files_sel(clicked_sample[1])
                 # Unblock after renders complete (delay covers spectrum + table)
                 delay(
                   2000,
@@ -2430,7 +2614,7 @@ server <- function(
         shiny$observe({
           shiny$req(result_files_sel(), reactVars$heatmap_ready > 0L)
 
-          sample_name <- gsub("\\.raw$", "", result_files_sel())
+          sample_name <- ms_sample_base(result_files_sel())
           well_id <- shiny$isolate(
             reactVars$rslt_df$well_id[reactVars$rslt_df$sample == sample_name]
           )
@@ -2510,14 +2694,9 @@ server <- function(
           shiny$req(result_files_sel())
           result_dir <- file.path(
             analysis_dest(),
-            gsub(".raw", "_rawdata_unidecfiles", result_files_sel())
+            ms_result_dirname(result_files_sel())
           )
-          sel_base <- gsub(
-            "\\.raw$",
-            "",
-            result_files_sel(),
-            ignore.case = TRUE
-          )
+          sel_base <- ms_sample_base(result_files_sel())
           db_sp <- file.path(
             analysis_dest(),
             paste0(trimws(input$analysis_name), ".db")
@@ -2566,7 +2745,7 @@ server <- function(
         shiny$req(result_files_sel())
 
         # Check DB for failure / get plot data
-        sel_base <- gsub("\\.raw$", "", result_files_sel(), ignore.case = TRUE)
+        sel_base <- ms_sample_base(result_files_sel())
         db_sp <- file.path(
           analysis_dest(),
           paste0(trimws(input$analysis_name), ".db")
@@ -2581,7 +2760,7 @@ server <- function(
 
         result_dir <- file.path(
           analysis_dest(),
-          gsub(".raw", "_rawdata_unidecfiles", result_files_sel())
+          ms_result_dirname(result_files_sel())
         )
 
         is_raw_toggle <- as.logical(ifelse(
@@ -2680,16 +2859,11 @@ server <- function(
 
         result_dir <- file.path(
           analysis_dest(),
-          gsub(".raw", "_rawdata_unidecfiles", result_files_sel())
+          ms_result_dirname(result_files_sel())
         )
 
         # Check DB for failure before rendering metrics
-        sel_base_dt <- gsub(
-          "\\.raw$",
-          "",
-          result_files_sel(),
-          ignore.case = TRUE
-        )
+        sel_base_dt <- ms_sample_base(result_files_sel())
         db_dt <- file.path(
           analysis_dest(),
           paste0(trimws(input$analysis_name), ".db")
@@ -2792,9 +2966,9 @@ server <- function(
 
         result_dir <- file.path(
           analysis_dest(),
-          gsub(".raw", "_rawdata_unidecfiles", result_files_sel())
+          ms_result_dirname(result_files_sel())
         )
-        sel_base <- gsub("\\.raw$", "", result_files_sel(), ignore.case = TRUE)
+        sel_base <- ms_sample_base(result_files_sel())
         db_path <- file.path(
           analysis_dest(),
           paste0(trimws(input$analysis_name), ".db")
@@ -2877,7 +3051,7 @@ server <- function(
       # than cached, so it always reflects what is currently selected.
       current_failed_selection <- function() {
         shiny$req(result_files_sel())
-        sel <- gsub("\\.raw$", "", result_files_sel(), ignore.case = TRUE)
+        sel <- ms_sample_base(result_files_sel())
         db_fm <- file.path(
           analysis_dest(),
           paste0(trimws(input$analysis_name), ".db")
@@ -2944,7 +3118,7 @@ server <- function(
       # cards for the same sample.
       output$metrics_failure_msg <- shiny$renderUI({
         shiny$req(result_files_sel())
-        sel <- gsub("\\.raw$", "", result_files_sel(), ignore.case = TRUE)
+        sel <- ms_sample_base(result_files_sel())
         db_fm <- file.path(
           analysis_dest(),
           paste0(trimws(input$analysis_name), ".db")

@@ -3124,6 +3124,71 @@ th.sorting {
   align-content: end;
 }
 
+.suggest-params-btn {
+  margin-bottom: 0.5rem;
+  white-space: nowrap;
+}
+
+// Shiny renders uiOutput as `display: contents`, so the rendered content would
+// otherwise be laid out by the surrounding .row flex container and overlap the
+// parameter cards. This wrapper restores a real box for it to live in, and
+// takes no vertical space while the output is empty.
+.suggest-feedback-slot {
+  display: block;
+  width: 100%;
+}
+
+// The one checkbox among the numeric parameter rows: take the leftover width
+// so the save button sits where the other save buttons do, and drop the
+// stacked form-group spacing.
+.deconv-param-check {
+  flex: 1 1 auto;
+  min-width: 0;
+
+  .form-group,
+  .checkbox {
+    margin-bottom: 0;
+  }
+
+  .checkbox label {
+    font-size: 0.95em;
+    line-height: 1.3;
+  }
+}
+
+// One line per sample, so it needs room to wrap and its own scroll rather than
+// pushing the parameter cards down the page.
+.suggest-feedback {
+  box-sizing: border-box;
+  width: 100%;
+  font-size: 0.82em;
+  line-height: 1.5;
+  margin: 0 0 0.85rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 3px;
+  max-height: 7.5rem;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+
+  &--info {
+    background-color: rgba(139, 195, 74, 0.12);
+    border-left: 3px solid #8bc34a;
+
+    i {
+      color: #8bc34a;
+    }
+  }
+
+  &--error {
+    background-color: rgba(209, 112, 80, 0.12);
+    border-left: 3px solid #d17050;
+
+    i {
+      color: #d17050;
+    }
+  }
+}
+
 .deconvolution-title {
   font-weight: 400;
   width: 100%;

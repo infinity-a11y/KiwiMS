@@ -25,10 +25,29 @@ get_default_user_settings <- function() {
     deconv_peaknorm = 2,
     deconv_peakthresh = 0.07,
     deconv_massbins = 0.5,
+    # Off by default: measuring the peak width from the data usually improves
+    # the fit but not always, and switching it on silently would change every
+    # existing user's numbers. See the tooltip on the control.
+    deconv_auto_peak_width = FALSE,
     deconv_keep_raw_output = FALSE,
     deconv_input_dir = "",
-    log_dir = ""
+    log_dir = "",
+    # One-shot acknowledgement of the release in which the elution window began
+    # to take effect. Before it, time_start/time_end were written into the run
+    # config but never applied, so every deconvolution silently used the whole
+    # acquisition; results from this release on will differ for anyone whose
+    # window is narrower than their run. Only operators with settings saved
+    # before the change are shown the notice -- see main.R.
+    deconv_time_window_notice_seen = FALSE
   )
+}
+
+# user_settings_exist(): has this machine ever saved a setting? ----
+# Distinguishes an upgrade from a first install, which is what decides whether
+# a behaviour-change notice is worth showing at all.
+#' @export
+user_settings_exist <- function() {
+  file.exists(settings_path)
 }
 
 #' @export

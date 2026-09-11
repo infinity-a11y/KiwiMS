@@ -27,6 +27,10 @@ box::use(
   utils[read.delim, read.table],
 )
 
+box::use(
+  app / logic / ms_formats[ms_sample_base],
+)
+
 # db_with_retry(): BEGIN IMMEDIATE + body + COMMIT with R-level retry ----
 # Retries the full transaction cycle on any lock/busy error, with random jitter.
 # The body is captured unevaluated and re-evaluated on every attempt: forcing a
@@ -134,18 +138,14 @@ process_single_dir <- function(
   time_end,
   db_path,
   keep_raw_output = FALSE,
+  auto_peak_width = FALSE,
   max_attempts = 2L
 ) {
   input_path <- gsub("\\\\", "/", waters_dir)
   result_dir <- gsub("\\\\", "/", result_dir)
 
   # Derive sample base name up front so it is available in every error path
-  sample_basename <- gsub(
-    "\\.raw$",
-    "",
-    basename(input_path),
-    ignore.case = TRUE
-  )
+  sample_basename <- ms_sample_base(input_path)
 
   # When discarding raw output, route UniDec intermediates to a per-sample
   # temp dir so the target directory stays clean throughout the run.
@@ -189,7 +189,8 @@ process_single_dir <- function(
     paste0(
       '"startz": %s, "endz": %s, "minmz": %s, "maxmz": %s, "masslb": %s',
       ', "massub": %s, "massbins": %s, "peakthresh": %s, "peakwindow": ',
-      '%s, "peaknorm": %s, "time_start": %s, "time_end": %s'
+      '%s, "peaknorm": %s, "time_start": %s, "time_end": %s',
+      ', "auto_peak_width": %s'
     ),
     format_param(startz),
     format_param(endz),
@@ -202,7 +203,8 @@ process_single_dir <- function(
     format_param(peakwindow),
     format_param(peaknorm),
     format_param(time_start),
-    format_param(time_end)
+    format_param(time_end),
+    if (isTRUE(auto_peak_width)) "True" else "False"
   )
 
   # attempt(): One full UniDec run plus DB write for this sample ----
@@ -215,11 +217,10 @@ process_single_dir <- function(
         # Run unidec with python
         reticulate::py_run_string(sprintf(
           '
-import sys
-import unidec
-import re
 import os
-import shutil
+import numpy as np
+import unidec
+from unidec import tools as ud
 
 # Parameters passed from R
 params = {%s}
@@ -227,19 +228,47 @@ input_file = r"%s"
 result_dir = r"%s"
 out_stub = r"%s"
 
-# Initialize UniDec engine
-engine = unidec.UniDec()
+# Elution window. Blank bounds mean "use the whole acquisition".
+#
+# This is applied here, at read time, because it is the only place it has any
+# effect. engine.config.time_start/time_end are set further down for the record
+# they leave in _conf.dat, but the plain UniDec engine never reads them back --
+# only ChromEng (which drives UniChrom) does. Setting them was previously the
+# only thing that happened with the operator elution window, which is why every
+# run before this change silently deconvoluted the entire acquisition.
+ts, te = params["time_start"], params["time_end"]
+time_range = None
+if ts != "" and te != "" and float(te) > float(ts):
+    time_range = (float(ts), float(te))
 
-# Convert Waters .raw to txt
-engine.raw_process(input_file)
+# Vendor-agnostic read. get_importer() resolves a .raw *directory* to the Waters
+# reader and a .raw *file* to the Thermo reader -- the extension is identical,
+# so the file/folder distinction is what separates the two vendors -- and takes
+# .mzML/.mzML.gz/.mzXML to the open-format readers.
+importer = ud.get_importer(input_file)
+if importer is None:
+    raise IOError("Unsupported or unreadable input: " + input_file)
 
-# Move processed file to output directory under the out_stub name (not the
-# source file own name -- see the R-side comment on raw_stub for why).
-txt_file = input_file.removesuffix(".raw") + "_rawdata.txt"
+data = importer.get_data(time_range=time_range)
+if data is None or len(data) == 0:
+    span = ""
+    try:
+        span = (" The acquisition covers "
+                + str(round(float(importer.times.min()), 3)) + " to "
+                + str(round(float(importer.times.max()), 3)) + " min.")
+    except Exception:
+        pass
+    raise IOError("The elution window selected no scans." + span)
+
+# Written straight into the worker directory. The previous Waters-only path
+# wrote a scratch _rawdata.txt next to the operator source data and moved it
+# afterwards, which made write access to the data folder a hard requirement;
+# nothing is written outside result_dir now.
 output = os.path.join(result_dir, out_stub + "_rawdata.txt")
-shutil.move(txt_file, output)
+np.savetxt(output, data)
 
 # Make result directory
+engine = unidec.UniDec()
 engine.open_file(output)
 
 # Set configuration parameters
@@ -258,6 +287,18 @@ engine.config.time_end = params["time_end"]
 
 # Process and deconvolve the data
 engine.process_data()
+
+# Peak width (config.mzsig) is the one parameter the interface never set, so it
+# stayed at UniDec library default no matter what the instrument produced.
+# get_auto_peak_width() measures it from the processed spectrum, which is what
+# UniDec own GUI does. Off unless the operator asks for it: it improves the fit
+# on most samples but not all, and it must not change existing results silently.
+if params["auto_peak_width"]:
+    try:
+        engine.get_auto_peak_width()
+    except Exception as exc:
+        print("Auto peak width failed, keeping the default:", exc)
+
 engine.run_unidec()
 engine.pick_peaks()
 ',
@@ -800,11 +841,12 @@ deconvolute <- function(
   peakwindow = 500,
   peaknorm = 1,
   time_start = "",
-  time_end = ""
+  time_end = "",
+  auto_peak_width = FALSE
 ) {
   python_exe <- decon_python_exe()
 
-  sample_bases <- gsub("\\.raw$", "", basename(raw_dirs), ignore.case = TRUE)
+  sample_bases <- ms_sample_base(raw_dirs)
 
   # Parameters shared by every sample, identical in both processing modes.
   params_list <- list(
@@ -822,7 +864,8 @@ deconvolute <- function(
     peakwindow = peakwindow,
     peaknorm = peaknorm,
     time_start = time_start,
-    time_end = time_end
+    time_end = time_end,
+    auto_peak_width = auto_peak_width
   )
 
   run_sequential <- function(dirs) {
@@ -908,6 +951,7 @@ deconvolute <- function(
       "write_sample_status",
       "db_with_retry",
       "read_file_safe",
+      "ms_sample_base",
       "%||%",
       "params_list"
     ),

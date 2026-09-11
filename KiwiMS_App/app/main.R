@@ -30,6 +30,7 @@ box::use(
       save_user_settings,
       update_user_setting,
       get_default_user_settings,
+      user_settings_exist,
     ],
   app /
     logic /
@@ -43,6 +44,7 @@ box::use(
       read_config_file,
       validate_config,
     ],
+  app / logic / ms_formats[has_ms_extension],
 )
 
 suppressWarnings(library(logr))
@@ -1569,11 +1571,11 @@ server <- function(id) {
           " No default set"
         ))
       }
-      if (grepl("\\.raw$", path, ignore.case = TRUE)) {
+      if (has_ms_extension(path)) {
         shiny$div(
           class = "settings-dest-feedback settings-dest-feedback--invalid",
           shiny$icon("triangle-exclamation"),
-          " Cannot use a .raw folder as default input"
+          " Cannot use a sample as default input; pick the folder holding it"
         )
       } else if (dir.exists(path)) {
         shiny$div(
@@ -1992,10 +1994,10 @@ server <- function(id) {
         if (
           length(p) == 1L &&
             nzchar(p) &&
-            grepl("\\.raw$", p, ignore.case = TRUE)
+            has_ms_extension(p)
         ) {
           shinyWidgets::show_toast(
-            title = "Cannot save a .raw folder as default input.",
+            title = "Cannot save a sample as default input; pick the folder holding it.",
             text = NULL,
             type = "error",
             timer = 3000,
@@ -2156,7 +2158,7 @@ server <- function(id) {
       filename = "example_config.csv",
       content = function(file) {
         example <- data.frame(
-          Sample = c("sample_1.raw", "sample_2.raw", "sample_3.raw"),
+          Sample = c("sample_1", "sample_2", "sample_3"),
           Replicate = c("Rep1", "Rep1", "Rep2"),
           Protein = c("RACA", "RACA", "RACA"),
           Well = c("A1", "A2", "A3"),
@@ -2561,6 +2563,55 @@ server <- function(id) {
       ignoreNULL = TRUE,
       ignoreInit = TRUE
     )
+
+    # Elution window behaviour-change notice ----
+    # Shown once, and only to installations that already had saved settings
+    # before this release. Until now the elution window was written into the run
+    # config but never applied to the data, so every deconvolution used the
+    # whole acquisition; it takes effect from this version. Anyone whose window
+    # is narrower than their chromatogram will get different numbers than they
+    # did last week, and they should hear it from the app rather than discover
+    # it in a results table.
+    shiny$observe({
+      s <- read_user_settings()
+      if (
+        !user_settings_exist() || isTRUE(s$deconv_time_window_notice_seen)
+      ) {
+        return()
+      }
+      update_user_setting("deconv_time_window_notice_seen", TRUE)
+      shiny$showModal(
+        shiny$modalDialog(
+          title = "The elution window now takes effect",
+          size = "l",
+          easyClose = FALSE,
+          shiny$div(
+            shiny$p(shiny$HTML(paste0(
+              "Earlier versions recorded the <b>elution start and end time</b> ",
+              "with every run but never applied them, so deconvolution always ",
+              "used the entire acquisition. From this version the window is ",
+              "applied when the data is read."
+            ))),
+            shiny$p(shiny$HTML(paste0(
+              "Your saved window is <b>",
+              s$deconv_time_start,
+              "&ndash;",
+              s$deconv_time_end,
+              " min</b>. If that is narrower than your chromatography, results ",
+              "will differ from previous runs on the same samples &mdash; and ",
+              "a window carried over from a short run will keep very little of ",
+              "a long gradient."
+            ))),
+            shiny$p(shiny$HTML(paste0(
+              "<b>Suggest from data</b> on the deconvolution parameters panel ",
+              "reads your selected samples and proposes a window that matches ",
+              "the peak actually present."
+            )))
+          ),
+          footer = shiny$modalButton("Got it")
+        )
+      )
+    })
 
     # Licence Modal Window ----
     shiny::observeEvent(input$licence, {

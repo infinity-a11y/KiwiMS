@@ -21,6 +21,12 @@ message(paste("Current library paths: \n", paste(.libPaths(), collapse = "\n")))
 #   ))
 # }
 
+# box module lookups resolve against box.path, which the Shiny process gets from
+# rhino but a bare Rscript does not. deconvolution_functions.R imports
+# app/logic/ms_formats, so point box at the app root -- argv[3] -- before the
+# source() below, or that import fails with "module not found".
+options(box.path = commandArgs(trailingOnly = TRUE)[3])
+
 # Sourcing deconvolution functions
 source_file <- file.path(
   commandArgs(trailingOnly = TRUE)[3],
@@ -70,7 +76,7 @@ library(RSQLite)
 message("Initialising SQLite database ...")
 tryCatch(
   {
-    sample_bases <- gsub("\\.raw$", "", basename(conf$dirs), ignore.case = TRUE)
+    sample_bases <- ms_sample_base(conf$dirs)
 
     con_init <- DBI::dbConnect(RSQLite::SQLite(), db_path)
     DBI::dbExecute(con_init, "PRAGMA journal_mode=WAL")
@@ -233,7 +239,9 @@ tryCatch(
       peakwindow = conf$params$peakwindow,
       peaknorm = conf$params$peaknorm,
       time_start = conf$params$time_start,
-      time_end = conf$params$time_end
+      time_end = conf$params$time_end,
+      # A config.rds written before this setting existed has no such column.
+      auto_peak_width = isTRUE(conf$params$auto_peak_width)
     )
   },
   error = function(e) {

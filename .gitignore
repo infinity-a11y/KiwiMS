@@ -29,3 +29,7 @@ Output/
 
 # Ignore the VC++ redistributable (fetched at build time by dev/build_installer.ps1)
 setup/VC_redist.x64.exe
+
+# Python bytecode (ms_profile.py is executed in place)
+__pycache__/
+*.pyc

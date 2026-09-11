@@ -23,6 +23,15 @@ box::use(
   app / logic / folder_picker[folder_picker],
   app / logic / helper_functions[config_badge],
   app / logic / logging[get_log],
+  app /
+    logic /
+    ms_formats[
+      describe_ms_inputs,
+      is_ms_input,
+      list_ms_inputs,
+      ms_format_label,
+      ms_formats_phrase
+    ],
 )
 
 
@@ -49,7 +58,7 @@ ui <- function(id) {
               ns("folder"),
               "Select Input",
               icon = shiny::icon("file-import"),
-              title = "Select a .raw folder or a directory containing multiple .raw folders"
+              title = "Select a sample or a directory containing Thermo .raw files, Waters .raw folders, mzML or mzXML"
             ),
             bslib::tooltip(
               shiny::div(
@@ -149,7 +158,7 @@ server <- function(
       input,
       session,
       "folder",
-      title = "Select a .raw folder or a directory containing .raw folders",
+      title = "Select a sample or a directory containing Thermo .raw files, Waters .raw folders, mzML or mzXML",
       initial_dir = opening_dir(rootdir, default_input_path)
     )
 
@@ -200,26 +209,35 @@ server <- function(
     output$dir_check <- shiny::renderUI({
       rd <- rootdir()
       if (!is.null(rd) && length(rd) > 0 && nzchar(rd)) {
-        if (grepl("\\.raw$", rd, ignore.case = TRUE) && dir.exists(rd)) {
+        if (is_ms_input(rd)) {
           runjs(paste0(
             '$("#app-deconvolution_pars-path_selected").css({"border-color": "#8BC34A"})'
           ))
           shiny::p(shiny::HTML(paste0(
             '<i class="fa-solid fa-circle-check" style="font-size:1em; c',
             'olor:#000000; margin-right: 10px;"></i>',
-            "Selected folder is a valid .raw folder."
+            paste0(
+              "Selected folder is a valid ",
+              ms_format_label(rd),
+              " sample."
+            )
           )))
         } else if (dir.exists(rd)) {
-          raw_dirs <- list.dirs(rd, full.names = TRUE, recursive = FALSE)
-          raw_dirs <- raw_dirs[grep("\\.raw$", raw_dirs)]
-          if (length(raw_dirs)) {
+          inputs <- list_ms_inputs(rd)
+          if (length(inputs)) {
             runjs(paste0(
               '$("#app-deconvolution_pars-path_selected").css({"border-color": "#8BC34A"})'
             ))
             shiny::p(shiny::HTML(paste0(
               '<i class="fa-solid fa-circle-check" style="font-size:1em; col',
               'or:#000000; margin-right: 10px;"></i>',
-              paste("<b>", length(raw_dirs), "</b> .raw folders in directory.")
+              paste0(
+                "<b>",
+                length(inputs),
+                "</b> samples in directory (",
+                describe_ms_inputs(inputs),
+                ")."
+              )
             )))
           } else {
             runjs(paste0(
@@ -228,14 +246,16 @@ server <- function(
             shiny::p(shiny::HTML(paste0(
               '<i class="fa-solid fa-circle-exclamation" style="font-size:1e',
               'm; color:black; margin-right: 10px;"></i>',
-              "<b>No</b> .raw folders found in directory."
+              "<b>No</b> readable samples in directory."
             )))
           }
         }
       } else {
-        shiny::p(shiny::HTML(
-          "Select a .raw folder or a directory containing multiple .raw folders."
-        ))
+        shiny::p(shiny::HTML(paste0(
+          "Select a sample or a directory containing ",
+          ms_formats_phrase(),
+          "."
+        )))
       }
     })
 

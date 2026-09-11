@@ -1,7 +1,6 @@
 # app/logic/deconvolution_ui.R
 box::use(
   bslib[card, card_body, card_header, tooltip],
-  fs[dir_ls],
   plotly[event_data, event_register, plotlyOutput, renderPlotly],
   processx[process],
   shiny,
@@ -39,6 +38,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
   peaknorm_def <- as.character(s$deconv_peaknorm)
   peakthresh_def <- s$deconv_peakthresh
   massbins_def <- s$deconv_massbins
+  auto_peak_width_def <- isTRUE(s$deconv_auto_peak_width)
 
   card(
     card_header(
@@ -60,7 +60,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                 class = "instruction-info",
                 shiny$HTML(
                   paste(
-                    "1. Use the sidebar to select the Waters .raw folder(s) for processing.",
+                    "1. Use the sidebar to select the sample(s) for processing &mdash; Thermo .raw files, Waters .raw folders, mzML or mzXML.",
                     "<br/>",
                     "2. Check and configure parameters in the main panel and start deconvolution."
                   )
@@ -72,11 +72,40 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
               width = 4,
               shiny$div(
                 class = "show-advanced-ui",
+                tooltip(
+                  shiny$actionButton(
+                    ns("suggest_params"),
+                    "Suggest from data",
+                    icon = shiny$icon("wand-magic-sparkles"),
+                    class = "btn-default suggest-params-btn"
+                  ),
+                  paste(
+                    "Read the selected sample(s) and propose an elution window,",
+                    "m/z range, charge range and mass range from the charge-state",
+                    "envelope actually present. Nothing runs until you press Start."
+                  ),
+                  placement = "bottom"
+                ),
                 shiny$checkboxInput(
                   ns("show_advanced"),
                   "Edit advanced settings",
                   value = FALSE
                 )
+              )
+            )
+          ),
+          # Full-width strip of its own rather than a corner of the button
+          # column: the result is one line per sample and would otherwise have
+          # to wrap inside a third of the row. It also needs a real container --
+          # Shiny gives .shiny-html-output `display: contents`, so an unwrapped
+          # uiOutput puts its content straight into the parent flex row, where
+          # it lands on top of the parameter cards.
+          shiny$fluidRow(
+            shiny$column(
+              width = 12,
+              shiny$div(
+                class = "suggest-feedback-slot",
+                shiny$uiOutput(ns("suggest_feedback"))
               )
             )
           ),
@@ -217,7 +246,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                               min = 1,
                               max = 100000,
                               value = minmz_def,
-                              step = 1
+                              step = 0.1
                             )
                           ),
                           shiny::div(
@@ -256,7 +285,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                               min = 1,
                               max = 100000,
                               value = maxmz_def,
-                              step = 1
+                              step = 0.1
                             )
                           ),
                           shiny::div(
@@ -639,6 +668,57 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                                 class = "save-button",
                                 shiny$actionButton(
                                   ns("save_peakthresh_btn"),
+                                  NULL,
+                                  icon = shiny$icon("floppy-disk"),
+                                  class = "btn-default"
+                                )
+                              ),
+                              "Save Setting",
+                              placement = "top"
+                            )
+                          )
+                        )
+                      )
+                    ),
+                    shiny$fluidRow(
+                      shiny$column(
+                        width = 12,
+                        # Same flex wrapper the numeric rows use, so the save
+                        # button lines up with the ones above it.
+                        shiny$div(
+                          class = "save-default-button",
+                          tooltip(
+                            # Same class the advanced-settings toggle enables,
+                            # so this behaves like every other advanced control.
+                            shiny$div(
+                              class = "deconv-param-input-adv deconv-param-check",
+                              disabled(
+                                shiny$checkboxInput(
+                                  ns("auto_peak_width"),
+                                  "Fit peak width to data",
+                                  value = auto_peak_width_def
+                                )
+                              )
+                            ),
+                            paste(
+                              "Measures how wide the peaks actually are in this",
+                              "sample and tells the deconvolution to expect that",
+                              "width, instead of using a fixed guess. It usually",
+                              "makes the fit match the raw spectrum more closely,",
+                              "which matters because binding percentages are read",
+                              "off peak intensities. It does not help on every",
+                              "sample, so compare a run with and without it before",
+                              "adopting it. Measured masses barely change either way."
+                            ),
+                            placement = "bottom"
+                          ),
+                          shiny::div(
+                            style = "height: -webkit-fill-available;",
+                            tooltip(
+                              shiny$div(
+                                class = "save-button",
+                                shiny$actionButton(
+                                  ns("save_auto_peak_width_btn"),
                                   NULL,
                                   icon = shiny$icon("floppy-disk"),
                                   class = "btn-default"
