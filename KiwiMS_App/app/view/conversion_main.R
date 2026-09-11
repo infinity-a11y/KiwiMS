@@ -6739,7 +6739,7 @@ server <- function(
           render_trigger(render_trigger() + 1)
         } else {
           set3_max <- RColorBrewer::brewer.pal.info["Set3", "maxcolors"]
-          selected <- if (n <= set3_max) "Set3" else "turbo"
+          selected <- if (n <= set3_max) "Set3" else "plasma"
         }
 
         shiny::updateSelectInput(
