@@ -12,7 +12,8 @@ box::use(
       qualitative_scales,
       gradient_scales,
       paste_hook_js,
-      hits_col_full_names
+      hits_col_full_names,
+      kinetics_settings
     ],
 )
 
@@ -138,7 +139,7 @@ convert_kobs_result_units <- function(binding_kobs_result, view) {
 
   conc_names <- setdiff(
     names(binding_kobs_result),
-    c("binding_table", "binding_plot", "kobs_result_table")
+    c("binding_table", "binding_points", "binding_plot", "kobs_result_table")
   )
 
   for (i in conc_names) {
@@ -149,7 +150,20 @@ convert_kobs_result_units <- function(binding_kobs_result, view) {
     if (!is.null(entry$predictions)) {
       entry$predictions$time <- entry$predictions$time * time_factor
     }
+    if (!is.null(entry$hits)) {
+      entry$hits$time <- entry$hits$time * time_factor
+    }
     binding_kobs_result[[i]] <- entry
+  }
+
+  binding_points <- binding_kobs_result$binding_points
+  if (!is.null(binding_points) && nrow(binding_points) > 0) {
+    binding_points$time <- binding_points$time * time_factor
+    levels(binding_points$concentration) <- unname(convert_conc_keys(
+      levels(binding_points$concentration),
+      view
+    ))
+    binding_kobs_result$binding_points <- binding_points
   }
 
   # Rename the per-concentration entries to the converted keys
@@ -222,6 +236,56 @@ convert_kinact_ki_units <- function(kinact_ki_result, view) {
     kinact_ki_result$Params,
     view
   )
+
+  # kinact/KI is per concentration per time; its t and p values are unitless
+  ratio_factor <- view$time_factor * view$conc_factor
+  ratio_cols <- c("Estimate", "Std. Error", "CI 2.5%", "CI 97.5%")
+  if (!is.null(kinact_ki_result$Ratio)) {
+    kinact_ki_result$Ratio[ratio_cols] <- kinact_ki_result$Ratio[ratio_cols] /
+      ratio_factor
+  }
+  if (!is.null(kinact_ki_result$Params_CI)) {
+    kinact_ki_result$Params_CI["kinact", ] <-
+      kinact_ki_result$Params_CI["kinact", ] / view$time_factor
+    kinact_ki_result$Params_CI["KI", ] <-
+      kinact_ki_result$Params_CI["KI", ] * view$conc_factor
+  }
+  if (!is.null(kinact_ki_result$Series)) {
+    series <- kinact_ki_result$Series
+    series$ratio <- series$ratio / ratio_factor
+    series$ratio_se <- series$ratio_se / ratio_factor
+    series$kinact <- series$kinact / view$time_factor
+    series$KI <- series$KI * view$conc_factor
+    kinact_ki_result$Series <- series
+  }
+  if (!is.null(kinact_ki_result$Fit)) {
+    kinact_ki_result$Fit$max_concentration <-
+      kinact_ki_result$Fit$max_concentration * view$conc_factor
+    kinact_ki_result$Fit$KI_hyperbolic <-
+      kinact_ki_result$Fit$KI_hyperbolic * view$conc_factor
+    kinact_ki_result$Fit$ratio_hyperbolic <-
+      kinact_ki_result$Fit$ratio_hyperbolic / ratio_factor
+    kinact_ki_result$Fit$ratio_linear <-
+      kinact_ki_result$Fit$ratio_linear / ratio_factor
+  }
+  if (!is.null(kinact_ki_result$Points)) {
+    kinact_ki_result$Points$conc <- kinact_ki_result$Points$conc *
+      view$conc_factor
+    kinact_ki_result$Points$time <- kinact_ki_result$Points$time *
+      view$time_factor
+  }
+  if (!is.null(kinact_ki_result$Plateaus)) {
+    kinact_ki_result$Plateaus$conc <- kinact_ki_result$Plateaus$conc *
+      view$conc_factor
+  }
+  if (!is.null(kinact_ki_result$Bootstrap)) {
+    kinact_ki_result$Bootstrap$ratio <- kinact_ki_result$Bootstrap$ratio /
+      ratio_factor
+    kinact_ki_result$Bootstrap$kinact <- kinact_ki_result$Bootstrap$kinact /
+      view$time_factor
+    kinact_ki_result$Bootstrap$KI <- kinact_ki_result$Bootstrap$KI *
+      view$conc_factor
+  }
 
   kobs_data <- kinact_ki_result$Kobs_Data
   if (!is.null(kobs_data) && nrow(kobs_data) > 0) {
@@ -2112,7 +2176,7 @@ log_fit_failed <- function(last, reason) {
   ))
 }
 
-# Pre-flight check: returns NULL if data is suitable for nlsLM, or a reason string if not
+# Pre-flight check: returns NULL if data is suitable for fitting, or a reason string if not
 can_fit_kobs <- function(data) {
   real <- data[data$time > 0 & !is.na(data$binding), ]
 
@@ -2194,28 +2258,65 @@ log_kinact_ki_analysis <- function() {
 
 # Log kinact/Ki results
 log_kinact_ki_results <- function(results, units) {
-  message(
-    paste0(
-      sprintf(
-        "     ├─ kᵢₙₐ꜀ₜ = %s ± %s %s⁻¹\n",
-        fmt_log(results$Params[1, 1]),
-        fmt_log(results$Params[1, 2]),
-        units[["Time"]]
-      ),
-      sprintf(
-        "     ├─ Kᵢ     = %s ± %s %s\n",
-        fmt_log(results$Params[2, 1]),
-        fmt_log(results$Params[2, 2]),
-        units[["Concentration"]]
-      ),
-      sprintf(
-        "     └─ kᵢₙₐ꜀ₜ/Kᵢ = %s %s⁻¹ %s⁻¹",
-        fmt_log(results$Params[1, 1] / results$Params[2, 1]),
-        units[["Concentration"]],
-        units[["Time"]]
+  fit <- results$Fit
+  model_label <- if (results$Model == "hyperbolic") {
+    "hyperbolic"
+  } else {
+    "linear (no saturation)"
+  }
+  ratio <- results$Ratio
+  ci <- if (all(is.na(ratio[c("CI 2.5%", "CI 97.5%")]))) {
+    ""
+  } else {
+    sprintf(
+      " [95%% CI %s – %s]",
+      fmt_log(ratio[["CI 2.5%"]]),
+      fmt_log(ratio[["CI 97.5%"]])
+    )
+  }
+
+  lines <- c(
+    sprintf(
+      "     ├─ Global fit: %d samples, %d concentrations, %d plateau(s) (own plateau where ≥ %d %% of it is reached)",
+      fit$n_points,
+      fit$n_concentrations,
+      max(fit$plateau_groups),
+      round(100 * kinetics_settings$plateau_min_reached)
+    ),
+    sprintf(
+      "     ├─ Model: %s (curvature p = %s)",
+      model_label,
+      fmt_log(fit$p_curvature, 2)
+    ),
+    if (results$Status == "saturated") {
+      c(
+        sprintf(
+          "     ├─ kᵢₙₐ꜀ₜ = %s ± %s %s⁻¹",
+          fmt_log(results$Params[1, 1]),
+          fmt_log(results$Params[1, 2]),
+          units[["Time"]]
+        ),
+        sprintf(
+          "     ├─ Kᵢ     = %s ± %s %s",
+          fmt_log(results$Params[2, 1]),
+          fmt_log(results$Params[2, 2]),
+          units[["Concentration"]]
+        )
       )
+    } else {
+      "     ├─ kᵢₙₐ꜀ₜ, Kᵢ = not determinable"
+    },
+    sprintf(
+      "     └─ kᵢₙₐ꜀ₜ/Kᵢ = %s ± %s %s⁻¹ %s⁻¹%s",
+      fmt_log(ratio[["Estimate"]]),
+      fmt_log(ratio[["Std. Error"]]),
+      units[["Concentration"]],
+      units[["Time"]],
+      ci
     )
   )
+
+  message(paste(lines, collapse = "\n"))
 }
 
 # Add screened hits to result list
@@ -2507,7 +2608,7 @@ add_kobs_binding_result <- function(
   # Get measured concentrations
   concentrations <- which(
     !names(binding_kobs_result) %in%
-      c("binding_table", "binding_plot")
+      c("binding_table", "binding_points", "binding_plot")
   )
 
   # Get concentration names
@@ -2571,6 +2672,34 @@ sci_axis_ticks <- list(
   showexponent = "all"
 )
 
+# Marker symbol per concentration, highest concentration first. Built once
+# from all analysed concentrations and handed to every plot that shows
+# concentrations, so a concentration keeps its shape whatever subset a plot
+# draws (a single concentration tab, excluded concentrations).
+#' @export
+concentration_symbol_map <- function(concentrations) {
+  conc <- unique(as.character(concentrations))
+  conc <- conc[order(as.numeric(conc), decreasing = TRUE)]
+  stats::setNames(rep_len(symbols, length(conc)), conc)
+}
+
+# The given symbol map, extended by any concentration it does not know;
+# without a map, symbols follow the plotted concentrations
+resolve_symbol_map <- function(symbol_map, concentrations) {
+  if (is.null(symbol_map)) {
+    return(concentration_symbol_map(concentrations))
+  }
+  missing <- setdiff(unique(as.character(concentrations)), names(symbol_map))
+  if (length(missing) > 0) {
+    extra <- rep_len(symbols, length(symbol_map) + length(missing))
+    symbol_map <- c(
+      symbol_map,
+      stats::setNames(extra[length(symbol_map) + seq_along(missing)], missing)
+    )
+  }
+  symbol_map
+}
+
 # Function to generate and display binding plot
 #' @export
 make_binding_plot <- function(
@@ -2578,17 +2707,33 @@ make_binding_plot <- function(
   filter_conc = NULL,
   colors = NULL,
   units = NULL,
-  theme = "dark"
+  theme = "dark",
+  points = c("mean", "samples", "both"),
+  symbol_map = NULL
 ) {
+  # Which observations to draw: mean ± SD per time point, the individual
+  # samples, or both (both clutters the full plot; single concentrations cope)
+  points <- match.arg(points)
+  show_means <- points != "samples"
+
+  # Individual sample points (every sample enters the fit on its own)
+  sample_points <- if (points != "mean") kobs_result$binding_points
+
   # Filter for specified concentration
   if (!is.null(filter_conc)) {
     kobs_result$binding_table <- dplyr::filter(
       kobs_result$binding_table,
       concentration == filter_conc
     )
+    if (!is.null(sample_points)) {
+      sample_points <- dplyr::filter(
+        sample_points,
+        concentration == filter_conc
+      )
+    }
   }
 
-  # Keep observed data points at t > 0 (excludes dummy t=0 anchor rows)
+  # Mean per time point (rows of the curve table that carry observations)
   df_points <- kobs_result$binding_table[
     kobs_result$binding_table$time > 0 &
       !is.na(kobs_result$binding_table$binding),
@@ -2607,11 +2752,8 @@ make_binding_plot <- function(
   )
   df_points <- df_points[order(df_points$concentration), ]
 
-  # Set symbols to corresponding concentration (descending)
-  symbol_map <- stats::setNames(
-    symbols[seq_along(all_conc_sorted)],
-    as.character(all_conc_sorted)
-  )
+  # Symbols fixed per concentration (see concentration_symbol_map())
+  symbol_map <- resolve_symbol_map(symbol_map, all_conc_chr)
 
   font_color <- if (theme == "light") "black" else "white"
   grid_color <- if (theme == "light") {
@@ -2628,6 +2770,14 @@ make_binding_plot <- function(
   has_replicates <- "binding_sd" %in%
     names(df_points) &&
     !all(is.na(df_points$binding_sd))
+
+  df_points$sd_label <- ifelse(
+    is.na(df_points$binding_sd),
+    "n.a.",
+    sprintf("%.2f", df_points$binding_sd)
+  )
+
+  time_unit <- gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])
 
   # Generate plot
   binding_plot <- plotly::plot_ly() |>
@@ -2650,7 +2800,7 @@ make_binding_plot <- function(
         ),
         "Binding [%]: %{y:.2f}<br>",
         paste0(
-          "K<sub>obs</sub>: %{customdata:.2f} ",
+          "k<sub>obs</sub>: %{customdata:.3~g} ",
           gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
           "⁻¹"
         ),
@@ -2658,8 +2808,10 @@ make_binding_plot <- function(
       ),
       customdata = ~kobs,
       showlegend = FALSE
-    ) |>
-    # Observed binding
+    )
+
+  if (show_means) binding_plot <- binding_plot |>
+    # Mean ± SD per time point
     plotly::add_markers(
       data = dplyr::filter(df_points, !is.na(kobs)),
       x = ~time,
@@ -2685,8 +2837,9 @@ make_binding_plot <- function(
       } else {
         list(visible = FALSE)
       },
+      text = ~ paste0("n = ", n, " · SD ", sd_label),
       hovertemplate = ~ paste(
-        "<b>Observed</b><br>",
+        "<b>Mean ± SD</b> (%{text})<br>",
         paste(
           "Time: %{x}",
           gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
@@ -2694,7 +2847,7 @@ make_binding_plot <- function(
         ),
         "Binding [%]: %{y:.2f}<br>",
         paste0(
-          "K<sub>obs</sub>: %{customdata:.2f} ",
+          "k<sub>obs</sub>: %{customdata:.3~g} ",
           gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
           "⁻¹"
         ),
@@ -2703,6 +2856,79 @@ make_binding_plot <- function(
       customdata = ~kobs,
       showlegend = ifelse(is.null(filter_conc), TRUE, FALSE)
     )
+
+  # Individual samples: these are the points the curves were fitted to.
+  if (!is.null(sample_points) && nrow(sample_points) > 0) {
+    sample_points$concentration <- factor(
+      as.character(sample_points$concentration),
+      levels = as.character(all_conc_sorted)
+    )
+    sample_points <- sample_points[!is.na(sample_points$concentration), ]
+    sample_points <- sample_points[order(sample_points$concentration), ]
+    ring_colors <- unname(colors[as.character(sample_points$concentration)])
+    ring_colors[is.na(ring_colors)] <- font_color
+    sample_hover <- paste0(
+      "<b>Sample</b><br>%{text}<br>",
+      "Time: %{x} ",
+      time_unit,
+      "<br>",
+      "Binding [%]: %{y:.2f}",
+      "<extra></extra>"
+    )
+  }
+
+  if (!is.null(sample_points) && nrow(sample_points) > 0 && !show_means) {
+    # Samples alone: filled in the concentration colour with an outline in
+    # the theme's text colour, carrying the legend in place of the means
+    binding_plot <- binding_plot |>
+      plotly::add_markers(
+        data = sample_points,
+        x = ~time,
+        y = ~binding,
+        color = ~concentration,
+        colors = colors,
+        symbol = ~concentration,
+        symbols = symbol_map,
+        legendgroup = ~concentration,
+        marker = list(
+          size = 10,
+          opacity = 1,
+          line = list(width = 1.5, color = font_color)
+        ),
+        text = ~Sample,
+        hovertemplate = sample_hover,
+        showlegend = is.null(filter_conc)
+      )
+  } else if (!is.null(sample_points) && nrow(sample_points) > 0) {
+    # Samples on top of the means: solid in the text colour of the theme
+    # (white on dark, black on light) with a ring in the concentration colour,
+    # so they read against the coloured means in both export themes.
+    binding_plot <- binding_plot |>
+      plotly::add_markers(
+        data = sample_points,
+        x = ~time,
+        y = ~binding,
+        legendgroup = ~concentration,
+        marker = list(
+          size = 7,
+          opacity = 1,
+          color = font_color,
+          symbol = unname(symbol_map[as.character(sample_points$concentration)]),
+          line = list(width = 1.5, color = ring_colors)
+        ),
+        text = ~Sample,
+        hovertemplate = paste0(
+          "<b>Sample</b><br>%{text}<br>",
+          "Time: %{x} ",
+          time_unit,
+          "<br>",
+          "Binding [%]: %{y:.2f}",
+          "<extra></extra>"
+        ),
+        showlegend = FALSE,
+        inherit = FALSE
+      )
+  }
 
   # Add explicit legend-only entries for no-response concentrations (no observed points)
   if (is.null(filter_conc) && length(missing_conc) > 0) {
@@ -2778,7 +3004,14 @@ make_binding_plot <- function(
 
 # Function to generate and display kobs plot
 #' @export
-make_kobs_plot <- function(kinact_ki_result, colors, units, theme = "dark") {
+make_kobs_plot <- function(
+  kinact_ki_result,
+  colors,
+  units,
+  theme = "dark",
+  show_extrapolation = FALSE,
+  symbol_map = NULL
+) {
   # Get predicted/modeled kobs
   df <- kinact_ki_result$Kobs_Data[
     !is.na(kinact_ki_result$Kobs_Data$predicted_kobs),
@@ -2802,16 +3035,13 @@ make_kobs_plot <- function(kinact_ki_result, colors, units, theme = "dark") {
   df_points$kobs_se_label <- ifelse(
     is.na(df_points$kobs_se),
     "N/A",
-    sprintf("%.4f", df_points$kobs_se)
+    formatC(df_points$kobs_se, digits = 3, format = "g")
   )
 
   # Set symbols to corresponding concentration (descending, matching binding curve)
   ordered_conc <- as.character(ordered_levels)
 
-  symbol_map <- stats::setNames(
-    symbols[1:length(ordered_conc)],
-    ordered_conc
-  )
+  symbol_map <- resolve_symbol_map(symbol_map, ordered_conc)
 
   font_color <- if (theme == "light") "black" else "white"
   grid_color <- if (theme == "light") {
@@ -2827,7 +3057,7 @@ make_kobs_plot <- function(kinact_ki_result, colors, units, theme = "dark") {
 
   # Generate plot
   kobs_plot <- plotly::plot_ly() |>
-    # Predicted / modeled kobs
+    # kobs curve of the global fit (linear or hyperbolic model)
     plotly::add_lines(
       data = df,
       x = ~conc,
@@ -2836,14 +3066,14 @@ make_kobs_plot <- function(kinact_ki_result, colors, units, theme = "dark") {
       symbols = symbol_map,
       line = list(width = 1.5, color = font_color),
       hovertemplate = paste(
-        "<b>Predicted</b><br>",
+        paste0("<b>Global fit (", kinact_ki_result$Model, ")</b><br>"),
         paste0(
           "Concentration: %{x} ",
           gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
           "<br>"
         ),
         paste0(
-          "K<sub>obs</sub>: %{y:.4f} ",
+          "k<sub>obs</sub>: %{y:.3~g} ",
           gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
           "⁻¹"
         ),
@@ -2887,7 +3117,7 @@ make_kobs_plot <- function(kinact_ki_result, colors, units, theme = "dark") {
         " ",
         conc_unit,
         "<br>",
-        "K<sub>obs</sub>: %{y:.4f} ± %{customdata} ",
+        "k<sub>obs</sub>: %{y:.3~g} ± %{customdata} ",
         time_unit,
         "⁻¹",
         "<extra></extra>"
@@ -2897,8 +3127,123 @@ make_kobs_plot <- function(kinact_ki_result, colors, units, theme = "dark") {
     )
   }
 
+  # Optional view past the measured range: the fitted curve continued as a
+  # dashed line, the alternative model as a dotted one, and the measured range
+  # shaded. Inside the shade the two models are indistinguishable when the
+  # data do not saturate; outside it they part — which is the reason kinact
+  # and KI are then not reported.
+  shapes <- list()
+  annotations <- list()
+  if (isTRUE(show_extrapolation) && nrow(df) > 0) {
+    max_conc <- max(df$conc, na.rm = TRUE)
+    fit <- kinact_ki_result$Fit
+    ratio <- kinact_ki_result$Ratio[["Estimate"]]
+    ki <- fit$KI_hyperbolic
+    extrap_max <- 5 * max_conc
+    if (kinact_ki_result$Model == "hyperbolic" && is.finite(ki)) {
+      extrap_max <- max(extrap_max, 3 * ki)
+    }
+    hyperbolic_ok <- is.finite(ki) &&
+      !isTRUE(fit$KI_hyperbolic_at_bound) &&
+      is.finite(fit$ratio_hyperbolic)
+
+    kobs_at <- function(conc, model) {
+      if (model == "hyperbolic") {
+        r <- if (kinact_ki_result$Model == "hyperbolic") {
+          ratio
+        } else {
+          fit$ratio_hyperbolic
+        }
+        r * conc / (1 + conc / ki)
+      } else {
+        r <- if (kinact_ki_result$Model == "linear") ratio else fit$ratio_linear
+        r * conc
+      }
+    }
+    unit_suffix <- paste0(" ", time_unit, "⁻¹")
+    line_hover <- function(label) {
+      paste0(
+        "<b>",
+        label,
+        "</b><br>Concentration: %{x:.3~g} ",
+        conc_unit,
+        "<br>k<sub>obs</sub>: %{y:.3~g}",
+        unit_suffix,
+        "<extra></extra>"
+      )
+    }
+
+    grid_out <- seq(max_conc, extrap_max, length.out = 200)
+    kobs_plot <- kobs_plot |>
+      plotly::add_lines(
+        x = grid_out,
+        y = kobs_at(grid_out, kinact_ki_result$Model),
+        line = list(width = 1.5, color = font_color, dash = "dash"),
+        hovertemplate = line_hover(paste0(
+          "Global fit (",
+          kinact_ki_result$Model,
+          "), extrapolated"
+        )),
+        showlegend = FALSE,
+        inherit = FALSE
+      )
+
+    other <- if (kinact_ki_result$Model == "linear") "hyperbolic" else "linear"
+    other_ok <- if (other == "hyperbolic") {
+      hyperbolic_ok
+    } else {
+      is.finite(fit$ratio_linear)
+    }
+    if (other_ok) {
+      grid_all <- seq(0, extrap_max, length.out = 300)
+      kobs_plot <- kobs_plot |>
+        plotly::add_lines(
+          x = grid_all,
+          y = kobs_at(grid_all, other),
+          line = list(width = 1.2, color = zeroline_color, dash = "dot"),
+          hovertemplate = line_hover(paste0(
+            "Alternative model (",
+            other,
+            "), not selected"
+          )),
+          showlegend = FALSE,
+          inherit = FALSE
+        )
+    }
+
+    shapes <- list(list(
+      type = "rect",
+      xref = "x",
+      yref = "paper",
+      x0 = 0,
+      x1 = max_conc,
+      y0 = 0,
+      y1 = 1,
+      fillcolor = if (theme == "light") {
+        "rgba(0,0,0,0.07)"
+      } else {
+        "rgba(255,255,255,0.09)"
+      },
+      line = list(width = 0),
+      layer = "below"
+    ))
+    annotations <- list(list(
+      x = max_conc,
+      y = 1,
+      xref = "x",
+      yref = "paper",
+      text = "measured",
+      showarrow = FALSE,
+      xanchor = "right",
+      yanchor = "top",
+      font = list(size = 12, color = font_color)
+    ))
+  }
+
   kobs_plot <- kobs_plot |>
     plotly::layout(
+      shapes = shapes,
+      annotations = annotations,
       hovermode = "closest",
       paper_bgcolor = "rgba(0,0,0,0)",
       plot_bgcolor = "rgba(0,0,0,0)",
@@ -2946,59 +3291,902 @@ make_kobs_plot <- function(kinact_ki_result, colors, units, theme = "dark") {
   return(kobs_plot)
 }
 
-# Function to predict binding/kobs values
-predict_values <- function(
-  data,
-  predict,
-  x,
-  interval,
-  fitted_model,
-  max = NULL
-) {
-  # Prepare sequence of predictions
-  prediction_df <- data.frame(seq(
-    0,
-    ifelse(!is.null(max), max, max(data[[x]])),
-    by = interval
-  ))
-  colnames(prediction_df) <- x
+## Kinetics diagnostics plots ----
+#
+# Four views on how well the data support the global fit. All of them take
+# the theme so exports stay readable on light and dark backgrounds.
 
-  # Predict using the fitted model
-  predicted <- stats::predict(
-    fitted_model,
-    prediction_df
+kinetics_plot_colors <- function(theme) {
+  light <- theme == "light"
+  list(
+    font = if (light) "black" else "white",
+    grid = if (light) "rgba(0,0,0,0.1)" else "rgba(255,255,255,0.2)",
+    zero = if (light) "rgba(0,0,0,0.5)" else "rgba(255,255,255,0.5)",
+    shade = if (light) "rgba(0,0,0,0.07)" else "rgba(255,255,255,0.09)",
+    muted = if (light) "rgba(0,0,0,0.45)" else "rgba(255,255,255,0.55)"
+  )
+}
+
+kinetics_axis <- function(title, pal, extra = list()) {
+  c(
+    list(
+      title = title,
+      color = pal$font,
+      showgrid = TRUE,
+      gridcolor = pal$grid,
+      zerolinecolor = pal$zero
+    ),
+    extra
+  )
+}
+
+kinetics_layout <- function(p, pal, units, xaxis, yaxis, legend = TRUE, ...) {
+  plotly::layout(
+    p,
+    hovermode = "closest",
+    paper_bgcolor = "rgba(0,0,0,0)",
+    plot_bgcolor = "rgba(0,0,0,0)",
+    font = list(size = 14, color = pal$font),
+    showlegend = legend,
+    legend = list(
+      title = list(
+        text = paste0(
+          "Concentration [",
+          gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
+          "]  "
+        ),
+        font = list(color = pal$font)
+      ),
+      bgcolor = "rgba(0,0,0,0)",
+      bordercolor = "rgba(0,0,0,0)",
+      font = list(color = pal$font)
+    ),
+    xaxis = xaxis,
+    yaxis = yaxis,
+    ...
+  )
+}
+
+# Horizontal legend above the plot area, so it never runs into the x axis title
+kinetics_top_legend <- function(p, pal) {
+  plotly::layout(
+    p,
+    legend = list(
+      title = list(text = ""),
+      orientation = "h",
+      x = 0,
+      xanchor = "left",
+      y = 1.02,
+      yanchor = "bottom",
+      font = list(color = pal$font)
+    )
+  )
+}
+
+# Empty plot carrying a message (e.g. when a diagnostic does not apply)
+kinetics_message_plot <- function(message, theme = "dark") {
+  pal <- kinetics_plot_colors(theme)
+  plotly::plot_ly() |>
+    plotly::layout(
+      paper_bgcolor = "rgba(0,0,0,0)",
+      plot_bgcolor = "rgba(0,0,0,0)",
+      xaxis = list(visible = FALSE),
+      yaxis = list(visible = FALSE),
+      annotations = list(list(
+        text = message,
+        showarrow = FALSE,
+        xref = "paper",
+        yref = "paper",
+        x = 0.5,
+        y = 0.5,
+        font = list(size = 14, color = pal$font)
+      ))
+    )
+}
+
+# Residuals of the global fit against time, per concentration. Scatter around
+# zero without a trend means the model describes the time courses; a run of
+# same-signed residuals (e.g. early points all below zero) points at
+# something the model does not capture.
+#' @export
+make_kinetics_residual_plot <- function(
+  kinact_ki_result,
+  colors,
+  units,
+  theme = "dark",
+  symbol_map = NULL
+) {
+  pts <- kinact_ki_result$Points
+  if (is.null(pts) || nrow(pts) == 0) {
+    return(kinetics_message_plot("No global fit available", theme))
+  }
+  pal <- kinetics_plot_colors(theme)
+  time_unit <- gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])
+  conc_unit <- gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]])
+
+  levels_desc <- as.character(sort(unique(pts$conc), decreasing = TRUE))
+  pts$concentration <- factor(as.character(pts$conc), levels = levels_desc)
+  pts$series[is.na(pts$series) | pts$series == ""] <- "–"
+  pts <- pts[order(pts$concentration, pts$series, pts$time), ]
+  symbol_map <- resolve_symbol_map(symbol_map, levels_desc)
+  spread <- 2 * stats::sd(pts$residual)
+  time_max <- max(pts$time)
+
+  # Replicate series share the concentration's colour and shape and differ in
+  # fill: filled, open, dotted, open with dot. The thin line joins the points
+  # of one series over time, so a replicate that drifts away shows as a run.
+  series_levels <- sort(unique(pts$series))
+  variants <- c("", "-open", "-dot", "-open-dot")
+  series_variant <- stats::setNames(
+    variants[(seq_along(series_levels) - 1) %% length(variants) + 1],
+    series_levels
+  )
+  multi_series <- length(series_levels) > 1
+
+  pts$hover <- paste0(
+    "<b>", pts$sample, "</b>",
+    if (multi_series) paste0("<br>Series: ", pts$series) else "",
+    "<br>Concentration: ", pts$concentration, " ", conc_unit,
+    "<br>Time: ", signif(pts$time, 4), " ", time_unit,
+    "<br>Observed: ", sprintf("%.1f", pts$binding), " %",
+    "<br>Fitted: ", sprintf("%.1f", pts$fitted), " %",
+    "<br>Residual: ", sprintf("%+.1f", pts$residual), " %"
   )
 
-  prediction_df[[paste0("predicted_", predict)]] <- predicted
+  p <- plotly::plot_ly()
+  for (conc_name in levels_desc) {
+    conc_color <- unname(colors[conc_name])
+    if (is.na(conc_color)) conc_color <- pal$muted
+    first <- TRUE
+    for (s in series_levels) {
+      sub <- pts[
+        as.character(pts$concentration) == conc_name & pts$series == s,
+        ,
+        drop = FALSE
+      ]
+      if (nrow(sub) == 0) next
+      variant <- series_variant[[s]]
+      open <- grepl("open", variant)
 
-  return(prediction_df)
+      if (multi_series && nrow(sub) > 1) {
+        p <- plotly::add_lines(
+          p,
+          x = sub$time,
+          y = sub$residual,
+          line = list(color = conc_color, width = 1),
+          opacity = 0.45,
+          legendgroup = conc_name,
+          showlegend = FALSE,
+          hoverinfo = "skip",
+          inherit = FALSE
+        )
+      }
+
+      p <- plotly::add_markers(
+        p,
+        x = sub$time,
+        y = sub$residual,
+        name = conc_name,
+        legendgroup = conc_name,
+        showlegend = first,
+        marker = list(
+          size = 10,
+          color = conc_color,
+          symbol = paste0(symbol_map[[conc_name]], variant),
+          line = if (open) {
+            list(width = 2)
+          } else {
+            list(width = 1, color = pal$font)
+          }
+        ),
+        text = sub$hover,
+        hovertemplate = "%{text}<extra></extra>",
+        inherit = FALSE
+      )
+      first <- FALSE
+    }
+  }
+
+  # Legend entries explaining the fill of each series (shape-neutral circles
+  # in the text colour)
+  if (multi_series) {
+    for (i in seq_along(series_levels)) {
+      s <- series_levels[i]
+      variant <- series_variant[[s]]
+      p <- plotly::add_markers(
+        p,
+        x = numeric(0),
+        y = numeric(0),
+        name = s,
+        legendgroup = "series",
+        legendgrouptitle = if (i == 1) {
+          list(text = "Replicate series", font = list(color = pal$font))
+        },
+        marker = list(
+          size = 10,
+          color = pal$font,
+          symbol = paste0("circle", variant),
+          line = if (grepl("open", variant)) list(width = 2) else list(width = 0)
+        ),
+        hoverinfo = "skip",
+        inherit = FALSE
+      )
+    }
+  }
+
+  guide <- function(y, dash) {
+    list(
+      type = "line",
+      xref = "paper",
+      x0 = 0,
+      x1 = 1,
+      y0 = y,
+      y1 = y,
+      line = list(color = pal$zero, width = 1, dash = dash)
+    )
+  }
+
+  kinetics_layout(
+    p,
+    pal,
+    units,
+    xaxis = kinetics_axis(
+      paste0("Time [", time_unit, "]"),
+      pal,
+      c(list(range = c(-0.03 * time_max, 1.03 * time_max)), sci_axis_ticks)
+    ),
+    yaxis = kinetics_axis("Residual [% binding]", pal),
+    shapes = list(guide(0, "solid"), guide(spread, "dot"), guide(-spread, "dot")),
+    annotations = list(list(
+      x = 1,
+      y = spread,
+      xref = "paper",
+      yref = "y",
+      text = "±2 SD",
+      showarrow = FALSE,
+      xanchor = "right",
+      yanchor = "bottom",
+      font = list(size = 11, color = pal$muted)
+    ))
+  ) |>
+    plotly::layout(legend = list(tracegroupgap = 4))
+}
+
+# Plateau per concentration, all in % binding. For each concentration the
+# binding observed at its last time point (the concentration's symbol) is
+# joined by a dotted stem to the plateau of its single-concentration fit (the
+# tick, as in the Binding Analysis table): a long stem means the curve was
+# still rising when measurement stopped, so that plateau is extrapolated. The
+# bar is the plateau the global fit used; one bar across several
+# concentrations means they share it because none of them got close enough to
+# define its own.
+#' @export
+make_kinetics_plateau_plot <- function(
+  kinact_ki_result,
+  colors,
+  units,
+  theme = "dark",
+  symbol_map = NULL
+) {
+  tab <- kinact_ki_result$Plateaus
+  if (is.null(tab) || nrow(tab) == 0) {
+    return(kinetics_message_plot("No global fit available", theme))
+  }
+  pal <- kinetics_plot_colors(theme)
+  conc_unit <- gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]])
+  time_unit <- gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])
+
+  tab <- tab[order(tab$conc), ]
+  tab$label <- as.character(tab$conc)
+  tab$x <- seq_len(nrow(tab))
+  symbol_map <- resolve_symbol_map(symbol_map, tab$label)
+
+  # Mean observed binding at each concentration's last time point
+  pts <- kinact_ki_result$Points
+  last_obs <- vapply(
+    seq_len(nrow(tab)),
+    function(i) {
+      sub <- pts[pts$conc == tab$conc[i], , drop = FALSE]
+      if (nrow(sub) == 0) return(c(NA_real_, NA_real_))
+      t_last <- max(sub$time)
+      c(mean(sub$binding[sub$time == t_last]), t_last)
+    },
+    numeric(2)
+  )
+  tab$last_binding <- last_obs[1, ]
+  tab$last_time <- last_obs[2, ]
+
+  point_colors <- unname(colors[tab$label])
+  point_colors[is.na(point_colors)] <- pal$muted
+
+  # NA-separated segments drawn as one trace each
+  segments <- function(x0, x1, y0, y1) {
+    list(
+      x = as.vector(rbind(x0, x1, NA)),
+      y = as.vector(rbind(y0, y1, NA))
+    )
+  }
+
+  # Stems from the observed value to the single-fit plateau
+  stems <- segments(tab$x, tab$x, tab$last_binding, tab$plateau_single)
+
+  # Global plateau: one bar per plateau group across its concentrations
+  groups <- split(tab, tab$group)
+  group_tab <- data.frame(
+    x0 = vapply(groups, function(g) min(g$x) - 0.38, numeric(1)),
+    x1 = vapply(groups, function(g) max(g$x) + 0.38, numeric(1)),
+    plateau = vapply(groups, function(g) g$plateau[1], numeric(1)),
+    text = vapply(
+      groups,
+      function(g) {
+        if (nrow(g) == 1) {
+          "Own plateau"
+        } else {
+          paste0(
+            "Shared by ",
+            paste(g$label, collapse = ", "),
+            " ",
+            conc_unit
+          )
+        }
+      },
+      character(1)
+    )
+  )
+  bars <- segments(
+    group_tab$x0,
+    group_tab$x1,
+    group_tab$plateau,
+    group_tab$plateau
+  )
+
+  hover_head <- paste0("<b>", tab$label, " ", conc_unit, "</b><br>")
+
+  p <- plotly::plot_ly() |>
+    plotly::add_lines(
+      x = bars$x,
+      y = bars$y,
+      line = list(color = pal$muted, width = 5),
+      text = as.vector(rbind(group_tab$text, group_tab$text, NA)),
+      hovertemplate = "<b>Global fit plateau</b>: %{y:.1f} %<br>%{text}<extra></extra>",
+      name = "Plateau, global fit",
+      legendrank = 3,
+      inherit = FALSE
+    ) |>
+    plotly::add_lines(
+      x = stems$x,
+      y = stems$y,
+      line = list(color = pal$font, width = 1.5, dash = "dot"),
+      hoverinfo = "skip",
+      name = "Rise still to come",
+      legendrank = 4,
+      inherit = FALSE
+    ) |>
+    plotly::add_markers(
+      x = tab$x,
+      y = tab$plateau_single,
+      marker = list(
+        symbol = "line-ew-open",
+        size = 24,
+        color = pal$font,
+        line = list(width = 3, color = pal$font)
+      ),
+      text = paste0(
+        hover_head,
+        "Single-concentration fit plateau: ",
+        sprintf("%.1f", tab$plateau_single),
+        " %"
+      ),
+      hovertemplate = "%{text}<extra></extra>",
+      name = "Plateau, single-concentration fit",
+      legendrank = 2,
+      inherit = FALSE
+    ) |>
+    plotly::add_markers(
+      x = tab$x,
+      y = tab$last_binding,
+      marker = list(
+        symbol = unname(symbol_map[tab$label]),
+        size = 13,
+        color = point_colors,
+        opacity = 1,
+        line = list(width = 1, color = pal$font)
+      ),
+      text = paste0(
+        hover_head,
+        "Observed at ",
+        signif(tab$last_time, 4),
+        " ",
+        time_unit,
+        ": ",
+        sprintf("%.1f", tab$last_binding),
+        " %<br>Model: curve reached ",
+        round(100 * tab$reached),
+        " % of its plateau"
+      ),
+      hovertemplate = "%{text}<extra></extra>",
+      showlegend = FALSE,
+      inherit = FALSE
+    ) |>
+    # Legend entry for the observed values in neutral colour; the points
+    # themselves carry the concentration's colour and symbol
+    plotly::add_markers(
+      x = numeric(0),
+      y = numeric(0),
+      marker = list(
+        symbol = "circle",
+        size = 11,
+        color = pal$muted,
+        line = list(width = 1, color = pal$font)
+      ),
+      name = "Observed at last time point",
+      legendrank = 1,
+      inherit = FALSE
+    )
+
+  kinetics_layout(
+    p,
+    pal,
+    units,
+    xaxis = kinetics_axis(
+      paste0("Compound [", conc_unit, "]"),
+      pal,
+      list(
+        tickmode = "array",
+        tickvals = tab$x,
+        ticktext = tab$label,
+        range = c(0.4, nrow(tab) + 0.6),
+        showgrid = FALSE,
+        zeroline = FALSE
+      )
+    ),
+    yaxis = kinetics_axis("Binding [%]", pal, list(range = c(0, 105)))
+  ) |>
+    kinetics_top_legend(pal)
+}
+
+# kinact/KI of each replicate series fitted on its own next to the result of
+# all samples. Series that agree within their error bars mean a repeat of the
+# experiment gives the same answer.
+#' @export
+make_kinetics_series_plot <- function(
+  kinact_ki_result,
+  units,
+  theme = "dark"
+) {
+  series <- kinact_ki_result$Series
+  if (is.null(series) || nrow(series) < 2) {
+    return(kinetics_message_plot(
+      "Fewer than two replicate series with ≥ 3 concentrations",
+      theme
+    ))
+  }
+  pal <- kinetics_plot_colors(theme)
+  conc_unit <- gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]])
+  time_unit <- gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])
+  ratio_unit <- paste0(time_unit, "⁻¹ ", conc_unit, "⁻¹")
+  ratio <- kinact_ki_result$Ratio
+
+  all_label <- "All samples"
+  lvls <- c(rev(series$series), all_label)
+  has_ci <- !any(is.na(ratio[c("CI 2.5%", "CI 97.5%")]))
+
+  p <- plotly::plot_ly() |>
+    plotly::add_markers(
+      x = series$ratio,
+      y = factor(series$series, levels = lvls),
+      name = "Series fit ± SE",
+      marker = list(
+        size = 12,
+        color = pal$font,
+        line = list(width = 1, color = pal$font)
+      ),
+      error_x = list(
+        type = "data",
+        array = series$ratio_se,
+        color = pal$font,
+        thickness = 1.5,
+        width = 6
+      ),
+      text = paste0("n = ", series$n, " samples"),
+      hovertemplate = paste0(
+        "<b>%{y}</b><br>k<sub>inact</sub>/K<sub>i</sub>: %{x:.4~g} ",
+        ratio_unit,
+        "<br>%{text}<extra></extra>"
+      ),
+      inherit = FALSE
+    ) |>
+    plotly::add_markers(
+      x = ratio[["Estimate"]],
+      y = factor(all_label, levels = lvls),
+      name = if (has_ci) "All samples, 95 % CI" else "All samples ± SE",
+      marker = list(
+        size = 14,
+        symbol = "diamond",
+        color = "#7777f9",
+        line = list(width = 1.5, color = pal$font)
+      ),
+      error_x = if (has_ci) {
+        list(
+          type = "data",
+          symmetric = FALSE,
+          array = ratio[["CI 97.5%"]] - ratio[["Estimate"]],
+          arrayminus = ratio[["Estimate"]] - ratio[["CI 2.5%"]],
+          color = pal$font,
+          thickness = 1.5,
+          width = 6
+        )
+      } else {
+        list(
+          type = "data",
+          array = ratio[["Std. Error"]],
+          color = pal$font,
+          thickness = 1.5,
+          width = 6
+        )
+      },
+      hovertemplate = paste0(
+        "<b>All samples</b><br>k<sub>inact</sub>/K<sub>i</sub>: %{x:.4~g} ",
+        ratio_unit,
+        "<extra></extra>"
+      ),
+      inherit = FALSE
+    )
+
+  kinetics_layout(
+    p,
+    pal,
+    units,
+    xaxis = kinetics_axis(
+      paste0("k<sub>inact</sub>/K<sub>i</sub> [", ratio_unit, "]"),
+      pal,
+      sci_axis_ticks
+    ),
+    yaxis = kinetics_axis("", pal, list(type = "category", showgrid = FALSE)),
+    shapes = list(list(
+      type = "line",
+      yref = "paper",
+      y0 = 0,
+      y1 = 1,
+      x0 = ratio[["Estimate"]],
+      x1 = ratio[["Estimate"]],
+      line = list(color = pal$zero, width = 1, dash = "dot")
+    ))
+  ) |>
+    kinetics_top_legend(pal)
+}
+
+# Saturation coverage: the fraction of the maximal rate, [I] / (KI + [I]),
+# reached at each measured concentration according to the curved fit's KI.
+# Values far below 50 % mean the bend of the curve — and with it kinact and
+# KI separately — lies outside the measured range.
+#' @export
+make_kinetics_saturation_plot <- function(
+  kinact_ki_result,
+  colors,
+  units,
+  theme = "dark",
+  symbol_map = NULL
+) {
+  fit <- kinact_ki_result$Fit
+  pal <- kinetics_plot_colors(theme)
+  ki <- fit$KI_hyperbolic
+  if (is.null(fit) || !is.finite(ki) || isTRUE(fit$KI_hyperbolic_at_bound)) {
+    return(kinetics_message_plot(
+      paste(
+        "The curved fit finds no KI within reach:",
+        "k_obs rises linearly over the whole range",
+        sep = "<br>"
+      ),
+      theme
+    ))
+  }
+  conc_unit <- gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]])
+  max_conc <- fit$max_concentration
+  x_max <- max(5 * max_conc, 3 * ki)
+  frac <- function(c) 100 * c / (ki + c)
+
+  tab <- kinact_ki_result$Plateaus
+  concs <- sort(tab$conc)
+  labels <- as.character(concs)
+  point_colors <- unname(colors[labels])
+  point_colors[is.na(point_colors)] <- pal$font
+  symbol_map <- resolve_symbol_map(symbol_map, labels)
+
+  grid <- seq(0, x_max, length.out = 400)
+  selected_label <- if (kinact_ki_result$Status == "saturated") {
+    "KI determined"
+  } else {
+    "KI not determinable — curved fit estimate"
+  }
+
+  p <- plotly::plot_ly() |>
+    plotly::add_lines(
+      x = grid,
+      y = frac(grid),
+      line = list(width = 2, color = pal$font),
+      hovertemplate = paste0(
+        "Concentration: %{x:.3~g} ",
+        conc_unit,
+        "<br>%{y:.0f} % of k<sub>inact</sub><extra></extra>"
+      ),
+      showlegend = FALSE,
+      inherit = FALSE
+    ) |>
+    plotly::add_markers(
+      x = concs,
+      y = frac(concs),
+      marker = list(
+        size = 12,
+        color = point_colors,
+        symbol = unname(symbol_map[labels]),
+        line = list(width = 1, color = pal$font)
+      ),
+      text = labels,
+      hovertemplate = paste0(
+        "<b>%{text} ",
+        conc_unit,
+        "</b><br>%{y:.1f} % of the maximal rate<extra></extra>"
+      ),
+      showlegend = FALSE,
+      inherit = FALSE
+    )
+
+  kinetics_layout(
+    p,
+    pal,
+    units,
+    legend = FALSE,
+    xaxis = kinetics_axis(
+      paste0("Compound [", conc_unit, "]"),
+      pal,
+      c(list(range = c(0, x_max)), sci_axis_ticks)
+    ),
+    yaxis = kinetics_axis(
+      "k<sub>obs</sub> / k<sub>inact</sub> [%]",
+      pal,
+      list(range = c(0, 100))
+    ),
+    shapes = list(
+      list(
+        type = "rect",
+        xref = "x",
+        yref = "paper",
+        x0 = 0,
+        x1 = max_conc,
+        y0 = 0,
+        y1 = 1,
+        fillcolor = pal$shade,
+        line = list(width = 0),
+        layer = "below"
+      ),
+      list(
+        type = "line",
+        xref = "x",
+        yref = "y",
+        x0 = ki,
+        x1 = ki,
+        y0 = 0,
+        y1 = 50,
+        line = list(color = pal$zero, width = 1, dash = "dot")
+      ),
+      list(
+        type = "line",
+        xref = "x",
+        yref = "y",
+        x0 = 0,
+        x1 = ki,
+        y0 = 50,
+        y1 = 50,
+        line = list(color = pal$zero, width = 1, dash = "dot")
+      )
+    ),
+    annotations = list(
+      list(
+        x = max_conc,
+        y = 1,
+        xref = "x",
+        yref = "paper",
+        text = sprintf("measured: up to %.0f %%", frac(max_conc)),
+        showarrow = FALSE,
+        xanchor = "left",
+        yanchor = "top",
+        font = list(size = 12, color = pal$font)
+      ),
+      list(
+        x = ki,
+        y = 50,
+        xref = "x",
+        yref = "y",
+        text = sprintf("K<sub>i</sub> ≈ %s %s<br>%s", signif(ki, 3), conc_unit, selected_label),
+        showarrow = FALSE,
+        xanchor = "left",
+        yanchor = "top",
+        xshift = 6,
+        font = list(size = 11, color = pal$muted)
+      )
+    )
+  )
+}
+
+## Binding kinetics ----
+#
+# Every sample is one measurement. Samples measured at the same concentration
+# and time are independent incubations (separate wells, separately quenched),
+# so they all enter the fits as individual points; nothing is averaged before
+# fitting and the Replicate label never decides what gets merged. Means and
+# standard deviations per time point are computed for display only.
+#
+# Neither model needs an artificial (0, 0) anchor: both pass through the origin
+# by construction, so such a row always fits perfectly, changes no estimate and
+# only inflates the degrees of freedom (standard errors too small).
+
+# Collapse the hits table to one row per sample. A sample contributes one row
+# per matched peak, all carrying the same total binding; those rows are copies
+# of a single measurement, not repeats of the experiment.
+kinetic_sample_points <- function(raw_data) {
+  if (!"Sample" %in% names(raw_data)) {
+    raw_data$Sample <- as.character(seq_len(nrow(raw_data)))
+  }
+  if (!"Replicate" %in% names(raw_data)) {
+    raw_data$Replicate <- NA_character_
+  }
+
+  raw_data |>
+    dplyr::group_by(Sample, time) |>
+    dplyr::summarise(
+      Replicate = dplyr::first(as.character(Replicate)),
+      binding = mean(binding, na.rm = TRUE),
+      .groups = "drop"
+    ) |>
+    as.data.frame()
+}
+
+# Replicate series a sample belongs to, used for the per-series fits. A config
+# Replicate value names the series directly (e.g. "R1"). A label KiwiMS derived
+# from the file name names the condition instead (identical for R1 and R2), so
+# for those the _R<n> suffix of the sample name is used. NA when neither exists.
+kinetic_series_labels <- function(samples, replicate = NULL) {
+  stem <- sub("\\.raw$", "", as.character(samples), ignore.case = TRUE)
+  has_suffix <- grepl("_[Rr][0-9]+$", stem)
+  suffix <- rep(NA_character_, length(stem))
+  suffix[has_suffix] <- toupper(sub("^.*_([Rr][0-9]+)$", "\\1", stem[has_suffix]))
+
+  if (is.null(replicate)) {
+    return(suffix)
+  }
+
+  rep_chr <- trimws(as.character(replicate))
+  derived <- is.na(rep_chr) |
+    rep_chr == "" |
+    rep_chr == sub("_[Rr][0-9]+$", "", stem)
+  ifelse(derived, suffix, rep_chr)
+}
+
+# Standard errors and covariance of a minpack.lm::nls.lm() fit. Parameters
+# sitting on a bound are held fixed: they get no standard error and are left
+# out of the covariance of the free ones.
+nls_lm_covariance <- function(fit, n, lower, upper) {
+  p <- length(fit$par)
+  vc <- matrix(NA_real_, p, p)
+  at_bound <- abs(fit$par - lower) <= 1e-8 * pmax(1, abs(lower)) |
+    (is.finite(upper) & abs(fit$par - upper) <= 1e-8 * pmax(1, abs(upper)))
+  free <- which(!at_bound)
+  df <- n - length(free)
+
+  if (df > 0 && length(free) > 0) {
+    inv <- tryCatch(
+      solve(fit$hessian[free, free, drop = FALSE]),
+      error = function(e) NULL
+    )
+    if (!is.null(inv)) {
+      vc[free, free] <- inv * fit$deviance / df
+    }
+  }
+
+  list(
+    vcov = vc,
+    se = sqrt(pmax(diag(vc), 0)),
+    df = df,
+    at_bound = at_bound
+  )
+}
+
+# Starting values for the single-exponential binding curve, read off the data
+# (so they work in any unit): the highest binding for the plateau and the first
+# time the mean binding reaches half of it for the half-life.
+binding_start_values <- function(data) {
+  real <- data[data$time > 0 & !is.na(data$binding), ]
+  # Kept inside the 0-100 % bounds: a start on a bound (e.g. samples reading
+  # 100 %) can leave the optimiser stuck there
+  plateau <- min(95, max(5, max(real$binding)))
+
+  means <- stats::aggregate(binding ~ time, real, mean)
+  means <- means[order(means$time), ]
+  reached <- means$time[means$binding >= plateau / 2]
+  t_half <- if (length(reached)) reached[1] else max(means$time)
+
+  c(plateau = plateau, kobs = log(2) / t_half)
+}
+
+# Fit Binding(t) = plateau * (1 - exp(-kobs * t)) to all sample points of one
+# concentration. The plateau is free (bounded to 0-100 %): measured binding
+# often levels off below 100 %, and a fixed 100 % plateau misfits such data.
+fit_binding_curve <- function(data) {
+  start <- binding_start_values(data)
+  lower <- c(0, 0)
+  upper <- c(100, Inf)
+
+  # A curve that has not levelled off yet leaves plateau and kobs loosely
+  # coupled, so the fit is started from a few plateau/half-life combinations
+  # and the best one is kept
+  starts <- list(
+    start,
+    c(start[1] * 0.75, start[2]),
+    c(min(95, start[1] * 1.2), start[2] / 2)
+  )
+  fits <- lapply(starts, function(s) {
+    tryCatch(
+      minpack.lm::nls.lm(
+        par = s,
+        fn = function(p) data$binding - p[1] * (1 - exp(-p[2] * data$time)),
+        lower = lower,
+        upper = upper,
+        control = minpack.lm::nls.lm.control(maxiter = 500)
+      ),
+      error = function(e) NULL
+    )
+  })
+  fits <- Filter(Negate(is.null), fits)
+  if (length(fits) == 0) {
+    stop("the binding curve fit did not converge")
+  }
+  fit <- fits[[which.min(vapply(fits, function(f) f$deviance, numeric(1)))]]
+  cov <- nls_lm_covariance(fit, nrow(data), lower, upper)
+
+  plateau <- unname(fit$par[1])
+  kobs <- unname(fit$par[2])
+
+  list(
+    kobs = kobs,
+    kobs_se = unname(cov$se[2]),
+    v = plateau / 100 * kobs,
+    plateau = plateau,
+    n = nrow(data)
+  )
+}
+
+# Mean, SD and n of the sample points per time point (display only)
+binding_time_summary <- function(data) {
+  data |>
+    dplyr::group_by(time) |>
+    dplyr::summarise(
+      binding_sd = if (dplyr::n() > 1) stats::sd(binding) else NA_real_,
+      n = dplyr::n(),
+      binding = mean(binding),
+      .groups = "drop"
+    ) |>
+    as.data.frame()
 }
 
 compute_kobs <- function(hits, units) {
   # Prepare empty objects
   concentration_list <- list()
   binding_table <- data.frame()
+  binding_points <- data.frame()
 
   # Concentration and time columns
   conc <- names(hits)[grep("Concentration", names(hits))]
-  time <- names(hits)[grep("Time", names(hits))]
   names(hits)[grep("Time", names(hits))] <- "time"
 
-  # Starting values based on units
-  # TODO
-  if (units["Concentration"] == "M" & units["Time"] == "s") {
-    start_vals <- c(v = 1, kobs = 0.0004)
-  } else {
-    start_vals <- c(v = 1, kobs = 0.001)
-  }
+  max_time <- max(hits$time, na.rm = TRUE)
+  time_grid <- seq(0, max_time, length.out = kinetics_settings$curve_points + 1)
+
+  concentrations <- as.character(unique(hits[[conc]]))
 
   # Loop over each unique concentration
-  for (i in as.character(unique(hits[[conc]]))) {
-    last <- ifelse(
-      i == utils::tail(as.character(unique(hits[[conc]])), 1),
-      TRUE,
-      FALSE
-    )
+  for (i in concentrations) {
+    last <- i == utils::tail(concentrations, 1)
 
     # Filter rows for this concentration
     raw_data <- hits |>
@@ -3011,36 +4199,23 @@ compute_kobs <- function(hits, units) {
       next
     }
 
-    if ("Replicate" %in% names(raw_data) && !all(is.na(raw_data$Replicate))) {
-      # Group by Replicate AND time. A sample contributes one row per matched
-      # peak, so collapsing by replicate is what removes those duplicates —
-      # but the replicate label is documented as a free-text *group* label and
-      # is regularly shared by every time point of one series (the example
-      # config ships "Rep1", "Rep1", "Rep2"). Grouping by the label alone then
-      # folded a whole time course into a single row stamped with
-      # first(time), leaving every concentration with < 2 usable time points
-      # and no fit at all. Keeping time in the key averages true replicates of
-      # the same condition while preserving the time course.
-      data <- raw_data |>
-        dplyr::group_by(Replicate, time) |>
-        dplyr::summarise(
-          binding = mean(binding, na.rm = TRUE),
-          .groups = "drop"
-        )
-    } else {
-      data <- dplyr::distinct(raw_data, time, .keep_all = TRUE)
+    # The untreated control (0 concentration) has no rate to fit; noting it
+    # as a warning would flag every correctly designed experiment
+    if (isTRUE(as.numeric(i) == 0)) {
+      message(sprintf(
+        "  │  %s %s %s: untreated control, not fitted",
+        if (last) "└─" else "├─",
+        fmt_log(0),
+        units["Concentration"]
+      ))
+      next
     }
 
-    # Make dummy row to anchor fitting at 0
-    dummy_row <- data[1, ]
-    dummy_row$binding <- 0.0
-    dummy_row$time <- 0
-
-    # If Well column exists
-    if ("Well" %in% colnames(data)) {
-      dummy_row$Well <- "XX"
-    }
-    data <- rbind(data, dummy_row)
+    # One point per sample
+    data <- kinetic_sample_points(raw_data)
+    data$concentration <- i
+    data$series <- kinetic_series_labels(data$Sample, data$Replicate)
+    obs_summary <- binding_time_summary(data)
 
     # Pre-flight: verify data is identifiable before attempting fit
     # Check before logging so skipped concentrations emit a single compact line
@@ -3060,45 +4235,19 @@ compute_kobs <- function(hits, units) {
           kobs_se = NA_real_,
           v = 0,
           plateau = 0,
-          nlm = NULL
-        )
-
-        # Build per-timepoint SD the same way as the normal case
-        if (
-          "Replicate" %in% names(raw_data) && !all(is.na(raw_data$Replicate))
-        ) {
-          tp_sd_zero <- raw_data |>
-            dplyr::group_by(time) |>
-            dplyr::summarise(
-              binding_sd = stats::sd(binding, na.rm = TRUE),
-              .groups = "drop"
-            )
-        } else {
-          tp_sd_zero <- data.frame(
-            time = unique(raw_data$time),
-            binding_sd = NA_real_
-          )
-        }
-
-        predictions_zero <- data.frame(
-          time = seq(0, max(hits$time), by = 1),
-          predicted_binding = 0
+          hits = data
         )
 
         binding_table <- rbind(
           binding_table,
           dplyr::left_join(
-            predictions_zero,
-            dplyr::select(data, c("time", "binding")),
+            data.frame(time = time_grid, predicted_binding = 0),
+            obs_summary,
             by = "time"
           ) |>
-            dplyr::left_join(tp_sd_zero, by = "time") |>
-            dplyr::mutate(
-              concentration = i,
-              kobs = 0,
-              kobs_se = NA_real_
-            )
+            dplyr::mutate(concentration = i, kobs = 0, kobs_se = NA_real_)
         )
+        binding_points <- rbind(binding_points, data)
       } else {
         message(sprintf(
           "  │  %s %s %s %s: skipped (%s)",
@@ -3120,82 +4269,43 @@ compute_kobs <- function(hits, units) {
     )
     log_timepoints(data = data, unit = units["Time"], last = last)
 
-    # Nonlinear regression with customized minpack.lm::nlsLM() function
-    nonlin_mod <- tryCatch(
-      nlsLM_fixed(
-        formula = binding ~ 100 * (v / kobs * (1 - exp(-kobs * time))),
-        start = start_vals,
-        data = data
-      ),
+    result <- tryCatch(
+      fit_binding_curve(data),
       error = function(e) {
         log_fit_failed(last, conditionMessage(e))
         NULL
       }
     )
-    if (is.null(nonlin_mod)) {
+    if (is.null(result)) {
       next
     }
 
-    # Extract parameters
-    params <- summary(nonlin_mod)$parameters
-    result <- list(
-      kobs = params[2, 1],
-      kobs_se = params[2, 2],
-      v = params[1, 1],
-      plateau = 100 * (params[1, 1] / params[2, 1]),
-      nlm = nonlin_mod
+    # Predictions on an even grid plus the measured times, so every observed
+    # mean lands on a row of the curve table
+    grid <- sort(unique(c(time_grid, obs_summary$time)))
+    predictions <- data.frame(
+      time = grid,
+      predicted_binding = result$plateau * (1 - exp(-result$kobs * grid))
     )
-    # Add parameters to concentration list
+
+    result$predictions <- predictions
+    result$hits <- data
     concentration_list[[i]] <- result
 
-    # Predict concentration
-    predictions <- predict_values(
-      data = data,
-      fitted_model = nonlin_mod,
-      predict = "binding",
-      x = "time",
-      interval = 1,
-      max = max(hits$time)
-    )
-
-    # Per-time-point SD from raw replicates (NA when no Replicate column)
-    if ("Replicate" %in% names(raw_data) && !all(is.na(raw_data$Replicate))) {
-      tp_sd <- raw_data |>
-        dplyr::group_by(time) |>
-        dplyr::summarise(
-          binding_sd = stats::sd(binding, na.rm = TRUE),
-          .groups = "drop"
-        )
-    } else {
-      tp_sd <- data.frame(time = unique(raw_data$time), binding_sd = NA_real_)
-    }
-
-    # Append predictions to predictions data frame
     binding_table <- rbind(
       binding_table,
-      dplyr::left_join(
-        predictions,
-        dplyr::select(data, c("time", "binding")),
-        by = "time"
-      ) |>
-        dplyr::left_join(tp_sd, by = "time") |>
+      dplyr::left_join(predictions, obs_summary, by = "time") |>
         dplyr::mutate(
           concentration = i,
           kobs = result$kobs,
           kobs_se = result$kobs_se
         )
     )
-
-    # Add predictions specific for concentration
-    concentration_list[[i]][["predictions"]] <- predictions
-
-    # Save hits for concentration (averaged) and raw replicates for scatter plots
-    concentration_list[[i]][["hits"]] <- data
-    concentration_list[[i]][["hits_raw"]] <- raw_data
+    binding_points <- rbind(binding_points, data)
 
     # Log kobs result
     log_kobs_result(
-      result = concentration_list[[i]],
+      result = result,
       last = last,
       unit = units["Time"]
     )
@@ -3204,341 +4314,747 @@ compute_kobs <- function(hits, units) {
   # Reorder concentrations as factor (skip if no concentration was fitted,
   # otherwise binding_table is a zero-column data.frame without `concentration`)
   if ("concentration" %in% names(binding_table)) {
-    binding_table <- binding_table |>
-      dplyr::mutate(
-        concentration = factor(
-          concentration,
-          levels = sort(
-            as.numeric(unique(concentration)),
-            decreasing = TRUE
-          )
-        )
-      )
+    conc_levels <- sort(
+      as.numeric(unique(binding_table$concentration)),
+      decreasing = TRUE
+    )
+    binding_table$concentration <- factor(
+      binding_table$concentration,
+      levels = conc_levels
+    )
+    binding_points$concentration <- factor(
+      binding_points$concentration,
+      levels = conc_levels
+    )
   }
   concentration_list[["binding_table"]] <- binding_table
+  concentration_list[["binding_points"]] <- binding_points
 
   return(concentration_list)
 }
 
-compute_kinact_ki <- function(kobs_result, units = units) {
-  # One row per concentration from kobs_result_table (avoids deduplication by value)
-  kobs <- kobs_result$kobs_result_table
-  kobs$conc <- as.numeric(rownames(kobs))
-  kobs <- kobs[, c("conc", "kobs", "kobs_se")]
-  kobs <- kobs[order(kobs$conc), ]
+## kinact / KI ----
+#
+# One global fit of all sample points of all concentrations:
+#
+#   Binding = P[group] * (1 - exp(-kobs([I]) * t))
+#   hyperbolic: kobs = (kinact/KI) * [I] / (1 + [I]/KI)
+#   linear:     kobs = (kinact/KI) * [I]
+#
+# Plateau groups: a concentration whose curve gets close to its plateau within
+# the measured time has its own plateau; all other concentrations share one
+# (see compute_kinact_ki()). kinact/KI is a fit parameter of its own, so it gets
+# a standard error even when kinact and KI cannot be separated. Concentration
+# and time are scaled to their maxima inside the fit, which keeps the
+# parameters of order one whatever the declared units.
 
-  # Adjust start values to units
-  if (units["Concentration"] == "M" & units["Time"] == "s") {
-    start_values <- c(kinact = 0.001, KI = 0.000001)
+fit_global_kinetics <- function(points, model, groups, start) {
+  conc_levels <- sort(unique(points$conc_n))
+  np <- max(groups)
+  pi_idx <- groups[match(points$conc_n, conc_levels)]
+  hyperbolic <- model == "hyperbolic"
+
+  kobs_n <- if (hyperbolic) {
+    function(p) p[np + 1] * points$conc_n / (1 + points$conc_n / p[np + 2])
   } else {
-    start_values <- c(kinact = 1000, KI = 10)
+    function(p) p[np + 1] * points$conc_n
   }
 
-  # Add dummy row at origin
-  kobs_dummy <- kobs[1, ]
-  kobs_dummy$kobs <- 0
-  kobs_dummy$conc <- 0
-  kobs <- rbind(kobs, kobs_dummy)
-  kobs <- kobs[order(kobs$conc), ]
+  lower <- c(rep(0, np), 0, if (hyperbolic) 1e-3)
+  upper <- c(rep(100, np), Inf, if (hyperbolic) 1e3)
 
-  # Pre-flight: warn if fewer than 3 real data points (0 or negative DOF)
-  n_real <- nrow(kobs) - 1
-  if (n_real < 3) {
-    log_kinact_ki_warning(sprintf(
-      "only %d kobs value(s) available — parameter estimates will have 0 or negative degrees of freedom",
-      n_real
-    ))
-  }
-
-  # Nonlinear regression — capture C-level warnings (e.g. lmdif maxiter) so
-  # they are routed through our logger instead of appearing as raw R warnings.
-  nonlin_mod <- tryCatch(
-    withCallingHandlers(
-      nlsLM_fixed(
-        formula = kobs ~ (kinact * conc) / (KI + conc),
-        data = kobs,
-        start = start_values
-      ),
-      warning = function(w) {
-        log_kinact_ki_warning(paste("Solver:", conditionMessage(w)))
-        invokeRestart("muffleWarning")
-      }
-    ),
-    error = function(e) {
-      log_kinact_ki_warning(paste("Fit failed:", conditionMessage(e)))
-      NULL
-    }
+  fit <- minpack.lm::nls.lm(
+    par = start,
+    fn = function(p) {
+      points$binding - p[pi_idx] * (1 - exp(-kobs_n(p) * points$time_n))
+    },
+    lower = lower,
+    upper = upper,
+    control = minpack.lm::nls.lm.control(maxiter = 1000)
   )
-  if (is.null(nonlin_mod)) {
+  cov <- nls_lm_covariance(fit, nrow(points), lower, upper)
+
+  list(
+    model = model,
+    groups = groups,
+    par = fit$par,
+    vcov = cov$vcov,
+    se = cov$se,
+    df = cov$df,
+    at_bound = cov$at_bound,
+    deviance = fit$deviance,
+    n = nrow(points),
+    np = np,
+    conc_levels = conc_levels
+  )
+}
+
+# Fit a model from several starting points and keep the best one.
+# - Plateaus: the per-concentration fits averaged per group, plus the plateau
+#   of the highest concentration (its curve is the most complete) and a lower
+#   variant of it. Low concentrations rarely level off within the measured
+#   time, so their own plateau estimates tend to run to 100 %, and a start
+#   there can leave the global fit stuck on that bound.
+# - kinact/KI: a third of, equal to and three times each initial estimate.
+#   Plateau and rate trade off against each other at concentrations whose
+#   curve has not levelled off, so a single start can end in a local minimum.
+# - KI (hyperbolic model): below, near and above the highest concentration,
+#   because the error surface is flat along kinact/KI when the data does not
+#   saturate.
+fit_global_best <- function(points, model, groups, plateau_start, k2_start) {
+  np <- max(groups)
+  top <- min(95, max(5, plateau_start[length(plateau_start)]))
+  per_group <- vapply(
+    seq_len(np),
+    function(g) min(95, max(5, mean(plateau_start[groups == g]))),
+    numeric(1)
+  )
+  plateau_starts <- unique(list(per_group, rep(top, np), rep(0.8 * top, np)))
+  k2_starts <- unique(as.vector(outer(k2_start, c(1 / 3, 1, 3))))
+  ki_starts <- if (model == "hyperbolic") c(0.5, 2, 10) else NA
+  combos <- expand.grid(
+    p = seq_along(plateau_starts),
+    k2 = k2_starts,
+    ki = ki_starts
+  )
+
+  fits <- lapply(seq_len(nrow(combos)), function(j) {
+    start <- c(
+      plateau_starts[[combos$p[j]]],
+      combos$k2[j],
+      if (model == "hyperbolic") combos$ki[j]
+    )
+    tryCatch(
+      fit_global_kinetics(points, model, groups, start),
+      error = function(e) NULL
+    )
+  })
+  fits <- Filter(Negate(is.null), fits)
+  if (length(fits) == 0) {
+    return(NULL)
+  }
+  fits[[which.min(vapply(fits, function(f) f$deviance, numeric(1)))]]
+}
+
+# Extra-sum-of-squares F-test of a nested model pair: p value for the simpler
+# fit describing the data as well as the more flexible one
+nested_f_test <- function(simple, complex) {
+  if (is.null(simple) || is.null(complex)) {
+    return(NA_real_)
+  }
+  extra <- simple$df - complex$df
+  if (complex$df <= 0 || extra <= 0) {
+    return(NA_real_)
+  }
+  gain <- max(simple$deviance - complex$deviance, 0)
+  f_value <- (gain / extra) / (complex$deviance / complex$df)
+  stats::pf(f_value, extra, complex$df, lower.tail = FALSE)
+}
+
+# Linear and hyperbolic global fits for one plateau grouping, and the selected
+# one: hyperbolic only when it fits significantly better (F-test) and its KI is
+# not below the lowest concentration — such a KI would mean every
+# concentration is saturated, which a rising kobs contradicts
+fit_global_models <- function(points, groups, plateau_start, k2_start) {
+  linear <- fit_global_best(points, "linear", groups, plateau_start, k2_start)
+  if (is.null(linear)) {
+    return(NULL)
+  }
+  hyperbolic <- fit_global_best(
+    points,
+    "hyperbolic",
+    groups,
+    plateau_start,
+    c(linear$par[linear$np + 1], k2_start)
+  )
+  p_curvature <- nested_f_test(linear, hyperbolic)
+  ki_n <- if (is.null(hyperbolic)) {
+    NA_real_
+  } else {
+    unname(hyperbolic$par[hyperbolic$np + 2])
+  }
+  significant <- isTRUE(p_curvature < kinetics_settings$curvature_alpha)
+  ki_in_range <- isTRUE(ki_n >= min(points$conc_n))
+
+  list(
+    linear = linear,
+    hyperbolic = hyperbolic,
+    p_curvature = p_curvature,
+    ki_n = ki_n,
+    significant = significant,
+    ki_in_range = ki_in_range,
+    selected = if (significant && ki_in_range) hyperbolic else linear
+  )
+}
+
+# Estimates in declared units from a (scaled) global fit
+global_fit_estimates <- function(fit, conc_max, time_max) {
+  np <- fit$np
+  k2_n <- fit$par[np + 1]
+  out <- list(
+    ratio = k2_n / (conc_max * time_max),
+    ratio_se = fit$se[np + 1] / (conc_max * time_max),
+    plateaus = stats::setNames(
+      fit$par[fit$groups],
+      fit$conc_levels * conc_max
+    )
+  )
+
+  if (fit$model == "hyperbolic") {
+    ki_n <- fit$par[np + 2]
+    # kinact = (kinact/KI) * KI; standard error by the delta method
+    grad <- c(ki_n, k2_n)
+    idx <- c(np + 1, np + 2)
+    kinact_var <- as.numeric(t(grad) %*% fit$vcov[idx, idx] %*% grad)
+    out$kinact <- k2_n * ki_n / time_max
+    out$kinact_se <- sqrt(kinact_var) / time_max
+    out$KI <- ki_n * conc_max
+    out$KI_se <- fit$se[np + 2] * conc_max
+    out$KI_n <- ki_n
+    out$KI_at_bound <- fit$at_bound[np + 2]
+  }
+
+  out
+}
+
+# Fitted binding values of a global fit at the sample points
+global_fitted <- function(points, fit) {
+  np <- fit$np
+  p <- fit$par
+  kobs_n <- if (fit$model == "hyperbolic") {
+    p[np + 1] * points$conc_n / (1 + points$conc_n / p[np + 2])
+  } else {
+    p[np + 1] * points$conc_n
+  }
+  plateau <- p[fit$groups[match(points$conc_n, fit$conc_levels)]]
+  plateau * (1 - exp(-kobs_n * points$time_n))
+}
+
+# Residual bootstrap: add resampled residuals of the selected fit to its fitted
+# values and refit; returns the refitted estimates (one row per resample).
+# Residuals are pooled over all samples rather than resampled within each
+# concentration x time cell: with two replicates per cell, resampling within
+# the cell loses about half of the scatter and gives intervals that are too
+# narrow. They are centred and rescaled for the fitted parameters.
+bootstrap_global_kinetics <- function(points, fit, conc_max, time_max) {
+  n_boot <- kinetics_settings$bootstrap_n
+  fitted <- global_fitted(points, fit)
+  residuals <- points$binding - fitted
+  residuals <- (residuals - mean(residuals)) *
+    sqrt(nrow(points) / max(fit$df, 1))
+
+  with_kinetics_seed(kinetics_settings$bootstrap_seed, {
+    rows <- lapply(seq_len(n_boot), function(b) {
+      boot_points <- points
+      boot_points$binding <- fitted +
+        residuals[sample.int(length(residuals), replace = TRUE)]
+      refit <- tryCatch(
+        fit_global_kinetics(boot_points, fit$model, fit$groups, fit$par),
+        error = function(e) NULL
+      )
+      if (is.null(refit)) {
+        return(NULL)
+      }
+      est <- global_fit_estimates(refit, conc_max, time_max)
+      data.frame(
+        ratio = est$ratio,
+        kinact = if (is.null(est$kinact)) NA_real_ else est$kinact,
+        KI = if (is.null(est$KI)) NA_real_ else est$KI
+      )
+    })
+    do.call(rbind, rows)
+  })
+}
+
+# Run expr with a fixed seed without disturbing the session's random stream
+with_kinetics_seed <- function(seed, expr) {
+  had_seed <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
+  if (had_seed) {
+    old_seed <- get(".Random.seed", envir = globalenv(), inherits = FALSE)
+  }
+  on.exit({
+    if (had_seed) {
+      assign(".Random.seed", old_seed, envir = globalenv())
+    } else if (exists(".Random.seed", envir = globalenv(), inherits = FALSE)) {
+      rm(".Random.seed", envir = globalenv())
+    }
+  })
+  set.seed(seed)
+  expr
+}
+
+# Early time points that read exactly 0 % while later ones at the same
+# concentration show binding: small adduct peaks below the deconvolution peak
+# threshold are not reported and turn into 0 %, pulling the early curve down.
+early_zero_points <- function(points) {
+  flagged <- lapply(split(points, points$conc), function(d) {
+    first_positive <- suppressWarnings(min(d$time[d$binding > 0]))
+    if (!is.finite(first_positive)) {
+      return(NULL)
+    }
+    d[d$binding == 0 & d$time < first_positive, c("conc", "time")]
+  })
+  do.call(rbind, flagged)
+}
+
+kinact_ki_warning <- function(code, title, detail) {
+  list(code = code, title = title, detail = detail)
+}
+
+compute_kinact_ki <- function(kobs_result, units = units) {
+  conc_names <- setdiff(
+    names(kobs_result),
+    c("binding_table", "binding_points", "binding_plot", "kobs_result_table")
+  )
+  warnings <- list()
+  add_warning <- function(w) {
+    log_kinact_ki_warning(paste0(w$title, ": ", w$detail))
+    warnings[[length(warnings) + 1]] <<- w
+  }
+
+  # Sample points of all fitted concentrations. Concentrations without any
+  # response carry no information on the rate (their plateau fits 0 %, which
+  # makes any kobs fit equally well) and are left out of the global fit.
+  points <- do.call(rbind, lapply(conc_names, function(i) {
+    entry <- kobs_result[[i]]
+    if (is.null(entry$hits) || isTRUE(entry$kobs == 0)) {
+      return(NULL)
+    }
+    data.frame(
+      conc = as.numeric(i),
+      time = entry$hits$time,
+      binding = entry$hits$binding,
+      series = entry$hits$series,
+      sample = entry$hits$Sample
+    )
+  }))
+
+  n_conc <- if (is.null(points)) 0 else length(unique(points$conc))
+  if (n_conc < 3) {
+    log_kinact_ki_warning(sprintf(
+      "Fit skipped: %d concentration(s) with a response, at least 3 required",
+      n_conc
+    ))
     return(NULL)
   }
 
-  # Post-fit: warn if the saturating region was never observed
-  fitted_kinact <- summary(nonlin_mod)$parameters[1, 1]
-  max_kobs_real <- max(kobs$kobs[kobs$conc > 0], na.rm = TRUE)
-  if (max_kobs_real < 0.5 * fitted_kinact) {
-    log_kinact_ki_warning(sprintf(
-      "max k_obs (%s) < 50%% of kᵢₙₐ꜀ₜ (%s)\n     │    saturating region not observed — kᵢₙₐ꜀ₜ extrapolated",
-      fmt_log(max_kobs_real),
-      fmt_log(fitted_kinact)
+  conc_max <- max(points$conc)
+  time_max <- max(points$time)
+  points$conc_n <- points$conc / conc_max
+  points$time_n <- points$time / time_max
+
+  # Starting values from the per-concentration fits: their plateaus, and the
+  # slope through the origin of kobs against concentration
+  conc_levels <- sort(unique(points$conc))
+  # (kept inside the 0-100 % bounds, see binding_start_values())
+  plateau_start <- vapply(
+    conc_levels,
+    function(c0) {
+      p <- kobs_result[[as.character(c0)]]$plateau
+      if (is.null(p) || !is.finite(p)) 50 else min(95, max(5, p))
+    },
+    numeric(1)
+  )
+  kobs_n <- vapply(
+    conc_levels,
+    function(c0) kobs_result[[as.character(c0)]]$kobs * time_max,
+    numeric(1)
+  )
+  cn <- conc_levels / conc_max
+  k2_start <- max(sum(cn * kobs_n) / sum(cn^2), 1e-6)
+
+  # A second start that does not rely on the per-concentration fits (which are
+  # unreliable when no curve levels off): kobs from the log-linearised binding
+  # assuming a 100 % plateau, then the slope through the origin
+  early <- points[points$binding > 0 & points$binding < 90, ]
+  if (nrow(early) > 0) {
+    kobs_lin <- -log(1 - early$binding / 100) / early$time_n
+    k2_data <- sum(early$conc_n * kobs_lin) / sum(early$conc_n^2)
+    if (is.finite(k2_data) && k2_data > 0) {
+      k2_start <- c(k2_start, k2_data)
+    }
+  }
+
+  # 1) Plateau groups. A plateau can only be estimated from a curve that gets
+  #    close to it within the measured time; for a curve that is still rising,
+  #    plateau and rate trade off against each other, and free plateaus there
+  #    can fake curvature or bias kinact/KI. So: fit with one shared plateau,
+  #    then give every concentration whose curve reaches at least
+  #    plateau_min_reached of its plateau by the last time point a plateau of
+  #    its own; all others keep sharing one.
+  alpha <- kinetics_settings$curvature_alpha
+  nc <- length(conc_levels)
+  shared_models <- fit_global_models(
+    points,
+    rep(1L, nc),
+    plateau_start,
+    k2_start
+  )
+  if (is.null(shared_models)) {
+    log_kinact_ki_warning("Fit failed: the global model did not converge")
+    return(NULL)
+  }
+
+  shared_est <- global_fit_estimates(shared_models$selected, conc_max, time_max)
+  kobs_shared <- if (shared_models$selected$model == "hyperbolic") {
+    shared_est$ratio * conc_levels / (1 + conc_levels / shared_est$KI)
+  } else {
+    shared_est$ratio * conc_levels
+  }
+  reached <- 1 - exp(-kobs_shared * time_max)
+  resolved <- reached >= kinetics_settings$plateau_min_reached
+  groups <- if (any(resolved)) {
+    # Unresolved concentrations share group 1 (when there are any), resolved
+    # ones get consecutive groups of their own. (Tying the unresolved ones to
+    # the plateau of the lowest resolved concentration instead biased
+    # kinact/KI in simulations where the plateau truly rises with
+    # concentration.)
+    g <- integer(nc)
+    offset <- if (any(!resolved)) 1L else 0L
+    g[!resolved] <- 1L
+    g[resolved] <- offset + seq_len(sum(resolved))
+    g
+  } else {
+    rep(1L, nc)
+  }
+
+  models <- if (max(groups) == 1L) {
+    shared_models
+  } else {
+    fit_global_models(points, groups, plateau_start, k2_start)
+  }
+  if (is.null(models)) {
+    models <- shared_models
+    groups <- rep(1L, nc)
+  }
+
+  linear_fit <- models$linear
+  hyperbolic_fit <- models$hyperbolic
+  p_curvature <- models$p_curvature
+  ki_n_hyp <- models$ki_n
+  significant_curvature <- models$significant
+  ki_in_range <- models$ki_in_range
+  curved <- identical(models$selected, hyperbolic_fit) && !is.null(hyperbolic_fit)
+
+  selected <- models$selected
+  est <- global_fit_estimates(selected, conc_max, time_max)
+
+  # Separate kinact and KI only when KI is actually pinned down by the data
+  ki_rel_se <- NA_real_
+  determinable <- FALSE
+  if (curved) {
+    ki_rel_se <- est$KI_se / est$KI
+    determinable <- !isTRUE(est$KI_at_bound) &&
+      is.finite(ki_rel_se) &&
+      ki_rel_se <= kinetics_settings$ki_max_rel_se &&
+      est$KI_n <= kinetics_settings$ki_max_over_conc
+  }
+
+  status <- if (determinable) {
+    "saturated"
+  } else if (curved) {
+    "ki_undetermined"
+  } else {
+    "linear"
+  }
+
+  conc_unit <- units[["Concentration"]]
+  time_unit <- units[["Time"]]
+
+  if (significant_curvature && !ki_in_range) {
+    add_warning(kinact_ki_warning(
+      "curvature_implausible",
+      "Curvature not interpretable",
+      sprintf(
+        paste(
+          "the hyperbolic model fits better (p = %s) only with KI (%s %s)",
+          "below the lowest concentration — treated as linear."
+        ),
+        fmt_log(p_curvature, 2),
+        fmt_log(ki_n_hyp * conc_max),
+        conc_unit
+      )
     ))
   }
 
-  # Predict kobs values with NLM
-  kobs_predicted <- predict_values(
-    data = kobs,
-    predict = "kobs",
-    x = "conc",
-    interval = 0.1,
-    fitted_model = nonlin_mod
-  )
-
-  # Join with true data
-  kobs_data <- dplyr::full_join(kobs_predicted, kobs, by = "conc")
-
-  # Return complete list
-  kinact_ki_result <- list(
-    "Params" = summary(nonlin_mod)$parameters,
-    "Kobs_Data" = kobs_data
-  )
-
-  return(kinact_ki_result)
-}
-
-# Modified minpack.lm::nlsLM() function due to namespace issues with stats::model.frame()
-nlsLM_fixed <- function(
-  formula,
-  data = base::parent.frame(),
-  start,
-  jac = NULL,
-  algorithm = "LM",
-  control = minpack.lm::nls.lm.control(),
-  lower = NULL,
-  upper = NULL,
-  trace = FALSE,
-  subset,
-  weights,
-  na.action,
-  model = FALSE,
-  ...
-) {
-  formula <- stats::as.formula(formula)
-  if (!base::is.list(data) && !base::is.environment(data)) {
-    base::stop("'data' must be a list or an environment")
+  if (status == "linear") {
+    add_warning(kinact_ki_warning(
+      "no_saturation",
+      "Saturation not reached",
+      sprintf(
+        paste(
+          "k_obs rises linearly up to the highest concentration (%s %s;",
+          "curvature p = %s). kinact and KI cannot be separated —",
+          "only kinact/KI is determined."
+        ),
+        fmt_log(conc_max),
+        conc_unit,
+        fmt_log(p_curvature, 2)
+      )
+    ))
+  } else if (status == "ki_undetermined") {
+    add_warning(kinact_ki_warning(
+      "ki_undetermined",
+      "KI not determinable",
+      sprintf(
+        paste(
+          "k_obs curves (p = %s), but KI (%s %s) is %s —",
+          "kinact and KI are extrapolated, only kinact/KI is reported."
+        ),
+        fmt_log(p_curvature, 2),
+        fmt_log(est$KI),
+        conc_unit,
+        if (isTRUE(est$KI_at_bound)) {
+          "at the edge of the search range"
+        } else if (est$KI_n > kinetics_settings$ki_max_over_conc) {
+          sprintf(
+            "%s× the highest concentration",
+            fmt_log(est$KI_n, 2)
+          )
+        } else {
+          sprintf("uncertain by ±%s %%", round(100 * ki_rel_se))
+        }
+      )
+    ))
   }
-  mf <- base::match.call()
-  varNames <- base::all.vars(formula)
-  if (base::length(formula) == 2L) {
-    formula[[3L]] <- formula[[2L]]
-    formula[[2L]] <- 0
-  }
-  form2 <- formula
-  form2[[2L]] <- 0
-  varNamesRHS <- base::all.vars(form2)
-  mWeights <- base::missing(weights)
-  if (trace) {
-    control$nprint <- 1
-  }
-  pnames <- if (base::missing(start)) {
-    if (!base::is.null(base::attr(data, "parameters"))) {
-      base::names(base::attr(data, "parameters"))
-    } else {
-      cll <- formula[[base::length(formula)]]
-      func <- base::get(base::as.character(cll[[1L]]))
-      if (!base::is.null(pn <- base::attr(func, "pnames"))) {
-        base::as.character(base::as.list(base::match.call(
-          func,
-          call = cll
-        ))[-1L][pn])
-      }
+
+  # Bootstrap confidence intervals
+  boot <- bootstrap_global_kinetics(points, selected, conc_max, time_max)
+  n_boot_ok <- if (is.null(boot)) 0L else nrow(boot)
+  ci <- function(x) {
+    if (n_boot_ok < kinetics_settings$bootstrap_min_success *
+      kinetics_settings$bootstrap_n) {
+      return(c(NA_real_, NA_real_))
     }
-  } else {
-    base::names(start)
+    unname(stats::quantile(x, c(0.025, 0.975), na.rm = TRUE))
   }
-  env <- base::environment(formula)
-  if (base::is.null(env)) {
-    env <- base::parent.frame()
+  ratio_ci <- if (n_boot_ok > 0) ci(boot$ratio) else c(NA_real_, NA_real_)
+  if (all(is.na(ratio_ci))) {
+    add_warning(kinact_ki_warning(
+      "bootstrap",
+      "No confidence interval",
+      sprintf(
+        "only %d of %d bootstrap refits converged",
+        n_boot_ok,
+        kinetics_settings$bootstrap_n
+      )
+    ))
   }
-  if (base::length(pnames)) {
-    varNames <- varNames[base::is.na(base::match(varNames, pnames))]
+
+  # Plateaus that differ between concentrations. The kinetic model assumes one
+  # maximum occupancy; clearly different plateaus point at effects it does not
+  # describe (inhibitor depletion or instability, protein degradation), and
+  # kinact/KI can be biased by them.
+  group_plateaus <- tapply(unname(est$plateaus), groups, mean)
+  if (length(group_plateaus) >= 2 &&
+    diff(range(group_plateaus)) > kinetics_settings$plateau_max_spread) {
+    add_warning(kinact_ki_warning(
+      "plateau_spread",
+      "Plateaus differ",
+      sprintf(
+        paste(
+          "binding levels off between %s %% and %s %% depending on the",
+          "concentration. The model assumes one maximum occupancy; check",
+          "inhibitor depletion or stability — kinact/KI may be biased."
+        ),
+        round(min(group_plateaus)),
+        round(max(group_plateaus))
+      )
+    ))
   }
-  lenVar <- function(var) {
-    base::tryCatch(
-      base::length(base::eval(base::as.name(var), data, env)),
-      error = function(e) -1
+
+  # Low-intensity adducts reported as 0 %
+  zeros <- early_zero_points(points)
+  if (!is.null(zeros) && nrow(zeros) > 0) {
+    add_warning(kinact_ki_warning(
+      "early_zero",
+      "Early 0 % readings",
+      sprintf(
+        paste(
+          "%d early sample(s) at %d concentration(s) read 0 %% before binding",
+          "appears — adduct peaks below the deconvolution peak threshold are",
+          "recorded as 0 %% and pull the early curve down."
+        ),
+        nrow(zeros),
+        length(unique(zeros$conc))
+      )
+    ))
+  }
+
+  # Parameter table (kinact, KI) — NA where not determinable
+  t_p <- function(estimate, se, df) {
+    t_value <- estimate / se
+    c(t_value, 2 * stats::pt(-abs(t_value), df))
+  }
+  params <- matrix(
+    NA_real_,
+    nrow = 2,
+    ncol = 4,
+    dimnames = list(
+      c("kinact", "KI"),
+      c("Estimate", "Std. Error", "t value", "Pr(>|t|)")
     )
+  )
+  if (status == "saturated") {
+    params["kinact", ] <- c(
+      est$kinact,
+      est$kinact_se,
+      t_p(est$kinact, est$kinact_se, selected$df)
+    )
+    params["KI", ] <- c(est$KI, est$KI_se, t_p(est$KI, est$KI_se, selected$df))
   }
-  if (base::length(varNames)) {
-    n <- base::sapply(varNames, lenVar)
-    if (base::any(not.there <- n == -1)) {
-      nnn <- base::names(n[not.there])
-      if (base::missing(start)) {
-        base::warning(
-          "No starting values specified for some parameters.\n",
-          "Initializing ",
-          base::paste(base::sQuote(nnn), collapse = ", "),
-          " to '1.'.\n",
-          "Consider specifying 'start' or using a selfStart model"
-        )
-        start <- base::as.list(base::rep(1, base::length(nnn)))
-        base::names(start) <- nnn
-        varNames <- varNames[i <- base::is.na(base::match(varNames, nnn))]
-        n <- n[i]
-      } else {
-        base::stop(
-          "parameters without starting value in 'data': ",
-          base::paste(nnn, collapse = ", ")
-        )
-      }
-    }
-  } else {
-    if (
-      base::length(pnames) &&
-        base::any((np <- base::sapply(pnames, lenVar)) == -1)
-    ) {
-      base::message(
-        "fitting parameters ",
-        base::paste(base::sQuote(pnames[np == -1]), collapse = ", "),
-        " without any variables"
-      )
-      n <- base::integer()
-    } else {
-      base::stop("no parameters to fit")
-    }
-  }
-  respLength <- base::length(base::eval(formula[[2L]], data, env))
-  if (base::length(n) > 0L) {
-    varIndex <- n %% respLength == 0
-    if (
-      base::is.list(data) &&
-        base::diff(base::range(n[base::names(n) %in% base::names(data)])) > 0
-    ) {
-      mf <- data
-      if (!base::missing(subset)) {
-        base::warning("argument 'subset' will be ignored")
-      }
-      if (!base::missing(na.action)) {
-        base::warning("argument 'na.action' will be ignored")
-      }
-      if (base::missing(start)) {
-        start <- stats::getInitial(formula, mf)
-      }
-      startEnv <- base::new.env(
-        hash = FALSE,
-        parent = base::environment(formula)
-      )
-      for (i in base::names(start)) {
-        base::assign(i, start[[i]], envir = startEnv)
-      }
-      rhs <- base::eval(formula[[3L]], data, startEnv)
-      n <- base::NROW(rhs)
-      wts <- if (mWeights) {
-        base::rep(1, n)
-      } else {
-        base::eval(
-          base::substitute(weights),
-          data,
-          base::environment(formula)
-        )
-      }
-    } else {
-      mf$formula <- stats::as.formula(
-        base::paste("~", base::paste(varNames[varIndex], collapse = "+")),
-        env = base::environment(formula)
-      )
-      mf$start <- mf$control <- mf$algorithm <- mf$trace <- mf$model <- NULL
-      mf$lower <- mf$upper <- NULL
 
-      # CHANGE FROM ORIGINAL
-      # Using quote(stats::model.frame) to fix the scoping issue
-      mf[[1L]] <- quote(stats::model.frame)
-      mf <- base::eval.parent(mf)
+  ratio <- c(
+    Estimate = est$ratio,
+    `Std. Error` = est$ratio_se,
+    `t value` = NA_real_,
+    `Pr(>|t|)` = NA_real_,
+    `CI 2.5%` = ratio_ci[1],
+    `CI 97.5%` = ratio_ci[2]
+  )
+  ratio[c("t value", "Pr(>|t|)")] <- t_p(est$ratio, est$ratio_se, selected$df)
 
-      n <- base::nrow(mf)
-      mf <- base::as.list(mf)
-      wts <- if (!mWeights) {
-        stats::model.weights(mf)
-      } else {
-        base::rep(1, n)
+  kinact_ci <- c(NA_real_, NA_real_)
+  ki_ci <- c(NA_real_, NA_real_)
+  if (status == "saturated" && n_boot_ok > 0) {
+    kinact_ci <- ci(boot$kinact)
+    ki_ci <- ci(boot$KI)
+  }
+
+  # Per-series fits: the same model on each replicate series on its own,
+  # showing how much a complete repeat of the experiment varies
+  series <- NULL
+  labels <- unique(stats::na.omit(points$series))
+  if (length(labels) >= 2) {
+    series <- do.call(rbind, lapply(sort(labels), function(s) {
+      sp <- points[!is.na(points$series) & points$series == s, ]
+      if (length(unique(sp$conc)) < 3) {
+        return(NULL)
       }
+      levels_s <- sort(unique(sp$conc_n))
+      pos <- match(levels_s, selected$conc_levels)
+      groups_s <- match(groups[pos], sort(unique(groups[pos])))
+      sfit <- fit_global_best(
+        sp,
+        selected$model,
+        groups_s,
+        unname(est$plateaus[pos]),
+        c(selected$par[selected$np + 1], k2_start)
+      )
+      if (is.null(sfit)) {
+        return(NULL)
+      }
+      sest <- global_fit_estimates(sfit, conc_max, time_max)
+      data.frame(
+        series = s,
+        ratio = sest$ratio,
+        ratio_se = sest$ratio_se,
+        kinact = if (status == "saturated") sest$kinact else NA_real_,
+        KI = if (status == "saturated") sest$KI else NA_real_,
+        n = nrow(sp)
+      )
+    }))
+    if (!is.null(series) && nrow(series) < 2) {
+      series <- NULL
     }
-    if (base::any(wts < 0 | base::is.na(wts))) {
-      base::stop("missing or negative weights not allowed")
-    }
+  }
+
+  # Fitted kobs curve of the selected model plus the per-concentration kobs
+  conc_grid <- seq(0, conc_max, length.out = kinetics_settings$curve_points + 1)
+  predicted_kobs <- if (selected$model == "hyperbolic") {
+    est$ratio * conc_grid / (1 + conc_grid / est$KI)
   } else {
-    varIndex <- base::logical()
-    mf <- base::list(0)
-    wts <- base::numeric()
+    est$ratio * conc_grid
   }
-  if (base::missing(start)) {
-    start <- stats::getInitial(formula, mf)
-  }
-  for (var in varNames[!varIndex]) {
-    mf[[var]] <- base::eval(base::as.name(var), data, env)
-  }
-  varNamesRHS <- varNamesRHS[varNamesRHS %in% varNames[varIndex]]
-  mf <- base::c(mf, start)
-  lhs <- base::eval(formula[[2L]], envir = mf)
-  m <- base::match(base::names(start), base::names(mf))
-  .swts <- if (!base::missing(wts) && base::length(wts)) {
-    base::sqrt(wts)
-  }
-  FCT <- function(par) {
-    mf[m] <- par
-    rhs <- base::eval(formula[[3L]], envir = mf, base::environment(formula))
-    res <- lhs - rhs
-    res <- .swts * res
-    res
-  }
-  NLS <- minpack.lm::nls.lm(
-    par = start,
-    fn = FCT,
-    jac = jac,
-    control = control,
-    lower = lower,
-    upper = upper,
-    ...
+  kobs_table <- kobs_result$kobs_result_table
+  kobs_points <- data.frame(
+    conc = as.numeric(rownames(kobs_table)),
+    kobs = kobs_table$kobs,
+    kobs_se = kobs_table$kobs_se
   )
-  start <- NLS$par
-  m <- minpack.lm:::nlsModel(formula, mf, start, wts)
-  if (NLS$info %in% base::c(1, 2, 3, 4)) {
-    isConv <- TRUE
+  kobs_data <- dplyr::full_join(
+    data.frame(conc = conc_grid, predicted_kobs = predicted_kobs),
+    kobs_points,
+    by = "conc"
+  ) |>
+    dplyr::arrange(conc)
+
+  # Per-sample fitted values and residuals of the selected global fit, and the
+  # plateau of every concentration (for the diagnostics plots)
+  fitted_points <- data.frame(
+    conc = points$conc,
+    time = points$time,
+    binding = points$binding,
+    fitted = global_fitted(points, selected),
+    series = points$series,
+    sample = points$sample
+  )
+  fitted_points$residual <- fitted_points$binding - fitted_points$fitted
+
+  group_sizes <- tabulate(groups, nbins = max(groups))
+  plateau_table <- data.frame(
+    conc = conc_levels,
+    plateau = unname(est$plateaus),
+    plateau_single = vapply(
+      conc_levels,
+      function(c0) {
+        p <- kobs_result[[as.character(c0)]]$plateau
+        if (is.null(p)) NA_real_ else p
+      },
+      numeric(1)
+    ),
+    reached = reached,
+    group = groups,
+    # A concentration fits its own plateau when it is alone in its group
+    own = group_sizes[groups] == 1L
+  )
+
+  hyperbolic_est <- if (is.null(hyperbolic_fit)) {
+    NULL
   } else {
-    isConv <- FALSE
+    global_fit_estimates(hyperbolic_fit, conc_max, time_max)
   }
-  finIter <- NLS$niter
-  finTol <- minpack.lm::nls.lm.control()$ftol
-  convInfo <- base::list(
-    isConv = isConv,
-    finIter = finIter,
-    finTol = finTol,
-    stopCode = NLS$info,
-    stopMessage = NLS$message
+
+  list(
+    Params = params,
+    Ratio = ratio,
+    Params_CI = rbind(kinact = kinact_ci, KI = ki_ci),
+    Status = status,
+    Model = selected$model,
+    Fit = list(
+      n_points = nrow(points),
+      n_concentrations = n_conc,
+      max_concentration = conc_max,
+      plateau_groups = stats::setNames(groups, conc_levels),
+      plateau_reached = stats::setNames(reached, conc_levels),
+      p_curvature = p_curvature,
+      KI_hyperbolic = ki_n_hyp * conc_max,
+      KI_hyperbolic_at_bound = isTRUE(hyperbolic_est$KI_at_bound),
+      ratio_hyperbolic = if (is.null(hyperbolic_est)) {
+        NA_real_
+      } else {
+        hyperbolic_est$ratio
+      },
+      ratio_linear = global_fit_estimates(linear_fit, conc_max, time_max)$ratio,
+      KI_rel_se = ki_rel_se,
+      df = selected$df,
+      rss_linear = linear_fit$deviance,
+      rss_hyperbolic = if (is.null(hyperbolic_fit)) {
+        NA_real_
+      } else {
+        hyperbolic_fit$deviance
+      },
+      plateaus = est$plateaus,
+      bootstrap_n = kinetics_settings$bootstrap_n,
+      bootstrap_ok = n_boot_ok
+    ),
+    Series = series,
+    Warnings = warnings,
+    Points = fitted_points,
+    Plateaus = plateau_table,
+    Bootstrap = boot,
+    Kobs_Data = kobs_data
   )
-  nls.out <- base::list(
-    m = m,
-    convInfo = convInfo,
-    data = base::substitute(data),
-    call = base::match.call()
-  )
-  nls.out$call$algorithm <- algorithm
-  nls.out$call$control <- stats::nls.control()
-  nls.out$call$trace <- FALSE
-  nls.out$call$lower <- lower
-  nls.out$call$upper <- upper
-  nls.out$na.action <- base::attr(mf, "na.action")
-  nls.out$dataClasses <- base::attr(base::attr(mf, "terms"), "dataClasses")[
-    varNamesRHS
-  ]
-  if (model) {
-    nls.out$model <- mf
-  }
-  if (!mWeights) {
-    nls.out$weights <- wts
-  }
-  nls.out$control <- control
-  base::class(nls.out) <- "nls"
-  nls.out
 }
 
 # Function to format number in scientific

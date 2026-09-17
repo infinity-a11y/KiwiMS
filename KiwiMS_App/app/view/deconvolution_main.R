@@ -134,6 +134,18 @@ server <- function(
       duplicated = "Overwrite Samples"
     )
 
+    # Observers created anew on every deconvolution start, one slot per role.
+    # Re-creating a role destroys its predecessor so repeated runs in a session
+    # do not stack copies that handle the same events several times.
+    run_observers <- new.env(parent = emptyenv())
+    set_run_observer <- function(name, observer) {
+      if (!is.null(run_observers[[name]])) {
+        run_observers[[name]]$destroy()
+      }
+      run_observers[[name]] <- observer
+      invisible(observer)
+    }
+
     decon_rep_process_data <- shiny$reactiveVal(NULL)
     result_files_sel <- shiny$reactiveVal(NULL)
     target_selector_sel <- shiny$reactiveVal()
@@ -194,7 +206,17 @@ server <- function(
     # Compute the lowest non-existing name in the target folder
     smart_analysis_name <- shiny$reactive({
       reset_button() # re-evaluate after reset so file.exists() sees newly created .db files
-      base <- session_base_name
+      dir_path <- deconvolution_sidebar_vars$dir()
+      base <- if (
+        !is.null(dir_path) &&
+          length(dir_path) == 1 &&
+          !is.na(dir_path) &&
+          nzchar(dir_path)
+      ) {
+        gsub("\\.raw$", "", basename(dir_path), ignore.case = TRUE)
+      } else {
+        session_base_name
+      }
       target <- deconvolution_sidebar_vars$targetpath()
       if (
         is.null(target) ||
@@ -229,16 +251,22 @@ server <- function(
     # Locked destination — set once when deconvolute_start_conf fires
     analysis_dest <- shiny$reactiveVal(NULL)
 
-    # Update the text input when the output path changes
-    shiny$observeEvent(deconvolution_sidebar_vars$targetpath(), {
-      suggested <- smart_analysis_name()
-      shiny$updateTextInput(
-        session,
-        "analysis_name",
-        value = suggested,
-        placeholder = suggested
-      )
-    })
+    # Update the text input when the output path or input path changes
+    shiny$observeEvent(
+      list(
+        deconvolution_sidebar_vars$targetpath(),
+        deconvolution_sidebar_vars$dir()
+      ),
+      {
+        suggested <- smart_analysis_name()
+        shiny$updateTextInput(
+          session,
+          "analysis_name",
+          value = suggested,
+          placeholder = suggested
+        )
+      }
+    )
 
     ### Deconvolution interface (init or running, one output) ----
     output$deconvolution_ui <- shiny$renderUI({
@@ -1241,6 +1269,14 @@ server <- function(
       # Lock in analysis destination (sidebar path — no subfolder created)
       analysis_dest(effective_dest())
 
+      # Snapshot the inputs this run was started with. Everything rendered or
+      # polled for this run reads the snapshot: reading config_file() and the
+      # sidebar reactively re-rendered the whole running interface (progress,
+      # heatmap, buttons) whenever a different config was loaded afterwards.
+      run_config <- config_file()
+      run_use_config <- isTRUE(deconvolution_sidebar_vars$use_config())
+      run_selected <- deconvolution_sidebar_vars$selected()
+
       write_log("Deconvolution initiated")
 
       # UI changes
@@ -1261,7 +1297,7 @@ server <- function(
       )
 
       ##### Deconvolution init and mode ----
-      if (deconvolution_sidebar_vars$selected() == "folder") {
+      if (run_selected == "folder") {
         dir_path <- deconvolution_sidebar_vars$dir()
         if (
           grepl("\\.raw$", dir_path, ignore.case = TRUE) && dir.exists(dir_path)
@@ -1273,12 +1309,12 @@ server <- function(
         }
 
         if (
-          isTRUE(deconvolution_sidebar_vars$use_config()) &&
-            length(config_file())
+          run_use_config &&
+            length(run_config)
         ) {
           write_log("Multiple target deconvolution mode (with config file)")
 
-          sample_names <- config_file()[["Sample"]]
+          sample_names <- run_config[["Sample"]]
           raw_dirs <- raw_dirs[basename(raw_dirs) %in% sample_names]
 
           # Prepare heatmap variables — restrict to samples present in folder
@@ -1295,7 +1331,7 @@ server <- function(
           reactVars$wells <- gsub(
             ",",
             "",
-            sub("^.*:", "", config_file()[["Well"]][present_in_folder])
+            sub("^.*:", "", run_config[["Well"]][present_in_folder])
           )
         } else if (
           grepl("\\.raw$", dir_path, ignore.case = TRUE) && dir.exists(dir_path)
@@ -1435,7 +1471,7 @@ server <- function(
           time_end = input$time_end
         ),
         dirs = raw_dirs,
-        selected = deconvolution_sidebar_vars$selected()
+        selected = run_selected
       )
 
       # Place config parameter in temporary file
@@ -1604,7 +1640,7 @@ server <- function(
       decon_process_data(rx_process)
 
       # Track process exit status for errors
-      shiny$observe({
+      set_run_observer("exit_status", shiny$observe({
         shiny$req(decon_process_data())
 
         if (isTRUE(reactVars$is_running)) {
@@ -1662,7 +1698,7 @@ server <- function(
                 reactVars$process_observer$destroy()
               }
               if (
-                deconvolution_sidebar_vars$selected() == "folder" &&
+                run_selected == "folder" &&
                   !is.null(reactVars$results_observer)
               ) {
                 reactVars$results_observer$destroy()
@@ -1676,7 +1712,7 @@ server <- function(
             }
           }
         }
-      })
+      }))
 
       # Log deconvolution initiation parameter
       write_log("Deconvolution started")
@@ -1716,7 +1752,7 @@ server <- function(
       })
 
       #### Results tracking observer for heatmap ----
-      if (deconvolution_sidebar_vars$selected() == "folder") {
+      if (run_selected == "folder") {
         reactVars$results_observer <- shiny$observe({
           shiny$invalidateLater(10000)
 
@@ -1734,12 +1770,12 @@ server <- function(
               10
           ) {
             if (
-              isTRUE(deconvolution_sidebar_vars$use_config()) &&
-                length(config_file()) &&
-                "Well" %in% names(config_file()) &&
+              run_use_config &&
+                length(run_config) &&
+                "Well" %in% names(run_config) &&
                 any(
-                  !is.na(config_file()[["Well"]]) &
-                    nzchar(trimws(as.character(config_file()[["Well"]])))
+                  !is.na(run_config[["Well"]]) &
+                    nzchar(trimws(as.character(run_config[["Well"]])))
                 ) &&
                 nrow(reactVars$rslt_df) < reactVars$completed_files
             ) {
@@ -2045,7 +2081,7 @@ server <- function(
                 reactVars$process_observer$destroy()
               }
               if (
-                deconvolution_sidebar_vars$selected() == "folder" &&
+                run_selected == "folder" &&
                   !is.null(reactVars$results_observer)
               ) {
                 reactVars$results_observer$destroy()
@@ -2056,13 +2092,13 @@ server <- function(
 
               # final result check for heatmap update
               if (
-                deconvolution_sidebar_vars$selected() == "folder" &&
-                  isTRUE(deconvolution_sidebar_vars$use_config()) &&
-                  length(config_file()) &&
-                  "Well" %in% names(config_file()) &&
+                run_selected == "folder" &&
+                  run_use_config &&
+                  length(run_config) &&
+                  "Well" %in% names(run_config) &&
                   any(
-                    !is.na(config_file()[["Well"]]) &
-                      nzchar(trimws(as.character(config_file()[["Well"]])))
+                    !is.na(run_config[["Well"]]) &
+                      nzchar(trimws(as.character(run_config[["Well"]])))
                   )
               ) {
                 new_sample_names <- setdiff(
@@ -2159,14 +2195,14 @@ server <- function(
                 if (!file.exists(file.path(temp, "heatmap.rds"))) {
                   heatmap <- plate_heatmap(
                     reactVars$rslt_df,
-                    all_wells = config_file()[["Well"]],
+                    all_wells = run_config[["Well"]],
                     failed_wells = current_failed_wells()
                   )
                   saveRDS(heatmap, file.path(temp, "heatmap.rds"))
                 }
               } else {
                 selected_files <- if (
-                  deconvolution_sidebar_vars$selected() == "folder"
+                  run_selected == "folder"
                 ) {
                   run_target_files()
                 } else {
@@ -2325,17 +2361,17 @@ server <- function(
 
       #### Heatmap click observer ----
       if (
-        deconvolution_sidebar_vars$selected() == "folder" &&
-          isTRUE(deconvolution_sidebar_vars$use_config()) &&
-          length(config_file()) &&
-          "Well" %in% names(config_file()) &&
+        run_selected == "folder" &&
+          run_use_config &&
+          length(run_config) &&
+          "Well" %in% names(run_config) &&
           any(
-            !is.na(config_file()[["Well"]]) &
-              nzchar(trimws(as.character(config_file()[["Well"]])))
+            !is.na(run_config[["Well"]]) &
+              nzchar(trimws(as.character(run_config[["Well"]])))
           )
       ) {
         # Observe clicks on interactive heatmap to show spectra
-        reactVars$click_observer <- shiny$observe({
+        set_run_observer("heatmap_click", shiny$observe({
           click_data <- event_data("plotly_click")
           if (shiny$isolate(reactVars$heatmap_ready) > 0L) {
             # DEBUG — remove once click behaviour is confirmed
@@ -2423,11 +2459,11 @@ server <- function(
               }
             }
           }
-        })
+        }))
 
         #### Heatmap selection highlight observer ----
         # Draws a green shape rectangle (data coords) around the selected well
-        shiny$observe({
+        set_run_observer("heatmap_highlight", shiny$observe({
           shiny$req(result_files_sel(), reactVars$heatmap_ready > 0L)
 
           sample_name <- gsub("\\.raw$", "", result_files_sel())
@@ -2468,7 +2504,7 @@ server <- function(
                 )
             })
           }
-        })
+        }))
       } # end heatmap-click block
 
       #### Switch to running UI ----
@@ -2476,14 +2512,14 @@ server <- function(
       runjs("document.querySelector('button.collapse-toggle').click();")
       output$deconvolution_ui <- shiny$renderUI({
         has_wells <- "Well" %in%
-          names(config_file()) &&
+          names(run_config) &&
           any(
-            !is.na(config_file()[["Well"]]) &
-              nzchar(trimws(as.character(config_file()[["Well"]])))
+            !is.na(run_config[["Well"]]) &
+              nzchar(trimws(as.character(run_config[["Well"]])))
           )
-        show_heatmap <- deconvolution_sidebar_vars$selected() == "folder" &&
-          isTRUE(deconvolution_sidebar_vars$use_config()) &&
-          !is.null(config_file()) &&
+        show_heatmap <- run_selected == "folder" &&
+          run_use_config &&
+          !is.null(run_config) &&
           has_wells
         deconvolution_results_ui(ns, show_heatmap)
       })
@@ -2493,13 +2529,13 @@ server <- function(
 
       ### Render result spectrum
       spectrum_ready <- shiny$reactiveVal(FALSE)
-      shiny$observeEvent(
+      set_run_observer("spectrum_ready", shiny$observeEvent(
         result_files_sel(),
         {
           spectrum_ready(FALSE)
         },
         ignoreNULL = FALSE
-      )
+      ))
 
       setup_plot_dl(
         input,
@@ -2894,7 +2930,7 @@ server <- function(
       # builds its own layered DOM under the hood, and that layering was
       # swallowing clicks on the Copy button placed over it. Showing one or
       # the other as the card's only content sidesteps that entirely.
-      shiny$observeEvent(input$spectrum_copy_error, {
+      set_run_observer("copy_error", shiny$observeEvent(input$spectrum_copy_error, {
         current <- current_failed_selection()
         shiny$req(current)
         text <- paste(
@@ -2909,7 +2945,7 @@ server <- function(
         )
         write_clip(text, allow_non_interactive = TRUE)
         runjs("alert('Error message copied to clipboard!');")
-      })
+      }))
 
       output$spectrum_container <- shiny$renderUI({
         current <- current_failed_selection()
@@ -2962,13 +2998,13 @@ server <- function(
 
       ### Render heatmap when config has wells specified
       if (
-        deconvolution_sidebar_vars$selected() == "folder" &&
-          isTRUE(deconvolution_sidebar_vars$use_config()) &&
-          length(config_file()) &&
-          "Well" %in% names(config_file()) &&
+        run_selected == "folder" &&
+          run_use_config &&
+          length(run_config) &&
+          "Well" %in% names(run_config) &&
           any(
-            !is.na(config_file()[["Well"]]) &
-              nzchar(trimws(as.character(config_file()[["Well"]])))
+            !is.na(run_config[["Well"]]) &
+              nzchar(trimws(as.character(run_config[["Well"]])))
           )
       ) {
         output$heatmap <- renderPlotly({
@@ -2982,7 +3018,7 @@ server <- function(
 
           heatmap <- plate_heatmap(
             reactVars$rslt_df,
-            all_wells = config_file()[["Well"]],
+            all_wells = run_config[["Well"]],
             failed_wells = current_failed_wells()
           ) |>
             event_register("plotly_click")

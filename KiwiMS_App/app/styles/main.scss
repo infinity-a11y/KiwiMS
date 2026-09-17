@@ -492,7 +492,12 @@ button .sF-modal {
 
 .conversion-modal .modal-dialog {
   width: fit-content;
-  max-width: unset !important;
+  max-width: 760px !important;
+}
+
+.conversion-modal .modal-body {
+  max-height: 75vh;
+  overflow-y: auto;
 }
 
 .modal .bootstrap-select .dropdown-menu,
@@ -699,14 +704,29 @@ input[type="number"]::-webkit-inner-spin-button {
   --bs-progress-bg: #f7f7f7;
 }
 
-/* --- Tooltips --- */
+/* --- Tooltips: one consistent hover design everywhere, set through
+   Bootstrap's own tooltip CSS variables so every bslib::tooltip() in the
+   app (Help bubbles, alert/warning lists, inline explanations) picks it up
+   without touching each call site --- */
+.tooltip {
+  --bs-tooltip-bg: #14151fe6;
+  --bs-tooltip-color: #fff;
+  --bs-tooltip-border-radius: 8px;
+  --bs-tooltip-padding-x: 0.75rem;
+  --bs-tooltip-padding-y: 0.55rem;
+  --bs-tooltip-max-width: 340px;
+  --bs-tooltip-font-size: 0.85rem;
+}
+
 .tooltip-inner {
-  background-color: #000000c9;
+  text-align: left;
+  line-height: 1.35;
+  border: 1px solid rgb(255 255 255 / 12%);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 35%);
 }
 
 .settings-label-tooltip {
-  position: relative;
-  cursor: default;
+  cursor: help;
 
   &::after {
     content: "\f059";
@@ -716,27 +736,6 @@ input[type="number"]::-webkit-inner-spin-button {
     margin-left: 0.3em;
     opacity: 0.5;
     vertical-align: middle;
-  }
-
-  &::before {
-    content: attr(data-tooltip);
-    position: absolute;
-    bottom: calc(100% + 4px);
-    left: 0;
-    background: #000000c9;
-    color: #fff;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 0.8em;
-    white-space: nowrap;
-    z-index: 9999;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.15s;
-  }
-
-  &:hover::before {
-    opacity: 1;
   }
 }
 
@@ -2225,6 +2224,14 @@ div[data-value="Protein Conversion"] .tab-pane {
 #app-conversion_main-stats_violin>div,
 #app-conversion_main-stats_violin>div>div,
 #app-conversion_main-stats_scatter>div,
+#app-conversion_main-diag_residuals_plot>div,
+#app-conversion_main-diag_residuals_plot>div>div,
+#app-conversion_main-diag_plateaus_plot>div,
+#app-conversion_main-diag_plateaus_plot>div>div,
+#app-conversion_main-diag_series_plot>div,
+#app-conversion_main-diag_series_plot>div>div,
+#app-conversion_main-diag_saturation_plot>div,
+#app-conversion_main-diag_saturation_plot>div>div,
 #app-conversion_main-stats_scatter>div>div {
   width: unset !important;
   height: unset !important;
@@ -2419,7 +2426,8 @@ div[data-value="Protein Conversion"] .tab-pane {
   display: grid;
   gap: 1%;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: 3fr 2fr;
+  /* The plots take everything the compact result cards and table leave */
+  grid-template-rows: minmax(0, 1fr) minmax(14rem, 30vh);
 }
 
 .statistics-tab {
@@ -2467,7 +2475,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 .protocol-tab {
   height: 100%;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-rows: 1fr;
   gap: 1%;
   overflow: hidden;
@@ -2475,6 +2483,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 
 .protocol-tab>* {
   min-height: 0;
+  min-width: 0;
 }
 
 .protocol-left-col {
@@ -2492,14 +2501,14 @@ div[data-value="Protein Conversion"] .tab-pane {
 
 .protocol-secondary-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
   flex-shrink: 0;
 }
 
 .protocol-stats-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-rows: repeat(4, 1fr);
   gap: 1rem;
   min-height: 0;
@@ -2542,35 +2551,25 @@ div[data-value="Protein Conversion"] .tab-pane {
   color: #e53935;
 }
 
-.pstat-msg-list {
-  width: 100%;
-  margin-top: 5px;
-  max-height: 6em;
-  overflow-y: auto;
-  text-align: left;
+/* Grid and flex children default to their content width; long warning
+   messages would otherwise widen the whole Summary Statistics layout */
+.protocol-secondary-grid>*,
+.protocol-stats-grid>*,
+.protocol-stat-body {
+  min-width: 0;
 }
 
-.pstat-msg-item {
-  font-size: 0.67rem;
-  line-height: 1.45;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* Alerts / Warnings cards: the count, with the messages in a tooltip.
+   The tooltip's own content (title/detail/count per item) is styled
+   inline in R since it's reparented into a Bootstrap tooltip popup; the
+   surrounding chrome (background, radius, width) comes from the global
+   .tooltip rules above. */
+.pstat-count-trigger {
+  cursor: help;
 
-  &.pstat-msg-err {
-    color: #e53935;
+  .protocol-stat-sub .fa {
+    margin-right: 0.3em;
   }
-
-  &.pstat-msg-warn {
-    color: darkorange;
-  }
-}
-
-.pstat-msg-more {
-  font-size: 0.67rem;
-  opacity: 0.55;
-  text-align: center;
-  margin-top: 2px;
 }
 
 .protocol-log-card .card-body {
@@ -2671,6 +2670,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 
 /* Card Styling in Analysis */
 .binding-analysis-tab .card-custom .card,
+.kinetics-diagnostics-tab .card-custom .card,
 .statistics-tab .card-custom .card,
 .batch-control-tab .card-custom .card,
 .protocol-tab .card-custom .card,
@@ -2681,6 +2681,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 }
 
 .binding-analysis-tab .card-custom .bslib-card .card-header,
+.kinetics-diagnostics-tab .card-custom .bslib-card .card-header,
 .statistics-tab .card-custom .bslib-card .card-header,
 .batch-control-tab .card-custom .bslib-card .card-header,
 .protocol-tab .card-custom .bslib-card .card-header,
@@ -2699,6 +2700,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 }
 
 .binding-analysis-tab .card-custom .card .card-body,
+.kinetics-diagnostics-tab .card-custom .card .card-body,
 .statistics-tab .card-custom .card .card-body,
 .batch-control-tab .card-custom .card .card-body,
 .protocol-tab .card-custom .card .card-body,
@@ -2744,7 +2746,8 @@ div[data-value="Protein Conversion"] .tab-pane {
   padding-bottom: 0;
 }
 
-.binding-analysis-tab sub {
+.binding-analysis-tab sub,
+.kinetics-diagnostics-tab sub {
   left: -0.1vw !important;
   font-size: 0.7vw;
 }
@@ -2800,6 +2803,179 @@ div[data-value="Protein Conversion"] .tab-pane {
 .param-result {
   font-size: 0.5em;
   text-align: left;
+}
+
+/* Kinetic Analysis result cards (kinact, Ki, kinact/Ki): compact content that
+   stays inside the card; it scrolls rather than clipping on small screens */
+.binding-analysis-tab .result-cards {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+
+  /* kinact/Ki takes the right half, kinact and Ki stack in the left half */
+  >.card-custom:nth-child(3) {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+
+    .kinetic-card-content>* {
+      flex-basis: 100%;
+    }
+
+    .kinetic-main {
+      font-size: 1.15em;
+    }
+
+    .kinetic-stats {
+      justify-content: center;
+      font-size: 0.4em;
+    }
+
+    .kinetic-detail {
+      font-size: 0.5em;
+    }
+  }
+}
+
+.binding-analysis-tab .result-cards .card-custom {
+  min-width: 0;
+  min-height: 0;
+}
+
+.binding-analysis-tab .result-cards .kobs-val {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  overflow: hidden;
+  align-content: stretch;
+
+  >.shinycssloaders-container,
+  >.shinycssloaders-container>.shiny-html-output,
+  >.shiny-html-output {
+    height: 100%;
+  }
+}
+
+.kinetic-card-content {
+  position: static;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: center;
+  column-gap: 0.6em;
+  row-gap: 0.15em;
+  padding: 0.25em 0.6em;
+  overflow-y: auto;
+  overflow-x: hidden;
+  text-align: left;
+  line-height: 1.25;
+
+  /* Value on the left, statistics or warnings beside it; both drop to their
+     own line only when the card is too narrow */
+  >* {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  >.kinetic-main {
+    flex: 0 1 auto;
+  }
+
+  >.kinetic-stats,
+  >.result-warnings {
+    flex: 1 1 9em;
+    margin-top: 0;
+  }
+}
+
+.kinetic-main {
+  font-size: 1em;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kinetic-stats {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  column-gap: 0.8em;
+  font-size: 0.42em;
+}
+
+.kinetic-stat {
+  white-space: nowrap;
+  color: rgb(255 255 255 / 62%);
+}
+
+.kinetic-unit {
+  font-size: 0.6em;
+}
+
+.kinetic-error {
+  font-size: 0.55em;
+  text-align: right;
+}
+
+.kinetic-detail {
+  font-size: 0.45em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.result-nd {
+  opacity: 0.55;
+}
+
+.result-nd-sub {
+  text-align: center;
+  font-style: italic;
+}
+
+.result-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+  margin-top: 0.35em;
+  font-size: 0.42em;
+  text-align: left;
+  min-width: 0;
+}
+
+.result-warning {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45em;
+  color: darkorange;
+  font-weight: 600;
+  cursor: help;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  .fa,
+  .fas,
+  svg {
+    flex-shrink: 0;
+  }
+}
+
+/* Fit Diagnostics tab */
+.kinetics-diagnostics-tab {
+  height: 100%;
+  display: grid;
+  gap: 1%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+
+.kinetics-diagnostics-tab>* {
+  min-width: 0;
+  min-height: 0;
 }
 
 // .deconvolution-spectrum-card .plotly,

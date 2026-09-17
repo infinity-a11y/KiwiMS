@@ -62,6 +62,11 @@ box::use(
       render_table_view,
       filter_table_view,
       make_kobs_plot,
+      concentration_symbol_map,
+      make_kinetics_residual_plot,
+      make_kinetics_plateau_plot,
+      make_kinetics_series_plot,
+      make_kinetics_saturation_plot,
       empty_prot_comp_tbl,
       read_decon_metadata,
       read_decon_result,
@@ -78,7 +83,7 @@ box::use(
       convert_conc_keys,
       convert_hits_units,
       convert_kobs_result_units,
-      convert_kinact_ki_params,
+      convert_kinact_ki_units,
       convert_result_list_units
     ],
   app /
@@ -1898,7 +1903,7 @@ server <- function(
         ))
       }
 
-      return(result_list$kinact_ki_result$Params)
+      return(result_list$kinact_ki_result)
     })
 
     ## Render conversion results interface ----
@@ -1915,6 +1920,15 @@ server <- function(
 
     iface_state <- new.env(parent = emptyenv())
     iface_state$built <- character(0)
+    iface_state$observers <- list()
+
+    # Observers created while building a panel belong to that build. They are
+    # destroyed on reset; otherwise every re-run would stack another copy on
+    # the same inputs, and copies updating their own inputs loop forever.
+    track_iface_observer <- function(observer) {
+      iface_state$observers <- c(iface_state$observers, list(observer))
+      invisible(observer)
+    }
 
     iface_key <- function(analysis_select) {
       switch(
@@ -1966,6 +1980,8 @@ server <- function(
     }
 
     reset_result_interfaces <- function() {
+      lapply(iface_state$observers, function(observer) observer$destroy())
+      iface_state$observers <- list()
       iface_state$built <- character(0)
       lapply(iface_keys, function(key) {
         output[[paste0("iface_", key)]] <- shiny::renderUI(NULL)
@@ -2434,7 +2450,7 @@ server <- function(
             prot_dist_settings <- shiny::reactiveVal(0L)
             prot_table_settings <- shiny::reactiveVal(0L)
 
-            shiny::observeEvent(
+            track_iface_observer(shiny::observeEvent(
               list(
                 input$sample_view_spectrum_annotation,
                 input$sample_view_spectrum_diff
@@ -2442,8 +2458,8 @@ server <- function(
               smpl_spectrum_settings(smpl_spectrum_settings() + 1L),
               ignoreInit = TRUE,
               ignoreNULL = TRUE
-            )
-            shiny::observeEvent(
+            ))
+            track_iface_observer(shiny::observeEvent(
               list(
                 input$samples_table_view_binding_bar,
                 input$samples_table_view_tot_binding_bar
@@ -2451,14 +2467,14 @@ server <- function(
               smpl_table_settings(smpl_table_settings() + 1L),
               ignoreInit = TRUE,
               ignoreNULL = TRUE
-            )
-            shiny::observeEvent(
+            ))
+            track_iface_observer(shiny::observeEvent(
               list(input$cmp_distribution_labels, input$cmp_distribution_scale),
               cmp_dist_settings(cmp_dist_settings() + 1L),
               ignoreInit = TRUE,
               ignoreNULL = TRUE
-            )
-            shiny::observeEvent(
+            ))
+            track_iface_observer(shiny::observeEvent(
               list(
                 input$compounds_table_view_binding_bar,
                 input$compounds_table_view_tot_binding_bar
@@ -2466,8 +2482,8 @@ server <- function(
               cmp_table_settings(cmp_table_settings() + 1L),
               ignoreInit = TRUE,
               ignoreNULL = TRUE
-            )
-            shiny::observeEvent(
+            ))
+            track_iface_observer(shiny::observeEvent(
               list(
                 input$protein_distribution_labels,
                 input$protein_distribution_scale
@@ -2475,8 +2491,8 @@ server <- function(
               prot_dist_settings(prot_dist_settings() + 1L),
               ignoreInit = TRUE,
               ignoreNULL = TRUE
-            )
-            shiny::observeEvent(
+            ))
+            track_iface_observer(shiny::observeEvent(
               list(
                 input$proteins_table_view_binding_bar,
                 input$proteins_table_view_tot_binding_bar
@@ -2484,7 +2500,7 @@ server <- function(
               prot_table_settings(prot_table_settings() + 1L),
               ignoreInit = TRUE,
               ignoreNULL = TRUE
-            )
+            ))
 
             ###### Annotated spectrum ----
             output$samples_annotated_spectrum <- plotly::renderPlotly({
@@ -2791,7 +2807,7 @@ server <- function(
               )
 
             ####### Show label input (update static switch) ----
-            shiny::observeEvent(
+            track_iface_observer(shiny::observeEvent(
               list(input$conversion_compound_picker, input$truncate_names),
               {
                 shiny::req(hits_summary, input$conversion_compound_picker)
@@ -2812,7 +2828,7 @@ server <- function(
                 )
               },
               ignoreInit = TRUE
-            )
+            ))
 
             ###### Annotated spectrum ----
 
@@ -2832,19 +2848,19 @@ server <- function(
               length(unique(ids)) <= 8 & max(nchar(as.character(ids))) <= 20
             }))
 
-            shiny::observeEvent(
+            track_iface_observer(shiny::observeEvent(
               input$conversion_compound_picker,
               {
                 manual_render_cmp_spectrum(0L)
               },
               ignoreInit = TRUE
-            )
+            ))
 
-            shiny::observeEvent(input$render_cmp_annotated_spectrum_btn, {
+            track_iface_observer(shiny::observeEvent(input$render_cmp_annotated_spectrum_btn, {
               manual_render_cmp_spectrum(manual_render_cmp_spectrum() + 1L)
-            })
+            }))
 
-            shiny::observeEvent(
+            track_iface_observer(shiny::observeEvent(
               list(
                 input$truncate_names,
                 input$color_variable,
@@ -2858,7 +2874,7 @@ server <- function(
                 if (n_samples >= 30) manual_render_cmp_spectrum(0L)
               },
               ignoreInit = TRUE
-            )
+            ))
 
             output$cmp_annotated_spectrum_na <- shiny::renderText("N/A")
 
@@ -3035,7 +3051,7 @@ server <- function(
             # Show/hide the peak symbols and their legend rows on the figure
             # that is already on screen. The traces are always built; only
             # their visibility changes, so this never touches the data.
-            shiny::observeEvent(
+            track_iface_observer(shiny::observeEvent(
               input$compounds_spectrum_symbols,
               {
                 restyle_peak_symbols(
@@ -3046,9 +3062,9 @@ server <- function(
                 )
               },
               ignoreInit = TRUE
-            )
+            ))
 
-            shiny::observeEvent(
+            track_iface_observer(shiny::observeEvent(
               input$compounds_spectrum_legend,
               {
                 relayout_spectrum_legend(
@@ -3060,9 +3076,9 @@ server <- function(
                 )
               },
               ignoreInit = TRUE
-            )
+            ))
 
-            shiny::observeEvent(
+            track_iface_observer(shiny::observeEvent(
               compounds_labels_val(),
               {
                 relayout_spectrum_labels(
@@ -3074,10 +3090,10 @@ server <- function(
                 )
               },
               ignoreInit = TRUE
-            )
+            ))
 
             ####### Show label input UI ----
-            shiny::observe({
+            track_iface_observer(shiny::observe({
               shiny::req(hits_summary, input$conversion_compound_picker)
 
               tbl <- hits_summary |>
@@ -3118,15 +3134,15 @@ server <- function(
                 "compounds_spectrum_labels",
                 value = labels_show
               )
-            })
+            }))
 
-            shiny::observeEvent(
+            track_iface_observer(shiny::observeEvent(
               input$compounds_spectrum_labels,
               {
                 compounds_labels_val(input$compounds_spectrum_labels)
               },
               ignoreInit = TRUE
-            )
+            ))
 
             ###### Compounds view table ----
             output$compounds_table_view <- DT::renderDataTable(
@@ -3265,7 +3281,7 @@ server <- function(
             )
 
             ###### Tot. Binding [%] for one compound across samples ----
-            shiny::observeEvent(input$conversion_protein_picker, {
+            track_iface_observer(shiny::observeEvent(input$conversion_protein_picker, {
               choices <- unique(hits_summary$`Cmp Name`[
                 hits_summary$`Protein` == input$conversion_protein_picker &
                   !is.na(hits_summary$`Cmp Name`)
@@ -3278,7 +3294,7 @@ server <- function(
                 "total_pct_prot_binding_select",
                 choices = choices
               )
-            })
+            }))
 
             output$total_pct_prot_binding <- shiny::renderUI({
               shiny::req(
@@ -3416,7 +3432,7 @@ server <- function(
 
             ####### Show label input UI ----
             ####### Show label input (update static switch) ----
-            shiny::observeEvent(
+            track_iface_observer(shiny::observeEvent(
               list(input$conversion_protein_picker, input$truncate_names),
               {
                 shiny::req(hits_summary, input$conversion_protein_picker)
@@ -3443,7 +3459,7 @@ server <- function(
                 )
               },
               ignoreInit = TRUE
-            )
+            ))
 
             ###### Annotated spectrum ----
 
@@ -3463,19 +3479,19 @@ server <- function(
               length(unique(ids)) <= 8 & max(nchar(as.character(ids))) <= 20
             }))
 
-            shiny::observeEvent(
+            track_iface_observer(shiny::observeEvent(
               input$conversion_protein_picker,
               {
                 manual_render_spectrum(0L)
               },
               ignoreInit = TRUE
-            )
+            ))
 
-            shiny::observeEvent(input$render_annotated_spectrum_btn, {
+            track_iface_observer(shiny::observeEvent(input$render_annotated_spectrum_btn, {
               manual_render_spectrum(manual_render_spectrum() + 1L)
-            })
+            }))
 
-            shiny::observeEvent(
+            track_iface_observer(shiny::observeEvent(
               list(
                 input$truncate_names,
                 input$color_variable,
@@ -3489,7 +3505,7 @@ server <- function(
                 if (n_samples >= 30) manual_render_spectrum(0L)
               },
               ignoreInit = TRUE
-            )
+            ))
 
             output$annotated_spectrum_container <- shiny::renderUI({
               shiny::req(hits_summary, input$conversion_protein_picker)
@@ -3652,7 +3668,7 @@ server <- function(
               proteins_spectrum_plot()
             })
 
-            shiny::observeEvent(
+            track_iface_observer(shiny::observeEvent(
               input$proteins_spectrum_symbols,
               {
                 restyle_peak_symbols(
@@ -3663,9 +3679,9 @@ server <- function(
                 )
               },
               ignoreInit = TRUE
-            )
+            ))
 
-            shiny::observeEvent(
+            track_iface_observer(shiny::observeEvent(
               input$proteins_spectrum_legend,
               {
                 relayout_spectrum_legend(
@@ -3677,9 +3693,9 @@ server <- function(
                 )
               },
               ignoreInit = TRUE
-            )
+            ))
 
-            shiny::observeEvent(
+            track_iface_observer(shiny::observeEvent(
               proteins_labels_val(),
               {
                 relayout_spectrum_labels(
@@ -3691,10 +3707,10 @@ server <- function(
                 )
               },
               ignoreInit = TRUE
-            )
+            ))
 
             ####### Show label input UI ----
-            shiny::observe({
+            track_iface_observer(shiny::observe({
               shiny::req(hits_summary, input$conversion_protein_picker)
 
               tbl <- hits_summary |>
@@ -3735,15 +3751,15 @@ server <- function(
                 "proteins_spectrum_labels",
                 value = labels_show
               )
-            })
+            }))
 
-            shiny::observeEvent(
+            track_iface_observer(shiny::observeEvent(
               input$proteins_spectrum_labels,
               {
                 proteins_labels_val(input$proteins_spectrum_labels)
               },
               ignoreInit = TRUE
-            )
+            ))
 
             ###### Proteins view table ----
             output$proteins_table_view <- DT::renderDataTable(
@@ -3870,14 +3886,14 @@ server <- function(
             )
 
             # Assign colors to reactive variable
-            shiny::observe({
+            track_iface_observer(shiny::observe({
               conversion_vars$conc_colors <- concentration_colors()
-            })
+            }))
 
             # Offer only palettes that can supply one color per concentration,
             # keeping the user's pick whenever it survives the filter. Gated on
             # a sibling input so the picker exists before it is populated.
-            shiny::observe({
+            track_iface_observer(shiny::observe({
               shiny::req(input$conc_unit_results)
 
               shiny::updateSelectInput(
@@ -3889,7 +3905,7 @@ server <- function(
                   length(conc_levels)
                 )
               )
-            })
+            }))
 
             # Assign concentrations to reactive variable
             conversion_vars$concentrations <- concentrations <- dplyr::filter(
@@ -3959,6 +3975,13 @@ server <- function(
               convert_conc_keys(all_fitted_conc, unit_view())
             })
 
+            # Marker symbol per concentration, fixed from all analysed
+            # concentrations so every plot (Binding, concentration tabs, fit
+            # diagnostics) shows a concentration with the same shape
+            view_symbols <- shiny::reactive({
+              concentration_symbol_map(unname(view_fitted_conc()))
+            })
+
             # Results currently on display: the recomputed ones when
             # concentrations were excluded, otherwise the original fit
             view_results <- shiny::reactive({
@@ -3986,116 +4009,236 @@ server <- function(
 
             ##### Binding tab ----
 
-            ###### Calculated kinact value ----
-            output$kinact <- shiny::renderUI({
-              params <- convert_kinact_ki_params(
-                kinact_ki_result(),
-                unit_view()
-              )
+            ###### Result cards ----
+            # The cards read the global fit. kinact and KI are only shown when
+            # the data saturates; otherwise their cards say why they are not
+            # determinable, and the fit warnings (also listed under Warnings
+            # in the Summary Statistics) appear in the cards they concern.
+            view_kinact_ki <- shiny::reactive({
+              convert_kinact_ki_units(kinact_ki_result(), unit_view())
+            })
 
-              shiny::div(
-                class = "result-card-content",
+            # format_scientific() returns a tag list for powers of ten; render it
+            # to one HTML string so it can be pasted into labels
+            fmt_num <- function(x) as.character(format_scientific(x))
+
+            # A hover tooltip in the same visual language as the Alerts /
+            # Warnings list (bold title, dimmer detail line below). Used
+            # wherever a short label needs an on-hover explanation, instead
+            # of the native title attribute, which browsers render as a
+            # plain unstyled system tooltip.
+            hover_info <- function(trigger, detail, title = NULL, accent = "#8f9bb3") {
+              bslib::tooltip(
+                trigger,
                 shiny::div(
-                  class = "main-result",
-                  shiny::HTML(paste(
-                    format_scientific(params[1, 1]),
-                    paste0(unit_view()$time_unit, "⁻¹")
-                  ))
-                ),
-                shiny::div(
-                  class = "error-result",
-                  shiny::HTML(paste(
-                    "±",
-                    format_scientific(params[1, 2])
-                  ))
-                ),
-                shiny::div(
-                  class = "param-result",
-                  shiny::HTML(
-                    paste(
-                      "<b>t value</b>&nbsp;",
-                      format_scientific(params[1, 3])
+                  style = "text-align:left; max-width:22rem;",
+                  if (!is.null(title)) {
+                    shiny::div(
+                      style = paste0(
+                        "font-weight:700; font-size:0.85rem; color:",
+                        accent,
+                        ";"
+                      ),
+                      shiny::HTML(title)
                     )
+                  },
+                  shiny::div(
+                    style = paste0(
+                      "font-size:0.78rem; color:#fff; opacity:0.9;",
+                      if (!is.null(title)) " margin-top:0.15rem;" else ""
+                    ),
+                    shiny::HTML(detail)
                   )
                 ),
-                shiny::div(
-                  class = "param-result",
-                  shiny::HTML(
-                    paste(
-                      "<b>Pr(>|t|)</b>&nbsp;",
-                      format_scientific(params[1, 4])
-                    )
+                placement = "auto"
+              )
+            }
+
+            card_warnings <- function(res, codes = NULL) {
+              warnings <- res$Warnings
+              if (!is.null(codes)) {
+                warnings <- Filter(function(w) w$code %in% codes, warnings)
+              }
+              if (length(warnings) == 0) {
+                return(NULL)
+              }
+              shiny::div(
+                class = "result-warnings",
+                lapply(warnings, function(w) {
+                  hover_info(
+                    shiny::div(
+                      class = "result-warning",
+                      shiny::icon("triangle-exclamation"),
+                      w$title
+                    ),
+                    detail = w$detail,
+                    accent = "#ffa53a"
+                  )
+                })
+              )
+            }
+
+            ci_text <- function(ci) {
+              if (any(is.na(ci))) {
+                return(NULL)
+              }
+              paste0("95% CI ", fmt_num(ci[1]), " – ", fmt_num(ci[2]))
+            }
+
+            # Compact card layout: the value and unit on the left, the
+            # statistics beside it as short items that wrap onto further lines
+            # only when the card is narrow, warnings below. The container
+            # scrolls instead of clipping when the card is small.
+            kinetic_card <- function(...) {
+              shiny::div(
+                class = "result-card-content kinetic-card-content",
+                ...
+              )
+            }
+
+            kinetic_line <- function(html, class = "kinetic-detail", title = NULL) {
+              if (is.null(html) || length(html) == 0) {
+                return(NULL)
+              }
+              el <- shiny::div(class = class, shiny::HTML(html))
+              if (is.null(title)) el else hover_info(el, detail = title)
+            }
+
+            kinetic_value <- function(value, unit_label) {
+              shiny::div(
+                class = "kinetic-main",
+                shiny::HTML(paste0(
+                  value,
+                  " <span class='kinetic-unit'>",
+                  unit_label,
+                  "</span>"
+                ))
+              )
+            }
+
+            # Statistics as inline items (± SE, CI, t/p) that share lines
+            kinetic_stats <- function(...) {
+              items <- Filter(function(x) length(x) > 0, list(...))
+              if (length(items) == 0) {
+                return(NULL)
+              }
+              shiny::div(
+                class = "kinetic-stats",
+                lapply(items, function(item) {
+                  shiny::span(class = "kinetic-stat", shiny::HTML(item))
+                })
+              )
+            }
+
+            param_card <- function(res, row, unit_label) {
+              params <- res$Params
+              if (res$Status != "saturated" || is.na(params[row, 1])) {
+                # The warnings say why (saturation not reached / KI not
+                # determinable), so the value itself only reads n.d.
+                warnings <- card_warnings(
+                  res,
+                  c("no_saturation", "ki_undetermined")
+                )
+                return(kinetic_card(
+                  hover_info(
+                    shiny::div(class = "kinetic-main result-nd", "n.d."),
+                    detail = "not determinable"
+                  ),
+                  if (is.null(warnings)) {
+                    kinetic_stats("not determinable")
+                  } else {
+                    warnings
+                  }
+                ))
+              }
+
+              kinetic_card(
+                kinetic_value(fmt_num(params[row, 1]), unit_label),
+                kinetic_stats(
+                  paste0("± ", fmt_num(params[row, 2])),
+                  ci_text(res$Params_CI[row, ]),
+                  paste0(
+                    "<b>t</b> ",
+                    fmt_num(params[row, 3]),
+                    " · <b>p</b> ",
+                    fmt_num(params[row, 4])
                   )
                 )
               )
+            }
+
+            ###### Calculated kinact value ----
+            output$kinact <- shiny::renderUI({
+              res <- view_kinact_ki()
+              shiny::req(res)
+              param_card(res, "kinact", paste0(unit_view()$time_unit, "⁻¹"))
             })
 
             ###### Calculated Ki value ----
             output$Ki <- shiny::renderUI({
-              params <- convert_kinact_ki_params(
-                kinact_ki_result(),
-                unit_view()
-              )
-
-              shiny::div(
-                class = "result-card-content",
-                shiny::div(
-                  class = "main-result",
-                  shiny::HTML(paste(
-                    format_scientific(params[2, 1]),
-                    unit_view()$conc_unit
-                  ))
-                ),
-                shiny::div(
-                  class = "error-result",
-                  shiny::HTML(paste(
-                    "±",
-                    format_scientific(params[2, 2])
-                  ))
-                ),
-                shiny::div(
-                  class = "param-result",
-                  shiny::HTML(
-                    paste(
-                      "<b>t value</b>&nbsp;",
-                      format_scientific(params[2, 3])
-                    )
-                  )
-                ),
-                shiny::div(
-                  class = "param-result",
-                  shiny::HTML(
-                    paste(
-                      "<b>Pr(>|t|)</b>&nbsp;",
-                      format_scientific(params[2, 4])
-                    )
-                  )
-                )
-              )
+              res <- view_kinact_ki()
+              shiny::req(res)
+              param_card(res, "KI", unit_view()$conc_unit)
             })
 
             ###### Calculated kinact/Ki value ----
             output$Kinact_Ki <- shiny::renderUI({
-              params <- convert_kinact_ki_params(
-                kinact_ki_result(),
-                unit_view()
-              )
+              res <- view_kinact_ki()
+              shiny::req(res)
+              ratio <- res$Ratio
 
-              shiny::div(
-                class = "result-card-content",
-                shiny::div(
-                  class = "main-result",
-                  shiny::HTML(paste(
-                    format_scientific(params[1, 1] / params[2, 1]),
-                    "<br>",
-                    paste0(
-                      unit_view()$time_unit,
-                      "⁻¹ ",
-                      unit_view()$conc_unit,
-                      "⁻¹"
-                    )
-                  ))
+              model_label <- if (res$Model == "hyperbolic") {
+                "hyperbolic fit"
+              } else {
+                "linear fit (no saturation)"
+              }
+
+              series_text <- if (!is.null(res$Series)) {
+                paste0(
+                  "<b>Series</b> ",
+                  paste(
+                    vapply(
+                      seq_len(nrow(res$Series)),
+                      function(i) {
+                        paste(res$Series$series[i], fmt_num(res$Series$ratio[i]))
+                      },
+                      character(1)
+                    ),
+                    collapse = " · "
+                  )
                 )
+              }
+
+              kinetic_card(
+                kinetic_value(
+                  fmt_num(ratio[["Estimate"]]),
+                  paste0(
+                    unit_view()$time_unit,
+                    "⁻¹ ",
+                    unit_view()$conc_unit,
+                    "⁻¹"
+                  )
+                ),
+                kinetic_stats(
+                  if (!is.na(ratio[["Std. Error"]])) {
+                    paste0("± ", fmt_num(ratio[["Std. Error"]]))
+                  },
+                  ci_text(ratio[c("CI 2.5%", "CI 97.5%")])
+                ),
+                kinetic_line(
+                  paste0("<b>Model</b> ", model_label),
+                  title = sprintf(
+                    "Global fit of %d samples at %d concentrations; curvature p = %s",
+                    res$Fit$n_points,
+                    res$Fit$n_concentrations,
+                    signif(res$Fit$p_curvature, 2)
+                  )
+                ),
+                kinetic_line(
+                  series_text,
+                  title = "kinact/Ki fitted to each replicate series on its own"
+                ),
+                card_warnings(res)
               )
             })
 
@@ -4219,13 +4362,21 @@ server <- function(
             )
 
             ###### Binding plot ----
+            # Mean ± SD or the individual samples (both together clutter the
+            # full plot); the export follows the same choice
+            binding_points_mode <- shiny::reactive({
+              if (identical(input$binding_points, "samples")) "samples" else "mean"
+            })
+
             output$binding_plot <- plotly::renderPlotly({
               shiny::req(result_list)
 
               make_binding_plot(
                 kobs_result = view_results()$binding_kobs_result,
                 colors = view_colors(),
-                units = view_units()
+                symbol_map = view_symbols(),
+                units = view_units(),
+                points = binding_points_mode()
               )
             })
 
@@ -4236,7 +4387,9 @@ server <- function(
               make_kobs_plot(
                 kinact_ki_result = view_results()$kinact_ki_result,
                 colors = view_colors(),
-                units = view_units()
+                symbol_map = view_symbols(),
+                units = view_units(),
+                show_extrapolation = isTRUE(input$kobs_show_extrapolation)
               )
             })
 
@@ -4253,8 +4406,10 @@ server <- function(
                     unit_view()
                   ),
                   colors = build_view_colors(),
+                  symbol_map = view_symbols(),
                   units = view_units(),
-                  theme = theme
+                  theme = theme,
+                  points = binding_points_mode()
                 )
               },
               filename_fn = function() {
@@ -4272,14 +4427,89 @@ server <- function(
                 make_kobs_plot(
                   kinact_ki_result = view_results()$kinact_ki_result,
                   colors = build_view_colors(),
+                  symbol_map = view_symbols(),
                   units = view_units(),
-                  theme = theme
+                  theme = theme,
+                  show_extrapolation = isTRUE(input$kobs_show_extrapolation)
                 )
               },
               filename_fn = function() {
                 paste0(get_session_prefix(), "_kobs_Curve")
               }
             )
+
+            ##### Fit diagnostics tab ----
+            # Each diagnostics plot is rendered on screen and exported with the
+            # same builder, so the export follows the chosen theme
+            diagnostics_plots <- list(
+              diag_residuals = list(
+                build = function(res, colors, units, theme) {
+                  make_kinetics_residual_plot(
+                    res,
+                    colors,
+                    units,
+                    theme,
+                    view_symbols()
+                  )
+                },
+                file = "_Fit_Residuals"
+              ),
+              diag_plateaus = list(
+                build = function(res, colors, units, theme) {
+                  make_kinetics_plateau_plot(
+                    res,
+                    colors,
+                    units,
+                    theme,
+                    view_symbols()
+                  )
+                },
+                file = "_Plateaus"
+              ),
+              diag_series = list(
+                build = function(res, colors, units, theme) {
+                  make_kinetics_series_plot(res, units, theme)
+                },
+                file = "_kinact_Ki_Series"
+              ),
+              diag_saturation = list(
+                build = function(res, colors, units, theme) {
+                  make_kinetics_saturation_plot(
+                    res,
+                    colors,
+                    units,
+                    theme,
+                    view_symbols()
+                  )
+                },
+                file = "_Saturation_Coverage"
+              )
+            )
+
+            lapply(names(diagnostics_plots), function(id) {
+              spec <- diagnostics_plots[[id]]
+
+              output[[paste0(id, "_plot")]] <- plotly::renderPlotly({
+                res <- view_results()$kinact_ki_result
+                shiny::req(res)
+                spec$build(res, view_colors(), view_units(), "dark")
+              })
+
+              setup_plot_dl(
+                input,
+                output,
+                session,
+                id,
+                build_fn = function(theme) {
+                  res <- view_results()$kinact_ki_result
+                  shiny::req(res)
+                  spec$build(res, build_view_colors(), view_units(), theme)
+                },
+                filename_fn = function() {
+                  paste0(get_session_prefix(), spec$file)
+                }
+              )
+            })
 
             ##### Concentration tabs ----
 
@@ -4455,6 +4685,19 @@ server <- function(
                 )
 
                 ###### Binding plot ----
+                local_binding_points_mode <- shiny::reactive({
+                  if (
+                    identical(
+                      input[[paste0(local_ui_id, "_binding_points")]],
+                      "samples"
+                    )
+                  ) {
+                    "samples"
+                  } else {
+                    "mean"
+                  }
+                })
+
                 output[[paste0(
                   local_ui_id,
                   "_binding_plot"
@@ -4466,7 +4709,9 @@ server <- function(
                     ),
                     filter_conc = view_concentration(),
                     colors = view_colors(),
-                    units = view_units()
+                    symbol_map = view_symbols(),
+                    units = view_units(),
+                    points = local_binding_points_mode()
                   )
                 })
 
@@ -4515,8 +4760,10 @@ server <- function(
                       ),
                       filter_conc = view_concentration(),
                       colors = build_view_colors(),
+                      symbol_map = view_symbols(),
                       units = view_units(),
-                      theme = theme
+                      theme = theme,
+                      points = local_binding_points_mode()
                     )
                   },
                   filename_fn = function() {
@@ -4583,7 +4830,7 @@ server <- function(
               )
             })
 
-            shiny::observeEvent(
+            track_iface_observer(shiny::observeEvent(
               conversion_sidebar_vars$console_log_snapshot(),
               {
                 shiny::req(conversion_sidebar_vars$console_log_snapshot())
@@ -4610,7 +4857,7 @@ server <- function(
                 ))
               },
               ignoreNULL = TRUE
-            )
+            ))
 
             scatter_cs <- shiny::reactive({
               cs <- input$stats_scatter_color_scale
@@ -5037,7 +5284,7 @@ server <- function(
             # with a stale heatmap_well_click value left over from a previous
             # click (which would immediately re-navigate every time results_observer
             # re-runs with analysis_select == 1).
-            shiny::observeEvent(
+            track_iface_observer(shiny::observeEvent(
               input$heatmap_well_click,
               {
                 click <- input$heatmap_well_click
@@ -5077,11 +5324,11 @@ server <- function(
               },
               ignoreNULL = TRUE,
               ignoreInit = TRUE
-            )
+            ))
 
             # Apply pending sample once Relative Binding interface is active
             # and the picker has been rendered (req on picker avoids racing the renderUI)
-            shiny::observe({
+            track_iface_observer(shiny::observe({
               pending <- heatmap_pending_sample()
               shiny::req(!is.null(pending))
               shiny::req(conversion_sidebar_vars$analysis_select() == 2)
@@ -5093,10 +5340,10 @@ server <- function(
               )
               set_selected_tab("Samples View", session)
               heatmap_pending_sample(NULL)
-            })
+            }))
 
             # Scatter click → navigate to Relative Binding / Samples View
-            shiny::observeEvent(
+            track_iface_observer(shiny::observeEvent(
               input$stats_scatter_click,
               {
                 click <- input$stats_scatter_click
@@ -5112,9 +5359,9 @@ server <- function(
               },
               ignoreNULL = TRUE,
               ignoreInit = TRUE
-            )
+            ))
 
-            shiny::observe({
+            track_iface_observer(shiny::observe({
               pending <- stats_scatter_pending_sample()
               shiny::req(!is.null(pending))
               shiny::req(conversion_sidebar_vars$analysis_select() == 2)
@@ -5126,10 +5373,10 @@ server <- function(
               )
               set_selected_tab("Samples View", session)
               stats_scatter_pending_sample(NULL)
-            })
+            }))
 
             # Boxplot point click → navigate to Relative Binding / Samples View
-            shiny::observeEvent(
+            track_iface_observer(shiny::observeEvent(
               input$stats_boxplot_click,
               {
                 click <- input$stats_boxplot_click
@@ -5145,9 +5392,9 @@ server <- function(
               },
               ignoreNULL = TRUE,
               ignoreInit = TRUE
-            )
+            ))
 
-            shiny::observe({
+            track_iface_observer(shiny::observe({
               pending <- stats_boxplot_pending_sample()
               shiny::req(!is.null(pending))
               shiny::req(conversion_sidebar_vars$analysis_select() == 2)
@@ -5159,10 +5406,10 @@ server <- function(
               )
               set_selected_tab("Samples View", session)
               stats_boxplot_pending_sample(NULL)
-            })
+            }))
 
             # Violin point click → navigate to Relative Binding / Samples View
-            shiny::observeEvent(
+            track_iface_observer(shiny::observeEvent(
               input$stats_violin_click,
               {
                 click <- input$stats_violin_click
@@ -5178,9 +5425,9 @@ server <- function(
               },
               ignoreNULL = TRUE,
               ignoreInit = TRUE
-            )
+            ))
 
-            shiny::observe({
+            track_iface_observer(shiny::observe({
               pending <- stats_violin_pending_sample()
               shiny::req(!is.null(pending))
               shiny::req(conversion_sidebar_vars$analysis_select() == 2)
@@ -5192,9 +5439,9 @@ server <- function(
               )
               set_selected_tab("Samples View", session)
               stats_violin_pending_sample(NULL)
-            })
+            }))
 
-            shiny::observe({
+            track_iface_observer(shiny::observe({
               var_sel <- input$batch_heatmap_pct_cmp_var_select
               if (is.null(var_sel)) {
                 return()
@@ -5205,7 +5452,7 @@ server <- function(
                 "batch_heatmap_pct_cmp_color_scale",
                 selected = new_cs
               )
-            })
+            }))
 
             output$pstat_n_samples <- shiny::renderUI({
               shiny::div(
@@ -5350,33 +5597,104 @@ server <- function(
               x
             }
 
-            make_pstat_items <- function(msgs, item_cls) {
-              if (length(msgs) == 0) {
-                return(NULL)
-              }
+            # The card only shows the count; the messages are listed in a
+            # tooltip, each with its title (the text before the first ": ")
+            # in bold, the explanation below it and how often it occurred.
+            # Styled inline: bslib's tooltip web component reparents this
+            # element into a Bootstrap tooltip popup, and stylesheet classes
+            # on it are unreliable there, so every rule that matters for
+            # legibility is written directly onto the tags.
+            pstat_accent <- function(item_cls) {
+              if (identical(item_cls, "pstat-msg-err")) "#ff6b66" else "#ffa53a"
+            }
+
+            make_pstat_tooltip <- function(msgs, item_cls) {
               tbl <- sort(table(msgs), decreasing = TRUE)
-              max_show <- 4L
-              shown <- seq_len(min(length(tbl), max_show))
-              items <- lapply(shown, function(i) {
+              accent <- pstat_accent(item_cls)
+              items <- lapply(seq_along(tbl), function(i) {
                 txt <- names(tbl)[i]
                 cnt <- as.integer(tbl[[i]])
-                label <- if (cnt > 1) sprintf("%s ×%d", txt, cnt) else txt
+                # Counts folded into the message ("... ×3")
+                folded <- regmatches(txt, regexpr("\\s*×\\d+$", txt))
+                if (length(folded) > 0) {
+                  cnt <- cnt * as.integer(sub("^\\s*×", "", folded))
+                  txt <- sub("\\s*×\\d+$", "", txt)
+                }
+                split_at <- regexpr(": ", txt, fixed = TRUE)
+                title <- if (split_at > 0) substr(txt, 1, split_at - 1) else txt
+                detail <- if (split_at > 0) {
+                  substr(txt, split_at + 2, nchar(txt))
+                }
                 shiny::div(
-                  class = paste("pstat-msg-item", item_cls),
-                  title = txt,
-                  label
+                  style = paste(
+                    "text-align:left; padding:0.35rem 0 0.35rem 0.6rem;",
+                    "border-left:3px solid", paste0(accent, ";"),
+                    "line-height:1.35;"
+                  ),
+                  shiny::div(
+                    style = paste(
+                      "display:flex; justify-content:space-between;",
+                      "align-items:baseline; gap:0.75rem;",
+                      "font-weight:700; font-size:0.85rem; color:",
+                      paste0(accent, ";")
+                    ),
+                    shiny::span(title),
+                    if (cnt > 1) {
+                      shiny::span(
+                        style = paste(
+                          "flex-shrink:0; font-weight:400; opacity:0.8;",
+                          "font-variant-numeric:tabular-nums;"
+                        ),
+                        paste0("×", cnt)
+                      )
+                    }
+                  ),
+                  if (!is.null(detail)) {
+                    shiny::div(
+                      style = paste(
+                        "font-size:0.78rem; color:#fff; opacity:0.9;",
+                        "margin-top:0.15rem;"
+                      ),
+                      detail
+                    )
+                  }
                 )
               })
-              if (length(tbl) > max_show) {
-                items <- c(
-                  items,
-                  list(shiny::div(
-                    class = "pstat-msg-more",
-                    sprintf("+%d more", length(tbl) - max_show)
-                  ))
-                )
+              shiny::div(
+                style = paste(
+                  "display:flex; flex-direction:column; gap:0.5rem;",
+                  "max-height:50vh; max-width:22rem; width:max-content;",
+                  "overflow-y:auto; text-align:left;"
+                ),
+                items
+              )
+            }
+
+            pstat_count_card <- function(n, msgs, item_cls) {
+              cls <- if (n > 0) {
+                "protocol-stat-value protocol-stat-warn"
+              } else {
+                "protocol-stat-value"
               }
-              items
+              if (n == 0) {
+                return(shiny::div(
+                  shiny::div(class = cls, n),
+                  shiny::div(class = "protocol-stat-sub", "No alerts")
+                ))
+              }
+              bslib::tooltip(
+                shiny::div(
+                  class = "pstat-count-trigger",
+                  shiny::div(class = cls, n),
+                  shiny::div(
+                    class = "protocol-stat-sub",
+                    shiny::icon("circle-info"),
+                    "Hover for details"
+                  )
+                ),
+                make_pstat_tooltip(msgs, item_cls),
+                placement = "auto"
+              )
             }
 
             parse_log_lines <- function(snapshot) {
@@ -5457,50 +5775,16 @@ server <- function(
             output$pstat_alerts <- shiny::renderUI({
               shiny::req(conversion_sidebar_vars$console_log_snapshot())
               parsed <- parse_log_lines(conversion_sidebar_vars$console_log_snapshot())
-              n <- parsed$n_err
-              cls <- if (n > 0) {
-                "protocol-stat-value protocol-stat-warn"
-              } else {
-                "protocol-stat-value"
-              }
-              shiny::div(
-                shiny::div(class = cls, n),
-                if (n == 0) {
-                  shiny::div(
-                    class = "protocol-stat-sub",
-                    "No alerts"
-                  )
-                } else {
-                  shiny::div(
-                    class = "pstat-msg-list",
-                    make_pstat_items(parsed$err_msgs, "pstat-msg-err")
-                  )
-                }
-              )
+              pstat_count_card(parsed$n_err, parsed$err_msgs, "pstat-msg-err")
             })
 
             output$pstat_warnings <- shiny::renderUI({
               shiny::req(conversion_sidebar_vars$console_log_snapshot())
               parsed <- parse_log_lines(conversion_sidebar_vars$console_log_snapshot())
-              n <- parsed$n_warn_total
-              cls <- if (n > 0) {
-                "protocol-stat-value protocol-stat-warn"
-              } else {
-                "protocol-stat-value"
-              }
-              shiny::div(
-                shiny::div(class = cls, n),
-                if (n == 0) {
-                  shiny::div(
-                    class = "protocol-stat-sub",
-                    "No alerts"
-                  )
-                } else {
-                  shiny::div(
-                    class = "pstat-msg-list",
-                    make_pstat_items(parsed$warn_msgs, "pstat-msg-warn")
-                  )
-                }
+              pstat_count_card(
+                parsed$n_warn_total,
+                parsed$warn_msgs,
+                "pstat-msg-warn"
               )
             })
 
@@ -5577,7 +5861,7 @@ server <- function(
               )
             })
 
-            shiny::observe({
+            track_iface_observer(shiny::observe({
               rl <- conversion_sidebar_vars$result_list()
               shiny::req(rl, rl$hits_summary)
               hs <- rl$hits_summary
@@ -5605,8 +5889,10 @@ server <- function(
               }
 
               default_grp <- smart_default()
-              cur_violin <- input$stats_violin_groupby
-              cur_scatter <- input$stats_scatter_groupby
+              # Isolated: reacting to the inputs updated below would re-trigger
+              # this observer with every selection it sends
+              cur_violin <- shiny::isolate(input$stats_violin_groupby)
+              cur_scatter <- shiny::isolate(input$stats_scatter_groupby)
               sel_violin <- if (
                 !is.null(cur_violin) && cur_violin %in% choices
               ) {
@@ -5634,6 +5920,17 @@ server <- function(
                 choices = choices,
                 selected = sel_scatter
               )
+            }))
+
+            # Offer only palettes that fit the number of groups of the current
+            # group-by selection, keeping the user's pick when it survives
+            track_iface_observer(shiny::observe({
+              rl <- conversion_sidebar_vars$result_list()
+              shiny::req(rl, rl$hits_summary)
+              hs <- rl$hits_summary
+              sel_scatter <- input$stats_scatter_groupby
+              sel_violin <- input$stats_violin_groupby
+              shiny::req(sel_scatter, sel_violin)
 
               set1_max <- RColorBrewer::brewer.pal.info["Dark2", "maxcolors"]
 
@@ -5679,17 +5976,17 @@ server <- function(
 
               update_cs(
                 "stats_scatter_color_scale",
-                input$stats_scatter_color_scale,
+                shiny::isolate(input$stats_scatter_color_scale),
                 n_scatter
               )
               update_cs(
                 "stats_violin_color_scale",
-                input$stats_violin_color_scale,
+                shiny::isolate(input$stats_violin_color_scale),
                 n_violin
               )
-            })
+            }))
 
-            shiny::observe({
+            track_iface_observer(shiny::observe({
               rl <- conversion_sidebar_vars$result_list()
               shiny::req(rl, rl$hits_summary)
               has_well <- "well" %in%
@@ -5711,7 +6008,7 @@ server <- function(
                   session = session
                 )
               }
-            })
+            }))
 
             set_selected_tab("Protocol", session, id = "summary_tabs")
           } else if (iface == "hits") {
@@ -5724,7 +6021,7 @@ server <- function(
             ##### Hits unified table ----
             hits_col_selection <- shiny::reactiveVal(NULL)
 
-            shiny::observeEvent(
+            track_iface_observer(shiny::observeEvent(
               input$hits_tab_col_select,
               {
                 if (
@@ -5735,7 +6032,7 @@ server <- function(
               },
               ignoreInit = TRUE,
               ignoreNULL = FALSE
-            )
+            ))
 
             hits_tab_trigger <- shiny::reactive({
               list(
@@ -5901,7 +6198,7 @@ server <- function(
             )
 
             ##### Update column selector when display mode changes ----
-            shiny::observeEvent(
+            track_iface_observer(shiny::observeEvent(
               input$hits_per_adduct,
               {
                 always_excluded <- c(
@@ -5981,10 +6278,10 @@ server <- function(
                 }
               },
               ignoreInit = TRUE
-            )
+            ))
 
             ##### Hits unified table clicking observer ----
-            shiny::observeEvent(
+            track_iface_observer(shiny::observeEvent(
               input$hits_unified_tab_cell_clicked,
               {
                 shiny::req(
@@ -6049,10 +6346,10 @@ server <- function(
               },
               ignoreNULL = TRUE,
               ignoreInit = TRUE
-            )
+            ))
 
             ##### Color scale observer for unified hits table ----
-            shiny::observe({
+            track_iface_observer(shiny::observe({
               shiny::req(
                 conversion_vars$hits_summary,
                 input$hits_color_variable
@@ -6080,7 +6377,7 @@ server <- function(
                 choices = color_scale_choices(n),
                 selected = resolve_color_scale(color_scale, n)
               )
-            })
+            }))
           }
 
           n_hits_detected <- sum(!is.na(hits_summary$`Cmp Name`))
@@ -7085,6 +7382,9 @@ server <- function(
                     "An anchor point is forced at (t = 0, binding = 0). The plateau ",
                     shiny::strong("100 × v / k", htmltools::tags$sub("obs")),
                     " is the maximum covalent occupancy achievable."
+                  ),
+                  shiny::p(
+                    "Use the Settings button to show either the mean ± SD per time point or the individual samples the curves were fitted to. The export uses the same choice."
                   )
                 )
               )
@@ -7132,6 +7432,19 @@ server <- function(
                     " (maximum covalent rate) and ",
                     shiny::strong("K", htmltools::tags$sub("i")),
                     " (apparent affinity of the initial reversible complex)."
+                  ),
+                  shiny::p(
+                    "Points are the k",
+                    htmltools::tags$sub("obs"),
+                    " ± SE of each concentration fitted on its own; the line is the global fit of all samples (straight when no saturation is detected)."
+                  ),
+                  shiny::p(
+                    shiny::strong("Settings → Show Extrapolation: "),
+                    "shades the measured concentration range and continues the fitted line beyond it (dashed). The model that was not selected is drawn dotted. Inside the shade both usually coincide; where they part outside it, the data cannot tell them apart — which is why k",
+                    htmltools::tags$sub("inact"),
+                    " and K",
+                    htmltools::tags$sub("i"),
+                    " are then not reported."
                   )
                 )
               )
@@ -7139,6 +7452,80 @@ server <- function(
           )
         )
       )
+    })
+
+    ## Fit diagnostics help ----
+    diagnostics_help <- list(
+      diag_residuals_tooltip_bttn = list(
+        title = "Global Fit Residuals",
+        text = list(
+          shiny::p(
+            "Each point is one sample: measured binding minus the value of the global fit at its concentration and time, plotted against time. Colour and shape give the concentration; the fill gives the replicate series (filled, open, dotted), and a thin line joins the points of one series over time."
+          ),
+          shiny::p(
+            "Points scattering evenly around zero, mostly within the dotted ±2 SD lines, mean the model describes the time courses. A run of points on one side — for example early samples all below zero, or one concentration drifting away — shows something the model does not capture, such as low-intensity adducts read as 0 %, a lag phase or an unstable compound."
+          )
+        )
+      ),
+      diag_plateaus_tooltip_bttn = list(
+        title = "Plateau per Concentration",
+        text = list(
+          shiny::p(
+            "All values in % binding. The symbol (same colour and shape as in the other plots) is the mean binding observed at the concentration's last time point. The short horizontal tick is the plateau of that concentration fitted on its own (the Plateau column of the Binding Analysis table). The wide grey bar is the plateau used in the global fit; a bar spanning several concentrations means they share one plateau."
+          ),
+          shiny::p(
+            "The dotted stem from the symbol up to the tick is the rise the fit expects after the last measurement. A long stem means the curve was still rising when measurement stopped, so that plateau is an extrapolation. The hover on a symbol also gives the model's estimate of how far the curve got towards its plateau."
+          ),
+          shiny::p(
+            "A plateau can only be measured when the curve gets close to it. Concentrations reaching at least 70 % get a plateau of their own in the global fit; the others share one. Well-reached plateaus should be similar — the kinetic model assumes one maximum occupancy. Clearly different plateaus (warning above 10 percentage points) can point at inhibitor depletion or instability."
+          )
+        )
+      ),
+      diag_series_tooltip_bttn = list(
+        title = "kinact/Ki by Replicate Series",
+        text = list(
+          shiny::p(
+            "The global fit repeated on each replicate series alone (e.g. all R1 samples, all R2 samples), with its standard error, next to the result of all samples and its 95 % bootstrap confidence interval."
+          ),
+          shiny::p(
+            "Series that agree within their error bars mean a repeat of the whole experiment gives the same answer. A clear gap between series shows variability the per-sample scatter does not capture (different stock dilution, plate or day)."
+          )
+        )
+      ),
+      diag_saturation_tooltip_bttn = list(
+        title = "Saturation Coverage",
+        text = list(
+          shiny::p(
+            "The fraction of the maximal inactivation rate reached at each measured concentration, [C] / (Ki + [C]), using the Ki of the curved (hyperbolic) global fit. The shade marks the measured range; the dotted lines mark Ki, where half the maximal rate is reached."
+          ),
+          shiny::p(
+            "kinact and Ki can only be separated when the measured range reaches well into the bend of this curve. When the highest concentration stays at a small fraction, the data only determine kinact/Ki. If Ki is not determinable, its value here is an estimate and shown as such."
+          )
+        )
+      )
+    )
+
+    lapply(names(diagnostics_help), function(btn) {
+      help <- diagnostics_help[[btn]]
+      shiny::observeEvent(input[[btn]], {
+        shiny::showModal(
+          shiny::div(
+            class = "conversion-modal",
+            shiny::modalDialog(
+              title = help$title,
+              easyClose = TRUE,
+              footer = shiny::modalButton("Dismiss"),
+              shiny::fluidRow(
+                shiny::br(),
+                shiny::column(
+                  width = 11,
+                  shiny::div(class = "tooltip-text", help$text)
+                )
+              )
+            )
+          )
+        )
+      })
     })
 
     ## Binding analysis ----
@@ -7214,6 +7601,22 @@ server <- function(
                   ),
                   shiny::p(
                     "It measures intrinsic warhead reactivity and transition-state stabilization in the reversible complex, independent of binding affinity."
+                  ),
+                  shiny::p(
+                    shiny::strong("When it shows n.d. (not determinable): "),
+                    "k",
+                    htmltools::tags$sub("inact"),
+                    " and K",
+                    htmltools::tags$sub("i"),
+                    " can only be told apart when k",
+                    htmltools::tags$sub("obs"),
+                    " visibly levels off within the measured concentrations. KiwiMS tests this in the global fit: the curved (hyperbolic) model must describe the data significantly better than a straight line (p < 0.05), and K",
+                    htmltools::tags$sub("i"),
+                    " must be determined to within ±50 % and lie no higher than twice the highest concentration. Otherwise only k",
+                    htmltools::tags$sub("inact"),
+                    "/K",
+                    htmltools::tags$sub("i"),
+                    " is reported."
                   )
                 )
               )
@@ -7296,6 +7699,17 @@ server <- function(
                     "Lower K",
                     htmltools::tags$sub("i"),
                     " indicates stronger reversible binding before covalency."
+                  ),
+                  shiny::p(
+                    "K",
+                    htmltools::tags$sub("i"),
+                    " is only reported when the measured concentrations reach it: if all concentrations lie far below K",
+                    htmltools::tags$sub("i"),
+                    ", k",
+                    htmltools::tags$sub("obs"),
+                    " rises linearly and any K",
+                    htmltools::tags$sub("i"),
+                    " above the measured range fits equally well. The card then shows n.d. and the reason."
                   )
                 )
               )
@@ -7337,6 +7751,34 @@ server <- function(
                   ),
                   shiny::p(
                     "Higher values indicate more efficient covalent labeling at low concentration."
+                  ),
+                  shiny::p(
+                    shiny::strong("How it is determined: "),
+                    "all samples of all included concentrations are fitted at once (global fit), each sample as its own point, with a free plateau per concentration. k",
+                    htmltools::tags$sub("inact"),
+                    "/K",
+                    htmltools::tags$sub("i"),
+                    " is a parameter of that fit, so it has a standard error even when k",
+                    htmltools::tags$sub("inact"),
+                    " and K",
+                    htmltools::tags$sub("i"),
+                    " cannot be separated. The 95 % confidence interval comes from 200 bootstrap refits."
+                  ),
+                  shiny::p(
+                    shiny::strong("Model: "),
+                    "hyperbolic when k",
+                    htmltools::tags$sub("obs"),
+                    " levels off significantly, otherwise linear (slope = k",
+                    htmltools::tags$sub("inact"),
+                    "/K",
+                    htmltools::tags$sub("i"),
+                    "). ",
+                    shiny::strong("Series: "),
+                    "the same fit on each replicate series alone, showing how much a repeat of the experiment varies."
+                  ),
+                  shiny::p(
+                    shiny::strong("Warnings "),
+                    "(hover for details) flag results that need care, for example missing saturation or early samples reading 0 % because small adduct peaks fell below the deconvolution peak threshold."
                   )
                 )
               )
@@ -7676,7 +8118,7 @@ server <- function(
                     "Number of processing errors (alerts) encountered during the conversion run."
                   ),
                   shiny::p(
-                    "Alerts indicate samples where a critical issue prevented normal peak assignment, such as a missing deconvolution result or an unresolvable data conflict. The most frequent alert types are listed below the count."
+                    "Alerts indicate samples where a critical issue prevented normal peak assignment, such as a missing deconvolution result or an unresolvable data conflict. Hover over the count to see each alert with its explanation and how often it occurred."
                   )
                 )
               )
@@ -7705,7 +8147,7 @@ server <- function(
                     "Number of non-critical warnings raised during the conversion run."
                   ),
                   shiny::p(
-                    "Warnings flag conditions that may affect result quality but do not stop processing — for example, samples ignored due to missing hits, or concentrations omitted after filtering. The most frequent warning types are listed below the count."
+                    "Warnings flag conditions that may affect result quality but do not stop processing — for example, samples ignored due to missing hits, or concentrations omitted after filtering. Hover over the count to see each warning with its explanation and how often it occurred."
                   )
                 )
               )

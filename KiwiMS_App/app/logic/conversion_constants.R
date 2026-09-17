@@ -181,7 +181,7 @@ symbols <- c(
   "star-triangle-down",
   "diamond",
   "triangle-down",
-  "square",
+  "cross",
   "x",
   "hexagram",
   "hourglass"
@@ -219,3 +219,25 @@ empty_protein_table <- data.frame(
   rep(list(as.numeric(rep(NA, 9))), 9)
 ) |>
   stats::setNames(c("Protein", paste("Mass", 1:9)))
+
+# Kinetics fitting settings (see compute_kinact_ki()). A concentration gets a
+# plateau of its own when its curve reaches plateau_min_reached of it within
+# the measured time; the others share one. Plateaus spreading by more than
+# plateau_max_spread percentage points raise a warning. kinact and KI are only
+# reported separately when the global fit shows significant curvature
+# (curvature_alpha) and KI is determinable: not at its search bound, a relative
+# standard error of at most ki_max_rel_se and no further above the highest
+# measured concentration than ki_max_over_conc. Otherwise only kinact/KI is
+# reported.
+#' @export
+kinetics_settings <- list(
+  curvature_alpha = 0.05,
+  plateau_min_reached = 0.7,
+  plateau_max_spread = 10,
+  ki_max_rel_se = 0.5,
+  ki_max_over_conc = 2,
+  bootstrap_n = 200,
+  bootstrap_min_success = 0.8,
+  bootstrap_seed = 20260917L,
+  curve_points = 500
+)

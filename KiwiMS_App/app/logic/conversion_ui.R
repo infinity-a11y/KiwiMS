@@ -92,6 +92,23 @@ kinact_ki_concentrations_tabs <- function(ns, local_ui_id, conc_result, units) {
           "Binding Curve",
           shiny::div(
             class = "box-header-settings-help",
+            card_settings_popover(shiny::div(
+              shiny::div(
+                class = "conversion-tab-items-label",
+                shiny::HTML("Data Points")
+              ),
+              shinyWidgets::radioGroupButtons(
+                ns(paste0(local_ui_id, "_binding_points")),
+                label = NULL,
+                choices = c(
+                  "Mean ± SD" = "mean",
+                  "Samples" = "samples"
+                ),
+                selected = "mean",
+                size = "sm"
+              ),
+              style = "margin-right:20px;"
+            )),
             plot_dl_popover(ns, paste0(local_ui_id, "_binding")),
             bslib::tooltip(
               shiny::div(
@@ -267,6 +284,11 @@ kinact_ki_results_ui <- function(
   dynamic_ui_ids,
   units = NULL
 ) {
+  # Declared concentration unit, e.g. "µM" from "Concentration [µM]"
+  conc_unit <- if (!is.null(units[["Concentration"]])) {
+    gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]])
+  }
+
   # Generate the dynamic concentration panels
   concentration_panels <- lapply(seq_along(concentrations), function(i) {
     concentration <- concentrations[[i]]
@@ -275,7 +297,7 @@ kinact_ki_results_ui <- function(
     bslib::nav_panel(
       # Kept in the declared unit — the tab labels stay fixed while the unit
       # view changes
-      title = paste0("[", concentration, "]"),
+      title = paste(c(concentration, conc_unit), collapse = " "),
       shiny::div(
         class = "conversion-result-wrapper",
         shiny::uiOutput(ns(ui_id))
@@ -286,7 +308,7 @@ kinact_ki_results_ui <- function(
 
   static_panels <- list(
     bslib::nav_panel(
-      title = "Binding",
+      title = "Kinetics",
       shiny::div(
         class = "conversion-result-wrapper",
         shiny::div(
@@ -300,6 +322,23 @@ kinact_ki_results_ui <- function(
                 "Binding Curve",
                 shiny::div(
                   class = "box-header-settings-help",
+                  card_settings_popover(shiny::div(
+                    shiny::div(
+                      class = "conversion-tab-items-label",
+                      shiny::HTML("Data Points")
+                    ),
+                    shinyWidgets::radioGroupButtons(
+                      ns("binding_points"),
+                      label = NULL,
+                      choices = c(
+                        "Mean ± SD" = "mean",
+                        "Samples" = "samples"
+                      ),
+                      selected = "mean",
+                      size = "sm"
+                    ),
+                    style = "margin-right:20px;"
+                  )),
                   plot_dl_popover(ns, "binding"),
                   bslib::tooltip(
                     shiny::div(
@@ -342,6 +381,15 @@ kinact_ki_results_ui <- function(
                 ),
                 shiny::div(
                   class = "box-header-settings-help",
+                  card_settings_popover(shiny::div(
+                    shinyWidgets::materialSwitch(
+                      ns("kobs_show_extrapolation"),
+                      label = "Show Extrapolation",
+                      value = FALSE,
+                      right = TRUE
+                    ),
+                    style = "margin-right:20px;"
+                  )),
                   plot_dl_popover(ns, "kobs"),
                   bslib::tooltip(
                     shiny::div(
@@ -517,7 +565,81 @@ kinact_ki_results_ui <- function(
     )
   )
 
-  all_tabs <- c(static_panels, concentration_panels)
+  # Fit diagnostics: how well the data support the global kinact/KI fit
+  diagnostics_card <- function(title, id, help_id) {
+    shiny::div(
+      class = "card-custom",
+      bslib::card(
+        full_screen = TRUE,
+        bslib::card_header(
+          class = "bg-dark help-header d-flex justify-content-between",
+          title,
+          shiny::div(
+            class = "box-header-settings-help",
+            plot_dl_popover(ns, id),
+            bslib::tooltip(
+              shiny::div(
+                class = "tooltip-bttn",
+                shiny::actionButton(
+                  ns(help_id),
+                  label = NULL,
+                  icon = shiny::icon("circle-question")
+                )
+              ),
+              "Help",
+              placement = "top"
+            )
+          )
+        ),
+        bslib::card_body(
+          shinycssloaders::withSpinner(
+            plotly::plotlyOutput(ns(paste0(id, "_plot")), height = "100%"),
+            type = 1,
+            color = "#7777f9"
+          )
+        )
+      )
+    )
+  }
+
+  diagnostics_panel <- bslib::nav_panel(
+    title = "Fit",
+    shiny::div(
+      class = "conversion-result-wrapper",
+      shiny::div(
+        class = "kinetics-diagnostics-tab",
+        diagnostics_card(
+          "Global Fit Residuals",
+          "diag_residuals",
+          "diag_residuals_tooltip_bttn"
+        ),
+        diagnostics_card(
+          "Plateau per Concentration",
+          "diag_plateaus",
+          "diag_plateaus_tooltip_bttn"
+        ),
+        diagnostics_card(
+          htmltools::tagList(shiny::div(
+            "k",
+            htmltools::tags$sub("inact"),
+            "/K",
+            htmltools::tags$sub("i"),
+            " by Replicate Series"
+          )),
+          "diag_series",
+          "diag_series_tooltip_bttn"
+        ),
+        diagnostics_card(
+          "Saturation Coverage",
+          "diag_saturation",
+          "diag_saturation_tooltip_bttn"
+        )
+      )
+    ),
+    shiny::tags$script(popover_autoclose)
+  )
+
+  all_tabs <- c(static_panels, list(diagnostics_panel), concentration_panels)
 
   do.call(
     bslib::navset_card_tab,

@@ -684,12 +684,7 @@ server <- function(
             "Summary Statistics",
             "Hits Table",
             "Relative Binding",
-            shiny::span(
-              "K",
-              htmltools::tags$sub("i"),
-              " / k",
-              htmltools::tags$sub("inact")
-            )
+            "Kinetic Analysis"
           ),
           choiceValues = list(1, 4, 2, 3)
         ),

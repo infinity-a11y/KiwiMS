@@ -62,7 +62,7 @@ plot_dl_popover <- function(ns, prefix) {
           materialSwitch(
             ns(paste0(prefix, "_dl_transparent")),
             label = "Transparent Background",
-            value = TRUE,
+            value = FALSE,
             right = TRUE
           ),
           shiny::radioButtons(
