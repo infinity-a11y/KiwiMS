@@ -4068,6 +4068,52 @@ server <- function(
               )
             }
 
+            # Concentrations that carried data but could not be fitted. They
+            # are absent from the Binding Analysis table and from the global
+            # fit, so without this chip the only trace would be the protocol
+            # log — and a missing concentration silently narrows the measured
+            # range the saturation diagnostics are read against.
+            skipped_conc_warning <- function(skipped, conc_unit) {
+              if (is.null(skipped) || nrow(skipped) == 0) {
+                return(NULL)
+              }
+              n <- nrow(skipped)
+              detail <- paste(
+                vapply(
+                  seq_len(n),
+                  function(i) {
+                    paste0(
+                      "<b>",
+                      skipped$concentration[i],
+                      " ",
+                      conc_unit,
+                      "</b> — ",
+                      skipped$reason[i]
+                    )
+                  },
+                  character(1)
+                ),
+                collapse = "<br>"
+              )
+              shiny::div(
+                class = "result-warnings",
+                hover_info(
+                  shiny::div(
+                    class = "result-warning",
+                    shiny::icon("triangle-exclamation"),
+                    sprintf(
+                      "%d concentration%s excluded",
+                      n,
+                      if (n == 1) "" else "s"
+                    )
+                  ),
+                  detail = detail,
+                  title = "Not included in the fit",
+                  accent = "#ffa53a"
+                )
+              )
+            }
+
             card_warnings <- function(res, codes = NULL) {
               warnings <- res$Warnings
               if (!is.null(codes)) {
@@ -4259,7 +4305,14 @@ server <- function(
                   series_text,
                   title = "kinact/Ki fitted to each replicate series on its own"
                 ),
-                card_warnings(res)
+                card_warnings(res),
+                skipped_conc_warning(
+                  convert_kobs_result_units(
+                    result_list$binding_kobs_result,
+                    unit_view()
+                  )$skipped,
+                  unit_view()$conc_unit
+                )
               )
             })
 

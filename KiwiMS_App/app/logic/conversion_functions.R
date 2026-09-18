@@ -139,8 +139,26 @@ convert_kobs_result_units <- function(binding_kobs_result, view) {
 
   conc_names <- setdiff(
     names(binding_kobs_result),
-    c("binding_table", "binding_points", "binding_plot", "kobs_result_table")
+    c(
+      "binding_table",
+      "binding_points",
+      "binding_plot",
+      "kobs_result_table",
+      "skipped"
+    )
   )
+
+  # Concentrations that were left out of the fit are reported to the user, so
+  # their labels follow the selected unit view like every other concentration
+  if (
+    !is.null(binding_kobs_result$skipped) &&
+      nrow(binding_kobs_result$skipped) > 0
+  ) {
+    binding_kobs_result$skipped$concentration <- unname(convert_conc_keys(
+      binding_kobs_result$skipped$concentration,
+      view
+    ))
+  }
 
   for (i in conc_names) {
     entry <- binding_kobs_result[[i]]
@@ -2638,7 +2656,7 @@ add_kobs_binding_result <- function(
   # Get measured concentrations
   concentrations <- which(
     !names(binding_kobs_result) %in%
-      c("binding_table", "binding_points", "binding_plot")
+      c("binding_table", "binding_points", "binding_plot", "skipped")
   )
 
   # Get concentration names
@@ -2956,6 +2974,46 @@ make_binding_plot <- function(
           "<extra></extra>"
         ),
         showlegend = FALSE,
+        inherit = FALSE
+      )
+  }
+
+  # Concentrations that were measured but could not be fitted: their means are
+  # drawn in a neutral open marker with no curve behind them, so real data
+  # never disappears from the plot without trace. The hover carries the reason.
+  unfitted <- if ("skip_reason" %in% names(df_points)) {
+    df_points[!is.na(df_points$skip_reason), ]
+  } else {
+    df_points[0, ]
+  }
+  if (nrow(unfitted) > 0) {
+    binding_plot <- binding_plot |>
+      plotly::add_markers(
+        data = unfitted,
+        x = ~time,
+        y = ~binding,
+        name = ~ paste0(concentration, " (not fitted)"),
+        legendgroup = ~concentration,
+        marker = list(
+          size = 11,
+          color = "rgba(0,0,0,0)",
+          symbol = unname(symbol_map[as.character(unfitted$concentration)]),
+          line = list(width = 2, color = font_color)
+        ),
+        text = ~skip_reason,
+        hovertemplate = paste0(
+          "<b>Measured, not fitted</b><br>",
+          "Time: %{x} ",
+          time_unit,
+          "<br>",
+          "Binding [%]: %{y:.2f}<br>",
+          "%{text}",
+          "<extra></extra>"
+        ),
+        # In Mean ± SD mode this trace is the concentration's only legend
+        # entry, because the coloured mean markers exclude it. In Samples mode
+        # the sample trace already carries one, so a second would duplicate it.
+        showlegend = is.null(filter_conc) && show_means,
         inherit = FALSE
       )
   }
@@ -4204,6 +4262,31 @@ compute_kobs <- function(hits, units) {
   concentration_list <- list()
   binding_table <- data.frame()
   binding_points <- data.frame()
+  # Concentrations that carry data but could not be fitted. Collected here so
+  # the result interface can say so; without this the only trace of them is
+  # the protocol log, and a concentration silently missing from the Binding
+  # Curve is easy to overlook.
+  skipped <- data.frame(
+    concentration = character(0),
+    reason = character(0),
+    stringsAsFactors = FALSE
+  )
+
+  # Observed points of a concentration that is shown but not fitted: the
+  # measured means land on the curve grid, with no predicted curve behind them
+  unfitted_rows <- function(obs_summary, conc, reason, grid) {
+    dplyr::left_join(
+      data.frame(time = grid, predicted_binding = NA_real_),
+      obs_summary,
+      by = "time"
+    ) |>
+      dplyr::mutate(
+        concentration = conc,
+        kobs = NA_real_,
+        kobs_se = NA_real_,
+        skip_reason = reason
+      )
+  }
 
   # Concentration and time columns
   conc <- names(hits)[grep("Concentration", names(hits))]
@@ -4229,23 +4312,47 @@ compute_kobs <- function(hits, units) {
       next
     }
 
-    # The untreated control (0 concentration) has no rate to fit; noting it
-    # as a warning would flag every correctly designed experiment
-    if (isTRUE(as.numeric(i) == 0)) {
-      message(sprintf(
-        "  │  %s %s %s: untreated control, not fitted",
-        if (last) "└─" else "├─",
-        fmt_log(0),
-        units["Concentration"]
-      ))
-      next
-    }
-
     # One point per sample
     data <- kinetic_sample_points(raw_data)
     data$concentration <- i
     data$series <- kinetic_series_labels(data$Sample, data$Replicate)
     obs_summary <- binding_time_summary(data)
+
+    # The untreated control (0 concentration) has no rate to fit; noting it
+    # as a warning would flag every correctly designed experiment. It is still
+    # drawn in the Binding Curve as the experiment's baseline — a control that
+    # does not sit flat at 0 % points at background adduct or carry-over, and
+    # the Binding Curve is where that is noticed. It gets no entry in
+    # concentration_list, so it stays out of the Binding Analysis table, the
+    # concentration tabs and the global fit.
+    if (isTRUE(as.numeric(i) == 0)) {
+      message(sprintf(
+        "  │  %s %s %s: untreated control, not fitted (shown as baseline)",
+        if (last) "└─" else "├─",
+        fmt_log(0),
+        units["Concentration"]
+      ))
+
+      binding_table <- rbind(
+        binding_table,
+        dplyr::left_join(
+          data.frame(
+            time = sort(unique(c(time_grid, obs_summary$time))),
+            predicted_binding = 0
+          ),
+          obs_summary,
+          by = "time"
+        ) |>
+          dplyr::mutate(
+            concentration = i,
+            kobs = 0,
+            kobs_se = NA_real_,
+            skip_reason = NA_character_
+          )
+      )
+      binding_points <- rbind(binding_points, data)
+      next
+    }
 
     # Pre-flight: verify data is identifiable before attempting fit
     # Check before logging so skipped concentrations emit a single compact line
@@ -4275,7 +4382,12 @@ compute_kobs <- function(hits, units) {
             obs_summary,
             by = "time"
           ) |>
-            dplyr::mutate(concentration = i, kobs = 0, kobs_se = NA_real_)
+            dplyr::mutate(
+              concentration = i,
+              kobs = 0,
+              kobs_se = NA_real_,
+              skip_reason = NA_character_
+            )
         )
         binding_points <- rbind(binding_points, data)
       } else {
@@ -4287,6 +4399,27 @@ compute_kobs <- function(hits, units) {
           units["Concentration"],
           fit_check
         ))
+        # The measurements are real; only the fit is impossible. Keep the
+        # points visible so the concentration does not vanish from the plot
+        # without trace, but draw no curve behind them.
+        skipped <- rbind(
+          skipped,
+          data.frame(
+            concentration = i,
+            reason = fit_check,
+            stringsAsFactors = FALSE
+          )
+        )
+        binding_table <- rbind(
+          binding_table,
+          unfitted_rows(
+            obs_summary,
+            i,
+            fit_check,
+            sort(unique(c(time_grid, obs_summary$time)))
+          )
+        )
+        binding_points <- rbind(binding_points, data)
       }
       next
     }
@@ -4299,14 +4432,38 @@ compute_kobs <- function(hits, units) {
     )
     log_timepoints(data = data, unit = units["Time"], last = last)
 
+    fit_error <- NULL
     result <- tryCatch(
       fit_binding_curve(data),
       error = function(e) {
         log_fit_failed(last, conditionMessage(e))
+        fit_error <<- conditionMessage(e)
         NULL
       }
     )
     if (is.null(result)) {
+      skipped <- rbind(
+        skipped,
+        data.frame(
+          concentration = i,
+          reason = if (is.null(fit_error)) {
+            "the curve fit did not converge"
+          } else {
+            fit_error
+          },
+          stringsAsFactors = FALSE
+        )
+      )
+      binding_table <- rbind(
+        binding_table,
+        unfitted_rows(
+          obs_summary,
+          i,
+          "the curve fit did not converge",
+          sort(unique(c(time_grid, obs_summary$time)))
+        )
+      )
+      binding_points <- rbind(binding_points, data)
       next
     }
 
@@ -4328,7 +4485,8 @@ compute_kobs <- function(hits, units) {
         dplyr::mutate(
           concentration = i,
           kobs = result$kobs,
-          kobs_se = result$kobs_se
+          kobs_se = result$kobs_se,
+          skip_reason = NA_character_
         )
     )
     binding_points <- rbind(binding_points, data)
@@ -4359,6 +4517,7 @@ compute_kobs <- function(hits, units) {
   }
   concentration_list[["binding_table"]] <- binding_table
   concentration_list[["binding_points"]] <- binding_points
+  concentration_list[["skipped"]] <- skipped
 
   return(concentration_list)
 }
@@ -4634,7 +4793,13 @@ kinact_ki_warning <- function(code, title, detail) {
 compute_kinact_ki <- function(kobs_result, units = units) {
   conc_names <- setdiff(
     names(kobs_result),
-    c("binding_table", "binding_points", "binding_plot", "kobs_result_table")
+    c(
+      "binding_table",
+      "binding_points",
+      "binding_plot",
+      "kobs_result_table",
+      "skipped"
+    )
   )
   warnings <- list()
   add_warning <- function(w) {
