@@ -756,17 +756,23 @@ summary_results_ui <- function(ns, batch_control) {
                     class = "protocol-log-body",
                     shiny::uiOutput(ns("summary_protocol"))
                   ),
-                  shiny::actionButton(
-                    ns("protocol_scroll_top"),
-                    NULL,
-                    icon = shiny::icon("arrow-up"),
-                    title = "Jump to top"
+                  bslib::tooltip(
+                    shiny::actionButton(
+                      ns("protocol_scroll_top"),
+                      NULL,
+                      icon = shiny::icon("arrow-up")
+                    ),
+                    "Jump to top",
+                    placement = "left"
                   ),
-                  shiny::actionButton(
-                    ns("protocol_scroll_bot"),
-                    NULL,
-                    icon = shiny::icon("arrow-down"),
-                    title = "Jump to bottom"
+                  bslib::tooltip(
+                    shiny::actionButton(
+                      ns("protocol_scroll_bot"),
+                      NULL,
+                      icon = shiny::icon("arrow-down")
+                    ),
+                    "Jump to bottom",
+                    placement = "left"
                   ),
                   shiny::tags$script(shiny::HTML(sprintf(
                     "
@@ -2410,8 +2416,8 @@ hits_results_ui <- function(ns, hits_summary, units) {
         shiny::radioButtons(
           ns("hits_per_adduct"),
           label = "Display",
-          choices = c("Hit View", "Adduct View"),
-          selected = "Hit View"
+          choices = c("Adduct View", "Sample View"),
+          selected = "Adduct View"
         ),
         shinyWidgets::pickerInput(
           ns("hits_color_variable"),

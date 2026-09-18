@@ -2246,9 +2246,36 @@ log_kobs_result <- function(result, last, unit) {
   message(sprintf("%s└─ Plateau = %s%%", p, fmt_log(result$plateau)))
 }
 
-# Log kinact/Ki warning
-log_kinact_ki_warning <- function(msg) {
-  message(sprintf("     ├─ %s %s", .col_warn(warning_sym), msg))
+# Longest log row we keep on a single line. The Protocol log renders with
+# white-space: pre, so anything past this would run off the side of the card
+# instead of wrapping. Long text is broken here and the continuation rows are
+# indented to stay lined up under the tree glyphs.
+log_wrap_width <- 74
+
+# Break `text` into rows: the first carries `head` (the branch glyph), the
+# rest carry `cont`. `head_width` is given separately because a head may hold
+# markup (the coloured warning symbol) that takes no visible width.
+wrap_log_line <- function(
+  head,
+  cont,
+  text,
+  head_width = nchar(head, type = "width")
+) {
+  parts <- strwrap(text, width = max(28, log_wrap_width - head_width))
+  if (length(parts) == 0) parts <- ""
+  paste0(c(head, rep(cont, length(parts) - 1L)), parts)
+}
+
+# Log kinact/Ki warning. The headline sits on the branch, the explanation
+# hangs off it one level deeper — the same shape the kobs steps use — so no
+# single row grows past the width of the log card.
+log_kinact_ki_warning <- function(msg, detail = NULL) {
+  head <- sprintf("     ├─ %s ", .col_warn(warning_sym))
+  lines <- wrap_log_line(head, "     │    ", msg, head_width = 10)
+  if (!is.null(detail) && nzchar(detail)) {
+    lines <- c(lines, wrap_log_line("     │  └─ ", "     │     ", detail))
+  }
+  message(paste(lines, collapse = "\n"))
 }
 
 # Log (Kᵢ/kᵢₙₐ꜀ₜ) analysis initiation
@@ -2277,10 +2304,13 @@ log_kinact_ki_results <- function(results, units) {
 
   lines <- c(
     sprintf(
-      "     ├─ Global fit: %d samples, %d concentrations, %d plateau(s) (own plateau where ≥ %d %% of it is reached)",
+      "     ├─ Global fit: %d samples, %d concentrations, %d plateau(s)",
       fit$n_points,
       fit$n_concentrations,
-      max(fit$plateau_groups),
+      max(fit$plateau_groups)
+    ),
+    sprintf(
+      "     │  └─ own plateau where ≥ %d %% of it is reached",
       round(100 * kinetics_settings$plateau_min_reached)
     ),
     sprintf(
@@ -3428,9 +3458,9 @@ make_kinetics_residual_plot <- function(
     if (multi_series) paste0("<br>Series: ", pts$series) else "",
     "<br>Concentration: ", pts$concentration, " ", conc_unit,
     "<br>Time: ", signif(pts$time, 4), " ", time_unit,
-    "<br>Observed: ", sprintf("%.1f", pts$binding), " %",
-    "<br>Fitted: ", sprintf("%.1f", pts$fitted), " %",
-    "<br>Residual: ", sprintf("%+.1f", pts$residual), " %"
+    "<br>Observed: ", sprintf("%.2f", pts$binding), " %",
+    "<br>Fitted: ", sprintf("%.2f", pts$fitted), " %",
+    "<br>Residual: ", sprintf("%+.2f", pts$residual), " %"
   )
 
   p <- plotly::plot_ly()
@@ -3648,7 +3678,7 @@ make_kinetics_plateau_plot <- function(
       y = bars$y,
       line = list(color = pal$muted, width = 5),
       text = as.vector(rbind(group_tab$text, group_tab$text, NA)),
-      hovertemplate = "<b>Global fit plateau</b>: %{y:.1f} %<br>%{text}<extra></extra>",
+      hovertemplate = "<b>Global fit plateau</b>: %{y:.2f} %<br>%{text}<extra></extra>",
       name = "Plateau, global fit",
       legendrank = 3,
       inherit = FALSE
@@ -3674,7 +3704,7 @@ make_kinetics_plateau_plot <- function(
       text = paste0(
         hover_head,
         "Single-concentration fit plateau: ",
-        sprintf("%.1f", tab$plateau_single),
+        sprintf("%.2f", tab$plateau_single),
         " %"
       ),
       hovertemplate = "%{text}<extra></extra>",
@@ -3699,9 +3729,9 @@ make_kinetics_plateau_plot <- function(
         " ",
         time_unit,
         ": ",
-        sprintf("%.1f", tab$last_binding),
+        sprintf("%.2f", tab$last_binding),
         " %<br>Model: curve reached ",
-        round(100 * tab$reached),
+        sprintf("%.2f", 100 * tab$reached),
         " % of its plateau"
       ),
       hovertemplate = "%{text}<extra></extra>",
@@ -3908,7 +3938,7 @@ make_kinetics_saturation_plot <- function(
       hovertemplate = paste0(
         "Concentration: %{x:.3~g} ",
         conc_unit,
-        "<br>%{y:.0f} % of k<sub>inact</sub><extra></extra>"
+        "<br>%{y:.2f} % of k<sub>inact</sub><extra></extra>"
       ),
       showlegend = FALSE,
       inherit = FALSE
@@ -3926,7 +3956,7 @@ make_kinetics_saturation_plot <- function(
       hovertemplate = paste0(
         "<b>%{text} ",
         conc_unit,
-        "</b><br>%{y:.1f} % of the maximal rate<extra></extra>"
+        "</b><br>%{y:.2f} % of the maximal rate<extra></extra>"
       ),
       showlegend = FALSE,
       inherit = FALSE
@@ -4608,7 +4638,7 @@ compute_kinact_ki <- function(kobs_result, units = units) {
   )
   warnings <- list()
   add_warning <- function(w) {
-    log_kinact_ki_warning(paste0(w$title, ": ", w$detail))
+    log_kinact_ki_warning(w$title, w$detail)
     warnings[[length(warnings) + 1]] <<- w
   }
 
@@ -9332,8 +9362,8 @@ stats_scatter <- function(
       y = ~y_plot,
       name = grp,
       showlegend = TRUE,
-      customdata = ~Sample,
-      text = ~tooltip,
+      customdata = I(sub_df$Sample),
+      text = I(sub_df$tooltip),
       hovertemplate = "%{text}<extra></extra>",
       marker = list(
         color = color_map[[grp]],

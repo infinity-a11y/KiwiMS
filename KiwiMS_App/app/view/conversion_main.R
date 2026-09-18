@@ -2856,9 +2856,12 @@ server <- function(
               ignoreInit = TRUE
             ))
 
-            track_iface_observer(shiny::observeEvent(input$render_cmp_annotated_spectrum_btn, {
-              manual_render_cmp_spectrum(manual_render_cmp_spectrum() + 1L)
-            }))
+            track_iface_observer(shiny::observeEvent(
+              input$render_cmp_annotated_spectrum_btn,
+              {
+                manual_render_cmp_spectrum(manual_render_cmp_spectrum() + 1L)
+              }
+            ))
 
             track_iface_observer(shiny::observeEvent(
               list(
@@ -3281,20 +3284,23 @@ server <- function(
             )
 
             ###### Tot. Binding [%] for one compound across samples ----
-            track_iface_observer(shiny::observeEvent(input$conversion_protein_picker, {
-              choices <- unique(hits_summary$`Cmp Name`[
-                hits_summary$`Protein` == input$conversion_protein_picker &
-                  !is.na(hits_summary$`Cmp Name`)
-              ])
-              if (!length(choices)) {
-                choices <- character(0)
+            track_iface_observer(shiny::observeEvent(
+              input$conversion_protein_picker,
+              {
+                choices <- unique(hits_summary$`Cmp Name`[
+                  hits_summary$`Protein` == input$conversion_protein_picker &
+                    !is.na(hits_summary$`Cmp Name`)
+                ])
+                if (!length(choices)) {
+                  choices <- character(0)
+                }
+                shinyWidgets::updatePickerInput(
+                  session,
+                  "total_pct_prot_binding_select",
+                  choices = choices
+                )
               }
-              shinyWidgets::updatePickerInput(
-                session,
-                "total_pct_prot_binding_select",
-                choices = choices
-              )
-            }))
+            ))
 
             output$total_pct_prot_binding <- shiny::renderUI({
               shiny::req(
@@ -3487,9 +3493,12 @@ server <- function(
               ignoreInit = TRUE
             ))
 
-            track_iface_observer(shiny::observeEvent(input$render_annotated_spectrum_btn, {
-              manual_render_spectrum(manual_render_spectrum() + 1L)
-            }))
+            track_iface_observer(shiny::observeEvent(
+              input$render_annotated_spectrum_btn,
+              {
+                manual_render_spectrum(manual_render_spectrum() + 1L)
+              }
+            ))
 
             track_iface_observer(shiny::observeEvent(
               list(
@@ -4027,7 +4036,12 @@ server <- function(
             # wherever a short label needs an on-hover explanation, instead
             # of the native title attribute, which browsers render as a
             # plain unstyled system tooltip.
-            hover_info <- function(trigger, detail, title = NULL, accent = "#8f9bb3") {
+            hover_info <- function(
+              trigger,
+              detail,
+              title = NULL,
+              accent = "#8f9bb3"
+            ) {
               bslib::tooltip(
                 trigger,
                 shiny::div(
@@ -4096,7 +4110,11 @@ server <- function(
               )
             }
 
-            kinetic_line <- function(html, class = "kinetic-detail", title = NULL) {
+            kinetic_line <- function(
+              html,
+              class = "kinetic-detail",
+              title = NULL
+            ) {
               if (is.null(html) || length(html) == 0) {
                 return(NULL)
               }
@@ -4200,7 +4218,10 @@ server <- function(
                     vapply(
                       seq_len(nrow(res$Series)),
                       function(i) {
-                        paste(res$Series$series[i], fmt_num(res$Series$ratio[i]))
+                        paste(
+                          res$Series$series[i],
+                          fmt_num(res$Series$ratio[i])
+                        )
                       },
                       character(1)
                     ),
@@ -4365,7 +4386,11 @@ server <- function(
             # Mean ± SD or the individual samples (both together clutter the
             # full plot); the export follows the same choice
             binding_points_mode <- shiny::reactive({
-              if (identical(input$binding_points, "samples")) "samples" else "mean"
+              if (identical(input$binding_points, "samples")) {
+                "samples"
+              } else {
+                "mean"
+              }
             })
 
             output$binding_plot <- plotly::renderPlotly({
@@ -5628,7 +5653,8 @@ server <- function(
                 shiny::div(
                   style = paste(
                     "text-align:left; padding:0.35rem 0 0.35rem 0.6rem;",
-                    "border-left:3px solid", paste0(accent, ";"),
+                    "border-left:3px solid",
+                    paste0(accent, ";"),
                     "line-height:1.35;"
                   ),
                   shiny::div(
@@ -6072,7 +6098,7 @@ server <- function(
                   )
                 )
 
-              if (isTRUE(input$hits_per_adduct == "Adduct View")) {
+              if (isTRUE(input$hits_per_adduct == "Sample View")) {
                 hits_table <- transform_per_adduct(
                   hits_table,
                   proteins_table = protein_table_data(),
@@ -6215,7 +6241,7 @@ server <- function(
                   if ("Time" %in% names(units)) units[["Time"]] else NULL
                 )
 
-                if (input$hits_per_adduct == "Adduct View") {
+                if (input$hits_per_adduct == "Sample View") {
                   adduct_cols <- names(transform_per_adduct(
                     hits_summary,
                     proteins_table = protein_table_data(),
@@ -7603,6 +7629,16 @@ server <- function(
                     "It measures intrinsic warhead reactivity and transition-state stabilization in the reversible complex, independent of binding affinity."
                   ),
                   shiny::p(
+                    shiny::strong("± on the card "),
+                    "is the ",
+                    shiny::strong("standard error"),
+                    " of k",
+                    htmltools::tags$sub("inact"),
+                    " in the global fit — how precisely the fit pins the parameter down, not the spread of the measurements. The bracketed ",
+                    shiny::strong("95 % CI"),
+                    " is a bootstrap interval from 200 refits of the same fit and is the more reliable range of the two, because it does not assume the estimate is normally distributed."
+                  ),
+                  shiny::p(
                     shiny::strong("When it shows n.d. (not determinable): "),
                     "k",
                     htmltools::tags$sub("inact"),
@@ -7652,6 +7688,16 @@ server <- function(
                     "It is extracted from the single-exponential fit of the binding curve shown."
                   ),
                   shiny::p(
+                    shiny::strong("± on the card "),
+                    "is the ",
+                    shiny::strong("standard error"),
+                    " of k",
+                    htmltools::tags$sub("obs"),
+                    " in that single-concentration fit — how precisely the curve fixes the rate constant. It is not the standard deviation of the replicates: the scatter between replicates is visible in the binding curve itself, where the Data Points setting switches between mean ± SD per time point and the individual samples. It reads n.a. when the fit cannot put an error on k",
+                    htmltools::tags$sub("obs"),
+                    ", typically with too few usable time points."
+                  ),
+                  shiny::p(
                     "Units: typically min⁻¹ or s⁻¹. Under the two-step model:"
                   ),
                   shiny::div(
@@ -7699,6 +7745,16 @@ server <- function(
                     "Lower K",
                     htmltools::tags$sub("i"),
                     " indicates stronger reversible binding before covalency."
+                  ),
+                  shiny::p(
+                    shiny::strong("± on the card "),
+                    "is the ",
+                    shiny::strong("standard error"),
+                    " of K",
+                    htmltools::tags$sub("i"),
+                    " in the global fit — how precisely the fit pins the parameter down, not the spread of the measurements. The bracketed ",
+                    shiny::strong("95 % CI"),
+                    " is a bootstrap interval from 200 refits of the same fit and is the more reliable range of the two, because it does not assume the estimate is normally distributed."
                   ),
                   shiny::p(
                     "K",
@@ -7762,7 +7818,15 @@ server <- function(
                     htmltools::tags$sub("inact"),
                     " and K",
                     htmltools::tags$sub("i"),
-                    " cannot be separated. The 95 % confidence interval comes from 200 bootstrap refits."
+                    " cannot be separated."
+                  ),
+                  shiny::p(
+                    shiny::strong("± on the card "),
+                    "is the ",
+                    shiny::strong("standard error"),
+                    " of that fitted parameter — how precisely the global fit pins it down, not the spread of the measurements. The bracketed ",
+                    shiny::strong("95 % CI"),
+                    " is a bootstrap interval from 200 refits and is the more reliable range of the two, because it does not assume the estimate is normally distributed. The per-series error bars in the Fit tab are standard errors of the same kind."
                   ),
                   shiny::p(
                     shiny::strong("Model: "),
