@@ -1298,6 +1298,7 @@ process_plot_data <- function(
     # Merge non-preferred hits per peak: sort preferred first, then collapse
     # multiple interpretations of the same peak into a single combined label.
     compound_hits <- sample$hits |>
+      dplyr::filter(!is.na(Compound)) |>
       dplyr::arrange(
         `Peak [Da]`,
         dplyr::desc(Preferred == "TRUE"),
@@ -1310,15 +1311,29 @@ process_plot_data <- function(
         `Binding Stoichiometry` = `Binding Stoichiometry`[Preferred == "TRUE"][
           1
         ],
+        # Protein species the adduct sits on, so the spectrum can relate the
+        # peak to its own proteoform rather than to the lightest one
+        parent_prot = `Measured Mw Protein [Da]`[Preferred == "TRUE"][1],
         mass_stoich_label = paste(
           paste0("[", `Compound Mw [Da]`, "] x", `Binding Stoichiometry`),
           collapse = " + "
         )
       )
 
-    # Peaks: protein + one entry per unique compound peak
+    # Unbound protein species, kept ahead of the compound peaks so the protein
+    # stays the first entry. A protein can be declared with several masses (e.g.
+    # a modified form), so theoretical and measured mass have to be taken as
+    # pairs rather than collected column by column.
+    prot_species <- sample$hits[, c(
+      "Protein",
+      "Mw Protein [Da]",
+      "Measured Mw Protein [Da]"
+    )]
+    prot_species <- prot_species[!duplicated(prot_species), ]
+
+    # Peaks: protein species + one entry per unique compound peak
     peaks <- c(
-      unique(sample$hits$`Measured Mw Protein [Da]`),
+      prot_species$`Measured Mw Protein [Da]`,
       compound_hits$`Peak [Da]`
     )
 
@@ -1328,28 +1343,90 @@ process_plot_data <- function(
 
     # Get protein and compound names
     name <- c(
-      unique(sample$hits$Protein),
+      prot_species$Protein,
       compound_hits$Compound
     )
 
     # Get molecular weights (preferred hit's theoretical mass)
     mw <- c(
-      unique(sample$hits$`Mw Protein [Da]`),
+      prot_species$`Mw Protein [Da]`,
       compound_hits$`Compound Mw [Da]`
     )
 
     # Get stoichiometry values (preferred hit)
-    multiple <- c(1, compound_hits$`Binding Stoichiometry`)
+    multiple <- c(
+      rep(1, nrow(prot_species)),
+      compound_hits$`Binding Stoichiometry`
+    )
 
-    # Combined mass-shift label for hover; NA for the protein peak
-    mass_stoich_label <- c(NA_character_, compound_hits$mass_stoich_label)
+    # Combined mass-shift label for hover; NA for the protein peaks
+    mass_stoich_label <- c(
+      rep(NA_character_, nrow(prot_species)),
+      compound_hits$mass_stoich_label
+    )
+
+    # Proteoform each peak belongs to: itself for an apo peak, its parent
+    # species for an adduct. Drives the mass-difference connectors.
+    parent_prot <- c(
+      prot_species$`Measured Mw Protein [Da]`,
+      compound_hits$parent_prot
+    )
 
     # Summarize in data frame - one row per unique peak
-    highlight_peaks <- cbind(peak_df, name, mw, multiple, mass_stoich_label) |>
+    highlight_peaks <- cbind(
+      peak_df,
+      name,
+      mw,
+      multiple,
+      mass_stoich_label,
+      parent_prot
+    ) |>
       dplyr::filter(!is.na(name))
   }
 
   return(list(mass = mass, highlight_peaks = highlight_peaks))
+}
+
+# mass_diff_groups(): Peaks a mass-difference connector may span ----
+#
+# A connector reports the mass a compound added, so it only ever runs from a
+# protein species to the adducts of that same species. Returns one entry per
+# species that has adducts, holding the apo peak and its adduct peaks; species
+# without a detected apo peak are dropped, since there is nothing to measure the
+# shift against. Falls back to "lightest peak is the base" for highlight tables
+# that carry no species column (peaks read straight from a file or the DB).
+#' @export
+mass_diff_groups <- function(highlight_peaks) {
+  masses <- sort(unique(stats::na.omit(highlight_peaks$mass)))
+
+  if (length(masses) < 2) {
+    return(list())
+  }
+
+  if (!"parent_prot" %in% names(highlight_peaks)) {
+    return(list(list(base = masses[1], others = masses[-1])))
+  }
+
+  parents <- sort(unique(stats::na.omit(highlight_peaks$parent_prot)))
+  groups <- list()
+
+  for (parent in parents) {
+    # An adduct peak is any peak of this species that is not the apo peak itself
+    members <- highlight_peaks$mass[
+      !is.na(highlight_peaks$parent_prot) &
+        highlight_peaks$parent_prot == parent &
+        !is.na(highlight_peaks$mass)
+    ]
+    others <- sort(unique(members[members != parent]))
+
+    if (!parent %in% masses || !length(others)) {
+      next
+    }
+
+    groups[[length(groups) + 1]] <- list(base = parent, others = others)
+  }
+
+  groups
 }
 
 # spectrum_plot(): Make spectrum plot interactively (plotly) or non-interactively (ggplot2) ----
@@ -1547,11 +1624,13 @@ spectrum_plot <- function(
 
           # Prepare marker colors
           if (color_variable == "Compounds") {
+            # The protein carries one marker color, no matter how many of its
+            # declared mass species are annotated in the spectrum
             color_cmp <- c(marker_fill_color, color_cmp)
             names(color_cmp) <- c(
-              plot_data$highlight_peaks$name[
+              unique(plot_data$highlight_peaks$name[
                 !plot_data$highlight_peaks$name %in% names(color_cmp)
-              ],
+              ]),
               names(color_cmp)[-1]
             )
 
@@ -1621,24 +1700,43 @@ spectrum_plot <- function(
       # Reserve a strip for it whenever that label is going to be drawn.
       top_margin <- if (show_mass_diff && length(unique_masses) >= 2) 28 else 0
 
-      # Mass difference connector (if enabled and two or more unique masses)
-      if (show_mass_diff && length(unique_masses) >= 2) {
-        base_mass <- unique_masses[1]
-        other_masses <- unique_masses[-1]
-        base_i <- plot_data$highlight_peaks$intensity[
-          plot_data$highlight_peaks$mass == base_mass
-        ][1]
+      # Guard the connector block below against a highlight table that carries
+      # no unique masses at all
+      if (length(unique_masses) < 2) {
+        show_mass_diff <- FALSE
+      }
+
+      # Mass difference connector (if enabled and two or more unique masses).
+      #
+      # A connector states the mass a compound added to the protein, so it runs
+      # from a protein species to the adducts of that same species. When the
+      # protein was declared with several masses (proteoforms), each of them is
+      # its own base: connecting them to one another would label the proteoform
+      # offset as if it were a binding event, and connecting an adduct to a
+      # foreign proteoform would state a mass shift that never happened.
+      diff_groups <- mass_diff_groups(plot_data$highlight_peaks)
+
+      if (show_mass_diff && length(diff_groups) > 0) {
         global_max_i <- max(plot_data$highlight_peaks$intensity, na.rm = TRUE)
         y_offset <- 5 # Initial offset above global max intensity
         line_spacing <- 5 # Spacing between each difference line (adjust if text overlaps)
 
-        # Calculate the maximum y_line needed for the base vertical
-        num_diffs <- length(other_masses)
-        max_y_line <- global_max_i + y_offset + (num_diffs - 1) * line_spacing
+        shapes <- list()
+        level <- 0 # Connector height rank across all species
 
-        # Add single vertical line for the base peak up to the highest y_line
-        shapes <- list(
-          list(
+        for (grp in diff_groups) {
+          base_mass <- grp$base
+          other_masses <- grp$others
+          base_i <- plot_data$highlight_peaks$intensity[
+            plot_data$highlight_peaks$mass == base_mass
+          ][1]
+
+          # Vertical line for the base peak up to this species' highest y_line
+          max_y_line <- global_max_i +
+            y_offset +
+            (level + length(other_masses) - 1) * line_spacing
+
+          shapes[[length(shapes) + 1]] <- list(
             type = "line",
             x0 = base_mass,
             y0 = base_i,
@@ -1646,56 +1744,57 @@ spectrum_plot <- function(
             y1 = max_y_line,
             line = list(color = font_color, width = 1, dash = "dot")
           )
-        )
 
-        # Add branches for each other peak
-        for (j in seq_along(other_masses)) {
-          x2 <- other_masses[j]
-          diff <- x2 - base_mass
-          i2 <- plot_data$highlight_peaks$intensity[
-            plot_data$highlight_peaks$mass == x2
-          ][1]
-          y_line <- global_max_i + y_offset + (j - 1) * line_spacing
-          mid_x <- (base_mass + x2) / 2
-          diff_text <- sprintf("%.2f Da", diff)
+          # Add branches for each adduct of this species
+          for (j in seq_along(other_masses)) {
+            x2 <- other_masses[j]
+            diff <- x2 - base_mass
+            i2 <- plot_data$highlight_peaks$intensity[
+              plot_data$highlight_peaks$mass == x2
+            ][1]
+            y_line <- global_max_i + y_offset + level * line_spacing
+            level <- level + 1
+            mid_x <- (base_mass + x2) / 2
+            diff_text <- sprintf("%.2f Da", diff)
 
-          # Vertical line from the other peak up to its y_line
-          shapes[[length(shapes) + 1]] <- list(
-            type = "line",
-            x0 = x2,
-            y0 = i2,
-            x1 = x2,
-            y1 = y_line,
-            line = list(color = font_color, width = 1, dash = "dot")
-          )
+            # Vertical line from the other peak up to its y_line
+            shapes[[length(shapes) + 1]] <- list(
+              type = "line",
+              x0 = x2,
+              y0 = i2,
+              x1 = x2,
+              y1 = y_line,
+              line = list(color = font_color, width = 1, dash = "dot")
+            )
 
-          # Horizontal line from base to other at y_line
-          shapes[[length(shapes) + 1]] <- list(
-            type = "line",
-            x0 = base_mass,
-            y0 = y_line,
-            x1 = x2,
-            y1 = y_line,
-            line = list(color = font_color, width = 1, dash = "dot")
-          )
+            # Horizontal line from base to other at y_line
+            shapes[[length(shapes) + 1]] <- list(
+              type = "line",
+              x0 = base_mass,
+              y0 = y_line,
+              x1 = x2,
+              y1 = y_line,
+              line = list(color = font_color, width = 1, dash = "dot")
+            )
 
-          # Text annotation above the horizontal line.
-          #
-          # Anchored by its bottom edge to the connector rather than centred on
-          # a fixed data-space offset above it. The old +1.5 offset was a
-          # constant in y units while the text height is set by the font, so a
-          # larger label grew down past the offset and sat on the very line it
-          # labels. yshift is a pixel gap, which keeps clear of the line at any
-          # font size and scales with the label size on export.
-          annotations[[length(annotations) + 1]] <- list(
-            x = mid_x,
-            y = y_line,
-            text = diff_text,
-            showarrow = FALSE,
-            yanchor = "bottom",
-            yshift = 3,
-            font = list(color = font_color, size = 12)
-          )
+            # Text annotation above the horizontal line.
+            #
+            # Anchored by its bottom edge to the connector rather than centred
+            # on a fixed data-space offset above it. The old +1.5 offset was a
+            # constant in y units while the text height is set by the font, so
+            # a larger label grew down past the offset and sat on the very line
+            # it labels. yshift is a pixel gap, which keeps clear of the line at
+            # any font size and scales with the label size on export.
+            annotations[[length(annotations) + 1]] <- list(
+              x = mid_x,
+              y = y_line,
+              text = diff_text,
+              showarrow = FALSE,
+              yanchor = "bottom",
+              yshift = 3,
+              font = list(color = font_color, size = 12)
+            )
+          }
         }
       }
 

@@ -1585,6 +1585,13 @@ get_compound_matrix <- function(compound_file, header = TRUE) {
   return(compounds_matrix)
 }
 
+# A protein may be declared with more than one mass (Mass 1 .. Mass 9), e.g. the
+# plain protein plus a modified form such as a gluconoylated His-tag. Every
+# declared mass is treated as an independent species: it carries its own unbound
+# signal and compounds bind to it exactly like they bind to the base mass. Rows
+# of the returned hits frame carry the species a hit belongs to in theor_prot /
+# measured_prot / delta_prot, while prot_intensity stays a sample-level value -
+# the summed intensity of all detected unbound species.
 check_hits <- function(
   sample_table,
   protein_mw,
@@ -1595,31 +1602,52 @@ check_hits <- function(
   sample,
   well = NA
 ) {
-  # Get protein name and mass
-  prot_name <- as.character(protein_mw[, 1])
-  prot_mass <- as.numeric(protein_mw[, 2])
+  # Get protein name and its declared mass species
+  prot_name <- as.character(protein_mw[1, 1])
+  prot_masses <- suppressWarnings(as.numeric(unlist(
+    protein_mw[1, -1, drop = FALSE]
+  )))
+  prot_masses <- unique(prot_masses[!is.na(prot_masses)])
 
-  # Find protein peak
-  protein_peak <- peaks$mass >= prot_mass - peak_tolerance &
-    peaks$mass <= prot_mass + peak_tolerance
-
-  prot_intensity <- ifelse(
-    !any(protein_peak),
-    0,
-    peaks$intensity[which(protein_peak)]
+  # Locate each species: closest peak within tolerance, NA if the species has
+  # no unbound signal (fully converted or simply absent)
+  species_row <- vapply(
+    prot_masses,
+    function(m) {
+      dist <- abs(peaks$mass - m)
+      within <- which(dist <= peak_tolerance)
+      if (!length(within)) NA_integer_ else within[which.min(dist[within])]
+    },
+    integer(1)
   )
 
-  # Keep only peaks above protein mw
-  peaks_valid <- peaks$mass >= prot_mass - peak_tolerance
+  species <- data.frame(
+    theor = prot_masses,
+    measured = peaks$mass[species_row],
+    intensity = peaks$intensity[species_row]
+  )
+  species$delta <- abs(species$theor - species$measured)
 
-  if (any(peaks_valid)) {
-    peaks_filtered <- as.data.frame(peaks[peaks_valid, ])
+  # A peak claimed by more than one species - declared masses closer to each
+  # other than the tolerance - is counted for the first species claiming it, so
+  # the unbound signal is not inflated. A species without signal contributes
+  # nothing but can still carry complexes (fully converted protein).
+  species$intensity[duplicated(species_row) & !is.na(species_row)] <- 0
+  species$intensity[is.na(species$intensity)] <- 0
+
+  # Keep only peaks at or above the lightest declared species
+  peaks_valid <- if (length(prot_masses)) {
+    peaks$mass >= min(prot_masses) - peak_tolerance
   } else {
+    logical(nrow(peaks))
+  }
+
+  if (!any(peaks_valid)) {
     hits_df <- data.frame(
       well = well,
       sample = sample,
       protein = prot_name,
-      theor_prot = prot_mass,
+      theor_prot = if (length(prot_masses)) prot_masses[1] else NA_real_,
       measured_prot = NA,
       delta_prot = NA,
       prot_intensity = NA,
@@ -1642,6 +1670,12 @@ check_hits <- function(
     return(hits_df)
   }
 
+  # Peaks already explained as an unbound species must not be re-interpreted as
+  # a complex of a lighter species
+  peaks_filtered <- as.data.frame(peaks[
+    peaks_valid & !(seq_len(nrow(peaks)) %in% stats::na.omit(species_row)),
+  ])
+
   # Transform compounds to matrix
   cmp_mat <- as.matrix(compound_mw[, -1])
   rownames(cmp_mat) <- compound_mw[, 1]
@@ -1658,23 +1692,28 @@ check_hits <- function(
     }
   }
 
-  # Addition of protein mw with multiples matrix
-  complex_mat <- mat + prot_mass
+  # Addition of every protein species with the multiples matrix
+  complex_mats <- lapply(species$theor, function(m) mat + m)
 
   # Initiate empty hits data frame
   hits_df <- data.frame()
 
   # Fill hits_df
-  for (j in 1:nrow(peaks_filtered)) {
+  for (j in seq_len(nrow(peaks_filtered))) {
     upper <- peaks_filtered$mass[j] + peak_tolerance
     lower <- peaks_filtered$mass[j] - peak_tolerance
 
-    hits <- complex_mat >= lower & complex_mat <= upper
+    hits_add <- data.frame()
 
-    if (any(hits, na.rm = TRUE)) {
+    # A peak can be a complex of any of the declared species
+    for (s in seq_len(nrow(species))) {
+      hits <- complex_mats[[s]] >= lower & complex_mats[[s]] <= upper
+
+      if (!any(hits, na.rm = TRUE)) {
+        next
+      }
+
       indices <- which(hits, arr.ind = TRUE)
-
-      hits_add <- data.frame()
 
       for (k in 1:nrow(indices)) {
         # Retrieve compound mass from hit on complex
@@ -1689,27 +1728,17 @@ check_hits <- function(
           well = well,
           sample = sample,
           protein = prot_name,
-          theor_prot = prot_mass,
-          measured_prot = if (any(protein_peak)) {
-            peaks$mass[which(protein_peak)]
-          } else {
-            NA
-          },
-          delta_prot = if (any(protein_peak)) {
-            abs(
-              prot_mass - peaks$mass[which(protein_peak)]
-            )
-          } else {
-            NA
-          },
-          prot_intensity = prot_intensity,
+          theor_prot = species$theor[s],
+          measured_prot = species$measured[s],
+          delta_prot = species$delta[s],
+          prot_intensity = species$intensity[s],
           peak = peaks_filtered[j, "mass"],
           intensity = peaks_filtered[j, "intensity"],
-          compound = rownames(hits)[indices[1]],
+          compound = rownames(hits)[indices[k, 1]],
           cmp_mass = cmp_mass,
           delta_cmp = abs(
             (as.numeric(cmp_mass) * multiple) -
-              (peaks_filtered[j, "mass"] - prot_mass)
+              (peaks_filtered[j, "mass"] - species$theor[s])
           ),
           multiple = multiple,
           preferred = TRUE,
@@ -1719,66 +1748,74 @@ check_hits <- function(
 
         hits_add <- rbind(hits_add, hit)
       }
-
-      # Case multiple matching
-      if (nrow(hits_add) > 1) {
-        # Hit with highest compound mass is preferred to add to total binding
-        hits_add <- hits_add |>
-          dplyr::group_by(compound) |>
-          dplyr::mutate(
-            preferred = dplyr::row_number() == 1
-          )
-
-        # Log duplication event
-        log_duplicated_hits(hits_add)
-      }
-
-      hits_df <- rbind(hits_df, hits_add)
     }
+
+    if (!nrow(hits_add)) {
+      next
+    }
+
+    # Case multiple matching
+    if (nrow(hits_add) > 1) {
+      # Hit with highest compound mass is preferred to add to total binding
+      hits_add <- hits_add |>
+        dplyr::group_by(theor_prot, compound) |>
+        dplyr::mutate(
+          preferred = dplyr::row_number() == 1
+        ) |>
+        dplyr::ungroup() |>
+        as.data.frame()
+
+      # Log duplication event
+      log_duplicated_hits(hits_add)
+    }
+
+    hits_df <- rbind(hits_df, hits_add)
   }
 
-  # If no hits detected in peaks
-  if (nrow(hits_df) == 0) {
-    hits_df <- data.frame(
-      well = well,
-      sample = sample,
-      protein = prot_name,
-      theor_prot = prot_mass,
-      measured_prot = if (any(protein_peak)) {
-        peaks$mass[which(protein_peak)]
-      } else {
-        NA
-      },
-      delta_prot = if (any(protein_peak)) {
-        abs(
-          prot_mass - peaks$mass[which(protein_peak)]
-        )
-      } else {
-        NA
-      },
-      prot_intensity = if (any(protein_peak)) prot_intensity else NA,
-      peak = if (any(protein_peak)) {
-        peaks$mass[which(protein_peak)]
-      } else {
-        NA
-      },
-      intensity = NA,
-      compound = NA,
-      cmp_mass = NA,
-      delta_cmp = NA,
-      multiple = NA,
-      preferred = NA,
-      unmatched = NA,
-      correct = NA
+  # Detected species that no complex points back to are still part of the
+  # spectrum: emit one unbound row each so they are annotated and counted
+  detected <- species[!is.na(species$measured), , drop = FALSE]
+  unbound <- detected[!detected$theor %in% hits_df$theor_prot, , drop = FALSE]
+
+  if (nrow(hits_df) == 0 || nrow(unbound) > 0) {
+    if (nrow(hits_df) == 0 && nrow(detected) == 0) {
+      # No species detected and no complex found
+      unbound <- species[1, , drop = FALSE]
+      unbound$measured <- NA
+      unbound$delta <- NA
+    }
+
+    hits_df <- rbind(
+      hits_df,
+      data.frame(
+        well = well,
+        sample = sample,
+        protein = prot_name,
+        theor_prot = unbound$theor,
+        measured_prot = unbound$measured,
+        delta_prot = unbound$delta,
+        prot_intensity = ifelse(
+          is.na(unbound$measured),
+          NA_real_,
+          unbound$intensity
+        ),
+        peak = unbound$measured,
+        intensity = NA,
+        compound = NA,
+        cmp_mass = NA,
+        delta_cmp = NA,
+        multiple = NA,
+        preferred = NA,
+        unmatched = NA,
+        correct = NA
+      )
     )
   }
 
-  # Calculate % unmatched and % correct
-  # hits_df$unmatched <- unmatched <- sum(!peaks$mass %in% hits_df$peak) /
-  #   nrow(peaks) *
-  #   100
+  # Calculate % unmatched and % correct. Peaks explained as an unbound species
+  # count as matched just like the peaks of a complex.
   hits_df$unmatched <- unmatched <- sum(
-    !peaks$mass %in% c(hits_df$peak, hits_df$measured_prot)
+    !peaks$mass %in% c(hits_df$peak, species$measured)
   ) /
     nrow(peaks) *
     100
@@ -1799,6 +1836,103 @@ check_hits <- function(
 # Protein MW = 1000
 # Compound MW = 10|11
 
+# Unbound protein species of one sample, one row per declared mass that carries
+# unbound signal. Hits are one row per assignment, so a species with several
+# complexes repeats and one without any complex appears as its own
+# compound-less row - both collapse to the same single entry here. Accepts the
+# hits frame in either its raw or its display column naming.
+#' @export
+unbound_species <- function(hits) {
+  cols <- if ("Mw Protein [Da]" %in% names(hits)) {
+    c("Mw Protein [Da]", "Protein Intensity")
+  } else if ("Theor. Prot. [Da]" %in% names(hits)) {
+    c("Theor. Prot. [Da]", "Int. Prot. [%]")
+  } else {
+    c("theor_prot", "prot_intensity")
+  }
+
+  species <- data.frame(
+    theor_prot = suppressWarnings(as.numeric(hits[[cols[1]]])),
+    prot_intensity = suppressWarnings(as.numeric(hits[[cols[2]]]))
+  )
+
+  species <- species[
+    !is.na(species$prot_intensity) & species$prot_intensity > 0,
+    ,
+    drop = FALSE
+  ]
+  species <- species[!duplicated(species$theor_prot), , drop = FALSE]
+
+  species[order(species$theor_prot), , drop = FALSE]
+}
+
+# Format a protein species mass for use in a label
+#' @export
+fmt_species_mass <- function(x) {
+  vapply(
+    suppressWarnings(as.numeric(x)),
+    function(v) {
+      if (is.na(v)) {
+        "N/A"
+      } else {
+        format(round(v, 1), big.mark = ",", scientific = FALSE)
+      }
+    },
+    character(1)
+  )
+}
+
+# Mass-shift label of one peak, e.g. "[266.0]&#8321;". When the protein was
+# declared with more than one mass the label is prefixed with the proteoform the
+# adduct sits on - without it two species carrying the same compound produce the
+# same text, which reads as a duplicate in a table and is silently merged into
+# one sector by a plotly pie.
+#' @export
+mass_shift_label <- function(
+  theor_cmp,
+  stoich,
+  species_mass = NULL,
+  multi_species = FALSE,
+  sep = ""
+) {
+  valid <- !is.na(theor_cmp) & theor_cmp != "N/A"
+
+  label <- if (!any(valid)) {
+    "N/A"
+  } else {
+    paste(
+      paste0(
+        "[",
+        theor_cmp[valid],
+        "]",
+        sep,
+        sapply(stoich[valid], function(x) {
+          as.character(htmltools::tags$sub(x))
+        })
+      ),
+      collapse = " + "
+    )
+  }
+
+  if (isTRUE(multi_species)) {
+    # A literal separator, not an HTML entity: plotly text rendering resolves
+    # only a small set of entities, a DT cell resolves them all
+    paste0(fmt_species_mass(species_mass[1]), " Da · ", label)
+  } else {
+    label
+  }
+}
+
+# Unbound-slice label, naming the proteoform when there is more than one
+#' @export
+unbound_label <- function(species_mass, multi_species = FALSE) {
+  if (isTRUE(multi_species)) {
+    paste0("Unbound ", fmt_species_mass(species_mass), " Da")
+  } else {
+    rep("Unbound Protein", length(species_mass))
+  }
+}
+
 conversion <- function(hits) {
   # Check 'hits' argument validity
   if (!is.data.frame(hits) || nrow(hits) < 1) {
@@ -1807,9 +1941,9 @@ conversion <- function(hits) {
   } else if (ncol(hits) != 16) {
     log_err_cols(ncol(hits))
     return(NULL)
-  } else if (nrow(hits) == 1 && is.na(hits$intensity)) {
-    # Case only protein detected no hits
-    I_total <- hits$prot_intensity # Total intensity
+  } else if (all(is.na(hits$intensity))) {
+    # Case only protein species detected, no complex hits
+    I_total <- sum(unbound_species(hits)$prot_intensity) # Total intensity
     hits <- dplyr::mutate(hits, `%binding` = 0)
     hits <- dplyr::mutate(
       hits,
@@ -1817,22 +1951,33 @@ conversion <- function(hits) {
       .before = peak
     )
   } else {
-    # Total intensity (only preferred)
-    I_total <- sum(hits$intensity[hits$preferred]) +
-      ifelse(anyNA(hits$prot_intensity), 0, unique(hits$prot_intensity))
+    # Complex signal. Counted per peak, not per row: one peak can carry several
+    # interpretations (different compounds, mass shifts or protein species) and
+    # must contribute its intensity only once.
+    complex_peaks <- hits[!is.na(hits$intensity), c("peak", "intensity")]
+    complex_peaks <- complex_peaks[!duplicated(complex_peaks$peak), ]
+    I_complex <- sum(complex_peaks$intensity)
+
+    # Unbound signal, summed over all detected protein species. Every declared
+    # mass is a proteoform of the same protein, so all of their apo peaks belong
+    # to the unbound pool the occupancy is measured against.
+    I_prot <- sum(unbound_species(hits)$prot_intensity)
+
+    # Total intensity
+    I_total <- I_complex + I_prot
 
     # Protein only binding
-    perc_bind_prot <- ifelse(
-      anyNA(hits$prot_intensity),
-      0,
-      unique(hits$prot_intensity) / I_total
-    )
+    perc_bind_prot <- I_prot / I_total
 
-    # Adding %Binding values to hit data frame
-    hits <- dplyr::mutate(hits, `%binding` = intensity / I_total)
+    # Adding %Binding values to hit data frame. Rows of an unbound species carry
+    # no complex signal and therefore no binding.
     hits <- dplyr::mutate(
       hits,
-      `%binding_tot` = sum(unique(hits$`%binding`)),
+      `%binding` = dplyr::if_else(is.na(intensity), 0, intensity / I_total)
+    )
+    hits <- dplyr::mutate(
+      hits,
+      `%binding_tot` = I_complex / I_total,
       .before = peak
     )
 
@@ -1846,8 +1991,8 @@ conversion <- function(hits) {
     # Log computed relative binding values
     log_intensities(
       I_total,
-      unique(hits$prot_intensity),
-      sum(unique(hits$intensity))
+      I_prot,
+      I_complex
     )
 
     # Normalize peak intensity
@@ -1906,11 +2051,20 @@ log_duplicated_hits <- function(hits_add) {
     .col_warn(warning_sym),
     hits_add[1, "peak"]
   ))
+  # Name the protein species too - with several declared masses the same peak
+  # can be a complex of different species
+  multi_species <- length(unique(hits_add[["theor_prot"]])) > 1
+
   for (i in 1:nrow(hits_add)) {
     message(sprintf(
-      "  │  └─ Compound %s - %s%s",
+      "  │  └─ Compound %s - %s%s%s",
       hits_add[i, "compound"],
       paste0("[", hits_add[i, "cmp_mass"], "]x", hits_add[i, "multiple"]),
+      if (multi_species) {
+        paste0(" - Protein: ", hits_add[i, "theor_prot"], " Da")
+      } else {
+        ""
+      },
       paste0(" - Preferred: ", hits_add[i, "preferred"])
     ))
   }
@@ -2221,7 +2375,6 @@ add_hits <- function(
   config = NULL
 ) {
   samples <- names(results$deconvolution)
-  protein_mw <- protein_table$`Mass 1`
   compound_mw <- as.matrix(compound_table[, -1])
   rownames(compound_mw) <- compound_table[, 1]
 
@@ -2394,10 +2547,19 @@ check_filter_hits <- function(result_list) {
   hits_summary <- result_list$hits_summary |>
     dplyr::filter(!is.na(binding))
 
-  # Summarize filtered hits by concentration
+  # Summarize filtered hits by concentration. Counted per sample, not per row:
+  # one sample yields one hit row per compound, mass shift and protein species,
+  # which would otherwise let a single measurement satisfy the count below.
   tab <- hits_summary |>
     dplyr::group_by(dplyr::pick(dplyr::contains("Concentration"))) |>
-    dplyr::summarise(count = dplyr::n(), .groups = "drop")
+    dplyr::summarise(
+      count = if ("Sample" %in% names(hits_summary)) {
+        dplyr::n_distinct(Sample)
+      } else {
+        dplyr::n()
+      },
+      .groups = "drop"
+    )
 
   # Assign concentration column
   conc_col <- names(tab)[1]
@@ -2947,6 +3109,14 @@ compute_kobs <- function(hits, units) {
     # Filter rows for this concentration
     raw_data <- hits |>
       dplyr::filter(!!rlang::sym(conc) == i)
+
+    # Collapse to one row per sample. Binding is a sample-level quantity, but a
+    # sample contributes one row per compound, mass shift and protein species -
+    # without this a sample with more hits would weigh more in the replicate
+    # mean and would shrink the per-timepoint SD.
+    if ("Sample" %in% names(raw_data)) {
+      raw_data <- dplyr::distinct(raw_data, Sample, .keep_all = TRUE)
+    }
 
     if ("Replicate" %in% names(raw_data) && !all(is.na(raw_data$Replicate))) {
       data <- raw_data |>
@@ -4805,6 +4975,11 @@ filter_table_view <- function(table, colors, inputs, units) {
     NULL
   }
 
+  # Adducts of different proteoforms land on different peaks and stay separate
+  # rows, so the mass-shift label has to name the proteoform - otherwise the
+  # rows are indistinguishable
+  multi_species <- length(unique(table$`Theor. Prot. [Da]`)) > 1
+
   # Merge non-preferred hits per peak into their preferred counterpart
   table <- table |>
     dplyr::arrange(
@@ -4818,26 +4993,16 @@ filter_table_view <- function(table, colors, inputs, units) {
     dplyr::reframe(
       truncSample_ID = `truncSample_ID`[1],
       dplyr::across(dplyr::any_of(optional_cols), ~ .x[1]),
-      mass_stoich_html = {
-        theor <- `Theor. Cmp [Da]`
-        stoich <- `Bind. Stoich.`
-        valid <- !is.na(theor) & theor != "N/A"
-        if (!any(valid)) {
-          "N/A"
-        } else {
-          paste(
-            paste0(
-              "[",
-              theor[valid],
-              "]&thinsp;",
-              sapply(stoich[valid], function(x) {
-                as.character(htmltools::tags$sub(x))
-              })
-            ),
-            collapse = " + "
-          )
-        }
-      },
+      mass_stoich_html = mass_shift_label(
+        `Theor. Cmp [Da]`,
+        `Bind. Stoich.`,
+        species_mass = `Theor. Prot. [Da]`[1],
+        multi_species = multi_species,
+        sep = "&thinsp;"
+      ),
+      # Hidden in the table, but the proteoform has to reach the export: the
+      # visible Mass Shift column is HTML and is dropped on the way out
+      `Theor. Prot. [Da]` = `Theor. Prot. [Da]`[1],
       `Theor. Cmp [Da]` = {
         theor <- `Theor. Cmp [Da]`
         valid <- !is.na(theor) & theor != "N/A"
@@ -4882,6 +5047,7 @@ filter_table_view <- function(table, colors, inputs, units) {
       `Cmp Name` = `Cmp Name`,
       dplyr::any_of(optional_cols),
       `Mass Shift` = mass_stoich_html,
+      `Theor. Prot. [Da]` = `Theor. Prot. [Da]`,
       `Theor. Cmp [Da]` = `Theor. Cmp [Da]`,
       `Bind. Stoich.` = `Bind. Stoich.`,
       `Binding [%]` = `Binding [%]`,
@@ -5037,6 +5203,7 @@ render_table_view <- function(table, colors, tab, inputs, units) {
             "col_var",
             "label_color",
             "trunc_label",
+            "Theor. Prot. [Da]",
             "Theor. Cmp [Da]",
             "Bind. Stoich.",
             if (tab == "Concentration") "Cmp Name"
@@ -5148,8 +5315,21 @@ transform_per_adduct <- function(
   compounds_table,
   samples_table
 ) {
-  # Get distinct adducts
-  distinct_adducts <- dplyr::distinct(hits_table, `Sample ID`, `Cmp Name`)
+  # Get distinct adducts. A protein declared with several masses contributes one
+  # entry per species, so the species mass is part of the grouping key.
+  species_col <- "Theor. Prot. [Da]"
+  has_species <- species_col %in% names(hits_table)
+
+  distinct_adducts <- if (has_species) {
+    dplyr::distinct(
+      hits_table,
+      `Sample ID`,
+      !!rlang::sym(species_col),
+      `Cmp Name`
+    )
+  } else {
+    dplyr::distinct(hits_table, `Sample ID`, `Cmp Name`)
+  }
 
   # Get colnames of retained columns subset
   col_names <- names(hits_table)[
@@ -5173,15 +5353,21 @@ transform_per_adduct <- function(
     sample <- distinct_adducts$`Sample ID`[i] # Current sample
     cmp <- distinct_adducts$`Cmp Name`[i] # Current compound
 
+    row_sel <- hits_table$`Sample ID` == sample
+    if (has_species) {
+      species <- distinct_adducts[[species_col]][i] # Current protein species
+      row_sel <- row_sel & hits_table[[species_col]] %in% species
+    }
+
     if (is.na(cmp)) {
       hits_per_adduct <- hits_table[
-        hits_table$`Sample ID` == sample,
+        row_sel,
         col_names
       ][1, ]
     } else {
       # Build hits df per adduct
       hits_table_subset <- hits_table[
-        hits_table$`Sample ID` == sample & hits_table$`Cmp Name` == cmp,
+        row_sel & !is.na(hits_table$`Cmp Name`) & hits_table$`Cmp Name` == cmp,
       ]
       hits_per_adduct <- hits_table_subset[, col_names][1, ]
 
@@ -6467,6 +6653,10 @@ prot_compound_distribution <- function(
         !is.na(`Cmp Name`)
     )
 
+  # Adducts of different proteoforms are separate bar segments and need labels
+  # that tell them apart
+  multi_species <- length(unique(tbl$`Theor. Prot. [Da]`)) > 1
+
   if (color_variable == "Compounds") {
     color <- ~`Cmp Name`
   } else if (color_variable == "Samples") {
@@ -6487,16 +6677,11 @@ prot_compound_distribution <- function(
       `Protein` = `Protein`[1],
       `Tot. Binding [%]` = `Tot. Binding [%]`[1],
       `truncSample_ID` = `truncSample_ID`[1],
-      mass_stoich_raw = paste(
-        paste0(
-          "[",
-          `Theor. Cmp [Da]`,
-          "]",
-          sapply(`Bind. Stoich.`, function(x) {
-            as.character(htmltools::tags$sub(x))
-          })
-        ),
-        collapse = " + "
+      mass_stoich_raw = mass_shift_label(
+        `Theor. Cmp [Da]`,
+        `Bind. Stoich.`,
+        species_mass = `Theor. Prot. [Da]`[1],
+        multi_species = multi_species
       ),
       `Theor. Cmp [Da]` = `Theor. Cmp [Da]`[Preferred == "TRUE"][1],
       `Bind. Stoich.` = `Bind. Stoich.`[Preferred == "TRUE"][1],
@@ -6885,6 +7070,10 @@ cmp_compound_distribution <- function(
   tbl <- hits_summary |>
     dplyr::filter(`Cmp Name` == compound)
 
+  # Adducts of different proteoforms are separate bar segments and need labels
+  # that tell them apart
+  multi_species <- length(unique(tbl$`Theor. Prot. [Da]`)) > 1
+
   # Merge non-preferred hits (same peak) into their preferred counterpart
   tbl <- tbl |>
     dplyr::arrange(
@@ -6898,16 +7087,11 @@ cmp_compound_distribution <- function(
       `Cmp Name` = `Cmp Name`[1],
       `Tot. Binding [%]` = `Tot. Binding [%]`[1],
       `truncSample_ID` = `truncSample_ID`[1],
-      mass_stoich_raw = paste(
-        paste0(
-          "[",
-          `Theor. Cmp [Da]`,
-          "]",
-          sapply(`Bind. Stoich.`, function(x) {
-            as.character(htmltools::tags$sub(x))
-          })
-        ),
-        collapse = " + "
+      mass_stoich_raw = mass_shift_label(
+        `Theor. Cmp [Da]`,
+        `Bind. Stoich.`,
+        species_mass = `Theor. Prot. [Da]`[1],
+        multi_species = multi_species
       ),
       `Theor. Cmp [Da]` = `Theor. Cmp [Da]`[Preferred == "TRUE"][1],
       `Bind. Stoich.` = `Bind. Stoich.`[Preferred == "TRUE"][1],
@@ -7072,59 +7256,74 @@ smpl_compound_distribution <- function(
   tbl <- hits_summary |>
     dplyr::filter(`Sample ID` == sample)
 
-  if (anyNA(tbl)) {
+  # Binding events only - a protein species without any complex sits in the
+  # table as a compound-less row and is accounted for in the unbound slices
+  adducts <- dplyr::filter(tbl, !is.na(`Cmp Name`))
+
+  if (nrow(adducts) == 0) {
     return(NULL)
   }
 
-  # Group by compound + peak: multiple stoichiometry interpretations of the
-  # same peak are merged into one slice with a combined [x]xN + [y]xM label.
-  # Only the Preferred hit's binding value counts for the slice size.
-  cmp_table <- tbl |>
+  # A protein may be declared with several masses (proteoforms). Each of them
+  # binds on its own, so every (proteoform, peak) pair is a separate slice and
+  # its label has to name the proteoform - plotly merges pie sectors that share
+  # a label, which would silently fold the species into one another.
+  species <- unbound_species(tbl)
+  multi_species <- length(unique(tbl$`Theor. Prot. [Da]`)) > 1
+
+  # Group by protein species + compound + peak: multiple stoichiometry
+  # interpretations of the same peak are merged into one slice with a combined
+  # [x]xN + [y]xM label. Only the Preferred hit's binding value counts.
+  cmp_table <- adducts |>
     dplyr::arrange(
       `Cmp Name`,
+      `Theor. Prot. [Da]`,
       `Peak Signal [Da]`,
       dplyr::desc(Preferred == "TRUE"),
       dplyr::desc(suppressWarnings(as.numeric(`Theor. Cmp [Da]`)))
     ) |>
-    dplyr::group_by(`Cmp Name`, `Peak Signal [Da]`) |>
+    dplyr::group_by(`Cmp Name`, `Theor. Prot. [Da]`, `Peak Signal [Da]`) |>
     dplyr::reframe(
       `Cmp Name` = `Cmp Name`[1],
       `Sample ID` = if (truncate_names) `truncSample_ID`[1] else `Sample ID`[1],
       total_bind = `Tot. Binding [%]`[1],
-      mass_stoich = paste(
-        paste0(
-          "[",
-          `Theor. Cmp [Da]`,
-          "]",
-          sapply(`Bind. Stoich.`, function(x) {
-            as.character(htmltools::tags$sub(x))
-          })
-        ),
-        collapse = " + "
+      mass_stoich = mass_shift_label(
+        `Theor. Cmp [Da]`,
+        `Bind. Stoich.`,
+        species_mass = `Theor. Prot. [Da]`[1],
+        multi_species = multi_species
       ),
       relBinding = {
         pref <- `Binding [%]`[Preferred == "TRUE"]
         (if (length(pref) > 0) pref[1] else `Binding [%]`[1]) / 100
       }
     ) |>
-    dplyr::select(-`Peak Signal [Da]`) |>
+    dplyr::select(-`Peak Signal [Da]`, -`Theor. Prot. [Da]`) |>
     dplyr::mutate(
       `Binding [%]` = paste0(sprintf("%.2f", relBinding * 100), "%")
-    ) |>
-    rbind(
+    )
+
+  # Unbound slice per proteoform, splitting the unbound remainder by the share
+  # each apo peak holds of the total unbound signal
+  unbound_rel <- 1 - tbl$`Tot. Binding [%]`[1] / 100
+  if (nrow(species) > 0 && unbound_rel > 0) {
+    shares <- species$prot_intensity / sum(species$prot_intensity)
+    cmp_table <- rbind(
+      cmp_table,
       data.frame(
         "Cmp Name" = "Unbound",
         "Sample ID" = "Unbound",
         total_bind = 100 - tbl$`Tot. Binding [%]`[1],
-        mass_stoich = "Unbound Protein",
-        relBinding = 1 - tbl$`Tot. Binding [%]`[1] / 100,
+        mass_stoich = unbound_label(species$theor_prot, multi_species),
+        relBinding = unbound_rel * shares,
         "Binding [%]" = paste0(
-          sprintf("%.2f", 100 - tbl$`Tot. Binding [%]`[1]),
+          sprintf("%.2f", unbound_rel * shares * 100),
           "%"
         ),
         check.names = FALSE
       )
     )
+  }
 
   colors <- c(
     "#e5e5e5",
@@ -8071,11 +8270,21 @@ batch_plate_heatmap <- function(
     return(plotly::plotly_empty())
   }
 
-  # Classify each sample's well state (use df = one row per sample)
-  no_prot_flag <- is.na(df$`Measured Mw Protein [Da]`) &
-    is.na(df$Compound)
-  no_hit_flag <- !is.na(df$`Measured Mw Protein [Da]`) &
-    is.na(df$Compound)
+  # Classify each sample's well state. Evaluated over all rows of a sample
+  # rather than its first one: a sample contributes one row per compound and
+  # per protein species, and an unbound species carries no compound.
+  prot_seen <- tapply(
+    !is.na(hits_summary$`Measured Mw Protein [Da]`),
+    hits_summary$Sample,
+    any
+  )
+  cmp_seen <- tapply(
+    !is.na(hits_summary$Compound),
+    hits_summary$Sample,
+    any
+  )
+  no_prot_flag <- unname(!prot_seen[df$Sample] & !cmp_seen[df$Sample])
+  no_hit_flag <- unname(prot_seen[df$Sample] & !cmp_seen[df$Sample])
   well_state <- dplyr::case_when(
     no_prot_flag ~ "no_prot",
     no_hit_flag ~ "no_hit",
