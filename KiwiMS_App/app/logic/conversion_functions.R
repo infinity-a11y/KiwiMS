@@ -2237,23 +2237,7 @@ add_hits <- function(
   compound_mw <- as.matrix(compound_table[, -1])
   rownames(compound_mw) <- compound_table[, 1]
 
-  hits_max <- if (kinact_ki) 80 else 100
-
   for (i in seq_along(samples)) {
-    shinyWidgets::updateProgressBar(
-      session = session,
-      id = ns("conversion_progress"),
-      value = ifelse(i == 1, 0, (i - 1) / length(samples) * hits_max),
-      title = paste(
-        "[",
-        i,
-        "/",
-        length(samples),
-        "] Checking hits for",
-        samples[i]
-      )
-    )
-
     log_start(samples[i])
 
     st_key <- gsub("\\.raw$", "", sample_table$Sample, ignore.case = TRUE)
@@ -2302,18 +2286,6 @@ add_hits <- function(
 
     log_done()
   }
-
-  shinyWidgets::updateProgressBar(
-    session = session,
-    id = ns("conversion_progress"),
-    value = hits_max,
-    title = paste0(
-      "Hit screening completed for ",
-      length(samples),
-      " sample(s).",
-      if (kinact_ki) " Computing binding kinetics..." else ""
-    )
-  )
 
   return(results)
 }
@@ -4399,7 +4371,8 @@ multiple_spectra <- function(
     if (nrow(peaks_data) > 0) {
       for (lvl in levels(peaks_data$z)) {
         peaks_lvl <- peaks_data[
-          !is.na(peaks_data$z) & peaks_data$z == lvl, ,
+          !is.na(peaks_data$z) & peaks_data$z == lvl,
+          ,
           drop = FALSE
         ]
 
@@ -4689,7 +4662,8 @@ multiple_spectra <- function(
     if (nrow(peaks_data) > 0) {
       for (lvl in levels(peaks_data$z)) {
         peaks_lvl <- peaks_data[
-          !is.na(peaks_data$z) & peaks_data$z == lvl, ,
+          !is.na(peaks_data$z) & peaks_data$z == lvl,
+          ,
           drop = FALSE
         ]
 
@@ -4986,18 +4960,20 @@ filter_table_view <- function(table, colors, inputs, units) {
       # that round trip loses the last bit (0.9375 μM -> 9.375e-07 M reads back
       # one ULP off) and the row silently loses its colour. Comparing the
       # canonical strings on both sides sidesteps the float entirely.
-      col_var = as.character(!!rlang::sym(
-        if (
-          length(units) == 2 &&
-            inputs$color_variable == units[["Concentration"]]
-        ) {
-          units[["Concentration"]]
-        } else if (inputs$color_variable == "Compounds") {
-          "Cmp Name"
-        } else if (inputs$color_variable == "Samples") {
-          "trunc_label"
-        }
-      ))
+      col_var = as.character(
+        !!rlang::sym(
+          if (
+            length(units) == 2 &&
+              inputs$color_variable == units[["Concentration"]]
+          ) {
+            units[["Concentration"]]
+          } else if (inputs$color_variable == "Compounds") {
+            "Cmp Name"
+          } else if (inputs$color_variable == "Samples") {
+            "trunc_label"
+          }
+        )
+      )
     )
 
   # Show the concentration in the same canonical form. Besides matching the
