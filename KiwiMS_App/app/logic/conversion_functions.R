@@ -1362,32 +1362,6 @@ check_table <- function(tab, tolerance) {
   return(TRUE)
 }
 
-
-# # Parse filename according to nomenclature of test files
-# parse_filename <- function(s) {
-#   # Remove file extension if present
-#   s <- sub("\\.[^\\.]+$", "", s)
-
-#   # Split on + (corrected escaping for fixed=TRUE)
-#   parts <- strsplit(s, "+", fixed = TRUE)[[1]]
-
-#   if (length(parts) != 2) {
-#     stop("String does not contain exactly one +")
-#   }
-
-#   before <- parts[1]
-
-#   after <- parts[2]
-
-#   # Now split after on _
-#   after_parts <- strsplit(after, "_", fixed = TRUE)[[1]]
-
-#   # Combine into a vector
-#   result <- c(before, after_parts)
-
-#   return(result)
-# }
-
 # Read in file containing the peaks picked from spectrum
 get_peaks <- function(peak_file = NULL, result_sample, results) {
   if (
@@ -1444,8 +1418,10 @@ get_peaks <- function(peak_file = NULL, result_sample, results) {
   # Set names
   names(peaks) <- c("mass", "intensity")
 
-  # Normalize peaks
-  peaks$intensity <- peaks$intensity / max(peaks$intensity) * 100
+  if (nrow(peaks) != 0) {
+    # Normalize peaks
+    peaks$intensity <- peaks$intensity / max(peaks$intensity) * 100
+  }
 
   # Message information
   log_status(nrow(peaks), peaks$mass)
@@ -1585,6 +1561,7 @@ get_compound_matrix <- function(compound_file, header = TRUE) {
   return(compounds_matrix)
 }
 
+# Check if hits present in spectrum i.e. peaks belonging to declared species or adducts
 check_hits <- function(
   sample_table,
   protein_mw,
@@ -1629,15 +1606,8 @@ check_hits <- function(
       cmp_mass = NA,
       delta_cmp = NA,
       multiple = NA,
-      preferred = NA,
-      unmatched = NA,
-      correct = NA
+      preferred = NA
     )
-
-    hits_df$unmatched <- unmatched <- sum(!peaks$mass %in% hits_df$peak) /
-      nrow(peaks) *
-      100
-    hits_df$correct <- 100 - unmatched
 
     return(hits_df)
   }
@@ -1712,15 +1682,13 @@ check_hits <- function(
               (peaks_filtered[j, "mass"] - prot_mass)
           ),
           multiple = multiple,
-          preferred = TRUE,
-          unmatched = NA,
-          correct = NA
+          preferred = TRUE
         )
 
         hits_add <- rbind(hits_add, hit)
       }
 
-      # Case multiple matching
+      # Preferred in case of multiple matching
       if (nrow(hits_add) > 1) {
         # Hit with highest compound mass is preferred to add to total binding
         hits_add <- hits_add |>
@@ -1767,38 +1735,14 @@ check_hits <- function(
       cmp_mass = NA,
       delta_cmp = NA,
       multiple = NA,
-      preferred = NA,
-      unmatched = NA,
-      correct = NA
+      preferred = NA
     )
   }
 
-  # Calculate % unmatched and % correct
-  # hits_df$unmatched <- unmatched <- sum(!peaks$mass %in% hits_df$peak) /
-  #   nrow(peaks) *
-  #   100
-  hits_df$unmatched <- unmatched <- sum(
-    !peaks$mass %in% c(hits_df$peak, hits_df$measured_prot)
-  ) /
-    nrow(peaks) *
-    100
-  hits_df$correct <- correct <- 100 - unmatched
-
-  log_result(nrow(hits_df), unmatched, correct)
   return(hits_df)
 }
 
-###################################################
-# intensitäten aufsummieren -> 100 %
-# prot signal intenstität (einzeln) / gesamtintensität
-
-# Compounds
-# 1. Unterschiedliche massenshifts
-# 2. multiple bindungen -> vielfache von compound MW (! jeweils pro massenshift)
-
-# Protein MW = 1000
-# Compound MW = 10|11
-
+# Conversion of intensities to fractional % binding
 conversion <- function(hits) {
   # Check 'hits' argument validity
   if (!is.data.frame(hits) || nrow(hits) < 1) {
@@ -1849,11 +1793,6 @@ conversion <- function(hits) {
       unique(hits$prot_intensity),
       sum(unique(hits$intensity))
     )
-
-    # Normalize peak intensity
-    # max_intensity <- max(c(hits$intensity, hits$prot_intensity))
-    # hits$intensity <- hits$intensity / max_intensity * 100
-    # hits$prot_intensity <- hits$prot_intensity / max_intensity * 100
   }
 
   # Change column names
@@ -1873,8 +1812,8 @@ conversion <- function(hits) {
     "Delta Mw Compound [Da]",
     "Binding Stoichiometry",
     "Preferred",
-    "% Unmatched",
     "% Correct",
+    "% Unmatched",
     "% Binding"
   )
 
@@ -2232,6 +2171,15 @@ add_hits <- function(
   kinact_ki = FALSE,
   config = NULL
 ) {
+  results <<- results
+  sample_table <<- sample_table
+  protein_table <<- protein_table
+  compound_table <<- compound_table
+  peak_tolerance <<- peak_tolerance
+  max_multiples <<- max_multiples
+  kinact_ki <<- kinact_ki
+  config <<- config
+
   samples <- names(results$deconvolution)
   protein_mw <- protein_table$`Mass 1`
   compound_mw <- as.matrix(compound_table[, -1])
@@ -2265,29 +2213,54 @@ add_hits <- function(
       }
     }
 
-    results$deconvolution[[samples[i]]][["hits"]] <- check_hits(
+    peaks <- get_peaks(result_sample = samples[i], results = results)
+
+    # Hit search
+    hits_df <- check_hits(
       sample_table = sample_table,
       protein_mw = protein_table[protein_table$Protein == present_protein, ],
       compound_mw = compound_table[compound_table$Compound == present_cmp, ],
-      peaks = get_peaks(result_sample = samples[i], results = results),
+      peaks = peaks,
       peak_tolerance = peak_tolerance,
       max_multiples = max_multiples,
       sample = samples[i],
       well = sample_well
     )
 
+    # Calculate quality metrics unmatched[%] and correct[%]
+    hits_df <- assess_quality(hits = hits_df, peaks = peaks)
+
+    # Log hit search result
+    log_result(nrow(hits_df), hits_df$unmatched[1], hits_df$correct[1])
+
     # Conversion of relative intensities to Binding [%]
     # Add resulting hits data frame to sample
     results$deconvolution[[samples[i]]][[
       "hits"
-    ]] <- conversion(results$deconvolution[[samples[i]]][[
-      "hits"
-    ]])
+    ]] <- conversion(hits_df)
 
     log_done()
   }
 
   return(results)
+}
+
+# Calculate quality metrics unmatched[%] and correct[%]
+assess_quality <- function(hits, peaks) {
+  if (nrow(peaks) != 0) {
+    total_peak_intensity <- sum(peaks$intensity)
+    detected_species <- c(hits$measured_prot, hits$peak)
+    known_peak_intensity <- sum(peaks$intensity[
+      peaks$mass %in% detected_species
+    ])
+
+    hits$correct <- correct <- 100 * known_peak_intensity / total_peak_intensity
+    hits$unmatched <- 100 - correct
+  } else {
+    hits$correct <- hits$unmatched <- NA
+  }
+
+  return(hits)
 }
 
 # Concatenate and extract all hits data frames from all samples
