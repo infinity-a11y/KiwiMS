@@ -21,7 +21,7 @@
 #   Prerequisite: the ps2exe module.
 #       Install-Module ps2exe -Scope CurrentUser -Force
 #
-#   Normally you do not run this directly - dev\build_installer.ps1 calls it
+#   Normally you do not run this directly - dev\build-installer.ps1 calls it
 #   as step 1 of the full installer build and passes -NoPause to skip the
 #   "Press Enter" prompts below.
 #
@@ -30,7 +30,7 @@
 # =============================================
 
 param(
-    # Suppress the "Press Enter" prompts so dev\build_installer.ps1 can drive this
+    # Suppress the "Press Enter" prompts so dev\build-installer.ps1 can drive this
     # script unattended.
     [switch] $NoPause
 )

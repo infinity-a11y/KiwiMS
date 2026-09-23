@@ -27,5 +27,5 @@ KiwiMS_App/KiwiMS.exe
 KiwiMS-Windows-x86_64.exe
 Output/
 
-# Ignore the VC++ redistributable (fetched at build time by dev/build_installer.ps1)
+# Ignore the VC++ redistributable (fetched at build time by dev/build-installer.ps1)
 setup/VC_redist.x64.exe

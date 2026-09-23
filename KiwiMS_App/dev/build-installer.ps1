@@ -12,7 +12,7 @@
         - Inno Setup 6 (ISCC.exe) and the ps2exe module
 
     Usage:
-        .\dev\build_installer.ps1
+        .\dev\build-installer.ps1
 #>
 
 [CmdletBinding()]
