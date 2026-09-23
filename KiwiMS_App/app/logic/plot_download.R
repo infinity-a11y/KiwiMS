@@ -1,6 +1,7 @@
 # app/logic/plot_download.R
 
 box::use(
+  base64enc[base64encode],
   bslib,
   htmlwidgets[saveWidget],
   openxlsx[
@@ -142,6 +143,179 @@ with_export_palette <- function(expr) {
   force(expr)
 }
 
+# Writes a widget to a single HTML file with every local dependency folded in.
+# `background` paints the page body the figure sits on, and callers pass the
+# same colour they gave the figure so the two cannot come apart.
+#
+# htmlwidgets does this through saveWidget(selfcontained = TRUE), which shells
+# out to pandoc, and the installed app has no pandoc: R-Portable ships without
+# one and nothing sets RSTUDIO_PANDOC, so rmarkdown finds nothing on any of
+# the three paths it searches and saveWidget() aborts. That killed every HTML
+# export outside a dev session - the content function errored, Shiny answered
+# the download request with a 500, and the browser reported a failed download
+# named after the output id rather than after filename_fn(). A dev session
+# works only because RStudio exports RSTUDIO_PANDOC into the R process.
+#
+# So the widget goes out with its library folder instead, and each
+# <script src> and <link href> is folded into the document here. Assets are
+# inlined verbatim, which keeps the export the size pandoc produced; one that
+# cannot be (it carries a sequence that would close its own tag) goes in as a
+# data URI. Anything still pointing at the library folder afterwards throws -
+# a loud failure beats an export that opens with pieces missing.
+#' @export
+save_widget_selfcontained <- function(widget, file, background = "white") {
+  staging <- tempfile("kiwims-export-")
+  dir.create(staging)
+  on.exit(unlink(staging, recursive = TRUE), add = TRUE)
+
+  staged <- file.path(staging, "widget.html")
+  saveWidget(
+    widget,
+    staged,
+    selfcontained = FALSE,
+    libdir = "lib",
+    background = background
+  )
+
+  doc <- readChar(staged, file.size(staged), useBytes = TRUE)
+  Encoding(doc) <- "UTF-8"
+
+  doc <- inline_widget_tags(
+    doc,
+    '<script[^>]*\\ssrc="(lib/[^"]+)"[^>]*>\\s*</script>',
+    function(path, tag) inline_widget_script(staging, path)
+  )
+  doc <- inline_widget_tags(
+    doc,
+    '<link[^>]*\\shref="(lib/[^"]+)"[^>]*>',
+    function(path, tag) inline_widget_style(staging, path, tag)
+  )
+
+  leftovers <- regmatches(
+    doc,
+    gregexpr('(?:src|href)="lib/[^"]*"', doc, perl = TRUE)
+  )[[1]]
+  if (length(leftovers)) {
+    stop(
+      "Export still references its library folder after inlining: ",
+      paste(unique(leftovers), collapse = ", ")
+    )
+  }
+
+  # The splicing works on offsets into a string that grows by megabytes as it
+  # goes, and a document that lost its tail to a bad offset still passes every
+  # check above - the references are gone because the text holding them is.
+  # The closing tag is the cheap end-to-end proof that it is all still here.
+  if (!grepl("</html>\\s*$", doc)) {
+    stop("Export was truncated while inlining: the document has no closing tag")
+  }
+
+  con <- file(file, open = "wb")
+  on.exit(close(con), add = TRUE)
+  writeLines(enc2utf8(doc), con, useBytes = TRUE)
+
+  invisible(file)
+}
+
+# Replaces every match of `pattern` with builder(path, tag), `path` being the
+# pattern's single capture group and `tag` the whole element.
+#
+# Splices from the last match backwards so the earlier offsets stay valid, and
+# so an inlined asset that happens to contain something matching the pattern
+# is never rescanned - a forwards pass would have to re-search the document
+# after each replacement and could walk into the three megabytes of plotly.js
+# it had just pasted in.
+inline_widget_tags <- function(doc, pattern, builder) {
+  matches <- gregexpr(pattern, doc, perl = TRUE)[[1]]
+  if (matches[[1]] == -1L) {
+    return(doc)
+  }
+
+  starts <- as.integer(matches)
+  lengths <- attr(matches, "match.length")
+  capture_starts <- as.integer(attr(matches, "capture.start"))
+  capture_lengths <- as.integer(attr(matches, "capture.length"))
+
+  for (i in rev(seq_along(starts))) {
+    tag <- substring(doc, starts[i], starts[i] + lengths[i] - 1L)
+    path <- substring(
+      doc,
+      capture_starts[i],
+      capture_starts[i] + capture_lengths[i] - 1L
+    )
+    # substring() defaults `last` to 1000000L, so the tail has to be asked for
+    # explicitly: left to the default it silently cuts the document at a
+    # million characters, which is a third of the way into plotly.js.
+    doc <- paste0(
+      substring(doc, 1L, starts[i] - 1L),
+      builder(path, tag),
+      substring(doc, starts[i] + lengths[i], nchar(doc))
+    )
+  }
+
+  doc
+}
+
+# Reads one dependency file out of the staging area as UTF-8 text.
+read_widget_asset <- function(staging, path) {
+  full <- file.path(staging, path)
+  if (!file.exists(full)) {
+    stop("Widget dependency missing from the export: ", path)
+  }
+  text <- readChar(full, file.size(full), useBytes = TRUE)
+  Encoding(text) <- "UTF-8"
+  text
+}
+
+inline_widget_script <- function(staging, path) {
+  js <- read_widget_asset(staging, path)
+  # An inline <script> ends at the first "</script" the parser sees, and an
+  # "<!--" opens a comment the rest of the file disappears into. Neither
+  # appears anywhere in the dependencies shipped today, so this costs nothing
+  # now; it is here because a later build of any of them could carry one.
+  if (grepl("</script|<!--", js, ignore.case = TRUE)) {
+    return(paste0(
+      '<script src="data:application/javascript;base64,',
+      base64encode(charToRaw(js)),
+      '"></script>'
+    ))
+  }
+  paste0("<script>\n", js, "\n</script>")
+}
+
+inline_widget_style <- function(staging, path, tag) {
+  if (!grepl('rel="stylesheet"', tag, fixed = TRUE)) {
+    stop("Unsupported <link> in a plot export, not a stylesheet: ", tag)
+  }
+
+  css <- read_widget_asset(staging, path)
+
+  # A url() would still point into the library folder the export does not
+  # carry. Nothing in the current dependency set has one - the check is here
+  # so a widget that does fails now, at export time, instead of opening later
+  # with a missing icon and no explanation.
+  urls <- regmatches(css, gregexpr("url\\([^)]*\\)", css, perl = TRUE))[[1]]
+  targets <- gsub("^['\"]|['\"]$", "", trimws(gsub("^url\\(|\\)$", "", urls)))
+  external <- targets[!grepl("^(data:|https?://|#)", targets)]
+  if (length(external)) {
+    stop(
+      "Stylesheet ",
+      path,
+      " references files this export cannot carry: ",
+      paste(unique(external), collapse = ", ")
+    )
+  }
+
+  if (grepl("</style", css, ignore.case = TRUE)) {
+    return(paste0(
+      '<link rel="stylesheet" href="data:text/css;base64,',
+      base64encode(charToRaw(css)),
+      '" />'
+    ))
+  }
+  paste0("<style>\n", css, "\n</style>")
+}
+
 # Registers HTML/PNG/SVG download handlers for a plot card.
 # build_fn(theme) must return a plotly figure.
 # filename_fn() must return a string (no extension).
@@ -197,10 +371,13 @@ setup_plot_dl <- function(
     if (is.null(current_available_fn)) {
       return(invisible(NULL))
     }
-    session$sendCustomMessage("setExportState", list(
-      prefix = prefix,
-      enabled = isTRUE(current_available_fn())
-    ))
+    session$sendCustomMessage(
+      "setExportState",
+      list(
+        prefix = prefix,
+        enabled = isTRUE(current_available_fn())
+      )
+    )
   })
 
   no_plot_toast <- function() {
@@ -250,11 +427,40 @@ setup_plot_dl <- function(
       # PNG and SVG have the background applied browser-side, in the
       # downloadPlot handler; the HTML export never goes through that, so it
       # is applied to the figure here instead.
-      background <- dl_background()
-      if (!is.null(background)) {
-        p <- layout(p, paper_bgcolor = background, plot_bgcolor = background)
+      #
+      # The transparency switch deliberately does not reach this export. It is
+      # an affordance for the image formats, which get composited onto
+      # whatever they are dropped into, so "no background at all" is a
+      # meaningful answer there. An HTML export is a page and always paints
+      # something: honouring the switch here left the figure transparent over
+      # the white body saveWidget() writes, which is merely redundant under
+      # the light theme but puts dark-theme plots on white. So HTML takes the
+      # picked theme's own background either way, and takes it twice - once on
+      # the figure, once on the page behind it, so the two cannot disagree.
+      background <- export_bg_color(dl_theme(), transparent = FALSE)
+      p <- layout(p, paper_bgcolor = background, plot_bgcolor = background)
+      # save_widget_selfcontained() throws rather than write a half-inlined
+      # file, and an error escaping a content function reaches the user only
+      # as a failed browser download named after the output id - the symptom
+      # that made the missing pandoc so hard to place. Name the reason in a
+      # toast before letting the request fail.
+      failure <- tryCatch(
+        {
+          save_widget_selfcontained(as_widget(p), file, background = background)
+          NULL
+        },
+        error = function(e) conditionMessage(e)
+      )
+      if (!is.null(failure)) {
+        show_toast(
+          "HTML export failed",
+          text = failure,
+          type = "error",
+          timer = 8000,
+          timerProgressBar = TRUE
+        )
+        shiny::req(FALSE)
       }
-      saveWidget(as_widget(p), file, selfcontained = TRUE)
     }
   )
 
