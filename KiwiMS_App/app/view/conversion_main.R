@@ -2271,38 +2271,53 @@ server <- function(
                 )
                 selected <- input$conversion_sample_picker
 
-                protein <- unique(hits_summary$`Protein`[
-                  hits_summary$`Sample ID` == selected
-                ])
-
-                # Get protein signal
-                measured_protein_mw <- hits_summary$`Meas. Prot. [Da]`[
-                  hits_summary$`Sample ID` == selected
+                sample_rows <- hits_summary[
+                  hits_summary$`Sample ID` == selected,
                 ]
 
-                # Convert to numeric (column may be character after display formatting)
-                measured_protein_mw <- suppressWarnings(as.numeric(
-                  measured_protein_mw
+                protein <- unique(sample_rows$Protein)
+
+                # One entry per declared protein species — a protein may carry
+                # several masses (e.g. a modified form), so theoretical and
+                # measured mass are read as pairs
+                species <- sample_rows[
+                  !duplicated(sample_rows$`Theor. Prot. [Da]`),
+                  c("Theor. Prot. [Da]", "Meas. Prot. [Da]")
+                ]
+
+                # Convert to numeric (columns may be character after display formatting)
+                theor_protein_mw <- suppressWarnings(as.numeric(
+                  species$`Theor. Prot. [Da]`
                 ))
-                measured_protein_mw <- measured_protein_mw[
-                  !is.na(measured_protein_mw)
-                ]
-                if (length(measured_protein_mw)) {
-                  signal_average <- paste(
-                    format(
-                      round(mean(measured_protein_mw), 2),
-                      big.mark = ",",
-                      scientific = FALSE
-                    ),
-                    "Da"
+                measured_protein_mw <- suppressWarnings(as.numeric(
+                  species$`Meas. Prot. [Da]`
+                ))
+                species_order <- order(theor_protein_mw)
+                theor_protein_mw <- theor_protein_mw[species_order]
+                measured_protein_mw <- measured_protein_mw[species_order]
+
+                fmt_mw <- function(x) {
+                  vapply(
+                    x,
+                    function(v) {
+                      format(v, big.mark = ",", scientific = FALSE)
+                    },
+                    character(1)
                   )
-                } else {
-                  signal_average <- "No signal"
                 }
 
-                theor_protein_mw <- hits_summary$`Theor. Prot. [Da]`[
-                  hits_summary$`Sample ID` == selected
-                ]
+                if (all(is.na(measured_protein_mw))) {
+                  signal_average <- "No signal"
+                } else {
+                  signal_average <- paste(
+                    ifelse(
+                      is.na(measured_protein_mw),
+                      "No signal",
+                      paste(fmt_mw(round(measured_protein_mw, 2)), "Da")
+                    ),
+                    collapse = " | "
+                  )
+                }
 
                 shiny::div(
                   class = "conversion-sample-protein-box",
@@ -2315,12 +2330,11 @@ server <- function(
                     shiny::HTML(paste(
                       protein,
                       "<br>",
-                      format(
-                        theor_protein_mw[1],
-                        big.mark = ",",
-                        scientific = FALSE
+                      paste(
+                        paste(fmt_mw(theor_protein_mw), "Da"),
+                        collapse = " | "
                       ),
-                      "Da <br>",
+                      "<br>",
                       signal_average
                     ))
                   )
@@ -2376,12 +2390,16 @@ server <- function(
                 input$conversion_sample_picker
               )
 
+              # A sample can hold compound-less rows for protein species that
+              # carry no complex, so the chart is empty only when the sample has
+              # no binding event at all
               tbl <- hits_summary |>
                 dplyr::filter(
-                  `Sample ID` == input$conversion_sample_picker
+                  `Sample ID` == input$conversion_sample_picker &
+                    !is.na(`Cmp Name`)
                 )
 
-              if (anyNA(tbl)) {
+              if (nrow(tbl) < 1) {
                 shiny::textOutput(ns("samples_present_compounds_na"))
               } else {
                 shinycssloaders::withSpinner(
@@ -3205,34 +3223,54 @@ server <- function(
 
                 selected <- input$conversion_protein_picker
 
-                # Get all protein signals
-                measured_protein_mw <- hits_summary$`Meas. Prot. [Da]`[
-                  hits_summary$Protein == selected
+                protein_rows <- hits_summary[
+                  hits_summary$Protein == selected,
                 ]
-                # Convert to numeric (column may be character after display formatting)
-                measured_protein_mw <- suppressWarnings(as.numeric(
-                  measured_protein_mw
+
+                # Signals are averaged per declared protein species — a protein
+                # may carry several masses (e.g. a modified form), and averaging
+                # across species would mix unrelated peaks
+                theor_protein_mw <- suppressWarnings(as.numeric(
+                  protein_rows$`Theor. Prot. [Da]`
                 ))
-                measured_protein_mw <- measured_protein_mw[
-                  !is.na(measured_protein_mw)
-                ]
-                if (length(measured_protein_mw)) {
-                  signal_average <- paste(
-                    format(
-                      round(mean(measured_protein_mw), 2),
-                      big.mark = ",",
-                      scientific = FALSE
-                    ),
-                    "Da"
+                measured_protein_mw <- suppressWarnings(as.numeric(
+                  protein_rows$`Meas. Prot. [Da]`
+                ))
+
+                species_mw <- sort(unique(theor_protein_mw))
+
+                fmt_mw <- function(x) {
+                  vapply(
+                    x,
+                    function(v) {
+                      format(v, big.mark = ",", scientific = FALSE)
+                    },
+                    character(1)
                   )
-                } else {
-                  signal_average <- "No signal"
                 }
 
-                # Get theoretical protein mw
-                theor_protein_mw <- hits_summary$`Theor. Prot. [Da]`[
-                  hits_summary$Protein == selected
-                ]
+                # Per species: mean of the measured signals (± sd on repeats)
+                signal_average <- vapply(
+                  species_mw,
+                  function(mw) {
+                    signals <- measured_protein_mw[
+                      theor_protein_mw %in% mw & !is.na(measured_protein_mw)
+                    ]
+                    if (!length(signals)) {
+                      return("No signal")
+                    }
+                    paste0(
+                      fmt_mw(round(mean(signals), 2)),
+                      if (length(signals) > 1) {
+                        paste0(" ± ", round(stats::sd(signals), 2))
+                      } else {
+                        ""
+                      },
+                      " Da"
+                    )
+                  },
+                  character(1)
+                )
 
                 shiny::div(
                   class = "conversion-sample-protein-box",
@@ -3245,19 +3283,9 @@ server <- function(
                     shiny::HTML(paste(
                       selected,
                       "<br>",
-                      format(
-                        theor_protein_mw[1],
-                        big.mark = ",",
-                        scientific = FALSE
-                      ),
-                      "Da <br>",
-                      signal_average,
-                      if (length(measured_protein_mw) > 1) {
-                        "±"
-                      },
-                      if (length(measured_protein_mw) > 1) {
-                        round(stats::sd(measured_protein_mw), 2)
-                      }
+                      paste(paste(fmt_mw(species_mw), "Da"), collapse = " | "),
+                      "<br>",
+                      paste(signal_average, collapse = " | ")
                     ))
                   )
                 )
