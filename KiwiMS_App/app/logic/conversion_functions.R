@@ -2575,7 +2575,21 @@ check_filter_hits <- function(result_list) {
   # least 3 non-zero concentrations must carry >= 2 distinct non-zero times.
   # Without this, a single-time-point design passes the hit count check above
   # and then fails silently for every concentration inside compute_kobs().
+  time_col <- grep("^Time", names(hits_summary), value = TRUE)[1]
   if (!is.na(time_col)) {
+    timepoints <- hits_summary |>
+      dplyr::group_by(dplyr::pick(dplyr::contains("Concentration"))) |>
+      dplyr::summarise(
+        timepoints = {
+          t <- as.numeric(.data[[time_col]])
+          dplyr::n_distinct(t[!is.na(t) & t != 0])
+        },
+        .groups = "drop"
+      )
+    tab$timepoints <- timepoints$timepoints[match(
+      tab[[conc_col]],
+      timepoints[[conc_col]]
+    )]
     valid_time_concs <- sum(tab$timepoints[nonzero_conc] >= 2, na.rm = TRUE)
 
     if (valid_time_concs < 3) {
