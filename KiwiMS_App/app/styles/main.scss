@@ -2985,14 +2985,52 @@ th.sorting {
   padding: 0.4em 1em;
   border-radius: var(--bs-border-radius);
   background: rgba(223, 223, 223, 0.26);
-  display: inline-block;
+  display: flex;
+  align-items: center;
   line-height: normal;
   width: fit-content;
+  max-width: 100%;
   white-space: nowrap;
   color: white;
 
-  svg {
+  svg,
+  i {
     margin-right: 0.4em;
+    flex-shrink: 0;
+  }
+
+  // Never wider than the table: a long text is cut, the info icon stays
+  .table-hint-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .table-hint-details {
+    flex-shrink: 0;
+    margin-left: 0.8em;
+    cursor: help;
+
+    svg,
+    i {
+      margin-right: 0;
+    }
+  }
+}
+
+// Pairs listed behind the info icon of a table hint
+.tooltip.table-hint-tooltip {
+  --bs-tooltip-max-width: min(46rem, 90vw);
+
+  .tooltip-inner {
+    text-align: left;
+    font-family: monospace;
+    font-size: 0.8rem;
+  }
+
+  .table-hint-note {
+    margin-top: 0.5em;
+    font-style: italic;
   }
 }
 

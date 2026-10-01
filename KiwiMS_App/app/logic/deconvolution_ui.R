@@ -923,7 +923,7 @@ deconvolution_results_ui <- function(ns, show_heatmap = FALSE) {
               ),
               shinyWidgets::materialSwitch(
                 ns("spectrum_annotation"),
-                label = "Annotate Hits",
+                label = "Annotate Mass",
                 value = TRUE,
                 right = TRUE
               ),

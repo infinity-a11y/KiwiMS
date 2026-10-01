@@ -265,7 +265,8 @@ kinact_ki_results_ui <- function(
   hits_summary,
   concentrations,
   dynamic_ui_ids,
-  units = NULL
+  units = NULL,
+  proteoforms = FALSE
 ) {
   # Generate the dynamic concentration panels
   concentration_panels <- lapply(seq_along(concentrations), function(i) {
@@ -342,6 +343,20 @@ kinact_ki_results_ui <- function(
                 ),
                 shiny::div(
                   class = "box-header-settings-help",
+                  # Offered only when a protein carries several masses
+                  if (isTRUE(proteoforms)) {
+                    card_settings_popover(
+                      shiny::div(
+                        shinyWidgets::materialSwitch(
+                          ns("kobs_show_proteoforms"),
+                          label = "Show Proteoforms",
+                          value = TRUE,
+                          right = TRUE
+                        ),
+                        style = "margin-right: 20px;"
+                      )
+                    )
+                  },
                   plot_dl_popover(ns, "kobs"),
                   bslib::tooltip(
                     shiny::div(
@@ -517,7 +532,13 @@ kinact_ki_results_ui <- function(
     )
   )
 
-  all_tabs <- c(static_panels, concentration_panels)
+  # Per-proteoform kinetics next to the pooled fit, only offered when a protein
+  # was declared with several masses
+  proteoform_panels <- if (isTRUE(proteoforms)) {
+    list(proteoform_results_panel(ns))
+  }
+
+  all_tabs <- c(static_panels, proteoform_panels, concentration_panels)
 
   do.call(
     bslib::navset_card_tab,
@@ -561,6 +582,94 @@ kinact_ki_results_ui <- function(
         )
       )
     )
+  )
+}
+
+# Proteoforms tab of the kinetics interface
+proteoform_results_panel <- function(ns) {
+  help_button <- function(id) {
+    bslib::tooltip(
+      shiny::div(
+        class = "tooltip-bttn",
+        shiny::actionButton(
+          ns(id),
+          label = NULL,
+          icon = shiny::icon("circle-question")
+        )
+      ),
+      "Help",
+      placement = "top"
+    )
+  }
+
+  result_card <- function(title, download, output, style = NULL) {
+    shiny::div(
+      class = "card-custom",
+      style = style,
+      bslib::card(
+        full_screen = TRUE,
+        bslib::card_header(
+          class = "bg-dark help-header d-flex justify-content-between",
+          title,
+          shiny::div(
+            class = "box-header-settings-help",
+            download,
+            help_button("proteoform_tooltip_bttn")
+          )
+        ),
+        bslib::card_body(
+          shinycssloaders::withSpinner(
+            output,
+            type = 1,
+            color = "#7777f9"
+          )
+        )
+      )
+    )
+  }
+
+  bslib::nav_panel(
+    title = "Proteoforms",
+    shiny::div(
+      class = "conversion-result-wrapper",
+      shiny::div(
+        class = "binding-analysis-tab",
+        result_card(
+          htmltools::tagList(shiny::div(
+            "k",
+            htmltools::tags$sub("obs"),
+            " per Proteoform"
+          )),
+          plot_dl_popover(ns, "proteoform_kobs"),
+          plotly::plotlyOutput(ns("proteoform_kobs_plot"), height = "100%")
+        ),
+        result_card(
+          "Paired Binding",
+          htmltools::tagList(
+            card_settings_popover(
+              shiny::div(
+                shinyWidgets::materialSwitch(
+                  ns("paired_show_limits"),
+                  label = "Show Limit Values",
+                  value = FALSE,
+                  right = TRUE
+                ),
+                style = "margin-right: 20px;"
+              )
+            ),
+            plot_dl_popover(ns, "proteoform_paired")
+          ),
+          plotly::plotlyOutput(ns("proteoform_paired_plot"), height = "100%")
+        ),
+        result_card(
+          "Proteoform Kinetics",
+          table_dl_popover(ns, "proteoform_table"),
+          DT::DTOutput(ns("proteoform_table")),
+          style = "grid-column: span 2; min-height: 0;"
+        )
+      )
+    ),
+    shiny::tags$script(popover_autoclose)
   )
 }
 
@@ -1366,7 +1475,13 @@ binding_results_ui <- function(ns, hits_summary, show_sort_binding = TRUE) {
                         stats::setNames(cmp_samples, cmp_samples)
                     }
                   }
-                  no_hits_vec <- unique(sample_col[no_cmp & !no_sample])
+                  # A sample with several proteoforms has one row per
+                  # species, so a species without a complex must not list
+                  # a sample that has hits under "No Hits"
+                  no_hits_vec <- setdiff(
+                    unique(sample_col[no_cmp & !no_sample]),
+                    sample_col[!no_cmp]
+                  )
                   if (length(no_hits_vec)) {
                     choices_list[["No Hits"]] <- stats::setNames(
                       no_hits_vec,
@@ -1421,7 +1536,7 @@ binding_results_ui <- function(ns, hits_summary, show_sort_binding = TRUE) {
                 bslib::card(
                   bslib::card_header(
                     class = "bg-dark help-header",
-                    "Tot. Binding [%]",
+                    "Quality",
                     bslib::tooltip(
                       shiny::div(
                         class = "tooltip-bttn",
@@ -1430,7 +1545,7 @@ binding_results_ui <- function(ns, hits_summary, show_sort_binding = TRUE) {
                           class = "btn btn-default",
                           onclick = sprintf(
                             "Shiny.setInputValue('%s', Math.random());",
-                            ns("total_pct_bind_tooltip_bttn")
+                            ns("samples_quality_tooltip_bttn")
                           ),
                           shiny::icon("circle-question")
                         )
@@ -1443,7 +1558,7 @@ binding_results_ui <- function(ns, hits_summary, show_sort_binding = TRUE) {
                     class = "kobs-val",
                     shinycssloaders::withSpinner(
                       shiny::uiOutput(ns(
-                        "samples_total_pct_binding"
+                        "samples_quality"
                       )),
                       type = 1,
                       color = "#7777f9"
@@ -1567,7 +1682,13 @@ binding_results_ui <- function(ns, hits_summary, show_sort_binding = TRUE) {
                       ),
                       shinyWidgets::materialSwitch(
                         ns("sample_view_spectrum_annotation"),
-                        label = "Annotate Hits",
+                        label = "Annotate Mass",
+                        value = FALSE,
+                        right = TRUE
+                      ),
+                      shinyWidgets::materialSwitch(
+                        ns("sample_view_spectrum_unmatched"),
+                        label = "Show Unmatched",
                         value = FALSE,
                         right = TRUE
                       ),
@@ -1876,6 +1997,12 @@ binding_results_ui <- function(ns, hits_summary, show_sort_binding = TRUE) {
                           ]
                           length(unique(ids[!is.na(ids)])) <= 20
                         }),
+                        right = TRUE
+                      ),
+                      shinyWidgets::materialSwitch(
+                        ns("compounds_spectrum_unmatched"),
+                        label = "Show Unmatched",
+                        value = FALSE,
                         right = TRUE
                       ),
                       shinyWidgets::materialSwitch(
@@ -2193,6 +2320,12 @@ binding_results_ui <- function(ns, hits_summary, show_sort_binding = TRUE) {
                         right = TRUE
                       ),
                       shinyWidgets::materialSwitch(
+                        ns("proteins_spectrum_unmatched"),
+                        label = "Show Unmatched",
+                        value = FALSE,
+                        right = TRUE
+                      ),
+                      shinyWidgets::materialSwitch(
                         ns("proteins_spectrum_legend"),
                         label = "Show Legend",
                         value = TRUE,
@@ -2279,6 +2412,18 @@ binding_results_ui <- function(ns, hits_summary, show_sort_binding = TRUE) {
 # Unified Hits interface (single card, no tabs)
 #' @export
 hits_results_ui <- function(ns, hits_summary, units) {
+  # Percentage columns offered as bars; Prot. Binding [%] exists only when a
+  # protein was declared with several masses
+  bar_cols <- c(
+    "Binding [%]",
+    "Tot. Binding [%]",
+    if ("Prot. Binding [%]" %in% names(hits_summary)) "Prot. Binding [%]",
+    "Int. Prot. [%]",
+    "Int. Cmp [%]",
+    "Unmatched [%]",
+    "Correct [%]"
+  )
+
   bslib::card(
     class = "hits-unified-card",
     bslib::card_body(
@@ -2381,22 +2526,8 @@ hits_results_ui <- function(ns, hits_summary, units) {
         shinyWidgets::pickerInput(
           ns("hits_binding_chart"),
           label = "Show % Bar",
-          choices = c(
-            "Binding [%]",
-            "Tot. Binding [%]",
-            "Int. Prot. [%]",
-            "Int. Cmp [%]",
-            "Unmatched [%]",
-            "Correct [%]"
-          ),
-          selected = c(
-            "Binding [%]",
-            "Tot. Binding [%]",
-            "Int. Prot. [%]",
-            "Int. Cmp [%]",
-            "Unmatched [%]",
-            "Correct [%]"
-          ),
+          choices = bar_cols,
+          selected = bar_cols,
           multiple = TRUE,
           options = list(`actions-box` = TRUE)
         ),
@@ -2429,6 +2560,29 @@ conversion_declaration_ui <- function(
   conc_unit = NULL,
   time_unit = NULL
 ) {
+  # Protein/compound file input; a saved table renders it locked, matching
+  # what confirm_ui_changes() applies to an already rendered input
+  declaration_fileinput <- function(id, status) {
+    file_input <- shiny::fileInput(
+      ns(id),
+      "",
+      multiple = FALSE,
+      accept = c(".csv", ".tsv", ".xlsx", ".xls", ".txt")
+    )
+    if (status != "confirmed") {
+      return(file_input)
+    }
+    shinyjs::disabled(
+      htmltools::tagQuery(file_input)$
+        find(".btn-file")$
+        addClass("custom-disable")$
+        resetSelected()$
+        find(".input-group > .form-control")$
+        addClass("custom-disable")$
+        allTags()
+    )
+  }
+
   if (proteins_status == "confirmed") {
     proteins_control_buttons <- shiny::div(
       class = "table-control-buttons",
@@ -2664,12 +2818,7 @@ conversion_declaration_ui <- function(
             width = 4,
             shiny::div(
               class = "table-input",
-              shiny::fileInput(
-                ns("proteins_fileinput"),
-                "",
-                multiple = FALSE,
-                accept = c(".csv", ".tsv", ".xlsx", ".xls", ".txt")
-              )
+              declaration_fileinput("proteins_fileinput", proteins_status)
             )
           ),
           shiny::column(
@@ -2729,12 +2878,7 @@ conversion_declaration_ui <- function(
             width = 4,
             shiny::div(
               class = "table-input",
-              shiny::fileInput(
-                ns("compounds_fileinput"),
-                "",
-                multiple = FALSE,
-                accept = c(".csv", ".tsv", ".xlsx", ".xls", ".txt")
-              )
+              declaration_fileinput("compounds_fileinput", compounds_status)
             )
           ),
           shiny::column(
@@ -3077,7 +3221,7 @@ table_legend <- shiny::div(
     ),
     shiny::div(
       class = "table-legend-desc",
-      "= mass shifts of one protein duplicated (proximity < peak tolerance)"
+      "= masses of one entry within 2 × peak tolerance"
     )
   ),
   shiny::div(
@@ -3087,7 +3231,7 @@ table_legend <- shiny::div(
     ),
     shiny::div(
       class = "table-legend-desc",
-      "= mass shifts duplicated between different proteins (proximity < peak tolerance)"
+      "= masses of different entries within 2 × peak tolerance"
     )
   )
 )

@@ -1,7 +1,14 @@
 # app/logic/conversion_functions.R
 
 box::use(
-  app / logic / deconvolution_functions[spectrum_plot, process_plot_data, ],
+  app /
+    logic /
+    deconvolution_functions[
+      spectrum_plot,
+      process_plot_data,
+      unmatched_marker,
+      unmatched_trace_tag,
+    ],
   app /
     logic /
     conversion_constants[
@@ -616,6 +623,10 @@ prot_comp_handsontable <- function(
       td.style.color = '';      // Clear existing text color
       
       var GLOBAL_TOLERANCE = %s; 
+      // A peak matches a mass within the tolerance, so two masses can claim
+      // the same peak once they are no more than twice the tolerance apart -
+      // the window the declaration check uses (small margin for rounding)
+      var PROXIMITY = GLOBAL_TOLERANCE === null ? null : 2 * GLOBAL_TOLERANCE + 1e-9;
       
       var getNormalizedValue = function(val) {
         if (val == null || val === '') {
@@ -661,7 +672,7 @@ prot_comp_handsontable <- function(
             var other_data = getNormalizedValue(other_value);
             if (other_data.is_numeric) {
               var diff = Math.abs(current_val - other_data.val);
-              if (diff < GLOBAL_TOLERANCE) {
+              if (diff <= PROXIMITY) {
                 if (r === row) isSameRowProximate = true;
                 else isDiffRowProximate = true;
               }
@@ -1151,8 +1162,24 @@ slice_cols <- function(sample_table) {
 }
 
 # Validate sample table
+#
+# With the protein and compound tables, the peak tolerance and the maximum
+# stoichiometry it also checks every protein and compound combination for mass
+# assignments a peak cannot tell apart (see mass_ambiguities()). Two compounds
+# of one sample that are indistinguishable fail the check - the analysis could
+# not attribute their binding. The other ambiguities are resolved by a fixed
+# rule during the run, so they pass with the reason attached as a
+# "warning" attribute.
 #' @export
-check_sample_table <- function(sample_table, proteins, compounds) {
+check_sample_table <- function(
+  sample_table,
+  proteins,
+  compounds,
+  protein_table = NULL,
+  compound_table = NULL,
+  tolerance = NULL,
+  max_multiples = NULL
+) {
   conc_col <- grep("^Concentration", names(sample_table), value = TRUE)
   time_col <- grep("^Time", names(sample_table), value = TRUE)
   has_conc_time <- length(conc_col) == 1 && length(time_col) == 1
@@ -1272,6 +1299,60 @@ check_sample_table <- function(sample_table, proteins, compounds) {
     }
   }
 
+  if (
+    is.null(protein_table) ||
+      is.null(compound_table) ||
+      is.null(tolerance) ||
+      is.null(max_multiples)
+  ) {
+    return(TRUE)
+  }
+
+  amb <- declaration_ambiguities(
+    sample_table,
+    protein_table,
+    compound_table,
+    tolerance,
+    max_multiples
+  )
+
+  # The hint above the table holds one short line; the pairs and what the
+  # screening does with them go to its tooltip (attributes "details", "note")
+  window <- paste0("within 2 \u00d7 peak tolerance (", 2 * tolerance, " Da)")
+
+  blocking <- amb[amb$kind == "compounds", , drop = FALSE]
+  if (nrow(blocking)) {
+    return(structure(
+      paste0(
+        "Compounds of one sample are not distinguishable ",
+        window,
+        ": ",
+        format_compound_pairs(blocking)
+      ),
+      details = format_ambiguities(blocking),
+      note = "Assign them to separate samples or revise the mass shifts."
+    ))
+  }
+
+  if (nrow(amb)) {
+    pairs <- length(format_ambiguities(amb, max_listed = Inf))
+    return(structure(
+      TRUE,
+      warning = paste0(
+        "Ambiguous masses ",
+        window,
+        ": ",
+        pairs,
+        if (pairs == 1) " pair" else " pairs"
+      ),
+      details = format_ambiguities(amb),
+      note = paste(
+        "Unbound readings are kept and complexes shared by proteoforms are",
+        "split between them."
+      )
+    ))
+  }
+
   return(TRUE)
 }
 
@@ -1285,8 +1366,9 @@ check_mass_duplicates <- function(tab, tolerance) {
   # Calculate absolute difference matrix
   diff_matrix <- abs(outer(all_values, all_values, FUN = "-"))
 
-  # Create boolean matrix for proximity
-  is_close_matrix <- diff_matrix < tolerance
+  # Create boolean matrix for proximity: within 2 x tolerance two masses can
+  # claim the same peak, as in mass_ambiguities()
+  is_close_matrix <- diff_matrix <= 2 * tolerance + 1e-9
 
   # Set all NA values in the boolean matrix to FALSE
   is_close_matrix[is.na(is_close_matrix)] <- FALSE
@@ -1562,6 +1644,292 @@ get_compound_matrix <- function(compound_file, header = TRUE) {
 }
 
 # Check if hits present in spectrum i.e. peaks belonging to declared species or adducts
+# Peaks the declaration predicts ----
+#
+# One row per interpretation of a mass: every protein species unbound, and
+# every species with every mass shift of every compound at stoichiometry
+# 1 .. max_multiples. Ordered species, stoichiometry, mass shift, compound -
+# the order check_hits() picks the preferred hit in. `compound_mw` is the
+# compound table (name column, then Mass 1 ..) restricted to the compounds in
+# question.
+#' @export
+predict_peaks <- function(prot_masses, compound_mw, max_multiples) {
+  prot_masses <- suppressWarnings(as.numeric(prot_masses))
+  prot_masses <- unique(prot_masses[!is.na(prot_masses)])
+
+  unbound <- data.frame(
+    mass = prot_masses,
+    species = prot_masses,
+    type = rep("unbound", length(prot_masses)),
+    compound = NA_character_,
+    shift = NA_integer_,
+    cmp_mass = NA_real_,
+    multiple = 0L
+  )
+
+  max_multiples <- suppressWarnings(as.integer(max_multiples))
+  if (
+    is.null(compound_mw) ||
+      !nrow(compound_mw) ||
+      ncol(compound_mw) < 2 ||
+      !length(prot_masses) ||
+      is.na(max_multiples) ||
+      max_multiples < 1
+  ) {
+    return(unbound)
+  }
+
+  cmp <- suppressWarnings(apply(
+    as.matrix(compound_mw[, -1, drop = FALSE]),
+    2,
+    as.numeric
+  ))
+  cmp <- matrix(cmp, nrow = nrow(compound_mw))
+
+  # Compound fastest, then mass shift, then stoichiometry
+  grid <- expand.grid(
+    row = seq_len(nrow(cmp)),
+    shift = seq_len(ncol(cmp)),
+    multiple = seq_len(max_multiples)
+  )
+  cmp_mass <- cmp[cbind(grid$row, grid$shift)]
+  keep <- !is.na(cmp_mass)
+  grid <- grid[keep, , drop = FALSE]
+  cmp_mass <- cmp_mass[keep]
+
+  complexes <- do.call(
+    rbind,
+    lapply(prot_masses, function(m) {
+      data.frame(
+        mass = m + cmp_mass * grid$multiple,
+        species = m,
+        type = rep("complex", nrow(grid)),
+        compound = as.character(compound_mw[[1]])[grid$row],
+        shift = grid$shift,
+        cmp_mass = cmp_mass,
+        multiple = grid$multiple
+      )
+    })
+  )
+
+  rbind(unbound, complexes)
+}
+
+# Plain-text name of one predicted interpretation
+interpretation_label <- function(peaks) {
+  species <- paste0(fmt_species_mass(peaks$species), " Da")
+  ifelse(
+    peaks$type == "unbound",
+    paste(species, "unbound"),
+    sprintf(
+      "%s + %s (%s Da ×%d)",
+      species,
+      peaks$compound,
+      format(peaks$cmp_mass, nsmall = 1, trim = TRUE),
+      as.integer(peaks$multiple)
+    )
+  )
+}
+
+# Mass assignments a peak cannot tell apart ----
+#
+# check_hits() assigns a peak to every interpretation whose predicted mass lies
+# within the peak tolerance of it, so two interpretations can claim one peak
+# once their predicted masses are no more than twice the tolerance apart. One
+# row per such pair, classified by what the screening does with it:
+#   compounds  - one species with two different compounds. Nothing in the
+#                spectrum tells the compounds apart, so the declaration check
+#                refuses such a sample.
+#   species    - an unbound species and a complex, or two unbound species. The
+#                unbound reading wins; the run logs it.
+#   proteoform - complexes of two different species. The peak's intensity is
+#                split between them.
+# Pairs within one compound on one species - two of its mass shifts or
+# stoichiometries - are left out: the preferred hit resolves those.
+#' @export
+mass_ambiguities <- function(
+  prot_masses,
+  compound_mw,
+  max_multiples,
+  tolerance
+) {
+  empty <- data.frame(
+    kind = character(0),
+    first = character(0),
+    second = character(0),
+    delta = numeric(0),
+    first_compound = character(0),
+    second_compound = character(0)
+  )
+
+  tolerance <- suppressWarnings(as.numeric(tolerance))
+  if (!length(tolerance) || is.na(tolerance) || tolerance < 0) {
+    return(empty)
+  }
+
+  pred <- predict_peaks(prot_masses, compound_mw, max_multiples)
+  if (nrow(pred) < 2) {
+    return(empty)
+  }
+  pred <- pred[order(pred$mass), , drop = FALSE]
+
+  # Neighbours within the window, found on the sorted masses rather than on
+  # the full pairwise matrix, which grows with the square of the
+  # interpretations (9 masses x 9 shifts x stoichiometry per compound)
+  window <- 2 * tolerance + 1e-9 # margin for floating-point sums
+  last <- findInterval(pred$mass + window, pred$mass)
+  i <- rep(seq_len(nrow(pred)), pmax(last - seq_len(nrow(pred)), 0))
+  if (!length(i)) {
+    return(empty)
+  }
+  j <- unlist(lapply(
+    seq_len(nrow(pred)),
+    function(k) if (last[k] > k) (k + 1):last[k] else integer(0)
+  ))
+
+  a <- pred[i, , drop = FALSE]
+  b <- pred[j, , drop = FALSE]
+  both_complex <- a$type == "complex" & b$type == "complex"
+  same_species <- a$species == b$species
+
+  kind <- ifelse(
+    !both_complex,
+    "species",
+    ifelse(
+      !same_species,
+      "proteoform",
+      ifelse(a$compound != b$compound, "compounds", NA_character_)
+    )
+  )
+  keep <- !is.na(kind)
+
+  if (!any(keep)) {
+    return(empty)
+  }
+
+  out <- data.frame(
+    kind = kind[keep],
+    first = interpretation_label(a[keep, , drop = FALSE]),
+    second = interpretation_label(b[keep, , drop = FALSE]),
+    delta = abs(b$mass[keep] - a$mass[keep]),
+    # Compound of each side, NA for an unbound reading
+    first_compound = a$compound[keep],
+    second_compound = b$compound[keep]
+  )
+  out[!duplicated(out[, c("kind", "first", "second")]), , drop = FALSE]
+}
+
+# The same for every protein and compound combination of a sample table ----
+#
+# Samples sharing a protein and a set of compounds are checked once. `samples`
+# counts how many samples a pair concerns.
+#' @export
+declaration_ambiguities <- function(
+  sample_table,
+  protein_table,
+  compound_table,
+  tolerance,
+  max_multiples
+) {
+  empty <- data.frame(
+    protein = character(0),
+    kind = character(0),
+    first = character(0),
+    second = character(0),
+    delta = numeric(0),
+    first_compound = character(0),
+    second_compound = character(0),
+    samples = integer(0)
+  )
+
+  if (
+    !is.data.frame(sample_table) ||
+      !nrow(sample_table) ||
+      !is.data.frame(protein_table) ||
+      !is.data.frame(compound_table) ||
+      !"Protein" %in% names(sample_table)
+  ) {
+    return(empty)
+  }
+
+  cmp_cols <- grep("^Compound", names(sample_table), value = TRUE)
+  compounds <- apply(
+    sample_table[, cmp_cols, drop = FALSE],
+    1,
+    function(x) {
+      x <- trimws(as.character(x))
+      sort(unique(x[!is.na(x) & nzchar(x)]))
+    },
+    simplify = FALSE
+  )
+  key <- paste(
+    sample_table$Protein,
+    vapply(compounds, paste, character(1), collapse = "\u0001"),
+    sep = "\u0002"
+  )
+
+  out <- lapply(unique(key), function(k) {
+    idx <- which(key == k)
+    protein <- as.character(sample_table$Protein[idx[1]])
+    prot_row <- protein_table[protein_table[[1]] %in% protein, , drop = FALSE]
+    if (!nrow(prot_row) || is.na(protein)) {
+      return(NULL)
+    }
+    cmp_rows <- compound_table[
+      compound_table[[1]] %in% compounds[[idx[1]]],
+      ,
+      drop = FALSE
+    ]
+
+    amb <- mass_ambiguities(
+      unlist(prot_row[1, -1, drop = FALSE]),
+      cmp_rows,
+      max_multiples,
+      tolerance
+    )
+    if (!nrow(amb)) {
+      return(NULL)
+    }
+    cbind(protein = protein, amb, samples = length(idx))
+  })
+
+  out <- do.call(rbind, out)
+  if (is.null(out)) empty else out
+}
+
+# Ambiguous pairs for the tooltip of the declaration hints, one line each,
+# listing at most `max_listed` pairs
+format_ambiguities <- function(amb, max_listed = 12) {
+  pairs <- unique(sprintf(
+    "%s ↔ %s (Δ %.1f Da)",
+    amb$first,
+    amb$second,
+    amb$delta
+  ))
+  more <- length(pairs) - max_listed
+  c(
+    utils::head(pairs, max_listed),
+    if (more > 0) sprintf("and %d more", more)
+  )
+}
+
+# The compounds that cannot be told apart, for the one-line declaration hint
+format_compound_pairs <- function(amb, max_listed = 2) {
+  pairs <- unique(vapply(
+    seq_len(nrow(amb)),
+    function(k) {
+      compounds <- c(amb$first_compound[k], amb$second_compound[k])
+      paste(sort(compounds), collapse = " ↔ ")
+    },
+    character(1)
+  ))
+  more <- length(pairs) - max_listed
+  paste0(
+    paste(utils::head(pairs, max_listed), collapse = ", "),
+    if (more > 0) sprintf(" and %d more", more) else ""
+  )
+}
+
 # A protein may be declared with more than one mass (Mass 1 .. Mass 9), e.g. the
 # plain protein plus a modified form such as a gluconoylated His-tag. Every
 # declared mass is treated as an independent species: it carries its own unbound
@@ -1640,30 +2008,33 @@ check_hits <- function(
     return(hits_df)
   }
 
+  # Every peak the declaration predicts: each species unbound and with every
+  # mass shift of every compound at every stoichiometry. The declaration check
+  # reads the same table, so both see the same interpretations.
+  predicted <- predict_peaks(prot_masses, compound_mw, max_multiples)
+  complexes <- predicted[predicted$type == "complex", , drop = FALSE]
+
+  # A peak read as an unbound species can equally be a complex of another
+  # species (its mass offset matches a compound). The species reading wins -
+  # there is nothing in one spectrum to decide it otherwise - so it is logged.
+  for (s in which(!is.na(species_row) & !duplicated(species_row))) {
+    peak_mass <- peaks$mass[species_row[s]]
+    alt <- complexes[
+      abs(complexes$mass - peak_mass) <= peak_tolerance &
+        complexes$species != species$theor[s],
+      ,
+      drop = FALSE
+    ]
+    if (nrow(alt)) {
+      log_species_complex_overlap(peak_mass, species$theor[s], alt)
+    }
+  }
+
   # Peaks already explained as an unbound species must not be re-interpreted as
   # a complex of a lighter species
   peaks_filtered <- as.data.frame(peaks[
     peaks_valid & !(seq_len(nrow(peaks)) %in% stats::na.omit(species_row)),
   ])
-
-  # Transform compounds to matrix
-  cmp_mat <- as.matrix(compound_mw[, -1])
-  rownames(cmp_mat) <- compound_mw[, 1]
-
-  # Fill multiples matrix
-  for (i in 1:max_multiples) {
-    if (i == 1) {
-      mat <- cmp_mat * i
-      colnames(mat) <- paste0(colnames(cmp_mat), "*", i)
-    } else {
-      multiple <- cmp_mat * i
-      colnames(multiple) <- paste0(colnames(multiple), "*", i)
-      mat <- cbind(mat, multiple)
-    }
-  }
-
-  # Addition of every protein species with the multiples matrix
-  complex_mats <- lapply(species$theor, function(m) mat + m)
 
   # Initiate empty hits data frame
   hits_df <- data.frame()
@@ -1673,58 +2044,46 @@ check_hits <- function(
     upper <- peaks_filtered$mass[j] + peak_tolerance
     lower <- peaks_filtered$mass[j] - peak_tolerance
 
-    hits_add <- data.frame()
+    # A peak can be a complex of any of the declared species. The predicted
+    # table is ordered species, stoichiometry, mass shift, compound - the order
+    # the preferred hit below is picked in.
+    matched <- complexes[
+      complexes$mass >= lower & complexes$mass <= upper,
+      ,
+      drop = FALSE
+    ]
 
-    # A peak can be a complex of any of the declared species
-    for (s in seq_len(nrow(species))) {
-      hits <- complex_mats[[s]] >= lower & complex_mats[[s]] <= upper
-
-      if (!any(hits, na.rm = TRUE)) {
-        next
-      }
-
-      indices <- which(hits, arr.ind = TRUE)
-
-      for (k in 1:nrow(indices)) {
-        # Retrieve compound mass from hit on complex
-        multiple <- as.integer(sub(".*\\*", "", colnames(hits)[indices[k, 2]]))
-        cmp_mass <- mat[
-          indices[k, 1],
-          indices[k, 2] - (ncol(hits) / max_multiples) * (multiple - 1)
-        ]
-
-        # Construct new entry for hits_df data frame
-        hit <- data.frame(
-          well = well,
-          sample = sample,
-          protein = prot_name,
-          theor_prot = species$theor[s],
-          measured_prot = species$measured[s],
-          delta_prot = species$delta[s],
-          prot_intensity = species$intensity[s],
-          peak = peaks_filtered[j, "mass"],
-          intensity = peaks_filtered[j, "intensity"],
-          compound = rownames(hits)[indices[k, 1]],
-          cmp_mass = cmp_mass,
-          delta_cmp = abs(
-            (as.numeric(cmp_mass) * multiple) -
-              (peaks_filtered[j, "mass"] - species$theor[s])
-          ),
-          multiple = multiple,
-          preferred = TRUE
-        )
-
-        hits_add <- rbind(hits_add, hit)
-      }
-    }
-
-    if (!nrow(hits_add)) {
+    if (!nrow(matched)) {
       next
     }
 
+    s <- match(matched$species, species$theor)
+
+    hits_add <- data.frame(
+      well = well,
+      sample = sample,
+      protein = prot_name,
+      theor_prot = species$theor[s],
+      measured_prot = species$measured[s],
+      delta_prot = species$delta[s],
+      prot_intensity = species$intensity[s],
+      peak = peaks_filtered[j, "mass"],
+      intensity = peaks_filtered[j, "intensity"],
+      compound = matched$compound,
+      cmp_mass = matched$cmp_mass,
+      delta_cmp = abs(
+        matched$cmp_mass * matched$multiple -
+          (peaks_filtered[j, "mass"] - species$theor[s])
+      ),
+      multiple = matched$multiple,
+      preferred = TRUE
+    )
+
     # Case multiple matching
     if (nrow(hits_add) > 1) {
-      # Hit with highest compound mass is preferred to add to total binding
+      # One interpretation per species and compound counts towards the
+      # binding: the first in the predicted order, i.e. the lowest
+      # stoichiometry, then the first declared mass shift
       hits_add <- hits_add |>
         dplyr::group_by(theor_prot, compound) |>
         dplyr::mutate(
@@ -1773,36 +2132,13 @@ check_hits <- function(
         cmp_mass = NA,
         delta_cmp = NA,
         multiple = NA,
-        preferred = NA,
-        unmatched = NA,
-        correct = NA
+        preferred = NA
       )
     )
   }
 
-  # Calculate % unmatched and % correct. Peaks explained as an unbound species
-  # count as matched just like the peaks of a complex.
-  hits_df$unmatched <- unmatched <- sum(
-    !peaks$mass %in% c(hits_df$peak, species$measured)
-  ) /
-    nrow(peaks) *
-    100
-  hits_df$correct <- correct <- 100 - unmatched
-
-  log_result(nrow(hits_df), unmatched, correct)
   return(hits_df)
 }
-
-###################################################
-# intensitäten aufsummieren -> 100 %
-# prot signal intenstität (einzeln) / gesamtintensität
-
-# Compounds
-# 1. Unterschiedliche massenshifts
-# 2. multiple bindungen -> vielfache von compound MW (! jeweils pro massenshift)
-
-# Protein MW = 1000
-# Compound MW = 10|11
 
 # Unbound protein species of one sample, one row per declared mass that carries
 # unbound signal. Hits are one row per assignment, so a species with several
@@ -1901,6 +2237,874 @@ unbound_label <- function(species_mass, multi_species = FALSE) {
   }
 }
 
+# Binding of every protein species on its own ----
+#
+# Total % Binding is the occupancy of the whole protein, all declared masses
+# pooled. Split by species it is the complex signal of one species over that
+# species' unbound plus complex signal. Proteoforms that react alike show the
+# same binding, so the split is the check on the pooled value.
+#
+# `limit` flags a value pinned to 0 or 100 % because one form of the species was
+# not detected: a minor proteoform's peaks drop below the deconvolution peak
+# threshold well before the main species' do, and its binding then snaps to an
+# end of the scale instead of being measured. Accepts the hits frame in its raw
+# or its display column naming.
+#' @export
+proteoform_binding <- function(hits) {
+  cols <- if ("Mw Protein [Da]" %in% names(hits)) {
+    c(
+      sample = "Sample",
+      species = "Mw Protein [Da]",
+      unbound = "Protein Intensity",
+      peak = "Peak [Da]",
+      complex = "Intensity",
+      compound = "Compound"
+    )
+  } else {
+    c(
+      sample = "Sample ID",
+      species = "Theor. Prot. [Da]",
+      unbound = "Int. Prot. [%]",
+      peak = "Peak Signal [Da]",
+      complex = "Int. Cmp [%]",
+      compound = "Cmp Name"
+    )
+  }
+
+  empty <- data.frame(
+    sample = character(0),
+    protein = character(0),
+    species = numeric(0),
+    unbound = numeric(0),
+    complex = numeric(0),
+    binding = numeric(0),
+    limit = character(0)
+  )
+
+  if (!is.data.frame(hits) || !nrow(hits) || !all(cols %in% names(hits))) {
+    return(empty)
+  }
+
+  num <- function(x) suppressWarnings(as.numeric(as.character(x)))
+  compound <- as.character(hits[[cols[["compound"]]]])
+
+  df <- data.frame(
+    sample = as.character(hits[[cols[["sample"]]]]),
+    protein = if ("Protein" %in% names(hits)) {
+      as.character(hits$Protein)
+    } else {
+      NA_character_
+    },
+    species = num(hits[[cols[["species"]]]]),
+    unbound = num(hits[[cols[["unbound"]]]]),
+    peak = num(hits[[cols[["peak"]]]]),
+    complex = num(hits[[cols[["complex"]]]]),
+    is_complex = !is.na(compound) & compound != "N/A"
+  )
+  df <- df[!is.na(df$species), , drop = FALSE]
+
+  if (!nrow(df)) {
+    return(empty)
+  }
+
+  # A peak that is a complex of several species is split evenly between them,
+  # so the species' complex signals add up to the pooled one
+  claimed <- df$is_complex & !is.na(df$complex)
+  peak_key <- paste(df$sample, df$peak)
+  n_species <- tapply(
+    df$species[claimed],
+    peak_key[claimed],
+    function(x) length(unique(x))
+  )
+  df$share <- 1
+  df$share[claimed] <- 1 / n_species[peak_key[claimed]]
+
+  out <- df |>
+    dplyr::group_by(sample, protein, species) |>
+    dplyr::summarise(
+      # Repeated on every row of the species; 0 when it was not detected
+      unbound = {
+        u <- unbound[!is.na(unbound)]
+        if (length(u)) u[1] else 0
+      },
+      # A peak carrying several interpretations (compounds, mass shifts)
+      # contributes its intensity once
+      complex = {
+        keep <- is_complex & !is.na(complex)
+        x <- complex[keep] * share[keep]
+        sum(x[!duplicated(peak[keep])])
+      },
+      .groups = "drop"
+    ) |>
+    as.data.frame()
+
+  total <- out$unbound + out$complex
+  out$binding <- ifelse(total > 0, 100 * out$complex / total, NA_real_)
+  out$limit <- ifelse(
+    total <= 0,
+    NA_character_,
+    ifelse(
+      out$unbound <= 0,
+      "unbound",
+      ifelse(out$complex <= 0, "complex", NA_character_)
+    )
+  )
+
+  out
+}
+
+# Card text for a list of per-species values ----
+#
+# The summary cards have room for two proteoforms. Beyond that the values are
+# cut after `max_shown` and the rest is named in the hover text of a trailing
+# ellipsis. `values` may carry HTML; the hover text is its plain-text form.
+strip_html <- function(x) {
+  x <- gsub("<[^>]+>", "", x)
+  x <- gsub("&nbsp;", " ", x, fixed = TRUE)
+  x <- gsub("&ndash;", "–", x, fixed = TRUE)
+  trimws(gsub("\\s+", " ", x))
+}
+
+ellipsis_html <- function(hidden, sep) {
+  sprintf(
+    "<span title=\"%s\" style=\"cursor: help;\">…</span>",
+    htmltools::htmlEscape(paste(strip_html(hidden), collapse = sep), TRUE)
+  )
+}
+
+#' @export
+collapse_species <- function(values, max_shown = 2, sep = " | ") {
+  if (length(values) <= max_shown) {
+    return(paste(values, collapse = sep))
+  }
+  paste(
+    c(values[seq_len(max_shown)], ellipsis_html(values[-seq_len(max_shown)], "\n")),
+    collapse = sep
+  )
+}
+
+# One line per declared species: theoretical mass and, next to it, the range of
+# the unbound signals detected for it. Returns the lines as HTML and the matching
+# label column, since both columns of a card have to stay line-aligned.
+#' @export
+species_mw_lines <- function(theor, measured, max_shown = 2) {
+  theor <- suppressWarnings(as.numeric(as.character(theor)))
+  measured <- suppressWarnings(as.numeric(as.character(measured)))
+  species <- sort(unique(theor[!is.na(theor)]))
+
+  fmt <- function(x) format(round(x, 1), big.mark = ",", nsmall = 1, scientific = FALSE)
+
+  lines <- vapply(
+    species,
+    function(mw) {
+      signals <- measured[theor %in% mw & !is.na(measured)]
+      range <- if (!length(signals)) {
+        "no signal"
+      } else if (min(signals) == max(signals)) {
+        fmt(signals[1])
+      } else {
+        paste0(fmt(min(signals)), " &ndash; ", fmt(max(signals)))
+      }
+      title <- if (length(signals) > 1) {
+        " title=\"Range of the detected signals\""
+      } else if (length(signals) == 1) {
+        " title=\"Detected signal\""
+      } else {
+        ""
+      }
+      sprintf(
+        "%s Da <span class=\"conversion-sample-protein-names\"%s>(%s)</span>",
+        fmt(mw),
+        title,
+        range
+      )
+    },
+    character(1)
+  )
+
+  if (length(lines) > max_shown) {
+    lines <- c(
+      lines[seq_len(max_shown)],
+      ellipsis_html(lines[-seq_len(max_shown)], "\n")
+    )
+  }
+
+  list(
+    html = paste(lines, collapse = "<br>"),
+    labels = paste(c("Mw", rep("&nbsp;", max(length(lines) - 1, 0))), collapse = "<br>")
+  )
+}
+
+# Whether any protein of the proteoform binding table carries several species
+has_proteoforms <- function(binding) {
+  if (!nrow(binding)) {
+    return(FALSE)
+  }
+  protein <- ifelse(is.na(binding$protein), "", binding$protein)
+  any(tapply(binding$species, protein, function(x) length(unique(x))) > 1)
+}
+
+# Hover note for a proteoform binding value pinned by an undetected peak
+#' @export
+proteoform_limit_note <- function(limit) {
+  ifelse(
+    is.na(limit),
+    NA_character_,
+    ifelse(
+      limit == "unbound",
+      "Unbound peak not detected: binding may be overestimated",
+      "No complex detected: binding may be underestimated"
+    )
+  )
+}
+
+# Adds the binding of each row's own species to the display hits table as
+# `Prot. Binding [%]`, next to the pooled total. Left out when no protein has
+# more than one declared mass - the value would only repeat the total.
+#' @export
+add_proteoform_binding <- function(hits_summary) {
+  binding <- proteoform_binding(hits_summary)
+
+  if (!has_proteoforms(binding)) {
+    return(hits_summary)
+  }
+
+  species <- suppressWarnings(as.numeric(as.character(
+    hits_summary$`Theor. Prot. [Da]`
+  )))
+  hits_summary$`Prot. Binding [%]` <- binding$binding[match(
+    paste(hits_summary$`Sample ID`, species),
+    paste(binding$sample, binding$species)
+  )]
+
+  dplyr::relocate(
+    hits_summary,
+    `Prot. Binding [%]`,
+    .after = dplyr::any_of("Tot. Binding [%]")
+  )
+}
+
+# Colours of the proteoforms in the comparison plots, keyed by species mass;
+# the pooled fit is drawn in the font colour
+#' @export
+proteoform_colors <- function(species) {
+  palette <- c(
+    "#ffa100",
+    "#29b6f6",
+    "#ef5350",
+    "#66bb6a",
+    "#ab47bc",
+    "#fbc02d",
+    "#8d6e63",
+    "#26a69a",
+    "#ec407a"
+  )
+  species <- sort(unique(species))
+  stats::setNames(
+    palette[(seq_along(species) - 1) %% length(palette) + 1],
+    as.character(species)
+  )
+}
+
+# Main species of each protein: the one carrying the most signal on average.
+# The declared mass order does not survive the hit screening, and the native
+# form is the dominant one in any usable preparation.
+main_proteoform <- function(binding) {
+  binding$total <- binding$unbound + binding$complex
+  binding$protein[is.na(binding$protein)] <- ""
+  share <- binding |>
+    dplyr::group_by(sample, protein) |>
+    dplyr::mutate(share = total / sum(total)) |>
+    dplyr::group_by(protein, species) |>
+    dplyr::summarise(share = mean(share, na.rm = TRUE), .groups = "drop") |>
+    dplyr::group_by(protein) |>
+    dplyr::mutate(main = share == max(share)) |>
+    dplyr::ungroup() |>
+    as.data.frame()
+  share
+}
+
+# Binding kinetics of every proteoform on its own ----
+#
+# Runs the pooled kinetics - k_obs per concentration, then kinact/KI - on the
+# binding of one species at a time, over the same concentrations, so each fit
+# compares like for like with the pooled one. Expects the raw hits summary the
+# pooled kinetics were fitted on. NULL when there is only one species.
+#' @export
+proteoform_kinetics <- function(
+  hits_summary,
+  units,
+  conc_time,
+  concentrations_select = NULL
+) {
+  binding <- proteoform_binding(hits_summary)
+
+  if (!has_proteoforms(binding)) {
+    return(NULL)
+  }
+
+  conc_col <- gsub("Conc.", "Concentration", conc_time[["Concentration"]])
+  species <- sort(unique(binding$species))
+
+  lapply(stats::setNames(species, as.character(species)), function(s) {
+    b <- binding[binding$species == s, , drop = FALSE]
+
+    # One row per sample carrying the species, with its own binding in place of
+    # the pooled one
+    rows <- hits_summary[
+      !is.na(hits_summary$`Mw Protein [Da]`) &
+        hits_summary$`Mw Protein [Da]` == s,
+      ,
+      drop = FALSE
+    ]
+    rows <- rows[!duplicated(rows$Sample), , drop = FALSE]
+    rows$binding <- b$binding[match(rows$Sample, b$sample)]
+    rows <- rows[!is.na(rows$binding), , drop = FALSE]
+
+    if (!is.null(concentrations_select) && conc_col %in% names(rows)) {
+      used <- rows[rows[[conc_col]] %in% concentrations_select, , drop = FALSE]
+    } else {
+      used <- rows
+    }
+    limit <- b$limit[match(used$Sample, b$sample)]
+
+    # The pooled fit logs every step; for the comparison only the result counts
+    kobs <- tryCatch(
+      suppressWarnings(suppressMessages(add_kobs_binding_result(
+        rows,
+        concentrations_select = concentrations_select,
+        units = units,
+        conc_time = conc_time
+      ))),
+      error = function(e) NULL
+    )
+    if (!is.null(kobs) && nrow(kobs$kobs_result_table) == 0) {
+      kobs <- NULL
+    }
+
+    kinact_ki <- if (!is.null(kobs)) {
+      tryCatch(
+        suppressWarnings(suppressMessages(compute_kinact_ki(
+          kobs,
+          units = units
+        ))),
+        error = function(e) NULL
+      )
+    }
+
+    # A negative kinact or KI has no physical meaning - it comes from k_obs
+    # values too few or too scattered to show the hyperbola - so such a fit
+    # is dropped rather than drawn and tabulated
+    nonphysical <- !is.null(kinact_ki) &&
+      !all(kinact_ki$Params[1:2, 1] > 0, na.rm = FALSE)
+    if (isTRUE(nonphysical)) {
+      kinact_ki <- NULL
+    }
+
+    list(
+      species = s,
+      binding_kobs_result = kobs,
+      kinact_ki_result = kinact_ki,
+      nonphysical = isTRUE(nonphysical),
+      n_samples = nrow(used),
+      n_limit = sum(!is.na(limit))
+    )
+  })
+}
+
+# Comparison table of the pooled and the per-proteoform kinetics ----
+#
+# `kinetics` from proteoform_kinetics(), `pooled` the pooled kinact/KI
+# parameter matrix, both already in the displayed units; `binding` from
+# proteoform_binding(). Δ Binding is the mean paired difference to the main
+# species over the samples where both values are measured, which isolates a
+# difference in reactivity from the detection-limit artefacts of the fits.
+#' @export
+proteoform_comparison_table <- function(kinetics, pooled, binding, view) {
+  fmt <- function(x) {
+    if (is.null(x) || !length(x) || is.na(x)) {
+      return("N/A")
+    }
+    as.character(format_scientific(x))
+  }
+  ratio_of <- function(params) {
+    if (is.null(params)) NA_real_ else params[1, 1] / params[2, 1]
+  }
+
+  pooled_ratio <- ratio_of(pooled)
+  shares <- main_proteoform(binding)
+  main <- shares$species[shares$main][1]
+  main_b <- binding[binding$species == main, , drop = FALSE]
+
+  species_rows <- lapply(kinetics, function(k) {
+    params <- k$kinact_ki_result$Params
+    ratio <- ratio_of(params)
+    share <- shares$share[shares$species == k$species][1]
+
+    # Fitted mostly on values pinned by an undetected peak, the parameters
+    # describe the detection limit rather than the proteoform
+    unreliable <- k$n_samples > 0 && k$n_limit / k$n_samples > 0.5
+    flag <- function(x) {
+      if (x == "N/A" || !unreliable) {
+        return(x)
+      }
+      sprintf(
+        "<span class=\"protocol-stat-warn\" title=\"%s\">%s</span>",
+        "More than half of the values sit at a detection limit",
+        x
+      )
+    }
+    # Say why a proteoform has no fit when the reason is known
+    not_fitted <- function(x) {
+      if (x != "N/A" || !isTRUE(k$nonphysical)) {
+        return(x)
+      }
+      "<span title=\"The fit gave a negative parameter\">N/A</span>"
+    }
+
+    delta <- if (identical(k$species, main)) {
+      "Reference"
+    } else {
+      b <- binding[binding$species == k$species, , drop = FALSE]
+      paired <- merge(
+        b[, c("sample", "binding", "limit")],
+        main_b[, c("sample", "binding", "limit")],
+        by = "sample",
+        suffixes = c("", "_main")
+      )
+      paired <- paired[
+        is.na(paired$limit) &
+          is.na(paired$limit_main) &
+          !is.na(paired$binding) &
+          !is.na(paired$binding_main),
+        ,
+        drop = FALSE
+      ]
+      if (!nrow(paired)) {
+        "N/A"
+      } else {
+        d <- paired$binding - paired$binding_main
+        sprintf(
+          "%+.2f%s (n = %d)",
+          mean(d),
+          if (length(d) > 1) sprintf(" ± %.2f", stats::sd(d)) else "",
+          length(d)
+        )
+      }
+    }
+
+    data.frame(
+      Proteoform = paste0(fmt_species_mass(k$species), " Da"),
+      Signal = sprintf("%.1f", 100 * share),
+      kinact = not_fitted(flag(fmt(if (!is.null(params)) params[1, 1]))),
+      KI = not_fitted(flag(fmt(if (!is.null(params)) params[2, 1]))),
+      ratio = not_fitted(flag(fmt(ratio))),
+      vs_pooled = if (is.na(ratio) || is.na(pooled_ratio)) {
+        "N/A"
+      } else {
+        flag(sprintf("%+.1f", 100 * (ratio / pooled_ratio - 1)))
+      },
+      delta = delta,
+      limit = sprintf("%d / %d", k$n_limit, k$n_samples)
+    )
+  })
+
+  pooled_row <- data.frame(
+    Proteoform = "Pooled",
+    Signal = "100.0",
+    kinact = fmt(if (!is.null(pooled)) pooled[1, 1]),
+    KI = fmt(if (!is.null(pooled)) pooled[2, 1]),
+    ratio = fmt(pooled_ratio),
+    vs_pooled = "",
+    delta = "",
+    limit = ""
+  )
+
+  tbl <- do.call(rbind, c(list(pooled_row), unname(species_rows)))
+
+  names(tbl) <- c(
+    "Proteoform",
+    "Signal [%]",
+    paste0("k<sub> inact</sub> [", view$time_unit, "⁻¹]"),
+    paste0("K<sub>I</sub> [", view$conc_unit, "]"),
+    paste0(
+      "k<sub> inact</sub>/K<sub>I</sub> [",
+      view$conc_unit,
+      "⁻¹ ",
+      view$time_unit,
+      "⁻¹]"
+    ),
+    "Δ vs Pooled [%]",
+    "Δ Binding vs Main [pp]",
+    "Limit Values"
+  )
+
+  tbl
+}
+
+# k_obs per proteoform ----
+#
+# Observed k_obs with standard errors and the fitted hyperbola of every
+# proteoform over the pooled fit. `entries` is a named list, the pooled entry
+# named "Pooled" and the others by species mass, each holding `kobs` (the
+# k_obs result table) and `kinact_ki` (the kinact/KI result), in the displayed
+# units. The k_obs points come from the table, so a proteoform whose hyperbola
+# could not be fitted still shows them.
+#' @export
+proteoform_kobs_plot <- function(entries, colors, units, theme = "dark") {
+  font_color <- if (theme == "light") "black" else "white"
+  grid_color <- if (theme == "light") {
+    "rgba(0,0,0,0.1)"
+  } else {
+    "rgba(255,255,255,0.2)"
+  }
+  zeroline_color <- if (theme == "light") {
+    "rgba(0,0,0,0.5)"
+  } else {
+    "rgba(255,255,255,0.5)"
+  }
+  conc_unit <- gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]])
+  time_unit <- gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])
+
+  plotly::plot_ly() |>
+    add_proteoform_kobs_traces(
+      entries,
+      colors = colors,
+      font_color = font_color,
+      conc_unit = conc_unit,
+      time_unit = time_unit,
+      subtle = "Pooled"
+    ) |>
+    plotly::layout(
+      hovermode = "closest",
+      paper_bgcolor = "rgba(0,0,0,0)",
+      plot_bgcolor = "rgba(0,0,0,0)",
+      font = list(size = 14, color = font_color),
+      legend = list(
+        title = list(text = "Proteoform  ", font = list(color = font_color)),
+        bgcolor = "rgba(0,0,0,0)",
+        bordercolor = "rgba(0,0,0,0)",
+        font = list(color = font_color)
+      ),
+      xaxis = c(
+        list(
+          title = paste0("Compound [", conc_unit, "]"),
+          color = font_color,
+          showgrid = TRUE,
+          gridcolor = grid_color,
+          zerolinecolor = zeroline_color
+        ),
+        sci_axis_ticks
+      ),
+      yaxis = c(
+        list(
+          title = paste0("k<sub>obs</sub> [", time_unit, "⁻¹]"),
+          color = font_color,
+          showgrid = TRUE,
+          gridcolor = grid_color,
+          zerolinecolor = zeroline_color
+        ),
+        sci_axis_ticks
+      )
+    )
+}
+
+# k_obs points and fitted hyperbola of every entry of `entries` (see
+# proteoform_kobs_plot()). Shared by the Proteoforms tab and the k_obs curve of
+# the Binding tab; `group_title` puts the proteoform rows under a legend
+# heading of their own when they join another legend.
+#
+# Entries named in `subtle` are context rather than the subject of the plot and
+# are drawn in the background: thin dotted line, small open markers, no error
+# bars, faded. The Binding tab passes the proteoforms, the Proteoforms tab the
+# pooled fit.
+add_proteoform_kobs_traces <- function(
+  plot,
+  entries,
+  colors,
+  font_color,
+  conc_unit,
+  time_unit,
+  group_title = NULL,
+  subtle = character(0)
+) {
+  first <- TRUE
+
+  for (label in names(entries)) {
+    kobs_tbl <- entries[[label]]$kobs
+    if (is.null(kobs_tbl) || !nrow(kobs_tbl)) {
+      next
+    }
+    background <- label %in% subtle
+    color <- if (label == "Pooled") font_color else unname(colors[label])
+    name <- if (label == "Pooled") {
+      "Pooled"
+    } else {
+      paste0(fmt_species_mass(label), " Da")
+    }
+    group <- if (is.null(group_title)) name else "proteoforms"
+    symbol <- if (label == "Pooled") "diamond" else "circle"
+
+    points <- data.frame(
+      conc = as.numeric(rownames(kobs_tbl)),
+      kobs = kobs_tbl$kobs,
+      kobs_se = kobs_tbl$kobs_se
+    )
+    points <- points[!is.na(points$kobs) & points$conc > 0, , drop = FALSE]
+    points$kobs_se[is.na(points$kobs_se)] <- 0
+
+    kd <- entries[[label]]$kinact_ki$Kobs_Data
+    if (!is.null(kd) && nrow(kd) > 0) {
+      plot <- plotly::add_lines(
+        plot,
+        data = kd[!is.na(kd$predicted_kobs), , drop = FALSE],
+        x = ~conc,
+        y = ~predicted_kobs,
+        name = name,
+        legendgroup = group,
+        opacity = if (background) 0.5 else 1,
+        line = list(
+          width = if (background) 1 else 1.5,
+          color = color,
+          dash = if (background) "dot" else "solid"
+        ),
+        hoverinfo = "skip",
+        showlegend = FALSE,
+        inherit = FALSE
+      )
+    }
+
+    args <- list(
+      p = plot,
+      data = points,
+      x = ~conc,
+      y = ~kobs,
+      name = name,
+      legendgroup = group,
+      opacity = if (background) 0.5 else 1,
+      marker = if (background) {
+        list(
+          size = 6,
+          color = color,
+          symbol = paste0(symbol, "-open"),
+          line = list(width = 1, color = color)
+        )
+      } else {
+        list(
+          size = 10,
+          color = color,
+          symbol = symbol,
+          line = list(width = 1, color = font_color)
+        )
+      },
+      hovertemplate = paste0(
+        "<b>",
+        name,
+        "</b><br>Concentration: %{x} ",
+        conc_unit,
+        "<br>k<sub>obs</sub>: %{y:.4g} ",
+        time_unit,
+        "⁻¹<extra></extra>"
+      ),
+      showlegend = TRUE,
+      inherit = FALSE
+    )
+    if (!background) {
+      args$error_y <- list(
+        type = "data",
+        array = ~kobs_se,
+        visible = TRUE,
+        thickness = 1.5,
+        width = 4,
+        color = color
+      )
+    }
+    if (!is.null(group_title) && first) {
+      args$legendgrouptitle <- list(
+        text = group_title,
+        font = list(color = font_color)
+      )
+    }
+    plot <- do.call(plotly::add_markers, args)
+    first <- FALSE
+  }
+
+  plot
+}
+
+# Paired binding of the proteoforms ----
+#
+# Every other species' binding against the main species', one point per sample.
+# Proteoforms that react alike sit on the diagonal.
+#
+# Values pinned to 0 or 100 % by an undetected peak are left out unless
+# `show_limits`: they say nothing about reactivity, and with several minor
+# proteoforms they stack on the 0 and 100 % lines and hide the measured points.
+# The species are named in the legend; the y axis only names the mass when a
+# single minor proteoform has points, as more would not fit on it.
+#' @export
+proteoform_paired_plot <- function(
+  binding,
+  colors,
+  theme = "dark",
+  show_limits = FALSE
+) {
+  font_color <- if (theme == "light") "black" else "white"
+  grid_color <- if (theme == "light") {
+    "rgba(0,0,0,0.1)"
+  } else {
+    "rgba(255,255,255,0.2)"
+  }
+
+  shares <- main_proteoform(binding)
+  main <- shares$species[shares$main][1]
+  main_b <- binding[binding$species == main, , drop = FALSE]
+  main_label <- paste0(fmt_species_mass(main), " Da")
+  others <- setdiff(sort(unique(binding$species)), main)
+
+  plot <- plotly::plot_ly() |>
+    plotly::add_lines(
+      x = c(0, 100),
+      y = c(0, 100),
+      line = list(color = font_color, width = 1, dash = "dot"),
+      hoverinfo = "skip",
+      showlegend = FALSE,
+      inherit = FALSE
+    )
+
+  any_pinned <- FALSE
+  # Species that end up with points; one with only limit values drops out
+  shown <- numeric(0)
+
+  for (s in others) {
+    paired <- merge(
+      binding[binding$species == s, c("sample", "binding", "limit")],
+      main_b[, c("sample", "binding", "limit")],
+      by = "sample",
+      suffixes = c("", "_main")
+    )
+    paired <- paired[
+      !is.na(paired$binding) & !is.na(paired$binding_main),
+      ,
+      drop = FALSE
+    ]
+
+    # Pinned when either value of the pair sits at a detection limit
+    paired$note <- ifelse(
+      !is.na(paired$limit),
+      proteoform_limit_note(paired$limit),
+      proteoform_limit_note(paired$limit_main)
+    )
+    paired$pinned <- !is.na(paired$note)
+    if (!show_limits) {
+      paired <- paired[!paired$pinned, , drop = FALSE]
+    }
+    if (!nrow(paired)) {
+      next
+    }
+    shown <- c(shown, s)
+
+    label <- paste0(fmt_species_mass(s), " Da")
+    color <- unname(colors[as.character(s)])
+    paired$hover <- paste0(
+      paired$sample,
+      "<br>",
+      main_label,
+      ": ",
+      sprintf("%.2f", paired$binding_main),
+      "%<br>",
+      label,
+      ": ",
+      sprintf("%.2f", paired$binding),
+      "%",
+      ifelse(paired$pinned, paste0("<br><i>", paired$note, "</i>"), "")
+    )
+
+    # Measured points first, so the legend row of the species shows its fill
+    for (pinned in c(FALSE, TRUE)) {
+      pts <- paired[paired$pinned == pinned, , drop = FALSE]
+      if (!nrow(pts)) {
+        next
+      }
+      any_pinned <- any_pinned || pinned
+      plot <- plotly::add_markers(
+        plot,
+        data = pts,
+        x = ~binding_main,
+        y = ~binding,
+        name = label,
+        legendgroup = label,
+        # A species with only limit values still needs its legend row
+        showlegend = !pinned || all(paired$pinned),
+        # Translucent, so that points of several proteoforms lying on top of
+        # each other still show through
+        opacity = if (pinned) 0.6 else 0.8,
+        marker = list(
+          size = 7,
+          color = if (pinned) "rgba(0,0,0,0)" else color,
+          symbol = "circle",
+          line = list(width = 1, color = if (pinned) color else font_color)
+        ),
+        text = ~hover,
+        hoverinfo = "text",
+        inherit = FALSE
+      )
+    }
+  }
+
+  # One legend row explains the open symbol for every proteoform
+  if (any_pinned) {
+    plot <- plotly::add_markers(
+      plot,
+      x = -100,
+      y = -100,
+      name = "Detection limit",
+      marker = list(
+        size = 7,
+        color = "rgba(0,0,0,0)",
+        symbol = "circle",
+        line = list(width = 1, color = font_color)
+      ),
+      hoverinfo = "skip",
+      inherit = FALSE
+    )
+  }
+
+  axis <- function(title) {
+    list(
+      title = title,
+      range = c(-3, 103),
+      color = font_color,
+      showgrid = TRUE,
+      gridcolor = grid_color,
+      zeroline = FALSE
+    )
+  }
+
+  plot |>
+    plotly::layout(
+      hovermode = "closest",
+      paper_bgcolor = "rgba(0,0,0,0)",
+      plot_bgcolor = "rgba(0,0,0,0)",
+      font = list(size = 14, color = font_color),
+      legend = list(
+        title = list(text = "Proteoform  ", font = list(color = font_color)),
+        bgcolor = "rgba(0,0,0,0)",
+        bordercolor = "rgba(0,0,0,0)",
+        font = list(color = font_color)
+      ),
+      xaxis = axis(paste0("Binding ", main_label, " [%]")),
+      yaxis = axis(
+        if (length(shown) == 1) {
+          paste0("Binding ", fmt_species_mass(shown), " Da [%]")
+        } else {
+          "Binding [%]"
+        }
+      )
+    )
+}
+
+# Conversion of intensities to fractional % binding
 conversion <- function(hits) {
   # Check 'hits' argument validity
   if (!is.data.frame(hits) || nrow(hits) < 1) {
@@ -1938,10 +3142,23 @@ conversion <- function(hits) {
     perc_bind_prot <- I_prot / I_total
 
     # Adding %Binding values to hit data frame. Rows of an unbound species carry
-    # no complex signal and therefore no binding.
+    # no complex signal and therefore no binding. A peak claimed by several
+    # preferred interpretations - complexes of different proteoforms, or of
+    # different compounds - is split evenly between them, so the per-row
+    # values still add up to the total instead of counting the peak twice.
+    n_claims <- stats::ave(
+      as.numeric(hits$preferred %in% TRUE),
+      hits$peak,
+      FUN = sum
+    )
+    n_claims[is.na(n_claims) | n_claims < 1] <- 1
     hits <- dplyr::mutate(
       hits,
-      `%binding` = dplyr::if_else(is.na(intensity), 0, intensity / I_total)
+      `%binding` = dplyr::if_else(
+        is.na(intensity),
+        0,
+        intensity / n_claims / I_total
+      )
     )
     hits <- dplyr::mutate(
       hits,
@@ -2033,6 +3250,47 @@ log_duplicated_hits <- function(hits_add) {
   }
 }
 
+# A peak read as an unbound species that also fits complexes of other species
+log_species_complex_overlap <- function(peak_mass, species_mass, alt) {
+  message(sprintf(
+    "  ├─ %s Peak %s Da read as unbound %s Da, also fits:",
+    .col_warn(warning_sym),
+    peak_mass,
+    fmt_species_mass(species_mass)
+  ))
+  for (label in interpretation_label(alt)) {
+    message(sprintf("  │  └─ %s", label))
+  }
+}
+
+# Declaration-level ambiguities, logged once at the start of a run
+#' @export
+log_mass_ambiguities <- function(amb, tolerance) {
+  if (!nrow(amb)) {
+    return(invisible(NULL))
+  }
+  kinds <- c(
+    species = "unbound reading kept",
+    proteoform = "intensity split between proteoforms",
+    compounds = "compounds not distinguishable"
+  )
+  message(sprintf(
+    "AMBIGUOUS MASS ASSIGNMENTS (within 2 × %s Da)\n  │",
+    tolerance
+  ))
+  for (k in seq_len(nrow(amb))) {
+    message(sprintf(
+      "  %s %s %s ↔ %s: Δ %.2f Da - %s",
+      if (k == nrow(amb)) "└─" else "├─",
+      .col_warn(warning_sym),
+      amb$first[k],
+      amb$second[k],
+      amb$delta[k],
+      kinds[[amb$kind[k]]]
+    ))
+  }
+}
+
 .col_warn <- function(x) {
   if (!is.null(shiny::getDefaultReactiveDomain())) {
     paste0('<span style="color: darkorange; font-weight: bold;">', x, "</span>")
@@ -2106,8 +3364,11 @@ log_err_binding <- function() {
 
 # Log hits summary
 log_hits_summary <- function(hits_summarized) {
-  unmatched_vals <- as.numeric(hits_summarized[["% Unmatched"]])
-  correct_vals <- as.numeric(hits_summarized[["% Correct"]])
+  # Quality metrics are sample-level values repeated on every hit row, so they
+  # are averaged per sample - otherwise samples with more rows would weigh more
+  per_sample <- hits_summarized[!duplicated(hits_summarized$Sample), ]
+  unmatched_vals <- as.numeric(per_sample[["% Unmatched"]])
+  correct_vals <- as.numeric(per_sample[["% Correct"]])
   mean_unmatched <- mean(unmatched_vals, na.rm = TRUE)
   sd_unmatched <- stats::sd(unmatched_vals, na.rm = TRUE)
   mean_correct <- mean(correct_vals, na.rm = TRUE)
@@ -2154,14 +3415,76 @@ log_binding_kinetics <- function(concentrations, times, units) {
       units[1]
     ),
     sprintf(
-      " ├─ %s time points present from %s to %s [%s]\n",
+      " ├─ %s time points present from %s to %s [%s]",
       length(unique(times)),
       fmt_log(min(times)),
       fmt_log(max(times)),
       units[2]
-    ),
-    " ├─ Infer observed first-order rate constant k_obs\n  │  │"
+    )
   ))
+}
+
+# Log k_obs analysis initiation, the first step of the kinetics of a complex
+log_kobs_analysis <- function() {
+  message("  ├─ Infer observed first-order rate constant k_obs\n  │  │")
+}
+
+# Tree lines of the protocol log ----
+#
+# The kinetics loggers draw one complex's steps as a tree rooted at column 2
+# ("  ├─ ..."). These helpers close a branch whose last step was cut short (a
+# failed fit, skipped prerequisites) and hang the tree of each complex under
+# its own branch when a run has several.
+
+# Node line at column `col`: `col` characters of indentation, then a connector
+is_log_node <- function(lines, col) {
+  substr(lines, col + 1, col + 2) %in% c("├─", "└─") &
+    !grepl("[^ │]", substr(lines, 1, col))
+}
+
+# Turns the last node at column `col` into a closing one, clearing the
+# vertical line it would have continued below
+close_log_node <- function(lines, col) {
+  nodes <- which(is_log_node(lines, col))
+  if (!length(nodes)) {
+    return(lines)
+  }
+  last <- max(nodes)
+  substr(lines[last], col + 1, col + 1) <- "└"
+  below <- seq_along(lines) > last
+  continued <- below & substr(lines, col + 1, col + 1) == "│"
+  substr(lines[continued], col + 1, col + 1) <- " "
+  lines
+}
+
+# One complex's log block, closed at its root and in the last root step
+#' @export
+close_log_block <- function(lines) {
+  # A vertical separator after the last step leads nowhere
+  while (length(lines) && grepl("^[ │]*$", lines[length(lines)])) {
+    lines <- lines[-length(lines)]
+  }
+  lines <- close_log_node(lines, 2)
+  last <- max(c(0, which(is_log_node(lines, 2))))
+  if (last > 0) {
+    tail <- seq(last, length(lines))
+    lines[tail] <- close_log_node(lines[tail], 5)
+  }
+  lines
+}
+
+# The block hung under a branch of its own, named `title`. The first branch
+# needs no separator: the section heading ends in one.
+#' @export
+nest_log_block <- function(lines, title, last = FALSE, first = FALSE) {
+  branch <- if (last) "  └─ " else "  ├─ "
+  cont <- if (last) "   " else "│  "
+  c(
+    if (!first) "  │",
+    paste0(branch, title),
+    paste0("  ", cont, "│"),
+    paste0("  ", cont, substr(lines, 3, nchar(lines)))
+  )
 }
 
 # Log filtered samples
@@ -2301,7 +3624,7 @@ log_kobs_result <- function(result, last, unit) {
 
 # Log kinact/Ki warning
 log_kinact_ki_warning <- function(msg) {
-  message(sprintf("     ├─ %s %s", .col_warn(warning_sym), msg))
+  message(sprintf("     ├─ %s %s", .col_warn(warning_sym), trimws(msg)))
 }
 
 # Log (Kᵢ/kᵢₙₐ꜀ₜ) analysis initiation
@@ -2349,15 +3672,6 @@ add_hits <- function(
   kinact_ki = FALSE,
   config = NULL
 ) {
-  results <<- results
-  sample_table <<- sample_table
-  protein_table <<- protein_table
-  compound_table <<- compound_table
-  peak_tolerance <<- peak_tolerance
-  max_multiples <<- max_multiples
-  kinact_ki <<- kinact_ki
-  config <<- config
-
   samples <- names(results$deconvolution)
   compound_mw <- as.matrix(compound_table[, -1])
   rownames(compound_mw) <- compound_table[, 1]
@@ -2396,7 +3710,11 @@ add_hits <- function(
     hits_df <- check_hits(
       sample_table = sample_table,
       protein_mw = protein_table[protein_table$Protein == present_protein, ],
-      compound_mw = compound_table[compound_table$Compound == present_cmp, ],
+      # %in%, not ==: a sample can list several compounds, and comparing the
+      # compound column against that one-row frame picked none or a wrong one
+      compound_mw = compound_table[
+        compound_table$Compound %in% unlist(present_cmp),
+      ],
       peaks = peaks,
       peak_tolerance = peak_tolerance,
       max_multiples = max_multiples,
@@ -2434,7 +3752,10 @@ assess_quality <- function(hits, peaks) {
     hits$correct <- correct <- 100 * known_peak_intensity / total_peak_intensity
     hits$unmatched <- 100 - correct
   } else {
-    hits$correct <- hits$unmatched <- NA
+    # Assigned separately so correct precedes unmatched, the column order
+    # conversion() relies on when naming the columns
+    hits$correct <- NA
+    hits$unmatched <- NA
   }
 
   return(hits)
@@ -2690,6 +4011,217 @@ add_kinact_ki_result <- function(result_list, units) {
   return(kinact_ki_result)
 }
 
+# Binding kinetics per protein-compound complex ----
+#
+# k_obs and kinact/KI describe one compound reacting with one protein, so the
+# kinetics are fitted per complex, over the samples declared with both. A
+# sample declaring a single compound contributes its total binding, as before;
+# one declaring several contributes the binding of the complex's compound only,
+# so a second compound binding alongside does not inflate the curve.
+
+# Picker value of a complex
+#' @export
+complex_key <- function(protein, compound) {
+  paste(protein, compound, sep = " + ")
+}
+
+# Rows of the raw hits summary belonging to one complex, with `binding` set to
+# the binding of its compound
+#' @export
+complex_hits <- function(hits_summary, sample_table, protein, compound) {
+  strip <- function(x) gsub("\\.raw$", "", x, ignore.case = TRUE)
+
+  cmp_cols <- grep("^Compound", names(sample_table), value = TRUE)
+  declared <- lapply(seq_len(nrow(sample_table)), function(i) {
+    x <- trimws(as.character(unlist(sample_table[i, cmp_cols])))
+    unique(x[!is.na(x) & nzchar(x)])
+  })
+  has_compound <- vapply(declared, function(x) compound %in% x, logical(1))
+  samples <- strip(sample_table$Sample[
+    sample_table$Protein %in% protein & has_compound
+  ])
+  single <- strip(sample_table$Sample[lengths(declared) == 1])
+
+  sample_key <- strip(hits_summary$Sample)
+  rows <- hits_summary[
+    sample_key %in% samples & hits_summary$Protein %in% protein,
+    ,
+    drop = FALSE
+  ]
+
+  # Complexes of the other compounds of a sample are not this complex's
+  # binding; the unbound rows stay
+  rows <- rows[is.na(rows$Compound) | rows$Compound == compound, , drop = FALSE]
+  if (!nrow(rows) || !"binding" %in% names(rows)) {
+    return(rows)
+  }
+
+  # The preferred rows of the compound add up to its share of the total, as a
+  # peak claimed by several interpretations is split between them
+  own <- !is.na(rows$Compound) & rows$Preferred %in% TRUE
+  shares <- tapply(
+    ifelse(own, rows$`% Binding`, 0),
+    rows$Sample,
+    sum,
+    na.rm = TRUE
+  )
+  rows$binding <- ifelse(
+    strip(rows$Sample) %in% single,
+    rows$binding,
+    100 * unname(shares[rows$Sample])
+  )
+  rows
+}
+
+# The complexes of a run: every protein-compound pair with a hit
+#' @export
+run_complexes <- function(hits_summary) {
+  hits <- hits_summary[!is.na(hits_summary$Compound), , drop = FALSE]
+  pairs <- unique(data.frame(
+    protein = as.character(hits$Protein),
+    compound = as.character(hits$Compound)
+  ))
+  pairs <- pairs[order(pairs$protein, pairs$compound), , drop = FALSE]
+  pairs$key <- complex_key(pairs$protein, pairs$compound)
+  rownames(pairs) <- NULL
+  pairs
+}
+
+# k_obs and kinact/KI of every complex. `reason` says why a complex has no
+# k_obs: the prerequisites of check_filter_hits() failed, or no concentration
+# could be fitted.
+#' @export
+complex_kinetics <- function(hits_summary, sample_table, conc_time, units) {
+  complexes <- run_complexes(hits_summary)
+  several <- nrow(complexes) > 1
+
+  out <- lapply(seq_len(nrow(complexes)), function(k) {
+    hits <- complex_hits(
+      hits_summary,
+      sample_table,
+      complexes$protein[k],
+      complexes$compound[k]
+    )
+
+    # The steps log into a block of their own, closed where they stop early
+    # and, with several complexes, hung under the complex's branch
+    log <- character(0)
+    entry <- withCallingHandlers(
+      fit_complex(
+        hits,
+        complexes$protein[k],
+        complexes$compound[k],
+        conc_time,
+        units
+      ),
+      message = function(m) {
+        log <<- c(log, conditionMessage(m))
+        invokeRestart("muffleMessage")
+      }
+    )
+    lines <- close_log_block(strsplit(paste(log, collapse = ""), "\n")[[1]])
+    if (several) {
+      lines <- nest_log_block(
+        lines,
+        sprintf(
+          "%s (%d samples)",
+          complexes$key[k],
+          length(unique(hits$Sample))
+        ),
+        last = k == nrow(complexes),
+        first = k == 1
+      )
+    }
+    message(paste(lines, collapse = "\n"))
+
+    entry
+  })
+
+  stats::setNames(out, complexes$key)
+}
+
+# k_obs and kinact/KI of one complex, logging every step
+fit_complex <- function(hits, protein, compound, conc_time, units) {
+  # The design of this complex's own samples
+  log_binding_kinetics(
+    concentrations = hits[[conc_time[1]]],
+    times = hits[[conc_time[2]]],
+    units = units
+  )
+  log_kobs_analysis()
+
+  entry <- list(
+    protein = protein,
+    compound = compound,
+    hits = hits,
+    binding_kobs_result = NULL,
+    kinact_ki_result = NULL,
+    reason = NULL
+  )
+
+  filtered <- check_filter_hits(list(hits_summary = hits))
+  if (!is.data.frame(filtered)) {
+    entry$reason <- "Too few concentrations, hits or time points for a k_obs fit"
+    return(entry)
+  }
+
+  log_filtered_samples(diff = nrow(hits) - nrow(filtered))
+  log_filtered_concentrations(
+    initial_tbl = hits,
+    filtered_tbl = filtered,
+    conc_time = conc_time
+  )
+
+  kobs <- add_kobs_binding_result(
+    filtered,
+    conc_time = conc_time,
+    units = units
+  )
+  if (nrow(kobs$kobs_result_table) == 0) {
+    message(paste(
+      "  │  └─ No concentration could be fitted.",
+      "Skipping binding kinetics analysis."
+    ))
+    entry$reason <- "No concentration could be fitted"
+    return(entry)
+  }
+
+  entry$binding_kobs_result <- kobs
+  entry$kinact_ki_result <- add_kinact_ki_result(
+    list(binding_kobs_result = kobs),
+    units = units
+  )
+  entry
+}
+
+# The result list with the kinetics of one complex in the places the kinetics
+# interface reads them from. Without a valid `key` the first complex with a
+# k_obs fit is taken.
+#' @export
+select_complex_kinetics <- function(result_list, key = NULL) {
+  kinetics <- result_list$kinetics
+  if (!length(kinetics)) {
+    return(result_list)
+  }
+
+  if (is.null(key) || !key %in% names(kinetics)) {
+    fitted <- vapply(
+      kinetics,
+      function(k) !is.null(k$binding_kobs_result),
+      logical(1)
+    )
+    key <- names(kinetics)[if (any(fitted)) which(fitted)[1] else 1]
+  }
+
+  k <- kinetics[[key]]
+  result_list$binding_kobs_result <- k$binding_kobs_result
+  result_list$kinact_ki_result <- k$kinact_ki_result
+  result_list$kinetics_hits <- k$hits
+  result_list$kinetics_complex <- k[c("protein", "compound", "reason")]
+  result_list$kinetics_complex$key <- key
+  result_list
+}
+
 # Tick formatting shared by the kinetics plot axes. Plotly's default renders
 # magnitudes as SI prefixes ("5µ", "3.6k"), which reads as a unit on axes that
 # already carry one. Powers of ten instead, matching how the result cards
@@ -2905,8 +4437,36 @@ make_binding_plot <- function(
 }
 
 # Function to generate and display kobs plot
+#
+# `proteoforms` optionally overlays the per-proteoform k_obs and fits on the
+# pooled ones: entries as in proteoform_kobs_plot(), without the pooled entry,
+# coloured by `proteoform_palette`.
 #' @export
-make_kobs_plot <- function(kinact_ki_result, colors, units, theme = "dark") {
+make_kobs_plot <- function(
+  kinact_ki_result,
+  colors,
+  units,
+  theme = "dark",
+  proteoforms = NULL,
+  proteoform_palette = NULL,
+  kobs_table = NULL
+) {
+  # Without a kinact/KI fit the k_obs values of `kobs_table` are drawn alone
+  fit_failed <- is.null(kinact_ki_result)
+  if (fit_failed) {
+    if (is.null(kobs_table) || !nrow(kobs_table)) {
+      return(NULL)
+    }
+    kinact_ki_result <- list(
+      Kobs_Data = data.frame(
+        conc = as.numeric(rownames(kobs_table)),
+        predicted_kobs = NA_real_,
+        kobs = kobs_table$kobs,
+        kobs_se = kobs_table$kobs_se
+      )
+    )
+  }
+
   # Get predicted/modeled kobs
   df <- kinact_ki_result$Kobs_Data[
     !is.na(kinact_ki_result$Kobs_Data$predicted_kobs),
@@ -2954,9 +4514,11 @@ make_kobs_plot <- function(kinact_ki_result, colors, units, theme = "dark") {
   }
 
   # Generate plot
-  kobs_plot <- plotly::plot_ly() |>
+  kobs_plot <- plotly::plot_ly()
+  if (nrow(df)) {
     # Predicted / modeled kobs
-    plotly::add_lines(
+    kobs_plot <- plotly::add_lines(
+      kobs_plot,
       data = df,
       x = ~conc,
       y = ~predicted_kobs,
@@ -2979,9 +4541,27 @@ make_kobs_plot <- function(kinact_ki_result, colors, units, theme = "dark") {
       ),
       showlegend = FALSE
     )
+  }
 
   conc_unit <- gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]])
   time_unit <- gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])
+
+  if (fit_failed) {
+    kobs_plot <- plotly::layout(
+      kobs_plot,
+      annotations = list(list(
+        text = "k<sub>inact</sub>/K<sub>I</sub> fit failed",
+        xref = "paper",
+        yref = "paper",
+        x = 0,
+        y = 1,
+        xanchor = "left",
+        yanchor = "bottom",
+        showarrow = FALSE,
+        font = list(color = font_color, size = 13)
+      ))
+    )
+  }
 
   for (conc_name in ordered_conc) {
     sub <- df_points[as.character(df_points$conc) == conc_name, , drop = FALSE]
@@ -3022,6 +4602,19 @@ make_kobs_plot <- function(kinact_ki_result, colors, units, theme = "dark") {
       ),
       showlegend = TRUE,
       inherit = FALSE
+    )
+  }
+
+  if (length(proteoforms)) {
+    kobs_plot <- add_proteoform_kobs_traces(
+      kobs_plot,
+      proteoforms,
+      colors = proteoform_palette,
+      font_color = font_color,
+      conc_unit = conc_unit,
+      time_unit = time_unit,
+      group_title = "Proteoforms",
+      subtle = names(proteoforms)
     )
   }
 
@@ -3131,6 +4724,13 @@ compute_kobs <- function(hits, units) {
     # Filter rows for this concentration
     raw_data <- hits |>
       dplyr::filter(!!rlang::sym(conc) == i)
+
+    # Nothing measured at this concentration (e.g. NA concentration slipped
+    # through) — there is nothing to fit, so move on instead of building a
+    # dummy row out of an empty frame.
+    if (nrow(raw_data) == 0) {
+      next
+    }
 
     # Collapse to one row per sample. Binding is a sample-level quantity, but a
     # sample contributes one row per compound, mass shift and protein species -
@@ -3673,6 +5273,11 @@ nlsLM_fixed <- function(
 # Function to format number in scientific
 #' @export
 format_scientific <- function(number, digits = 2) {
+  # No value, e.g. the parameters of a kinact/KI fit that failed
+  if (!is.numeric(number) || length(number) != 1 || !is.finite(number)) {
+    return("N/A")
+  }
+
   # Calculate the absolute value and the exponent (log10)
   abs_num <- abs(number)
   exponent <- ifelse(abs_num > 0, floor(log10(abs_num)), 0)
@@ -4025,9 +5630,10 @@ label_smart_clean <- function(files) {
 peaks_trace_tag <- "kiwims-peak-symbols"
 
 # 0-based indices of the tagged traces in a built plotly figure, ready to hand
-# to plotlyProxyInvoke("restyle", ...), which indexes traces the JS way.
+# to plotlyProxyInvoke("restyle", ...), which indexes traces the JS way. The
+# hit markers carry peaks_trace_tag, the unmatched peaks unmatched_trace_tag.
 #' @export
-peaks_trace_indices <- function(built_plot) {
+peaks_trace_indices <- function(built_plot, tag = peaks_trace_tag) {
   traces <- built_plot$x$data
 
   if (is.null(traces) || length(traces) == 0) {
@@ -4039,8 +5645,8 @@ peaks_trace_indices <- function(built_plot) {
   tagged <- vapply(
     traces,
     function(trace) {
-      tag <- as.character(trace$meta)
-      length(tag) > 0 && all(tag == peaks_trace_tag)
+      meta <- as.character(trace$meta)
+      length(meta) > 0 && all(meta == tag)
     },
     logical(1)
   )
@@ -4058,14 +5664,21 @@ spectrum_legend_camera_x <- 0.33
 # with plotlyProxy rather than costing a full rebuild and re-serialization.
 
 # Show or hide the peak symbols and the legend rows that name them. The traces
-# are always built, so this only flips their `visible` flag.
+# are always built, so this only flips their `visible` flag. `tag` picks the
+# hit markers or the unmatched peaks.
 #' @export
-restyle_peak_symbols <- function(session, output_id, plot_reactive, show) {
+restyle_peak_symbols <- function(
+  session,
+  output_id,
+  plot_reactive,
+  show,
+  tag = peaks_trace_tag
+) {
   # The figure is behind bindEvent(), so this returns the last built value and
   # never kicks off a build of its own; before the first render there is no
   # value and nothing to patch.
   indices <- tryCatch(
-    peaks_trace_indices(shiny::isolate(plot_reactive())),
+    peaks_trace_indices(shiny::isolate(plot_reactive()), tag = tag),
     error = function(e) integer(0)
   )
 
@@ -4240,6 +5853,7 @@ multiple_spectra <- function(
   labels_show = NULL,
   symbols_show = TRUE,
   legend_show = TRUE,
+  unmatched_show = FALSE,
   time = FALSE,
   color_cmp = NULL,
   truncated = FALSE,
@@ -4263,6 +5877,7 @@ multiple_spectra <- function(
   # quadratic reallocation of growing a data.frame with rbind() in a loop.
   spectrum_parts <- vector("list", length(samples))
   peaks_parts <- vector("list", length(samples))
+  unmatched_parts <- vector("list", length(samples))
 
   for (i in seq_along(samples)) {
     plot_data <- process_plot_data(
@@ -4288,10 +5903,16 @@ multiple_spectra <- function(
     if (!is.null(peaks_df) && nrow(peaks_df) > 0) {
       peaks_parts[[i]] <- dplyr::mutate(peaks_df, z = z_value)
     }
+
+    unmatched_df <- plot_data$unmatched_peaks
+    if (!is.null(unmatched_df) && nrow(unmatched_df) > 0) {
+      unmatched_parts[[i]] <- dplyr::mutate(unmatched_df, z = z_value)
+    }
   }
 
   spectrum_data <- as.data.frame(dplyr::bind_rows(spectrum_parts))
   peaks_data <- as.data.frame(dplyr::bind_rows(peaks_parts))
+  unmatched_data <- as.data.frame(dplyr::bind_rows(unmatched_parts))
 
   if (nrow(spectrum_data) == 0 || !("mass" %in% names(spectrum_data))) {
     return(
@@ -4355,6 +5976,23 @@ multiple_spectra <- function(
       rev(unique(peaks_data$z))
     }
   )
+
+  # Unmatched peaks share the spectrum's sample levels, so their traces land on
+  # the same category of the sample axis as the spectrum they belong to
+  if (nrow(unmatched_data) > 0) {
+    if (!isFALSE(truncated)) {
+      unmatched_data$z <- truncated$truncated[match(
+        unmatched_data$z,
+        truncated$original
+      )]
+    }
+    unmatched_data$z <- factor(
+      unmatched_data$z,
+      levels = levels(spectrum_data$z)
+    )
+  }
+  unmatched_show <- isTRUE(unmatched_show)
+  um <- unmatched_marker(theme)
 
   font_color <- if (theme == "light") "black" else "white"
   inv_color <- if (theme == "light") "white" else "black"
@@ -4578,23 +6216,33 @@ multiple_spectra <- function(
       }
     }
 
+    plot <- add_unmatched_traces(
+      plot,
+      unmatched_data,
+      cubic = TRUE,
+      visible = unmatched_show,
+      um = um,
+      inv_color = inv_color,
+      time = time,
+      units = units,
+      legend = !time
+    )
+
     if (nrow(peaks_data) > 0 && !time) {
       name_entries <- peaks_data |>
         dplyr::filter(!is.na(name)) |>
         dplyr::distinct(name, symbol) |>
         dplyr::arrange(dplyr::desc(symbol == "diamond"), name)
 
-      protein_seen <- FALSE
-      compound_seen <- FALSE
-
+      # Marker symbols are listed without group titles: the symbol and name
+      # say what each one marks, and a "Compounds" title would also seem to
+      # claim the "Unmatched" row listed after it
       for (i in seq_len(nrow(name_entries))) {
         entry_name <- name_entries$name[i]
         sym <- name_entries$symbol[i]
         first_peak <- peaks_data[peaks_data$name == entry_name, ][1, ]
         is_protein <- sym == "diamond"
         lg <- if (is_protein) "proteins" else "compounds"
-        add_lgt <- (is_protein && !protein_seen) ||
-          (!is_protein && !compound_seen)
 
         args <- list(
           p = plot,
@@ -4616,15 +6264,7 @@ multiple_spectra <- function(
           legendrank = i,
           hoverinfo = "skip"
         )
-        if (add_lgt) {
-          args$legendgrouptitle <- list(
-            text = if (is_protein) "Proteins" else "Compounds",
-            font = list(color = font_color)
-          )
-        }
         plot <- do.call(plotly::add_trace, args)
-
-        if (is_protein) protein_seen <- TRUE else compound_seen <- TRUE
       }
 
       plot <- plotly::style(
@@ -4878,23 +6518,33 @@ multiple_spectra <- function(
       }
     }
 
+    plot_2d <- add_unmatched_traces(
+      plot_2d,
+      unmatched_data,
+      cubic = FALSE,
+      visible = unmatched_show,
+      um = um,
+      inv_color = inv_color,
+      time = time,
+      units = units,
+      legend = TRUE
+    )
+
     if (nrow(peaks_data) > 0) {
       name_entries <- peaks_data |>
         dplyr::filter(!is.na(name)) |>
         dplyr::distinct(name, symbol) |>
         dplyr::arrange(dplyr::desc(symbol == "diamond"), name)
 
-      protein_seen <- FALSE
-      compound_seen <- FALSE
-
+      # Marker symbols are listed without group titles: the symbol and name
+      # say what each one marks, and a "Compounds" title would also seem to
+      # claim the "Unmatched" row listed after it
       for (i in seq_len(nrow(name_entries))) {
         entry_name <- name_entries$name[i]
         sym <- name_entries$symbol[i]
         first_peak <- peaks_data[peaks_data$name == entry_name, ][1, ]
         is_protein <- sym == "diamond"
         lg <- if (is_protein) "proteins" else "compounds"
-        add_lgt <- (is_protein && !protein_seen) ||
-          (!is_protein && !compound_seen)
 
         args <- list(
           p = plot_2d,
@@ -4918,15 +6568,7 @@ multiple_spectra <- function(
           legendrank = i,
           hoverinfo = "skip"
         )
-        if (add_lgt) {
-          args$legendgrouptitle <- list(
-            text = if (is_protein) "Proteins" else "Compounds",
-            font = list(color = font_color)
-          )
-        }
         plot_2d <- do.call(plotly::add_trace, args)
-
-        if (is_protein) protein_seen <- TRUE else compound_seen <- TRUE
       }
 
       plot_2d <- plotly::style(
@@ -4994,6 +6636,127 @@ multiple_spectra <- function(
   }
 }
 
+# Add the unmatched peak markers of multiple_spectra() ----
+#
+# One trace per sample, grouped with that sample's spectrum so hiding it in the
+# legend hides its unmatched peaks too, plus a single legend row naming the
+# symbol. Every trace carries unmatched_trace_tag, so the peaks are toggled on
+# the rendered figure rather than by a rebuild.
+add_unmatched_traces <- function(
+  plot,
+  unmatched_data,
+  cubic,
+  visible,
+  um,
+  inv_color,
+  time = FALSE,
+  units = NULL,
+  legend = TRUE
+) {
+  if (is.null(unmatched_data) || nrow(unmatched_data) == 0) {
+    return(plot)
+  }
+
+  time_unit <- if (time) {
+    paste0(" ", gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]))
+  } else {
+    ""
+  }
+
+  for (lvl in levels(unmatched_data$z)) {
+    um_lvl <- unmatched_data[
+      !is.na(unmatched_data$z) & unmatched_data$z == lvl,
+      ,
+      drop = FALSE
+    ]
+
+    if (nrow(um_lvl) == 0) {
+      next
+    }
+
+    args <- list(
+      p = plot,
+      data = um_lvl,
+      x = ~mass,
+      y = ~intensity,
+      legendgroup = lvl,
+      mode = "markers",
+      inherit = FALSE,
+      visible = visible,
+      meta = unmatched_trace_tag,
+      # 3D markers are sized in a different scale than 2D ones. The 2D cross
+      # is line-only and drawn by its line colour; the solid 3D one gets an
+      # outline like the hit markers of that view.
+      marker = list(
+        color = um$color,
+        symbol = if (cubic) um$symbol_3d else um$symbol,
+        size = if (cubic) 3 else 8,
+        line = list(
+          color = if (cubic) inv_color else um$color,
+          width = if (cubic) 2 else 1.5
+        )
+      ),
+      hoverinfo = "text",
+      text = ~ paste0(
+        "Unmatched Peak",
+        "\nMeasured: ",
+        mass,
+        " Da\nIntensity: ",
+        round(intensity, 2),
+        if (time) "%\nTime: " else "%\nSample: ",
+        z,
+        time_unit
+      ),
+      showlegend = FALSE
+    )
+
+    if (cubic) {
+      args$z <- ~z
+      args$type <- "scatter3d"
+    } else {
+      # SVG like the hit markers, so they draw above the WebGL spectrum lines
+      args$type <- "scatter"
+    }
+
+    plot <- do.call(plotly::add_trace, args)
+  }
+
+  if (legend) {
+    args <- list(
+      p = plot,
+      inherit = FALSE,
+      type = "scatter",
+      mode = "markers",
+      x = 0,
+      y = 0,
+      name = "Unmatched",
+      legendgroup = "unmatched",
+      marker = list(
+        color = um$color,
+        symbol = um$symbol,
+        size = 8,
+        line = list(color = um$color, width = 1.5)
+      ),
+      visible = visible,
+      meta = unmatched_trace_tag,
+      showlegend = TRUE,
+      # After the protein and compound rows (ranked 1..n), ahead of the
+      # sample rows (plotly's default rank of 1000)
+      legendrank = 999,
+      hoverinfo = "skip"
+    )
+
+    if (!cubic) {
+      args$xaxis <- "x2"
+      args$yaxis <- "y2"
+    }
+
+    plot <- do.call(plotly::add_trace, args)
+  }
+
+  plot
+}
+
 # Filter function for table view
 #' @export
 filter_table_view <- function(table, colors, inputs, units) {
@@ -5050,7 +6813,10 @@ filter_table_view <- function(table, colors, inputs, units) {
         pref <- `Binding [%]`[Preferred == "TRUE"]
         if (length(pref) > 0) pref[1] else `Binding [%]`[1]
       },
-      `Tot. Binding [%]` = `Tot. Binding [%]`[1]
+      `Tot. Binding [%]` = `Tot. Binding [%]`[1],
+      # Binding of the row's own proteoform, present with several declared
+      # masses only (see add_proteoform_binding())
+      dplyr::across(dplyr::any_of("Prot. Binding [%]"), ~ .x[1])
     ) |>
     dplyr::select(-`Peak Signal [Da]`)
 
@@ -5083,6 +6849,7 @@ filter_table_view <- function(table, colors, inputs, units) {
       `Theor. Cmp [Da]` = `Theor. Cmp [Da]`,
       `Bind. Stoich.` = `Bind. Stoich.`,
       `Binding [%]` = `Binding [%]`,
+      dplyr::any_of(c(`Proteoform %` = "Prot. Binding [%]")),
       `Total %` = `Tot. Binding [%]`
     ) |>
     dplyr::mutate(
@@ -5196,6 +6963,9 @@ render_table_view <- function(table, colors, tab, inputs, units) {
   }
   if (!is.null(inputs$tot_binding_bar) && !isTRUE(inputs$tot_binding_bar)) {
     table[["Total %"]] <- sprintf("%.2f", table[["Total %"]])
+    if ("Proteoform %" %in% names(table)) {
+      table[["Proteoform %"]] <- sprintf("%.2f", table[["Proteoform %"]])
+    }
   }
 
   # Add  prefix to group rows
@@ -5221,7 +6991,7 @@ render_table_view <- function(table, colors, tab, inputs, units) {
       scrollY = TRUE,
       scrollCollapse = TRUE,
       rowGroup = row_group,
-      columnDefs = list(
+      columnDefs = Filter(Negate(is.null), list(
         list(
           visible = ifelse(
             is.null(group_variable) ||
@@ -5261,11 +7031,25 @@ render_table_view <- function(table, colors, tab, inputs, units) {
           },
           render = render_tot_binding
         ),
+        # The proteoform's own binding sits next to the pooled total and
+        # follows its bar setting
+        if ("Proteoform %" %in% names(table)) {
+          list(
+            targets = "Proteoform %",
+            type = "num",
+            className = if (!is.null(render_tot_binding)) {
+              "bar-chart-col"
+            } else {
+              NULL
+            },
+            render = render_tot_binding
+          )
+        },
         list(
           targets = -1,
           className = 'dt-last-col'
         )
-      )
+      ))
     )
   ) |>
     DT::formatStyle(
@@ -5629,6 +7413,7 @@ render_hits_table <- function(
       c(
         "Binding [%]",
         "Tot. Binding [%]",
+        "Prot. Binding [%]",
         "Unmatched [%]",
         "Correct [%]",
         "Int. Prot. [%]",
@@ -6028,7 +7813,7 @@ confirm_ui_changes <- function(
     selector = paste0(
       ".btn-file:has(#app-conversion_main-",
       tab_low,
-      "_fileinput"
+      "_fileinput)"
     ),
     class = "custom-disable"
   )
@@ -6098,7 +7883,7 @@ edit_ui_changes <- function(
     selector = paste0(
       ".btn-file:has(#app-conversion_main-",
       tab_low,
-      "_fileinput"
+      "_fileinput)"
     ),
     class = "custom-disable"
   )
@@ -6119,6 +7904,32 @@ edit_ui_changes <- function(
   ))
 }
 
+# One-line hint above a declaration table. A long explanation (`details`, one
+# line each, then `note`) goes into the tooltip of an info icon, so the hint
+# itself stays within the table width.
+table_hint <- function(class, msg, details = NULL, note = NULL) {
+  shiny::div(
+    class = class,
+    shiny::icon("triangle-exclamation"),
+    shiny::span(class = "table-hint-text", as.character(msg)),
+    if (length(details) || length(note)) {
+      bslib::tooltip(
+        shiny::span(
+          class = "table-hint-details",
+          tabindex = "0",
+          shiny::icon("circle-info")
+        ),
+        shiny::tagList(
+          lapply(details, shiny::div),
+          if (length(note)) shiny::div(class = "table-hint-note", note)
+        ),
+        placement = "bottom",
+        options = list(customClass = "table-hint-tooltip")
+      )
+    }
+  )
+}
+
 # Slice sample declaration table row-wise
 #' @export
 table_observe <- function(
@@ -6128,7 +7939,10 @@ table_observe <- function(
   ns,
   proteins,
   compounds,
-  tolerance = 3
+  tolerance = 3,
+  protein_table = NULL,
+  compound_table = NULL,
+  max_multiples = NULL
 ) {
   # Show waiter with 0.25 seconds minimum runtime; on.exit ensures hide always runs
   waiter::waiter_show(
@@ -6169,7 +7983,11 @@ table_observe <- function(
       args <- list(
         sample_table = table,
         proteins = proteins,
-        compounds = compounds
+        compounds = compounds,
+        protein_table = protein_table,
+        compound_table = compound_table,
+        tolerance = tolerance,
+        max_multiples = max_multiples
       )
     } else {
       check_function <- "check_table"
@@ -6191,7 +8009,20 @@ table_observe <- function(
       output[[paste0(tab, "_table_info")]] <- shiny::renderText(
         "Table can be saved"
       )
-      output[[paste0(tab, "_table_hint")]] <- shiny::renderUI(NULL)
+      # A passed check can still carry a warning (e.g. ambiguous masses)
+      local({
+        check <- table_check
+        output[[paste0(tab, "_table_hint")]] <- shiny::renderUI(
+          if (!is.null(attr(check, "warning"))) {
+            table_hint(
+              "table-hint table-hint-orange",
+              attr(check, "warning"),
+              details = attr(check, "details"),
+              note = attr(check, "note")
+            )
+          }
+        )
+      })
 
       # Enable confirm button
       shinyjs::enable(paste0("confirm_", tab))
@@ -6219,10 +8050,11 @@ table_observe <- function(
           "table-hint table-hint-red"
         }
         output[[paste0(tab, "_table_hint")]] <- shiny::renderUI(
-          shiny::div(
-            class = hint_class,
-            shiny::icon("triangle-exclamation"),
-            msg
+          table_hint(
+            hint_class,
+            msg,
+            details = attr(msg, "details"),
+            note = attr(msg, "note")
           )
         )
       })

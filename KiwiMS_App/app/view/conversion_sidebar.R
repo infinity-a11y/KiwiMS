@@ -11,12 +11,11 @@ box::use(
     conversion_functions[
       add_hits,
       summarize_hits,
-      check_filter_hits,
-      add_kobs_binding_result,
-      add_kinact_ki_result,
-      log_binding_kinetics,
-      log_filtered_samples,
-      log_filtered_concentrations,
+      complex_kinetics,
+      select_complex_kinetics,
+      run_complexes,
+      declaration_ambiguities,
+      log_mass_ambiguities,
     ],
   app /
     logic /
@@ -59,6 +58,7 @@ server <- function(
     # Declare reactive vars ----
     result_list <- shiny::reactiveVal(NULL)
     complexes <- shiny::reactiveVal(NULL)
+    complex_default <- shiny::reactiveVal(NULL)
     analysis_status <- shiny::reactiveVal("pending")
     kinact_ki_available <- shiny::reactiveVal(FALSE)
     console_log_snapshot <- shiny::reactiveVal(NULL)
@@ -225,7 +225,8 @@ server <- function(
                 shinyWidgets::pickerInput(
                   ns("complex"),
                   NULL,
-                  choices = complexes()
+                  choices = complexes(),
+                  selected = complex_default()
                 )
               )
             )
@@ -318,6 +319,16 @@ server <- function(
     # )
 
     ## Conditional tooltip for launch button ----
+    # The overlay goes up in the browser at click time: the run is computed
+    # in a single observer and Shiny only delivers its runjs() messages once
+    # that observer returns, so a server-side block would arrive together
+    # with the unblock. Without it the app looks idle for the whole run, and
+    # a second click queued meanwhile is processed afterwards as "Reset".
+    # The blur keeps Enter/Space from re-triggering the focused button.
+    block_on_click <- paste0(
+      "document.getElementById('blocking-overlay').style.display = 'block';",
+      " this.blur();"
+    )
     output$run_button_wrapper <- shiny::renderUI({
       if (isTRUE(conversion_main_vars$conversion_ready())) {
         return(
@@ -328,7 +339,8 @@ server <- function(
               "Start",
               icon = shiny::icon("circle-play"),
               width = "100%",
-              class = "btn-highlight"
+              class = "btn-highlight",
+              onclick = block_on_click
             )
           )
         )
@@ -342,7 +354,8 @@ server <- function(
                   ns("run_binding_analysis"),
                   "Start",
                   icon = shiny::icon("circle-play"),
-                  width = "100%"
+                  width = "100%",
+                  onclick = block_on_click
                 )
               )
             ),
@@ -391,7 +404,43 @@ server <- function(
       event_expr = input$run_binding_analysis,
       observer_name = "Conversion Processing",
       handler_fn = function() {
+        # Release the overlay the button's onclick put up, on every way out
+        # (refused run, no hits, results, reset, error)
+        on.exit(shinyjs::runjs(
+          'document.getElementById("blocking-overlay").style.display = "none";'
+        ))
+
         if (analysis_status() == "pending") {
+          # The peak tolerance and the maximum stoichiometry can have changed
+          # since the sample table was checked, so the mass ambiguities are
+          # checked again for the settings the run uses. Compounds of one
+          # sample that cannot be told apart stop the run: their binding could
+          # not be attributed.
+          declared <- conversion_main_vars$input_list()
+          ambiguities <- declaration_ambiguities(
+            declared$Samples_Table,
+            declared$Protein_Table,
+            declared$Compound_Table,
+            tolerance = input$peak_tolerance,
+            max_multiples = input$max_multiples
+          )
+          if (any(ambiguities$kind == "compounds")) {
+            write_log(
+              "Conversion refused - compounds of one sample not distinguishable"
+            )
+            shinyWidgets::show_toast(
+              "Compounds not distinguishable",
+              text = paste0(
+                "Two compounds of one sample give the same peaks within ",
+                "2 × peak tolerance. Lower the peak tolerance or the ",
+                "maximum stoichiometry, or revise the sample declaration."
+              ),
+              type = "error",
+              timer = 6000
+            )
+            return(invisible(NULL))
+          }
+
           write_log("Conversion initiated")
           write_log(paste(
             "Conversion parameters:\n",
@@ -410,9 +459,6 @@ server <- function(
 
           # Show spinner on conversion_ui while computation runs
           analysis_running(TRUE)
-          shinyjs::runjs(
-            'document.getElementById("blocking-overlay").style.display = "block";'
-          )
 
           # Preset logical flags
           kinact_ki_check <- FALSE
@@ -430,6 +476,9 @@ server <- function(
           # Add hits
           withCallingHandlers(
             expr = {
+              # Ambiguities the run resolves by rule, stated up front
+              log_mass_ambiguities(ambiguities, input$peak_tolerance)
+
               result_with_hits <- add_hits(
                 conversion_main_vars$input_list()$result,
                 sample_table = conversion_main_vars$input_list()$Samples_Table,
@@ -470,69 +519,26 @@ server <- function(
                 units <- gsub("Concentration |Time |\\[|\\]", "", conc_time)
                 names(units) <- c("Concentration", "Time")
 
-                # Log initiation of binding kinetics analysis
-                log_binding_kinetics(
-                  concentrations = result_with_hits$hits_summary[[conc_time[
-                    1
-                  ]]],
-                  times = result_with_hits$hits_summary[[conc_time[2]]],
+                # k_obs and kinact/KI per protein-compound complex, each
+                # logged with the concentrations and time points of its own
+                # samples; the complex picker of the Results Menu chooses the
+                # one shown
+                result_with_hits$kinetics <- complex_kinetics(
+                  result_with_hits$hits_summary,
+                  sample_table = conversion_main_vars$input_list()$Samples_Table,
+                  conc_time = conc_time,
                   units = units
                 )
 
-                # Perform checks for binding kinetics analysis prerequisites
-                hits_summary_filtered <- check_filter_hits(
-                  result_with_hits
-                )
-
-                kinact_ki_check <- is.data.frame(hits_summary_filtered)
+                # Every concentration of a complex skipped or failed to
+                # converge leaves it without k_obs; the reason was logged above
+                kinact_ki_check <- any(vapply(
+                  result_with_hits$kinetics,
+                  function(k) !is.null(k$binding_kobs_result),
+                  logical(1)
+                ))
                 kinact_ki_available(kinact_ki_check)
-
-                if (kinact_ki_check) {
-                  # Log filtered samples
-                  log_filtered_samples(
-                    diff = nrow(result_with_hits$hits_summary) -
-                      nrow(hits_summary_filtered)
-                  )
-
-                  # Log filtered concentrations
-                  log_filtered_concentrations(
-                    initial_tbl = result_with_hits$hits_summary,
-                    filtered_tbl = hits_summary_filtered,
-                    conc_time = conc_time
-                  )
-
-                  # Add binding/kobs results to result list
-                  result_with_hits$binding_kobs_result <- add_kobs_binding_result(
-                    hits_summary_filtered,
-                    conc_time = conc_time,
-                    units = units
-                  )
-
-                  if (
-                    nrow(
-                      result_with_hits$binding_kobs_result$kobs_result_table
-                    ) ==
-                      0
-                  ) {
-                    # Every concentration was skipped or failed to converge —
-                    # the per-concentration reason was already logged above.
-                    # There is no k_obs to feed kinact/Ki, so drop the empty
-                    # result rather than hand it to the result interface.
-                    message(paste(
-                      "  │  └─ No concentration could be fitted.",
-                      "Skipping binding kinetics analysis."
-                    ))
-                    result_with_hits$binding_kobs_result <- NULL
-                    kinact_ki_check <- FALSE
-                    kinact_ki_available(FALSE)
-                  } else {
-                    # Add kinact/Ki results to result list
-                    result_with_hits$kinact_ki_result <- add_kinact_ki_result(
-                      result_with_hits,
-                      units = units
-                    )
-                  }
-                }
+                result_with_hits <- select_complex_kinetics(result_with_hits)
               }
             },
             message = function(m) {
@@ -560,9 +566,6 @@ server <- function(
               icon = shiny::icon("play"),
               disabled = FALSE
             )
-            shinyjs::runjs(
-              'document.getElementById("blocking-overlay").style.display = "none";'
-            )
             analysis_running(FALSE)
             shinyWidgets::show_toast(
               title = "No hits detected",
@@ -580,22 +583,20 @@ server <- function(
             ))
             result_list(result_with_hits)
 
-            # Save distinct protein - compound combinations/complexes
-            complex_df <- dplyr::distinct(
-              result_with_hits$hits_summary,
-              Protein,
-              Compound
-            ) |>
-              dplyr::filter(!is.na(Compound))
+            # Save distinct protein - compound combinations/complexes. The
+            # value names the complex, the label is the compound under its
+            # protein's heading.
+            complex_df <- run_complexes(result_with_hits$hits_summary)
 
             choice_values <- stats::setNames(
-              complex_df$Compound,
-              complex_df$Compound
+              complex_df$key,
+              complex_df$compound
             )
 
-            complexes <- split(choice_values, complex_df$Protein)
+            complexes <- split(choice_values, complex_df$protein)
 
             complexes(complexes)
+            complex_default(result_with_hits$kinetics_complex$key)
 
             # Update sidebar control inputs
             shiny::updateActionButton(
@@ -608,9 +609,6 @@ server <- function(
             shinyjs::disable("max_multiples")
 
             console_log_snapshot(paste(log_lines, collapse = ""))
-            shinyjs::runjs(
-              'document.getElementById("blocking-overlay").style.display = "none";'
-            )
             analysis_running(FALSE)
             analysis_status("done")
           }

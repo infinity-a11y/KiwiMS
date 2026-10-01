@@ -79,7 +79,19 @@ box::use(
       convert_hits_units,
       convert_kobs_result_units,
       convert_kinact_ki_params,
-      convert_result_list_units
+      convert_kinact_ki_units,
+      convert_result_list_units,
+      add_proteoform_binding,
+      proteoform_binding,
+      proteoform_limit_note,
+      proteoform_kinetics,
+      select_complex_kinetics,
+      proteoform_comparison_table,
+      proteoform_kobs_plot,
+      proteoform_paired_plot,
+      proteoform_colors,
+      collapse_species,
+      species_mw_lines
     ],
   app /
     logic /
@@ -87,7 +99,7 @@ box::use(
       safe_observe,
       config_units,
     ],
-  app / logic / deconvolution_functions[spectrum_plot, ],
+  app / logic / deconvolution_functions[spectrum_plot, unmatched_trace_tag, ],
   app /
     logic /
     plot_download[
@@ -318,6 +330,32 @@ server <- function(
     }) |>
       shiny::debounce(750)
 
+    max_stoichiometry <- shiny::reactive({
+      max_mult <- conversion_sidebar_vars$max_multiples()
+      if (is.null(max_mult)) 4 else max_mult
+    }) |>
+      shiny::debounce(750)
+
+    # Validate the sample table, including the mass ambiguities of its protein
+    # and compound combinations under the current peak tolerance and maximum
+    # stoichiometry. Both are read isolated: the observers calling this react
+    # to table edits, and the settings are re-checked by an observer of their
+    # own below.
+    observe_sample_table <- function(table) {
+      table_observe(
+        tab = "samples",
+        table = table,
+        output = output,
+        ns = ns,
+        proteins = declaration_vars$protein_table$Protein,
+        compounds = declaration_vars$compound_table$Compound,
+        protein_table = declaration_vars$protein_table,
+        compound_table = declaration_vars$compound_table,
+        tolerance = shiny::isolate(tolerance()),
+        max_multiples = shiny::isolate(max_stoichiometry())
+      )
+    }
+
     # Throttled reactive for protein declaration table input
     protein_table_input <- shiny::reactive({
       proteins_table <- input$proteins_table
@@ -380,9 +418,12 @@ server <- function(
 
     # Helper: auto-fill sample table columns from config file
     apply_config_autofill <- function(tbl, cfg) {
+      # Sample names may carry the .raw extension on one side only, as in the
+      # replicate lookup (add_replicate_col())
+      cfg_key <- gsub("\\.raw$", "", cfg$Sample, ignore.case = TRUE)
+      tbl_key <- gsub("\\.raw$", "", tbl$Sample, ignore.case = TRUE)
       for (i in seq_len(nrow(tbl))) {
-        sample_name <- tbl$Sample[i]
-        match_idx <- which(cfg$Sample == sample_name)
+        match_idx <- which(cfg_key == tbl_key[i])
         if (length(match_idx) == 1) {
           m <- cfg[match_idx, , drop = FALSE]
           if ("Protein" %in% names(cfg)) {
@@ -873,15 +914,29 @@ server <- function(
           selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
           class = "custom-disable"
         )
-        declaration_vars$sample_table_status <- table_observe(
-          tab = "samples",
-          table = clean_sample_table(sample_table_data()),
-          output = output,
-          ns = ns,
-          proteins = declaration_vars$protein_table$Protein,
-          compounds = declaration_vars$compound_table$Compound
+        declaration_vars$sample_table_status <- observe_sample_table(
+          clean_sample_table(sample_table_data())
         )
       }
+    )
+
+    ## Sample table re-check on changed screening settings ----
+    # Whether masses are ambiguous depends on the peak tolerance and the
+    # maximum stoichiometry, which are set in the sidebar and can change after
+    # the table was filled
+    shiny::observeEvent(
+      list(tolerance(), max_stoichiometry()),
+      {
+        shiny::req(isTRUE(declaration_vars$sample_table_active))
+        table <- tryCatch(
+          clean_sample_table(sample_table_data()),
+          error = function(e) NULL
+        )
+        shiny::req(is.data.frame(table), nrow(table) > 0)
+
+        declaration_vars$sample_table_status <- observe_sample_table(table)
+      },
+      ignoreInit = TRUE
     )
 
     ## Config autofill button state ----
@@ -1160,15 +1215,8 @@ server <- function(
           shinyjs::enable("conc_unit")
           shinyjs::enable("time_unit")
 
-          declaration_vars$sample_table_status <- table_observe(
-            tab = "samples",
-            table = clean_sample_table(
-              samples_table_input
-            ),
-            output = output,
-            ns = ns,
-            proteins = declaration_vars$protein_table$Protein,
-            compounds = declaration_vars$compound_table$Compound
+          declaration_vars$sample_table_status <- observe_sample_table(
+            clean_sample_table(samples_table_input)
           )
         }
 
@@ -1874,12 +1922,22 @@ server <- function(
     kobs_result_raw <- shiny::reactiveVal()
 
     ## Reactive functions ----
+    # The results with the kinetics of the complex picked in the Results Menu.
+    # Only the kinetics differ between complexes; the hits stay those of the
+    # whole run.
+    kinetics_result_list <- shiny::reactive({
+      select_complex_kinetics(
+        conversion_sidebar_vars$result_list(),
+        conversion_sidebar_vars$complex()
+      )
+    })
+
     # Infer kinact/Ki result from selected samples
     kinact_ki_result <- shiny::reactive({
       shiny::req(conversion_sidebar_vars$result_list())
 
       if (is.null(conversion_vars$modified_results)) {
-        result_list <- conversion_sidebar_vars$result_list()
+        result_list <- kinetics_result_list()
       } else {
         # Block UI
         shinyjs::runjs(paste0(
@@ -1992,12 +2050,20 @@ server <- function(
     results_observer <- safe_observe(
       observer_name = "Conditional Results Rendering",
       handler_fn = function() {
-        result_list <- conversion_sidebar_vars$result_list()
+        result_list <- kinetics_result_list()
 
         analysis_select <- conversion_sidebar_vars$analysis_select()
         shiny::req(length(analysis_select) > 0)
 
         iface <- iface_key(analysis_select)
+
+        # Another complex picked: the kinetics panel is built anew for it, the
+        # other panels do not depend on the complex
+        complex <- result_list$kinetics_complex$key
+        if (!identical(complex, iface_state$complex)) {
+          iface_state$complex <- complex
+          iface_state$built <- setdiff(iface_state$built, "kinetics")
+        }
 
         # Nothing to build: the selected interface is already rendered, so the
         # switch is a pure visibility change and needs no blocking overlay.
@@ -2033,6 +2099,9 @@ server <- function(
           output$Ki <- NULL
           output$Kinact_Ki <- NULL
           output$kobs_result <- NULL
+          output$proteoform_kobs_plot <- NULL
+          output$proteoform_paired_plot <- NULL
+          output$proteoform_table <- NULL
           output$binding_plot <- NULL
           output$kobs_plot <- NULL
 
@@ -2059,7 +2128,7 @@ server <- function(
           # Null binding interface
           output$hits_unified_tab <- NULL
           output$samples_selected_protein <- NULL
-          output$samples_total_pct_binding <- NULL
+          output$samples_quality <- NULL
           output$samples_compound_distribution_ui <- NULL
           output$samples_present_compounds_na <- NULL
           output$samples_compound_distribution <- NULL
@@ -2185,6 +2254,10 @@ server <- function(
           ### Compute hits summary ----
           hits_summary <- transform_hits(result_list$"hits_summary")
 
+          # Binding of each row's own proteoform next to the pooled total, when
+          # a protein was declared with several masses
+          hits_summary <- add_proteoform_binding(hits_summary)
+
           # Get concentration and time units
           units <- c(
             names(hits_summary)[grep("Conc.", names(hits_summary))],
@@ -2306,79 +2379,136 @@ server <- function(
                   )
                 }
 
+                # Every row lists one value per species; past two species the
+                # rest moves into the hover text of a trailing ellipsis
                 if (all(is.na(measured_protein_mw))) {
                   signal_average <- "No signal"
                 } else {
-                  signal_average <- paste(
-                    ifelse(
-                      is.na(measured_protein_mw),
-                      "No signal",
-                      paste(fmt_mw(round(measured_protein_mw, 2)), "Da")
-                    ),
-                    collapse = " | "
-                  )
+                  signal_average <- collapse_species(ifelse(
+                    is.na(measured_protein_mw),
+                    "No signal",
+                    paste(fmt_mw(round(measured_protein_mw, 2)), "Da")
+                  ))
                 }
+
+                # Binding of each species on its own, in the order of the
+                # masses above. A value pinned by an undetected peak is marked
+                # and explained on hover.
+                species_binding <- proteoform_binding(sample_rows)
+                sb <- species_binding[match(
+                  theor_protein_mw,
+                  species_binding$species
+                ), ]
+                binding_text <- collapse_species(ifelse(
+                  is.na(sb$binding),
+                  "N/A",
+                  ifelse(
+                    is.na(sb$limit),
+                    sprintf("%.2f%%", sb$binding),
+                    sprintf(
+                      "<span class=\"protocol-stat-warn\" title=\"%s\">%.2f%%</span>",
+                      proteoform_limit_note(sb$limit),
+                      sb$binding
+                    )
+                  )
+                ))
 
                 shiny::div(
                   class = "conversion-sample-protein-box",
                   shiny::div(
                     class = "conversion-sample-protein-names",
-                    shiny::HTML("Name<br>Mw<br>Signal")
+                    shiny::HTML("Name<br>Mw<br>Signal<br>Binding")
                   ),
                   shiny::div(
                     class = "conversion-sample-protein",
                     shiny::HTML(paste(
                       protein,
                       "<br>",
-                      paste(
-                        paste(fmt_mw(theor_protein_mw), "Da"),
-                        collapse = " | "
-                      ),
+                      collapse_species(paste(fmt_mw(theor_protein_mw), "Da")),
                       "<br>",
-                      signal_average
+                      signal_average,
+                      "<br>",
+                      binding_text
                     ))
                   )
                 )
               }
             )
 
-            ###### Tot. Binding [%] ----
-            output$samples_total_pct_binding <- shiny::renderUI({
+            ###### Quality metrics ----
+            output$samples_quality <- shiny::renderUI({
               shiny::req(
                 hits_summary,
                 input$conversion_sample_picker
               )
 
+              selected_sample <- input$conversion_sample_picker
               tbl <- hits_summary[
-                hits_summary$`Sample ID` == input$conversion_sample_picker,
+                hits_summary$`Sample ID` == selected_sample,
               ]
 
-              if (all(is.na(tbl$`Cmp Name`))) {
+              # Sample-level values, repeated on every hit row of the sample
+              correct <- suppressWarnings(as.numeric(tbl$`Correct [%]`[1]))
+              unmatched <- suppressWarnings(as.numeric(
+                tbl$`Unmatched [%]`[1]
+              ))
+
+              if (!nrow(tbl) || (is.na(correct) && is.na(unmatched))) {
                 return(shiny::div("N/A", class = "na-placeholder"))
+              }
+
+              # Peak count behind the metrics: assigned are the protein
+              # species and complexes, as in the metric itself
+              sample <- result_list$deconvolution[[selected_sample]]
+              peak_mass <- sample$peaks$mass
+              assigned <- c(
+                sample$hits$`Measured Mw Protein [Da]`,
+                sample$hits$`Peak [Da]`
+              )
+              n_peaks <- length(peak_mass)
+              n_matched <- sum(peak_mass %in% assigned)
+
+              # Same warning levels as the Protocol tab's quality cards
+              fmt_metric <- function(value, warn, err) {
+                if (is.na(value)) {
+                  return("N/A")
+                }
+                cls <- if (err(value)) {
+                  "protocol-stat-err"
+                } else if (warn(value)) {
+                  "protocol-stat-warn"
+                } else {
+                  NULL
+                }
+                as.character(shiny::span(
+                  class = cls,
+                  sprintf("%.2f%%", value)
+                ))
               }
 
               shiny::div(
                 class = "conversion-sample-protein-box",
                 shiny::div(
                   class = "conversion-sample-protein-names",
-                  shiny::HTML(paste(
-                    "Mass Shifts<br>Selected<br>Binding"
-                  ))
+                  shiny::HTML("Correct<br>Unmatched<br>Peaks")
                 ),
                 shiny::div(
                   class = "conversion-sample-protein",
-                  shiny::HTML(
-                    paste0(
-                      length(unique(tbl$`Theor. Cmp [Da]`[
-                        !is.na(tbl$`Cmp Name`)
-                      ])),
-                      "<br>",
-                      unique(tbl$`Cmp Name`[!is.na(tbl$`Cmp Name`)]),
-                      "<br>",
-                      sprintf("%.2f", mean(tbl$`Tot. Binding [%]`)),
-                      "%"
-                    )
-                  )
+                  shiny::HTML(paste0(
+                    fmt_metric(
+                      correct,
+                      warn = function(x) x < 50,
+                      err = function(x) x < 10
+                    ),
+                    "<br>",
+                    fmt_metric(
+                      unmatched,
+                      warn = function(x) x > 50,
+                      err = function(x) x > 90
+                    ),
+                    "<br>",
+                    sprintf("%d / %d matched", n_matched, n_peaks)
+                  ))
                 )
               )
             })
@@ -2455,7 +2585,8 @@ server <- function(
             shiny::observeEvent(
               list(
                 input$sample_view_spectrum_annotation,
-                input$sample_view_spectrum_diff
+                input$sample_view_spectrum_diff,
+                input$sample_view_spectrum_unmatched
               ),
               smpl_spectrum_settings(smpl_spectrum_settings() + 1L),
               ignoreInit = TRUE,
@@ -2544,7 +2675,8 @@ server <- function(
                   is.null(input$sample_view_spectrum_diff),
                   TRUE,
                   input$sample_view_spectrum_diff
-                )
+                ),
+                show_unmatched = isTRUE(input$sample_view_spectrum_unmatched)
               )
             }) |>
               shiny::bindEvent(
@@ -2976,7 +3108,10 @@ server <- function(
                   color_cmp = colors,
                   color_variable = color_variable,
                   show_peak_labels = TRUE,
-                  show_mass_diff = FALSE
+                  show_mass_diff = FALSE,
+                  show_unmatched = isTRUE(shiny::isolate(
+                    input$compounds_spectrum_unmatched
+                  ))
                 )
               } else {
                 plot <- multiple_spectra(
@@ -3002,7 +3137,10 @@ server <- function(
                   symbols_show = shiny::isolate(
                     input$compounds_spectrum_symbols
                   ),
-                  legend_show = shiny::isolate(input$compounds_spectrum_legend)
+                  legend_show = shiny::isolate(input$compounds_spectrum_legend),
+                  unmatched_show = isTRUE(shiny::isolate(
+                    input$compounds_spectrum_unmatched
+                  ))
                 )
               }
 
@@ -3034,6 +3172,7 @@ server <- function(
                 shiny::isolate(compounds_labels_val()),
                 shiny::isolate(input$compounds_spectrum_symbols),
                 shiny::isolate(input$compounds_spectrum_legend),
+                shiny::isolate(input$compounds_spectrum_unmatched),
                 cache = spectrum_cache
               ) |>
               shiny::bindEvent(
@@ -3061,6 +3200,20 @@ server <- function(
                   "compounds_annotated_spectrum",
                   compounds_spectrum_plot,
                   input$compounds_spectrum_symbols
+                )
+              },
+              ignoreInit = TRUE
+            )
+
+            shiny::observeEvent(
+              input$compounds_spectrum_unmatched,
+              {
+                restyle_peak_symbols(
+                  session,
+                  "compounds_annotated_spectrum",
+                  compounds_spectrum_plot,
+                  input$compounds_spectrum_unmatched,
+                  tag = unmatched_trace_tag
                 )
               },
               ignoreInit = TRUE
@@ -3227,66 +3380,25 @@ server <- function(
                   hits_summary$Protein == selected,
                 ]
 
-                # Signals are averaged per declared protein species — a protein
-                # may carry several masses (e.g. a modified form), and averaging
-                # across species would mix unrelated peaks
-                theor_protein_mw <- suppressWarnings(as.numeric(
-                  protein_rows$`Theor. Prot. [Da]`
-                ))
-                measured_protein_mw <- suppressWarnings(as.numeric(
+                # One line per declared species: its theoretical mass and the
+                # range of the signals detected for it. Kept per species - a
+                # protein may carry several masses (e.g. a modified form), and
+                # pooling their signals would mix unrelated peaks. The protein
+                # name is already on the picker above.
+                mw_lines <- species_mw_lines(
+                  protein_rows$`Theor. Prot. [Da]`,
                   protein_rows$`Meas. Prot. [Da]`
-                ))
-
-                species_mw <- sort(unique(theor_protein_mw))
-
-                fmt_mw <- function(x) {
-                  vapply(
-                    x,
-                    function(v) {
-                      format(v, big.mark = ",", scientific = FALSE)
-                    },
-                    character(1)
-                  )
-                }
-
-                # Per species: mean of the measured signals (± sd on repeats)
-                signal_average <- vapply(
-                  species_mw,
-                  function(mw) {
-                    signals <- measured_protein_mw[
-                      theor_protein_mw %in% mw & !is.na(measured_protein_mw)
-                    ]
-                    if (!length(signals)) {
-                      return("No signal")
-                    }
-                    paste0(
-                      fmt_mw(round(mean(signals), 2)),
-                      if (length(signals) > 1) {
-                        paste0(" ± ", round(stats::sd(signals), 2))
-                      } else {
-                        ""
-                      },
-                      " Da"
-                    )
-                  },
-                  character(1)
                 )
 
                 shiny::div(
                   class = "conversion-sample-protein-box",
                   shiny::div(
                     class = "conversion-sample-protein-names",
-                    shiny::HTML("Name<br>Mw<br>Signal")
+                    shiny::HTML(mw_lines$labels)
                   ),
                   shiny::div(
                     class = "conversion-sample-protein",
-                    shiny::HTML(paste(
-                      selected,
-                      "<br>",
-                      paste(paste(fmt_mw(species_mw), "Da"), collapse = " | "),
-                      "<br>",
-                      paste(signal_average, collapse = " | ")
-                    ))
+                    shiny::HTML(mw_lines$html)
                   )
                 )
               }
@@ -3616,7 +3728,10 @@ server <- function(
                   color_cmp = colors,
                   color_variable = color_variable,
                   show_peak_labels = TRUE,
-                  show_mass_diff = FALSE
+                  show_mass_diff = FALSE,
+                  show_unmatched = isTRUE(shiny::isolate(
+                    input$proteins_spectrum_unmatched
+                  ))
                 )
               } else {
                 plot <- multiple_spectra(
@@ -3638,7 +3753,10 @@ server <- function(
                   symbols_show = shiny::isolate(
                     input$proteins_spectrum_symbols
                   ),
-                  legend_show = shiny::isolate(input$proteins_spectrum_legend)
+                  legend_show = shiny::isolate(input$proteins_spectrum_legend),
+                  unmatched_show = isTRUE(shiny::isolate(
+                    input$proteins_spectrum_unmatched
+                  ))
                 )
               }
 
@@ -3664,6 +3782,7 @@ server <- function(
                 shiny::isolate(proteins_labels_val()),
                 shiny::isolate(input$proteins_spectrum_symbols),
                 shiny::isolate(input$proteins_spectrum_legend),
+                shiny::isolate(input$proteins_spectrum_unmatched),
                 cache = spectrum_cache
               ) |>
               shiny::bindEvent(
@@ -3688,6 +3807,20 @@ server <- function(
                   "proteins_annotated_spectrum",
                   proteins_spectrum_plot,
                   input$proteins_spectrum_symbols
+                )
+              },
+              ignoreInit = TRUE
+            )
+
+            shiny::observeEvent(
+              input$proteins_spectrum_unmatched,
+              {
+                restyle_peak_symbols(
+                  session,
+                  "proteins_annotated_spectrum",
+                  proteins_spectrum_plot,
+                  input$proteins_spectrum_unmatched,
+                  tag = unmatched_trace_tag
                 )
               },
               ignoreInit = TRUE
@@ -3867,6 +4000,54 @@ server <- function(
             # Reset any prior concentration exclusions so plots match the table
             conversion_vars$modified_results <- NULL
 
+            # The observers of a previous build of this panel (another
+            # complex) would keep writing their stale values
+            lapply(iface_state$kinetics_observers, function(o) o$destroy())
+            iface_state$kinetics_observers <- NULL
+
+            # Kinetics of the complex picked in the Results Menu: its samples,
+            # with the hits of its compound only
+            kinetics_complex <- result_list$kinetics_complex
+            if (!is.null(kinetics_complex)) {
+              result_list$hits_summary <- result_list$kinetics_hits
+              hits_summary <- hits_summary[
+                hits_summary$`Sample ID` %in%
+                  result_list$kinetics_hits$Sample &
+                  hits_summary$Protein %in% kinetics_complex$protein &
+                  hits_summary$`Cmp Name` %in%
+                    c(NA, "N/A", kinetics_complex$compound),
+                ,
+                drop = FALSE
+              ]
+            }
+
+            # A complex without k_obs has nothing to show but the reason
+            if (is.null(result_list$binding_kobs_result)) {
+              render_result_interface(
+                "kinetics",
+                bslib::card(
+                  class = "kinetics-unavailable",
+                  bslib::card_body(
+                    shiny::h4(kinetics_complex$key),
+                    shiny::p(paste0(
+                      "No binding kinetics for this complex: ",
+                      if (is.null(kinetics_complex$reason)) {
+                        "no k_obs could be fitted"
+                      } else {
+                        kinetics_complex$reason
+                      },
+                      ". The protocol log has the details."
+                    ))
+                  )
+                )
+              )
+              shinyjs::runjs(paste0(
+                'document.getElementById("blocking-overlay").style.display ',
+                '= "none";'
+              ))
+              return(invisible(NULL))
+            }
+
             # Assign formatted hits to reactive variable
             conversion_vars$formatted_hits <- hits_summary
 
@@ -3898,14 +4079,14 @@ server <- function(
             )
 
             # Assign colors to reactive variable
-            shiny::observe({
+            colors_observer <- shiny::observe({
               conversion_vars$conc_colors <- concentration_colors()
             })
 
             # Offer only palettes that can supply one color per concentration,
             # keeping the user's pick whenever it survives the filter. Gated on
             # a sibling input so the picker exists before it is populated.
-            shiny::observe({
+            palette_observer <- shiny::observe({
               shiny::req(input$conc_unit_results)
 
               shiny::updateSelectInput(
@@ -3918,6 +4099,10 @@ server <- function(
                 )
               )
             })
+            iface_state$kinetics_observers <- list(
+              colors_observer,
+              palette_observer
+            )
 
             # Assign concentrations to reactive variable
             conversion_vars$concentrations <- concentrations <- dplyr::filter(
@@ -4000,6 +4185,11 @@ server <- function(
               )
             })
 
+            # Per-proteoform kinetics are offered whenever a protein was
+            # declared with several masses; add_proteoform_binding() adds the
+            # column only then
+            show_proteoforms <- "Prot. Binding [%]" %in% names(hits_summary)
+
             # Call function to render kinact/Ki results interface
             render_result_interface(
               "kinetics",
@@ -4008,11 +4198,29 @@ server <- function(
                 hits_summary,
                 all_fitted_conc,
                 dynamic_ui_ids,
-                units = units
+                units = units,
+                proteoforms = show_proteoforms
               )
             )
 
             ##### Binding tab ----
+
+            # Card content when the kinact/KI fit failed; the k_obs table and
+            # plots below still show what was measured
+            fit_failed_card <- function() {
+              shiny::div(
+                class = "result-card-content",
+                shiny::div(class = "main-result", "N/A"),
+                shiny::div(
+                  class = "param-result",
+                  "The k",
+                  shiny::tags$sub("inact"),
+                  "/K",
+                  shiny::tags$sub("I"),
+                  " fit failed - see the protocol log"
+                )
+              )
+            }
 
             ###### Calculated kinact value ----
             output$kinact <- shiny::renderUI({
@@ -4020,6 +4228,9 @@ server <- function(
                 kinact_ki_result(),
                 unit_view()
               )
+              if (is.null(params)) {
+                return(fit_failed_card())
+              }
 
               shiny::div(
                 class = "result-card-content",
@@ -4064,6 +4275,9 @@ server <- function(
                 kinact_ki_result(),
                 unit_view()
               )
+              if (is.null(params)) {
+                return(fit_failed_card())
+              }
 
               shiny::div(
                 class = "result-card-content",
@@ -4108,6 +4322,9 @@ server <- function(
                 kinact_ki_result(),
                 unit_view()
               )
+              if (is.null(params)) {
+                return(fit_failed_card())
+              }
 
               shiny::div(
                 class = "result-card-content",
@@ -4258,13 +4475,26 @@ server <- function(
             })
 
             ###### Kobs plot ----
+            # Proteoform overlay of the k_obs curve: on by default whenever
+            # proteoforms exist (the setting reads NULL until its popover is
+            # first opened). proteoform_entries() is defined with the
+            # Proteoforms tab below and only exists when show_proteoforms is.
+            kobs_overlay <- function() {
+              if (show_proteoforms && !isFALSE(input$kobs_show_proteoforms)) {
+                proteoform_entries()
+              }
+            }
+
             output$kobs_plot <- plotly::renderPlotly({
               shiny::req(result_list)
 
               make_kobs_plot(
                 kinact_ki_result = view_results()$kinact_ki_result,
                 colors = view_colors(),
-                units = view_units()
+                units = view_units(),
+                proteoforms = kobs_overlay(),
+                proteoform_palette = if (show_proteoforms) proteoform_palette,
+                kobs_table = view_results()$binding_kobs_result$kobs_result_table
               )
             })
 
@@ -4301,13 +4531,204 @@ server <- function(
                   kinact_ki_result = view_results()$kinact_ki_result,
                   colors = build_view_colors(),
                   units = view_units(),
-                  theme = theme
+                  theme = theme,
+                  proteoforms = kobs_overlay(),
+                  proteoform_palette = if (show_proteoforms) proteoform_palette,
+                  kobs_table = view_results()$binding_kobs_result$kobs_result_table
                 )
               },
               filename_fn = function() {
                 paste0(get_session_prefix(), "_kobs_Curve")
               }
             )
+
+            ##### Proteoforms tab ----
+            if (show_proteoforms) {
+              proteoform_species_binding <- proteoform_binding(
+                result_list$hits_summary
+              )
+              proteoform_palette <- proteoform_colors(
+                proteoform_species_binding$species
+              )
+
+              # Every proteoform fitted on its own, over the concentrations the
+              # pooled fit currently includes, so both compare like for like
+              proteoform_fit <- shiny::reactive({
+                select <- conversion_vars$select_concentration
+                proteoform_kinetics(
+                  result_list$hits_summary,
+                  units = c(
+                    Concentration = gsub(
+                      ".*\\[(.+)\\].*",
+                      "\\1",
+                      units[["Concentration"]]
+                    ),
+                    Time = gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])
+                  ),
+                  conc_time = units,
+                  concentrations_select = if (!is.null(select)) {
+                    names(select)[which(select)]
+                  }
+                )
+              })
+
+              # The same in the displayed units
+              proteoform_view <- shiny::reactive({
+                view <- unit_view()
+                lapply(proteoform_fit(), function(k) {
+                  k$binding_kobs_result <- convert_kobs_result_units(
+                    k$binding_kobs_result,
+                    view
+                  )
+                  k$kinact_ki_result <- convert_kinact_ki_units(
+                    k$kinact_ki_result,
+                    view
+                  )
+                  k
+                })
+              })
+
+              # k_obs table and fit of every proteoform, as the k_obs plots
+              # take them; also read by the k_obs curve of the Binding tab
+              proteoform_entries <- function() {
+                lapply(proteoform_view(), function(k) {
+                  list(
+                    kobs = k$binding_kobs_result$kobs_result_table,
+                    kinact_ki = k$kinact_ki_result
+                  )
+                })
+              }
+
+              build_proteoform_kobs_plot <- function(theme = "dark") {
+                pooled <- view_results()
+                entries <- c(
+                  list(
+                    Pooled = list(
+                      kobs = pooled$binding_kobs_result$kobs_result_table,
+                      kinact_ki = pooled$kinact_ki_result
+                    )
+                  ),
+                  proteoform_entries()
+                )
+                proteoform_kobs_plot(
+                  entries,
+                  colors = proteoform_palette,
+                  units = view_units(),
+                  theme = theme
+                )
+              }
+
+              build_proteoform_table <- function() {
+                proteoform_comparison_table(
+                  proteoform_view(),
+                  pooled = convert_kinact_ki_params(
+                    kinact_ki_result(),
+                    unit_view()
+                  ),
+                  binding = proteoform_species_binding,
+                  view = unit_view()
+                )
+              }
+
+              output$proteoform_kobs_plot <- plotly::renderPlotly({
+                shiny::req(result_list)
+                build_proteoform_kobs_plot()
+              })
+
+              output$proteoform_paired_plot <- plotly::renderPlotly({
+                proteoform_paired_plot(
+                  proteoform_species_binding,
+                  colors = proteoform_palette,
+                  show_limits = isTRUE(input$paired_show_limits)
+                )
+              })
+
+              output$proteoform_table <- DT::renderDT({
+                tbl <- build_proteoform_table()
+                DT::datatable(
+                  tbl,
+                  escape = FALSE,
+                  rownames = FALSE,
+                  selection = "none",
+                  class = "order-column",
+                  options = list(
+                    dom = "t",
+                    paging = FALSE,
+                    ordering = FALSE,
+                    columnDefs = list(
+                      list(className = "dt-center", targets = "_all")
+                    )
+                  )
+                ) |>
+                  # The table has no row colouring of its own and would inherit
+                  # the dark card's text colour; light rows as in the Hits
+                  # table, the pooled fit set apart as the reference row
+                  DT::formatStyle(
+                    columns = "Proteoform",
+                    target = "row",
+                    color = "black",
+                    backgroundColor = DT::styleEqual(
+                      "Pooled",
+                      "#d4d4d4",
+                      default = "#f2f2f2"
+                    ),
+                    fontWeight = DT::styleEqual("Pooled", "bold")
+                  )
+              })
+
+              setup_plot_dl(
+                input,
+                output,
+                session,
+                "proteoform_kobs",
+                build_fn = function(theme) {
+                  shiny::req(result_list)
+                  build_proteoform_kobs_plot(theme)
+                },
+                filename_fn = function() {
+                  paste0(get_session_prefix(), "_kobs_per_Proteoform")
+                }
+              )
+
+              setup_plot_dl(
+                input,
+                output,
+                session,
+                "proteoform_paired",
+                build_fn = function(theme) {
+                  proteoform_paired_plot(
+                    proteoform_species_binding,
+                    colors = proteoform_palette,
+                    theme = theme,
+                    show_limits = isTRUE(input$paired_show_limits)
+                  )
+                },
+                filename_fn = function() {
+                  paste0(get_session_prefix(), "_Paired_Binding")
+                }
+              )
+
+              setup_table_dl(
+                input,
+                output,
+                session,
+                "proteoform_table",
+                data_fn = function() {
+                  # Plain-text headers and values for the file
+                  strip <- function(x) {
+                    x <- gsub("<sup>(-?[0-9]+)</sup>", "^\\1", x)
+                    trimws(gsub("\\s+", " ", gsub("<[^>]+>", "", x)))
+                  }
+                  tbl <- build_proteoform_table()
+                  names(tbl) <- strip(names(tbl))
+                  tbl[] <- lapply(tbl, strip)
+                  tbl
+                },
+                filename_fn = function() {
+                  paste0(get_session_prefix(), "_Proteoform_Kinetics")
+                }
+              )
+            }
 
             ##### Concentration tabs ----
 
@@ -6111,7 +6532,10 @@ server <- function(
             })
           }
 
-          n_hits_detected <- sum(!is.na(hits_summary$`Cmp Name`))
+          # Counted over the whole run: the kinetics panel narrows
+          # hits_summary to the picked complex, and a changed count would
+          # announce a finished analysis on every switch of the complex
+          n_hits_detected <- sum(!is.na(conversion_vars$hits_summary$`Cmp Name`))
           if (!identical(show_completion_toast(), n_hits_detected)) {
             show_completion_toast(n_hits_detected)
           }
@@ -6252,6 +6676,7 @@ server <- function(
           color_variable = input$color_variable,
           show_peak_labels = isTRUE(input$sample_view_spectrum_annotation),
           show_mass_diff = !isFALSE(input$sample_view_spectrum_diff),
+          show_unmatched = isTRUE(input$sample_view_spectrum_unmatched),
           theme = theme
         )
       },
@@ -6329,6 +6754,7 @@ server <- function(
             color_variable = input$color_variable,
             show_peak_labels = TRUE,
             show_mass_diff = FALSE,
+            show_unmatched = isTRUE(input$compounds_spectrum_unmatched),
             theme = theme
           )
         } else {
@@ -6348,6 +6774,7 @@ server <- function(
             labels_show = input$compounds_spectrum_labels,
             symbols_show = input$compounds_spectrum_symbols,
             legend_show = input$compounds_spectrum_legend,
+            unmatched_show = isTRUE(input$compounds_spectrum_unmatched),
             theme = theme
           )
         }
@@ -6433,6 +6860,7 @@ server <- function(
             color_variable = input$color_variable,
             show_peak_labels = TRUE,
             show_mass_diff = FALSE,
+            show_unmatched = isTRUE(input$proteins_spectrum_unmatched),
             theme = theme
           )
         } else {
@@ -6452,6 +6880,7 @@ server <- function(
             labels_show = input$proteins_spectrum_labels,
             symbols_show = input$proteins_spectrum_symbols,
             legend_show = input$proteins_spectrum_legend,
+            unmatched_show = isTRUE(input$proteins_spectrum_unmatched),
             theme = theme
           )
         }
@@ -6785,7 +7214,7 @@ server <- function(
       observer_name = "Deconvolution Results Transfer",
       handler_fn = function() {
         # Resolve row index to concentration name to avoid positional offset bugs
-        result_list_local <- conversion_sidebar_vars$result_list()
+        result_list_local <- kinetics_result_list()
         shiny::req(result_list_local)
         all_conc <- rownames(
           result_list_local$binding_kobs_result$kobs_result_table
@@ -6820,8 +7249,9 @@ server <- function(
           return(NULL)
         }
 
-        # Recalculate result object according to included concentrations
-        result_list <- conversion_sidebar_vars$result_list()
+        # Recalculate result object according to included concentrations, on
+        # the samples of the picked complex
+        result_list <- kinetics_result_list()
 
         # Transformed units argument
         units_adapt <- c(
@@ -6835,7 +7265,7 @@ server <- function(
 
         # Add binding/kobs results to result list
         result_list$binding_kobs_result <- add_kobs_binding_result(
-          result_list$hits_summary,
+          result_list$kinetics_hits %||% result_list$hits_summary,
           concentrations_select = names(
             conversion_vars$select_concentration
           )[which(conversion_vars$select_concentration)],
@@ -7403,6 +7833,91 @@ server <- function(
                   ),
                   shiny::p(
                     "Deconvolution into zero-charge mass distribution yields the % modified protein used to construct the binding curve."
+                  ),
+                  shiny::p(
+                    "Diamonds mark protein species and circles compound complexes. With ",
+                    shiny::strong("Show Unmatched"),
+                    " enabled in the plot settings, grey × symbols mark detected peaks that no protein species or complex explains; these make up the ",
+                    shiny::strong("Unmatched [%]"),
+                    " of a sample."
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    })
+
+    ## Proteoform comparison ----
+    shiny::observeEvent(input$proteoform_tooltip_bttn, {
+      shiny::showModal(
+        shiny::div(
+          class = "conversion-modal",
+          shiny::modalDialog(
+            title = htmltools::tags$span("Proteoforms"),
+            easyClose = TRUE,
+            footer = shiny::modalButton("Dismiss"),
+            shiny::fluidRow(
+              shiny::br(),
+              shiny::column(
+                width = 11,
+                shiny::div(
+                  class = "tooltip-text",
+                  shiny::p(
+                    "Binding kinetics use the ",
+                    shiny::strong("pooled"),
+                    " binding: complexes of all declared masses of the protein over its total signal. Here every proteoform is also fitted on its own binding - its complexes over its own unbound plus complex signal - over the concentrations the pooled fit includes."
+                  ),
+                  shiny::p(
+                    shiny::strong("Paired Binding"),
+                    " plots each sample's binding of a proteoform against the main species. Proteoforms that react alike lie on the diagonal. ",
+                    shiny::strong("Δ Binding vs Main"),
+                    " is the mean paired difference over the samples where both values were measured."
+                  ),
+                  shiny::p(
+                    shiny::strong("Limit Values"),
+                    " counts samples whose value is pinned to 0 or 100 % because the complex or the unbound peak of the proteoform was not detected. A minor proteoform reaches the deconvolution peak threshold much earlier than the main species, which distorts its own fit. Paired Binding leaves these samples out; the plot setting Show Limit Values draws them as open symbols. Lowering the peak threshold of the deconvolution reduces them."
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    })
+
+    ## Sample quality metrics ----
+    shiny::observeEvent(input$samples_quality_tooltip_bttn, {
+      shiny::showModal(
+        shiny::div(
+          class = "conversion-modal",
+          shiny::modalDialog(
+            title = htmltools::tags$span("Quality"),
+            easyClose = TRUE,
+            footer = shiny::modalButton("Dismiss"),
+            shiny::fluidRow(
+              shiny::br(),
+              shiny::column(
+                width = 11,
+                shiny::div(
+                  class = "tooltip-text",
+                  shiny::p(
+                    "How much of the deconvoluted spectrum the hit screening explains, weighted by peak intensity."
+                  ),
+                  shiny::p(
+                    shiny::strong("Correct [%]"),
+                    " is the share of the total peak intensity assigned to a declared protein species or one of its compound complexes."
+                  ),
+                  shiny::p(
+                    shiny::strong("Unmatched [%]"),
+                    " is the remaining share, carried by peaks no hit explains (100 - Correct). A high value points to undeclared proteoforms, adducts or a mass tolerance that is too tight."
+                  ),
+                  shiny::p(
+                    shiny::strong("Peaks"),
+                    " counts the detected peaks and how many of them were assigned. The unmatched peaks can be drawn in the Annotated Spectrum via ",
+                    shiny::strong("Show Unmatched"),
+                    "."
                   )
                 )
               )

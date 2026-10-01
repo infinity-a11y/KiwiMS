@@ -1225,6 +1225,9 @@ process_plot_data <- function(
     return(NULL)
   }
 
+  # Only a sample carrying hits knows which of its peaks are assigned
+  unmatched_peaks <- NULL
+
   if (!is.null(result_path)) {
     # Get file paths from deconvolution result
     base <- gsub("_unidecfiles", "", basename(result_path))
@@ -1382,10 +1385,73 @@ process_plot_data <- function(
       parent_prot
     ) |>
       dplyr::filter(!is.na(name))
+
+    unmatched_peaks <- unmatched_spectrum_peaks(
+      sample$peaks,
+      assigned = peaks,
+      mass = mass
+    )
   }
 
-  return(list(mass = mass, highlight_peaks = highlight_peaks))
+  return(list(
+    mass = mass,
+    highlight_peaks = highlight_peaks,
+    unmatched_peaks = unmatched_peaks
+  ))
 }
+
+# unmatched_spectrum_peaks(): Detected peaks no hit explains ----
+#
+# The same peaks the Unmatched [%] quality metric counts: every deconvolution
+# peak that is neither a protein species nor a complex. Their height is read off
+# the plotted spectrum rather than the peak list, which is normalised
+# differently, so the markers sit on the trace like the hit markers do.
+unmatched_spectrum_peaks <- function(peaks, assigned, mass) {
+  empty <- data.frame(mass = numeric(0), intensity = numeric(0))
+
+  if (is.null(peaks) || !nrow(peaks) || is.null(mass) || !nrow(mass)) {
+    return(empty)
+  }
+
+  unmatched <- peaks$mass[!peaks$mass %in% assigned]
+  unmatched <- unique(unmatched[!is.na(unmatched)])
+
+  if (!length(unmatched)) {
+    return(empty)
+  }
+
+  # Peak masses lie on the spectrum grid; the nearest point covers a peak that
+  # fell on the trimmed outer limits or on a zero-intensity point
+  idx <- match(unmatched, mass$mass)
+  missing <- is.na(idx)
+  idx[missing] <- vapply(
+    unmatched[missing],
+    function(m) which.min(abs(mass$mass - m)),
+    integer(1)
+  )
+
+  data.frame(mass = unmatched, intensity = mass$intensity[idx])
+}
+
+# Marker style of the unmatched peaks. A cross reads as "not assigned" next to
+# the protein diamond and compound circles. 2D traces draw it as a thin,
+# line-only cross, so it stays lighter than the hit markers it sits among; 3D
+# scatter traces support only the solid "x" of the few symbols they know.
+#' @export
+unmatched_marker <- function(theme = "dark") {
+  light <- tolower(theme) == "light"
+  list(
+    symbol = "x-thin-open",
+    symbol_3d = "x",
+    color = if (light) "#6e6e6e" else "#b4b4b4",
+    line = if (light) "#000000" else "#ffffff"
+  )
+}
+
+# plotly meta tag of the unmatched peak traces, so their visibility can be
+# toggled on the rendered figure without rebuilding it
+#' @export
+unmatched_trace_tag <- "kiwims-unmatched-peaks"
 
 # mass_diff_groups(): Peaks a mass-difference connector may span ----
 #
@@ -1442,7 +1508,8 @@ spectrum_plot <- function(
   color_cmp = NULL,
   color_variable = NULL,
   show_peak_labels = TRUE,
-  show_mass_diff = TRUE
+  show_mass_diff = TRUE,
+  show_unmatched = FALSE
 ) {
   if (is.null(plot_data)) {
     plot_data <- process_plot_data(
@@ -1798,9 +1865,21 @@ spectrum_plot <- function(
         }
       }
 
-      # Add short diagonal leader + text label for each peak (if enabled)
+      # Add short diagonal leader + text label for each peak (if enabled).
+      # Unmatched peaks are labelled too while their markers are shown.
       peak_labels <- list()
       leader_lines <- list()
+      label_peaks <- plot_data$highlight_peaks[, c("mass", "intensity")]
+      if (
+        isTRUE(show_unmatched) &&
+          !is.null(plot_data$unmatched_peaks) &&
+          nrow(plot_data$unmatched_peaks) > 0
+      ) {
+        label_peaks <- rbind(
+          label_peaks,
+          plot_data$unmatched_peaks[, c("mass", "intensity")]
+        )
+      }
 
       if (show_peak_labels) {
         # Compute ranges
@@ -1829,9 +1908,18 @@ spectrum_plot <- function(
           delta_x <- 25 # reduced fallback in Da
         }
 
-        for (i in seq_len(nrow(plot_data$highlight_peaks))) {
-          px <- plot_data$highlight_peaks$mass[i]
-          py <- plot_data$highlight_peaks$intensity[i]
+        for (i in seq_len(nrow(label_peaks))) {
+          px <- label_peaks$mass[i]
+          py <- label_peaks$intensity[i]
+
+          # A declared protein species without an unbound peak (fully
+          # converted, or below the detection threshold) has no position in
+          # the spectrum. Its shape and label would carry NA coordinates, which
+          # plotly draws as a stray line and an "NA Da" label, and which pull
+          # the x axis out to 0.
+          if (is.na(px) || is.na(py)) {
+            next
+          }
 
           # Diagonal end point: up and right
           end_x <- px + delta_x
@@ -1906,7 +1994,7 @@ spectrum_plot <- function(
       )
 
       # Add buffer depending on whether annotations are present
-      if (show_peak_labels && nrow(plot_data$highlight_peaks) > 0) {
+      if (show_peak_labels && nrow(label_peaks) > 0) {
         # When peak labels are active → need more headroom for text above the highest peak
         text_buffer <- 5 # increased to prevent clipping of highest label
       } else if (show_mass_diff && length(unique_masses) >= 2) {
@@ -1924,6 +2012,40 @@ spectrum_plot <- function(
       top_margin <- 0
       all_shapes <- NULL
       all_annotations <- NULL
+    }
+
+    # Peaks no hit explains. Always built when present, so the figure on screen
+    # can show or hide them without a rebuild; see unmatched_trace_tag.
+    unmatched <- plot_data$unmatched_peaks
+    if (!is.null(unmatched) && nrow(unmatched) > 0) {
+      um <- unmatched_marker(theme)
+      plot <- plotly::add_markers(
+        plot,
+        data = unmatched,
+        x = ~mass,
+        y = ~intensity,
+        name = "Unmatched",
+        visible = isTRUE(show_unmatched),
+        meta = unmatched_trace_tag,
+        # Open symbols are drawn by their line alone
+        marker = list(
+          color = um$color,
+          line = list(color = um$color, width = 1.5),
+          symbol = um$symbol,
+          size = 9,
+          zindex = 90
+        ),
+        hoverinfo = "text",
+        text = ~ paste0(
+          "Unmatched Peak",
+          "\nMeasured: ",
+          mass,
+          " Da\nIntensity: ",
+          round(intensity, 2),
+          "%"
+        ),
+        showlegend = TRUE
+      )
     }
 
     plot <- plotly::layout(
