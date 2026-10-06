@@ -10149,8 +10149,9 @@ batch_plate_heatmap <- function(
     hits_summary$Sample,
     any
   )
-  no_prot_flag <- unname(!prot_seen[df$Sample] & !cmp_seen[df$Sample])
-  no_hit_flag <- unname(prot_seen[df$Sample] & !cmp_seen[df$Sample])
+  # as.logical() drops the 1D-array dim from tapply(); case_when() rejects arrays
+  no_prot_flag <- as.logical(!prot_seen[df$Sample] & !cmp_seen[df$Sample])
+  no_hit_flag <- as.logical(prot_seen[df$Sample] & !cmp_seen[df$Sample])
   well_state <- dplyr::case_when(
     no_prot_flag ~ "no_prot",
     no_hit_flag ~ "no_hit",
