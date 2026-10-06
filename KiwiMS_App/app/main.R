@@ -870,6 +870,16 @@ server <- function(id) {
 
     # Reusable function to open the settings modal
     # initial_path: pre-fill dest folder from caller (e.g. currently active path)
+    # A settings label with an on-hover explanation, styled like every other
+    # hover tooltip in the app instead of a bespoke CSS-only popup
+    settings_label_tooltip <- function(label, text) {
+      bslib$tooltip(
+        shiny$span(class = "settings-label-tooltip", label),
+        text,
+        placement = "top"
+      )
+    }
+
     open_settings_modal <- function(initial_path = NULL, open_section = NULL) {
       s <- dest_settings()
       base <- if (length(initial_path) == 1L && nzchar(initial_path)) {
@@ -948,10 +958,9 @@ server <- function(id) {
                     shiny$tags$tr(
                       shiny$tags$td(
                         class = "settings-table-label",
-                        shiny$tags$span(
+                        settings_label_tooltip(
                           "Keep UniDec output files",
-                          class = "settings-label-tooltip",
-                          `data-tooltip` = "Keeps *_rawdata.txt and *_rawdata_unidecfiles/ after analysis"
+                          "Keeps *_rawdata.txt and *_rawdata_unidecfiles/ after analysis"
                         )
                       ),
                       shiny$tags$td(
@@ -1346,10 +1355,9 @@ server <- function(id) {
                     shiny$tags$tr(
                       shiny$tags$td(
                         class = "settings-table-label",
-                        shiny$tags$span(
+                        settings_label_tooltip(
                           "Log Directory",
-                          class = "settings-label-tooltip",
-                          `data-tooltip` = "Parent folder for daily log sub-folders. Takes effect on next app start."
+                          "Parent folder for daily log sub-folders. Takes effect on next app start."
                         )
                       ),
                       shiny$tags$td(

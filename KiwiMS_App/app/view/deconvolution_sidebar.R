@@ -45,11 +45,14 @@ ui <- function(id) {
         shiny::tags$div(
           class = "sample-file-row",
           shiny::div(
-            actionButton(
-              ns("folder"),
-              "Select Input",
-              icon = shiny::icon("file-import"),
-              title = "Select a .raw folder or a directory containing multiple .raw folders"
+            bslib::tooltip(
+              actionButton(
+                ns("folder"),
+                "Select Input",
+                icon = shiny::icon("file-import")
+              ),
+              "Select a .raw folder or a directory containing multiple .raw folders",
+              placement = "top"
             ),
             bslib::tooltip(
               shiny::div(
@@ -71,11 +74,14 @@ ui <- function(id) {
         shiny::div(
           class = "dest-folder-row",
           shiny::div(
-            actionButton(
-              ns("target_folder"),
-              "Select Output Path",
-              icon = shiny::icon("file-export"),
-              title = "Select output path"
+            bslib::tooltip(
+              actionButton(
+                ns("target_folder"),
+                "Select Output Path",
+                icon = shiny::icon("file-export")
+              ),
+              "Select the output path for deconvolution results",
+              placement = "top"
             ),
             bslib::tooltip(
               shiny::div(
