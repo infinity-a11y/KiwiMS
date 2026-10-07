@@ -583,10 +583,14 @@ server <- function(
             ))
             result_list(result_with_hits)
 
-            # Save distinct protein - compound combinations/complexes. The
-            # value names the complex, the label is the compound under its
-            # protein's heading.
-            complex_df <- run_complexes(result_with_hits$hits_summary)
+            # Save distinct protein - compound combinations/complexes, the
+            # declared ones without hits included (their kinetics show why
+            # they have no fit). The value names the complex, the label is the
+            # compound under its protein's heading.
+            complex_df <- run_complexes(
+              result_with_hits$hits_summary,
+              sample_table = conversion_main_vars$input_list()$Samples_Table
+            )
 
             choice_values <- stats::setNames(
               complex_df$key,

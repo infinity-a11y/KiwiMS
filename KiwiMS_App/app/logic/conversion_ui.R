@@ -26,252 +26,230 @@ box::use(
     ],
 )
 
-# kinact/Ki results interface
+# Concentrations tab of the kinact/Ki results interface: one concentration at a
+# time, picked like a sample in the Samples View of the Relative Binding
+# interface. `concentrations` are the fitted concentration keys in the declared
+# unit; the picker labels follow the unit view (updated by the server).
 #' @export
-kinact_ki_concentrations_tabs <- function(ns, local_ui_id, conc_result, units) {
-  shiny::div(
-    class = "result-conc-tab",
+kinact_ki_concentrations_panel <- function(ns, concentrations, conc_unit = NULL) {
+  stat_card <- function(title, help_id, output_id) {
     shiny::div(
-      class = "card-custom spectrum",
+      class = "card-custom",
       bslib::card(
         bslib::card_header(
-          class = "bg-dark help-header d-flex justify-content-between",
-          "Mass Spectra",
-          shiny::div(
-            class = "box-header-settings-help",
-            card_settings_popover(
-              shiny::div(
-                shiny::div(
-                  class = "spectrum-radio-button",
-                  shinyWidgets::radioGroupButtons(
-                    ns(paste0(
-                      local_ui_id,
-                      "_kind"
-                    )),
-                    choices = c("Cubic", "Planar")
-                  )
-                ),
-                style = "margin-right: 20px;"
-              )
-            ),
-            plot_dl_popover(ns, paste0(local_ui_id, "_spectra")),
-            bslib::tooltip(
-              shiny::div(
-                class = "tooltip-bttn",
-                shiny::tags$button(
-                  type = "button",
-                  class = "btn btn-default",
-                  onclick = sprintf(
-                    "Shiny.setInputValue('%s', Math.random());",
-                    ns("mass_spectra_tooltip_bttn")
-                  ),
-                  shiny::icon("circle-question")
-                )
-              ),
-              "Help",
-              placement = "top"
-            )
-          )
-        ),
-        full_screen = TRUE,
-        shinycssloaders::withSpinner(
-          plotly::plotlyOutput(
-            ns(paste0(local_ui_id, "_spectra")),
-            height = "100%"
-          ),
-          type = 1,
-          color = "#7777f9"
-        )
-      )
-    ),
-    shiny::div(
-      class = "card-custom binding",
-      bslib::card(
-        bslib::card_header(
-          class = "bg-dark help-header d-flex justify-content-between",
-          "Binding Curve",
-          shiny::div(
-            class = "box-header-settings-help",
-            card_settings_popover(shiny::div(
-              shiny::div(
-                class = "conversion-tab-items-label",
-                shiny::HTML("Data Points")
-              ),
-              shinyWidgets::radioGroupButtons(
-                ns(paste0(local_ui_id, "_binding_points")),
+          class = "bg-dark help-header",
+          title,
+          bslib::tooltip(
+            shiny::div(
+              class = "tooltip-bttn",
+              shiny::actionButton(
+                ns(help_id),
                 label = NULL,
-                choices = c(
-                  "Mean ± SD" = "mean",
-                  "Samples" = "samples"
-                ),
-                selected = "mean",
-                size = "sm"
-              ),
-              style = "margin-right:20px;"
-            )),
-            plot_dl_popover(ns, paste0(local_ui_id, "_binding")),
-            bslib::tooltip(
-              shiny::div(
-                class = "tooltip-bttn",
-                shiny::actionButton(
-                  ns("binding_curve_single_tooltip_bttn"),
-                  label = NULL,
-                  icon = shiny::icon("circle-question")
-                )
-              ),
-              "Help",
-              placement = "top"
-            )
-          )
-        ),
-        full_screen = TRUE,
-        shinycssloaders::withSpinner(
-          plotly::plotlyOutput(
-            ns(paste0(
-              local_ui_id,
-              "_binding_plot"
-            )),
-            height = "100%"
-          ),
-          type = 1,
-          color = "#7777f9"
-        )
-      )
-    ),
-    shiny::div(
-      class = "result-cards",
-      shiny::div(
-        class = "card-custom",
-        bslib::card(
-          bslib::card_header(
-            class = "bg-dark help-header",
-            htmltools::tagList(
-              shiny::div(
-                "k",
-                htmltools::tags$sub("obs")
+                icon = shiny::icon("circle-question")
               )
             ),
-            bslib::tooltip(
-              shiny::div(
-                class = "tooltip-bttn",
-                shiny::actionButton(
-                  ns("kobs_value_tooltip_bttn"),
-                  label = NULL,
-                  icon = shiny::icon("circle-question")
-                )
-              ),
-              "Help",
-              placement = "top"
-            )
-          ),
-          shiny::uiOutput(ns(paste0(local_ui_id, "_kobs_value")))
-        )
-      ),
-      shiny::div(
-        class = "card-custom",
-        bslib::card(
-          bslib::card_header(
-            class = "bg-dark help-header",
-            "Binding Plateau",
-            bslib::tooltip(
-              shiny::div(
-                class = "tooltip-bttn",
-                shiny::actionButton(
-                  ns("binding_plateau_tooltip_bttn"),
-                  label = NULL,
-                  icon = shiny::icon("circle-question")
-                )
-              ),
-              "Help",
-              placement = "top"
-            )
-          ),
-          shiny::div(
-            class = "kobs-val",
-            paste0(format_scientific(conc_result$plateau), "%")
-          )
-        )
-      ),
-      shiny::div(
-        class = "card-custom",
-        bslib::card(
-          bslib::card_header(
-            class = "bg-dark help-header",
-            "Velocity v",
-            bslib::tooltip(
-              shiny::div(
-                class = "tooltip-bttn",
-                shiny::actionButton(
-                  ns("v_value_tooltip_bttn"),
-                  label = NULL,
-                  icon = shiny::icon("circle-question")
-                )
-              ),
-              "Help",
-              placement = "top"
-            )
-          ),
-          shiny::uiOutput(ns(paste0(local_ui_id, "_v_value")))
-        )
-      )
-    ),
-    shiny::div(
-      class = "card-custom hits",
-      bslib::card(
-        bslib::card_header(
-          class = "bg-dark help-header d-flex justify-content-between",
-          "Table View",
-          shiny::div(
-            class = "box-header-settings-help",
-            card_settings_popover(
-              shiny::div(
-                shinyWidgets::materialSwitch(
-                  ns(paste0(
-                    local_ui_id,
-                    "concentrations_table_view_binding_bar"
-                  )),
-                  label = "Binding [%] Bar",
-                  value = TRUE,
-                  right = TRUE
-                ),
-                shinyWidgets::materialSwitch(
-                  ns(paste0(
-                    local_ui_id,
-                    "concentrations_table_view_tot_binding_bar"
-                  )),
-                  label = "Tot. Binding [%] Bar",
-                  value = TRUE,
-                  right = TRUE
-                ),
-                style = "margin-right: 20px;"
-              )
-            ),
-            table_dl_popover(ns, paste0(local_ui_id, "_hits")),
-            bslib::tooltip(
-              shiny::div(
-                class = "tooltip-bttn",
-                shiny::actionButton(
-                  ns("hits_table_tooltip_bttn"),
-                  label = NULL,
-                  icon = shiny::icon("circle-question")
-                )
-              ),
-              "Help",
-              placement = "top"
-            )
+            "Help",
+            placement = "top"
           )
         ),
-        full_screen = TRUE,
-        shiny::div(
-          class = "conc-hits-table",
-          shinycssloaders::withSpinner(
-            DT::DTOutput(ns(paste0(local_ui_id, "_hits"))),
-            type = 1,
-            color = "#7777f9"
-          )
-        )
+        shiny::uiOutput(ns(output_id))
       )
     )
+  }
+
+  bslib::nav_panel(
+    title = "Concentrations",
+    shiny::div(
+      class = "conversion-result-wrapper",
+      shiny::div(
+        class = "conversion-samples-wrapper conc-tab-wrapper",
+        # Top left: concentration picker and the per-concentration fit values
+        shiny::div(
+          class = "conversion-samples-control",
+          shiny::div(
+            class = "sample-cmp-prot-picker",
+            shinyWidgets::pickerInput(
+              ns("conc_tab_select"),
+              "Select Concentration",
+              choices = stats::setNames(
+                concentrations,
+                paste(concentrations, conc_unit)
+              ),
+              options = shinyWidgets::pickerOptions(
+                liveSearch = TRUE,
+                liveSearchPlaceholder = "Search concentrations ..."
+              )
+            )
+          ),
+          shiny::div(
+            class = "conversion-samples-stats",
+            stat_card(
+              htmltools::tagList(
+                shiny::div("k", htmltools::tags$sub("obs"))
+              ),
+              "kobs_value_tooltip_bttn",
+              "conc_tab_kobs_value"
+            ),
+            stat_card(
+              "Binding Plateau",
+              "binding_plateau_tooltip_bttn",
+              "conc_tab_plateau_value"
+            ),
+            stat_card("Velocity v", "v_value_tooltip_bttn", "conc_tab_v_value")
+          )
+        ),
+        # Top right: hits of the concentration
+        shiny::div(
+          class = "card-custom hits",
+          bslib::card(
+            bslib::card_header(
+              class = "bg-dark help-header d-flex justify-content-between",
+              "Table View",
+              shiny::div(
+                class = "box-header-settings-help",
+                card_settings_popover(
+                  shiny::div(
+                    shinyWidgets::materialSwitch(
+                      ns("conc_tab_table_view_binding_bar"),
+                      label = "Binding [%] Bar",
+                      value = TRUE,
+                      right = TRUE
+                    ),
+                    shinyWidgets::materialSwitch(
+                      ns("conc_tab_table_view_tot_binding_bar"),
+                      label = "Tot. Binding [%] Bar",
+                      value = TRUE,
+                      right = TRUE
+                    ),
+                    style = "margin-right: 20px;"
+                  )
+                ),
+                table_dl_popover(ns, "conc_tab_hits"),
+                bslib::tooltip(
+                  shiny::div(
+                    class = "tooltip-bttn",
+                    shiny::actionButton(
+                      ns("hits_table_tooltip_bttn"),
+                      label = NULL,
+                      icon = shiny::icon("circle-question")
+                    )
+                  ),
+                  "Help",
+                  placement = "top"
+                )
+              )
+            ),
+            full_screen = TRUE,
+            shiny::div(
+              class = "conc-hits-table",
+              shinycssloaders::withSpinner(
+                DT::DTOutput(ns("conc_tab_hits")),
+                type = 1,
+                color = "#7777f9"
+              )
+            )
+          )
+        ),
+        # Bottom left: spectra of the concentration's samples
+        shiny::div(
+          class = "card-custom spectrum",
+          bslib::card(
+            bslib::card_header(
+              class = "bg-dark help-header d-flex justify-content-between",
+              "Mass Spectra",
+              shiny::div(
+                class = "box-header-settings-help",
+                card_settings_popover(
+                  shiny::div(
+                    shiny::div(
+                      class = "spectrum-radio-button",
+                      shinyWidgets::radioGroupButtons(
+                        ns("conc_tab_kind"),
+                        choices = c("Cubic", "Planar")
+                      )
+                    ),
+                    style = "margin-right: 20px;"
+                  )
+                ),
+                plot_dl_popover(ns, "conc_tab_spectra"),
+                bslib::tooltip(
+                  shiny::div(
+                    class = "tooltip-bttn",
+                    shiny::tags$button(
+                      type = "button",
+                      class = "btn btn-default",
+                      onclick = sprintf(
+                        "Shiny.setInputValue('%s', Math.random());",
+                        ns("mass_spectra_tooltip_bttn")
+                      ),
+                      shiny::icon("circle-question")
+                    )
+                  ),
+                  "Help",
+                  placement = "top"
+                )
+              )
+            ),
+            full_screen = TRUE,
+            shinycssloaders::withSpinner(
+              plotly::plotlyOutput(ns("conc_tab_spectra"), height = "100%"),
+              type = 1,
+              color = "#7777f9"
+            )
+          )
+        ),
+        # Bottom right: binding curve of the concentration
+        shiny::div(
+          class = "card-custom binding",
+          bslib::card(
+            bslib::card_header(
+              class = "bg-dark help-header d-flex justify-content-between",
+              "Binding Curve",
+              shiny::div(
+                class = "box-header-settings-help",
+                card_settings_popover(shiny::div(
+                  shiny::div(
+                    class = "conversion-tab-items-label",
+                    shiny::HTML("Data Points")
+                  ),
+                  shinyWidgets::radioGroupButtons(
+                    ns("conc_tab_binding_points"),
+                    label = NULL,
+                    choices = c(
+                      "Mean ± SD" = "mean",
+                      "Samples" = "samples"
+                    ),
+                    selected = "mean",
+                    size = "sm"
+                  ),
+                  style = "margin-right:20px;"
+                )),
+                plot_dl_popover(ns, "conc_tab_binding"),
+                bslib::tooltip(
+                  shiny::div(
+                    class = "tooltip-bttn",
+                    shiny::actionButton(
+                      ns("binding_curve_single_tooltip_bttn"),
+                      label = NULL,
+                      icon = shiny::icon("circle-question")
+                    )
+                  ),
+                  "Help",
+                  placement = "top"
+                )
+              )
+            ),
+            full_screen = TRUE,
+            shinycssloaders::withSpinner(
+              plotly::plotlyOutput(ns("conc_tab_binding_plot"), height = "100%"),
+              type = 1,
+              color = "#7777f9"
+            )
+          )
+        )
+      )
+    ),
+    shiny::tags$script(popover_autoclose)
   )
 }
 
@@ -281,31 +259,19 @@ kinact_ki_results_ui <- function(
   ns,
   hits_summary,
   concentrations,
-  dynamic_ui_ids,
   units = NULL,
-  proteoforms = FALSE
+  proteoforms = FALSE,
+  paired_limits = FALSE
 ) {
   # Declared concentration unit, e.g. "µM" from "Concentration [µM]"
   conc_unit <- if (!is.null(units[["Concentration"]])) {
     gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]])
   }
 
-  # Generate the dynamic concentration panels
-  concentration_panels <- lapply(seq_along(concentrations), function(i) {
-    concentration <- concentrations[[i]]
-    ui_id <- dynamic_ui_ids[[i]]
-
-    bslib::nav_panel(
-      # Kept in the declared unit — the tab labels stay fixed while the unit
-      # view changes
-      title = paste(c(concentration, conc_unit), collapse = " "),
-      shiny::div(
-        class = "conversion-result-wrapper",
-        shiny::uiOutput(ns(ui_id))
-      ),
-      shiny::tags$script(popover_autoclose)
-    )
-  })
+  # One tab for all fitted concentrations, which are picked inside it
+  concentration_panels <- if (length(concentrations)) {
+    list(kinact_ki_concentrations_panel(ns, concentrations, conc_unit))
+  }
 
   static_panels <- list(
     bslib::nav_panel(
@@ -583,7 +549,7 @@ kinact_ki_results_ui <- function(
   # Per-proteoform kinetics next to the pooled fit, only offered when a protein
   # was declared with several masses
   proteoform_panels <- if (isTRUE(proteoforms)) {
-    list(proteoform_results_panel(ns))
+    list(proteoform_results_panel(ns, paired_limits))
   }
 
   # Fit diagnostics: how well the data support the global kinact/KI fit
@@ -713,7 +679,20 @@ kinact_ki_results_ui <- function(
 }
 
 # Proteoforms tab of the kinetics interface
-proteoform_results_panel <- function(ns) {
+# `paired_limits`: whether the Paired Binding plot has values pinned at a
+# detection limit. They are shown by default; without any the switch has
+# nothing to show and is disabled.
+proteoform_results_panel <- function(ns, paired_limits = FALSE) {
+  limits_switch <- shinyWidgets::materialSwitch(
+    ns("paired_show_limits"),
+    label = "Show Limit Values",
+    value = paired_limits,
+    right = TRUE
+  )
+  if (!paired_limits) {
+    limits_switch <- shinyjs::disabled(limits_switch)
+  }
+
   help_button <- function(id) {
     bslib::tooltip(
       shiny::div(
@@ -775,12 +754,7 @@ proteoform_results_panel <- function(ns) {
           htmltools::tagList(
             card_settings_popover(
               shiny::div(
-                shinyWidgets::materialSwitch(
-                  ns("paired_show_limits"),
-                  label = "Show Limit Values",
-                  value = FALSE,
-                  right = TRUE
-                ),
+                limits_switch,
                 style = "margin-right: 20px;"
               )
             ),
@@ -1576,7 +1550,7 @@ binding_results_ui <- function(ns, hits_summary, show_sort_binding = TRUE) {
   bslib::navset_card_tab(
     id = ns("tabs"),
     bslib::nav_panel(
-      title = "Samples View",
+      title = "Sample View",
       shiny::div(
         class = "conversion-result-wrapper",
         shiny::div(
@@ -1865,7 +1839,7 @@ binding_results_ui <- function(ns, hits_summary, show_sort_binding = TRUE) {
       )
     ),
     bslib::nav_panel(
-      title = "Compounds View",
+      title = "Compound View",
       shiny::div(
         class = "conversion-result-wrapper",
         shiny::div(
@@ -1909,7 +1883,7 @@ binding_results_ui <- function(ns, hits_summary, show_sort_binding = TRUE) {
                 bslib::card(
                   bslib::card_header(
                     class = "bg-dark help-header",
-                    "Compound",
+                    "Mass Shifts",
                     bslib::tooltip(
                       shiny::div(
                         class = "tooltip-bttn",
@@ -2177,7 +2151,7 @@ binding_results_ui <- function(ns, hits_summary, show_sort_binding = TRUE) {
       )
     ),
     bslib::nav_panel(
-      title = "Proteins View",
+      title = "Protein View",
       shiny::div(
         class = "conversion-result-wrapper",
         shiny::div(
@@ -2207,7 +2181,7 @@ binding_results_ui <- function(ns, hits_summary, show_sort_binding = TRUE) {
                 bslib::card(
                   bslib::card_header(
                     class = "bg-dark help-header",
-                    "Protein",
+                    "Mass Shifts",
                     bslib::tooltip(
                       shiny::div(
                         class = "tooltip-bttn",

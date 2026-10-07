@@ -1361,81 +1361,226 @@ check_sample_table <- function(
       ))
     }
 
-    # For each unique non-zero concentration, require at least 3 distinct non-zero time points
-    # (concentration = 0 is excluded from this check — only one sample is allowed there)
-    unique_concs <- unique(conc_vals[!is.na(conc_vals) & conc_vals != 0])
-    for (uc in unique_concs) {
-      times_for_conc <- time_vals[!is.na(conc_vals) & conc_vals == uc]
-      n_time <- length(unique(times_for_conc[
-        !is.na(times_for_conc) & times_for_conc != 0
-      ]))
-      if (n_time < 3) {
+    # kinact/KI describes one compound reacting with one protein, and the
+    # concentration column holds a single value per sample: a sample listing
+    # several compounds has no concentration for each, and a second compound
+    # competing for the site changes k_obs
+    declared <- sample_compounds(sample_table)
+    several <- lengths(declared) > 1
+    if (any(several)) {
+      return(structure(
+        paste0(
+          "One compound per sample for kinact/KI (",
+          sum(several),
+          if (sum(several) == 1) " sample lists" else " samples list",
+          " several)"
+        ),
+        details = format_listed(sprintf(
+          "%s: %s",
+          sub("\\.raw$", "", sample_table[several, 1], ignore.case = TRUE),
+          vapply(declared[several], paste, character(1), collapse = ", ")
+        )),
+        note = paste(
+          "k_obs and kinact/KI are fitted per protein-compound complex.",
+          "Screen compound mixtures with kinact/KI switched off."
+        )
+      ))
+    }
+
+    # k_obs and kinact/KI are fitted per complex, over its own samples, so the
+    # design rules hold for every complex: at least 3 non-zero concentrations,
+    # each with at least 3 distinct non-zero time points (concentration 0 is
+    # the untreated control and is exempt)
+    complex <- paste(
+      sample_table[, 2],
+      vapply(declared, function(x) x[1], character(1)),
+      sep = " + "
+    )
+    prefix <- if (length(unique(complex)) > 1) {
+      function(k) paste0(k, ": ")
+    } else {
+      function(k) ""
+    }
+    for (k in unique(complex)) {
+      in_k <- complex == k
+      k_conc <- conc_vals[in_k]
+      k_time <- time_vals[in_k]
+      unique_concs <- unique(k_conc[k_conc != 0])
+      if (length(unique_concs) < 3) {
         return(paste0(
-          "At least 3 different non-zero time points required per concentration (concentration ",
-          uc,
-          " has only ",
-          n_time,
-          ")"
+          prefix(k),
+          "At least 3 different non-zero concentrations required (",
+          length(unique_concs),
+          " present)"
         ))
+      }
+      for (uc in unique_concs) {
+        times_for_conc <- k_time[k_conc == uc]
+        n_time <- length(unique(times_for_conc[times_for_conc != 0]))
+        if (n_time < 3) {
+          return(paste0(
+            prefix(k),
+            "At least 3 different non-zero time points required per concentration (concentration ",
+            uc,
+            " has only ",
+            n_time,
+            ")"
+          ))
+        }
       }
     }
   }
 
+  # Warnings of a passed check, shown together in the orange hint
+  warnings <- list()
+
   if (
-    is.null(protein_table) ||
-      is.null(compound_table) ||
-      is.null(tolerance) ||
-      is.null(max_multiples)
+    !is.null(protein_table) &&
+      !is.null(compound_table) &&
+      !is.null(tolerance) &&
+      !is.null(max_multiples)
   ) {
+    amb <- declaration_ambiguities(
+      sample_table,
+      protein_table,
+      compound_table,
+      tolerance,
+      max_multiples
+    )
+
+    # The hint above the table holds one short line; the pairs and what the
+    # screening does with them go to its tooltip (attributes "details", "note")
+    window <- paste0("within 2 \u00d7 peak tolerance (", 2 * tolerance, " Da)")
+
+    blocking <- amb[amb$kind == "compounds", , drop = FALSE]
+    if (nrow(blocking)) {
+      return(structure(
+        paste0(
+          "Compounds of one sample are not distinguishable ",
+          window,
+          ": ",
+          format_compound_pairs(blocking)
+        ),
+        details = format_ambiguities(blocking),
+        note = "Assign them to separate samples or revise the mass shifts."
+      ))
+    }
+
+    if (nrow(amb)) {
+      pairs <- length(format_ambiguities(amb, max_listed = Inf))
+      warnings$ambiguities <- list(
+        warning = paste0(
+          "Ambiguous masses ",
+          window,
+          ": ",
+          pairs,
+          if (pairs == 1) " pair" else " pairs"
+        ),
+        details = format_ambiguities(amb),
+        note = paste(
+          "Unbound readings are kept and complexes shared by proteoforms are",
+          "split between them."
+        )
+      )
+    }
+  }
+
+  replicates <- replicate_mismatches(
+    sample_table,
+    if (has_conc_time) conc_time_tbl
+  )
+  if (length(replicates)) {
+    warnings$replicates <- list(
+      warning = paste0(
+        "Replicates declared differently: ",
+        length(replicates),
+        if (length(replicates) == 1) " group" else " groups"
+      ),
+      details = format_listed(replicates),
+      note = paste(
+        "Samples named alike up to _R<n> are read as replicates of one",
+        "condition. Each is analysed as declared, so a mismatch moves it to",
+        "another complex, concentration or time point."
+      )
+    )
+  }
+
+  if (!length(warnings)) {
     return(TRUE)
   }
 
-  amb <- declaration_ambiguities(
-    sample_table,
-    protein_table,
-    compound_table,
-    tolerance,
-    max_multiples
+  structure(
+    TRUE,
+    warning = paste(
+      vapply(warnings, `[[`, character(1), "warning"),
+      collapse = " \u00b7 "
+    ),
+    details = unlist(lapply(warnings, `[[`, "details"), use.names = FALSE),
+    note = paste(vapply(warnings, `[[`, character(1), "note"), collapse = " ")
+  )
+}
+
+# Tooltip lines of a declaration hint, at most `max_listed` of them
+format_listed <- function(lines, max_listed = 12) {
+  more <- length(lines) - max_listed
+  c(
+    utils::head(lines, max_listed),
+    if (more > 0) sprintf("and %d more", more)
+  )
+}
+
+# Compounds declared per row of a sample table (Sample | Protein | Compound ...)
+sample_compounds <- function(sample_table) {
+  cmp <- sample_table[, -(1:2), drop = FALSE]
+  lapply(seq_len(nrow(cmp)), function(i) {
+    x <- trimws(as.character(unlist(cmp[i, ])))
+    unique(x[!is.na(x) & nzchar(x)])
+  })
+}
+
+# Replicate groups whose samples are declared differently. A group is the
+# samples whose names differ only in their _R<n> suffix (the Replicate label
+# KiwiMS derives from the file name); they are expected to share protein,
+# compounds and, with kinact/KI, concentration and time. One line per group,
+# naming the first column that differs.
+replicate_mismatches <- function(sample_table, conc_time_tbl = NULL) {
+  stem <- sub("\\.raw$", "", as.character(sample_table[, 1]), ignore.case = TRUE)
+  group <- ifelse(
+    grepl("_[Rr][0-9]+$", stem),
+    sub("_[Rr][0-9]+$", "", stem),
+    NA_character_
   )
 
-  # The hint above the table holds one short line; the pairs and what the
-  # screening does with them go to its tooltip (attributes "details", "note")
-  window <- paste0("within 2 \u00d7 peak tolerance (", 2 * tolerance, " Da)")
-
-  blocking <- amb[amb$kind == "compounds", , drop = FALSE]
-  if (nrow(blocking)) {
-    return(structure(
-      paste0(
-        "Compounds of one sample are not distinguishable ",
-        window,
-        ": ",
-        format_compound_pairs(blocking)
-      ),
-      details = format_ambiguities(blocking),
-      note = "Assign them to separate samples or revise the mass shifts."
-    ))
+  fields <- list(
+    Protein = as.character(sample_table[, 2]),
+    Compound = vapply(
+      sample_compounds(sample_table),
+      function(x) paste(sort(x), collapse = ", "),
+      character(1)
+    )
+  )
+  if (!is.null(conc_time_tbl)) {
+    fields$Concentration <- as.character(conc_time_tbl[[1]])
+    fields$Time <- as.character(conc_time_tbl[[2]])
   }
 
-  if (nrow(amb)) {
-    pairs <- length(format_ambiguities(amb, max_listed = Inf))
-    return(structure(
-      TRUE,
-      warning = paste0(
-        "Ambiguous masses ",
-        window,
-        ": ",
-        pairs,
-        if (pairs == 1) " pair" else " pairs"
-      ),
-      details = format_ambiguities(amb),
-      note = paste(
-        "Unbound readings are kept and complexes shared by proteoforms are",
-        "split between them."
-      )
-    ))
-  }
-
-  return(TRUE)
+  groups <- unique(group[!is.na(group) & duplicated(group)])
+  out <- lapply(groups, function(g) {
+    idx <- which(group == g)
+    for (f in names(fields)) {
+      values <- unique(fields[[f]][idx])
+      if (length(values) > 1) {
+        return(sprintf(
+          "%s: %s %s",
+          g,
+          f,
+          paste(values, collapse = " \u2194 ")
+        ))
+      }
+    }
+    NULL
+  })
+  unlist(out)
 }
 
 ### Check duplicated masses
@@ -2517,6 +2662,205 @@ species_mw_lines <- function(theor, measured, max_shown = 2) {
   )
 }
 
+# Declared masses of one protein or compound, read from its declaration table
+# row (name column first, then "Mass 1" ...)
+#' @export
+declared_masses <- function(table, name) {
+  if (is.null(table) || !nrow(table)) {
+    return(numeric(0))
+  }
+  row <- table[!is.na(table[[1]]) & table[[1]] == name, -1, drop = FALSE]
+  masses <- suppressWarnings(as.numeric(as.character(unlist(row))))
+  unique(masses[!is.na(masses)])
+}
+
+# Whether each mass in `x` matches one in `ref`. The hits carry masses as
+# formatted text, so an exact comparison may miss on rounding.
+mass_matched <- function(x, ref, tol = 0.05) {
+  vapply(x, function(v) any(abs(ref - v) < tol), logical(1))
+}
+
+# Entries of a Mass Shifts card: label, whether it was assigned to a peak and
+# in how many samples
+mass_entries <- function(label = character(0), present = logical(0), count = integer(0)) {
+  data.frame(label = label, present = present, count = count)
+}
+
+# Compound masses for the Mass Shifts card, one line per mass whatever its
+# stoichiometry or proteoform: the masses assigned to a peak, followed by the
+# declared ones that were not. A peak counts for its preferred hit only, as for
+# the binding values - an alternative interpretation of a peak is not an
+# occurrence of its mass. Masses only the hits know of are kept, for results
+# loaded without their declaration.
+#' @export
+mass_shift_entries <- function(hits, declared = numeric(0)) {
+  theor <- suppressWarnings(as.numeric(as.character(hits$`Theor. Cmp [Da]`)))
+  preferred <- !is.na(hits$`Cmp Name`) &
+    !is.na(theor) &
+    as.character(hits$Preferred) %in% "TRUE"
+
+  masses <- unique(c(declared, theor[preferred]))
+  masses <- masses[!duplicated(round(masses, 1))]
+  count <- vapply(
+    masses,
+    function(m) {
+      length(unique(hits$`Sample ID`[preferred & abs(theor - m) < 0.05]))
+    },
+    integer(1)
+  )
+  order <- order(count == 0, masses)
+
+  mass_entries(
+    vapply(
+      masses[order],
+      function(m) paste(format(m, nsmall = 1, scientific = FALSE), "Da"),
+      character(1)
+    ),
+    count[order] > 0,
+    count[order]
+  )
+}
+
+# Protein masses (its proteoforms) for the Mass Shifts card: the declared
+# masses whose species shows a peak, followed by the ones without. Masses only
+# the hits know of are kept, for results loaded without their declaration.
+#' @export
+protein_mass_entries <- function(hits, declared = numeric(0)) {
+  theor <- suppressWarnings(as.numeric(as.character(hits$`Theor. Prot. [Da]`)))
+  measured <- suppressWarnings(as.numeric(as.character(hits$`Meas. Prot. [Da]`)))
+  detected <- unique(theor[!is.na(theor) & !is.na(measured)])
+
+  masses <- unique(c(declared, theor[!is.na(theor)]))
+  masses <- masses[!duplicated(round(masses, 1))]
+  present <- mass_matched(masses, detected)
+  shows <- !is.na(theor) & !is.na(measured)
+  count <- vapply(
+    masses,
+    function(m) {
+      length(unique(hits$`Sample ID`[shows & abs(theor - m) < 0.05]))
+    },
+    integer(1)
+  )
+  order <- order(!present, masses)
+
+  mass_entries(
+    paste(
+      format(round(masses[order], 1), big.mark = ",", nsmall = 1, scientific = FALSE),
+      "Da"
+    ),
+    unname(present[order]),
+    count[order]
+  )
+}
+
+# Mass Shifts card content from mass_entries(): the first `max_lines` entries,
+# then a "N more" hint listing the rest on hover. Entries without a peak are
+# greyed out and say so on hover. The hover lists are styled inline like the
+# Protocol tab's warning tooltip, as bslib reparents them into a popup where
+# stylesheet classes are unreliable.
+#' @export
+mass_shift_card <- function(entries, max_lines = 3, accent = "#7777f9") {
+  if (!nrow(entries)) {
+    return(shiny::div("N/A", class = "na-placeholder"))
+  }
+
+  absent_hint <- "Declared, but not assigned to any peak"
+  shown <- seq_len(min(nrow(entries), max_lines))
+  hidden <- setdiff(seq_len(nrow(entries)), shown)
+
+  count_hint <- function(n) {
+    sprintf("Found in %d sample%s", n, if (n == 1) "" else "s")
+  }
+
+  line <- function(i) {
+    if (entries$present[i]) {
+      return(shiny::div(
+        class = "mass-shift-line",
+        shiny::span(class = "mass-shift-label", shiny::HTML(entries$label[i])),
+        shiny::span(
+          class = "mass-shift-count",
+          title = count_hint(entries$count[i]),
+          paste0("×", entries$count[i])
+        )
+      ))
+    }
+    bslib::tooltip(
+      shiny::div(
+        class = "mass-shift-line mass-shift-absent",
+        shiny::span(class = "mass-shift-label", shiny::HTML(entries$label[i]))
+      ),
+      absent_hint,
+      placement = "auto"
+    )
+  }
+
+  tooltip_items <- lapply(hidden, function(i) {
+    color <- if (entries$present[i]) accent else "#9a9a9a"
+    shiny::div(
+      style = paste(
+        "text-align:left; padding:0.35rem 0 0.35rem 0.6rem;",
+        "border-left:3px solid",
+        paste0(color, ";"),
+        "line-height:1.35;"
+      ),
+      shiny::div(
+        style = paste(
+          "display:flex; justify-content:space-between;",
+          "align-items:baseline; gap:0.75rem;",
+          "font-weight:700; font-size:0.85rem; color:",
+          paste0(color, ";")
+        ),
+        shiny::span(shiny::HTML(entries$label[i])),
+        if (entries$present[i]) {
+          shiny::span(
+            style = paste(
+              "flex-shrink:0; font-weight:400; opacity:0.8;",
+              "font-variant-numeric:tabular-nums;"
+            ),
+            title = count_hint(entries$count[i]),
+            paste0("×", entries$count[i])
+          )
+        }
+      ),
+      if (!entries$present[i]) {
+        shiny::div(
+          style = paste(
+            "font-size:0.78rem; color:#fff; opacity:0.9;",
+            "margin-top:0.15rem;"
+          ),
+          absent_hint
+        )
+      }
+    )
+  })
+
+  shiny::div(
+    class = "mass-shift-list",
+    lapply(shown, line),
+    if (length(hidden)) {
+      bslib::tooltip(
+        shiny::div(
+          class = "mass-shift-more",
+          shiny::icon("circle-info"),
+          sprintf("%d more", length(hidden)),
+          if (any(!entries$present[hidden])) {
+            sprintf("(%d without peak)", sum(!entries$present[hidden]))
+          }
+        ),
+        shiny::div(
+          style = paste(
+            "display:flex; flex-direction:column; gap:0.5rem;",
+            "max-height:50vh; max-width:22rem; width:max-content;",
+            "overflow-y:auto; text-align:left;"
+          ),
+          tooltip_items
+        ),
+        placement = "auto"
+      )
+    }
+  )
+}
+
 # Whether any protein of the proteoform binding table carries several species
 has_proteoforms <- function(binding) {
   if (!nrow(binding)) {
@@ -2588,9 +2932,15 @@ proteoform_colors <- function(species) {
   )
 }
 
-# Main species of each protein: the one carrying the most signal on average.
-# The declared mass order does not survive the hit screening, and the native
-# form is the dominant one in any usable preparation.
+# Main species of each protein, the reference of the paired comparisons: the
+# one carrying the most signal on average. The declared mass order does not
+# survive the hit screening, and the native form is the dominant one in any
+# usable preparation. Only species whose binding is measured (not pinned to a
+# detection limit) in at least one sample qualify, as long as one does: when an
+# unbound mass coincides with a complex, the complex peak makes it the
+# strongest species, yet its binding sits at 0 % in every sample and every
+# pair with it would be pinned.
+#' @export
 main_proteoform <- function(binding) {
   binding$total <- binding$unbound + binding$complex
   binding$protein[is.na(binding$protein)] <- ""
@@ -2598,9 +2948,16 @@ main_proteoform <- function(binding) {
     dplyr::group_by(sample, protein) |>
     dplyr::mutate(share = total / sum(total)) |>
     dplyr::group_by(protein, species) |>
-    dplyr::summarise(share = mean(share, na.rm = TRUE), .groups = "drop") |>
+    dplyr::summarise(
+      share = mean(share, na.rm = TRUE),
+      measured = sum(is.na(limit) & !is.na(binding)),
+      .groups = "drop"
+    ) |>
     dplyr::group_by(protein) |>
-    dplyr::mutate(main = share == max(share)) |>
+    dplyr::mutate(
+      main = seq_along(species) ==
+        order(-(measured > 0), -share)[1]
+    ) |>
     dplyr::ungroup() |>
     as.data.frame()
   share
@@ -2687,11 +3044,40 @@ proteoform_kinetics <- function(
       kinact_ki <- NULL
     }
 
+    # Why a species has no kinact/KI, for the hover of its N/A cells. A
+    # species without binding anywhere (e.g. an unbound mass that coincides
+    # with a complex, or a form whose complex is never detected) is common
+    # enough to be named on its own; its plots leave out the row of zeros.
+    n_response <- if (is.null(kobs)) {
+      0L
+    } else {
+      sum(kobs$kobs_result_table$kobs > 0, na.rm = TRUE)
+    }
+    reason <- if (!is.null(kinact_ki)) {
+      NULL
+    } else if (isTRUE(nonphysical)) {
+      "The fit gave a negative parameter"
+    } else if (is.null(kobs)) {
+      "k_obs could not be fitted at any concentration"
+    } else if (n_response == 0) {
+      "No binding at any concentration"
+    } else if (n_response < 3) {
+      sprintf(
+        "Binding at %d concentration%s only, at least 3 are needed",
+        n_response,
+        if (n_response == 1) "" else "s"
+      )
+    } else {
+      "The kinact/KI fit did not converge"
+    }
+
     list(
       species = s,
       binding_kobs_result = kobs,
       kinact_ki_result = kinact_ki,
       nonphysical = isTRUE(nonphysical),
+      no_response = !is.null(kobs) && n_response == 0,
+      reason = reason,
       n_samples = nrow(used),
       n_limit = sum(!is.na(limit))
     )
@@ -2751,10 +3137,10 @@ proteoform_comparison_table <- function(kinetics, pooled, binding, view) {
     }
     # Say why a proteoform has no fit when the reason is known
     not_fitted <- function(x) {
-      if (x != "N/A" || !isTRUE(k$nonphysical)) {
+      if (x != "N/A" || is.null(k$reason)) {
         return(x)
       }
-      "<span title=\"The fit gave a negative parameter\">N/A</span>"
+      sprintf("<span title=\"%s\">N/A</span>", k$reason)
     }
 
     delta <- if (identical(k$species, main)) {
@@ -2776,7 +3162,10 @@ proteoform_comparison_table <- function(kinetics, pooled, binding, view) {
         drop = FALSE
       ]
       if (!nrow(paired)) {
-        "N/A"
+        sprintf(
+          "<span title=\"%s\">N/A</span>",
+          "No sample where both species are measured"
+        )
       } else {
         d <- paired$binding - paired$binding_main
         sprintf(
@@ -2800,7 +3189,18 @@ proteoform_comparison_table <- function(kinetics, pooled, binding, view) {
         flag(sprintf("%+.1f", 100 * (ratio / pooled_ratio - 1)))
       },
       delta = delta,
-      limit = sprintf("%d / %d", k$n_limit, k$n_samples)
+      # Flagged on its own as well, so the warning also shows when there is
+      # no fitted value to flag
+      limit = if (unreliable) {
+        sprintf(
+          "<span class=\"protocol-stat-warn\" title=\"%s\">%d / %d</span>",
+          "More than half of the values sit at a detection limit",
+          k$n_limit,
+          k$n_samples
+        )
+      } else {
+        sprintf("%d / %d", k$n_limit, k$n_samples)
+      }
     )
   })
 
@@ -2815,22 +3215,34 @@ proteoform_comparison_table <- function(kinetics, pooled, binding, view) {
     limit = ""
   )
 
+  # The reference species first, right under the pooled fit
+  is_main <- vapply(kinetics, function(k) identical(k$species, main), logical(1))
+  species_rows <- c(species_rows[is_main], species_rows[!is_main])
+
   tbl <- do.call(rbind, c(list(pooled_row), unname(species_rows)))
 
   names(tbl) <- c(
     "Proteoform",
     "Signal [%]",
     paste0("k<sub> inact</sub> [", view$time_unit, "⁻¹]"),
-    paste0("K<sub>I</sub> [", view$conc_unit, "]"),
+    paste0("K<sub>&thinsp;I</sub> [", view$conc_unit, "]"),
     paste0(
-      "k<sub> inact</sub>/K<sub>I</sub> [",
+      "k<sub> inact</sub>/K<sub>&thinsp;I</sub> [",
       view$conc_unit,
       "⁻¹ ",
       view$time_unit,
       "⁻¹]"
     ),
-    "Δ vs Pooled [%]",
-    "Δ Binding vs Main [pp]",
+    paste0(
+      "<span title=\"Relative difference of the proteoform's kinact/KI ",
+      "to the pooled kinact/KI\">Δ vs Pooled [%]</span>"
+    ),
+    paste0(
+      "<span title=\"Mean difference of the proteoform's binding to the ",
+      "binding of the reference proteoform, in percentage points, over the ",
+      "samples where both are measured (± SD, n = samples). Negative: it ",
+      "binds less.\">Δ Binding vs Reference [pp]</span>"
+    ),
     "Limit Values"
   )
 
@@ -2913,6 +3325,9 @@ proteoform_kobs_plot <- function(entries, colors, units, theme = "dark") {
 # are drawn in the background: thin dotted line, small open markers, no error
 # bars, faded. The Binding tab passes the proteoforms, the Proteoforms tab the
 # pooled fit.
+#
+# With `extrapolate_to` the fitted curve of every entry is continued as a
+# dashed line from its highest concentration to that concentration.
 add_proteoform_kobs_traces <- function(
   plot,
   entries,
@@ -2921,11 +3336,40 @@ add_proteoform_kobs_traces <- function(
   conc_unit,
   time_unit,
   group_title = NULL,
-  subtle = character(0)
+  subtle = character(0),
+  extrapolate_to = NULL
 ) {
-  first <- TRUE
+  # Entries with k_obs points, and of those the ones without binding at any
+  # concentration (drawn hidden, see below)
+  has_points <- function(label) {
+    tbl <- entries[[label]]$kobs
+    !is.null(tbl) && nrow(tbl) > 0
+  }
+  no_binding <- function(label) {
+    tbl <- entries[[label]]$kobs
+    k <- tbl$kobs[as.numeric(rownames(tbl)) > 0 & !is.na(tbl$kobs)]
+    label != "Pooled" && length(k) > 0 && all(k == 0)
+  }
+  # A species with more than half of its values at a detection limit (its
+  # `limit_share`) has k_obs that describe the limit, not the proteoform: a
+  # form read at 100 % from the first time point gets a k_obs only bounded by
+  # that time point, often far above all others, and the axis it stretches
+  # flattens every real curve. It is drawn hidden as well.
+  pinned <- function(label) {
+    label != "Pooled" && isTRUE(entries[[label]]$limit_share > 0.5)
+  }
+  hidden <- function(label) no_binding(label) || pinned(label)
+  drawn <- Filter(has_points, names(entries))
+  # Hidden species come last: plotly draws a legend group title in the style
+  # of the group's first row, and a hidden first row greys it out. The title
+  # goes on the first visible trace.
+  ordered <- c(
+    Filter(Negate(hidden), names(entries)),
+    Filter(hidden, names(entries))
+  )
+  title_label <- c(Filter(Negate(hidden), drawn), drawn)[1]
 
-  for (label in names(entries)) {
+  for (label in ordered) {
     kobs_tbl <- entries[[label]]$kobs
     if (is.null(kobs_tbl) || !nrow(kobs_tbl)) {
       next
@@ -2948,13 +3392,65 @@ add_proteoform_kobs_traces <- function(
     points <- points[!is.na(points$kobs) & points$conc > 0, , drop = FALSE]
     points$kobs_se[is.na(points$kobs_se)] <- 0
 
-    kd <- entries[[label]]$kinact_ki$Kobs_Data
+    # A species without binding at any concentration would draw a row of
+    # zeros, exactly on top of any other such species, so that all but the
+    # last stay hidden. Its legend row says so, and its zeros start hidden: a
+    # click on the row shows them.
+    if (no_binding(label)) {
+      args <- list(
+        p = plot,
+        data = points,
+        x = ~conc,
+        y = ~kobs,
+        visible = "legendonly",
+        name = paste0(name, " · no binding"),
+        legendgroup = group,
+        opacity = if (background) 0.5 else 1,
+        marker = list(
+          size = if (background) 6 else 10,
+          color = "rgba(0,0,0,0)",
+          symbol = paste0(symbol, "-open"),
+          line = list(width = 1, color = color)
+        ),
+        hovertemplate = paste0(
+          "<b>",
+          name,
+          "</b><br>No binding at ",
+          "%{x} ",
+          conc_unit,
+          "<extra></extra>"
+        ),
+        showlegend = TRUE,
+        inherit = FALSE
+      )
+      if (!is.null(group_title) && identical(label, title_label)) {
+        args$legendgrouptitle <- list(
+          text = group_title,
+          font = list(color = font_color)
+        )
+      }
+      plot <- do.call(plotly::add_markers, args)
+      next
+    }
+
+    # Mostly limit values: hidden until its legend row is clicked
+    visible <- if (pinned(label)) "legendonly" else TRUE
+    legend_name <- if (pinned(label)) {
+      paste0(name, " · limit values")
+    } else {
+      name
+    }
+
+    kinact_ki <- entries[[label]]$kinact_ki
+    kd <- kinact_ki$Kobs_Data
     if (!is.null(kd) && nrow(kd) > 0) {
+      kd <- kd[!is.na(kd$predicted_kobs), , drop = FALSE]
       plot <- plotly::add_lines(
         plot,
-        data = kd[!is.na(kd$predicted_kobs), , drop = FALSE],
+        data = kd,
         x = ~conc,
         y = ~predicted_kobs,
+        visible = visible,
         name = name,
         legendgroup = group,
         opacity = if (background) 0.5 else 1,
@@ -2967,6 +3463,35 @@ add_proteoform_kobs_traces <- function(
         showlegend = FALSE,
         inherit = FALSE
       )
+
+      fit_end <- if (nrow(kd)) max(kd$conc) else NA_real_
+      if (
+        !is.null(extrapolate_to) &&
+          is.finite(fit_end) &&
+          extrapolate_to > fit_end
+      ) {
+        grid_out <- seq(fit_end, extrapolate_to, length.out = 200)
+        kobs_out <- kobs_model_at(kinact_ki, grid_out)
+        if (length(kobs_out) == length(grid_out) && all(is.finite(kobs_out))) {
+          plot <- plotly::add_lines(
+            plot,
+            x = grid_out,
+            y = kobs_out,
+            visible = visible,
+            name = name,
+            legendgroup = group,
+            opacity = if (background) 0.5 else 1,
+            line = list(
+              width = if (background) 1 else 1.5,
+              color = color,
+              dash = "dash"
+            ),
+            hoverinfo = "skip",
+            showlegend = FALSE,
+            inherit = FALSE
+          )
+        }
+      }
     }
 
     args <- list(
@@ -2974,7 +3499,8 @@ add_proteoform_kobs_traces <- function(
       data = points,
       x = ~conc,
       y = ~kobs,
-      name = name,
+      visible = visible,
+      name = legend_name,
       legendgroup = group,
       opacity = if (background) 0.5 else 1,
       marker = if (background) {
@@ -3014,21 +3540,61 @@ add_proteoform_kobs_traces <- function(
         color = color
       )
     }
-    if (!is.null(group_title) && first) {
+    if (!is.null(group_title) && identical(label, title_label)) {
       args$legendgrouptitle <- list(
         text = group_title,
         font = list(color = font_color)
       )
     }
     plot <- do.call(plotly::add_markers, args)
-    first <- FALSE
   }
 
   plot
 }
 
 # Paired binding of the proteoforms ----
-#
+
+# Binding of species `s` against the main species' (`main_b`) in every sample
+# where both are measured. A pair is pinned when either value sits at a
+# detection limit; `note` then says which.
+proteoform_pairs <- function(binding, s, main_b) {
+  paired <- merge(
+    binding[binding$species == s, c("sample", "binding", "limit")],
+    main_b[, c("sample", "binding", "limit")],
+    by = "sample",
+    suffixes = c("", "_main")
+  )
+  paired <- paired[
+    !is.na(paired$binding) & !is.na(paired$binding_main),
+    ,
+    drop = FALSE
+  ]
+
+  paired$note <- ifelse(
+    !is.na(paired$limit),
+    proteoform_limit_note(paired$limit),
+    proteoform_limit_note(paired$limit_main)
+  )
+  paired$pinned <- !is.na(paired$note)
+  paired
+}
+
+# Whether proteoform_paired_plot() has any pinned pair, i.e. anything for its
+# `show_limits` to show
+#' @export
+proteoform_paired_has_limits <- function(binding) {
+  shares <- main_proteoform(binding)
+  main <- shares$species[shares$main][1]
+  main_b <- binding[binding$species == main, , drop = FALSE]
+  others <- setdiff(unique(binding$species), main)
+
+  any(vapply(
+    others,
+    function(s) any(proteoform_pairs(binding, s, main_b)$pinned),
+    logical(1)
+  ))
+}
+
 # Every other species' binding against the main species', one point per sample.
 # Proteoforms that react alike sit on the diagonal.
 #
@@ -3062,7 +3628,10 @@ proteoform_paired_plot <- function(
       x = c(0, 100),
       y = c(0, 100),
       line = list(color = font_color, width = 1, dash = "dot"),
-      hoverinfo = "skip",
+      hovertemplate = paste(
+        "Same binding on both species:<br>points here react alike,",
+        "<br>below it the other proteoform binds less<extra></extra>"
+      ),
       showlegend = FALSE,
       inherit = FALSE
     )
@@ -3070,37 +3639,46 @@ proteoform_paired_plot <- function(
   any_pinned <- FALSE
   # Species that end up with points; one with only limit values drops out
   shown <- numeric(0)
+  # Species left without points because all their pairs are pinned
+  hidden_limits <- 0
 
   for (s in others) {
-    paired <- merge(
-      binding[binding$species == s, c("sample", "binding", "limit")],
-      main_b[, c("sample", "binding", "limit")],
-      by = "sample",
-      suffixes = c("", "_main")
-    )
-    paired <- paired[
-      !is.na(paired$binding) & !is.na(paired$binding_main),
-      ,
-      drop = FALSE
-    ]
+    paired <- proteoform_pairs(binding, s, main_b)
+    label <- paste0(fmt_species_mass(s), " Da")
+    color <- unname(colors[as.character(s)])
 
-    # Pinned when either value of the pair sits at a detection limit
-    paired$note <- ifelse(
-      !is.na(paired$limit),
-      proteoform_limit_note(paired$limit),
-      proteoform_limit_note(paired$limit_main)
-    )
-    paired$pinned <- !is.na(paired$note)
+    # A species with no measured pair keeps its legend row and says why it
+    # has no points (or, with the limits shown, only open ones that may lie
+    # under another species' open points)
+    limits_only <- nrow(paired) > 0 && all(paired$pinned)
+    if (limits_only) {
+      label <- paste0(label, " · limits only")
+    }
     if (!show_limits) {
       paired <- paired[!paired$pinned, , drop = FALSE]
     }
     if (!nrow(paired)) {
+      if (limits_only) {
+        hidden_limits <- hidden_limits + 1
+        plot <- plotly::add_markers(
+          plot,
+          x = -100,
+          y = -100,
+          name = label,
+          legendgroup = label,
+          marker = list(
+            size = 7,
+            color = "rgba(0,0,0,0)",
+            symbol = "circle",
+            line = list(width = 1, color = color)
+          ),
+          hoverinfo = "skip",
+          inherit = FALSE
+        )
+      }
       next
     }
     shown <- c(shown, s)
-
-    label <- paste0(fmt_species_mass(s), " Da")
-    color <- unname(colors[as.character(s)])
     paired$hover <- paste0(
       paired$sample,
       "<br>",
@@ -3188,14 +3766,36 @@ proteoform_paired_plot <- function(
         bordercolor = "rgba(0,0,0,0)",
         font = list(color = font_color)
       ),
-      xaxis = axis(paste0("Binding ", main_label, " [%]")),
+      # x: the reference species, y: each other proteoform, in the same sample
+      xaxis = axis(paste0("Binding of ", main_label, " (reference) [%]")),
       yaxis = axis(
         if (length(shown) == 1) {
-          paste0("Binding ", fmt_species_mass(shown), " Da [%]")
+          paste0("Binding of ", fmt_species_mass(shown), " Da [%]")
         } else {
-          "Binding [%]"
+          "Binding of other proteoform [%]"
         }
-      )
+      ),
+      # Without any point the plot would be an unexplained diagonal
+      annotations = if (!length(shown)) {
+        list(list(
+          text = paste0(
+            "No sample where another proteoform and the<br>",
+            "reference are both measured",
+            if (hidden_limits > 0 && !show_limits) {
+              "<br><i>Show Limit Values (settings) shows the pinned values</i>"
+            } else {
+              ""
+            }
+          ),
+          x = 50,
+          y = 50,
+          xref = "x",
+          yref = "y",
+          showarrow = FALSE,
+          bgcolor = if (theme == "light") "rgba(255,255,255,0.8)" else "rgba(0,0,0,0.6)",
+          font = list(size = 13, color = font_color)
+        ))
+      }
     )
 }
 
@@ -3365,23 +3965,31 @@ log_mass_ambiguities <- function(amb, tolerance) {
     return(invisible(NULL))
   }
   kinds <- c(
-    species = "unbound reading kept",
-    proteoform = "intensity split between proteoforms",
-    compounds = "compounds not distinguishable"
+    species = "read as unbound",
+    proteoform = "split evenly",
+    compounds = "not distinguishable"
   )
+  # Found from the declared masses; each rule only acts on a detected peak
+  # that matches both readings of its pair
   message(sprintf(
-    "AMBIGUOUS MASS ASSIGNMENTS (within 2 × %s Da)\n  │",
+    "AMBIGUOUS MASS ASSIGNMENTS (within 2 × %s Da)\n  │  rule applied when a peak matches both\n  │",
     tolerance
   ))
+  # One short branch per pair, its two readings below it
   for (k in seq_len(nrow(amb))) {
+    last <- k == nrow(amb)
     message(sprintf(
-      "  %s %s %s ↔ %s: Δ %.2f Da - %s",
-      if (k == nrow(amb)) "└─" else "├─",
+      "  %s %s %s (Δ %.1f Da)\n  %s  ├─ %s\n  %s  └─ %s%s",
+      if (last) "└─" else "├─",
       .col_warn(warning_sym),
-      amb$first[k],
-      amb$second[k],
+      kinds[[amb$kind[k]]],
       amb$delta[k],
-      kinds[[amb$kind[k]]]
+      if (last) " " else "│",
+      amb$first[k],
+      if (last) " " else "│",
+      amb$second[k],
+      # Blank line before the first sample's log
+      if (last) "\n" else ""
     ))
   }
 }
@@ -4111,6 +4719,14 @@ add_kobs_binding_result <- function(
     )
   }
 
+  # Rows without a binding value are left out, as check_filter_hits() does
+  # before the first fit; the refit after excluding concentrations and the
+  # proteoform fits pass unfiltered hits, where such a row would turn its
+  # sample point into NaN and fail the whole concentration
+  if ("binding" %in% names(hits_summary)) {
+    hits_summary <- hits_summary[!is.na(hits_summary$binding), , drop = FALSE]
+  }
+
   # Compute kobs
   binding_kobs_result <- compute_kobs(hits_summary, units = units)
 
@@ -4235,14 +4851,32 @@ complex_hits <- function(hits_summary, sample_table, protein, compound) {
   rows
 }
 
-# The complexes of a run: every protein-compound pair with a hit
+# The complexes of a run: every protein-compound pair with a hit and, given the
+# sample table, every declared pair
 #' @export
-run_complexes <- function(hits_summary) {
+run_complexes <- function(hits_summary, sample_table = NULL) {
   hits <- hits_summary[!is.na(hits_summary$Compound), , drop = FALSE]
-  pairs <- unique(data.frame(
+  pairs <- data.frame(
     protein = as.character(hits$Protein),
     compound = as.character(hits$Compound)
-  ))
+  )
+
+  # With the sample table, also the declared pairs without any hit, so their
+  # samples do not drop out of the kinetics unnoticed
+  if (!is.null(sample_table)) {
+    st <- sample_table[, names(sample_table) != "Replicate", drop = FALSE]
+    cmp_cols <- grep("^Compound", names(st), value = TRUE)
+    declared <- sample_compounds(st[, c("Sample", "Protein", cmp_cols)])
+    pairs <- rbind(
+      pairs,
+      data.frame(
+        protein = rep(as.character(st$Protein), lengths(declared)),
+        compound = unlist(declared)
+      )
+    )
+  }
+
+  pairs <- unique(pairs)
   pairs <- pairs[order(pairs$protein, pairs$compound), , drop = FALSE]
   pairs$key <- complex_key(pairs$protein, pairs$compound)
   rownames(pairs) <- NULL
@@ -4254,7 +4888,7 @@ run_complexes <- function(hits_summary) {
 # could be fitted.
 #' @export
 complex_kinetics <- function(hits_summary, sample_table, conc_time, units) {
-  complexes <- run_complexes(hits_summary)
+  complexes <- run_complexes(hits_summary, sample_table)
   several <- nrow(complexes) > 1
 
   out <- lapply(seq_len(nrow(complexes)), function(k) {
@@ -4320,6 +4954,17 @@ fit_complex <- function(hits, protein, compound, conc_time, units) {
     kinact_ki_result = NULL,
     reason = NULL
   )
+
+  # A declared complex whose compound was found in none of its samples
+  if (!any(hits$Compound %in% compound)) {
+    message(sprintf(
+      "  │  └─ %s No hits of %s in its samples. Skipping binding kinetics analysis.",
+      .col_warn(warning_sym),
+      compound
+    ))
+    entry$reason <- paste("No hits of", compound, "in its samples")
+    return(entry)
+  }
 
   filtered <- check_filter_hits(list(hits_summary = hits))
   if (!is.data.frame(filtered)) {
@@ -4763,6 +5408,17 @@ make_binding_plot <- function(
   return(binding_plot)
 }
 
+# k_obs of the selected model (linear or hyperbolic) of a kinact/KI result at
+# `conc`, with the reported kinact/KI
+kobs_model_at <- function(kinact_ki_result, conc) {
+  ratio <- kinact_ki_result$Ratio[["Estimate"]]
+  if (identical(kinact_ki_result$Model, "hyperbolic")) {
+    ratio * conc / (1 + conc / kinact_ki_result$Fit$KI_hyperbolic)
+  } else {
+    ratio * conc
+  }
+}
+
 # Function to generate and display kobs plot
 #
 # `proteoforms` optionally overlays the per-proteoform k_obs and fits on the
@@ -4932,6 +5588,19 @@ make_kobs_plot <- function(
     )
   }
 
+  # Optional view past the measured range: the selected model continued as a
+  # dashed line and the measured range shaded. The proteoform fits are
+  # continued to the same end.
+  extrapolate <- isTRUE(show_extrapolation) && nrow(df) > 0
+  if (extrapolate) {
+    max_conc <- max(df$conc, na.rm = TRUE)
+    ki <- kinact_ki_result$Fit$KI_hyperbolic
+    extrap_max <- 5 * max_conc
+    if (kinact_ki_result$Model == "hyperbolic" && is.finite(ki)) {
+      extrap_max <- max(extrap_max, 3 * ki)
+    }
+  }
+
   if (length(proteoforms)) {
     kobs_plot <- add_proteoform_kobs_traces(
       kobs_plot,
@@ -4941,91 +5610,30 @@ make_kobs_plot <- function(
       conc_unit = conc_unit,
       time_unit = time_unit,
       group_title = "Proteoforms",
-      subtle = names(proteoforms)
+      subtle = names(proteoforms),
+      extrapolate_to = if (extrapolate) extrap_max
     )
   }
 
-  # Optional view past the measured range: the fitted curve continued as a
-  # dashed line, the alternative model as a dotted one, and the measured range
-  # shaded. Inside the shade the two models are indistinguishable when the
-  # data do not saturate; outside it they part — which is the reason kinact
-  # and KI are then not reported.
-  if (isTRUE(show_extrapolation) && nrow(df) > 0) {
-    max_conc <- max(df$conc, na.rm = TRUE)
-    fit <- kinact_ki_result$Fit
-    ratio <- kinact_ki_result$Ratio[["Estimate"]]
-    ki <- fit$KI_hyperbolic
-    extrap_max <- 5 * max_conc
-    if (kinact_ki_result$Model == "hyperbolic" && is.finite(ki)) {
-      extrap_max <- max(extrap_max, 3 * ki)
-    }
-    hyperbolic_ok <- is.finite(ki) &&
-      !isTRUE(fit$KI_hyperbolic_at_bound) &&
-      is.finite(fit$ratio_hyperbolic)
-
-    kobs_at <- function(conc, model) {
-      if (model == "hyperbolic") {
-        r <- if (kinact_ki_result$Model == "hyperbolic") {
-          ratio
-        } else {
-          fit$ratio_hyperbolic
-        }
-        r * conc / (1 + conc / ki)
-      } else {
-        r <- if (kinact_ki_result$Model == "linear") ratio else fit$ratio_linear
-        r * conc
-      }
-    }
-    unit_suffix <- paste0(" ", time_unit, "⁻¹")
-    line_hover <- function(label) {
-      paste0(
-        "<b>",
-        label,
-        "</b><br>Concentration: %{x:.3~g} ",
-        conc_unit,
-        "<br>k<sub>obs</sub>: %{y:.3~g}",
-        unit_suffix,
-        "<extra></extra>"
-      )
-    }
-
+  if (extrapolate) {
     grid_out <- seq(max_conc, extrap_max, length.out = 200)
     kobs_plot <- kobs_plot |>
       plotly::add_lines(
         x = grid_out,
-        y = kobs_at(grid_out, kinact_ki_result$Model),
+        y = kobs_model_at(kinact_ki_result, grid_out),
         line = list(width = 1.5, color = font_color, dash = "dash"),
-        hovertemplate = line_hover(paste0(
-          "Global fit (",
+        hovertemplate = paste0(
+          "<b>Global fit (",
           kinact_ki_result$Model,
-          "), extrapolated"
-        )),
+          "), extrapolated</b><br>Concentration: %{x:.3~g} ",
+          conc_unit,
+          "<br>k<sub>obs</sub>: %{y:.3~g} ",
+          time_unit,
+          "⁻¹<extra></extra>"
+        ),
         showlegend = FALSE,
         inherit = FALSE
       )
-
-    other <- if (kinact_ki_result$Model == "linear") "hyperbolic" else "linear"
-    other_ok <- if (other == "hyperbolic") {
-      hyperbolic_ok
-    } else {
-      is.finite(fit$ratio_linear)
-    }
-    if (other_ok) {
-      grid_all <- seq(0, extrap_max, length.out = 300)
-      kobs_plot <- kobs_plot |>
-        plotly::add_lines(
-          x = grid_all,
-          y = kobs_at(grid_all, other),
-          line = list(width = 1.2, color = zeroline_color, dash = "dot"),
-          hovertemplate = line_hover(paste0(
-            "Alternative model (",
-            other,
-            "), not selected"
-          )),
-          showlegend = FALSE,
-          inherit = FALSE
-        )
-    }
 
     shapes <- c(shapes, list(list(
       type = "rect",
@@ -9620,25 +10228,28 @@ edit_ui_changes <- function(
 # line each, then `note`) goes into the tooltip of an info icon, so the hint
 # itself stays within the table width.
 table_hint <- function(class, msg, details = NULL, note = NULL) {
-  shiny::div(
-    class = class,
+  has_details <- length(details) || length(note)
+  hint <- shiny::div(
+    class = paste(class, if (has_details) "table-hint-has-details"),
+    tabindex = if (has_details) "0",
     shiny::icon("triangle-exclamation"),
     shiny::span(class = "table-hint-text", as.character(msg)),
-    if (length(details) || length(note)) {
-      bslib::tooltip(
-        shiny::span(
-          class = "table-hint-details",
-          tabindex = "0",
-          shiny::icon("circle-info")
-        ),
-        shiny::tagList(
-          lapply(details, shiny::div),
-          if (length(note)) shiny::div(class = "table-hint-note", note)
-        ),
-        placement = "bottom",
-        options = list(customClass = "table-hint-tooltip")
-      )
+    # Cue that the hint has details; the whole hint shows them on hover
+    if (has_details) {
+      shiny::span(class = "table-hint-details", shiny::icon("circle-info"))
     }
+  )
+  if (!has_details) {
+    return(hint)
+  }
+  bslib::tooltip(
+    hint,
+    shiny::tagList(
+      lapply(details, shiny::div),
+      if (length(note)) shiny::div(class = "table-hint-note", note)
+    ),
+    placement = "bottom",
+    options = list(customClass = "table-hint-tooltip")
   )
 }
 
