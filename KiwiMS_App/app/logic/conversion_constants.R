@@ -242,3 +242,16 @@ kinetics_settings <- list(
   bootstrap_seed = 20260917L,
   curve_points = 500
 )
+
+# Hard caps of a run. A replicate series (R1, R2, ...) is one complete repeat
+# of the experiment; every sample of a condition belongs to one series, so a
+# condition has at most as many replicates as there are series. Four series
+# keep the series apart in the plots (four marker fills). The sample cap holds
+# for a deconvolution (the samples already in its database plus the new ones)
+# and for the Samples table of the conversion: one 384-well plate.
+#' @export
+run_limits <- list(
+  max_series = 4,
+  max_replicates = 4,
+  max_samples = 384
+)

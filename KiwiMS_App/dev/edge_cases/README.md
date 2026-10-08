@@ -26,8 +26,9 @@ not a sub-test: each test is complete as written.
 | 4 | An unbound mass collides with a complex or another unbound mass | T2, T3 |
 | 5 | A complex shared by two proteoforms | T4 |
 
-T6–T11 test other guards: the multi-compound fix, table colouring, and the
-complex and replicate checks.
+T6–T15 test other guards: the multi-compound fix, table colouring, the
+complex and replicate checks, and the limits on series, replicates and
+samples.
 
 ## What changed with the 0.7.5-2 merge
 
@@ -402,26 +403,138 @@ This is the case from the screenshot.
   "Ambiguous masses … : 5 pairs · Replicates declared differently: 1 group".
   The tooltip lists the mass pairs first, then the replicate group.
 
-### How replicates work
+## T12 Five replicate series (blocked)
 
-- A replicate group is the samples whose names differ only in their `_R<n>`
-  suffix. The warning compares Protein, the compounds and, with kinact/KI,
-  Concentration and Time within each group.
-- The Replicate column means different things, depending on its source:
-  - **file name ending in `_R<n>`** (no config): the condition, e.g.
-    `…_10_20min`, the same for R1 and R2. The series is the suffix;
-  - **file name without a suffix** (no config): a counter, R1, R2, R3, …,
-    one per sample in sorted order. It looks like a series but means nothing:
-    every sample is its own series, so there are no per-series fits and no
-    replicate groups;
-  - **from a config** (`config_*.csv` here): the series, e.g. `R1`. Samples
-    the config leaves out fall back to the two cases above; the counter
-    skips the numbers the config uses.
-- Replicates are never merged or averaged before a fit. Every sample is one
-  point, and the label only drives:
-  - the display;
-  - the per-series fits ("kinact/Ki by Replicate Series"), which take the
-    `_R<n>` suffix or the config value as the series.
-- A replicate group split across complexes (T1e, or the 20 min pair in T8)
-  therefore corrupts no number. Each complex just loses part of a time course
-  or a whole series. That's why the replicate check warns instead of blocking.
+`proteins_baseline` · `compounds_baseline` · `config_five_series` (Replicate R1, R2, R3, R4, R5 in turn)
+
+- **Config upload:** refused, with "'Replicate': at most 4 replicate series
+  (5 found: R1, R2, R3, R4, R5)."
+- The Samples table would be blocked as well: "At most 4 replicate series (5
+  present)", tooltip "R1: 25 samples", … The script checks this; in the app
+  the config never gets that far.
+
+## T13 Too many replicates of one condition (blocked)
+
+`proteins_baseline` · `compounds_baseline` · `config_six_replicates` (the 10 µM samples at 30 and 40 min declared at 20 min)
+
+- Red hint: "At most 4 replicates per condition (1 condition has up to 6)".
+- Tooltip: "MLKL + BI-8925, concentration 10, time 20: 6 samples", and the
+  note "Replicates are samples with the same protein, compounds, concentration
+  and time. Check for a mistyped concentration or time."
+- The two 0 µM controls are exempt; a design with more controls passes.
+
+## T14 Replicate value contradicts the file name (warning)
+
+`proteins_baseline` · `compounds_baseline` · `config_rep_swapped` (Replicate R1 and R2 swapped for the 20 samples at 10 µM)
+
+- Orange hint: "Replicate differs from the file name: 20 samples". Tooltip
+  lines such as "2026-09-18_MULI+BI-8925_10_20min_R1: Replicate R2", then
+  "The Replicate value from the config is used."
+- The Replicate column shows the config values (R2 for those `_R1` files).
+- **Kinetics:** kinact/KI 334.1, as in T0, because every sample still enters
+  the global fit on its own. Only the per-series fits change: R1 325.4, R2
+  343.6 (T0: 327.9 and 341.0).
+
+## T15 Sample cap (blocked)
+
+`config_385_samples` (385 made-up sample names)
+
+- **Config upload:** refused, with "At most 384 samples per config (385
+  rows)."
+- **Samples table:** with more than 384 samples the table is blocked with "At
+  most 384 samples per run (n present)". This DB has 122 samples, so only the
+  script checks it.
+- **Deconvolution:** point the deconvolution at more than 384 `.raw` files, or
+  at fewer but with an analysis name whose database already holds samples.
+  The start dialog shows a red line "At most 384 samples per analysis
+  database. This run would hold …", and **Continue** is disabled. Deselect
+  files in the picker until at most 384 remain: the red line goes and
+  Continue is enabled again. Samples already in the database count once, also
+  when they are queried again.
+
+## How replicates and series work
+
+### What they mean in the experiment
+
+- **Condition:** one combination of protein, compound(s), concentration and
+  time, e.g. MLKL + BI-8925 at 10 µM for 20 min.
+- **Replicate:** one sample of a condition. Measuring a condition twice gives
+  two replicates. In this kit, `…_10_20min_R1` and `…_10_20min_R2` are the two
+  replicates of the 10 µM / 20 min condition.
+- **Replicate series:** all samples with the same replicate number, i.e. one
+  complete repeat of the whole experiment. Series R1 holds the R1 sample of
+  every condition, series R2 the R2 samples. A series is what a repeat on
+  another day, plate or stock dilution produces.
+
+So the two words look at the same samples from two sides: replicates are
+counted per condition, series across the whole experiment. With one sample per
+condition and series, a condition has as many replicates as there are series.
+
+### How KiwiMS uses them
+
+- **The fits use every sample on its own.** Replicates are never averaged or
+  merged before fitting. Means ± SD per time point in the Binding Curve are
+  for display only.
+- **The series** drive two things only:
+  - the per-series fits, "kinact/Ki by Replicate Series" in the Fit tab: the
+    whole global fit repeated on each series alone. Agreement between series
+    means a repeat of the experiment gives the same answer;
+  - the marker fill in the Fit plots: R1 filled, R2 open, R3 dotted, R4 open
+    with dot.
+- **The replicate groups** (samples named alike up to `_R<n>`) drive the
+  "Replicates declared differently" warning (T11).
+
+### How they are declared
+
+The **Replicate** column of the Samples table always holds the series:
+
+| Source | Example | Replicate column |
+|---|---|---|
+| Config, Replicate column | `R2`, `Rep2`, `Day2` | the value as given |
+| No config value, file name ends in `_R<n>` | `…_10_20min_R2.raw` | `R2` (`_R02` → `R2`) |
+| Neither | `Plate_A1.raw` | empty: no series, no per-series fit |
+
+A config value wins over the file name; a contradicting number (config `R2`
+for a file ending in `_R1`) raises the T14 warning. Series are ordered
+naturally (R2 before R10).
+
+Before this change the column showed the condition name (`…_10_20min`) for
+`_R<n>` files and a meaningless counter (R1, R2, R3, … one per sample) for
+other names. Tables saved with the old condition names still work: such a
+value is read as missing and the `_R<n>` ending names the series.
+
+### Limits
+
+| | Cap | Checked |
+|---|---|---|
+| Replicate series | 4 | config upload, Samples table (kinact/KI on) |
+| Replicates per condition | 4 | Samples table; untreated controls (concentration 0) exempt |
+| Samples per run | 384 | config upload, Samples table, deconvolution start |
+
+The series cap matches the four marker fills of the Fit plots. The sample cap
+is one 384-well plate, the largest format the config's Well column accepts. The
+values are `run_limits` in `app/logic/conversion_constants.R`.
+
+### What can still go wrong
+
+- **Re-injections declared as replicates:** if `_R1` and `_R2` are two
+  injections of the same incubation, the fit counts them as independent and
+  the standard errors and confidence intervals come out too narrow. The data
+  can't reveal this, so the app explains it where the user decides or reads
+  the result:
+  - **Samples Declaration help** ("?" next to Browse in the Samples tab):
+    what counts as a replicate (a separate incubation), then how to declare
+    the samples for each design: separate incubations with or without a
+    repeat of the experiment, aliquots taken from one reaction over time, and
+    the same incubation injected more than once (include one injection only);
+  - **kinact/KI help** (Kinetics tab, kinact/KI card): the ± and the 95 % CI
+    assume separate incubations;
+  - **kinact/Ki by Replicate Series help** (Fit tab): series made of
+    re-injections agree by construction.
+- **Other naming:** only `_R<n>` at the end of a name is recognised; `-R1`,
+  `_rep1` or `_1` leave the Replicate column empty unless a config fills it.
+- **Unequal repeats:** a series spanning fewer than 3 concentrations gets no
+  per-series fit and is left out of the Fit tab's series plot.
+- **A replicate group split across complexes** (T1e, or the 20 min pair in T8)
+  corrupts no number. Each complex just loses part of a time course or a whole
+  series. That's why the replicate checks warn instead of blocking.

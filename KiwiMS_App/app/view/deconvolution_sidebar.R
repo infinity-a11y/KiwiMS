@@ -21,7 +21,7 @@ box::use(
 
 box::use(
   app / logic / folder_picker[folder_picker],
-  app / logic / helper_functions[config_badge],
+  app / logic / helper_functions[config_badge, config_icon],
   app / logic / logging[get_log],
 )
 
@@ -331,7 +331,7 @@ server <- function(
         actionButton(
           ns("open_config_btn"),
           "Experiment Configuration",
-          icon = icon("upload"),
+          icon = config_icon(),
           class = "btn btn-sm btn-default"
         ),
         if (active) chk else shinyjs::disabled(chk)

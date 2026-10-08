@@ -128,6 +128,7 @@ box::use(
       gradient_scales,
       hits_table_names,
       popover_autoclose,
+      run_limits,
     ],
 )
 
@@ -253,7 +254,8 @@ server <- function(
   id,
   conversion_sidebar_vars,
   deconvolution_main_vars,
-  config_file
+  config_file,
+  config_apply_trigger = NULL
 ) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
@@ -674,10 +676,37 @@ server <- function(
       #   hints <- "Binding [%] inferred from time series measurements of a single concentration."
       # }
 
-      shiny::HTML(paste(
-        '<i class="fa-solid fa-circle-info"></i> &nbsp;&nbsp;',
-        hints
-      ))
+      # Help modal for the active tab, shown next to its hint
+      help_input <- if (input$tabs == "Samples") {
+        "resultinput_tooltip_bttn"
+      } else {
+        "fileinput_tooltip_bttn"
+      }
+
+      shiny::div(
+        class = "declaration-info",
+        shiny::span(
+          class = "declaration-hint",
+          shiny::HTML(paste(
+            '<i class="fa-solid fa-circle-info"></i> &nbsp;&nbsp;',
+            hints
+          ))
+        ),
+        bslib::tooltip(
+          shiny::tags$button(
+            type = "button",
+            class = "btn declaration-help-btn",
+            `aria-label` = "Help",
+            onclick = sprintf(
+              "Shiny.setInputValue('%s', Math.random(), {priority: 'event'});",
+              ns(help_input)
+            ),
+            shiny::icon("question")
+          ),
+          "Help",
+          placement = "bottom"
+        )
+      )
     })
 
     ## Table loading special events ----
@@ -947,15 +976,26 @@ server <- function(
       ignoreInit = TRUE
     )
 
+    ## Config autofill availability ----
+    # Reason the sample table cannot take a config autofill right now, or NULL
+    # when it can. Shared by the use_config button and the config modal.
+    config_apply_block <- shiny::reactive({
+      if (isTRUE(declaration_vars$samples_confirmed)) {
+        "Sample table is confirmed. Click Edit to apply the config."
+      } else if (
+        is.null(sample_table_data()) || nrow(sample_table_data()) == 0
+      ) {
+        "Sample table is empty."
+      } else {
+        NULL
+      }
+    })
+
     ## Config autofill button state ----
     safe_observe(
       observer_name = "Use Config Button State",
       handler_fn = function() {
-        can_use <- !is.null(config_file()) &&
-          !isTRUE(declaration_vars$samples_confirmed) &&
-          !is.null(sample_table_data()) &&
-          nrow(sample_table_data()) > 0
-        if (can_use) {
+        if (!is.null(config_file()) && is.null(config_apply_block())) {
           shinyjs::enable("use_config")
         } else {
           shinyjs::disable("use_config")
@@ -964,63 +1004,79 @@ server <- function(
     )
 
     ## Config autofill ----
+    apply_config_to_samples <- function() {
+      shiny::req(is.null(config_apply_block()))
+      shiny::req(!is.null(config_file()))
+
+      cfg <- config_file()
+      cleared_tbl <- sample_table_data()
+      # Exclude Replicate from clearing — it is auto-computed, not user-entered
+      non_sample_cols <- setdiff(names(cleared_tbl), c("Sample", "Replicate"))
+      for (col in non_sample_cols) {
+        cleared_tbl[[col]] <- if (is.numeric(cleared_tbl[[col]])) {
+          NA_real_
+        } else {
+          ""
+        }
+      }
+
+      # If config has concentration/time and columns are missing, add them before
+      # autofill so apply_config_autofill can fill the values in one pass
+      has_conc <- "Compound_Concentration" %in%
+        names(cfg) &&
+        any(!is.na(cfg$Compound_Concentration))
+      has_time <- "Incubation_Time" %in%
+        names(cfg) &&
+        any(!is.na(cfg$Incubation_Time))
+      if (
+        has_conc &&
+          has_time &&
+          !all(c("Concentration", "Time") %in% names(cleared_tbl))
+      ) {
+        cleared_tbl$Concentration <- NA_real_
+        cleared_tbl$Time <- NA_real_
+      }
+
+      new_tbl <- apply_config_autofill(cleared_tbl, cfg)
+      new_tbl <- add_replicate_col(new_tbl, cfg)
+
+      if (!identical(new_tbl, sample_table_data())) {
+        write_log("Config autofill applied to sample table")
+        sample_table_data(new_tbl)
+        sample_table_trigger(sample_table_trigger() + 1)
+      }
+
+      if (
+        has_conc &&
+          has_time &&
+          !isTRUE(conversion_sidebar_vars$run_kinact_ki())
+      ) {
+        trigger_kinact_ki(trigger_kinact_ki() + 1L)
+      }
+    }
+
     safe_observe(
       event_expr = input$use_config,
       observer_name = "Config Autofill",
       handler_fn = function() {
         shiny::req(input$use_config > 0)
-        shiny::req(!is.null(sample_table_data()))
-        shiny::req(nrow(sample_table_data()) > 0)
-        shiny::req(!is.null(config_file()))
-
-        cfg <- config_file()
-        cleared_tbl <- sample_table_data()
-        # Exclude Replicate from clearing — it is auto-computed, not user-entered
-        non_sample_cols <- setdiff(names(cleared_tbl), c("Sample", "Replicate"))
-        for (col in non_sample_cols) {
-          cleared_tbl[[col]] <- if (is.numeric(cleared_tbl[[col]])) {
-            NA_real_
-          } else {
-            ""
-          }
-        }
-
-        # If config has concentration/time and columns are missing, add them before
-        # autofill so apply_config_autofill can fill the values in one pass
-        has_conc <- "Compound_Concentration" %in%
-          names(cfg) &&
-          any(!is.na(cfg$Compound_Concentration))
-        has_time <- "Incubation_Time" %in%
-          names(cfg) &&
-          any(!is.na(cfg$Incubation_Time))
-        if (
-          has_conc &&
-            has_time &&
-            !all(c("Concentration", "Time") %in% names(cleared_tbl))
-        ) {
-          cleared_tbl$Concentration <- NA_real_
-          cleared_tbl$Time <- NA_real_
-        }
-
-        new_tbl <- apply_config_autofill(cleared_tbl, cfg)
-        new_tbl <- add_replicate_col(new_tbl, cfg)
-
-        if (!identical(new_tbl, sample_table_data())) {
-          write_log("Config autofill applied to sample table")
-          sample_table_data(new_tbl)
-          sample_table_trigger(sample_table_trigger() + 1)
-        }
-
-        if (
-          has_conc &&
-            has_time &&
-            !isTRUE(conversion_sidebar_vars$run_kinact_ki())
-        ) {
-          trigger_kinact_ki(trigger_kinact_ki() + 1L)
-        }
+        apply_config_to_samples()
       },
       priority = -5
     )
+
+    # Same autofill, requested from the config modal ("Confirm & Apply")
+    if (!is.null(config_apply_trigger)) {
+      safe_observe(
+        event_expr = config_apply_trigger(),
+        observer_name = "Config Autofill — Modal",
+        handler_fn = function() {
+          shiny::req(config_apply_trigger() > 0)
+          apply_config_to_samples()
+        },
+        priority = -5
+      )
+    }
 
     ## Replicate column — refresh when config changes ----
     safe_observe(
@@ -7575,6 +7631,61 @@ server <- function(
                 shiny::div(
                   class = "tooltip-text",
                   "Assign each sample their contained protein and compound(s). If a kinact/Ki analysis is intended, samples need to be annotated with their corresponding compound concentration and incubation time. Sample annotation can be performed via file upload or by filling the table directly. The table also supports copy/paste for efficient filling."
+                ),
+                shiny::br(),
+                shiny::div(
+                  class = "tooltip-text",
+                  shiny::p(
+                    shiny::strong("Replicate"),
+                    " names the replicate series a sample belongs to: one complete repeat of the experiment, e.g. R1 for all samples of the first repeat and R2 for those of the second. It is read-only here and comes from the Replicate column of the experiment config or, without one, from an _R<n> ending of the file name (sample_10uM_5min_R2.raw → R2). Without either it stays empty."
+                  ),
+                  shiny::p(
+                    "Replicates of a condition are the samples with the same protein, compound(s), concentration and time, one per series. Every sample enters the fits on its own; the series only decide the per-series fits (kinact/Ki by Replicate Series) and the marker fills in the Fit plots."
+                  ),
+                  shiny::p(
+                    shiny::strong("What counts as a replicate: "),
+                    "a separate incubation, i.e. its own reaction mixed, incubated and stopped on its own, then measured. Injecting the same incubation twice is ",
+                    shiny::strong("not"),
+                    " a replicate: it repeats the measurement, not the experiment, and the two readings agree more closely than two real incubations would. KiwiMS counts every sample as an independent incubation, so re-injections declared as replicates make the standard errors and confidence intervals of k",
+                    htmltools::tags$sub("obs"),
+                    " and k",
+                    htmltools::tags$sub("inact"),
+                    "/K",
+                    htmltools::tags$sub("i"),
+                    " too narrow."
+                  ),
+                  shiny::p(
+                    shiny::strong("Declaring your samples"),
+                    " depends on how they were made:"
+                  ),
+                  htmltools::tags$ul(
+                    htmltools::tags$li(
+                      shiny::strong("Each sample its own incubation, the experiment repeated: "),
+                      "declare all samples. Give the samples of each repeat their own series number (R1, R2, …), the same for all samples of that repeat (same day, plate or stock dilution)."
+                    ),
+                    htmltools::tags$li(
+                      shiny::strong("Each sample its own incubation, no repeat: "),
+                      "declare all samples and leave Replicate empty (or all R1). The fits work as usual; there are no per-series fits."
+                    ),
+                    htmltools::tags$li(
+                      shiny::strong("Aliquots taken from one reaction over time: "),
+                      "the usual time-course design. Each aliquot is a sample at its time point; all aliquots of one reaction belong to the same series."
+                    ),
+                    htmltools::tags$li(
+                      shiny::strong("The same incubation injected more than once: "),
+                      "include one injection per incubation only, by leaving the others out of the deconvolution or the config. Declared as replicates or as a second series, they would make the confidence intervals too narrow and the series agree by construction."
+                    )
+                  ),
+                  shiny::p(
+                    shiny::strong("Limits: "),
+                    "at most ",
+                    run_limits$max_samples,
+                    " samples per run, ",
+                    run_limits$max_series,
+                    " replicate series and ",
+                    run_limits$max_replicates,
+                    " replicates per condition (untreated controls at concentration 0 excepted)."
+                  )
                 )
               ),
               title = "Samples Declaration",
@@ -7876,7 +7987,7 @@ server <- function(
         title = "Global Fit Residuals",
         text = list(
           shiny::p(
-            "Each point is one sample: measured binding minus the value of the global fit at its concentration and time, plotted against time. Colour and shape give the concentration; the fill gives the replicate series (filled, open, dotted), and a thin line joins the points of one series over time."
+            "Each point is one sample: measured binding minus the value of the global fit at its concentration and time, plotted against time. Colour and shape give the concentration; the fill gives the replicate series (R1 filled, R2 open, R3 dotted, R4 open with dot), and a thin line joins the points of one series over time."
           ),
           shiny::p(
             "Points scattering evenly around zero, mostly within the dotted ±2 SD lines, mean the model describes the time courses. A run of points on one side — for example early samples all below zero, or one concentration drifting away — shows something the model does not capture, such as low-intensity adducts read as 0 %, a lag phase or an unstable compound."
@@ -7905,6 +8016,9 @@ server <- function(
           ),
           shiny::p(
             "Series that agree within their error bars mean a repeat of the whole experiment gives the same answer. A clear gap between series shows variability the per-sample scatter does not capture (different stock dilution, plate or day)."
+          ),
+          shiny::p(
+            "This only holds when each series is an independent repeat with its own incubations. A second series made of re-injections of the first series' samples agrees with it by construction and says nothing about reproducibility."
           )
         )
       ),
@@ -8217,6 +8331,9 @@ server <- function(
                     " of that fitted parameter — how precisely the global fit pins it down, not the spread of the measurements. The bracketed ",
                     shiny::strong("95 % CI"),
                     " is a bootstrap interval from 200 refits and is the more reliable range of the two, because it does not assume the estimate is normally distributed. The per-series error bars in the Fit tab are standard errors of the same kind."
+                  ),
+                  shiny::p(
+                    "Both ranges assume that every sample is a separate incubation. Repeated injections of one incubation declared as replicates make them too narrow; the Samples Declaration help explains how to declare replicates."
                   ),
                   shiny::p(
                     shiny::strong("Model: "),
@@ -8761,6 +8878,7 @@ server <- function(
         }
       )),
       samples_confirmed = shiny::reactive(declaration_vars$samples_confirmed),
+      config_apply_block = config_apply_block,
       cancel_continuation = shiny::reactive(input$conversion_cont_cancel),
       activate_kinact_ki = shiny::reactive(trigger_kinact_ki())
     )

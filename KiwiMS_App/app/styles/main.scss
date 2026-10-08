@@ -18,14 +18,25 @@
   }
 
   .kiwi-file-list {
-    max-height: 220px;
+    max-height: 50vh;
     overflow-y: auto;
     padding-top: 1.5rem;
+    user-select: none;
 
     .checkbox {
       margin-bottom: 0;
       align-content: center;
       border-bottom: 1px solid #e5e5e5;
+      cursor: pointer;
+    }
+
+    .checkbox:hover {
+      background: #ececf4;
+    }
+
+    .checkbox:has(input:focus-visible) {
+      outline: 2px solid #38387c;
+      outline-offset: -2px;
     }
 
     .checkbox:last-child {
@@ -49,6 +60,30 @@
         flex-shrink: 0;
         position: static;
       }
+    }
+  }
+
+  /* Light-background take on .shortcut-bar (conversion tab) */
+  .kiwi-file-hint {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-around;
+    gap: 6px 14px;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid #e5e5e5;
+
+    .shortcut-item {
+      gap: 3px;
+      font-size: 0.75rem;
+      color: #333;
+      white-space: nowrap;
+    }
+
+    .key {
+      padding: 1px 5px;
+      font-size: 0.7rem;
+      line-height: 1.3;
     }
   }
 }
@@ -459,8 +494,63 @@ button .sF-modal {
   overflow-y: auto;
 }
 
+/* Start Deconvolution dialog: wide enough for full raw file names and never
+   taller than the viewport. The target file list is the one part that gives:
+   it takes the height the rest of the dialog leaves (flex chain from
+   .modal-content down to .kiwi-file-list) and scrolls itself. The body keeps
+   overflow visible so dropdowns in it are not clipped. */
+.deconvolute-modal .modal-dialog {
+  max-width: min(760px, 95vw);
+  margin: 4vh auto;
+}
+
+.deconvolute-modal .modal-content {
+  max-height: 92vh;
+}
+
 .deconvolute-modal .modal-body {
+  max-height: none !important;
   overflow-y: visible !important;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+
+  > .row {
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
+    flex-wrap: nowrap;
+
+    > .col-sm-12 {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+
+      > * {
+        flex: 0 0 auto;
+      }
+    }
+  }
+
+  #app-deconvolution_main-target_sel_ui,
+  .kiwi-file-selector {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .kiwi-file-actions,
+  .kiwi-file-hint {
+    flex: 0 0 auto;
+  }
+
+  .kiwi-file-list {
+    flex: 1 1 auto;
+    min-height: 120px;
+  }
 }
 
 /* No height constraint inside shinyFiles modals */
@@ -745,12 +835,6 @@ input[type="number"]::-webkit-inner-spin-button {
   }
 }
 
-.fileinput-tooltip-btn,
-#app-conversion_main-resultinput_tooltip_bttn {
-  margin: 0;
-  height: 46.6px;
-}
-
 .plot-dl-buttons {
   display: flex;
   gap: 4px;
@@ -764,11 +848,6 @@ input[type="number"]::-webkit-inner-spin-button {
 .plotly-dl-offscreen {
   position: absolute;
   left: -9999px;
-}
-
-.sample-declaration-info-ui {
-  display: flex;
-  justify-content: space-around;
 }
 
 .tooltip-bttn .btn {
@@ -836,6 +915,77 @@ input[type="number"]::-webkit-inner-spin-button {
   font-style: italic;
   font-size: 12px;
   padding-right: 8px;
+  // Fill the space right of the tabs so the hint can center in it
+  flex: 1 1 0;
+  min-width: 0;
+
+  > .shiny-html-output {
+    width: 100%;
+  }
+}
+
+.declaration-info {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+}
+
+// Centered between the last tab and the help button; the left padding
+// mirrors the gap before the button
+.declaration-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-left: 0.6em;
+  text-align: center;
+}
+
+// Scoped under .declaration-info so it outranks Bootstrap's .btn colors,
+// which are loaded after this stylesheet.
+.declaration-info .declaration-help-btn {
+  --bs-btn-color: #fff;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-active-color: #fff;
+  --bs-btn-bg: rgb(255 255 255 / 12%);
+  --bs-btn-hover-bg: rgb(190 209 193 / 35%);
+  --bs-btn-active-bg: rgb(190 209 193 / 50%);
+  --bs-btn-border-color: rgb(255 255 255 / 35%);
+  --bs-btn-hover-border-color: rgb(190 209 193);
+  --bs-btn-active-border-color: rgb(190 209 193);
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1;
+  color: var(--bs-btn-color);
+  background: var(--bs-btn-bg);
+  border: 1px solid var(--bs-btn-border-color);
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--bs-btn-hover-color);
+    background: var(--bs-btn-hover-bg);
+    border-color: var(--bs-btn-hover-border-color);
+    transform: scale(1.08);
+  }
+
+  &:active {
+    background: var(--bs-btn-active-bg);
+  }
+
+  &:focus:not(:focus-visible) {
+    box-shadow: none;
+  }
 }
 
 /* --- Loaders & Overlays --- */
@@ -2007,21 +2157,70 @@ div[data-value="Protein Conversion"] .tab-pane {
 #app-conversion_main-proteins_table_info,
 #app-conversion_main-compounds_table_info,
 #app-conversion_main-samples_table_info {
-  font-style: italic;
+  // Styled like the app's tooltips (dark panel, accent bar on the left);
+  // the state classes below only swap the accent and icon.
+  --info-accent: rgb(190 209 193);
+  --info-icon: "\f05a"; // circle-info
+
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6em;
   margin-top: auto;
-  height: 46.6px;
-  justify-self: center;
-  align-content: center;
-  font-size: 0.8vw;
+  height: var(--table-control-height, 47px);
   width: 100%;
+  padding: 0 1em;
+  font-size: 0.85em;
+  font-weight: 600;
+  line-height: 1.25;
   text-align: center;
+  color: #fff;
+  background: rgb(20 21 31 / 80%);
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-left: 3px solid var(--info-accent);
   border-radius: var(--bs-border-radius);
-  padding-left: 1em;
-  padding-right: 1em;
-  line-height: normal;
-  border: 1px solid white;
-  background: rgb(190 209 193);
-  color: black;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 25%);
+  transition:
+    border-color 0.2s ease,
+    color 0.2s ease;
+
+  &::before {
+    content: var(--info-icon);
+    font-family: "Font Awesome 6 Free";
+    font-weight: 900;
+    color: var(--info-accent);
+  }
+
+  &.table-info-green {
+    --info-accent: rgb(139 195 74);
+    --info-icon: "\f058"; // circle-check
+    color: var(--info-accent);
+  }
+
+  &.table-info-red {
+    --info-accent: #ff5a23;
+    --info-icon: "\f071"; // triangle-exclamation
+    color: var(--info-accent);
+  }
+
+  // While the table is being checked; declared last so it overrides the
+  // green/red state still set from the previous check
+  &.table-info-loading {
+    --info-accent: rgb(190 209 193);
+    --info-icon: "\f110"; // spinner
+    color: rgb(255 255 255 / 55%);
+
+    &::before {
+      animation: table-info-spin 1s linear infinite;
+    }
+  }
+}
+
+@keyframes table-info-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 #app-conversion_main-proteins_table,
@@ -2066,14 +2265,50 @@ div[data-value="Protein Conversion"] .tab-pane {
 
 .samples-controls,
 .comp-prot-controls {
+  // Shared height of every control in the row (file input, info panel,
+  // buttons, unit selectors), so their tops and bottoms line up
+  --table-control-height: 47px;
+
   height: 75px;
   align-content: end;
   width: 99%;
+
+  .table-input .input-group,
+  .table-control-buttons .btn,
+  .unit-selectors .bootstrap-select {
+    height: var(--table-control-height);
+  }
+
+  // The bootstrap-select wrapper is a bordered .form-control; the toggle
+  // fills it so the border is included in the shared height
+  .unit-selectors .bootstrap-select > .dropdown-toggle {
+    height: 100%;
+  }
+
+  // bootstrap-select positions the label absolutely over the full toggle;
+  // center it vertically in the taller toggle
+  .unit-selectors .bootstrap-select > .dropdown-toggle .filter-option {
+    display: flex;
+    align-items: center;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
 }
 
 .table-input .form-group {
+  position: relative;
   margin: 0;
   height: fit-content;
+}
+
+// Shiny's upload progress bar (shown as a thin line under the file input)
+// hangs below the input instead of taking space, which would lift the input
+// above the other controls in the row
+.table-input .shiny-file-input-progress {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin: 0;
 }
 
 .table-input .progress {
@@ -2839,11 +3074,49 @@ div[data-value="Protein Conversion"] .tab-pane {
   height: auto;
   overflow: hidden;
   align-content: stretch;
+  /* Lets the card content size itself against the card body (cqh/cqi) */
+  container-type: size;
 
   > .shinycssloaders-container,
   > .shinycssloaders-container > .shiny-html-output,
   > .shiny-html-output {
     height: 100%;
+  }
+}
+
+/* kinact and Ki: the text scales down with the card instead of overflowing
+   it. A short value with stats beside it fits on one line, a long value (e.g.
+   9.8 x 10^-5 M) pushes the stats onto a line of their own, so the height
+   limit allows for the value plus up to three stat lines. */
+.binding-analysis-tab .result-cards > .card-custom:nth-child(-n + 2) {
+  .kinetic-card-content {
+    font-size: min(1em, 28cqh, 14cqi);
+  }
+
+  /* Wide, short cards: value on the left, one stat per line on the right,
+     never wrapping, so the content needs ~2 lines of height instead of 3-4 */
+  @container (min-aspect-ratio: 5 / 2) {
+    .kinetic-card-content {
+      flex-wrap: nowrap;
+      font-size: min(1em, 40cqh, 7.5cqi);
+
+      > .kinetic-stats,
+      > .result-warnings {
+        flex: 1 1 auto;
+      }
+    }
+
+    .kinetic-stats {
+      flex-direction: column;
+      align-items: flex-end;
+      font-size: 0.48em;
+    }
+
+    .kinetic-stat {
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
   }
 }
 
@@ -3114,16 +3387,6 @@ th.sorting {
 .load-db {
   background-color: #38387c !important;
   color: white !important;
-}
-
-.table-info-red {
-  border: 1px solid #ff5a23;
-  font-family: monospace;
-}
-
-.table-info-green {
-  border: 1px solid rgb(139, 195, 74);
-  font-family: monospace;
 }
 
 .table-hint-anchor {
@@ -5082,23 +5345,62 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
    Config Modal
    ========================================================================== */
 
-/* Nav button indicators */
-.config-nav-indicator--active {
-  color: #7cb342;
-  font-size: 1em;
-  margin-right: 4px;
-  vertical-align: middle;
-  -webkit-text-stroke: 1px #333;
+/* Experiment config glyph — "apply config" variant carries a wand badge that
+   sits mostly beside the table glyph, so both shapes stay readable */
+.config-icon--apply {
+  position: relative;
+  display: inline-block;
+  margin-right: 0.7em;
+
+  .config-icon-badge {
+    position: absolute;
+    right: -1em;
+    bottom: -0.3em;
+    font-size: 0.7em;
+    line-height: 1;
+  }
 }
 
-.config-nav-indicator--inactive {
+/* Usable apply buttons: black wand against the green table glyph */
+#app-conversion_main-use_config:not(:disabled) .config-icon-badge,
+.config-apply-btn:not(:disabled) .config-icon-badge {
+  color: #000;
+}
+
+/* Apply-config buttons — green accent of the "Active" config badge while the
+   config can be applied, linking them visually to the config */
+#app-conversion_main-use_config:not(:disabled),
+.config-apply-btn:not(:disabled) {
+  border-color: #7cb342;
+  background-color: rgba(124, 179, 66, 0.15);
+  color: #558b2f;
+}
+
+#app-conversion_main-use_config:not(:disabled):hover,
+.config-apply-btn:not(:disabled):hover {
+  background-color: rgba(124, 179, 66, 0.3);
+}
+
+/* The samples controls sit on a darker panel — lay the green tint over a
+   white base so the button stays as light as in the modal */
+#app-conversion_main-use_config:not(:disabled) {
+  background-image: linear-gradient(
+    rgba(124, 179, 66, 0.15),
+    rgba(124, 179, 66, 0.15)
+  );
+  background-color: rgba(255, 255, 255, 0.85);
+}
+
+#app-conversion_main-use_config:not(:disabled):hover {
+  background-image: linear-gradient(
+    rgba(124, 179, 66, 0.3),
+    rgba(124, 179, 66, 0.3)
+  );
+  background-color: rgba(255, 255, 255, 0.85);
+}
+
+.config-apply-btn-wrapper {
   display: inline-block;
-  width: 1em;
-  height: 1em;
-  border-radius: 50%;
-  border: 2px solid #333;
-  margin-right: 4px;
-  vertical-align: middle;
 }
 
 /* Download example button — gap between icon and label */

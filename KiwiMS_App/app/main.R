@@ -36,6 +36,7 @@ box::use(
     helper_functions[
       check_github_version,
       config_badge,
+      config_icon,
       get_kiwims_version,
       get_latest_release_url,
       normalize_colnames,
@@ -732,7 +733,6 @@ ui <- function(id) {
         )
       ),
       bslib$nav_spacer(),
-      bslib$nav_item(shiny::uiOutput(ns("config_nav_btn"))),
       bslib$nav_item(
         shiny::actionButton(
           ns("settings"),
@@ -856,6 +856,10 @@ server <- function(id) {
     pending_config <- shiny$reactiveVal(NULL)
     config_modal_state <- shiny$reactiveVal("upload")
     config_filename <- shiny$reactiveVal(NULL)
+    # Modal opened from the Protein Conversion module — offers applying the
+    # config to the samples table on top of activating it
+    config_modal_from_conversion <- shiny$reactiveVal(FALSE)
+    config_apply_trigger <- shiny$reactiveVal(0L)
 
     # User settings persistence
     settings_dir <- file.path(Sys.getenv("LOCALAPPDATA"), "KiwiMS", "settings")
@@ -2060,7 +2064,8 @@ server <- function(id) {
       "conversion_main",
       conversion_sidebar_vars,
       deconvolution_main_vars,
-      config_file = configfile
+      config_file = configfile,
+      config_apply_trigger = config_apply_trigger
     )
 
     # Check update availability
@@ -2145,27 +2150,13 @@ server <- function(id) {
 
     # Config Modal Window ----
 
-    # Nav button — filled green circle = active, outlined black circle = none
-    output$config_nav_btn <- shiny$renderUI({
-      indicator <- if (!is.null(configfile())) {
-        shiny$tags$i(class = "fa-solid fa-circle config-nav-indicator--active")
-      } else {
-        shiny$tags$span(class = "config-nav-indicator--inactive")
-      }
-      shiny$actionButton(
-        ns("config"),
-        shiny$tagList(indicator, " Config"),
-        class = "nav-link"
-      )
-    })
-
     # Download handler for example config file
     output$download_example_config <- shiny$downloadHandler(
       filename = "example_config.csv",
       content = function(file) {
         example <- data.frame(
           Sample = c("sample_1.raw", "sample_2.raw", "sample_3.raw"),
-          Replicate = c("Rep1", "Rep1", "Rep2"),
+          Replicate = c("R1", "R1", "R2"),
           Protein = c("RACA", "RACA", "RACA"),
           Well = c("A1", "A2", "A3"),
           Compound_Concentration = c(100, 200, 100),
@@ -2216,7 +2207,7 @@ server <- function(id) {
                 shiny$tags$td(shiny$tags$code("Replicate")),
                 shiny$tags$td(class = "config-col-optional", "Optional"),
                 shiny$tags$td(
-                  "Replicate group label \u00b7 free text \u00b7 partial fill allowed"
+                  "Replicate series, e.g. R1, R2 \u00b7 at most 4 \u00b7 partial fill allowed"
                 )
               ),
               shiny$tags$tr(
@@ -2344,6 +2335,30 @@ server <- function(id) {
       }
     })
 
+    # "Apply to samples" footer button — only offered when the modal was opened
+    # from the Protein Conversion module. Follows the same sample table states
+    # as the use_config button there; disabled with the reason as tooltip.
+    config_apply_button <- function(id, label) {
+      if (!isTRUE(config_modal_from_conversion())) {
+        return(NULL)
+      }
+      block <- conversion_main_vars$config_apply_block()
+      btn <- shiny$actionButton(
+        ns(id),
+        label,
+        icon = config_icon(apply = TRUE),
+        class = "btn btn-default config-apply-btn"
+      )
+      if (is.null(block)) {
+        return(btn)
+      }
+      bslib$tooltip(
+        shiny$div(class = "config-apply-btn-wrapper", shinyjs::disabled(btn)),
+        block,
+        placement = "top"
+      )
+    }
+
     # Modal footer — three states (always includes Dismiss)
     output$config_modal_footer <- shiny$renderUI({
       state <- config_modal_state()
@@ -2356,10 +2371,15 @@ server <- function(id) {
             "Confirm",
             class = "btn btn-default"
           ),
+          config_apply_button(
+            "confirm_apply_config",
+            "Confirm & Apply to Samples"
+          ),
           shiny$modalButton("Dismiss")
         )
       } else {
         shiny$tagList(
+          config_apply_button("apply_config", "Apply to Samples"),
           shiny$actionButton(
             ns("remove_config"),
             "Remove Config",
@@ -2486,13 +2506,47 @@ server <- function(id) {
     })
 
     # Confirm — write to configfile, store filename, close modal, toast
-    shiny$observeEvent(input$confirm_config, {
+    commit_pending_config <- function() {
       configfile(pending_config())
       config_filename(input$experiment_config$name)
       pending_config(NULL)
       shiny$removeModal()
+    }
+
+    shiny$observeEvent(input$confirm_config, {
+      commit_pending_config()
       show_toast(
         "Config saved!",
+        text = NULL,
+        type = "success",
+        timer = 2000,
+        timerProgressBar = TRUE
+      )
+    })
+
+    # Confirm & Apply — as Confirm, then autofill the samples table exactly as
+    # the use_config button of the Protein Conversion module does
+    shiny$observeEvent(input$confirm_apply_config, {
+      shiny$req(is.null(conversion_main_vars$config_apply_block()))
+      commit_pending_config()
+      config_apply_trigger(config_apply_trigger() + 1L)
+      show_toast(
+        "Config saved and applied to samples!",
+        text = NULL,
+        type = "success",
+        timer = 2000,
+        timerProgressBar = TRUE
+      )
+    })
+
+    # Apply — autofill the samples table from the already active config
+    shiny$observeEvent(input$apply_config, {
+      shiny$req(!is.null(configfile()))
+      shiny$req(is.null(conversion_main_vars$config_apply_block()))
+      config_apply_trigger(config_apply_trigger() + 1L)
+      shiny$removeModal()
+      show_toast(
+        "Config applied to samples!",
         text = NULL,
         type = "success",
         timer = 2000,
@@ -2522,8 +2576,9 @@ server <- function(id) {
       )
     })
 
-    # Shared helper — opens the config modal (used by nav button and sidebar shortcut)
-    open_config_modal <- function(force_upload = FALSE) {
+    # Shared helper — opens the config modal (used by the sidebar shortcuts)
+    open_config_modal <- function(force_upload = FALSE, from_conversion = FALSE) {
+      config_modal_from_conversion(from_conversion)
       pending_config(NULL)
       output$config_check <- shiny$renderUI(NULL)
       if (!force_upload && !is.null(configfile())) {
@@ -2535,7 +2590,7 @@ server <- function(id) {
         shiny$div(
           class = "unidec-modal",
           shiny$modalDialog(
-            title = "Experiment Configuration",
+            title = shiny$tagList(config_icon(), " Experiment Configuration"),
             size = "l",
             easyClose = TRUE,
             shiny$uiOutput(ns("config_modal_body")),
@@ -2544,11 +2599,6 @@ server <- function(id) {
         )
       )
     }
-
-    # Open modal via nav button
-    shiny$observeEvent(input$config, {
-      open_config_modal()
-    })
 
     # Open modal via deconvolution sidebar shortcut
     shiny$observeEvent(
@@ -2564,7 +2614,7 @@ server <- function(id) {
     shiny$observeEvent(
       conversion_sidebar_vars$open_config_clicked(),
       {
-        open_config_modal()
+        open_config_modal(from_conversion = TRUE)
       },
       ignoreNULL = TRUE,
       ignoreInit = TRUE

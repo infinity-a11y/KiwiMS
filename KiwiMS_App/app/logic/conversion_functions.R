@@ -20,7 +20,8 @@ box::use(
       gradient_scales,
       paste_hook_js,
       hits_col_full_names,
-      kinetics_settings
+      kinetics_settings,
+      run_limits
     ],
 )
 
@@ -1274,11 +1275,35 @@ check_sample_table <- function(
     ]
   }
 
+  # The replicate series of each sample (see compute_replicate_labels()),
+  # empty where nothing names it
+  replicate_col <- if ("Replicate" %in% names(sample_table)) {
+    sample_table$Replicate
+  }
+  series <- kinetic_series_labels(sample_table$Sample, replicate_col)
+
   # Strip Replicate so positional checks below remain Sample | Protein | Compounds
   sample_table <- sample_table[,
     names(sample_table) != "Replicate",
     drop = FALSE
   ]
+
+  # Hard cap: one 384-well plate per run
+  if (nrow(sample_table) > run_limits$max_samples) {
+    return(structure(
+      paste0(
+        "At most ",
+        run_limits$max_samples,
+        " samples per run (",
+        nrow(sample_table),
+        " present)"
+      ),
+      note = paste(
+        "Split the samples over several deconvolution databases and convert",
+        "them one by one."
+      )
+    ))
+  }
 
   # Check if protein and compound names present
   if (is.null(proteins) || is.null(compounds)) {
@@ -1429,6 +1454,85 @@ check_sample_table <- function(
         }
       }
     }
+
+    # Hard cap on replicate series: each one is fitted on its own and drawn
+    # in its own marker fill, and the plots have four of them
+    n_series <- sort_series(series[!is.na(series)])
+    if (length(n_series) > run_limits$max_series) {
+      return(structure(
+        paste0(
+          "At most ",
+          run_limits$max_series,
+          " replicate series (",
+          length(n_series),
+          " present)"
+        ),
+        details = format_listed(vapply(
+          n_series,
+          function(s) sprintf("%s: %d samples", s, sum(series %in% s)),
+          character(1)
+        )),
+        note = paste(
+          "A replicate series is one complete repeat of the experiment (all R1",
+          "samples, all R2 samples, ...). It comes from the Replicate column",
+          "of the config or the _R<n> ending of the file names."
+        )
+      ))
+    }
+  }
+
+  # Hard cap on replicates per condition. With kinact/KI a condition is the
+  # declared protein, compounds, concentration and time (the untreated
+  # controls at concentration 0 are exempt, like in the design rules);
+  # without, it is the samples named alike up to _R<n>.
+  condition <- if (has_conc_time) {
+    key <- paste0(
+      sample_table[, 2],
+      " + ",
+      vapply(
+        sample_compounds(sample_table),
+        function(x) paste(sort(x), collapse = ", "),
+        character(1)
+      ),
+      ", concentration ",
+      conc_time_tbl[[1]],
+      ", time ",
+      conc_time_tbl[[2]]
+    )
+    key[conc_time_tbl[[1]] == 0] <- NA
+    key
+  } else {
+    stem <- sub("\\.raw$", "", as.character(sample_table[, 1]), ignore.case = TRUE)
+    ifelse(grepl("_[Rr][0-9]+$", stem), sub("_[Rr][0-9]+$", "", stem), NA)
+  }
+  counts <- table(condition[!is.na(condition)])
+  crowded <- counts[counts > run_limits$max_replicates]
+  if (length(crowded)) {
+    return(structure(
+      paste0(
+        "At most ",
+        run_limits$max_replicates,
+        " replicates per condition (",
+        length(crowded),
+        if (length(crowded) == 1) " condition has" else " conditions have",
+        " up to ",
+        max(crowded),
+        ")"
+      ),
+      details = format_listed(sprintf(
+        "%s: %d samples",
+        names(crowded),
+        as.integer(crowded)
+      )),
+      note = if (has_conc_time) {
+        paste(
+          "Replicates are samples with the same protein, compounds,",
+          "concentration and time. Check for a mistyped concentration or time."
+        )
+      } else {
+        "Replicates are samples named alike up to their _R<n> ending."
+      }
+    ))
   }
 
   # Warnings of a passed check, shown together in the orange hint
@@ -1505,6 +1609,22 @@ check_sample_table <- function(
     )
   }
 
+  conflicts <- replicate_conflicts(sample_table[, 1], replicate_col)
+  if (length(conflicts)) {
+    warnings$conflicts <- list(
+      warning = paste0(
+        "Replicate differs from the file name: ",
+        length(conflicts),
+        if (length(conflicts) == 1) " sample" else " samples"
+      ),
+      details = format_listed(conflicts),
+      note = paste(
+        "The Replicate value from the config is used. Check whether the",
+        "config or the file name is wrong."
+      )
+    )
+  }
+
   if (!length(warnings)) {
     return(TRUE)
   }
@@ -1536,6 +1656,26 @@ sample_compounds <- function(sample_table) {
     x <- trimws(as.character(unlist(cmp[i, ])))
     unique(x[!is.na(x) & nzchar(x)])
   })
+}
+
+# Samples whose Replicate value (from a config) names another series number
+# than the _R<n> ending of their file name, e.g. "R2" or "Rep2" for
+# "..._R1.raw". A value without a number is a naming of its own, not a
+# contradiction. One line per sample.
+replicate_conflicts <- function(sample_names, replicate) {
+  if (is.null(replicate)) {
+    return(character(0))
+  }
+  suffix <- replicate_suffix(sample_names)
+  value <- trimws(as.character(replicate))
+  value_n <- suppressWarnings(
+    as.integer(sub("^.*?([0-9]+)$", "\\1", value))
+  )
+  value_n[!grepl("[0-9]$", value)] <- NA
+  suffix_n <- as.integer(sub("^R", "", suffix))
+  clash <- !is.na(suffix_n) & !is.na(value_n) & value_n != suffix_n
+  stem <- sub("\\.raw$", "", as.character(sample_names), ignore.case = TRUE)
+  sprintf("%s: Replicate %s", stem[clash], value[clash])
 }
 
 # Replicate groups whose samples are declared differently. A group is the
@@ -5839,7 +5979,7 @@ make_kinetics_residual_plot <- function(
   # Replicate series share the concentration's colour and shape and differ in
   # fill: filled, open, dotted, open with dot. The thin line joins the points
   # of one series over time, so a replicate that drifts away shows as a run.
-  series_levels <- sort(unique(pts$series))
+  series_levels <- sort_series(pts$series)
   variants <- c("", "-open", "-dot", "-open-dot")
   series_variant <- stats::setNames(
     variants[(seq_along(series_levels) - 1) %% length(variants) + 1],
@@ -6468,25 +6608,24 @@ kinetic_sample_points <- function(raw_data) {
     as.data.frame()
 }
 
-# Replicate series a sample belongs to, used for the per-series fits. A config
-# Replicate value names the series directly (e.g. "R1"). A label KiwiMS derived
-# from the file name names the condition instead (identical for R1 and R2), so
-# for those the _R<n> suffix of the sample name is used. NA when neither exists.
+# Replicate series a sample belongs to, used for the per-series fits: its
+# Replicate value (see compute_replicate_labels()), else the _R<n> suffix of
+# its name, else NA. Tables saved before 0.7.5 held the condition name in the
+# Replicate column (the sample name without _R<n>, the same for R1 and R2);
+# such a value is read as missing, so the suffix names the series.
 kinetic_series_labels <- function(samples, replicate = NULL) {
-  stem <- sub("\\.raw$", "", as.character(samples), ignore.case = TRUE)
-  has_suffix <- grepl("_[Rr][0-9]+$", stem)
-  suffix <- rep(NA_character_, length(stem))
-  suffix[has_suffix] <- toupper(sub("^.*_([Rr][0-9]+)$", "\\1", stem[has_suffix]))
+  suffix <- replicate_suffix(samples)
 
   if (is.null(replicate)) {
     return(suffix)
   }
 
+  stem <- sub("\\.raw$", "", as.character(samples), ignore.case = TRUE)
   rep_chr <- trimws(as.character(replicate))
-  derived <- is.na(rep_chr) |
+  missing <- is.na(rep_chr) |
     rep_chr == "" |
     rep_chr == sub("_[Rr][0-9]+$", "", stem)
-  ifelse(derived, suffix, rep_chr)
+  ifelse(missing, suffix, rep_chr)
 }
 
 # Standard errors and covariance of a minpack.lm::nls.lm() fit. Parameters
@@ -7459,7 +7598,7 @@ compute_kinact_ki <- function(kobs_result, units = units) {
   series <- NULL
   labels <- unique(stats::na.omit(points$series))
   if (length(labels) >= 2) {
-    series <- do.call(rbind, lapply(sort(labels), function(s) {
+    series <- do.call(rbind, lapply(sort_series(labels), function(s) {
       sp <- points[!is.na(points$series) & points$series == s, ]
       if (length(unique(sp$conc)) < 3) {
         return(NULL)
@@ -9951,62 +10090,49 @@ checkboxColumn <- function(len, col, value = TRUE, ...) {
   inputs
 }
 
-# Compute replicate group labels for a vector of sample names.
-# Priority is resolved per sample (not globally), so a config that only
-# covers some of the current samples doesn't blind the fallbacks for the
-# rest: (1) config Replicate value for that sample, (2) _R<n> filename
-# suffix detection, (3) a unique R<n> placeholder for samples with no
-# detectable suffix at all.
+# Replicate series of each sample: the repeat of the whole experiment it
+# belongs to (R1 = first repeat, R2 = second, ...). Resolved per sample, so a
+# config that only covers some samples doesn't blind the fallback for the
+# rest: (1) the config's Replicate value, as given; (2) the _R<n> suffix of
+# the file name, as "R<n>"; (3) otherwise empty - nothing says which repeat
+# the sample is, and a made-up label would suggest a series that isn't there.
 #' @export
 compute_replicate_labels <- function(sample_names, config = NULL) {
-  labels <- rep(NA_character_, length(sample_names))
+  labels <- replicate_suffix(sample_names)
+  labels[is.na(labels)] <- ""
 
-  # Priority 1: config supplies a non-empty Replicate value for this sample
   if (!is.null(config) && "Replicate" %in% names(config)) {
     cfg_key <- gsub("\\.raw$", "", config$Sample, ignore.case = TRUE)
     samp_key <- gsub("\\.raw$", "", sample_names, ignore.case = TRUE)
-    matched <- config$Replicate[match(samp_key, cfg_key)]
-    non_empty <- !is.na(matched) & trimws(matched) != ""
-    labels[non_empty] <- trimws(matched[non_empty])
+    matched <- trimws(as.character(config$Replicate[match(samp_key, cfg_key)]))
+    from_config <- !is.na(matched) & matched != ""
+    labels[from_config] <- matched[from_config]
   }
 
-  # Priority 2: filename suffix detection (_R<n> before optional .raw), for
-  # any sample not already labeled from config. Assign the shared base name
-  # to every sample carrying an _R<n> suffix, even when its partner
-  # replicate(s) are missing (e.g. a failed deconvolution dropped one file
-  # from the set). A singleton still gets a label derived from its own
-  # filename instead of falling through to the arbitrary global counter
-  # below, which would otherwise hand out meaningless, order-dependent
-  # "R1"/"R2"/... tags with no relation to the sample's actual _R<n> suffix
-  # or to which other rows it belongs with.
-  remaining <- is.na(labels)
-  if (any(remaining)) {
-    has_rn <- grepl("_[Rr]\\d+(\\.raw)?$", sample_names)
-    base_names <- gsub("_[Rr]\\d+(\\.raw)?$", "", sample_names)
-    base_names <- gsub("\\.raw$", "", base_names, ignore.case = TRUE)
-    fill_idx <- remaining & has_rn
-    labels[fill_idx] <- base_names[fill_idx]
-  }
-
-  # Fill remaining NAs (samples with no config value and no _R<n> suffix)
-  # with R<n>, avoiding clashes with existing R<n>-shaped labels
-  existing <- labels[!is.na(labels)]
-  used_ints <- suppressWarnings(stats::na.omit(as.integer(
-    regmatches(
-      existing,
-      regexpr("(?<=[Rr])\\d+$", existing, perl = TRUE)
-    )
-  )))
-  ctr <- 1L
-  for (i in which(is.na(labels))) {
-    while (ctr %in% used_ints) {
-      ctr <- ctr + 1L
-    }
-    labels[i] <- paste0("R", ctr)
-    used_ints <- c(used_ints, ctr)
-    ctr <- ctr + 1L
-  }
   labels
+}
+
+# "R<n>" from an _R<n> suffix of a sample name (".raw" ignored), NA without
+# one. Leading zeros are dropped, so "_R01" and "_R1" name the same series.
+replicate_suffix <- function(sample_names) {
+  stem <- sub("\\.raw$", "", as.character(sample_names), ignore.case = TRUE)
+  has_suffix <- grepl("_[Rr][0-9]+$", stem)
+  out <- rep(NA_character_, length(stem))
+  out[has_suffix] <- paste0(
+    "R",
+    as.integer(sub("^.*_[Rr]([0-9]+)$", "\\1", stem[has_suffix]))
+  )
+  out
+}
+
+# Series labels in natural order: R2 before R10, labels without a number
+# after those with one
+#' @export
+sort_series <- function(series) {
+  series <- unique(as.character(series))
+  number <- suppressWarnings(as.numeric(sub("^.*?([0-9]+)$", "\\1", series)))
+  number[!grepl("[0-9]$", series)] <- NA
+  series[order(sub("[0-9]+$", "", series), is.na(number), number, series)]
 }
 
 # Empty sample declaration table generator function
@@ -10267,13 +10393,12 @@ table_observe <- function(
   compound_table = NULL,
   max_multiples = NULL
 ) {
-  # Show waiter with 0.25 seconds minimum runtime; on.exit ensures hide always runs
-  waiter::waiter_show(
-    id = ns(paste0(tab, "_table_info")),
-    html = waiter::spin_throbber()
-  )
+  # Loading state on the info panel itself, shown for at least 0.25 seconds;
+  # on.exit ensures it is always cleared. (A waiter overlay here switches the
+  # panel to position: static and briefly renders it with scrollbars.)
+  shinyjs::addClass(paste0(tab, "_table_info"), "table-info-loading")
   on.exit(
-    waiter::waiter_hide(id = ns(paste0(tab, "_table_info"))),
+    shinyjs::removeClass(paste0(tab, "_table_info"), "table-info-loading"),
     add = TRUE
   )
   Sys.sleep(0.25)

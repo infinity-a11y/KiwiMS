@@ -46,6 +46,7 @@ box::use(
   app / logic / logging[write_log, get_log, get_session_prefix],
   app / logic / user_settings[update_user_setting, read_user_settings],
   app / logic / conversion_functions[read_decon_metadata, read_decon_peaks_max],
+  app / logic / conversion_constants[run_limits],
   app /
     logic /
     deconvolution_ui[
@@ -198,6 +199,88 @@ server <- function(
     }
 
     decon_process_data <- shiny$reactiveVal(NULL)
+
+    # Samples the run would leave in its analysis database: the queried ones
+    # plus those already done there (a sample in both counts once). The
+    # conversion takes at most run_limits$max_samples, so a database must not
+    # grow beyond that.
+    planned_db_samples <- function() {
+      dir_path <- deconvolution_sidebar_vars$dir()
+      if (is.null(dir_path) || !nzchar(dir_path) || !dir.exists(dir_path)) {
+        return(list(new = 0L, total = 0L))
+      }
+      single <- grepl("\\.raw$", dir_path, ignore.case = TRUE)
+      raw_dirs <- if (single) dir_path else dir_ls(dir_path, glob = "*.raw")
+      queried <- if (
+        isTRUE(deconvolution_sidebar_vars$use_config()) &&
+          length(config_file())
+      ) {
+        samps <- config_file()[["Sample"]]
+        samps[samps %in% basename(raw_dirs)]
+      } else if (single) {
+        basename(dir_path)
+      } else {
+        # The live selection of the start dialog's picker, so the cap follows
+        # every tick; the persisted one while the picker is still rendering
+        sel <- input$target_selector %||% target_selector_sel()
+        if (length(sel) > 0) sel else basename(raw_dirs)
+      }
+      queried <- unique(gsub("\\.raw$", "", queried, ignore.case = TRUE))
+
+      dest_dir <- effective_dest() %||% deconvolution_sidebar_vars$targetpath()
+      name <- trimws(input$analysis_name %||% "")
+      db_path <- if (!is.null(dest_dir) && nzchar(name)) {
+        file.path(dest_dir, paste0(name, ".db"))
+      }
+      done <- if (!is.null(db_path) && file.exists(db_path)) {
+        tryCatch(
+          {
+            con <- DBI::dbConnect(
+              RSQLite::SQLite(),
+              db_path,
+              flags = RSQLite::SQLITE_RO
+            )
+            on.exit(DBI::dbDisconnect(con), add = TRUE)
+            if (DBI::dbExistsTable(con, "status")) {
+              DBI::dbGetQuery(
+                con,
+                "SELECT sample FROM status WHERE state = 'done'"
+              )$sample
+            } else {
+              character(0)
+            }
+          },
+          error = function(e) character(0)
+        )
+      } else {
+        character(0)
+      }
+
+      list(
+        new = length(queried),
+        total = length(union(queried, done))
+      )
+    }
+
+    # One line for the start dialog when the run would exceed the sample cap
+    sample_cap_message <- function(planned) {
+      if (planned$total <= run_limits$max_samples) {
+        return(NULL)
+      }
+      paste0(
+        "At most <b>",
+        run_limits$max_samples,
+        "</b> samples per analysis database. This run would hold <b>",
+        planned$total,
+        "</b>",
+        if (planned$total > planned$new) {
+          paste0(" (", planned$new, " queried, the rest already in the database)")
+        } else {
+          ""
+        },
+        ". Select fewer samples or start a new analysis."
+      )
+    }
 
     ### Smart analysis name suggestion ----
     # Base session name, e.g. "KiwiMS_2026-04-03_id1234"
@@ -871,7 +954,6 @@ server <- function(
           class = "start-modal deconvolute-modal",
           shiny$modalDialog(
             shiny$fluidRow(
-              shiny$br(),
               shiny$column(
                 width = 12,
                 shiny$uiOutput(ns("message_ui")),
@@ -1019,6 +1101,19 @@ server <- function(
             ))))
           )
         }
+      }
+
+      # ── Warning 3: sample cap of an analysis database ──────────────────────
+      cap_msg <- sample_cap_message(planned_db_samples())
+      if (!is.null(cap_msg)) {
+        warnings_list <- c(
+          list(shiny$p(shiny$HTML(paste0(
+            '<i class="fa-solid fa-circle-xmark" style="font-size:1em;',
+            ' color:#ff5a23; margin-right:10px;"></i>',
+            cap_msg
+          )))),
+          warnings_list
+        )
       }
 
       if (length(warnings_list) == 0) {
@@ -1182,6 +1277,13 @@ server <- function(
         }
       }
 
+      # Over the sample cap: Continue stays disabled, the red line of the
+      # warnings below says why. Decided here, after the enable() above, so
+      # the two never race; re-evaluated on every change of the selection.
+      if (!is.null(sample_cap_message(planned_db_samples()))) {
+        disable(selector = "#app-deconvolution_main-deconvolute_start_conf")
+      }
+
       return(message)
     })
 
@@ -1202,6 +1304,9 @@ server <- function(
             length(config_file()) == 0)
       ) {
         files <- basename(dir_ls(dir_sel, glob = "*.raw"))
+        # Key chips as in the conversion tab's shortcut bar
+        key <- function(k) shiny$span(class = "key", k)
+        shortcut <- function(...) shiny$div(class = "shortcut-item", ...)
         picker <- shiny$div(
           class = "kiwi-file-selector",
           shiny$div(
@@ -1226,6 +1331,15 @@ server <- function(
               selected = files,
               width = "100%"
             )
+          ),
+          # Mouse and keyboard handling lives in static/js/deconvolution.js
+          shiny$div(
+            class = "kiwi-file-hint",
+            shortcut(key("Shift"), " + ", key("Click"), " / ", key("Drag"), " Range"),
+            shortcut(key("↑"), key("↓"), " Move"),
+            shortcut(key("Shift"), " + ", key("↑"), key("↓"), " Extend"),
+            shortcut(key("Enter"), " Toggle"),
+            shortcut(key("Ctrl"), " + ", key("A"), " All / None")
           )
         )
       }
@@ -1253,6 +1367,14 @@ server <- function(
 
     #### Deconvolution start ----
     shiny$observeEvent(input$deconvolute_start_conf, {
+      # Hard cap. Continue is disabled over the cap (see message_ui); this is
+      # the safety net should it ever be pressed anyway. The dialog stays open
+      # and its red line says why, so no toast (it would sit behind the dialog).
+      if (!is.null(sample_cap_message(planned_db_samples()))) {
+        write_log("Deconvolution refused - sample cap exceeded")
+        return(NULL)
+      }
+
       # Reset modal and previous processes
       shiny$removeModal()
       reset_progress()

@@ -36,8 +36,8 @@ prot <- function(...) { v <- c(...); d <- data.frame(Protein = "MLKL"); for (i i
 cmp <- function(names, ...) { rows <- list(...); k <- max(lengths(rows))
   d <- data.frame(Compound = names); for (i in seq_len(k)) d[[paste("Mass", i)]] <- sapply(rows, function(r) if (i <= length(r)) r[i] else NA); d }
 
-config <- function(c1, c2 = NULL, t = time) {
-  d <- data.frame(Sample = ss, Replicate = rep, Protein = "MLKL", Compound_1 = c1)
+config <- function(c1, c2 = NULL, t = time, r = rep) {
+  d <- data.frame(Sample = ss, Replicate = r, Protein = "MLKL", Compound_1 = c1)
   if (!is.null(c2)) d$Compound_2 <- c2
   d$Compound_Concentration <- conc; d$Concentration_Unit <- "\u00b5M"
   d$Incubation_Time <- t; d$Time_Unit <- "min"
@@ -73,6 +73,8 @@ by_conc <- conc %in% c(2.5, 5, 10)
 short <- conc %in% c(2.5, 5) | (conc == 10 & time %in% c(1, 3))
 # R2 of 10 uM / 20 min declared at 25 min
 t_typo <- time; t_typo[conc == 10 & time == 20 & rep == "R2"] <- 25
+six_reps <- time; six_reps[conc == 10 & time %in% c(30, 40)] <- 20
+swapped <- rep; swapped[conc == 10] <- ifelse(rep[conc == 10] == "R1", "R2", "R1")
 
 cfgs <- list(
   config_baseline     = config("BI-8925"),
@@ -82,9 +84,26 @@ cfgs <- list(
   config_mixed_10uM   = config(ifelse(mixed, "BI-8926", "BI-8925")),
   config_split_by_conc = config(ifelse(by_conc, "BI-8926", "BI-8925")),
   config_split_short_times = config(ifelse(short, "BI-8926", "BI-8925")),
-  config_rep_mismatch = config("BI-8925", t = t_typo)
+  config_rep_mismatch = config("BI-8925", t = t_typo),
+  # Replicate R1-R5 in turn: five series
+  config_five_series = config("BI-8925", r = paste0("R", (seq_along(ss) - 1) %% 5 + 1)),
+  # 10 uM samples at 30 and 40 min declared at 20 min: six replicates there
+  config_six_replicates = config("BI-8925", t = six_reps),
+  # Replicate R1 and R2 swapped for the 10 uM samples
+  config_rep_swapped = config("BI-8925", r = swapped)
 )
 for (n in names(cfgs)) write_cfg(cfgs[[n]], paste0(n, ".csv"))
+
+# 385 made-up samples: one over the sample cap (config upload check only)
+write_cfg(
+  data.frame(
+    Sample = sprintf("Sample_%03d.raw", 1:385), Replicate = "", Protein = "MLKL",
+    Compound_1 = "BI-8925", Compound_Concentration = rep(c(0, 2.5, 5, 10, 20), 77),
+    Concentration_Unit = "µM", Incubation_Time = rep(c(0, 1, 3, 5, 10, 15, 20), 55),
+    Time_Unit = "min"
+  ),
+  "config_385_samples.csv"
+)
 
 # ---- runs --------------------------------------------------------------------
 sample_table <- function(cfg) {
@@ -259,3 +278,20 @@ show("T10 decoy 500 in every sample, kinact/KI on", declare(T$proteins_baseline,
 t11 <- run(T$proteins_baseline, T$compounds_baseline, C$config_rep_mismatch)
 show("T11 R2 of 10 uM / 20 min declared at 25 min", declare(T$proteins_baseline, T$compounds_baseline, C$config_rep_mismatch), t11)
 show("T11b same with proteins_two_unbound (two warnings)", declare(T$proteins_two_unbound, T$compounds_baseline, C$config_rep_mismatch))
+
+# T12-T15: replicate series, replicates per condition and the sample cap
+box::use(app / logic / helper_functions[validate_config, normalize_config_units])
+config_upload <- function(name) {
+  d <- utils::read.csv(file.path(kit, name), check.names = FALSE, encoding = "UTF-8")
+  issues <- validate_config(normalize_config_units(d))
+  cat("Config upload", name, if (length(issues)) "REFUSED" else "ACCEPTED", "\n")
+  if (length(issues)) cat(paste0("   ", issues), sep = "\n")
+}
+cat("\n===== T12 five replicate series =====\n"); config_upload("config_five_series.csv")
+show("T12 same table declared anyway", declare(T$proteins_baseline, T$compounds_baseline, C$config_five_series))
+show("T13 six replicates at 10 uM / 20 min", declare(T$proteins_baseline, T$compounds_baseline, C$config_six_replicates))
+t14 <- run(T$proteins_baseline, T$compounds_baseline, C$config_rep_swapped)
+show("T14 Replicate swapped for the 10 uM samples", declare(T$proteins_baseline, T$compounds_baseline, C$config_rep_swapped), t14)
+cat("\n===== T15 sample cap =====\n"); config_upload("config_385_samples.csv")
+big <- utils::read.csv(file.path(kit, "config_385_samples.csv"), check.names = FALSE, encoding = "UTF-8")
+show("T15 Samples table with 385 rows", declare(T$proteins_baseline, T$compounds_baseline, big))

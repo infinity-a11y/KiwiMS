@@ -21,6 +21,7 @@ box::use(
     logic /
     helper_functions[
       config_badge,
+      config_icon,
       safe_observe,
     ],
   app /
@@ -268,7 +269,7 @@ server <- function(
         shiny::actionButton(
           ns("open_config_btn"),
           "Experiment Configuration",
-          icon = shiny::icon("upload"),
+          icon = config_icon(),
           class = "btn btn-sm btn-default"
         )
       )

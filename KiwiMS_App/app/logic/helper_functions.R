@@ -11,6 +11,10 @@ box::use(
   stringr[str_split_fixed],
 )
 
+box::use(
+  app / logic / conversion_constants[run_limits],
+)
+
 # Unexpected error aware observer
 #' @export
 safe_observe <- function(
@@ -1024,7 +1028,27 @@ validate_config <- function(df) {
     }
   }
 
-  # Replicate: optional free-text group label; partial fill is allowed.
+  # Hard caps of a run (see run_limits): the samples, and the replicate
+  # series named in the Replicate column (optional free text, partial fill
+  # allowed; one value per complete repeat of the experiment, e.g. R1, R2)
+  if (nrow(df) > run_limits$max_samples) {
+    issues <- c(issues, paste0(
+      "At most ", run_limits$max_samples, " samples per config (",
+      nrow(df), " rows)."
+    ))
+  }
+  if ("Replicate" %in% names(df)) {
+    reps <- trimws(as.character(df[["Replicate"]]))
+    reps <- unique(reps[!is.na(reps) & reps != ""])
+    if (length(reps) > run_limits$max_series) {
+      issues <- c(issues, paste0(
+        "'Replicate': at most ", run_limits$max_series,
+        " replicate series (", length(reps), " found: ",
+        paste(utils::head(reps, 8), collapse = ", "),
+        if (length(reps) > 8) ", ..." else "", ")."
+      ))
+    }
+  }
 
   issues
 }
@@ -1060,4 +1084,19 @@ config_badge <- function(type, label, body = NULL) {
     )
   } else ""
   div(class = "config-badge-wrapper", HTML(paste0(badge, detail)))
+}
+
+# Experiment config glyph — the same icon everywhere the config appears so it
+# is recognisable across modules. `apply = TRUE` adds a wand badge meaning
+# "apply the config to the samples table".
+#' @export
+config_icon <- function(apply = FALSE) {
+  if (!apply) {
+    return(icon("table-list", class = "config-icon"))
+  }
+  span(
+    class = "config-icon config-icon--apply",
+    icon("table-list"),
+    icon("wand-magic-sparkles", class = "config-icon-badge")
+  )
 }

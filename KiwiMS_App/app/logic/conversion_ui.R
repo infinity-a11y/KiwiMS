@@ -16,6 +16,7 @@ box::use(
       stats_scatter,
       stats_violin,
     ],
+  app / logic / helper_functions[config_icon],
   app /
     logic /
     plot_download[
@@ -31,7 +32,11 @@ box::use(
 # interface. `concentrations` are the fitted concentration keys in the declared
 # unit; the picker labels follow the unit view (updated by the server).
 #' @export
-kinact_ki_concentrations_panel <- function(ns, concentrations, conc_unit = NULL) {
+kinact_ki_concentrations_panel <- function(
+  ns,
+  concentrations,
+  conc_unit = NULL
+) {
   stat_card <- function(title, help_id, output_id) {
     shiny::div(
       class = "card-custom",
@@ -241,7 +246,10 @@ kinact_ki_concentrations_panel <- function(ns, concentrations, conc_unit = NULL)
             ),
             full_screen = TRUE,
             shinycssloaders::withSpinner(
-              plotly::plotlyOutput(ns("conc_tab_binding_plot"), height = "100%"),
+              plotly::plotlyOutput(
+                ns("conc_tab_binding_plot"),
+                height = "100%"
+              ),
               type = 1,
               color = "#7777f9"
             )
@@ -2680,13 +2688,11 @@ conversion_declaration_ui <- function(
       return(file_input)
     }
     shinyjs::disabled(
-      htmltools::tagQuery(file_input)$
-        find(".btn-file")$
-        addClass("custom-disable")$
-        resetSelected()$
-        find(".input-group > .form-control")$
-        addClass("custom-disable")$
-        allTags()
+      htmltools::tagQuery(file_input)$find(".btn-file")$addClass(
+        "custom-disable"
+      )$resetSelected()$find(".input-group > .form-control")$addClass(
+        "custom-disable"
+      )$allTags()
     )
   }
 
@@ -2766,11 +2772,11 @@ conversion_declaration_ui <- function(
           shinyjs::disabled(shiny::actionButton(
             ns("use_config"),
             label = NULL,
-            icon = shiny::icon("wand-magic-sparkles"),
+            icon = config_icon(apply = TRUE),
             width = "100%"
           ))
         ),
-        "Use Experiment Config",
+        "Apply Experiment Config to Samples",
         placement = "top"
       ),
       bslib::tooltip(
@@ -2822,11 +2828,11 @@ conversion_declaration_ui <- function(
           shinyjs::disabled(shiny::actionButton(
             ns("use_config"),
             label = NULL,
-            icon = shiny::icon("wand-magic-sparkles"),
+            icon = config_icon(apply = TRUE),
             width = "100%"
           ))
         ),
-        "Use Experiment Config",
+        "Apply Experiment Config to Samples",
         placement = "top"
       ),
       bslib::tooltip(
@@ -2929,26 +2935,7 @@ conversion_declaration_ui <- function(
             )
           ),
           shiny::column(
-            width = 1,
-            bslib::tooltip(
-              shiny::div(
-                class = "tooltip-bttn",
-                shiny::tags$button(
-                  type = "button",
-                  class = "btn btn-default fileinput-tooltip-btn",
-                  onclick = sprintf(
-                    "Shiny.setInputValue('%s', Math.random());",
-                    ns("fileinput_tooltip_bttn")
-                  ),
-                  shiny::icon("circle-question")
-                )
-              ),
-              "Help",
-              placement = "top"
-            )
-          ),
-          shiny::column(
-            width = 2,
+            width = 3,
             shiny::textOutput(ns("proteins_table_info")),
           ),
           shiny::column(
@@ -2989,26 +2976,7 @@ conversion_declaration_ui <- function(
             )
           ),
           shiny::column(
-            width = 1,
-            bslib::tooltip(
-              shiny::div(
-                class = "tooltip-bttn",
-                shiny::tags$button(
-                  type = "button",
-                  class = "btn btn-default fileinput-tooltip-btn",
-                  onclick = sprintf(
-                    "Shiny.setInputValue('%s', Math.random());",
-                    ns("fileinput_tooltip_bttn")
-                  ),
-                  shiny::icon("circle-question")
-                )
-              ),
-              "Help",
-              placement = "top"
-            )
-          ),
-          shiny::column(
-            width = 2,
+            width = 3,
             shiny::textOutput(ns("compounds_table_info"))
           ),
           shiny::column(
@@ -3056,26 +3024,7 @@ conversion_declaration_ui <- function(
             )
           ),
           shiny::column(
-            width = 1,
-            align = "left",
-            shiny::div(
-              class = "sample-declaration-info-ui",
-              bslib::tooltip(
-                shiny::div(
-                  class = "tooltip-bttn",
-                  shiny::actionButton(
-                    ns("resultinput_tooltip_bttn"),
-                    label = NULL,
-                    icon = shiny::icon("circle-question")
-                  )
-                ),
-                "Help",
-                placement = "top"
-              ),
-            )
-          ),
-          shiny::column(
-            width = 2,
+            width = 3,
             shiny::textOutput(ns("samples_table_info"))
           ),
           shiny::column(
