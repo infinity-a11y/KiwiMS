@@ -10,9 +10,9 @@ All in `app/logic/conversion_functions.R`.
 
 - **`predict_peaks()`** lists every peak the declaration predicts: each
   declared mass of the protein unbound, and with every mass shift of every
-  compound at stoichiometry 1 … Max. Stoichiometry. Its order (species, then
-  stoichiometry, then mass shift, then compound) is the order the preferred
-  hit is picked in.
+  compound at stoichiometry 1 … Max. Stoichiometry, ordered species, then
+  stoichiometry, then mass shift, then compound. Each complex carries the
+  declared position of its mass shift (Mass 1, Mass 2 …).
 - **`check_hits()`** screens one sample:
   1. each declared mass takes the closest peak within the tolerance as its
      unbound signal. A peak claimed by two masses counts for the first one
@@ -24,8 +24,23 @@ All in `app/logic/conversion_functions.R`.
      complex of another species, the run logs "Peak … read as unbound …, also
      fits";
   4. every other peak is matched against all predicted complexes within the
-     tolerance. Per species and compound, the first match in predicted order
-     is *Preferred*; the others are listed but don't count.
+     tolerance. Per species and compound, `prefer_hits()` marks exactly one
+     match *Preferred*; the others are listed but don't count. The rule is
+     the **Preferred Assignment** setting of the conversion sidebar
+     (`hit_preference_rules` in `conversion_constants.R`):
+
+     | Rule | Criteria, in turn |
+     |---|---|
+     | Lowest stoichiometry (default) | stoichiometry, mass error, declared shift order |
+     | Closest mass | mass error, stoichiometry, declared shift order |
+     | Declared shift order | declared shift order, stoichiometry |
+
+     Mass errors are compared rounded to 1e-6 Da, so floating-point noise
+     can't break a tie. No two matches of one compound on one species share
+     shift and stoichiometry, and the row order settles anything left, so
+     one match always wins. A peak with several matches is logged as
+     "Ambiguous assignment at … Da (*rule* preferred)", every match below it
+     with the preferred one ticked; the Warnings card counts these.
 - **`conversion()`** turns intensities into binding. A peak counts once
   towards the total. A peak claimed by n preferred readings (different
   proteoforms, or different compounds) gives each 1/n of its intensity.
@@ -37,7 +52,7 @@ All in `app/logic/conversion_functions.R`.
   | `compounds` | one species, two different compounds | binding can't be attributed | **blocked** |
   | `species` | unbound and a complex, or two unbound | unbound reading wins | warning |
   | `proteoform` | complexes of two different species | intensity split evenly | warning |
-  | (none) | one species, one compound, two shifts or stoichiometries | preferred hit | silent |
+  | (none) | one species, one compound, two shifts or stoichiometries | preferred assignment rule | no hint; logged per peak |
 
 - **`declaration_ambiguities()`** runs that once per protein and set of
   compounds of the Samples table, and counts the samples per pair.
@@ -50,6 +65,16 @@ All in `app/logic/conversion_functions.R`.
   `declaration_ambiguities()` again with the current tolerance and
   stoichiometry, because a confirmed table isn't re-checked. It refuses the
   run on `compounds` pairs, and logs the rest via `log_mass_ambiguities()`.
+  It also refuses exact shift multiples (`shift_multiples()`, below) in case a
+  compound table reached the run without passing its own check.
+- **Exact shift multiples** (`shift_multiples()`, limits in
+  `shift_multiple_limits`): `check_table()` refuses a Compounds table where
+  one mass shift of a compound is a whole multiple (×1 to ×20) of another
+  within 0.01 Da, e.g. 266 = 2 × 133. Max. Stoichiometry and the tolerance
+  don't enter, so no later setting change lets one through. The info panel
+  says "Fix table issues", the red hint names up to 2 pairs
+  (`shift_multiples_message()`). Opposite signs are never multiples; a zero
+  shift pairs with another zero only.
 - **Table colouring** (`prot_comp_handsontable()`): JavaScript in the
   Proteins and Compounds tables marks numbers within 2 × tolerance of another
   number of the same table: striped in the same row, pale in another row.
@@ -68,8 +93,8 @@ All in `app/logic/conversion_functions.R`.
 | 6 | An unbound mass equal to a complex of another mass | warning; unbound wins, logged per sample | MA2 |
 | 7 | Two unbound masses within the window | warning; one peak counts for the first only | MA3, *peak of two species* |
 | 8 | A complex shared by two (or more) proteoforms | warning; split evenly, total unchanged | MA4, *three proteoforms* |
-| 9 | Two shifts of one compound close together | silent; first declared shift preferred | MA5a, *preferred hit* |
-| 10 | One shift a multiple of another | silent; lowest stoichiometry preferred | MA5b, *preferred hit* |
+| 9 | Two shifts of one compound close together | no hint; closer shift preferred, first declared one on a tie | MA5a, *default rule* |
+| 10 | One shift close to a multiple of another | no hint; lowest stoichiometry preferred | MA5b, *default rule* |
 | 11 | Masses typed close together in the Proteins/Compounds table | coloured at ≤ 2 × tolerance | MA6 |
 | 12 | A mass shift smaller than the window, on its own species | `species` warning; a lone peak reads as unbound | *own species' window* |
 | 13 | A declared mass listed twice | one species, no ambiguity, no double count | *mass listed twice* |
@@ -78,6 +103,11 @@ All in `app/logic/conversion_functions.R`.
 | 16 | Many pairs | hint: 2 compound pairs + "and n more"; tooltip: 12 pairs + "and n more" | *long lists* |
 | 17 | Samples with the same compounds in another column order, or an undeclared protein | checked once per protein and compound set; undeclared skipped | *once per set* |
 | 18 | A negative shift (complex lighter than its protein), also at stoichiometry 2 | screened like any other; peaks below every predicted mass stay out | *negative shift* |
+| 19 | Preferred Assignment set to Closest mass or Declared shift order | that rule names the peak; binding unchanged | *rules disagree*, *fall through* |
+| 20 | Two matches equally close, their errors differing only by floating-point noise | a tie: the next criterion decides | *floating-point noise* |
+| 21 | Any mix of ties, missing errors and unknown rule names | exactly one preferred match per species and compound | *exactly one*, *fall through* |
+| 22 | One shift exactly a multiple of another, or listed twice, within 0.01 Da | Compounds table refused; Start refuses too | MA5c, *exact multiples*, *multiples refusal* |
+| 23 | Hits where a reading was not preferred | Preferred column shown in the hits table by default | *Preferred column* |
 
 Tests in *italics* are synthetic, in the automated suite only.
 
@@ -228,24 +258,35 @@ hint and every sample reads as in B0.
   is no stray line and no "NA Da" label.
 - **Compound Distribution donut:** the slices add up to the total.
 
-### MA5 Shifts of one compound on one form (silent, preferred hit)
+### MA5 Shifts of one compound on one form (no hint, preferred assignment)
 
 **MA5a:** `baseline/proteins_baseline` · `mass_ambiguity/compounds_close_shifts` (BI-8925 266, 264) · `baseline/config_baseline`
 
-- No hint. This case is resolved by design, not reported.
+- No hint above the Samples table: the Preferred Assignment rule resolves it.
 - **Compounds table:** 266 and 264 are striped (same row, within 6 Da).
-- **Hits, reference sample:** the 21,903.5 Da peak appears twice, 266 as
-  *Preferred* TRUE and 264 as FALSE. Its binding counts once (12.04 %).
+- **Hits, reference sample:** the 21,903.5 Da peak appears twice. With the
+  default rule both are ×1, so the closer one wins: 264 (0.66 Da off) is
+  *Preferred* TRUE and 266 (1.34 Da off) FALSE. Its binding counts once
+  (12.04 %). The conversion log shows "Ambiguous assignment at 21903.50 Da
+  (lowest stoichiometry preferred)".
 - One sample changes. In `2o5_1min_R1` the complex sits at **21,900.5 Da**,
   missed by 266 (4.34 Da) but caught by 264: 6.62 % binding. It leaves "No
   Hits"; only `0_0min_R1` stays there. Open its spectrum to see the peak.
 - Tot. Binding card: 6.62–100 %, **73.05 ± 23.76**. All samples: 70.30.
 - kinact/KI 334.9 (CI 301.6–379.1). Proteoforms tab: 358.8 for 21,638.84.
 
-**MA5b:** `baseline/proteins_baseline` · `mass_ambiguity/compounds_half_shift` (BI-8925 266, 133) · `baseline/config_baseline`
+**MA5b:** `baseline/proteins_baseline` · `mass_ambiguity/compounds_near_half_shift` (BI-8925 266, 133.5) · `baseline/config_baseline`
 
-- 2 × 133 = 266. The hits show 266 ×1 as preferred and 133 ×2 as not.
+- 2 × 133.5 = 267, 1 Da from 266: not an exact multiple, the table passes.
+  The hits show 266 ×1 as preferred and 133.5 ×2 as not; the hits table
+  shows the Preferred column by default.
 - Results are identical to B0.
+
+**MA5c:** `mass_ambiguity/compounds_half_shift` (BI-8925 266, 133), Compounds tab
+
+- 2 × 133 = 266 exactly. The info panel reads "Fix table issues", the red
+  hint "Mass shifts that are multiples of each other: BI-8925 (266 = 2 ×
+  133)", and the table can't be saved, at any tolerance.
 
 ### MA6 Table colouring at 2 × tolerance
 
@@ -276,8 +317,8 @@ on the MLKL series; the synthetic ones pin the rules on made-up peak lists.
 | MA2: an unbound mass equal to a complex is read as unbound | 6, log block |
 | MA3: two unbound masses 5 Da apart warn but change nothing | 7 |
 | MA4: a complex shared by two proteoforms is split between them | 8 |
-| MA5a: two close shifts of one compound resolve to the first | 9 |
-| MA5b: a shift twice another prefers the lower stoichiometry | 10 |
+| MA5a: two close shifts of one compound resolve to the closer one | 9 |
+| MA5b: a shift close to twice another prefers the lower stoichiometry | 10 |
 | MA6: the tables colour masses within the declaration check's window | 11 |
 | the window holds its boundary against floating-point sums | 3 |
 | an unusable tolerance finds no ambiguity instead of failing | 14, 15 |
@@ -285,10 +326,19 @@ on the MLKL series; the synthetic ones pin the rules on made-up peak lists.
 | a mass shift inside its own species' window reads the peak as unbound | 12 |
 | a peak within the tolerance of two species counts once | 7 |
 | a complex shared by three proteoforms is split in thirds | 8 |
-| the preferred hit is the lowest stoichiometry, then the first shift | 9, 10 |
+| the default prefers the lowest stoichiometry, then the closest mass, then the first shift | 9, 10 |
+| each rule picks its own reading where the criteria disagree | 19 |
+| floating-point noise in the mass sums does not break a tie | 20 |
+| the rules fall through their criteria in order | 19, 21 |
+| every rule prefers exactly one reading per species and compound | 21 |
+| an ambiguous peak is logged with its rule and the preferred reading | 9, 8 |
 | ambiguities are checked once per protein and compound set | 17 |
 | long ambiguity lists are cut in the hint and its tooltip | 16 |
 | a negative shift is screened below the lightest species | 18 |
+| MA5c: a shift exactly twice another is refused | 22 |
+| exact multiples among the shifts of one compound are found | 22 |
+| the multiples refusal lists two pairs and folds the rest | 22 |
+| the Preferred column is shown when a reading was not preferred | 23 |
 
 `test-conversion-unit.R` covers the same rules at unit level (the
 `mass_ambiguities()` kinds, the split between two compounds and between two

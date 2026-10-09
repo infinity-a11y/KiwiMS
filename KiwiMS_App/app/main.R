@@ -45,6 +45,9 @@ box::use(
       validate_config,
     ],
   app / logic / ms_formats[has_ms_extension],
+  app /
+    logic /
+    conversion_functions[hit_preference_choices, hit_preference_rule],
 )
 
 suppressWarnings(library(logr))
@@ -1330,6 +1333,28 @@ server <- function(id) {
                       )
                     ),
                     shiny$tags$tr(
+                      shiny$tags$td(
+                        class = "settings-table-label",
+                        "Preferred Assignment"
+                      ),
+                      shiny$tags$td(
+                        shiny$div(
+                          class = "settings-select",
+                          shiny$selectInput(
+                            ns("settings_hit_pref"),
+                            label = NULL,
+                            choices = hit_preference_choices(),
+                            selected = hit_preference_rule(us$hit_preference),
+                            width = "200px"
+                          )
+                        )
+                      ),
+                      shiny$tags$td(
+                        class = "settings-table-feedback",
+                        shiny$uiOutput(ns("settings_hit_pref_feedback"))
+                      )
+                    ),
+                    shiny$tags$tr(
                       shiny$tags$td(class = "settings-table-label"),
                       shiny$tags$td(
                         colspan = "2",
@@ -1515,6 +1540,11 @@ server <- function(id) {
         "settings_max_mult",
         value = d$max_multiples
       )
+      shiny::updateSelectInput(
+        session,
+        "settings_hit_pref",
+        selected = d$hit_preference
+      )
     }
 
     do_reset_logs <- function() {
@@ -1674,6 +1704,11 @@ server <- function(id) {
       if (val != floor(val)) {
         return(settings_err_tag("Must be a whole number"))
       }
+      settings_ok_tag("Valid")
+    })
+
+    # Preferred Assignment — always valid (fixed choices)
+    output$settings_hit_pref_feedback <- shiny$renderUI({
       settings_ok_tag("Valid")
     })
 
@@ -1881,6 +1916,8 @@ server <- function(id) {
       if (int_ok(mm) && mm >= 1 && mm <= 20) {
         current$max_multiples <- mm
       }
+
+      current$hit_preference <- hit_preference_rule(input$settings_hit_pref)
 
       pw <- input$settings_peakwindow
       if (int_ok(pw) && pw >= 1 && pw <= 500) {

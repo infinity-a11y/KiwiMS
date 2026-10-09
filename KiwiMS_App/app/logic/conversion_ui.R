@@ -15,6 +15,7 @@ box::use(
       stats_boxplot,
       stats_scatter,
       stats_violin,
+      show_preferred_column,
     ],
   app / logic / helper_functions[config_icon],
   app /
@@ -2627,7 +2628,8 @@ hits_results_ui <- function(ns, hits_summary, units) {
                 "Well",
                 "Replicate",
                 "Unmatched [%]",
-                "Preferred",
+                # Shown when a peak had a reading that was not preferred
+                if (!show_preferred_column(hits_summary)) "Preferred",
                 "Meas. Prot. [Da]",
                 "Δ Prot. [Da]",
                 "Int. Prot. [%]",

@@ -1149,7 +1149,10 @@ input[type="number"]::-webkit-inner-spin-button {
   color: black;
 }
 
-.unit-selectors .bootstrap-select > .dropdown-toggle {
+.unit-selectors .bootstrap-select > .dropdown-toggle,
+.shiny-input-container:has(#app-conversion_sidebar-hit_preference)
+  .bootstrap-select
+  > .dropdown-toggle {
   color: #000;
   height: 40px;
   padding: 8px;
@@ -1556,7 +1559,8 @@ td.listbox.htDimmed.current.highlight {
 
 /* .peaknorm-selector */
 
-.settings-peaknorm .selectize-input {
+.settings-peaknorm .selectize-input,
+.settings-select .selectize-input {
   border: 1px solid #e5e5e5 !important;
 }
 

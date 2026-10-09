@@ -22,6 +22,7 @@ box::use(
   app /
     logic /
     conversion_functions[
+      show_preferred_column,
       add_kobs_binding_result,
       add_kinact_ki_result,
       sample_handsontable,
@@ -6056,6 +6057,12 @@ server <- function(
               x <- sub("^.*?⚠\\s*", "", x)
               x <- trimws(x)
               x <- sub("^Hit duplicates at .+$", "Hit duplicates", x)
+              # One entry per resolution, counted over peaks and samples
+              x <- sub(
+                "^Ambiguous assignment at .+? Da \\((.+)\\)$",
+                "Ambiguous assignment: a peak fits several readings, \\1",
+                x
+              )
               x <- sub(
                 "^(\\d+) sample\\(s\\) ignored due to missing hits$",
                 "Samples ignored due to missing hits ×\\1",
@@ -6728,7 +6735,7 @@ server <- function(
                         "Well",
                         "Replicate",
                         "Unmatched [%]",
-                        "Preferred",
+                        if (!show_preferred_column(hits_summary)) "Preferred",
                         "Meas. Prot. [Da]",
                         "Δ Prot. [Da]",
                         "Int. Prot. [%]",

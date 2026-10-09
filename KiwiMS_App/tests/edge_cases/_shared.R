@@ -10,6 +10,7 @@ box::use(
   app / logic / conversion_functions[
     add_hits,
     check_sample_table,
+    check_table,
     complex_kinetics,
     main_proteoform,
     process_uploaded_table,

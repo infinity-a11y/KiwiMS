@@ -16,7 +16,12 @@ box::use(
       run_complexes,
       declaration_ambiguities,
       log_mass_ambiguities,
+      hit_preference_rule,
+      hit_preference_choices,
+      shift_multiples,
+      shift_multiples_message,
     ],
+  app / logic / conversion_constants[hit_preference_rules],
   app /
     logic /
     helper_functions[
@@ -83,6 +88,7 @@ server <- function(
       saved <- read_user_settings()
       pt_default <- saved$peak_tolerance
       mm_default <- saved$max_multiples
+      hp_default <- hit_preference_rule(saved$hit_preference)
 
       shiny::div(
         class = "sidebar-section",
@@ -170,6 +176,49 @@ server <- function(
           max = 20,
           step = 1,
           width = "100%"
+        ),
+        # Same bootstrap-select picker as the unit selectors of the Samples
+        # table (conc_unit_input_ui())
+        shinyWidgets::pickerInput(
+          inputId = ns("hit_preference"),
+          label =
+          shiny::div(
+            class = "label-tooltip",
+            shiny::tags$label("Preferred Assignment"),
+
+            shiny::div(
+              class = "label-save-button",
+              tooltip(
+                shiny::div(
+                  class = "save-button",
+                  shiny::actionButton(
+                    ns("save_hit_pref_btn"),
+                    label = NULL,
+                    icon = shiny::icon("floppy-disk"),
+                    class = "btn-default"
+                  )
+                ),
+                "Save Setting",
+                placement = "top"
+              ),
+              tooltip(
+                shiny::div(
+                  class = "tooltip-bttn",
+                  shiny::actionButton(
+                    ns("hit_pref_tooltip_bttn"),
+                    label = NULL,
+                    icon = shiny::icon("circle-question")
+                  )
+                ),
+                "Help",
+                placement = "top"
+              )
+            )
+          ),
+          choices = hit_preference_choices(),
+          selected = hp_default,
+          width = "100%",
+          options = shinyWidgets::pickerOptions(size = 10)
         ),
         shiny::div(
           class = "kinact-ki-checkbox",
@@ -367,6 +416,23 @@ server <- function(
       }
     })
 
+    # The picker is a bootstrap-select: besides the input, its visible button
+    # is greyed out, as for the unit selectors of the Samples table
+    toggle_hit_preference <- function(enabled) {
+      selector <- paste0(
+        ".shiny-input-container:has(#",
+        ns("hit_preference"),
+        ") .bootstrap-select"
+      )
+      if (enabled) {
+        shinyjs::enable("hit_preference")
+        shinyjs::removeClass(selector = selector, class = "custom-disable")
+      } else {
+        shinyjs::disable("hit_preference")
+        shinyjs::addClass(selector = selector, class = "custom-disable")
+      }
+    }
+
     # Update UI on reset results event ----
     safe_observe(
       event_expr = deconvolution_main_vars$continue_conversion(),
@@ -386,6 +452,7 @@ server <- function(
         )
         shinyjs::enable("peak_tolerance")
         shinyjs::enable("max_multiples")
+        toggle_hit_preference(TRUE)
         analysis_status("pending")
 
         # New deconvolution results invalidate any prior conversion run —
@@ -442,6 +509,29 @@ server <- function(
             return(invisible(NULL))
           }
 
+          # Mass shifts that are multiples of each other, refused by the
+          # Compounds table already; checked again for a table that reached
+          # the run without passing it
+          multiples <- shift_multiples(declared$Compound_Table)
+          if (nrow(multiples)) {
+            write_log(
+              "Conversion refused - mass shifts that are multiples of each other"
+            )
+            shinyWidgets::show_toast(
+              "Mass shift multiples",
+              text = paste(
+                as.character(shift_multiples_message(multiples)),
+                "Remove the multiple in the Compounds table."
+              ),
+              type = "error",
+              timer = 6000
+            )
+            return(invisible(NULL))
+          }
+
+          # Rule for peaks one compound fits in more than one way
+          preference <- hit_preference_rule(input$hit_preference)
+
           write_log("Conversion initiated")
           write_log(paste(
             "Conversion parameters:\n",
@@ -449,7 +539,11 @@ server <- function(
               c(
                 paste("kinact/Ki =", isTRUE(input$run_kinact_ki)),
                 paste("Peak Tolerance =", input$peak_tolerance, "Da"),
-                paste("Max. Stoichiometry =", input$max_multiples)
+                paste("Max. Stoichiometry =", input$max_multiples),
+                paste(
+                  "Preferred Assignment =",
+                  hit_preference_rules[[preference]]$label
+                )
               ),
               collapse = "\n "
             )
@@ -490,7 +584,8 @@ server <- function(
                 session = session,
                 ns = ns,
                 kinact_ki = isTRUE(input$run_kinact_ki),
-                config = config_file()
+                config = config_file(),
+                preference = preference
               )
 
               result_with_hits$hits_summary <- summarize_hits(
@@ -560,6 +655,7 @@ server <- function(
             )
             shinyjs::enable("peak_tolerance")
             shinyjs::enable("max_multiples")
+            toggle_hit_preference(TRUE)
             shiny::updateActionButton(
               session = session,
               "run_binding_analysis",
@@ -612,6 +708,7 @@ server <- function(
             )
             shinyjs::disable("peak_tolerance")
             shinyjs::disable("max_multiples")
+            toggle_hit_preference(FALSE)
 
             console_log_snapshot(paste(log_lines, collapse = ""))
             analysis_running(FALSE)
@@ -664,6 +761,7 @@ server <- function(
           # Reenable conversion parameter inputs
           shinyjs::enable("peak_tolerance")
           shinyjs::enable("max_multiples")
+          toggle_hit_preference(TRUE)
 
           shiny::updateActionButton(
             session = session,
@@ -782,6 +880,23 @@ server <- function(
       }
     })
 
+    shiny::observeEvent(input$save_hit_pref_btn, {
+      val <- input$hit_preference
+      if (!is.null(val) && val %in% names(hit_preference_rules)) {
+        update_user_setting("hit_preference", val)
+        shinyWidgets::show_toast(
+          paste0(
+            "Preferred Assignment default set to ",
+            hit_preference_rules[[val]]$label
+          ),
+          text = NULL,
+          type = "success",
+          timer = 3000,
+          timerProgressBar = TRUE
+        )
+      }
+    })
+
     # Tooltips ----
     ## Peak tolerance ----
     shiny::observeEvent(input$peak_tol_tooltip_bttn, {
@@ -888,6 +1003,123 @@ server <- function(
       )
     })
 
+    ## Preferred assignment ----
+    shiny::observeEvent(input$hit_pref_tooltip_bttn, {
+      shiny::showModal(
+        shiny::div(
+          class = "conversion-modal",
+          shiny::modalDialog(
+            title = "Preferred Assignment",
+            easyClose = TRUE,
+            footer = shiny::modalButton("Dismiss"),
+            shiny::fluidRow(
+              shiny::br(),
+              shiny::column(
+                width = 11,
+                shiny::div(
+                  class = "tooltip-text",
+                  shiny::p(
+                    "A peak can fit the same compound on the same protein in ",
+                    "more than one way: two declared ",
+                    shiny::strong("mass shifts"),
+                    " within the peak tolerance of each other, or one mass ",
+                    "shift at a ",
+                    shiny::strong("stoichiometry"),
+                    " that matches another one at a different stoichiometry."
+                  ),
+                  shiny::p(
+                    "Exact multiples, such as 266 Da declared next to ",
+                    "133 Da, are refused in the Compounds table: the ",
+                    "stoichiometry search already covers them. The rule ",
+                    "resolves the remaining cases, where shifts are only ",
+                    "close to each other or to a multiple."
+                  ),
+                  shiny::p(
+                    "Exactly one of these readings becomes the ",
+                    shiny::strong("preferred assignment", .noWS = "after"),
+                    ". It names the peak in the hits table, the spectra and ",
+                    "the mass shift statistics. The other readings stay ",
+                    "listed with the peak. The peak's intensity counts once ",
+                    "towards the binding, whichever reading is preferred."
+                  ),
+                  shiny::br(),
+                  shiny::h5("Rules:"),
+                  shiny::p(
+                    "Each rule compares the readings by its first criterion. ",
+                    "Readings tied on it are compared by the next one. ",
+                    "The declared order of the mass shifts always comes last, ",
+                    "so exactly one reading is preferred."
+                  ),
+                  shiny::tags$ul(
+                    shiny::tags$li(
+                      shiny::strong("Lowest stoichiometry"),
+                      " (default): fewest bound compound molecules, then ",
+                      "closest mass, then declared order."
+                    ),
+                    shiny::tags$li(
+                      shiny::strong("Closest mass", .noWS = "after"),
+                      ": smallest deviation of the peak from the predicted ",
+                      "mass, then lowest stoichiometry, then declared order. ",
+                      "UniDec's peak matching assigns peaks by closest mass ",
+                      "as well."
+                    ),
+                    shiny::tags$li(
+                      shiny::strong("Declared shift order", .noWS = "after"),
+                      ": the mass shift listed first in the compound table ",
+                      "(Mass 1 before Mass 2), then lowest stoichiometry."
+                    )
+                  ),
+                  shiny::br(),
+                  shiny::h5("Example:"),
+                  shiny::p(
+                    shiny::div(
+                      shiny::strong("Protein:"),
+                      " 20,000 Da"
+                    ),
+                    shiny::div(
+                      shiny::strong("Compound mass shifts:"),
+                      " Mass 1 = 133 Da, Mass 2 = 267 Da"
+                    ),
+                    shiny::div(
+                      shiny::strong("Peak:"),
+                      " 20,266.2 Da, fitting 133 Da ×2 (Δ 0.2 Da) ",
+                      "and 267 Da ×1 (Δ 0.8 Da)"
+                    )
+                  ),
+                  shiny::tags$ul(
+                    shiny::tags$li(
+                      shiny::HTML(
+                        "Lowest stoichiometry &rightarrow; <strong>267 Da &times;1</strong>"
+                      )
+                    ),
+                    shiny::tags$li(
+                      shiny::HTML(
+                        "Closest mass &rightarrow; <strong>133 Da &times;2</strong>"
+                      )
+                    ),
+                    shiny::tags$li(
+                      shiny::HTML(
+                        "Declared shift order &rightarrow; <strong>133 Da &times;2</strong> (Mass 1)"
+                      )
+                    )
+                  ),
+                  shiny::p(
+                    "A peak at 20,266.5 Da is 0.5 Da off both readings. ",
+                    "Closest mass then falls back to the lowest ",
+                    "stoichiometry and prefers 267 Da ×1."
+                  ),
+                  shiny::p(
+                    "Ambiguous peaks are listed in the conversion log and ",
+                    "counted under Warnings in the Protocol tab."
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    })
+
     # Eagerly render all sidebar outputs that are visible on first tab visit so
     # they are computed in the first reactive flush alongside waiter_hide().
     shiny::outputOptions(
@@ -929,6 +1161,7 @@ server <- function(
         run_analysis = shiny::reactive(input$run_binding_analysis),
         peak_tolerance = shiny::reactive(input$peak_tolerance),
         max_multiples = shiny::reactive(input$max_multiples),
+        hit_preference = shiny::reactive(input$hit_preference),
         run_kinact_ki = shiny::reactive(input$run_kinact_ki),
         analysis_select = shiny::reactive(input$analysis_select),
         open_config_clicked = shiny::reactive(input$open_config_btn),

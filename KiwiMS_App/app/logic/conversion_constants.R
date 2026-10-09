@@ -255,3 +255,47 @@ run_limits <- list(
   max_replicates = 4,
   max_samples = 384
 )
+
+# Mass shifts that are multiples of each other ----
+# One mass shift of a compound that is a whole multiple of another (266 Da =
+# 2 x 133 Da), or the same shift twice, adds nothing: the stoichiometry search
+# already looks for it, and no spectrum tells the two apart. The Compounds table
+# refuses such shifts, and so does the start of a conversion. Compared at the
+# precision of a typed mass, for factors up to the highest Max. Stoichiometry
+# the app accepts, whatever the current setting: a setting changed after the
+# table was saved can't let a multiple through. Shifts that are only close to
+# a multiple are left to the preferred assignment rule.
+#' @export
+shift_multiple_limits <- list(
+  precision = 0.01,
+  max_factor = 20
+)
+
+# Preferred assignment of a peak ----
+# A peak can fit one compound on one protein species in more than one way: two
+# of its mass shifts at the same stoichiometry, or one shift at a stoichiometry
+# matching another at a different one (133 Da x2 = 266 Da x1). Exactly one of
+# these readings is preferred; it names the peak in the hits table, the spectra
+# and the Mass Shifts card, while the binding of the peak is the same whichever
+# reading names it. A rule sorts the readings by its criteria in turn:
+#   multiple - lowest stoichiometry first
+#   error    - smallest deviation of the peak from the predicted mass first
+#   shift    - mass shift declared first (Mass 1 before Mass 2) first
+# Every rule ends on the declared shift order, and no two readings of one
+# compound on one species share both a shift and a stoichiometry, so exactly one
+# reading is left at the top. The first rule is the default.
+#' @export
+hit_preference_rules <- list(
+  stoichiometry = list(
+    label = "Lowest stoichiometry",
+    keys = c("multiple", "error", "shift")
+  ),
+  mass_error = list(
+    label = "Closest mass",
+    keys = c("error", "multiple", "shift")
+  ),
+  declared = list(
+    label = "Declared shift order",
+    keys = c("shift", "multiple")
+  )
+)

@@ -21,7 +21,9 @@ box::use(
       paste_hook_js,
       hits_col_full_names,
       kinetics_settings,
-      run_limits
+      run_limits,
+      hit_preference_rules,
+      shift_multiple_limits
     ],
   app / logic / ms_formats[ms_sample_base],
 )
@@ -1724,9 +1726,137 @@ replicate_mismatches <- function(sample_table, conc_time_tbl = NULL) {
   unlist(out)
 }
 
-# Validate protein/compound table
+# Mass shifts of one compound that are whole multiples of each other ----
+#
+# One row per pair of shifts in one row of the compound table (name column,
+# then Mass 1 ..) where the larger is `factor` times the smaller, within
+# shift_multiple_limits$precision, for factors 1 (the same shift twice) up to
+# shift_multiple_limits$max_factor. Shifts of opposite sign are never
+# multiples; a zero shift only pairs with another zero.
 #' @export
-check_table <- function(tab, tolerance) {
+shift_multiples <- function(compound_table) {
+  empty <- data.frame(
+    compound = character(0),
+    smaller = character(0),
+    larger = character(0),
+    factor = integer(0),
+    smaller_mass = numeric(0),
+    larger_mass = numeric(0)
+  )
+  if (
+    !is.data.frame(compound_table) ||
+      !nrow(compound_table) ||
+      ncol(compound_table) < 3
+  ) {
+    return(empty)
+  }
+
+  precision <- shift_multiple_limits$precision + 1e-9 # floating-point margin
+  cols <- names(compound_table)[-1]
+
+  out <- lapply(seq_len(nrow(compound_table)), function(r) {
+    m <- suppressWarnings(as.numeric(unlist(
+      compound_table[r, -1, drop = FALSE]
+    )))
+    idx <- which(!is.na(m))
+    if (length(idx) < 2) {
+      return(NULL)
+    }
+    do.call(
+      rbind,
+      lapply(utils::combn(idx, 2, simplify = FALSE), function(p) {
+        # Smaller magnitude first, then declared order
+        p <- p[order(abs(m[p]), p)]
+        a <- m[p[1]]
+        b <- m[p[2]]
+        n <- if (abs(a) <= precision) {
+          if (abs(b) <= precision) 1 else NA
+        } else {
+          round(b / a)
+        }
+        if (
+          is.na(n) ||
+            n < 1 ||
+            n > shift_multiple_limits$max_factor ||
+            abs(b - n * a) > precision
+        ) {
+          return(NULL)
+        }
+        data.frame(
+          compound = as.character(compound_table[[1]][r]),
+          smaller = cols[p[1]],
+          larger = cols[p[2]],
+          factor = as.integer(n),
+          smaller_mass = a,
+          larger_mass = b
+        )
+      })
+    )
+  })
+
+  out <- do.call(rbind, out)
+  if (is.null(out)) empty else out
+}
+
+# The refusal for shift_multiples(): one line naming at most `max_listed`
+# pairs, every pair in the "details" attribute and what to do in "note". The
+# Compounds table shows it as its hint, the start of a conversion as a toast.
+#' @export
+shift_multiples_message <- function(multiples, max_listed = 2) {
+  fmt <- function(x) {
+    format(x, trim = TRUE, scientific = FALSE, drop0trailing = TRUE)
+  }
+  pair <- ifelse(
+    multiples$factor == 1,
+    sprintf("%s = %s", fmt(multiples$larger_mass), fmt(multiples$smaller_mass)),
+    sprintf(
+      "%s = %d × %s",
+      fmt(multiples$larger_mass),
+      multiples$factor,
+      fmt(multiples$smaller_mass)
+    )
+  )
+  short <- sprintf("%s (%s)", multiples$compound, pair)
+  more <- length(short) - max_listed
+
+  structure(
+    paste0(
+      "Mass shifts that are multiples of each other: ",
+      paste(utils::head(short, max_listed), collapse = ", "),
+      if (more > 0) sprintf(" and %d more", more) else ""
+    ),
+    details = sprintf(
+      "%s: %s (%s Da) = %s%s (%s Da)",
+      multiples$compound,
+      multiples$larger,
+      fmt(multiples$larger_mass),
+      ifelse(
+        multiples$factor == 1,
+        "",
+        paste0(multiples$factor, " × ")
+      ),
+      multiples$smaller,
+      fmt(multiples$smaller_mass)
+    ),
+    note = paste(
+      "Stoichiometry already covers multiples of a mass shift and no",
+      "spectrum tells them apart. Remove the multiple."
+    )
+  )
+}
+
+# Show the Preferred column of the hits table by default only when it tells
+# something: when at least one peak had a reading that was not preferred
+#' @export
+show_preferred_column <- function(hits) {
+  "Preferred" %in% names(hits) &&
+    any(as.character(hits$Preferred) %in% "FALSE")
+}
+
+# Validate protein/compound table. `type` is "proteins" or "compounds"; the
+# compound table also refuses mass shifts that are multiples of each other.
+#' @export
+check_table <- function(tab, tolerance, type = NULL) {
   if (!nrow(tab) || ncol(tab) < 2) {
     return("Fill name and mass fields.")
   }
@@ -1753,9 +1883,18 @@ check_table <- function(tab, tolerance) {
     return(paste("Duplicated names"))
   }
 
+  # Exact multiples among the shifts of one compound
+  if (identical(type, "compounds")) {
+    multiples <- shift_multiples(tab)
+    if (nrow(multiples)) {
+      return(shift_multiples_message(multiples))
+    }
+  }
+
   # Masses within the tolerance window of each other are not refused here: the
   # tables colour them (prot_comp_handsontable()) and the Samples-table check
-  # reports what they mean for the screening (mass_ambiguities())
+  # reports what they mean for the screening (mass_ambiguities()); within one
+  # compound the preferred assignment rule resolves them
 
   # If all checks passed return TRUE
   return(TRUE)
@@ -1965,10 +2104,10 @@ get_compound_matrix <- function(compound_file, header = TRUE) {
 #
 # One row per interpretation of a mass: every protein species unbound, and
 # every species with every mass shift of every compound at stoichiometry
-# 1 .. max_multiples. Ordered species, stoichiometry, mass shift, compound -
-# the order check_hits() picks the preferred hit in. `compound_mw` is the
-# compound table (name column, then Mass 1 ..) restricted to the compounds in
-# question.
+# 1 .. max_multiples. Ordered species, stoichiometry, mass shift, compound;
+# `shift` is the declared position of the mass shift (Mass 1, Mass 2 ..), which
+# prefer_hits() sorts on. `compound_mw` is the compound table (name column,
+# then Mass 1 ..) restricted to the compounds in question.
 #' @export
 predict_peaks <- function(prot_masses, compound_mw, max_multiples) {
   prot_masses <- suppressWarnings(as.numeric(prot_masses))
@@ -2062,7 +2201,8 @@ interpretation_label <- function(peaks) {
 #   proteoform - complexes of two different species. The peak's intensity is
 #                split between them.
 # Pairs within one compound on one species - two of its mass shifts or
-# stoichiometries - are left out: the preferred hit resolves those.
+# stoichiometries - are left out: the preferred assignment resolves those
+# (prefer_hits()).
 #' @export
 mass_ambiguities <- function(
   prot_masses,
@@ -2247,13 +2387,75 @@ format_compound_pairs <- function(amb, max_listed = 2) {
   )
 }
 
+# Preferred assignment of an ambiguous peak ----
+#
+# The rule a setting names (see hit_preference_rules), or the default one for a
+# missing or unknown name: a setting saved by another release must not stop a
+# run.
+#' @export
+hit_preference_rule <- function(rule) {
+  rule <- as.character(rule)[1]
+  if (!is.na(rule) && rule %in% names(hit_preference_rules)) {
+    rule
+  } else {
+    names(hit_preference_rules)[1]
+  }
+}
+
+# The rules as select-input choices, labels naming values
+#' @export
+hit_preference_choices <- function() {
+  stats::setNames(
+    names(hit_preference_rules),
+    vapply(hit_preference_rules, `[[`, character(1), "label")
+  )
+}
+
+# Which readings of one peak are preferred. `hits` holds one row per reading
+# (theor_prot, compound, multiple, delta_cmp) and `shift` the declared position
+# of each reading's mass shift. Per protein species and compound exactly one
+# reading is TRUE: the first after sorting by the criteria of the rule in turn.
+# Mass errors are compared rounded to 1e-6 Da, so floating-point noise in the
+# predicted sums cannot decide between readings that are equally close, and the
+# row order settles whatever the criteria leave tied.
+#' @export
+prefer_hits <- function(
+  hits,
+  shift = hits$shift,
+  rule = names(hit_preference_rules)[1]
+) {
+  n <- nrow(hits)
+  if (!n) {
+    return(logical(0))
+  }
+  if (length(shift) != n) {
+    shift <- rep(NA_real_, n)
+  }
+
+  criteria <- list(
+    multiple = suppressWarnings(as.numeric(hits$multiple)),
+    error = round(suppressWarnings(as.numeric(hits$delta_cmp)), 6),
+    shift = suppressWarnings(as.numeric(shift))
+  )[hit_preference_rules[[hit_preference_rule(rule)]]$keys]
+
+  group <- paste(hits$theor_prot, hits$compound, sep = "\r")
+  ord <- do.call(
+    order,
+    c(list(group), unname(criteria), list(seq_len(n)))
+  )
+  preferred <- logical(n)
+  preferred[ord] <- !duplicated(group[ord])
+  preferred
+}
+
 # A protein may be declared with more than one mass (Mass 1 .. Mass 9), e.g. the
 # plain protein plus a modified form such as a gluconoylated His-tag. Every
 # declared mass is treated as an independent species: it carries its own unbound
 # signal and compounds bind to it exactly like they bind to the base mass. Rows
 # of the returned hits frame carry the species a hit belongs to in theor_prot /
 # measured_prot / delta_prot, while prot_intensity stays a sample-level value -
-# the summed intensity of all detected unbound species.
+# the summed intensity of all detected unbound species. `preference` names the
+# rule picking the preferred reading of an ambiguous peak (hit_preference_rules).
 check_hits <- function(
   sample_table,
   protein_mw,
@@ -2262,7 +2464,8 @@ check_hits <- function(
   peak_tolerance,
   max_multiples,
   sample,
-  well = NA
+  well = NA,
+  preference = names(hit_preference_rules)[1]
 ) {
   # Get protein name and its declared mass species
   prot_name <- as.character(protein_mw[1, 1])
@@ -2363,9 +2566,7 @@ check_hits <- function(
     upper <- peaks_filtered$mass[j] + peak_tolerance
     lower <- peaks_filtered$mass[j] - peak_tolerance
 
-    # A peak can be a complex of any of the declared species. The predicted
-    # table is ordered species, stoichiometry, mass shift, compound - the order
-    # the preferred hit below is picked in.
+    # A peak can be a complex of any of the declared species
     matched <- complexes[
       complexes$mass >= lower & complexes$mass <= upper,
       ,
@@ -2401,19 +2602,16 @@ check_hits <- function(
 
     # Case multiple matching
     if (nrow(hits_add) > 1) {
-      # One interpretation per species and compound counts towards the
-      # binding: the first in the predicted order, i.e. the lowest
-      # stoichiometry, then the first declared mass shift
-      hits_add <- hits_add |>
-        dplyr::group_by(theor_prot, compound) |>
-        dplyr::mutate(
-          preferred = dplyr::row_number() == 1
-        ) |>
-        dplyr::ungroup() |>
-        as.data.frame()
+      # One reading per species and compound names the peak, picked by the
+      # chosen rule. Readings of different species (proteoforms) each stay
+      # preferred: conversion() splits the peak between them.
+      hits_add$preferred <- prefer_hits(
+        hits_add,
+        shift = matched$shift,
+        rule = preference
+      )
 
-      # Log duplication event
-      log_duplicated_hits(hits_add)
+      log_ambiguous_peak(hits_add, preference)
     }
 
     hits_df <- rbind(hits_df, hits_add)
@@ -4039,27 +4237,53 @@ log_status <- function(n_peaks, mass = NULL) {
   }
 }
 
-log_duplicated_hits <- function(hits_add) {
-  message(sprintf(
-    "  ├─ %s Hit duplicates at %s Da",
-    .col_warn(warning_sym),
-    hits_add[1, "peak"]
-  ))
-  # Name the protein species too - with several declared masses the same peak
-  # can be a complex of different species
-  multi_species <- length(unique(hits_add[["theor_prot"]])) > 1
+# A peak with more than one reading. Readings of one compound on one species
+# are resolved by the preference rule, readings of different species split the
+# peak between them; the header says which happened and every reading follows,
+# the preferred ones ticked. The header is a warning: the Warnings card of the
+# Protocol tab lists it, folded per resolution.
+log_ambiguous_peak <- function(hits, preference) {
+  group <- paste(hits$theor_prot, hits$compound, sep = "\r")
+  preferred <- hits$preferred %in% TRUE
+  n_split <- sum(preferred)
+  n_species <- length(unique(hits$theor_prot[preferred]))
 
-  for (i in 1:nrow(hits_add)) {
+  how <- c(
+    if (any(duplicated(group))) {
+      paste(
+        tolower(hit_preference_rules[[hit_preference_rule(preference)]]$label),
+        "preferred"
+      )
+    },
+    if (n_split > 1) {
+      sprintf(
+        "split between %d %s",
+        n_split,
+        if (n_species == n_split) "proteoforms" else "readings"
+      )
+    }
+  )
+  message(sprintf(
+    "  ├─ %s Ambiguous assignment at %.2f Da (%s)",
+    .col_warn(warning_sym),
+    hits$peak[1],
+    paste(how, collapse = "; ")
+  ))
+
+  labels <- interpretation_label(data.frame(
+    type = "complex",
+    species = hits$theor_prot,
+    compound = hits$compound,
+    cmp_mass = hits$cmp_mass,
+    multiple = hits$multiple
+  ))
+  for (i in seq_len(nrow(hits))) {
     message(sprintf(
-      "  │  └─ Compound %s - %s%s%s",
-      hits_add[i, "compound"],
-      paste0("[", hits_add[i, "cmp_mass"], "]x", hits_add[i, "multiple"]),
-      if (multi_species) {
-        paste0(" - Protein: ", hits_add[i, "theor_prot"], " Da")
-      } else {
-        ""
-      },
-      paste0(" - Preferred: ", hits_add[i, "preferred"])
+      "  │  %s %s %s, Δ %.2f Da",
+      if (i == nrow(hits)) "└─" else "├─",
+      if (preferred[i]) "✓" else "·",
+      labels[i],
+      hits$delta_cmp[i]
     ))
   }
 }
@@ -4562,9 +4786,11 @@ add_hits <- function(
   session,
   ns,
   kinact_ki = FALSE,
-  config = NULL
+  config = NULL,
+  preference = names(hit_preference_rules)[1]
 ) {
   samples <- names(results$deconvolution)
+  preference <- hit_preference_rule(preference)
   compound_mw <- as.matrix(compound_table[, -1])
   rownames(compound_mw) <- compound_table[, 1]
 
@@ -4611,7 +4837,8 @@ add_hits <- function(
       peak_tolerance = peak_tolerance,
       max_multiples = max_multiples,
       sample = samples[i],
-      well = sample_well
+      well = sample_well,
+      preference = preference
     )
 
     # Calculate quality metrics unmatched[%] and correct[%]
@@ -10473,7 +10700,7 @@ table_observe <- function(
       )
     } else {
       check_function <- "check_table"
-      args <- list(tab = table, tolerance = tolerance)
+      args <- list(tab = table, tolerance = tolerance, type = tab)
     }
 
     table_check <- do.call(what = check_function, args = args)

@@ -13,6 +13,9 @@ get_default_user_settings <- function() {
   list(
     peak_tolerance = 3,
     max_multiples = 4,
+    # Rule picking the preferred reading of a peak one compound fits in more
+    # than one way (conversion_constants$hit_preference_rules)
+    hit_preference = "stoichiometry",
     deconv_startz = 1,
     # Max charge must reach max mass / min m/z (60,000 / 710 = 85): below that,
     # the high charge states of a large protein are forced onto wrong masses.

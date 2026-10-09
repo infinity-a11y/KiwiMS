@@ -6,13 +6,20 @@
 box::use(
   app/logic/conversion_functions[
     add_hits,
+    check_table,
     declaration_ambiguities,
+    hit_preference_rule,
     log_mass_ambiguities,
     mass_ambiguities,
+    prefer_hits,
     prot_comp_handsontable,
+    shift_multiples,
+    shift_multiples_message,
+    show_preferred_column,
     summarize_hits,
     unbound_species
   ],
+  app/logic/conversion_constants[hit_preference_rules, shift_multiple_limits],
 )
 
 B <- function(name) paste0("baseline/", name)
@@ -20,7 +27,9 @@ M <- function(name) paste0("mass_ambiguity/", name)
 
 # synth_hits(): Hits of one synthetic sample ----
 # `compounds` maps each compound to its mass shifts; the sample lists all of
-# them unless `sample_compounds` says otherwise.
+# them unless `sample_compounds` says otherwise. `preference` is the rule for
+# the preferred assignment. With `log = TRUE` the messages of the run are
+# returned instead of the hits.
 synth_hits <- function(
   mass,
   intensity,
@@ -28,7 +37,9 @@ synth_hits <- function(
   compounds = list(A = 100),
   sample_compounds = names(compounds),
   tolerance = 3,
-  max_multiples = 1
+  max_multiples = 1,
+  preference = "stoichiometry",
+  log = FALSE
 ) {
   pt <- data.frame(Protein = "P")
   for (i in seq_along(protein_masses)) pt[[paste("Mass", i)]] <- protein_masses[i]
@@ -47,10 +58,28 @@ synth_hits <- function(
     S1 = list(peaks = data.frame(mass = mass, intensity = intensity))
   ))
   session <- list(sendCustomMessage = function(...) invisible(NULL))
-  suppressMessages({
-    r <- add_hits(result, st, pt, ct, tolerance, max_multiples, session, identity)
+  run <- function() {
+    r <- add_hits(
+      result, st, pt, ct, tolerance, max_multiples, session, identity,
+      preference = preference
+    )
     summarize_hits(r, st)
-  })
+  }
+  if (log) {
+    msgs <- character(0)
+    withCallingHandlers(run(), message = function(m) {
+      msgs <<- c(msgs, conditionMessage(m))
+      invokeRestart("muffleMessage")
+    })
+    return(msgs)
+  }
+  suppressMessages(run())
+}
+
+# preferred_reading(): Mass shift and stoichiometry of the preferred hit ----
+preferred_reading <- function(hits) {
+  pref <- hits[hits$Preferred %in% TRUE & !is.na(hits$Compound), ]
+  c(pref$`Compound Mw [Da]`, pref$`Binding Stoichiometry`)
 }
 
 compound_table <- function(...) {
@@ -280,7 +309,7 @@ test_that("MA4: a complex shared by two proteoforms is split between them", {
 
 # ---- MA5: shifts of one compound on one form --------------------------------
 
-test_that("MA5a: two close shifts of one compound resolve to the first", {
+test_that("MA5a: two close shifts of one compound resolve to the closer one", {
   d <- kit_check(B("proteins_baseline"), M("compounds_close_shifts"), B("config_baseline"))
   expect_equal(d$status, "PASS")
   expect_null(d$message)
@@ -289,7 +318,8 @@ test_that("MA5a: two close shifts of one compound resolve to the first", {
   ref <- kit_sample_hits(r)
   peak <- ref[ref$`Peak [Da]` %in% 21903.5, ]
   expect_equal(peak$`Compound Mw [Da]`, c(266, 264))
-  expect_equal(peak$Preferred, c(TRUE, FALSE))
+  # Both are x1; 264 is 0.66 Da off the peak, 266 1.34 Da
+  expect_equal(peak$Preferred, c(FALSE, TRUE))
   expect_rounded(r$total[[kit_reference_sample]], 12.04, 2)
 
   # 2o5_1min_R1's complex, 4.34 Da off 266, is caught by 264
@@ -307,18 +337,39 @@ test_that("MA5a: two close shifts of one compound resolve to the first", {
   expect_rounded(k$proteoforms[["21638.84"]]$ratio, 358.8)
 })
 
-test_that("MA5b: a shift twice another prefers the lower stoichiometry", {
-  expect_equal(kit_check(B("proteins_baseline"), M("compounds_half_shift"), B("config_baseline"))$status, "PASS")
+test_that("MA5b: a shift close to twice another prefers the lower stoichiometry", {
+  ct <- kit_load("mass_ambiguity", "compounds_near_half_shift")
+  # 2 x 133.5 = 267 is 1 Da off 266: not an exact multiple, the table passes
+  expect_true(isTRUE(check_table(ct, 3, "compounds")))
+  expect_equal(kit_check(B("proteins_baseline"), M("compounds_near_half_shift"), B("config_baseline"))$status, "PASS")
 
   base <- kit_case(B("proteins_baseline"), B("compounds_baseline"), B("config_baseline"))
-  r <- kit_case(B("proteins_baseline"), M("compounds_half_shift"), B("config_baseline"))
+  r <- kit_case(B("proteins_baseline"), M("compounds_near_half_shift"), B("config_baseline"))
   peak <- kit_sample_hits(r)
   peak <- peak[peak$`Peak [Da]` %in% 21903.5, ]
-  expect_equal(peak$`Compound Mw [Da]`, c(266, 133))
+  expect_equal(peak$`Compound Mw [Da]`, c(266, 133.5))
   expect_equal(peak$`Binding Stoichiometry`, c(1, 2))
   expect_equal(peak$Preferred, c(TRUE, FALSE))
   expect_equal(r$total, base$total[names(r$total)])
   expect_rounded(r$kinetics[["MLKL + BI-8925"]]$ratio, 334.1)
+})
+
+test_that("MA5c: a shift exactly twice another is refused", {
+  ct <- kit_load("mass_ambiguity", "compounds_half_shift")
+  chk <- check_table(ct, 3, "compounds")
+  expect_false(isTRUE(chk))
+  expect_equal(
+    as.character(chk),
+    "Mass shifts that are multiples of each other: BI-8925 (266 = 2 × 133)"
+  )
+  expect_equal(attr(chk, "details"), "BI-8925: Mass 1 (266 Da) = 2 × Mass 2 (133 Da)")
+  expect_match(attr(chk, "note"), "Remove the multiple", fixed = TRUE)
+  # Whatever the tolerance; the Proteins table and an untyped check pass
+  expect_false(isTRUE(check_table(ct, 0.1, "compounds")))
+  expect_true(isTRUE(check_table(ct, 3, "proteins")))
+  expect_true(isTRUE(check_table(ct, 3)))
+  # The run-start backstop finds the same pair
+  expect_equal(nrow(shift_multiples(ct)), 1)
 })
 
 # ---- MA6: table colouring ----------------------------------------------------
@@ -418,19 +469,190 @@ test_that("a complex shared by three proteoforms is split in thirds", {
   expect_equal(unique(hits$`Total % Binding`), 0.4)
 })
 
-test_that("the preferred hit is the lowest stoichiometry, then the first shift", {
-  # 1266 is 1000 + 133 x 2 and 1000 + 266 x 1: x1 wins although 133 comes first
-  hits <- synth_hits(c(1000, 1266), c(50, 50), 1000, list(A = c(133, 266)), max_multiples = 2)
-  pref <- hits[hits$Preferred %in% TRUE, ]
-  expect_equal(c(pref$`Compound Mw [Da]`, pref$`Binding Stoichiometry`), c(266, 1))
+test_that("the default prefers the lowest stoichiometry, then the closest mass, then the first shift", {
+  # 1266.2 is 0.2 Da off 1000 + 133 x 2 and 0.3 Da off 1000 + 266.5 x 1: x1
+  # wins although 133 x 2 is closer and declared first
+  hits <- synth_hits(c(1000, 1266.2), c(50, 50), 1000, list(A = c(133, 266.5)), max_multiples = 2)
+  expect_equal(preferred_reading(hits), c(266.5, 1))
 
-  # Same stoichiometry: the shift declared first
+  # Same stoichiometry: the closer shift (0.5 Da off against 1.5 Da)
+  hits <- synth_hits(c(1000, 1265.5), c(50, 50), 1000, list(A = c(264, 266)))
+  expect_equal(preferred_reading(hits), c(266, 1))
+
+  # Same stoichiometry, equally close: the shift declared first
   hits <- synth_hits(c(1000, 1265), c(50, 50), 1000, list(A = c(264, 266)))
-  pref <- hits[hits$Preferred %in% TRUE, ]
-  expect_equal(pref$`Compound Mw [Da]`, 264)
+  expect_equal(preferred_reading(hits), c(264, 1))
   # Both rows show the peak, its binding counts once
   expect_equal(nrow(hits[hits$`Peak [Da]` %in% 1265, ]), 2)
   expect_equal(unique(hits$`Total % Binding`), 0.5)
+})
+
+test_that("each rule picks its own reading where the criteria disagree", {
+  # 1266.2 fits 133 x 2 (0.2 Da off) and 267 x 1 (0.8 Da off)
+  pick <- function(rule, peak = 1266.2) {
+    preferred_reading(synth_hits(
+      c(1000, peak), c(50, 50), 1000, list(A = c(133, 267)),
+      max_multiples = 2, preference = rule
+    ))
+  }
+  expect_equal(pick("stoichiometry"), c(267, 1))
+  expect_equal(pick("mass_error"), c(133, 2))
+  expect_equal(pick("declared"), c(133, 2))
+  # 1266.5 is 0.5 Da off both: the closest mass falls back to the lowest
+  # stoichiometry, the declared order still takes Mass 1
+  expect_equal(pick("mass_error", 1266.5), c(267, 1))
+  expect_equal(pick("declared", 1266.5), c(133, 2))
+  # A rule the release does not know is the default
+  expect_equal(pick("removed_rule"), pick("stoichiometry"))
+
+  # The rule only names the peak: binding is the same under every rule
+  totals <- vapply(
+    names(hit_preference_rules),
+    function(rule) {
+      hits <- synth_hits(
+        c(1000, 1266.2), c(50, 50), 1000, list(A = c(133, 267)),
+        max_multiples = 2, preference = rule
+      )
+      unique(hits$`Total % Binding`)
+    },
+    numeric(1)
+  )
+  expect_equal(unname(totals), rep(0.5, 3))
+})
+
+test_that("floating-point noise in the mass sums does not break a tie", {
+  # 80.2 x 3 = 1240.6 and 241.6 x 1 = 1241.6 lie 0.5 Da either side of
+  # 1241.1. The computed errors differ in the 14th decimal, 80.2 x 3 the
+  # smaller; the tie still falls through to the lowest stoichiometry.
+  expect_lt(abs(80.2 * 3 - 241.1), abs(241.6 - 241.1))
+  hits <- synth_hits(
+    c(1000, 1241.1), c(50, 50), 1000, list(A = c(80.2, 241.6)),
+    max_multiples = 3, preference = "mass_error"
+  )
+  expect_equal(preferred_reading(hits), c(241.6, 1))
+})
+
+test_that("exact multiples among the shifts of one compound are found", {
+  ct <- compound_table(
+    A = c(133, 266),          # 2 x
+    B = c(266, 88.67),        # 3 x 88.67 = 266.01, within 0.01 Da
+    C = c(266, 88.6),         # 3 x 88.6 = 265.8: only close
+    D = c(-18, -36, 18),      # same sign only
+    E = c(10, 200, 210),      # 20 x is the last factor; 21 x is not checked
+    F = c(266, 266),          # the same shift twice
+    G = c(0, 0, 5),           # zero pairs with zero only
+    H = c(100, NA, 300)       # empty cells are skipped
+  )
+  m <- shift_multiples(ct)
+  key <- paste(m$compound, m$factor, m$smaller_mass, m$larger_mass)
+  expect_setequal(key, c(
+    "A 2 133 266", "B 3 88.67 266", "D 2 -18 -36", "E 20 10 200",
+    "F 1 266 266", "G 1 0 0", "H 3 100 300"
+  ))
+  expect_equal(m$smaller[m$compound == "A"], "Mass 1")
+  expect_equal(m$larger[m$compound == "B"], "Mass 1")
+
+  # The precision is the limit: 0.0101 Da off is no longer exact
+  expect_equal(nrow(shift_multiples(compound_table(A = c(100, 200.0101)))), 0)
+  expect_equal(nrow(shift_multiples(compound_table(A = c(100, 200.01)))), 1)
+  expect_equal(shift_multiple_limits$max_factor, 20)
+
+  # Max. Stoichiometry does not enter: 133 and 399 are refused even when
+  # complexes of more than two compounds are not screened
+  expect_equal(nrow(shift_multiples(compound_table(A = c(133, 399)))), 1)
+  # Nothing to compare
+  expect_equal(nrow(shift_multiples(compound_table(A = 100, B = 200))), 0)
+  expect_equal(nrow(shift_multiples(NULL)), 0)
+})
+
+test_that("the multiples refusal lists two pairs and folds the rest", {
+  ct <- compound_table(A = c(133, 266), B = c(100, 300), C = c(50, 50))
+  msg <- shift_multiples_message(shift_multiples(ct))
+  expect_equal(
+    as.character(msg),
+    "Mass shifts that are multiples of each other: A (266 = 2 × 133), B (300 = 3 × 100) and 1 more"
+  )
+  expect_equal(attr(msg, "details")[3], "C: Mass 2 (50 Da) = Mass 1 (50 Da)")
+})
+
+test_that("the Preferred column is shown when a reading was not preferred", {
+  # 1265.5 fits 264 and 266 x 1: one of them is not preferred
+  ambiguous <- synth_hits(c(1000, 1265.5), c(50, 50), 1000, list(A = c(264, 266)))
+  expect_true(show_preferred_column(ambiguous))
+  plain <- synth_hits(c(1000, 1100), c(50, 50), 1000)
+  expect_false(show_preferred_column(plain))
+  # Only unbound rows (Preferred NA), or no Preferred column at all
+  expect_false(show_preferred_column(synth_hits(1000, 100, 1000)))
+  expect_false(show_preferred_column(data.frame(x = 1)))
+})
+
+test_that("the rules fall through their criteria in order", {
+  # Five readings of one compound on one species, built so that every rule
+  # needs a fallback and each lands on a different reading
+  hits <- data.frame(
+    theor_prot = 1000,
+    compound = "A",
+    multiple = c(2, 1, 1, 2, 3),
+    delta_cmp = c(0.2, 0.8, 0.8, 0.2, 0.9)
+  )
+  shift <- c(2, 3, 2, 3, 1)
+  # x1 (rows 2, 3), tied on the error, Mass 2 before Mass 3
+  expect_equal(which(prefer_hits(hits, shift, "stoichiometry")), 3)
+  # 0.2 Da (rows 1, 4), tied on stoichiometry, Mass 2 before Mass 3
+  expect_equal(which(prefer_hits(hits, shift, "mass_error")), 1)
+  # Mass 1
+  expect_equal(which(prefer_hits(hits, shift, "declared")), 5)
+
+  # Readings alike in every criterion: the first row
+  twins <- hits[c(1, 1), ]
+  for (rule in names(hit_preference_rules)) {
+    expect_equal(prefer_hits(twins, c(2, 2), rule), c(TRUE, FALSE))
+  }
+  # Unknown or missing rules are the default
+  for (rule in list("removed_rule", NA, NULL, character(0))) {
+    expect_equal(hit_preference_rule(rule), "stoichiometry")
+  }
+  expect_equal(prefer_hits(hits[0, ], numeric(0)), logical(0))
+})
+
+test_that("every rule prefers exactly one reading per species and compound", {
+  set.seed(20261009)
+  for (rule in c(names(hit_preference_rules), "removed_rule")) {
+    counts <- unlist(lapply(seq_len(300), function(k) {
+      n <- sample(1:8, 1)
+      hits <- data.frame(
+        theor_prot = sample(c(1000, 1050.5), n, TRUE),
+        compound = sample(c("A", "B"), n, TRUE),
+        multiple = sample(1:3, n, TRUE),
+        # Ties, near-ties within floating-point noise and missing errors
+        delta_cmp = sample(c(0, 0.5, 0.5 + 1e-12, 1, NA), n, TRUE)
+      )
+      shift <- sample(c(1:3, NA), n, TRUE)
+      pref <- prefer_hits(hits, shift, rule)
+      as.vector(tapply(pref, paste(hits$theor_prot, hits$compound), sum))
+    }))
+    expect_true(all(counts == 1), info = rule)
+  }
+})
+
+test_that("an ambiguous peak is logged with its rule and the preferred reading", {
+  msgs <- synth_hits(
+    c(1000, 1266.2), c(50, 50), 1000, list(A = c(133, 267)),
+    max_multiples = 2, preference = "mass_error", log = TRUE
+  )
+  header <- grep("Ambiguous assignment", msgs, value = TRUE)
+  expect_length(header, 1)
+  expect_match(header, "Ambiguous assignment at 1266.20 Da (closest mass preferred)", fixed = TRUE)
+  expect_true(any(grepl("✓ 1,000 Da + A (133.0 Da ×2), Δ 0.20 Da", msgs, fixed = TRUE)))
+  expect_true(any(grepl("· 1,000 Da + A (267.0 Da ×1), Δ 0.80 Da", msgs, fixed = TRUE)))
+
+  # A peak shared by two proteoforms is split, not resolved by the rule
+  msgs <- synth_hits(c(1002, 1102), c(60, 40), c(1000, 1004), log = TRUE)
+  expect_match(
+    grep("Ambiguous assignment", msgs, value = TRUE),
+    "(split between 2 proteoforms)",
+    fixed = TRUE
+  )
 })
 
 test_that("ambiguities are checked once per protein and compound set", {

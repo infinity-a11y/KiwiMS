@@ -399,7 +399,7 @@ test_that("every compound of a multi-compound sample is screened", {
   expect_setequal(stats::na.omit(hits$Compound), c("B", "C"))
 })
 
-test_that("the predicted peaks follow the order the preferred hit is picked in", {
+test_that("the predicted peaks are ordered species, stoichiometry, shift, compound", {
   compound_mw <- data.frame(
     Compound = c("A", "B"),
     `Mass 1` = c(100, 200),
@@ -453,7 +453,7 @@ test_that("mass ambiguities are found within twice the tolerance", {
   )
   expect_true("proteoform" %in% amb$kind)
 
-  # Two mass shifts of one compound are left to the preferred hit
+  # Two mass shifts of one compound are left to the preferred assignment
   one_compound <- data.frame(
     Compound = "A",
     `Mass 1` = 100,

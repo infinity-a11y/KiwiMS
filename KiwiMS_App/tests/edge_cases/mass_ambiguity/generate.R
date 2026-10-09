@@ -25,7 +25,9 @@ kit_files <- function(ctx) {
     compounds_shift_250 = kit_compounds("BI-8925", c(266, 250)),
     # MA5a: two mass shifts of one compound 2 Da apart
     compounds_close_shifts = kit_compounds("BI-8925", c(266, 264)),
-    # MA5b: one mass shift half of the other
+    # MA5b: one mass shift close to half the other (2 x 133.5 = 267)
+    compounds_near_half_shift = kit_compounds("BI-8925", c(266, 133.5)),
+    # MA5c: one mass shift exactly half the other, refused
     compounds_half_shift = kit_compounds("BI-8925", c(266, 133)),
     # MA1a-d: both compounds in every sample
     config_with_decoy = kit_config(ctx, "BI-8925", "DECOY"),
@@ -72,8 +74,13 @@ kit_report <- function(ctx) {
 
   c5a <- M("compounds_close_shifts")
   kit_show("MA5a shifts 266/264", kit_declare(pt, c5a, cfg), kit_run(ctx, pt, c5a, cfg))
-  c5b <- M("compounds_half_shift")
-  kit_show("MA5b shifts 266/133", kit_declare(pt, c5b, cfg), kit_run(ctx, pt, c5b, cfg))
+  c5b <- M("compounds_near_half_shift")
+  kit_show("MA5b shifts 266/133.5", kit_declare(pt, c5b, cfg), kit_run(ctx, pt, c5b, cfg))
+  c5c <- M("compounds_half_shift")
+  kit_show("MA5c shifts 266/133 (Compounds table)", list(
+    status = if (isTRUE(check_table(c5c, 3, "compounds"))) "PASS" else "BLOCKED",
+    message = as.character(check_table(c5c, 3, "compounds"))
+  ))
 
   kit_show("MA6 colouring files (declaration)", kit_declare(pt3, M("compounds_decoy_271"), cfg))
 }

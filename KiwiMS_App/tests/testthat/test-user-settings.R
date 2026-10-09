@@ -2,6 +2,7 @@
 
 box::use(
   app/logic/user_settings[get_default_user_settings, migrate_settings],
+  app/logic/conversion_constants[hit_preference_rules],
 )
 
 # merged(): What read_user_settings() returns for a stored file ----
@@ -21,6 +22,13 @@ test_that("max charge and peak threshold default to 100 and 0.05", {
   expect_equal(d$deconv_peakthresh, 0.05)
   # The max charge reaches the mass range at the lowest m/z
   expect_gte(d$deconv_endz, d$deconv_massub / d$deconv_minmz)
+})
+
+test_that("the preferred assignment defaults to the first rule", {
+  d <- get_default_user_settings()
+  expect_identical(d$hit_preference, names(hit_preference_rules)[1])
+  # Settings saved before the option existed fall back to it
+  expect_identical(merged(list(max_multiples = 3))$hit_preference, d$hit_preference)
 })
 
 test_that("the defaults carry the current settings version", {
