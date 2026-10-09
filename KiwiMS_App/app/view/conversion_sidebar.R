@@ -181,8 +181,7 @@ server <- function(
         # table (conc_unit_input_ui())
         shinyWidgets::pickerInput(
           inputId = ns("hit_preference"),
-          label =
-          shiny::div(
+          label = shiny::div(
             class = "label-tooltip",
             shiny::tags$label("Preferred Assignment"),
 
@@ -220,24 +219,10 @@ server <- function(
           width = "100%",
           options = shinyWidgets::pickerOptions(size = 10)
         ),
-        shiny::div(
-          class = "kinact-ki-checkbox",
-          shiny::checkboxInput(
-            ns("run_kinact_ki"),
-            shiny::span(
-              class = "kinact-ki-label",
-              "Run",
-              shiny::div(
-                class = "kinact-ki-highlight",
-                " k",
-                htmltools::tags$sub("inact"),
-                " / K",
-                htmltools::tags$sub("i")
-              ),
-              " Analysis"
-            ),
-            value = FALSE
-          )
+        shiny::checkboxInput(
+          ns("run_kinact_ki"),
+          "Run Kinetics Analysis",
+          value = FALSE
         ),
         shiny::uiOutput(ns("run_button_wrapper"))
       )
@@ -317,7 +302,7 @@ server <- function(
         badge,
         shiny::actionButton(
           ns("open_config_btn"),
-          "Experiment Configuration",
+          "Configuration",
           icon = config_icon(),
           class = "btn btn-sm btn-default"
         )

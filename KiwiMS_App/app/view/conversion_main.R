@@ -577,29 +577,89 @@ server <- function(
     )
 
     ## Conversion Declaration UI ----
+    # A freshly rendered declaration interface shows its first tab and no tab
+    # as saved. This brings it back to the state of the tables: saved tabs get
+    # their checkmark, and a confirmed sample table keeps its file input and
+    # unit pickers locked and is the tab shown, as after an aborted run.
+    restore_declaration_state <- function(
+      proteins_saved,
+      compounds_saved,
+      samples_confirmed
+    ) {
+      saved_tabs <- c("Proteins", "Compounds", "Samples")[c(
+        proteins_saved,
+        compounds_saved,
+        samples_confirmed
+      )]
+      if (length(saved_tabs)) {
+        shinyjs::delay(250, {
+          for (saved_tab in saved_tabs) {
+            shinyjs::runjs(sprintf(
+              'document.querySelector(".nav-link[data-value=\'%s\']").classList.add("done");',
+              saved_tab
+            ))
+          }
+        })
+      }
+
+      if (!samples_confirmed) {
+        return(invisible(NULL))
+      }
+
+      session$onFlushed(
+        function() {
+          shinyjs::addClass(
+            selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
+            class = "custom-disable"
+          )
+          shinyjs::addClass(
+            selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
+            class = "custom-disable"
+          )
+          shinyjs::disable("conc_unit")
+          shinyjs::addClass(
+            selector = ".shiny-input-container:has(#app-conversion_main-conc_unit) .bootstrap-select",
+            class = "custom-disable"
+          )
+          shinyjs::disable("time_unit")
+          shinyjs::addClass(
+            selector = ".shiny-input-container:has(#app-conversion_main-time_unit) .bootstrap-select",
+            class = "custom-disable"
+          )
+        },
+        once = TRUE
+      )
+
+      set_selected_tab("Samples", session)
+      invisible(NULL)
+    }
+
+    # Rendered at start and again when a run ends without results (no hits):
+    # the run's spinner replaces the interface, so it comes back rebuilt and
+    # needs the state of the tables restored
     output$conversion_ui <- shiny::renderUI({
       shiny::req(!conversion_sidebar_vars$analysis_running())
       shiny::req(is.null(conversion_sidebar_vars$result_list()))
-      shiny::isolate(conversion_declaration_ui(
-        ns,
-        proteins_status = if (isTRUE(declaration_vars$protein_table_status)) {
-          "confirmed"
-        } else {
-          ""
-        },
-        compounds_status = if (isTRUE(declaration_vars$compound_table_status)) {
-          "confirmed"
-        } else {
-          ""
-        },
-        samples_status = if (isTRUE(declaration_vars$samples_confirmed)) {
-          "confirmed"
-        } else {
-          ""
-        },
-        conc_unit = conc_unit_selected(),
-        time_unit = time_unit_selected()
-      ))
+      shiny::isolate({
+        proteins_saved <- isFALSE(declaration_vars$protein_table_active)
+        compounds_saved <- isFALSE(declaration_vars$compound_table_active)
+        samples_confirmed <- isTRUE(declaration_vars$samples_confirmed)
+
+        ui <- conversion_declaration_ui(
+          ns,
+          proteins_status = if (proteins_saved) "confirmed" else "",
+          compounds_status = if (compounds_saved) "confirmed" else "",
+          samples_status = if (samples_confirmed) "confirmed" else "",
+          conc_unit = conc_unit_selected(),
+          time_unit = time_unit_selected()
+        )
+        restore_declaration_state(
+          proteins_saved,
+          compounds_saved,
+          samples_confirmed
+        )
+        ui
+      })
     })
 
     ### UI Render Functions ----
@@ -2273,50 +2333,14 @@ server <- function(
             )
           )
 
-          shinyjs::delay(250, {
-            shinyjs::runjs(
-              'document.querySelector(".nav-link[data-value=\'Proteins\']").classList.add("done");'
-            )
-            shinyjs::runjs(
-              'document.querySelector(".nav-link[data-value=\'Compounds\']").classList.add("done");'
-            )
-            shinyjs::runjs(
-              'document.querySelector(".nav-link[data-value=\'Samples\']").classList.add("done");'
-            )
-          })
-
-          session$onFlushed(
-            function() {
-              shinyjs::addClass(
-                selector = ".btn-file:has(#app-conversion_main-samples_fileinput)",
-                class = "custom-disable"
-              )
-              shinyjs::addClass(
-                selector = ".input-group:has(#app-conversion_main-samples_fileinput) > .form-control",
-                class = "custom-disable"
-              )
-              shinyjs::disable("conc_unit")
-              shinyjs::addClass(
-                selector = ".shiny-input-container:has(#app-conversion_main-conc_unit) .bootstrap-select",
-                class = "custom-disable"
-              )
-              shinyjs::disable("time_unit")
-              shinyjs::addClass(
-                selector = ".shiny-input-container:has(#app-conversion_main-time_unit) .bootstrap-select",
-                class = "custom-disable"
-              )
-            },
-            once = TRUE
-          )
+          # Mark all tabs saved, lock the sample inputs, select samples tab
+          restore_declaration_state(TRUE, TRUE, TRUE)
 
           # Unblock UI
           shinyjs::runjs(paste0(
             'document.getElementById("blocking-overlay").style.display ',
             '= "none";'
           ))
-
-          # Select samples tab
-          set_selected_tab("Samples", session)
         } else if (!is.null(result_list)) {
           shiny::req(!is.null(iface))
 

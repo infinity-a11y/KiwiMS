@@ -367,7 +367,7 @@ server <- function(
         badge,
         actionButton(
           ns("open_config_btn"),
-          "Experiment Configuration",
+          "Configuration",
           icon = config_icon(),
           class = "btn btn-sm btn-default"
         ),

@@ -1883,6 +1883,33 @@ check_table <- function(tab, tolerance, type = NULL) {
     return(paste("Duplicated names"))
   }
 
+  # Protein masses and compound mass shifts are both added onto the peaks
+  # looked for, so a mass of zero or below declares nothing a spectrum shows
+  masses <- as.matrix(tab[, -1, drop = FALSE])
+  not_positive <- which(!is.na(masses) & masses <= 0, arr.ind = TRUE)
+  if (nrow(not_positive)) {
+    not_positive <- not_positive[
+      order(not_positive[, 1], not_positive[, 2]),
+      ,
+      drop = FALSE
+    ]
+    return(structure(
+      "Mass values must be greater than 0",
+      details = sprintf(
+        "%s: %s (%s Da)",
+        tab[[1]][not_positive[, 1]],
+        colnames(masses)[not_positive[, 2]],
+        format(
+          masses[not_positive],
+          trim = TRUE,
+          scientific = FALSE,
+          drop0trailing = TRUE
+        )
+      ),
+      note = "Declare protein masses and compound mass shifts as positive values."
+    ))
+  }
+
   # Exact multiples among the shifts of one compound
   if (identical(type, "compounds")) {
     multiples <- shift_multiples(tab)

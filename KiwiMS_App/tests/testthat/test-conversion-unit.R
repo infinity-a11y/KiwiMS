@@ -7,6 +7,7 @@ box::use(
     add_hits,
     add_proteoform_binding,
     check_sample_table,
+    check_table,
     clean_prot_comp_table,
     close_log_block,
     complex_hits,
@@ -337,6 +338,39 @@ test_that("the declaration table keeps every mass a protein was given", {
 
   expect_equal(names(cleaned), c("Protein", "Mass 1", "Mass 2"))
   expect_equal(as.numeric(cleaned[1, -1]), c(1000, 1010))
+})
+
+test_that("the declaration tables refuse masses of zero or below", {
+  compounds <- data.frame(
+    Compound = c("BI-8925", "C2"),
+    `Mass 1` = c(-266, 150),
+    `Mass 2` = c(100, 0),
+    `Mass 3` = c(-1, NA),
+    check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
+  chk <- check_table(compounds, 3, "compounds")
+  expect_equal(as.character(chk), "Mass values must be greater than 0")
+  expect_equal(
+    attr(chk, "details"),
+    c(
+      "BI-8925: Mass 1 (-266 Da)",
+      "BI-8925: Mass 3 (-1 Da)",
+      "C2: Mass 2 (0 Da)"
+    )
+  )
+  expect_match(attr(chk, "note"), "positive values", fixed = TRUE)
+
+  proteins <- data.frame(
+    Protein = "MLKL",
+    `Mass 1` = -21638.84,
+    check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
+  expect_false(isTRUE(check_table(proteins, 3, "proteins")))
+
+  proteins$`Mass 1` <- 21638.84
+  expect_true(isTRUE(check_table(proteins, 3, "proteins")))
 })
 
 # screen_compounds(): Hit screening of one sample against several compounds ----
