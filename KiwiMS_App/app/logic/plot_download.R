@@ -125,24 +125,6 @@ export_bg_color <- function(theme, transparent) {
   if (identical(theme, "light")) "#ffffff" else "#121212"
 }
 
-# Builds a figure with the export palette active: brighten_hex() turns into a
-# no-op for the duration, so an exported figure carries the palette's true
-# colours instead of the lifted variants the dark in-app background needs to
-# keep the darkest end of a scale legible.
-#
-# A global option rather than an argument threaded through every plot builder:
-# the palette is built in a dozen different places, some of them several calls
-# deep inside the plot functions, and a few of them behind cached reactives.
-# Nothing here is concurrent - a Shiny process runs one session's reactive
-# flush at a time and build_fn() is synchronous - so the option cannot leak
-# into another session's render.
-#' @export
-with_export_palette <- function(expr) {
-  old <- options(kiwims.export_palette = TRUE)
-  on.exit(options(old), add = TRUE)
-  force(expr)
-}
-
 # Writes a widget to a single HTML file with every local dependency folded in.
 # `background` paints the page body the figure sits on, and callers pass the
 # same colour they gave the figure so the two cannot come apart.
@@ -392,7 +374,8 @@ setup_plot_dl <- function(
 
   try_build <- function(theme) {
     tryCatch(
-      shiny::isolate(with_export_palette(entry$build_fn(theme))),
+      # The builders draw the palette variant of the theme (see palette.R)
+      shiny::isolate(entry$build_fn(theme)),
       error = function(e) NULL
     )
   }

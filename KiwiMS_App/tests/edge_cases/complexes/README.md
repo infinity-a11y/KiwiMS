@@ -100,7 +100,8 @@ compound per sample for kinact/KI (122 samples list several)" (CX4).
   sample without a hit at 0 %):
   - BI-8925: 0–100 %, **81.63 ± 21.97** (the high concentrations);
   - BI-8926: 0–92.78 %, **58.48 ± 26.54** (2.5, 5 and 10 µM).
-- **Mass Shifts card** (Compound View): BI-8925 [266.0 Da] ×61, BI-8926 ×59.
+- **Compound Mass Shifts card** (Overview, MLKL with both compounds picked):
+  BI-8925 · 266.0 Da ×61, BI-8926 · 266.0 Da ×59.
 - **Complex picker:** BI-8925 and BI-8926 under MLKL; BI-8925 selected.
   - **BI-8925:** 62 samples (the 0 µM controls included). kinact/KI
     **224.3** (CI 199.9–251.0), status linear, "Saturation not reached".
@@ -115,9 +116,10 @@ compound per sample for kinact/KI (122 samples list several)" (CX4).
 
 - Passes. BI-8925's Tot. Binding card reads 0–100 %, **81.63 ± 21.97**, as in
   CX3a. All samples fall to 41.48.
-- BI-8926 is listed in the Compound View too: its samples name it on rows
-  without an adduct, so its card reads 0 % and its Mass Shifts card shows
-  500.0 Da unassigned.
+- BI-8926 is offered in the Overview's compound picker too, marked "No hits":
+  its samples name it on rows without an adduct, so its card reads 0 % and
+  the Compound Mass Shifts card shows 500.0 Da unassigned. MLKL stays first in
+  the protein picker, as one of its complexes has hits.
 - The complex picker still lists **BI-8926**. Pick it: the kinetics view shows
   the "no kinetics" card with "No hits of BI-8926 in its samples".
 - The log has, under "MLKL + BI-8926 (60 samples)": "⚠ No hits of BI-8926 in

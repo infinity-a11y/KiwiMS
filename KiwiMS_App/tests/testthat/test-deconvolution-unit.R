@@ -13,8 +13,14 @@ box::use(
     decon_samples_with_state,
     decon_worker_count,
     deconvolute,
+    add_metrics_table,
     generate_decon_rslt,
-    plate_heatmap
+    plate_heatmap,
+    plate_highlight,
+    plate_layout,
+    plate_sample_at,
+    read_decon_metrics,
+    read_decon_peak_counts
   ],
 )
 
@@ -290,83 +296,167 @@ test_that("WAL cleanup leaves the database readable and the sidecars gone", {
   expect_equal(nrow(kiwims_db_query(db, "SELECT * FROM peaks")), 1L)
 })
 
-test_that("plate_heatmap marks failed wells distinctly from empty ones", {
+test_that("plate_layout uses the config wells when every sample has one", {
+  plate <- plate_layout(c("s1", "s2", "s3"), c("B2", "c03", "B4"))
+
+  expect_true(plate$by_well)
+  expect_equal(plate$tiles$well_id, c("B2", "C3", "B4"))
+  expect_equal(plate$tiles$row, c(2L, 3L, 2L))
+  expect_equal(plate$tiles$col, c(2L, 3L, 4L))
+  # Cropped to the rectangle the wells span
+  expect_equal(plate$rows, 2:3)
+  expect_equal(plate$cols, 2:4)
+})
+
+test_that("plate_layout falls back to queue order without usable wells", {
+  samples <- paste0("s", 1:14)
+  for (wells in list(
+    NULL,
+    rep(NA_character_, 14),
+    c(rep("A1", 13), "A2"), # duplicate wells
+    c(paste0("A", 1:13), "Z9"), # a well off the plate
+    c(paste0("A", 1:13), NA) # a sample without a well
+  )) {
+    plate <- plate_layout(samples, wells)
+    expect_false(plate$by_well)
+    # Left to right, then the next row, on 12 columns
+    expect_equal(plate$tiles$row, c(rep(1L, 12), 2L, 2L))
+    expect_equal(plate$tiles$col, c(1:12, 1:2))
+    expect_equal(plate$rows, 1:2)
+    expect_equal(plate$cols, 1:12)
+  }
+
+  # 24 columns once the samples no longer fit a 96-well plate
+  big <- plate_layout(paste0("s", 1:100))
+  expect_equal(big$cols, 1:24)
+  expect_equal(big$rows, 1:5)
+
+  # No samples yet still makes a (blank) plate
+  empty <- plate_layout(character(0))
+  expect_equal(nrow(empty$tiles), 0L)
+  expect_equal(empty$rows, 1L)
+})
+
+test_that("plate_sample_at and plate_highlight address tiles by position", {
+  plate <- plate_layout(c("s1", "s2"), c("B2", "B3"))
+
+  expect_equal(plate_sample_at(plate, 3, 2), "s2")
+  expect_equal(plate_sample_at(plate, 3.2, 1.9), "s2")
+  expect_length(plate_sample_at(plate, 4, 2), 0)
+  expect_length(plate_sample_at(NULL, 3, 2), 0)
+
+  frame <- plate_highlight(plate, "s2")
+  expect_length(frame, 1)
+  expect_equal(c(frame[[1]]$x0, frame[[1]]$x1), c(2.5, 3.5))
+  expect_equal(c(frame[[1]]$y0, frame[[1]]$y1), c(1.5, 2.5))
+  # Nothing to frame clears an earlier frame
+  expect_equal(plate_highlight(plate, NULL), list())
+  expect_equal(plate_highlight(plate, "__show_all__"), list())
+})
+
+test_that("plate_heatmap colours done tiles by peak count and crosses failures", {
+  plate <- plate_layout(c("s1", "s2", "s3", "s4"), c("A1", "A2", "A3", "A4"))
   hm <- plate_heatmap(
-    data.frame(sample = "s1", well_id = "A1", value = 100),
-    all_wells = c("A1", "A2", "A3"),
-    failed_wells = data.frame(sample = "s2", well_id = "A2")
+    plate,
+    peak_counts = data.frame(sample = c("s1", "s2"), n_peaks = c(3L, 0L)),
+    failed = "s3"
   )
   built <- plotly::plotly_build(hm)
-  trace <- built$x$data[[1]]
-  rows <- trace$y
-  cols <- as.character(trace$x)
+  traces <- built$x$data
+  peaks <- traces[[2]]
+  z <- matrix(unlist(peaks$z), nrow = 1)
 
-  at <- function(well, mat) {
-    row <- sub("[0-9]+$", "", well)
-    col <- sub("^[A-Za-z]+", "", well)
-    mat[match(row, rows), match(col, cols)]
-  }
+  expect_equal(as.numeric(z[1, 1:2]), c(3, 0)) # done, 0 peaks still coloured
+  expect_true(all(is.na(z[1, 3:4]))) # failed and pending stay uncoloured
+  text <- unlist(peaks$text)
+  expect_match(text[1], "Sample: s1.*Peaks: 3")
+  expect_match(text[3], "Sample: s3.*Failed")
+  expect_match(text[4], "Sample: s4.*Pending")
 
-  expect_equal(at("A1", trace$z), 1) # done
-  expect_equal(at("A2", trace$z), 2) # failed
-  expect_equal(at("A3", trace$z), 0) # empty
-  expect_match(at("A1", trace$text), "Sample: s1")
-  # A failed well must carry its sample name too, not just "Failed" -- that's
-  # what lets a viewer identify which sample it was, and what the click
-  # handler needs to jump the selection there.
-  expect_match(at("A2", trace$text), "Sample: s2")
-  expect_match(at("A2", trace$text), "Failed")
-  expect_match(at("A3", trace$text), "Empty")
-
-  # A well can't be both: a done result takes precedence in the unlikely case
-  # a well is listed in both `data` and `failed_wells`.
-  hm2 <- plate_heatmap(
-    data.frame(sample = "s1", well_id = "A1", value = 100),
-    all_wells = "A1",
-    failed_wells = data.frame(sample = "s1", well_id = "A1")
-  )
-  trace2 <- plotly::plotly_build(hm2)$x$data[[1]]
-  expect_equal(as.numeric(trace2$z)[1], 1)
+  # One cross, on the failed tile
+  crosses <- Filter(function(t) identical(t$type, "scatter"), traces)
+  expect_length(crosses, 1)
+  expect_equal(as.numeric(crosses[[1]]$x), 3)
+  expect_equal(as.numeric(crosses[[1]]$y), 1)
+  expect_match(crosses[[1]]$marker$symbol, "^x")
 })
 
-test_that("plate_heatmap tolerates a malformed or empty failed_wells", {
-  for (bad in list(NULL, data.frame(), "A1", data.frame(well_id = "A1"))) {
-    hm <- plate_heatmap(
-      data.frame(sample = "s1", well_id = "A1", value = 100),
-      all_wells = c("A1", "A2"),
-      failed_wells = bad
+test_that("plate_heatmap draws a plate before anything is done", {
+  plate <- plate_layout(c("s1", "s2"))
+  for (counts in list(NULL, data.frame())) {
+    built <- plotly::plotly_build(plate_heatmap(plate, peak_counts = counts))
+    z <- unlist(built$x$data[[2]]$z)
+    expect_true(all(is.na(z)))
+    # No failures, no cross trace
+    expect_false(any(vapply(
+      built$x$data,
+      function(t) identical(t$type, "scatter"),
+      logical(1)
+    )))
+  }
+})
+
+test_that("read_decon_peak_counts counts peaks and reports 0 for none", {
+  db <- withr::local_tempfile(fileext = ".db")
+  con <- DBI::dbConnect(RSQLite::SQLite(), db)
+  DBI::dbWriteTable(
+    con,
+    "peaks",
+    data.frame(
+      sample = c("s1", "s1", "s1", "s2"),
+      mass = c(1, 2, 3, 4),
+      intensity = c(10, 20, 30, 40)
     )
-    trace <- plotly::plotly_build(hm)$x$data[[1]]
-    expect_true(all(trace$z %in% c(0, 1)))
-  }
-})
-
-test_that("plate_heatmap tolerates no failed wells (default behaviour unchanged)", {
-  hm <- plate_heatmap(
-    data.frame(sample = "s1", well_id = "A1", value = 100),
-    all_wells = c("A1", "A2")
   )
-  trace <- plotly::plotly_build(hm)$x$data[[1]]
-  expect_true(all(trace$z %in% c(0, 1)))
+  DBI::dbDisconnect(con)
+
+  counts <- read_decon_peak_counts(db, c("s2", "s1", "s3"))
+  expect_equal(counts$sample, c("s2", "s1", "s3"))
+  expect_equal(counts$n_peaks, c(1L, 3L, 0L))
+  expect_equal(nrow(read_decon_peak_counts(db, character(0))), 0L)
 })
 
-test_that("plate_heatmap accepts a columnless data.frame (nothing done yet)", {
-  # This is exactly what reactVars$rslt_df is before any sample completes
-  # (reset_progress() sets it to data.frame()) -- output$heatmap can reach
-  # plate_heatmap() with it as soon as there's a failed sample to show, even
-  # if nothing has succeeded yet.
-  for (empty_data in list(data.frame(), NULL)) {
-    hm <- plate_heatmap(
-      empty_data,
-      all_wells = c("A1", "A2"),
-      failed_wells = data.frame(sample = "s1", well_id = "A1")
+test_that("read_decon_metrics labels the error table and add_metrics_table shows it", {
+  db <- withr::local_tempfile(fileext = ".db")
+  con <- DBI::dbConnect(RSQLite::SQLite(), db)
+  DBI::dbWriteTable(
+    con,
+    "error",
+    data.frame(
+      sample = "s1",
+      Key = c("error", "time", "iterations", "uniscore"),
+      Value = c(123.4567891, 2.5, 100, 0.8765)
     )
-    trace <- plotly::plotly_build(hm)$x$data[[1]]
-    rows <- trace$y
-    cols <- as.character(trace$x)
-    z_a1 <- trace$z[match("A", rows), match("1", cols)]
-    z_a2 <- trace$z[match("A", rows), match("2", cols)]
-    expect_equal(z_a1, 2) # failed
-    expect_equal(z_a2, 0) # empty
-  }
+  )
+  DBI::dbDisconnect(con)
+
+  metrics <- read_decon_metrics(db, "s1")
+  expect_equal(
+    metrics$Parameter,
+    c(
+      "Fitting Error",
+      "Computation Time [s]",
+      "Iteration Count",
+      "UniScore (Quality)"
+    )
+  )
+  expect_equal(metrics$Value[1], 123.456789)
+  expect_equal(nrow(read_decon_metrics(db, "missing")), 0L)
+
+  base <- plotly::plot_ly(
+    data.frame(mass = 1:3, intensity = c(1, 5, 2)),
+    x = ~mass,
+    y = ~intensity,
+    type = "scatter",
+    mode = "lines"
+  )
+  built <- plotly::plotly_build(add_metrics_table(base, metrics))
+  table <- Filter(function(t) identical(t$type, "table"), built$x$data)
+  expect_length(table, 1)
+  expect_equal(unlist(table[[1]]$cells$values[[1]]), metrics$Parameter)
+  # The spectrum makes room for the table instead of running under it
+  expect_lt(built$x$layout$xaxis$domain[2], table[[1]]$domain$x[1])
+
+  # No metrics, no table
+  expect_identical(add_metrics_table(base, metrics[0, ]), base)
 })

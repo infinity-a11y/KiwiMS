@@ -12,12 +12,8 @@ box::use(
   app /
     logic /
     conversion_constants[
-      symbols,
       warning_sym,
       chart_js,
-      sequential_scales,
-      qualitative_scales,
-      gradient_scales,
       paste_hook_js,
       hits_col_full_names,
       kinetics_settings,
@@ -26,6 +22,26 @@ box::use(
       shift_multiple_limits
     ],
   app / logic / ms_formats[ms_sample_base],
+  app /
+    logic /
+    palette[
+      categorical_colors,
+      categorical_palette,
+      color_alpha,
+      concentration_symbols,
+      control_symbol,
+      level_tier,
+      ramp_at,
+      ramp_colorscale,
+      status_colors,
+      tier_pattern,
+      tier_symbol,
+      tint,
+    ],
+)
+
+box::use(
+  rlang[`%||%`],
 )
 
 # Concentration conversion
@@ -2949,7 +2965,7 @@ strip_html <- function(x) {
 
 ellipsis_html <- function(hidden, sep) {
   sprintf(
-    "<span title=\"%s\" style=\"cursor: help;\">…</span>",
+    "<span data-bs-toggle=\"tooltip\" title=\"%s\" style=\"cursor: help;\">…</span>",
     htmltools::htmlEscape(paste(strip_html(hidden), collapse = sep), TRUE)
   )
 }
@@ -2993,9 +3009,9 @@ species_mw_lines <- function(theor, measured, max_shown = 2) {
         paste0(fmt(min(signals)), " &ndash; ", fmt(max(signals)))
       }
       title <- if (length(signals) > 1) {
-        " title=\"Range of the detected signals\""
+        " data-bs-toggle=\"tooltip\" title=\"Range of the detected signals\""
       } else if (length(signals) == 1) {
-        " title=\"Detected signal\""
+        " data-bs-toggle=\"tooltip\" title=\"Detected signal\""
       } else {
         ""
       }
@@ -3127,6 +3143,34 @@ protein_mass_entries <- function(hits, declared = numeric(0)) {
   )
 }
 
+# Mass shifts of several compounds for one Mass Shifts card: the entries of
+# every compound (see mass_shift_entries()), each label naming its compound
+# once there is more than one. The masses assigned to a peak come first, so the
+# lines the card has room for show what was found.
+#' @export
+compound_mass_entries <- function(hits, compounds, compound_table = NULL) {
+  compounds <- unique(compounds[!is.na(compounds)])
+  entries <- lapply(compounds, function(cmp) {
+    e <- mass_shift_entries(
+      hits[hits$`Cmp Name` %in% cmp, , drop = FALSE],
+      declared = declared_masses(compound_table, cmp)
+    )
+    if (length(compounds) > 1 && nrow(e)) {
+      e$label <- paste(
+        htmltools::htmlEscape(cmp),
+        "&middot;",
+        e$label
+      )
+    }
+    e
+  })
+
+  entries <- do.call(rbind, c(list(mass_entries()), entries))
+  entries <- entries[order(!entries$present), , drop = FALSE]
+  rownames(entries) <- NULL
+  entries
+}
+
 # Mass Shifts card content from mass_entries(): the first `max_lines` entries,
 # then a "N more" hint listing the rest on hover. Entries without a peak are
 # greyed out and say so on hover. The hover lists are styled inline like the
@@ -3153,6 +3197,7 @@ mass_shift_card <- function(entries, max_lines = 3, accent = "#7777f9") {
         shiny::span(class = "mass-shift-label", shiny::HTML(entries$label[i])),
         shiny::span(
           class = "mass-shift-count",
+          `data-bs-toggle` = "tooltip",
           title = count_hint(entries$count[i]),
           paste0("×", entries$count[i])
         )
@@ -3285,20 +3330,17 @@ add_proteoform_binding <- function(hits_summary) {
 }
 
 # Colours of the proteoforms in the comparison plots, keyed by species mass;
-# the pooled fit is drawn in the font colour
+# the pooled fit is drawn in the font colour. The categorical colours are
+# taken cool ones first: the proteoforms are drawn over the k_obs curve,
+# whose concentrations run from violet to orange.
 #' @export
-proteoform_colors <- function(species) {
-  palette <- c(
-    "#ffa100",
-    "#29b6f6",
-    "#ef5350",
-    "#66bb6a",
-    "#ab47bc",
-    "#fbc02d",
-    "#8d6e63",
-    "#26a69a",
-    "#ec407a"
-  )
+proteoform_colors <- function(species, theme = "light") {
+  cool_first <- c(1L, 6L, 4L, 9L, 11L, 8L, 7L, 3L, 10L, 12L, 5L, 2L)
+  palette <- categorical_palette[[if (identical(theme, "dark")) {
+    "dark"
+  } else {
+    "light"
+  }]][cool_first]
   species <- sort(unique(species))
   stats::setNames(
     palette[(seq_along(species) - 1) %% length(palette) + 1],
@@ -3503,7 +3545,7 @@ proteoform_comparison_table <- function(kinetics, pooled, binding, view) {
         return(x)
       }
       sprintf(
-        "<span class=\"protocol-stat-warn\" title=\"%s\">%s</span>",
+        "<span class=\"protocol-stat-warn\" data-bs-toggle=\"tooltip\" title=\"%s\">%s</span>",
         "More than half of the values sit at a detection limit",
         x
       )
@@ -3513,7 +3555,7 @@ proteoform_comparison_table <- function(kinetics, pooled, binding, view) {
       if (x != "N/A" || is.null(k$reason)) {
         return(x)
       }
-      sprintf("<span title=\"%s\">N/A</span>", k$reason)
+      sprintf("<span data-bs-toggle=\"tooltip\" title=\"%s\">N/A</span>", k$reason)
     }
 
     delta <- if (identical(k$species, main)) {
@@ -3536,7 +3578,7 @@ proteoform_comparison_table <- function(kinetics, pooled, binding, view) {
       ]
       if (!nrow(paired)) {
         sprintf(
-          "<span title=\"%s\">N/A</span>",
+          "<span data-bs-toggle=\"tooltip\" title=\"%s\">N/A</span>",
           "No sample where both species are measured"
         )
       } else {
@@ -3566,7 +3608,7 @@ proteoform_comparison_table <- function(kinetics, pooled, binding, view) {
       # no fitted value to flag
       limit = if (unreliable) {
         sprintf(
-          "<span class=\"protocol-stat-warn\" title=\"%s\">%d / %d</span>",
+          "<span class=\"protocol-stat-warn\" data-bs-toggle=\"tooltip\" title=\"%s\">%d / %d</span>",
           "More than half of the values sit at a detection limit",
           k$n_limit,
           k$n_samples
@@ -3611,11 +3653,11 @@ proteoform_comparison_table <- function(kinetics, pooled, binding, view) {
       "⁻¹]"
     ),
     paste0(
-      "<span title=\"Relative difference of the proteoform's kinact/KI ",
+      "<span data-bs-toggle=\"tooltip\" title=\"Relative difference of the proteoform's kinact/KI ",
       "to the pooled kinact/KI\">Δ vs Pooled [%]</span>"
     ),
     paste0(
-      "<span title=\"Mean difference of the proteoform's binding to the ",
+      "<span data-bs-toggle=\"tooltip\" title=\"Mean difference of the proteoform's binding to the ",
       "binding of the reference proteoform, in percentage points, over the ",
       "samples where both are measured (± SD, n = samples). Negative: it ",
       "binds less.\">Δ Binding vs Reference [pp]</span>"
@@ -5463,7 +5505,10 @@ sci_axis_ticks <- list(
 concentration_symbol_map <- function(concentrations) {
   conc <- unique(as.character(concentrations))
   conc <- conc[order(as.numeric(conc), decreasing = TRUE)]
-  stats::setNames(rep_len(symbols, length(conc)), conc)
+  key_symbols(
+    list(concentrations = suppressWarnings(as.numeric(conc))),
+    conc
+  )
 }
 
 # The given symbol map, extended by any concentration it does not know;
@@ -5474,11 +5519,15 @@ resolve_symbol_map <- function(symbol_map, concentrations) {
   }
   missing <- setdiff(unique(as.character(concentrations)), names(symbol_map))
   if (length(missing) > 0) {
-    extra <- rep_len(symbols, length(symbol_map) + length(missing))
-    symbol_map <- c(
-      symbol_map,
-      stats::setNames(extra[length(symbol_map) + seq_along(missing)], missing)
-    )
+    # The control keeps its own symbol; other unknown concentrations take
+    # the symbols that follow the map's
+    is_control <- suppressWarnings(as.numeric(missing)) %in% 0
+    used <- sum(names(symbol_map) != "0" & symbol_map != control_symbol)
+    extra <- concentration_symbols[
+      (used + cumsum(!is_control) - 1L) %% length(concentration_symbols) + 1L
+    ]
+    extra[is_control] <- control_symbol
+    symbol_map <- c(symbol_map, stats::setNames(extra, missing))
   }
   symbol_map
 }
@@ -8638,6 +8687,144 @@ spectrum_sample_ids <- function(
   unique(tbl$`Sample ID`)
 }
 
+# Overview tab of the Relative Binding interface ----
+#
+# The Overview shows one protein with any of the compounds it was declared
+# with. The hits list every declared protein-compound pair of a sample, a pair
+# without an adduct on a row of its own (see check_hits()), so the pairs are
+# read off the hits: the declaration is not needed and results loaded without
+# it work the same.
+
+# The proteins of the run and the compounds declared with each, for the
+# Overview pickers. `proteins$status` is "hits" when a complex of the protein
+# has a hit, "no_hits" when it has complexes but none with a hit, and "none"
+# when it was declared without any compound (controls only). The proteins come
+# in that order, keeping the order of the hits within each group, so the
+# default pick is a protein with hits. The compounds of a protein list those
+# with a hit first.
+#' @export
+overview_choices <- function(hits_summary) {
+  prot <- as.character(hits_summary$Protein)
+  cmp <- as.character(hits_summary$`Cmp Name`)
+  named_prot <- !is.na(prot) & nzchar(trimws(prot))
+  named_cmp <- !is.na(cmp) & nzchar(trimws(cmp)) & cmp != "N/A"
+  complex <- is_complex_row(hits_summary)
+
+  proteins <- unique(prot[named_prot])
+  compounds <- lapply(stats::setNames(proteins, proteins), function(p) {
+    rows <- named_prot & prot == p & named_cmp
+    cmps <- unique(cmp[rows])
+    hit <- cmps %in% cmp[rows & complex]
+    data.frame(
+      compound = c(cmps[hit], cmps[!hit]),
+      hit = c(rep(TRUE, sum(hit)), rep(FALSE, sum(!hit)))
+    )
+  })
+
+  status <- vapply(
+    compounds,
+    function(d) {
+      if (!nrow(d)) "none" else if (any(d$hit)) "hits" else "no_hits"
+    },
+    character(1)
+  )
+  ord <- order(match(status, c("hits", "no_hits", "none")))
+
+  list(
+    proteins = data.frame(
+      protein = proteins[ord],
+      status = unname(status[ord])
+    ),
+    compounds = compounds
+  )
+}
+
+# Picker subtext of an Overview protein or compound: empty for one with hits
+#' @export
+overview_status_note <- function(status) {
+  unname(c(hits = "", no_hits = "No hits", none = "No compounds")[status])
+}
+
+# A valid Overview selection from overview_choices(): the protein asked for,
+# else the default one, with the asked compounds it was declared with, else all
+# of them
+#' @export
+overview_selection <- function(choices, protein = NULL, compounds = NULL) {
+  proteins <- choices$proteins$protein
+  if (!length(protein) || !protein[1] %in% proteins) {
+    protein <- proteins[1]
+  }
+  protein <- protein[1]
+
+  declared <- if (is.na(protein)) {
+    character(0)
+  } else {
+    choices$compounds[[protein]]$compound
+  }
+  compounds <- if (is.null(compounds)) {
+    declared
+  } else {
+    declared[declared %in% compounds]
+  }
+
+  list(protein = protein, compounds = compounds)
+}
+
+# The hits rows of the Overview selection: one protein with the picked
+# compounds. Samples declared without any of them (controls) belong to no
+# complex and are left out.
+#' @export
+overview_subset <- function(hits_summary, protein, compounds) {
+  hits_summary[
+    hits_summary$Protein %in% protein &
+      hits_summary$`Cmp Name` %in% compounds,
+    ,
+    drop = FALSE
+  ]
+}
+
+# Colours of the Overview selection, shared by its distribution plot, spectra
+# and table: the result's fixed colours (see color_key()) of the picked
+# compounds, or of the selection's samples. The protein's other compounds are
+# muted, as their peaks still show in the spectra of samples carrying several
+# compounds.
+#' @export
+overview_colors <- function(
+  hits_summary,
+  protein,
+  compounds,
+  variable,
+  key = NULL,
+  trunc = FALSE,
+  theme = "light"
+) {
+  key <- key %||% color_key(hits_summary)
+
+  if (identical(variable, "Compounds")) {
+    cmps <- hits_summary$`Cmp Name`[
+      hits_summary$Protein %in% protein & !is.na(hits_summary$`Cmp Name`)
+    ]
+    cmps <- sort(unique(as.character(cmps)), method = "radix")
+    picked <- cmps[cmps %in% compounds]
+    rest <- cmps[!cmps %in% compounds]
+  } else {
+    sub <- binding_ordered_hits(
+      overview_subset(hits_summary, protein, compounds),
+      truncate_names = trunc,
+      by_mean = TRUE
+    )
+    picked <- unique(as.character(
+      if (isTRUE(trunc)) sub$truncSample_ID else sub$`Sample ID`
+    ))
+    rest <- character(0)
+  }
+
+  c(
+    key_colors(key, variable, picked, theme = theme, trunc = trunc),
+    stats::setNames(rep(status_colors(theme)$muted, length(rest)), rest)
+  )
+}
+
 # Generate spectrum with multiple traces
 #' @export
 multiple_spectra <- function(
@@ -8656,7 +8843,9 @@ multiple_spectra <- function(
   units = NULL,
   time_factor = 1,
   max_points = 4000,
-  theme = "light"
+  theme = "light",
+  plot_data = NULL,
+  key = NULL
 ) {
   # Omit NA in samples
   samples <- samples[!is.na(samples)]
@@ -8674,10 +8863,17 @@ multiple_spectra <- function(
   unmatched_parts <- vector("list", length(samples))
 
   for (i in seq_along(samples)) {
-    plot_data <- process_plot_data(
-      results_list$deconvolution[[samples[i]]],
-      result_path = NULL
-    )
+    # `plot_data` hands over the spectra ready-made, one per sample and named
+    # by it (the deconvolution page reads them from the run database), in
+    # place of parsing them from results_list.
+    sample_data <- if (!is.null(plot_data)) {
+      plot_data[[samples[i]]]
+    } else {
+      process_plot_data(
+        results_list$deconvolution[[samples[i]]],
+        result_path = NULL
+      )
+    }
 
     z_value <- if (time) {
       extract_minutes(samples[i]) * time_factor
@@ -8685,7 +8881,7 @@ multiple_spectra <- function(
       samples[i]
     }
 
-    mass_df <- plot_data$mass
+    mass_df <- sample_data$mass
     if (!is.null(mass_df) && nrow(mass_df) > 0) {
       spectrum_parts[[i]] <- dplyr::mutate(
         downsample_spectrum(mass_df, max_points = max_points),
@@ -8693,12 +8889,12 @@ multiple_spectra <- function(
       )
     }
 
-    peaks_df <- plot_data$highlight_peaks
+    peaks_df <- sample_data$highlight_peaks
     if (!is.null(peaks_df) && nrow(peaks_df) > 0) {
       peaks_parts[[i]] <- dplyr::mutate(peaks_df, z = z_value)
     }
 
-    unmatched_df <- plot_data$unmatched_peaks
+    unmatched_df <- sample_data$unmatched_peaks
     if (!is.null(unmatched_df) && nrow(unmatched_df) > 0) {
       unmatched_parts[[i]] <- dplyr::mutate(unmatched_df, z = z_value)
     }
@@ -8707,6 +8903,12 @@ multiple_spectra <- function(
   spectrum_data <- as.data.frame(dplyr::bind_rows(spectrum_parts))
   peaks_data <- as.data.frame(dplyr::bind_rows(peaks_parts))
   unmatched_data <- as.data.frame(dplyr::bind_rows(unmatched_parts))
+
+  # Peaks straight from a deconvolution carry no assignment yet
+  if (nrow(peaks_data) > 0) {
+    if (!"name" %in% names(peaks_data)) peaks_data$name <- NA_character_
+    if (!"mw" %in% names(peaks_data)) peaks_data$mw <- NA_real_
+  }
 
   if (nrow(spectrum_data) == 0 || !("mass" %in% names(spectrum_data))) {
     return(
@@ -8818,6 +9020,8 @@ multiple_spectra <- function(
       linecolor = font_color
     )
   } else {
+    # No peak of the samples was assigned: no protein species to mark
+    prot_names <- character(0)
     peaks_data <- dplyr::mutate(
       peaks_data,
       symbol = "circle",
@@ -8880,12 +9084,21 @@ multiple_spectra <- function(
       z_linecolor <- list(width = 1)
     }
   } else {
-    # Make color palette
-    color_cmp <- brighten_hex(
-      viridisLite::viridis(length(unique(spectrum_data$z))),
-      factor = 1.5
+    # Time colours, placed among all times of the result when its colour
+    # key is given (z is in the displayed time unit, the key in the declared
+    # one), so a time point keeps its colour across concentrations
+    color_cmp <- key_colors(
+      list(
+        times = if (is.null(key)) {
+          as.numeric(levels(spectrum_data$z))
+        } else {
+          key$times * time_factor
+        }
+      ),
+      "Time",
+      levels(spectrum_data$z),
+      theme = theme
     )
-    names(color_cmp) <- levels(spectrum_data$z)
 
     # Adding protein peak marker
     peaks_data <- dplyr::mutate(
@@ -8989,9 +9202,8 @@ multiple_spectra <- function(
             ),
             hoverinfo = "text",
             text = ~ paste0(
-              "Name: ",
-              name,
-              "\nMeasured: ",
+              ifelse(is.na(name), "", paste0("Name: ", name, "\n")),
+              "Measured: ",
               mass,
               " Da\nIntensity: ",
               round(intensity, 2),
@@ -9002,8 +9214,7 @@ multiple_spectra <- function(
                 paste0(" ", gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])),
                 ""
               ),
-              "\nTheor. Mw: ",
-              mw
+              ifelse(is.na(mw), "", paste0("\nTheor. Mw: ", mw))
             ),
             showlegend = FALSE
           )
@@ -9207,10 +9418,7 @@ multiple_spectra <- function(
       z_levels <- levels(spectrum_data$z)
       stats::setNames(rep(font_color, length(z_levels)), z_levels)
     } else {
-      brighten_hex(
-        viridisLite::viridis(length(unique(peaks_data$z))),
-        factor = 1.5
-      )
+      color_cmp
     }
 
     plot_2d <- plotly::plot_ly(
@@ -9287,9 +9495,8 @@ multiple_spectra <- function(
             ),
             hoverinfo = "text",
             text = ~ paste0(
-              "Name: ",
-              name,
-              "\nMeasured: ",
+              ifelse(is.na(name), "", paste0("Name: ", name, "\n")),
+              "Measured: ",
               mass,
               " Da\nIntensity: ",
               round(intensity, 2),
@@ -9304,8 +9511,7 @@ multiple_spectra <- function(
                 paste0(" ", gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])),
                 ""
               ),
-              "\nTheor. Mw: ",
-              mw
+              ifelse(is.na(mw), "", paste0("\nTheor. Mw: ", mw))
             ),
             showlegend = FALSE
           )
@@ -9654,7 +9860,7 @@ filter_table_view <- function(table, colors, inputs, units) {
         `Sample ID`
       },
       `Cmp Name` = ifelse(is.na(`Cmp Name`), "N/A", `Cmp Name`),
-      label_color = get_contrast_color(colors[match(
+      label_color = get_contrast_color(tint(colors)[match(
         if (
           length(units) == 2 && inputs$color_variable == units["Concentration"]
         ) {
@@ -9849,16 +10055,17 @@ render_table_view <- function(table, colors, tab, inputs, units) {
       )
     )
   ) |>
+    # Rows in a light tint of the plots' colours, read in black
     DT::formatStyle(
       columns = "col_var",
       target = 'row',
       backgroundColor = DT::styleEqual(
         levels = names(colors),
-        values = colors
+        values = tint(colors)
       ),
       color = DT::styleEqual(
         levels = names(colors),
-        values = get_contrast_color(colors)
+        values = get_contrast_color(tint(colors))
       )
     ) |>
     (\(dt) {
@@ -10327,6 +10534,14 @@ render_hits_table <- function(
       columns = which(names(hits_table) %in% adduct_fmt_cols),
       digits = 2
     )
+  }
+
+  # Rows in a light tint of the plots' colours, read in black
+  if (!is.null(concentration_colors)) {
+    concentration_colors <- tint(concentration_colors)
+  }
+  if (!is.null(colors)) {
+    colors <- tint(colors)
   }
 
   if (!is.null(concentration_colors)) {
@@ -11050,128 +11265,281 @@ get_contrast_color <- function(hex_codes) {
   ifelse(brightness > 128, "#000000", "#ffffff")
 }
 
-# Adjust brightness.
+# Colour key of a conversion result.
 #
-# The brightening exists so the dark end of a palette stays legible against
-# the app's dark plot background. An exported figure is looked at on its own -
-# on white paper, in a slide deck - where that lift only distorts the palette,
-# so exports opt out via the option below (see with_export_palette() in
-# app/logic/plot_download.R). It is deliberately keyed on "is this an export"
-# rather than on the theme argument: a dark-themed export should still carry
-# the palette's true colours.
-brighten_hex <- function(hex_colors, factor = 1.2) {
-  # Neutralise the factor rather than returning early, so the round trip
-  # through col2rgb()/hsv() still happens: it normalises viridisLite's 8-digit
-  # "#RRGGBBFF" down to "#RRGGBB", and callers downstream compare and index
-  # these strings.
-  if (isTRUE(getOption("kiwims.export_palette", FALSE))) {
-    factor <- 1
-  }
-
-  # Convert Hex to HSV
-  rgb_vals <- grDevices::col2rgb(hex_colors)
-  hsv_vals <- grDevices::rgb2hsv(rgb_vals)
-
-  # Multiply the 'Value' (brightness) channel
-  # We use pmin to ensure we don't exceed the maximum value of 1
-  hsv_vals[3, ] <- pmin(hsv_vals[3, ] * factor, 1)
-
-  # Convert back to Hex
-  grDevices::hsv(hsv_vals[1, ], hsv_vals[2, ], hsv_vals[3, ])
-}
-
-# Sample n colors from a sequential brewer palette, cutting off the darkest end.
-# cutoff = 0.85 means only the lightest 85% of the palette is used.
-brewer_seq_colors <- function(n, scale, max_colors, cutoff = 0.85) {
-  avail <- max(floor(max_colors * cutoff), 3)
-  raw <- RColorBrewer::brewer.pal(avail, scale)
-  if (n == 1) {
-    return(raw[1])
-  }
-  raw[round(seq(1, avail, length.out = n))]
-}
-
-# Make uniform color scale for compounds
+# The levels of every variable the result views are coloured by, taken once
+# from the whole result, so a level keeps its colour however the views filter
+# it. Colours are looked up with key_colors(), marker symbols of the
+# concentrations with key_symbols(); see app/logic/palette.R for the palettes.
+#
+# - Proteins and compounds share one sequence (proteins first, then the
+#   compounds, each sorted), so a protein and a compound never share a colour
+#   where they are shown side by side (batch heatmaps, spectra).
+# - Samples follow their natural name order ("S2" before "S10").
+# - Concentrations and times are numeric and ordered.
+#
+# Works on the result table as stored (Sample, Compound, Concentration [..])
+# and on its display form (Sample ID, Cmp Name, Conc. [..]) alike, which hold
+# the same values.
 #' @export
-get_cmp_colorScale <- function(
-  filtered_table,
-  scale,
+color_key <- function(hits_summary) {
+  nms <- names(hits_summary)
+  pick <- function(cands) intersect(cands, nms)[1]
+  col_values <- function(col) {
+    if (is.na(col)) {
+      return(character(0))
+    }
+    x <- as.character(hits_summary[[col]])
+    unique(x[!is.na(x) & nzchar(x) & x != "N/A"])
+  }
+  num_values <- function(pattern) {
+    col <- nms[grepl(pattern, nms)][1]
+    if (is.na(col)) {
+      return(numeric(0))
+    }
+    x <- suppressWarnings(as.numeric(as.character(hits_summary[[col]])))
+    sort(unique(x[!is.na(x)]))
+  }
+
+  proteins <- sort(col_values(pick("Protein")), method = "radix")
+  compounds <- sort(col_values(pick(c("Cmp Name", "Compound"))), method = "radix")
+  sample_col <- pick(c("Sample ID", "Sample"))
+  samples <- natural_sort(col_values(sample_col))
+
+  # Short sample IDs, when the table carries them
+  sample_labels <- if (
+    !is.na(sample_col) && "truncSample_ID" %in% nms
+  ) {
+    keep <- !duplicated(hits_summary[[sample_col]]) &
+      !is.na(hits_summary[[sample_col]])
+    stats::setNames(
+      as.character(hits_summary$truncSample_ID[keep]),
+      as.character(hits_summary[[sample_col]][keep])
+    )
+  } else {
+    stats::setNames(character(0), character(0))
+  }
+
+  list(
+    entities = unique(c(proteins, compounds)),
+    proteins = proteins,
+    compounds = compounds,
+    samples = samples,
+    sample_labels = sample_labels,
+    concentrations = num_values("^Conc"),
+    times = num_values("^Time")
+  )
+}
+
+# Sorts strings with their digit runs compared as numbers
+natural_sort <- function(x) {
+  if (length(x) < 2) {
+    return(x)
+  }
+  padded <- vapply(
+    x,
+    function(s) {
+      parts <- regmatches(s, gregexpr("[0-9]+|[^0-9]+", s))[[1]]
+      num <- grepl("^[0-9]+$", parts)
+      parts[num] <- formatC(
+        parts[num],
+        width = 20,
+        flag = "0",
+        format = "s"
+      )
+      parts[num] <- gsub(" ", "0", parts[num], fixed = TRUE)
+      paste(parts, collapse = "")
+    },
+    character(1),
+    USE.NAMES = FALSE
+  )
+  x[order(padded, x, method = "radix")]
+}
+
+# Which key variable a view's colour variable or grouping column refers to
+#' @export
+key_variable <- function(variable) {
+  v <- tolower(as.character(variable)[1])
+  if (is.na(v)) {
+    return(NA_character_)
+  }
+  if (v %in% c("compounds", "compound", "cmp name")) {
+    "compound"
+  } else if (v %in% c("proteins", "protein")) {
+    "protein"
+  } else if (v %in% c("samples", "sample", "sample id", "truncsample_id")) {
+    "sample"
+  } else if (grepl("^conc", v)) {
+    "concentration"
+  } else if (grepl("^time", v)) {
+    "time"
+  } else {
+    NA_character_
+  }
+}
+
+# Position of each level in a key sequence; levels the key does not know are
+# appended after it, in order, so they still get colours of their own
+key_index <- function(levels, known) {
+  idx <- match(levels, known)
+  unknown <- unique(levels[is.na(idx) & !is.na(levels)])
+  idx[is.na(idx) & !is.na(levels)] <- length(known) +
+    match(levels[is.na(idx) & !is.na(levels)], unknown)
+  idx
+}
+
+# Rank positions (0 to 1) of numeric levels among the key's values
+key_ramp_position <- function(values, known) {
+  scale <- sort(unique(c(known, values[!is.na(values)])))
+  if (length(scale) < 2) {
+    return(ifelse(is.na(values), NA_real_, 0.5))
+  }
+  (match(values, scale) - 1) / (length(scale) - 1)
+}
+
+# Colours of the levels of one variable, named by the levels as given
+# (as.character). levels defaults to all levels of the key. For samples,
+# trunc = TRUE takes and returns the short sample IDs.
+#
+# - compound / protein: categorical, repeating past twelve (see level_tier).
+# - sample: categorical up to twelve samples in the result, otherwise spread
+#   over the sample ramp in name order.
+# - concentration: the 0 control in the control grey, the others over the
+#   concentration ramp, low to high.
+# - time: over the time ramp, early to late.
+# Missing levels, and variables the key does not cover, are muted.
+#' @export
+key_colors <- function(
+  key,
   variable,
-  trunc,
-  conc_col = NULL
+  levels = NULL,
+  theme = "light",
+  trunc = FALSE
 ) {
-  if (variable == "Compounds") {
-    # cmp_levels <- unique(filtered_table[["Theor. Cmp"]])
-    cmp_levels <- unique(filtered_table[["Cmp Name"]])
-  } else if (variable == "Samples") {
-    if (trunc) {
-      cmp_levels <- unique(filtered_table[["truncSample_ID"]])
-    } else {
-      cmp_levels <- unique(filtered_table[["Sample ID"]])
-    }
-  } else if (variable == "Concentration") {
-    cmp_levels <- unique(filtered_table[[conc_col]])
-  }
+  var <- key_variable(variable)
+  status <- status_colors(theme)
 
-  n <- length(cmp_levels)
-
-  # Initialize output
-  colors <- NULL
-
-  for (i in 1:2) {
-    # RColorBrewer Scales
-    if (scale %in% c(qualitative_scales, sequential_scales)) {
-      # Check max colors available for this specific Brewer palette
-      max_colors <- RColorBrewer::brewer.pal.info[scale, "maxcolors"]
-
-      # Shift to gradient scale if n exceeds the palette's max limit
-      if (n > max_colors) {
-        message(paste(
-          "N =",
-          n,
-          "exceeds max colors (",
-          max_colors,
-          ") for palette",
-          scale
-        ))
-
-        scale <- "viridis"
+  if (is.null(levels)) {
+    levels <- switch(
+      if (is.na(var)) "none" else var,
+      compound = key$compounds,
+      protein = key$proteins,
+      sample = if (isTRUE(trunc) && length(key$sample_labels)) {
+        unname(key$sample_labels[key$samples])
       } else {
-        if (scale %in% sequential_scales) {
-          colors <- brewer_seq_colors(n, scale, max_colors)
-        } else {
-          # Qualitative: keep existing subsetting
-          n_request <- max(n, 3)
-          raw_colors <- RColorBrewer::brewer.pal(n_request, scale)
-          if (n == 2) {
-            colors <- raw_colors[c(1, 2)]
-          } else if (n == 1) {
-            colors <- raw_colors[1]
-          } else {
-            colors <- raw_colors[1:n]
-          }
-        }
-        break
-      }
+        key$samples
+      },
+      concentration = key$concentrations,
+      time = key$times,
+      character(0)
+    )
+  }
+  lvl_names <- as.character(levels)
+  out <- rep(status$muted, length(levels))
 
-      # ViridisLite Scales
-    } else if (scale %in% gradient_scales) {
-      vir_func <- getExportedValue("viridisLite", scale)
-      dark_begin_scales <- c("magma", "inferno", "rocket", "mako")
-      begin <- if (scale %in% dark_begin_scales) 0.15 else 0
-      colors <- vir_func(n, begin = begin, end = 0.9)
-    } else {
-      stop(paste("Scale", scale, "not recognized in provided lists."))
-    }
+  if (is.na(var) || !length(levels)) {
+    return(stats::setNames(out, lvl_names))
   }
 
-  # Adjust brightness
-  colors <- brighten_hex(colors, factor = 1.5)
+  if (var %in% c("compound", "protein")) {
+    lv <- as.character(levels)
+    lv[lv %in% "N/A"] <- NA
+    idx <- key_index(lv, key$entities)
+    ok <- !is.na(idx)
+    out[ok] <- categorical_colors(max(c(idx[ok], 0L)), theme)[idx[ok]]
+  } else if (var == "sample") {
+    lv <- as.character(levels)
+    if (isTRUE(trunc) && length(key$sample_labels)) {
+      full <- names(key$sample_labels)[match(lv, key$sample_labels)]
+      lv <- ifelse(is.na(full), lv, full)
+    }
+    idx <- key_index(lv, key$samples)
+    ok <- !is.na(idx)
+    n_all <- max(c(length(key$samples), idx[ok]))
+    if (n_all <= length(categorical_palette$light)) {
+      out[ok] <- categorical_colors(n_all, theme)[idx[ok]]
+    } else {
+      out[ok] <- ramp_at((idx[ok] - 1) / (n_all - 1), "sample", theme)
+    }
+  } else if (var == "concentration") {
+    v <- suppressWarnings(as.numeric(as.character(levels)))
+    known <- key$concentrations[key$concentrations != 0]
+    control <- !is.na(v) & v == 0
+    dosed <- !is.na(v) & v != 0
+    out[control] <- status$control
+    out[dosed] <- ramp_at(
+      key_ramp_position(v[dosed], known),
+      "concentration",
+      theme
+    )
+  } else if (var == "time") {
+    v <- suppressWarnings(as.numeric(as.character(levels)))
+    ok <- !is.na(v)
+    out[ok] <- ramp_at(key_ramp_position(v[ok], key$times), "time", theme)
+  }
 
-  # Assign names mapping the colors to the specific variable levels
-  names(colors) <- cmp_levels
+  stats::setNames(out, lvl_names)
+}
 
-  return(colors)
+# Levels sorted the way the key orders them: numerically for concentrations
+# and times, in key order otherwise, with levels the key does not know last
+#' @export
+key_order <- function(key, variable, levels) {
+  var <- key_variable(variable)
+  lv <- unique(levels)
+  if (var %in% c("concentration", "time")) {
+    v <- suppressWarnings(as.numeric(as.character(lv)))
+    return(lv[order(is.na(v), v)])
+  }
+  known <- switch(
+    if (is.na(var)) "none" else var,
+    compound = key$entities,
+    protein = key$entities,
+    sample = key$samples,
+    character(0)
+  )
+  lv[order(is.na(lv), key_index(as.character(lv), known))]
+}
+
+# Repeat round of each level's categorical colour (0 within the first twelve),
+# for the plots that switch symbol, pattern or dash past the palette.
+# Ordered variables and ramp-coloured samples are always round 0.
+#' @export
+key_tiers <- function(key, variable, levels) {
+  var <- key_variable(variable)
+  lv <- as.character(levels)
+  tiers <- rep(0L, length(lv))
+  if (identical(var, "compound") || identical(var, "protein")) {
+    idx <- key_index(lv, key$entities)
+    tiers[!is.na(idx)] <- level_tier(max(c(idx, 0L), na.rm = TRUE))[
+      idx[!is.na(idx)]
+    ]
+  }
+  stats::setNames(tiers, lv)
+}
+
+# Marker symbol of each concentration, named by the levels as given: the
+# highest concentration of the result first (circle), the 0 control apart.
+# Fixed from all concentrations of the result, so a concentration has the
+# same shape in every plot and for every complex.
+#' @export
+key_symbols <- function(key, levels = NULL) {
+  if (is.null(levels)) {
+    levels <- key$concentrations
+  }
+  v <- suppressWarnings(as.numeric(as.character(levels)))
+  known <- sort(
+    unique(c(key$concentrations, v[!is.na(v)])),
+    decreasing = TRUE
+  )
+  known <- known[known != 0]
+  rank <- match(v, known)
+  out <- ifelse(
+    is.na(rank),
+    control_symbol,
+    concentration_symbols[(rank - 1L) %% length(concentration_symbols) + 1L]
+  )
+  stats::setNames(out, as.character(levels))
 }
 
 # JS function for conversion process tracking
@@ -11221,76 +11589,6 @@ conversion_tracking_js <- "
     };
   "
 
-# Filter RColorBrewer scales by number of distinct colors
-#' @export
-filter_color_list <- function(color_list, min_n) {
-  # Get the RColorBrewer metadata table
-  info <- RColorBrewer::brewer.pal.info
-
-  # Process each sub-list (Qualitative, Sequential, etc.)
-  filtered_list <- lapply(color_list, function(subgroup) {
-    # Filter the names within each subgroup
-    Filter(
-      function(pal_name) {
-        if (pal_name %in% rownames(info)) {
-          # If it's a Brewer palette, check maxcolors
-          return(info[pal_name, "maxcolors"] >= min_n)
-        } else {
-          # If it's a Gradient/Viridis palette, they are usually
-          # continuous and can support any n. We'll keep them.
-          return(TRUE)
-        }
-      },
-      subgroup
-    )
-  })
-
-  # Drop entirely-empty groups so they don't appear as orphan headers
-  Filter(function(g) length(g) > 0, filtered_list)
-}
-
-# Palette groups offered for a variable with n distinct levels. Brewer scales
-# that cannot supply n colors are dropped; the gradient scales are continuous
-# and stay available regardless of n.
-#' @export
-color_scale_choices <- function(n) {
-  scales <- filter_color_list(
-    list(
-      Qualitative = qualitative_scales,
-      Sequential = sequential_scales
-    ),
-    n
-  )
-  scales[["Gradient"]] <- gradient_scales
-  scales
-}
-
-# Palette used until the user picks one: Set3 while it still holds enough
-# distinct colors, a continuous scale beyond that.
-#' @export
-default_color_scale <- function(n) {
-  if (n <= RColorBrewer::brewer.pal.info["Set3", "maxcolors"]) {
-    "Set3"
-  } else {
-    "turbo"
-  }
-}
-
-# Palette a color-scale input should currently use: the user's pick while it
-# is still offered for n levels, otherwise the default.
-#' @export
-resolve_color_scale <- function(scale, n) {
-  if (
-    length(scale) == 1 &&
-      nzchar(scale) &&
-      scale %in% unlist(color_scale_choices(n))
-  ) {
-    scale
-  } else {
-    default_color_scale(n)
-  }
-}
-
 # Make compound distribution plot for proteins tab
 #' @export
 prot_compound_distribution <- function(
@@ -11298,10 +11596,11 @@ prot_compound_distribution <- function(
   protein,
   color_variable,
   truncate_names,
-  color_scale,
+  key = NULL,
   distribution_scale,
   distribution_labels = NULL,
-  theme = "light"
+  theme = "light",
+  colors = NULL
 ) {
   tbl <- hits_summary[
     hits_summary$Protein %in% protein & is_complex_row(hits_summary),
@@ -11361,16 +11660,20 @@ prot_compound_distribution <- function(
     dplyr::arrange(.mean_tb, .sid) |>
     dplyr::pull(.sid)
 
-  colors <- get_cmp_colorScale(
-    filtered_table = if (color_variable == "Compounds") {
-      tbl
-    } else {
-      tbl[order(match(.sid_raw, global_sample_order)), ]
-    },
-    scale = color_scale,
-    variable = color_variable,
-    trunc = truncate_names
-  )
+  # Colours handed in are shared with the other cards of a view
+  if (is.null(colors)) {
+    colors <- key_colors(
+      key %||% color_key(hits_summary),
+      color_variable,
+      if (color_variable == "Compounds") {
+        sort(unique(as.character(tbl$`Cmp Name`)), method = "radix")
+      } else {
+        global_sample_order
+      },
+      theme = theme,
+      trunc = truncate_names
+    )
+  }
 
   tbl <- tbl |>
     dplyr::group_by(`Cmp Name`) |>
@@ -11716,10 +12019,11 @@ cmp_compound_distribution <- function(
   compound,
   color_variable,
   truncate_names,
-  color_scale,
+  key = NULL,
   distribution_scale,
   distribution_labels = NULL,
-  theme = "light"
+  theme = "light",
+  colors = NULL
 ) {
   # A sample without any protein or complex peak has no binding to show
   tbl <- hits_summary |>
@@ -11783,12 +12087,20 @@ cmp_compound_distribution <- function(
     levels = unique(tbl$`Sample ID`)
   )
 
-  colors <- get_cmp_colorScale(
-    filtered_table = tbl,
-    scale = color_scale,
-    variable = color_variable,
-    trunc = truncate_names
-  )
+  # Colours handed in are shared with the other cards of a view
+  if (is.null(colors)) {
+    colors <- key_colors(
+      key %||% color_key(hits_summary),
+      color_variable,
+      if (color_variable == "Compounds") {
+        unique(as.character(tbl$`Cmp Name`))
+      } else {
+        levels(tbl$`Sample ID`)
+      },
+      theme = theme,
+      trunc = truncate_names
+    )
+  }
 
   tbl <- tbl |>
     dplyr::mutate(
@@ -11915,6 +12227,87 @@ cmp_compound_distribution <- function(
     )
 }
 
+# Compound distribution of the Overview selection: one protein with the picked
+# compounds. A single compound gets the per-sample bars of its samples, the
+# ones it was declared for but not found in at 0 %; several are grouped by
+# compound. NULL when the selection has no binding event to show.
+#' @export
+overview_compound_distribution <- function(
+  hits_summary,
+  protein,
+  compounds,
+  color_variable,
+  truncate_names,
+  key = NULL,
+  distribution_scale,
+  distribution_labels = NULL,
+  theme = "light",
+  colors = NULL
+) {
+  tbl <- overview_subset(hits_summary, protein, compounds)
+  if (!any(is_complex_row(tbl))) {
+    return(NULL)
+  }
+
+  if (is.null(colors)) {
+    colors <- overview_colors(
+      hits_summary,
+      protein,
+      compounds,
+      variable = color_variable,
+      key = key,
+      trunc = truncate_names,
+      theme = theme
+    )
+  }
+
+  # Compounds without a hit add nothing to the plot, so one with hits among
+  # several picked ones is shown on its own
+  hit_cmps <- unique(tbl$`Cmp Name`[is_complex_row(tbl)])
+
+  if (length(hit_cmps) == 1) {
+    cmp_compound_distribution(
+      hits_summary = tbl,
+      compound = hit_cmps,
+      color_variable = color_variable,
+      truncate_names = truncate_names,
+      key = key,
+      distribution_scale = distribution_scale,
+      distribution_labels = distribution_labels,
+      theme = theme,
+      colors = colors
+    )
+  } else {
+    prot_compound_distribution(
+      hits_summary = tbl,
+      protein = protein,
+      color_variable = color_variable,
+      truncate_names = truncate_names,
+      key = key,
+      distribution_scale = distribution_scale,
+      distribution_labels = distribution_labels,
+      theme = theme,
+      colors = colors
+    )
+  }
+}
+
+# Text in place of the Overview distribution plot when it has nothing to show
+#' @export
+overview_distribution_note <- function(hits_summary, protein, compounds) {
+  if (!length(compounds)) {
+    return("No compound selected")
+  }
+  tbl <- overview_subset(hits_summary, protein, compounds)
+  # Without any protein or complex peak there was nothing to measure, which is
+  # not the same as no binding
+  if (nrow(tbl) && all(is.na(tbl$`Tot. Binding [%]`))) {
+    "No protein or complex peak found"
+  } else {
+    "No binding events"
+  }
+}
+
 # Make compound distribution pie chart for samples tab
 #' @export
 smpl_compound_distribution <- function(
@@ -11922,7 +12315,7 @@ smpl_compound_distribution <- function(
   sample,
   color_variable,
   truncate_names,
-  color_scale,
+  key = NULL,
   theme = "light"
 ) {
   tbl <- hits_summary |>
@@ -11997,23 +12390,26 @@ smpl_compound_distribution <- function(
     )
   }
 
-  colors <- c(
-    "#e5e5e5",
-    get_cmp_colorScale(
-      filtered_table = tbl,
-      scale = color_scale,
-      variable = color_variable,
-      trunc = truncate_names
-    )
+  colors <- key_colors(
+    key %||% color_key(hits_summary),
+    color_variable,
+    if (color_variable == "Compounds") {
+      unique(as.character(cmp_table$`Cmp Name`))
+    } else {
+      unique(as.character(cmp_table$`Sample ID`))
+    },
+    theme = theme,
+    trunc = truncate_names
   )
-  names(colors) <- c("empty", names(colors)[-1])
 
   if (color_variable == "Compounds") {
     cmp_table$color <- colors[match(cmp_table$`Cmp Name`, names(colors))]
   } else {
     cmp_table$color <- colors[match(cmp_table$`Sample ID`, names(colors))]
   }
-  cmp_table$color[cmp_table$`Cmp Name` == "Unbound"] <- "#333338"
+  cmp_table$color[cmp_table$`Cmp Name` == "Unbound"] <- status_colors(
+    theme
+  )$unbound
 
   font_color <- if (theme == "light") "black" else "white"
 
@@ -12074,36 +12470,6 @@ smpl_compound_distribution <- function(
     )
 }
 
-stats_palette <- function(n, scale) {
-  if (scale %in% unlist(c(qualitative_scales, sequential_scales))) {
-    max_colors <- RColorBrewer::brewer.pal.info[scale, "maxcolors"]
-    if (n > max_colors) {
-      brighten_hex(viridisLite::viridis(n), factor = 1.5)
-    } else if (scale %in% sequential_scales) {
-      brewer_seq_colors(n, scale, max_colors)
-    } else {
-      # Qualitative
-      n_req <- max(n, 3)
-      raw <- RColorBrewer::brewer.pal(n_req, scale)
-      if (n == 1) {
-        raw[1]
-      } else if (n == 2) {
-        raw[c(1, 3)]
-      } else {
-        raw[seq_len(n)]
-      }
-    }
-  } else {
-    vir_func <- tryCatch(
-      getExportedValue("viridisLite", scale),
-      error = function(e) viridisLite::viridis
-    )
-    dark_begin_scales <- c("magma", "inferno", "rocket", "mako")
-    begin <- if (scale %in% dark_begin_scales) 0.15 else 0
-    brighten_hex(vir_func(n, begin = begin), factor = 1.5)
-  }
-}
-
 hex_to_rgba <- function(hex, alpha) {
   rgb <- grDevices::col2rgb(hex)
   sprintf("rgba(%d,%d,%d,%.2f)", rgb[1], rgb[2], rgb[3], alpha)
@@ -12134,8 +12500,8 @@ stats_histogram <- function(
     "rgba(255,255,255,0.5)"
   }
 
-  hex_correct <- "#4daf4a"
-  hex_unmatched <- "#e41a1c"
+  hex_correct <- status_colors(theme)$correct
+  hex_unmatched <- status_colors(theme)$unmatched
   col <- hex_to_rgba(
     if (show == "Unmatched") hex_unmatched else hex_correct,
     0.7
@@ -12221,7 +12587,11 @@ stats_boxplot <- function(
     "rgba(255,255,255,0.5)"
   }
 
-  hex_base <- if (show == "Unmatched") "#e41a1c" else "#4daf4a"
+  hex_base <- if (show == "Unmatched") {
+    status_colors(theme)$unmatched
+  } else {
+    status_colors(theme)$correct
+  }
   show_unmatched <- show == "Unmatched"
   show_correct <- show == "Correct"
   box_col <- hex_to_rgba(hex_base, 1)
@@ -12522,7 +12892,7 @@ stats_scatter <- function(
   hits_summary,
   full_scale = FALSE,
   group_by = NULL,
-  color_scale = "plasma",
+  key = NULL,
   theme = "light",
   show = "Correct"
 ) {
@@ -12580,12 +12950,13 @@ stats_scatter <- function(
   }
 
   df <- df[!is.na(df[[group_by]]), ]
-  groups <- as.character(unique(df[[group_by]]))
+  key <- key %||% color_key(hits_summary)
+  groups <- as.character(key_order(key, group_by, unique(df[[group_by]])))
   df[[group_by]] <- as.character(df[[group_by]])
-  color_map <- stats::setNames(
-    stats_palette(length(groups), color_scale),
-    groups
-  )
+  color_map <- key_colors(key, group_by, groups, theme = theme)
+  # Past the twelfth colour the marker shape tells groups apart
+  symbol_map <- tier_symbol(key_tiers(key, group_by, groups))
+  names(symbol_map) <- groups
 
   p <- plotly::plot_ly()
   for (grp in groups) {
@@ -12617,6 +12988,7 @@ stats_scatter <- function(
       hovertemplate = "%{text}<extra></extra>",
       marker = list(
         color = color_map[[grp]],
+        symbol = symbol_map[[grp]],
         size = 8,
         opacity = 0.8,
         line = list(color = dot_border_color, width = 1)
@@ -12745,7 +13117,7 @@ stats_violin <- function(
   group_by = "Protein",
   full_scale = FALSE,
   theme = "light",
-  color_scale = "plasma",
+  key = NULL,
   inner = "box",
   show = "Correct"
 ) {
@@ -12787,9 +13159,18 @@ stats_violin <- function(
 
   y_range <- if (full_scale) c(-5, 105) else NULL
 
+  # Groups in key order, the ones without a value ("Unknown") last and muted
+  key <- key %||% color_key(hits_summary)
   groups <- unique(df[[group_by]])
-  pal <- stats_palette(length(groups), color_scale)
-  color_map <- stats::setNames(pal, groups)
+  known <- groups[groups != "Unknown"]
+  groups <- c(key_order(key, group_by, known), groups[groups == "Unknown"])
+  color_map <- key_colors(
+    key,
+    group_by,
+    ifelse(groups == "Unknown", NA, groups),
+    theme = theme
+  )
+  names(color_map) <- groups
 
   p <- plotly::plot_ly()
   for (i in seq_along(groups)) {
@@ -12907,25 +13288,35 @@ stats_violin <- function(
 batch_plate_heatmap <- function(
   hits_summary,
   variable = "Total % Binding",
-  color_scale = "plasma",
+  key = NULL,
   scale_mode = "minmax",
   theme = "light"
 ) {
   # Only Total % Binding is stored as 0-1 fraction; % Correct / % Unmatched are 0-100
   fraction_vars <- c("Total % Binding")
   pct_vars <- c("Total % Binding", "% Correct", "% Unmatched")
-  numeric_vars <- c(
-    "Total % Binding",
-    "% Correct",
-    "% Unmatched",
-    "Concentration"
+  numeric_vars <- c("Total % Binding", "% Correct", "% Unmatched")
+  # Continuous fill of each numeric variable; the others (compound, protein,
+  # concentration, time) take the result's fixed colours
+  numeric_ramps <- c(
+    "Total % Binding" = "binding",
+    "% Correct" = "correct",
+    "% Unmatched" = "unmatched"
   )
+  key <- key %||% color_key(hits_summary)
 
   font_color <- if (theme == "light") "black" else "white"
   paper_bg <- if (theme == "light") "#f0f0f5" else "#23252e"
   tile_bg <- "rgba(190,192,200,0.38)"
 
   df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
+  # Concentration and time columns carry their unit in the name
+  if (variable %in% c("Concentration", "Time") && !variable %in% names(df)) {
+    unit_col <- names(df)[startsWith(names(df), paste0(variable, " ["))][1]
+    if (!is.na(unit_col)) {
+      df[[variable]] <- df[[unit_col]]
+    }
+  }
   if (!variable %in% names(df)) {
     return(plotly::plotly_empty())
   }
@@ -12965,7 +13356,11 @@ batch_plate_heatmap <- function(
 
   cat_levels <- NULL
   if (!is_numeric_var) {
-    cat_levels <- sort(unique(stats::na.omit(as.character(raw_vals))))
+    cat_levels <- as.character(key_order(
+      key,
+      variable,
+      unique(stats::na.omit(as.character(raw_vals)))
+    ))
     values <- as.numeric(factor(as.character(raw_vals), levels = cat_levels))
     display_vals <- as.character(raw_vals)
   } else {
@@ -13127,16 +13522,12 @@ batch_plate_heatmap <- function(
       zmin <- 0
       zmax <- 1
     }
-    n_stops <- 9
-    pal <- stats_palette(n_stops, color_scale)
-    cs <- lapply(seq_len(n_stops), function(i) {
-      list((i - 1) / (n_stops - 1), pal[i])
-    })
+    cs <- ramp_colorscale(numeric_ramps[[variable]], theme)
     show_scale <- TRUE
     cb_title <- variable
   } else {
     n_cats <- length(cat_levels)
-    pal <- stats_palette(max(n_cats, 2), color_scale)
+    pal <- unname(key_colors(key, variable, cat_levels, theme = theme))
     if (n_cats <= 1) {
       cs <- list(list(0, pal[1]), list(1, pal[1]))
     } else {
@@ -13184,7 +13575,7 @@ batch_plate_heatmap <- function(
 
   if (!is_numeric_var && !is.null(cat_levels) && length(cat_levels) > 0) {
     n_cats <- length(cat_levels)
-    pal <- stats_palette(max(n_cats, 2), color_scale)
+    pal <- unname(key_colors(key, variable, cat_levels, theme = theme))
     for (i in seq_len(n_cats)) {
       p <- p |>
         plotly::add_trace(

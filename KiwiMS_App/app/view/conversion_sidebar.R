@@ -22,6 +22,8 @@ box::use(
       shift_multiples_message,
     ],
   app / logic / conversion_constants[hit_preference_rules],
+  app / logic / help_modal[bind_help],
+  app / logic / help_pages[conversion_sidebar_help],
   app /
     logic /
     helper_functions[
@@ -221,7 +223,16 @@ server <- function(
         ),
         shiny::checkboxInput(
           ns("run_kinact_ki"),
-          "Run Kinetics Analysis",
+          tooltip(
+            shiny::span(class = "settings-label-tooltip", "Run Kinetics Analysis"),
+            paste(
+              "Fits binding over time and kinact/Ki. Every sample then needs",
+              "a concentration and an incubation time: at least three non-zero",
+              "concentrations, each with three samples at two or more time",
+              "points."
+            ),
+            placement = "top"
+          ),
           value = FALSE
         ),
         shiny::uiOutput(ns("run_button_wrapper"))
@@ -882,228 +893,8 @@ server <- function(
       }
     })
 
-    # Tooltips ----
-    ## Peak tolerance ----
-    shiny::observeEvent(input$peak_tol_tooltip_bttn, {
-      shiny::showModal(
-        shiny::div(
-          class = "conversion-modal",
-          shiny::modalDialog(
-            title = "Peak Tolerance",
-            easyClose = TRUE,
-            footer = shiny::modalButton("Dismiss"),
-            shiny::fluidRow(
-              shiny::br(),
-              shiny::column(
-                width = 11,
-                shiny::div(
-                  class = "tooltip-text",
-                  shiny::p(
-                    'The ',
-                    shiny::strong("Peak Tolerance"),
-                    ' sets the maximum acceptable ',
-                    shiny::strong("mass error"),
-                    ' (or deviation) around the theoretical molecular mass of your target compound.'
-                  ),
-                  shiny::p(
-                    'A measured mass peak is considered a ',
-                    shiny::strong("Hit"),
-                    ' only if it falls within this acceptable range.'
-                  ),
-                  shiny::br(),
-                  shiny::h5("Example:"),
-                  shiny::p(
-                    shiny::div(shiny::strong("Theoretical Mass:"), ' 105 Da'),
-                    shiny::div(shiny::strong("Tolerance:"), ' ± 2 Da'),
-                    shiny::div(
-                      shiny::strong("Accepted Range:"),
-                      ' [103 Da, 107 Da]'
-                    )
-                  ),
-                  shiny::tags$ul(
-                    shiny::tags$li(
-                      shiny::HTML(
-                        'Measured peak at <strong>104 Da</strong> &rightarrow; Hit <b>&check;</b> (Within the range [103 Da, 107 Da])'
-                      )
-                    ),
-                    shiny::tags$li(
-                      shiny::HTML(
-                        'Measured peak at <strong>107 Da</strong> &rightarrow; Hit <b>&check;</b> (Exactly on the upper boundary)'
-                      )
-                    ),
-                    shiny::tags$li(
-                      shiny::HTML(
-                        'Measured peak at <strong>102 Da</strong> &rightarrow; No Hit <b>&times;</b> (Outside the lower boundary of 103 Da)'
-                      )
-                    ),
-                    shiny::tags$li(
-                      shiny::HTML(
-                        'Measured peak at <strong>109 Da</strong> &rightarrow; No Hit <b>&times;</b> (Outside the upper boundary of 107 Da)'
-                      )
-                    )
-                  )
-                )
-              )
-            )
-          )
-        )
-      )
-    })
-
-    ## Maximum stoichiometry ----
-    shiny::observeEvent(input$max_mult_tooltip_bttn, {
-      shiny::showModal(
-        shiny::div(
-          class = "conversion-modal",
-          shiny::modalDialog(
-            title = "Maximum Stoichiometry",
-            easyClose = TRUE,
-            footer = shiny::modalButton("Dismiss"),
-            shiny::fluidRow(
-              shiny::br(),
-              shiny::column(
-                width = 11,
-                shiny::div(
-                  class = "tooltip-text",
-                  shiny::p(
-                    "The maximum number of compound molecules bound to the target protein."
-                  ),
-                  shiny::p(
-                    shiny::div(
-                      'If the',
-                      shiny::em('Max. Stoichiometry'),
-                      ' value is set to',
-                      shiny::strong(3),
-                      "protein-compound complexes of up to three bound compounds are screened for."
-                    ),
-                    shiny::div(
-                      "Complexes with four bound compounds would not be accounted for in the analysis."
-                    )
-                  )
-                )
-              )
-            )
-          )
-        )
-      )
-    })
-
-    ## Preferred assignment ----
-    shiny::observeEvent(input$hit_pref_tooltip_bttn, {
-      shiny::showModal(
-        shiny::div(
-          class = "conversion-modal",
-          shiny::modalDialog(
-            title = "Preferred Assignment",
-            easyClose = TRUE,
-            footer = shiny::modalButton("Dismiss"),
-            shiny::fluidRow(
-              shiny::br(),
-              shiny::column(
-                width = 11,
-                shiny::div(
-                  class = "tooltip-text",
-                  shiny::p(
-                    "A peak can fit the same compound on the same protein in ",
-                    "more than one way: two declared ",
-                    shiny::strong("mass shifts"),
-                    " within the peak tolerance of each other, or one mass ",
-                    "shift at a ",
-                    shiny::strong("stoichiometry"),
-                    " that matches another one at a different stoichiometry."
-                  ),
-                  shiny::p(
-                    "Exact multiples, such as 266 Da declared next to ",
-                    "133 Da, are refused in the Compounds table: the ",
-                    "stoichiometry search already covers them. The rule ",
-                    "resolves the remaining cases, where shifts are only ",
-                    "close to each other or to a multiple."
-                  ),
-                  shiny::p(
-                    "Exactly one of these readings becomes the ",
-                    shiny::strong("preferred assignment", .noWS = "after"),
-                    ". It names the peak in the hits table, the spectra and ",
-                    "the mass shift statistics. The other readings stay ",
-                    "listed with the peak. The peak's intensity counts once ",
-                    "towards the binding, whichever reading is preferred."
-                  ),
-                  shiny::br(),
-                  shiny::h5("Rules:"),
-                  shiny::p(
-                    "Each rule compares the readings by its first criterion. ",
-                    "Readings tied on it are compared by the next one. ",
-                    "The declared order of the mass shifts always comes last, ",
-                    "so exactly one reading is preferred."
-                  ),
-                  shiny::tags$ul(
-                    shiny::tags$li(
-                      shiny::strong("Lowest stoichiometry"),
-                      " (default): fewest bound compound molecules, then ",
-                      "closest mass, then declared order."
-                    ),
-                    shiny::tags$li(
-                      shiny::strong("Closest mass", .noWS = "after"),
-                      ": smallest deviation of the peak from the predicted ",
-                      "mass, then lowest stoichiometry, then declared order. ",
-                      "UniDec's peak matching assigns peaks by closest mass ",
-                      "as well."
-                    ),
-                    shiny::tags$li(
-                      shiny::strong("Declared shift order", .noWS = "after"),
-                      ": the mass shift listed first in the compound table ",
-                      "(Mass 1 before Mass 2), then lowest stoichiometry."
-                    )
-                  ),
-                  shiny::br(),
-                  shiny::h5("Example:"),
-                  shiny::p(
-                    shiny::div(
-                      shiny::strong("Protein:"),
-                      " 20,000 Da"
-                    ),
-                    shiny::div(
-                      shiny::strong("Compound mass shifts:"),
-                      " Mass 1 = 133 Da, Mass 2 = 267 Da"
-                    ),
-                    shiny::div(
-                      shiny::strong("Peak:"),
-                      " 20,266.2 Da, fitting 133 Da ×2 (Δ 0.2 Da) ",
-                      "and 267 Da ×1 (Δ 0.8 Da)"
-                    )
-                  ),
-                  shiny::tags$ul(
-                    shiny::tags$li(
-                      shiny::HTML(
-                        "Lowest stoichiometry &rightarrow; <strong>267 Da &times;1</strong>"
-                      )
-                    ),
-                    shiny::tags$li(
-                      shiny::HTML(
-                        "Closest mass &rightarrow; <strong>133 Da &times;2</strong>"
-                      )
-                    ),
-                    shiny::tags$li(
-                      shiny::HTML(
-                        "Declared shift order &rightarrow; <strong>133 Da &times;2</strong> (Mass 1)"
-                      )
-                    )
-                  ),
-                  shiny::p(
-                    "A peak at 20,266.5 Da is 0.5 Da off both readings. ",
-                    "Closest mass then falls back to the lowest ",
-                    "stoichiometry and prefers 267 Da ×1."
-                  ),
-                  shiny::p(
-                    "Ambiguous peaks are listed in the conversion log and ",
-                    "counted under Warnings in the Protocol tab."
-                  )
-                )
-              )
-            )
-          )
-        )
-      )
-    })
+    # Help modals ----
+    bind_help(input, conversion_sidebar_help)
 
     # Eagerly render all sidebar outputs that are visible on first tab visit so
     # they are computed in the first reactive flush alongside waiter_hide().

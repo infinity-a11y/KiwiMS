@@ -475,17 +475,6 @@ button .sF-modal {
   border-radius: var(--bs-border-radius);
 }
 
-.tip-modal .modal-content {
-  width: fit-content;
-  justify-items: center;
-}
-
-.tip-modal .modal-dialog {
-  max-width: 90vw;
-  justify-items: center;
-  width: 60vw;
-}
-
 .modal-body:not(.deconvolute-modal .modal-body) {
   max-height: 60vh;
   overflow-y: auto;
@@ -566,14 +555,9 @@ button .sF-modal {
   font-size: 1em;
 }
 
-.tip-modal .modal-body,
 .start-modal .modal-body {
   max-height: 60vh;
   overflow-y: auto;
-}
-
-.tip-modal .modal-body {
-  justify-items: center;
 }
 
 .conversion-modal .modal-dialog {
@@ -584,6 +568,212 @@ button .sF-modal {
 .conversion-modal .modal-body {
   max-height: 75vh;
   overflow-y: auto;
+}
+
+/* --- Help modals ---
+   Every Help button opens one of these (app/logic/help_modal.R). The dialog
+   is shaped like an upright page of the current window: its width follows the
+   window height, it is as tall as its content and never taller than the
+   window minus a margin. Longer content scrolls inside the body while title
+   and footer stay in place. */
+.help-modal {
+  --help-modal-margin: max(1rem, 3vh);
+  --help-modal-max-height: calc(100vh - 2 * var(--help-modal-margin));
+  --help-modal-max-height: calc(100dvh - 2 * var(--help-modal-margin));
+  --help-math-font: "Cambria Math", "STIX Two Math", "Latin Modern Math",
+    "Times New Roman", serif;
+
+  .modal-dialog {
+    width: min(
+      50rem,
+      calc(100vw - 2rem),
+      max(26rem, calc(var(--help-modal-max-height) * 0.8))
+    );
+    max-width: none;
+    min-height: var(--help-modal-max-height);
+    margin: var(--help-modal-margin) auto;
+    display: flex;
+    align-items: center;
+  }
+
+  .modal-content {
+    max-height: var(--help-modal-max-height);
+    overflow: hidden;
+  }
+
+  .modal-content .modal-body {
+    max-height: none;
+    overflow-y: auto;
+    padding: 1.25rem 1.75rem 1.5rem;
+  }
+}
+
+.help-modal-body {
+  font-size: 1rem;
+  line-height: 1.55;
+
+  > :first-child {
+    margin-top: 0;
+  }
+
+  > :last-child {
+    margin-bottom: 0;
+  }
+
+  p {
+    margin: 0 0 0.75rem;
+  }
+
+  ul {
+    margin: 0 0 0.75rem;
+    padding-left: 1.25rem;
+  }
+
+  li {
+    margin-bottom: 0.25rem;
+  }
+}
+
+.help-section {
+  margin: 1.5rem 0 0.75rem;
+}
+
+.help-heading {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0 0 0.6rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid rgb(0 0 0 / 12%);
+}
+
+.help-defs {
+  display: grid;
+  grid-template-columns: minmax(7rem, max-content) 1fr;
+  gap: 0.5rem 1.25rem;
+  margin: 0 0 0.75rem;
+
+  dt {
+    font-weight: 600;
+  }
+
+  dd {
+    margin: 0;
+  }
+
+  @media (max-width: 36rem) {
+    grid-template-columns: 1fr;
+    row-gap: 0.15rem;
+
+    dd {
+      margin-bottom: 0.4rem;
+    }
+  }
+}
+
+.help-note {
+  margin: 1rem 0 0.75rem;
+  padding: 0.65rem 0.9rem;
+  border-left: 3px solid #7777f9;
+  border-radius: 0 6px 6px 0;
+  background: rgb(119 119 249 / 8%);
+}
+
+.help-link {
+  margin-top: 1rem;
+
+  a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: none;
+  }
+}
+
+.help-figure {
+  margin: 1.25rem 0 0;
+  text-align: center;
+
+  img {
+    max-width: 100%;
+    height: auto;
+    border: 1px solid rgb(0 0 0 / 12%);
+    border-radius: 6px;
+  }
+}
+
+/* Formulas: plain HTML typeset like math (help_formula(), frac(), ...) */
+.help-formula {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 1.25rem 0 1.5rem;
+  padding: 1.1rem 1rem;
+  border-radius: 8px;
+  background: rgb(0 0 0 / 3.5%);
+  font-size: 1.2rem;
+  overflow-x: auto;
+}
+
+.help-modal .math {
+  font-family: var(--help-math-font);
+  white-space: nowrap;
+}
+
+.help-modal .math-var {
+  white-space: nowrap;
+
+  i {
+    font-family: var(--help-math-font);
+    font-size: 1.1em;
+    font-style: italic;
+  }
+
+  /* Italic correction: keeps the slanted symbol off its sub/superscript */
+  sub,
+  sup {
+    margin-left: 0.2em;
+    font-style: normal;
+  }
+}
+
+.help-modal .math-frac {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0 0.2em;
+  vertical-align: middle;
+  text-align: center;
+
+  .math-num {
+    padding: 0 0.35em 0.15em;
+    border-bottom: 1px solid currentColor;
+  }
+
+  .math-den {
+    padding: 0.15em 0.35em 0;
+  }
+}
+
+.help-modal .math-op {
+  margin: 0 0.3em;
+}
+
+.help-modal .math-rxn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0 0.6em;
+  vertical-align: middle;
+  line-height: 1.1;
+
+  .math-rxn-label {
+    font-size: 0.75em;
+  }
+
+  .math-rxn-arrow {
+    font-size: 1.35em;
+    line-height: 1;
+  }
 }
 
 .modal .bootstrap-select .dropdown-menu,
@@ -858,19 +1048,6 @@ input[type="number"]::-webkit-inner-spin-button {
 
 .card-header .tooltip-bttn button {
   color: black;
-}
-
-.tooltip-img-text {
-  font-style: italic;
-  font-size: 14px;
-}
-
-.tooltip-text {
-  font-size: 16px;
-}
-
-.hits-table-tooltip .tooltip-text {
-  font-size: 0.9em;
 }
 
 #app-conversion_main-declaration_info {
@@ -1642,6 +1819,13 @@ td.listbox.htDimmed.current.highlight {
 
 .deconvolution-sample-picker label {
   color: white !important;
+}
+
+// Spectrum settings: the Cubic/Planar switch while "Show All" is selected,
+// the single-sample settings otherwise (body class set by deconvolution_main.R)
+body:not(.decon-show-all) .decon-spectrum-settings .decon-settings-all,
+body.decon-show-all .decon-spectrum-settings .decon-settings-single {
+  display: none;
 }
 
 .deconvolution-spectrum-card,
@@ -2581,8 +2765,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 
 #app-conversion_main-hits_unified_tab div.dataTables_scrollBody,
 #app-conversion_main-samples_table_view div.dataTables_scrollBody,
-#app-conversion_main-compounds_table_view div.dataTables_scrollBody,
-#app-conversion_main-proteins_table_view div.dataTables_scrollBody,
+#app-conversion_main-overview_table_view div.dataTables_scrollBody,
 #app-conversion_main-kobs_result div.dataTables_scrollBody,
 #app-conversion_main-proteoform_table div.dataTables_scrollBody,
 .conc-hits-table div.dataTables_scrollBody {
@@ -2596,8 +2779,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 
 #app-conversion_main-hits_unified_tab tbody tr:last-child td,
 #app-conversion_main-samples_table_view tbody tr:last-child td,
-#app-conversion_main-compounds_table_view tbody tr:last-child td,
-#app-conversion_main-proteins_table_view tbody tr:last-child td,
+#app-conversion_main-overview_table_view tbody tr:last-child td,
 #app-conversion_main-kobs_result tbody tr:last-child td,
 #app-conversion_main-proteoform_table tbody tr:last-child td,
 .conc-hits-table tbody tr:last-child td {
@@ -2610,8 +2792,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 }
 
 #app-conversion_main-samples_table_view tbody td,
-#app-conversion_main-compounds_table_view tbody td,
-#app-conversion_main-proteins_table_view tbody td,
+#app-conversion_main-overview_table_view tbody td,
 #app-conversion_main-hits_unified_tab tbody td,
 #app-conversion_main-kobs_result tbody td,
 #app-conversion_main-proteoform_table tbody td,
@@ -2627,8 +2808,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 
 #app-conversion_main-hits_unified_tab .dataTables_scrollHead th,
 #app-conversion_main-samples_table_view .dataTables_scrollHead th,
-#app-conversion_main-compounds_table_view .dataTables_scrollHead th,
-#app-conversion_main-proteins_table_view .dataTables_scrollHead th,
+#app-conversion_main-overview_table_view .dataTables_scrollHead th,
 #app-conversion_main-kobs_result .dataTables_scrollHead th,
 #app-conversion_main-proteoform_table .dataTables_scrollHead th,
 .conc-hits-table .dataTables_scrollHead th,
@@ -2683,8 +2863,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 
 #app-conversion_main-hits_unified_tab thead th:first-child th.sorting,
 #app-conversion_main-samples_table_view thead th:first-child th.sorting,
-#app-conversion_main-compounds_table_view thead th:first-child th.sorting,
-#app-conversion_main-proteins_table_view thead th:first-child th.sorting,
+#app-conversion_main-overview_table_view thead th:first-child th.sorting,
 #app-conversion_main-kobs_result thead th:first-child th.sorting,
 #app-conversion_main-proteoform_table thead th:first-child th.sorting,
 .conc-hits-table thead th:first-child th.sorting {
@@ -3748,10 +3927,8 @@ html body.swal2-toast-shown .swal2-container {
 
 #app-conversion_main-samples_table_view div.dataTables_scrollBody,
 #app-conversion_main-samples_table_view div.dataTables_scrollHead,
-#app-conversion_main-compounds_table_view div.dataTables_scrollBody,
-#app-conversion_main-compounds_table_view div.dataTables_scrollHead,
-#app-conversion_main-proteins_table_view div.dataTables_scrollBody,
-#app-conversion_main-proteins_table_view div.dataTables_scrollHead,
+#app-conversion_main-overview_table_view div.dataTables_scrollBody,
+#app-conversion_main-overview_table_view div.dataTables_scrollHead,
 #app-conversion_main-kobs_result div.dataTables_scrollBody,
 #app-conversion_main-proteoform_table div.dataTables_scrollBody,
 #app-conversion_main-kobs_result div.dataTables_scrollHead,
@@ -3765,8 +3942,7 @@ html body.swal2-toast-shown .swal2-container {
 }
 
 #app-conversion_main-samples_table_view .table,
-#app-conversion_main-compounds_table_view .table,
-#app-conversion_main-proteins_table_view .table,
+#app-conversion_main-overview_table_view .table,
 #app-conversion_main-kobs_result .table,
 #app-conversion_main-proteoform_table .table,
 .conc-hits-table .table,
@@ -3827,6 +4003,34 @@ html body.swal2-toast-shown .swal2-container {
   padding-bottom: 10px;
 }
 
+// Overview: the protein and compound pickers side by side, each above the
+// Mass Shifts card it fills (same gap as .conversion-samples-stats)
+.conversion-samples-control > .overview-pickers {
+  display: flex;
+  gap: 2%;
+  width: 100%;
+  height: fit-content !important;
+
+  > .sample-cmp-prot-picker {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
+
+// Option annotations (subtext, e.g. "No hits") right aligned in the dropdown;
+// .bootstrap-select outranks bootstrap-select's own inline-block rule
+.sample-cmp-prot-picker .bootstrap-select .dropdown-menu li a span.text {
+  display: flex;
+  align-items: baseline;
+  width: 100%;
+
+  small.text-muted {
+    margin-left: auto;
+    padding-left: 1em;
+    white-space: nowrap;
+  }
+}
+
 table.dataTable tbody tr:hover,
 table.dataTable tbody tr.selected:hover {
   background: none;
@@ -3881,7 +4085,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   justify-self: center;
 }
 
-/* Mass Shifts cards (Compound / Protein View) - at most three lines plus the
+/* Mass Shifts cards (Overview) - at most three lines plus the
    "N more" hint, so the card never overflows */
 .mass-shift-list {
   display: flex;
@@ -3951,8 +4155,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 }
 
 #app-conversion_main-samples_table_view div.dataTables_wrapper div.dataTables_info,
-#app-conversion_main-conversion_compounds_table_view div.dataTables_wrapper div.dataTables_info,
-#app-conversion_main-conversion_proteins_table_view div.dataTables_wrapper div.dataTables_info,
+#app-conversion_main-overview_table_view div.dataTables_wrapper div.dataTables_info,
 #app-conversion_main-kobs_result div.dataTables_wrapper div.dataTables_info,
 #app-conversion_main-proteoform_table div.dataTables_wrapper div.dataTables_info,
 .conc-hits-table div.dataTables_wrapper div.dataTables_info {
@@ -3963,8 +4166,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   padding-left: 15px !important;
 }
 
-#app-conversion_main-compounds_table_view,
-#app-conversion_main-proteins_table_view,
+#app-conversion_main-overview_table_view,
 #app-conversion_main-samples_table_view,
 #app-conversion_main-kobs_result,
 #app-conversion_main-proteoform_table,
@@ -3975,10 +4177,8 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   font-size: 12px;
 }
 
-#app-conversion_main-proteins_table_view > div,
-#app-conversion_main-proteins_table_view .dataTables_scroll,
-#app-conversion_main-compounds_table_view > div,
-#app-conversion_main-compounds_table_view .dataTables_scroll,
+#app-conversion_main-overview_table_view > div,
+#app-conversion_main-overview_table_view .dataTables_scroll,
 #app-conversion_main-samples_table_view > div,
 #app-conversion_main-samples_table_view .dataTables_scroll,
 #app-conversion_main-kobs_result > div,
@@ -3992,8 +4192,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   height: 100% !important;
 }
 
-#app-conversion_main-proteins_table_view .dataTables_scrollBody,
-#app-conversion_main-compounds_table_view .dataTables_scrollBody,
+#app-conversion_main-overview_table_view .dataTables_scrollBody,
 #app-conversion_main-samples_table_view .dataTables_scrollBody,
 #app-conversion_main-kobs_result .dataTables_scrollBody,
 #app-conversion_main-proteoform_table .dataTables_scrollBody,
@@ -4103,919 +4302,6 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 .conversion-tab-item-wrapper {
   margin-left: auto !important;
   margin-top: 0 !important;
-}
-
-/* Set1 */
-.palette-select .selectize-dropdown .option[data-value="Set1"],
-.palette-select .selectize-input:has(> .item[data-value="Set1"]) {
-  background: linear-gradient(
-    to right,
-    #e41a1c 0%,
-    #e41a1c 11%,
-    #377eb8 11%,
-    #377eb8 22%,
-    #4daf4a 22%,
-    #4daf4a 33%,
-    #984ea3 33%,
-    #984ea3 44%,
-    #ff7f00 44%,
-    #ff7f00 55%,
-    #ffff33 55%,
-    #ffff33 66%,
-    #a65628 66%,
-    #a65628 77%,
-    #f781bf 77%,
-    #f781bf 88%,
-    #999999 88%,
-    #999999 100%
-  ) !important;
-  color: black;
-  text-align: left;
-}
-
-/* Set2 */
-.palette-select .selectize-dropdown .option[data-value="Set2"],
-.palette-select .selectize-input:has(> .item[data-value="Set2"]) {
-  background: linear-gradient(
-    to right,
-    #66c2a5 0%,
-    #66c2a5 12.5%,
-    #fc8d62 12.5%,
-    #fc8d62 25%,
-    #8da0cb 25%,
-    #8da0cb 37.5%,
-    #e78ac3 37.5%,
-    #e78ac3 50%,
-    #a6d854 50%,
-    #a6d854 62.5%,
-    #ffd92f 62.5%,
-    #ffd92f 75%,
-    #e5c494 75%,
-    #e5c494 87.5%,
-    #b3b3b3 87.5%,
-    #b3b3b3 100%
-  ) !important;
-  color: black;
-  text-align: left;
-}
-
-/* Set3 */
-.palette-select .selectize-dropdown .option[data-value="Set3"],
-.palette-select .selectize-input:has(> .item[data-value="Set3"]) {
-  background: linear-gradient(
-    to right,
-    #8dd3c7 0%,
-    #8dd3c7 8.33333%,
-    #ffffb3 8.33333%,
-    #ffffb3 16.6667%,
-    #bebada 16.6667%,
-    #bebada 25%,
-    #fb8072 25%,
-    #fb8072 33.3333%,
-    #80b1d3 33.3333%,
-    #80b1d3 41.6667%,
-    #fdb462 41.6667%,
-    #fdb462 50%,
-    #b3de69 50%,
-    #b3de69 58.3333%,
-    #fccde5 58.3333%,
-    #fccde5 66.6667%,
-    #d9d9d9 66.6667%,
-    #d9d9d9 75%,
-    #bc80bd 75%,
-    #bc80bd 83.3333%,
-    #ccebc5 83.3333%,
-    #ccebc5 91.6667%,
-    #ffed6f 91.6667%,
-    #ffed6f 100%
-  ) !important;
-  color: black;
-  text-align: left;
-}
-
-/* Pastel1 */
-.palette-select .selectize-dropdown .option[data-value="Pastel1"],
-.palette-select .selectize-input:has(> .item[data-value="Pastel1"]) {
-  background: linear-gradient(
-    to right,
-    #fbb4ae 0%,
-    #fbb4ae 11.1111%,
-    #b3cde3 11.1111%,
-    #b3cde3 22.2222%,
-    #ccebc5 22.2222%,
-    #ccebc5 33.3333%,
-    #decbe4 33.3333%,
-    #decbe4 44.4444%,
-    #fed9a6 44.4444%,
-    #fed9a6 55.5556%,
-    #ffffcc 55.5556%,
-    #ffffcc 66.6667%,
-    #e5d8bd 66.6667%,
-    #e5d8bd 77.7778%,
-    #fddaec 77.7778%,
-    #fddaec 88.8889%,
-    #f2f2f2 88.8889%,
-    #f2f2f2 100%
-  ) !important;
-  color: black;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="Pastel2"],
-.palette-select .selectize-input:has(> .item[data-value="Pastel2"]) {
-  background: linear-gradient(
-    to right,
-    #b3e2cd 0%,
-    #b3e2cd 12.5%,
-    #fdcdac 12.5%,
-    #fdcdac 25%,
-    #cbd5e8 25%,
-    #cbd5e8 37.5%,
-    #f4cae4 37.5%,
-    #f4cae4 50%,
-    #e6f5c9 50%,
-    #e6f5c9 62.5%,
-    #fff2ae 62.5%,
-    #fff2ae 75%,
-    #f1e2cc 75%,
-    #f1e2cc 87.5%,
-    #cccccc 87.5%,
-    #cccccc 100%
-  ) !important;
-  color: black;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="Dark2"],
-.palette-select .selectize-input:has(> .item[data-value="Dark2"]) {
-  background: linear-gradient(
-    to right,
-    #1b9e77 0%,
-    #1b9e77 12.5%,
-    #d95f02 12.5%,
-    #d95f02 25%,
-    #7570b3 25%,
-    #7570b3 37.5%,
-    #e7298a 37.5%,
-    #e7298a 50%,
-    #66a61e 50%,
-    #66a61e 62.5%,
-    #e6ab02 62.5%,
-    #e6ab02 75%,
-    #a6761d 75%,
-    #a6761d 87.5%,
-    #666666 87.5%,
-    #666666 100%
-  ) !important;
-  color: black;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="Accent"],
-.palette-select .selectize-input:has(> .item[data-value="Accent"]) {
-  background: linear-gradient(
-    to right,
-    #7fc97f 0%,
-    #7fc97f 12.5%,
-    #beaed4 12.5%,
-    #beaed4 25%,
-    #fdc086 25%,
-    #fdc086 37.5%,
-    #ffff99 37.5%,
-    #ffff99 50%,
-    #386cb0 50%,
-    #386cb0 62.5%,
-    #f0027f 62.5%,
-    #f0027f 75%,
-    #bf5b17 75%,
-    #bf5b17 87.5%,
-    #666666 87.5%,
-    #666666 100%
-  ) !important;
-  color: black;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="YlOrRd"],
-.palette-select .selectize-input:has(> .item[data-value="YlOrRd"]) {
-  background: linear-gradient(
-    to right,
-    #ffffcc 0%,
-    #ffffcc 11.1111%,
-    #ffeda0 11.1111%,
-    #ffeda0 22.2222%,
-    #fed976 22.2222%,
-    #fed976 33.3333%,
-    #feb24c 33.3333%,
-    #feb24c 44.4444%,
-    #fd8d3c 44.4444%,
-    #fd8d3c 55.5556%,
-    #fc4e2a 55.5556%,
-    #fc4e2a 66.6667%,
-    #e31a1c 66.6667%,
-    #e31a1c 77.7778%,
-    #bd0026 77.7778%,
-    #bd0026 88.8889%,
-    #800026 88.8889%,
-    #800026 100%
-  ) !important;
-  color: black;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="YlOrBr"],
-.palette-select .selectize-input:has(> .item[data-value="YlOrBr"]) {
-  background: linear-gradient(
-    to right,
-    #ffffe5 0%,
-    #ffffe5 11.1111%,
-    #fff7bc 11.1111%,
-    #fff7bc 22.2222%,
-    #fee391 22.2222%,
-    #fee391 33.3333%,
-    #fec44f 33.3333%,
-    #fec44f 44.4444%,
-    #fe9929 44.4444%,
-    #fe9929 55.5556%,
-    #ec7014 55.5556%,
-    #ec7014 66.6667%,
-    #cc4c02 66.6667%,
-    #cc4c02 77.7778%,
-    #993404 77.7778%,
-    #993404 88.8889%,
-    #662506 88.8889%,
-    #662506 100%
-  ) !important;
-  color: black;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="YlGnBu"],
-.palette-select .selectize-input:has(> .item[data-value="YlGnBu"]) {
-  background: linear-gradient(
-    to right,
-    #ffffd9 0%,
-    #ffffd9 11.1111%,
-    #edf8b1 11.1111%,
-    #edf8b1 22.2222%,
-    #c7e9b4 22.2222%,
-    #c7e9b4 33.3333%,
-    #7fcdbb 33.3333%,
-    #7fcdbb 44.4444%,
-    #41b6c4 44.4444%,
-    #41b6c4 55.5556%,
-    #1d91c0 55.5556%,
-    #1d91c0 66.6667%,
-    #225ea8 66.6667%,
-    #225ea8 77.7778%,
-    #253494 77.7778%,
-    #253494 88.8889%,
-    #081d58 88.8889%,
-    #081d58 100%
-  ) !important;
-  color: black;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="YlGn"],
-.palette-select .selectize-input:has(> .item[data-value="YlGn"]) {
-  background: linear-gradient(
-    to right,
-    #ffffe5 0%,
-    #ffffe5 11.1111%,
-    #f7fcb9 11.1111%,
-    #f7fcb9 22.2222%,
-    #d9f0a3 22.2222%,
-    #d9f0a3 33.3333%,
-    #addd8e 33.3333%,
-    #addd8e 44.4444%,
-    #78c679 44.4444%,
-    #78c679 55.5556%,
-    #41ab5d 55.5556%,
-    #41ab5d 66.6667%,
-    #238443 66.6667%,
-    #238443 77.7778%,
-    #006837 77.7778%,
-    #006837 88.8889%,
-    #004529 88.8889%,
-    #004529 100%
-  ) !important;
-  color: black;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="Reds"],
-.palette-select .selectize-input:has(> .item[data-value="Reds"]) {
-  background: linear-gradient(
-    to right,
-    #fff5f0 0%,
-    #fff5f0 11.1111%,
-    #fee0d2 11.1111%,
-    #fee0d2 22.2222%,
-    #fcbba1 22.2222%,
-    #fcbba1 33.3333%,
-    #fc9272 33.3333%,
-    #fc9272 44.4444%,
-    #fb6a4a 44.4444%,
-    #fb6a4a 55.5556%,
-    #ef3b2c 55.5556%,
-    #ef3b2c 66.6667%,
-    #cb181d 66.6667%,
-    #cb181d 77.7778%,
-    #a50f15 77.7778%,
-    #a50f15 88.8889%,
-    #67000d 88.8889%,
-    #67000d 100%
-  ) !important;
-  color: black;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="RdPu"],
-.palette-select .selectize-input:has(> .item[data-value="RdPu"]) {
-  background: linear-gradient(
-    to right,
-    #fff7f3 0%,
-    #fff7f3 11.1111%,
-    #fde0dd 11.1111%,
-    #fde0dd 22.2222%,
-    #fcc5c0 22.2222%,
-    #fcc5c0 33.3333%,
-    #fa9fb5 33.3333%,
-    #fa9fb5 44.4444%,
-    #f768a1 44.4444%,
-    #f768a1 55.5556%,
-    #dd3497 55.5556%,
-    #dd3497 66.6667%,
-    #ae017e 66.6667%,
-    #ae017e 77.7778%,
-    #7a0177 77.7778%,
-    #7a0177 88.8889%,
-    #49006a 88.8889%,
-    #49006a 100%
-  ) !important;
-  color: black;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="Purples"],
-.palette-select .selectize-input:has(> .item[data-value="Purples"]) {
-  background: linear-gradient(
-    to right,
-    #fcfbfd 0%,
-    #fcfbfd 11.1111%,
-    #efedf5 11.1111%,
-    #efedf5 22.2222%,
-    #dadaeb 22.2222%,
-    #dadaeb 33.3333%,
-    #bcbddc 33.3333%,
-    #bcbddc 44.4444%,
-    #9e9ac8 44.4444%,
-    #9e9ac8 55.5556%,
-    #807dba 55.5556%,
-    #807dba 66.6667%,
-    #6a51a3 66.6667%,
-    #6a51a3 77.7778%,
-    #54278f 77.7778%,
-    #54278f 88.8889%,
-    #3f007d 88.8889%,
-    #3f007d 100%
-  ) !important;
-  color: black;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="PuRd"],
-.palette-select .selectize-input:has(> .item[data-value="PuRd"]) {
-  background: linear-gradient(
-    to right,
-    #f7f4f9 0%,
-    #f7f4f9 11.1111%,
-    #e7e1ef 11.1111%,
-    #e7e1ef 22.2222%,
-    #d4b9da 22.2222%,
-    #d4b9da 33.3333%,
-    #c994c7 33.3333%,
-    #c994c7 44.4444%,
-    #df65b0 44.4444%,
-    #df65b0 55.5556%,
-    #e7298a 55.5556%,
-    #e7298a 66.6667%,
-    #ce1256 66.6667%,
-    #ce1256 77.7778%,
-    #980043 77.7778%,
-    #980043 88.8889%,
-    #67001f 88.8889%,
-    #67001f 100%
-  ) !important;
-  color: black;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="PuBuGn"],
-.palette-select .selectize-input:has(> .item[data-value="PuBuGn"]) {
-  background: linear-gradient(
-    to right,
-    #fff7fb 0%,
-    #fff7fb 11.1111%,
-    #ece2f0 11.1111%,
-    #ece2f0 22.2222%,
-    #d0d1e6 22.2222%,
-    #d0d1e6 33.3333%,
-    #a6bddb 33.3333%,
-    #a6bddb 44.4444%,
-    #67a9cf 44.4444%,
-    #67a9cf 55.5556%,
-    #3690c0 55.5556%,
-    #3690c0 66.6667%,
-    #02818a 66.6667%,
-    #02818a 77.7778%,
-    #016c59 77.7778%,
-    #016c59 88.8889%,
-    #014636 88.8889%,
-    #014636 100%
-  ) !important;
-  color: black;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="PuBu"],
-.palette-select .selectize-input:has(> .item[data-value="PuBu"]) {
-  background: linear-gradient(
-    to right,
-    #fff7fb 0%,
-    #fff7fb 11.1111%,
-    #ece7f2 11.1111%,
-    #ece7f2 22.2222%,
-    #d0d1e6 22.2222%,
-    #d0d1e6 33.3333%,
-    #a6bddb 33.3333%,
-    #a6bddb 44.4444%,
-    #74a9cf 44.4444%,
-    #74a9cf 55.5556%,
-    #3690c0 55.5556%,
-    #3690c0 66.6667%,
-    #0570b0 66.6667%,
-    #0570b0 77.7778%,
-    #045a8d 77.7778%,
-    #045a8d 88.8889%,
-    #023858 88.8889%,
-    #023858 100%
-  ) !important;
-  color: black;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="OrRd"],
-.palette-select .selectize-input:has(> .item[data-value="OrRd"]) {
-  background: linear-gradient(
-    to right,
-    #fff7ec 0%,
-    #fff7ec 11.1111%,
-    #fee8c8 11.1111%,
-    #fee8c8 22.2222%,
-    #fdd49e 22.2222%,
-    #fdd49e 33.3333%,
-    #fdbb84 33.3333%,
-    #fdbb84 44.4444%,
-    #fc8d59 44.4444%,
-    #fc8d59 55.5556%,
-    #ef6548 55.5556%,
-    #ef6548 66.6667%,
-    #d7301f 66.6667%,
-    #d7301f 77.7778%,
-    #b30000 77.7778%,
-    #b30000 88.8889%,
-    #7f0000 88.8889%,
-    #7f0000 100%
-  ) !important;
-  color: black;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="Oranges"],
-.palette-select .selectize-input:has(> .item[data-value="Oranges"]) {
-  background: linear-gradient(
-    to right,
-    #fff7ec 0%,
-    #fff7ec 11.1111%,
-    #fee8c8 11.1111%,
-    #fee8c8 22.2222%,
-    #fdd49e 22.2222%,
-    #fdd49e 33.3333%,
-    #fdbb84 33.3333%,
-    #fdbb84 44.4444%,
-    #fc8d59 44.4444%,
-    #fc8d59 55.5556%,
-    #ef6548 55.5556%,
-    #ef6548 66.6667%,
-    #d7301f 66.6667%,
-    #d7301f 77.7778%,
-    #b30000 77.7778%,
-    #b30000 88.8889%,
-    #7f0000 88.8889%,
-    #7f0000 100%
-  ) !important;
-  color: black;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="Greys"],
-.palette-select .selectize-input:has(> .item[data-value="Greys"]) {
-  background: linear-gradient(
-    to right,
-    #ffffff 0%,
-    #ffffff 11.1111%,
-    #f0f0f0 11.1111%,
-    #f0f0f0 22.2222%,
-    #d9d9d9 22.2222%,
-    #d9d9d9 33.3333%,
-    #bdbdbd 33.3333%,
-    #bdbdbd 44.4444%,
-    #969696 44.4444%,
-    #969696 55.5556%,
-    #737373 55.5556%,
-    #737373 66.6667%,
-    #525252 66.6667%,
-    #525252 77.7778%,
-    #252525 77.7778%,
-    #252525 88.8889%,
-    #000000 88.8889%,
-    #000000 100%
-  ) !important;
-  color: black;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="Greens"],
-.palette-select .selectize-input:has(> .item[data-value="Greens"]) {
-  background: linear-gradient(
-    to right,
-    #f7fcf5 0%,
-    #f7fcf5 11.1111%,
-    #e5f5e0 11.1111%,
-    #e5f5e0 22.2222%,
-    #c7e9c0 22.2222%,
-    #c7e9c0 33.3333%,
-    #a1d99b 33.3333%,
-    #a1d99b 44.4444%,
-    #74c476 44.4444%,
-    #74c476 55.5556%,
-    #41ab5d 55.5556%,
-    #41ab5d 66.6667%,
-    #238b45 66.6667%,
-    #238b45 77.7778%,
-    #006d2c 77.7778%,
-    #006d2c 88.8889%,
-    #00441b 88.8889%,
-    #00441b 100%
-  ) !important;
-  color: black;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="GnBu"],
-.palette-select .selectize-input:has(> .item[data-value="GnBu"]) {
-  background: linear-gradient(
-    to right,
-    #f7fcf5 0%,
-    #f7fcf5 11.1111%,
-    #e5f5e0 11.1111%,
-    #e5f5e0 22.2222%,
-    #c7e9c0 22.2222%,
-    #c7e9c0 33.3333%,
-    #a1d99b 33.3333%,
-    #a1d99b 44.4444%,
-    #74c476 44.4444%,
-    #74c476 55.5556%,
-    #41ab5d 55.5556%,
-    #41ab5d 66.6667%,
-    #238b45 66.6667%,
-    #238b45 77.7778%,
-    #006d2c 77.7778%,
-    #006d2c 88.8889%,
-    #00441b 88.8889%,
-    #00441b 100%
-  ) !important;
-  color: black;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="BuPu"],
-.palette-select .selectize-input:has(> .item[data-value="BuPu"]) {
-  background: linear-gradient(
-    to right,
-    #f7fcfd 0%,
-    #f7fcfd 11.1111%,
-    #e0ecf4 11.1111%,
-    #e0ecf4 22.2222%,
-    #bfd3e6 22.2222%,
-    #bfd3e6 33.3333%,
-    #9ebcda 33.3333%,
-    #9ebcda 44.4444%,
-    #8c96c6 44.4444%,
-    #8c96c6 55.5556%,
-    #8c6bb1 55.5556%,
-    #8c6bb1 66.6667%,
-    #88419d 66.6667%,
-    #88419d 77.7778%,
-    #810f7c 77.7778%,
-    #810f7c 88.8889%,
-    #4d004b 88.8889%,
-    #4d004b 100%
-  ) !important;
-  color: black;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="BuGn"],
-.palette-select .selectize-input:has(> .item[data-value="BuGn"]) {
-  background: linear-gradient(
-    to right,
-    #f7fcfd 0%,
-    #f7fcfd 11.1111%,
-    #e5f5f9 11.1111%,
-    #e5f5f9 22.2222%,
-    #ccece6 22.2222%,
-    #ccece6 33.3333%,
-    #99d8c9 33.3333%,
-    #99d8c9 44.4444%,
-    #66c2a4 44.4444%,
-    #66c2a4 55.5556%,
-    #41ae76 55.5556%,
-    #41ae76 66.6667%,
-    #238b45 66.6667%,
-    #238b45 77.7778%,
-    #006d2c 77.7778%,
-    #006d2c 88.8889%,
-    #00441b 88.8889%,
-    #00441b 100%
-  ) !important;
-  color: black;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="Blues"],
-.palette-select .selectize-input:has(> .item[data-value="Blues"]) {
-  background: linear-gradient(
-    to right,
-    #f7fbff 0%,
-    #f7fbff 11.1111%,
-    #deebf7 11.1111%,
-    #deebf7 22.2222%,
-    #c6dbef 22.2222%,
-    #c6dbef 33.3333%,
-    #9ecae1 33.3333%,
-    #9ecae1 44.4444%,
-    #6baed6 44.4444%,
-    #6baed6 55.5556%,
-    #4292c6 55.5556%,
-    #4292c6 66.6667%,
-    #2171b5 66.6667%,
-    #2171b5 77.7778%,
-    #08519c 77.7778%,
-    #08519c 88.8889%,
-    #08306b 88.8889%,
-    #08306b 100%
-  ) !important;
-  color: black;
-  text-align: left;
-}
-
-/* Viridis */
-
-.palette-select .selectize-dropdown .option[data-value="inferno"],
-.palette-select .selectize-input:has(> .item[data-value="inferno"]) {
-  background: linear-gradient(
-    to right,
-    #2c0b57ff,
-    #3f0a67ff,
-    #520e6dff,
-    #65156eff,
-    #771c6dff,
-    #88226aff,
-    #9b2964ff,
-    #ad305dff,
-    #be3852ff,
-    #ce4347ff,
-    #dc503bff,
-    #e8602dff,
-    #f1711fff,
-    #f8850fff,
-    #fb9906ff,
-    #fcaf13ff,
-    #fac62cff,
-    #f5db4dff,
-    #f1f077ff,
-    #fcffa4ff
-  ) !important;
-  color: white;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="plasma"],
-.palette-select .selectize-input:has(> .item[data-value="plasma"]) {
-  background: linear-gradient(
-    to right,
-    #0d0887ff,
-    #2d0594ff,
-    #44039eff,
-    #5901a5ff,
-    #6f00a8ff,
-    #8305a7ff,
-    #9512a1ff,
-    #a72197ff,
-    #b6308bff,
-    #c5407eff,
-    #d14e72ff,
-    #dd5e66ff,
-    #e76e5bff,
-    #ef7f4fff,
-    #f79044ff,
-    #fba238ff,
-    #feb72dff,
-    #fdcb26ff,
-    #f7e225ff,
-    #f0f921ff
-  ) !important;
-  color: white;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="viridis"],
-.palette-select .selectize-input:has(> .item[data-value="viridis"]) {
-  background: linear-gradient(
-    to right,
-    #440154ff,
-    #481568ff,
-    #482677ff,
-    #453781ff,
-    #3f4788ff,
-    #39558cff,
-    #32648eff,
-    #2d718eff,
-    #287d8eff,
-    #238a8dff,
-    #1f968bff,
-    #20a386ff,
-    #29af7fff,
-    #3cbc75ff,
-    #56c667ff,
-    #74d055ff,
-    #94d840ff,
-    #b8de29ff,
-    #dce318ff,
-    #fde725ff
-  ) !important;
-  color: white;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="cividis"],
-.palette-select .selectize-input:has(> .item[data-value="cividis"]) {
-  background: linear-gradient(
-    to right,
-    #00204dff,
-    #002a64ff,
-    #00336fff,
-    #1f3c6dff,
-    #35466bff,
-    #444f6bff,
-    #53596cff,
-    #5f636eff,
-    #6b6c71ff,
-    #777776ff,
-    #838079ff,
-    #908b79ff,
-    #9d9677ff,
-    #aba074ff,
-    #b9ac70ff,
-    #c7b76bff,
-    #d7c463ff,
-    #e5d05aff,
-    #f5dd4dff,
-    #ffea46ff
-  ) !important;
-  color: white;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="rocket"],
-.palette-select .selectize-input:has(> .item[data-value="rocket"]) {
-  background: linear-gradient(
-    to right,
-    #381a40ff,
-    #4a1d4aff,
-    #5c1e51ff,
-    #6f1f57ff,
-    #821e5aff,
-    #961c5bff,
-    #a9185aff,
-    #bc1656ff,
-    #ce1d4eff,
-    #dc2b46ff,
-    #e73e3fff,
-    #ee533fff,
-    #f26948ff,
-    #f47e58ff,
-    #f59269ff,
-    #f6a57dff,
-    #f6b893ff,
-    #f7c9aaff,
-    #f8dac4ff,
-    #faebddff
-  ) !important;
-  color: white;
-  text-align: left;
-}
-
-.palette-select .selectize-dropdown .option[data-value="mako"],
-.palette-select .selectize-input:has(> .item[data-value="mako"]) {
-  background: linear-gradient(
-    to right,
-    #30203eff,
-    #382952ff,
-    #3d3266ff,
-    #403c7aff,
-    #40488dff,
-    #3c5598ff,
-    #38639dff,
-    #3670a0ff,
-    #357da3ff,
-    #3489a6ff,
-    #3496a9ff,
-    #36a3abff,
-    #3bafadff,
-    #45bdadff,
-    #53c9adff,
-    #6ed3adff,
-    #90dbb4ff,
-    #aee3c0ff,
-    #c7ecd2ff,
-    #def5e5ff
-  ) !important;
-  color: white;
-  text-align: left;
-}
-
-/* Magma */
-.palette-select .selectize-dropdown .option[data-value="magma"],
-.palette-select .selectize-input:has(> .item[data-value="magma"]) {
-  background: linear-gradient(
-    to right,
-    #251256ff,
-    #390f6dff,
-    #4c117aff,
-    #5e187fff,
-    #701f81ff,
-    #822581ff,
-    #942c80ff,
-    #a6317dff,
-    #b93778ff,
-    #cc3f71ff,
-    #dd4869ff,
-    #eb5760ff,
-    #f4695cff,
-    #fa7e5eff,
-    #fd9467ff,
-    #fea973ff,
-    #febf84ff,
-    #fed395ff,
-    #fde8aaff,
-    #fcfdbfff
-  ) !important;
-  color: white;
-  text-align: left;
-}
-
-/* Turbo */
-.palette-select .selectize-dropdown .option[data-value="turbo"],
-.palette-select .selectize-input:has(> .item[data-value="turbo"]) {
-  background: linear-gradient(
-    to right,
-    #30123bff,
-    #3f3994ff,
-    #455ed2ff,
-    #4681f7ff,
-    #3aa2fcff,
-    #23c3e4ff,
-    #18dec1ff,
-    #2cf09eff,
-    #5bfb72ff,
-    #8eff49ff,
-    #b5f836ff,
-    #d6e635ff,
-    #efcd3aff,
-    #fcb036ff,
-    #fd8a26ff,
-    #f36215ff,
-    #e14209ff,
-    #c82803ff,
-    #a51301ff,
-    #7a0403ff
-  ) !important;
-  color: white;
-  text-align: left;
 }
 
 #app-conversion_main-compounds_compound_distribution > div > div > svg:nth-child(5) > g > g > text.name,
@@ -5316,8 +4602,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   border-radius: 5px;
 }
 
-#app-conversion_main-protein_distribution_scale .form-group,
-#app-conversion_main-cmp_distribution_scale .form-group {
+#app-conversion_main-overview_distribution_scale .form-group {
   margin: 0;
 }
 
@@ -5337,8 +4622,7 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   align-items: center;
 }
 
-#app-conversion_main-protein_distribution_scale label,
-#app-conversion_main-cmp_distribution_scale label {
+#app-conversion_main-overview_distribution_scale label {
   margin-bottom: 0.5rem;
 }
 
@@ -5815,20 +5099,24 @@ sample-file-row .form-group {
   align-content: center;
 }
 
+/* Export label with the Help button of the Hits table at its right end */
+.hits-table-export .label-tooltip {
+  flex-wrap: nowrap;
+  align-items: center;
+
+  label {
+    width: auto !important;
+  }
+
+  .tooltip-bttn .btn {
+    height: auto;
+    width: auto;
+  }
+}
+
 .table-dl-buttons {
   display: flex;
   gap: 4px;
-}
-
-.palette-select .selectize-control .item {
-  background: rgba(0, 0, 0, 0.5019607843);
-  color: #fff;
-  font-size: 15px;
-  padding: 2px;
-}
-
-.palette-select .selectize-input > input[type="text"] {
-  background: transparent !important;
 }
 
 .hits-control .btn {
@@ -5869,10 +5157,6 @@ sample-file-row .form-group {
 
 .input-stat-panel .form-group {
   margin-bottom: unset;
-}
-
-.input-panel .palette-select {
-  justify-content: center;
 }
 
 .hits-controls {
@@ -5973,14 +5257,12 @@ sample-file-row .form-group {
   min-width: fit-content;
 }
 
-/* Concentration palette picker sitting beside the unit selectors */
+/* Unit selectors of the kinetics header */
 .unit-inputs .selectize-control {
   min-height: unset;
   margin-bottom: 0;
 }
 
-/* No background here: the .palette-select gradient previews carry the same
-   specificity and would lose to a later rule */
 .unit-inputs .selectize-control.single .selectize-input {
   height: 30px;
   min-height: fit-content;

@@ -1,4 +1,4 @@
-﻿# app/logic/conversion_ui.R
+# app/logic/conversion_ui.R
 
 box::use(
   app /
@@ -17,6 +17,10 @@ box::use(
       stats_violin,
       show_preferred_column,
       is_complex_row,
+      overview_choices,
+      overview_status_note,
+      overview_selection,
+      overview_subset,
     ],
   app / logic / helper_functions[config_icon],
   app /
@@ -33,11 +37,13 @@ box::use(
 # time, picked like a sample in the Samples View of the Relative Binding
 # interface. `concentrations` are the fitted concentration keys in the declared
 # unit; the picker labels follow the unit view (updated by the server).
+# `selected` is the concentration picked first (NULL: the first one).
 #' @export
 kinact_ki_concentrations_panel <- function(
   ns,
   concentrations,
-  conc_unit = NULL
+  conc_unit = NULL,
+  selected = NULL
 ) {
   stat_card <- function(title, help_id, output_id) {
     shiny::div(
@@ -82,6 +88,7 @@ kinact_ki_concentrations_panel <- function(
                 concentrations,
                 paste(concentrations, conc_unit)
               ),
+              selected = selected,
               options = shinyWidgets::pickerOptions(
                 liveSearch = TRUE,
                 liveSearchPlaceholder = "Search concentrations ..."
@@ -263,7 +270,8 @@ kinact_ki_concentrations_panel <- function(
   )
 }
 
-# kinact/Ki results interface
+# kinact/Ki results interface. With `selected_conc`, one of the fitted
+# `concentrations`, it opens on that concentration in the Concentrations tab.
 #' @export
 kinact_ki_results_ui <- function(
   ns,
@@ -271,16 +279,26 @@ kinact_ki_results_ui <- function(
   concentrations,
   units = NULL,
   proteoforms = FALSE,
-  paired_limits = FALSE
+  paired_limits = FALSE,
+  selected_conc = NULL
 ) {
   # Declared concentration unit, e.g. "µM" from "Concentration [µM]"
   conc_unit <- if (!is.null(units[["Concentration"]])) {
     gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]])
   }
 
+  if (!length(selected_conc) || !selected_conc[1] %in% concentrations) {
+    selected_conc <- NULL
+  }
+
   # One tab for all fitted concentrations, which are picked inside it
   concentration_panels <- if (length(concentrations)) {
-    list(kinact_ki_concentrations_panel(ns, concentrations, conc_unit))
+    list(kinact_ki_concentrations_panel(
+      ns,
+      concentrations,
+      conc_unit,
+      selected = selected_conc
+    ))
   }
 
   static_panels <- list(
@@ -648,7 +666,10 @@ kinact_ki_results_ui <- function(
     c(
       # Kept distinct from the declaration/binding navsets: the result
       # interfaces now coexist in the DOM, so their tab ids have to be unique.
-      list(id = ns("kinetics_tabs")),
+      list(
+        id = ns("kinetics_tabs"),
+        selected = if (!is.null(selected_conc)) "Concentrations"
+      ),
       all_tabs,
       list(
         bslib::nav_item(
@@ -669,17 +690,6 @@ kinact_ki_results_ui <- function(
               id = "time_unit_results",
               label = FALSE,
               selected = if (!is.null(units)) unit_symbol(units[["Time"]])
-            ),
-            bslib::tooltip(
-              shiny::selectInput(
-                ns("kinetics_color_scale"),
-                label = NULL,
-                choices = NULL,
-                width = "120px"
-              ) |>
-                shiny::tagAppendAttributes(class = "palette-select"),
-              "Color palette",
-              placement = "top"
             )
           )
         )
@@ -703,14 +713,20 @@ proteoform_results_panel <- function(ns, paired_limits = FALSE) {
     limits_switch <- shinyjs::disabled(limits_switch)
   }
 
+  # Every card of the tab opens the same help, so the button sets the input
+  # rather than being one: an actionButton would repeat its id per card
   help_button <- function(id) {
     bslib::tooltip(
       shiny::div(
         class = "tooltip-bttn",
-        shiny::actionButton(
-          ns(id),
-          label = NULL,
-          icon = shiny::icon("circle-question")
+        shiny::tags$button(
+          type = "button",
+          class = "btn btn-default",
+          onclick = sprintf(
+            "Shiny.setInputValue('%s', Math.random());",
+            ns(id)
+          ),
+          shiny::icon("circle-question")
         )
       ),
       "Help",
@@ -1246,7 +1262,7 @@ summary_results_ui <- function(ns, batch_control) {
                         shiny::div(
                           class = "tooltip-bttn",
                           shiny::actionButton(
-                            ns("pstat_correct_help"),
+                            ns("pstat_correct_stat_help"),
                             NULL,
                             icon = shiny::icon("circle-question")
                           )
@@ -1278,7 +1294,7 @@ summary_results_ui <- function(ns, batch_control) {
                         shiny::div(
                           class = "tooltip-bttn",
                           shiny::actionButton(
-                            ns("pstat_unmatched_help"),
+                            ns("pstat_unmatched_stat_help"),
                             NULL,
                             icon = shiny::icon("circle-question")
                           )
@@ -1387,16 +1403,6 @@ summary_results_ui <- function(ns, batch_control) {
                 shiny::div(
                   class = "box-header-settings-help",
                   card_settings_popover(shiny::div(
-                    bslib::tooltip(
-                      shiny::selectInput(
-                        ns("stats_scatter_color_scale"),
-                        label = "Color Scale",
-                        choices = NULL
-                      ) |>
-                        shiny::tagAppendAttributes(class = "palette-select"),
-                      "Color palette",
-                      placement = "top"
-                    ),
                     shiny::selectInput(
                       ns("stats_scatter_groupby"),
                       label = "Color By",
@@ -1444,16 +1450,6 @@ summary_results_ui <- function(ns, batch_control) {
                 shiny::div(
                   class = "box-header-settings-help",
                   card_settings_popover(shiny::div(
-                    bslib::tooltip(
-                      shiny::selectInput(
-                        ns("stats_violin_color_scale"),
-                        label = "Color Scale",
-                        choices = NULL
-                      ) |>
-                        shiny::tagAppendAttributes(class = "palette-select"),
-                      "Color palette",
-                      placement = "top"
-                    ),
                     shiny::selectInput(
                       ns("stats_violin_groupby"),
                       label = "Group By",
@@ -1539,9 +1535,296 @@ summary_results_ui <- function(ns, batch_control) {
   )
 }
 
-# Binding results interface
+# Overview tab of the binding results interface: one protein with any of the
+# compounds declared with it, picked above the two Mass Shifts cards.
+# `selected` is an overview_selection() of `choices`.
+overview_results_panel <- function(
+  ns,
+  hits_summary,
+  choices,
+  selected,
+  sort_binding_switch
+) {
+  proteins <- choices$proteins
+  compounds <- if (is.na(selected$protein)) {
+    data.frame(compound = character(0), hit = logical(0))
+  } else {
+    choices$compounds[[selected$protein]]
+  }
+
+  # Spectrum labels and peak symbols get unreadable once many spectra are
+  # stacked, so they start off for large selections. The labels are the short
+  # sample IDs the interface starts with.
+  subset <- overview_subset(hits_summary, selected$protein, selected$compounds)
+  sample_ids <- unique(as.character(
+    if ("truncSample_ID" %in% names(subset)) {
+      subset$truncSample_ID
+    } else {
+      subset$`Sample ID`
+    }
+  ))
+  sample_ids <- sample_ids[!is.na(sample_ids)]
+  labels_show <- length(sample_ids) < 2 ||
+    (length(sample_ids) <= 8 && max(nchar(sample_ids)) <= 20)
+  symbols_show <- length(sample_ids) <= 20
+
+  help_button <- function(id) {
+    bslib::tooltip(
+      shiny::div(
+        class = "tooltip-bttn",
+        shiny::tags$button(
+          type = "button",
+          class = "btn btn-default",
+          onclick = sprintf(
+            "Shiny.setInputValue('%s', Math.random());",
+            ns(id)
+          ),
+          shiny::icon("circle-question")
+        )
+      ),
+      "Help",
+      placement = "top"
+    )
+  }
+
+  shift_card <- function(title, output_id) {
+    shiny::div(
+      class = "card-custom",
+      bslib::card(
+        bslib::card_header(
+          class = "bg-dark help-header",
+          title,
+          help_button("overview_mass_shifts_tooltip_bttn")
+        ),
+        shiny::div(
+          class = "kobs-val",
+          shinycssloaders::withSpinner(
+            shiny::uiOutput(ns(output_id)),
+            type = 1,
+            color = "#7777f9"
+          )
+        )
+      )
+    )
+  }
+
+  bslib::nav_panel(
+    title = "Overview",
+    shiny::div(
+      class = "conversion-result-wrapper",
+      shiny::div(
+        class = "conversion-samples-wrapper",
+        shiny::div(
+          class = "conversion-samples-control",
+          # Each picker sits above the card it fills
+          shiny::div(
+            class = "overview-pickers",
+            shiny::div(
+              class = "sample-cmp-prot-picker",
+              shinyWidgets::pickerInput(
+                ns("overview_protein_picker"),
+                "Select Protein",
+                choices = proteins$protein,
+                selected = selected$protein,
+                choicesOpt = list(
+                  subtext = overview_status_note(proteins$status)
+                ),
+                options = shinyWidgets::pickerOptions(
+                  liveSearch = TRUE,
+                  liveSearchPlaceholder = "Search proteins ..."
+                ),
+                width = "100%"
+              )
+            ),
+            shiny::div(
+              class = "sample-cmp-prot-picker",
+              shinyWidgets::pickerInput(
+                ns("overview_compound_picker"),
+                "Select Compounds",
+                choices = compounds$compound,
+                selected = selected$compounds,
+                multiple = TRUE,
+                choicesOpt = list(
+                  subtext = ifelse(compounds$hit, "", "No hits")
+                ),
+                options = overview_compound_picker_options(
+                  nrow(compounds) > 0
+                ),
+                width = "100%"
+              )
+            )
+          ),
+          shiny::div(
+            class = "conversion-samples-stats",
+            shift_card(
+              "Protein Mass Shifts",
+              "overview_protein_mass_shifts"
+            ),
+            shift_card(
+              "Compound Mass Shifts",
+              "overview_compound_mass_shifts"
+            )
+          )
+        ),
+        shiny::div(
+          class = "card-custom cmp-table",
+          bslib::card(
+            bslib::card_header(
+              class = "bg-dark help-header d-flex justify-content-between",
+              "Table View",
+              shiny::div(
+                class = "box-header-settings-help",
+                card_settings_popover(
+                  shiny::div(
+                    shinyWidgets::materialSwitch(
+                      ns("overview_table_view_binding_bar"),
+                      label = "Binding [%] Bar",
+                      value = TRUE,
+                      right = TRUE
+                    ),
+                    shinyWidgets::materialSwitch(
+                      ns("overview_table_view_tot_binding_bar"),
+                      label = "Tot. Binding [%] Bar",
+                      value = TRUE,
+                      right = TRUE
+                    ),
+                    style = "margin-right: 20px;"
+                  )
+                ),
+                table_dl_popover(ns, "overview_table_view"),
+                help_button("table_view_tooltip_bttn")
+              )
+            ),
+            shinycssloaders::withSpinner(
+              DT::DTOutput(ns("overview_table_view")),
+              type = 1,
+              color = "#7777f9"
+            ),
+            full_screen = TRUE
+          )
+        ),
+        shiny::div(
+          class = "card-custom",
+          bslib::card(
+            bslib::card_header(
+              class = "bg-dark help-header d-flex justify-content-between",
+              "Compound Distribution",
+              shiny::div(
+                class = "box-header-settings-help",
+                card_settings_popover(
+                  shiny::div(
+                    shiny::radioButtons(
+                      inputId = ns("overview_distribution_scale"),
+                      label = "Range",
+                      choices = c("Maximum", "100")
+                    ),
+                    shinyWidgets::materialSwitch(
+                      ns("overview_distribution_labels"),
+                      label = "Show Labels",
+                      value = TRUE,
+                      right = TRUE
+                    ),
+                    style = "margin-right: 20px;"
+                  )
+                ),
+                plot_dl_popover(ns, "overview_cmp_dist"),
+                help_button("cmp_distribution_tooltip_bttn")
+              )
+            ),
+            shinycssloaders::withSpinner(
+              shiny::uiOutput(ns("overview_distribution_ui")),
+              type = 1,
+              color = "#7777f9"
+            ),
+            full_screen = TRUE
+          )
+        ),
+        shiny::div(
+          class = "card-custom",
+          bslib::card(
+            bslib::card_header(
+              class = "bg-dark help-header d-flex justify-content-between",
+              "Annotated Spectrum",
+              shiny::div(
+                class = "box-header-settings-help",
+                card_settings_popover(
+                  shiny::div(
+                    shiny::div(
+                      class = "spectrum-radio-button",
+                      shinyWidgets::radioGroupButtons(
+                        ns("overview_spectrum_kind"),
+                        choices = c("Cubic", "Planar")
+                      )
+                    ),
+                    sort_binding_switch("overview_spectrum_sort_binding"),
+                    shinyWidgets::materialSwitch(
+                      ns("overview_spectrum_labels"),
+                      label = "Show Labels",
+                      value = labels_show,
+                      right = TRUE
+                    ),
+                    shinyWidgets::materialSwitch(
+                      ns("overview_spectrum_symbols"),
+                      label = "Show Symbols",
+                      value = symbols_show,
+                      right = TRUE
+                    ),
+                    shinyWidgets::materialSwitch(
+                      ns("overview_spectrum_unmatched"),
+                      label = "Show Unmatched",
+                      value = FALSE,
+                      right = TRUE
+                    ),
+                    shinyWidgets::materialSwitch(
+                      ns("overview_spectrum_legend"),
+                      label = "Show Legend",
+                      value = TRUE,
+                      right = TRUE
+                    ),
+                    style = "margin-right: 20px;"
+                  )
+                ),
+                plot_dl_popover(ns, "overview_spectrum"),
+                help_button("annotated_spectrum_tooltip_bttn")
+              )
+            ),
+            shiny::uiOutput(ns("overview_spectrum_container")),
+            full_screen = TRUE
+          )
+        )
+      )
+    ),
+    shiny::tags$script(popover_autoclose)
+  )
+}
+
+# Options of the Overview compound picker; without any compound declared for
+# the protein there is nothing to pick
 #' @export
-binding_results_ui <- function(ns, hits_summary, show_sort_binding = TRUE) {
+overview_compound_picker_options <- function(has_compounds = TRUE) {
+  shinyWidgets::pickerOptions(
+    actionsBox = TRUE,
+    liveSearch = TRUE,
+    liveSearchPlaceholder = "Search compounds ...",
+    selectedTextFormat = "count > 2",
+    countSelectedText = "{0} of {1} compounds",
+    noneSelectedText = if (has_compounds) {
+      "No compound selected"
+    } else {
+      "No compounds declared"
+    }
+  )
+}
+
+# Binding results interface. `overview` is the overview_selection() the
+# Overview tab opens with.
+#' @export
+binding_results_ui <- function(
+  ns,
+  hits_summary,
+  show_sort_binding = TRUE,
+  overview = NULL
+) {
   # The switch only has something to undo while the spectra are grouped by
   # concentration, so it is left out entirely when there is no concentration
   # to group by.
@@ -1557,8 +1840,20 @@ binding_results_ui <- function(ns, hits_summary, show_sort_binding = TRUE) {
     )
   }
 
+  choices <- overview_choices(hits_summary)
+  if (is.null(overview)) {
+    overview <- overview_selection(choices)
+  }
+
   bslib::navset_card_tab(
     id = ns("tabs"),
+    overview_results_panel(
+      ns,
+      hits_summary,
+      choices,
+      overview,
+      sort_binding_switch
+    ),
     bslib::nav_panel(
       title = "Sample View",
       shiny::div(
@@ -1714,7 +2009,7 @@ binding_results_ui <- function(ns, hits_summary, show_sort_binding = TRUE) {
                         class = "btn btn-default",
                         onclick = sprintf(
                           "Shiny.setInputValue('%s', Math.random());",
-                          ns("mass_spectra_tooltip_bttn")
+                          ns("table_view_tooltip_bttn")
                         ),
                         shiny::icon("circle-question")
                       )
@@ -1751,7 +2046,7 @@ binding_results_ui <- function(ns, hits_summary, show_sort_binding = TRUE) {
                         class = "btn btn-default",
                         onclick = sprintf(
                           "Shiny.setInputValue('%s', Math.random());",
-                          ns("mass_spectra_tooltip_bttn")
+                          ns("cmp_distribution_tooltip_bttn")
                         ),
                         shiny::icon("circle-question")
                       )
@@ -1811,7 +2106,7 @@ binding_results_ui <- function(ns, hits_summary, show_sort_binding = TRUE) {
                         class = "btn btn-default",
                         onclick = sprintf(
                           "Shiny.setInputValue('%s', Math.random());",
-                          ns("mass_spectra_tooltip_bttn")
+                          ns("annotated_spectrum_tooltip_bttn")
                         ),
                         shiny::icon("circle-question")
                       )
@@ -1829,638 +2124,6 @@ binding_results_ui <- function(ns, hits_summary, show_sort_binding = TRUE) {
                 type = 1,
                 color = "#7777f9"
               ),
-              full_screen = TRUE
-            )
-          )
-        )
-      ),
-      shiny::tags$script(
-        popover_autoclose
-      )
-    ),
-    bslib::nav_panel(
-      title = "Compound View",
-      shiny::div(
-        class = "conversion-result-wrapper",
-        shiny::div(
-          class = "conversion-samples-wrapper",
-          shiny::div(
-            class = "conversion-samples-control",
-            shiny::div(
-              class = "sample-cmp-prot-picker",
-              shinyWidgets::pickerInput(
-                ns("conversion_compound_picker"),
-                "Select Compound",
-                choices = {
-                  choices_list <- list()
-                  cmp_col <- as.character(hits_summary$`Cmp Name`)
-                  prot_col <- as.character(hits_summary$`Protein`)
-                  no_cmp <- is.na(cmp_col) | !nzchar(trimws(cmp_col))
-                  no_prot <- is.na(prot_col) | !nzchar(trimws(prot_col))
-
-                  prot_names <- unique(prot_col[!no_prot])
-                  for (prot in prot_names) {
-                    prot_cmps <- unique(cmp_col[
-                      !no_cmp & !no_prot & prot_col == prot
-                    ])
-                    if (length(prot_cmps)) {
-                      choices_list[[paste0("Protein: ", prot)]] <-
-                        stats::setNames(prot_cmps, prot_cmps)
-                    }
-                  }
-                  choices_list
-                },
-                options = shinyWidgets::pickerOptions(
-                  liveSearch = TRUE,
-                  liveSearchPlaceholder = "Search compounds ..."
-                )
-              )
-            ),
-            shiny::div(
-              class = "conversion-samples-stats",
-              shiny::div(
-                class = "card-custom",
-                bslib::card(
-                  bslib::card_header(
-                    class = "bg-dark help-header",
-                    "Mass Shifts",
-                    bslib::tooltip(
-                      shiny::div(
-                        class = "tooltip-bttn",
-                        shiny::tags$button(
-                          type = "button",
-                          class = "btn btn-default",
-                          onclick = sprintf(
-                            "Shiny.setInputValue('%s', Math.random());",
-                            ns("conversion_samples_protein_tooltip_bttn")
-                          ),
-                          shiny::icon("circle-question")
-                        )
-                      ),
-                      "Help",
-                      placement = "top"
-                    )
-                  ),
-                  shiny::div(
-                    class = "kobs-val",
-                    shinycssloaders::withSpinner(
-                      shiny::uiOutput(ns(
-                        "compounds_selected_compound"
-                      )),
-                      type = 1,
-                      color = "#7777f9"
-                    )
-                  )
-                )
-              ),
-              shiny::div(
-                class = "card-custom",
-                bslib::card(
-                  bslib::card_header(
-                    class = "bg-dark help-header",
-                    "Tot. Binding [%]",
-                    bslib::tooltip(
-                      shiny::div(
-                        class = "tooltip-bttn",
-                        shiny::tags$button(
-                          type = "button",
-                          class = "btn btn-default",
-                          onclick = sprintf(
-                            "Shiny.setInputValue('%s', Math.random());",
-                            ns("total_pct_bind_tooltip_bttn")
-                          ),
-                          shiny::icon("circle-question")
-                        )
-                      ),
-                      "Help",
-                      placement = "top"
-                    )
-                  ),
-                  shiny::div(
-                    class = "kobs-val",
-                    shinycssloaders::withSpinner(
-                      shiny::uiOutput(ns(
-                        "compounds_total_pct_binding"
-                      )),
-                      type = 1,
-                      color = "#7777f9"
-                    )
-                  )
-                )
-              )
-            )
-          ),
-          shiny::div(
-            class = "card-custom cmp-table",
-            id = "upper-section",
-            bslib::card(
-              bslib::card_header(
-                class = "bg-dark help-header d-flex justify-content-between",
-                "Table View",
-                shiny::div(
-                  class = "box-header-settings-help",
-                  card_settings_popover(
-                    shiny::div(
-                      shinyWidgets::materialSwitch(
-                        ns("compounds_table_view_binding_bar"),
-                        label = "Binding [%] Bar",
-                        value = TRUE,
-                        right = TRUE
-                      ),
-                      shinyWidgets::materialSwitch(
-                        ns("compounds_table_view_tot_binding_bar"),
-                        label = "Tot. Binding [%] Bar",
-                        value = TRUE,
-                        right = TRUE
-                      ),
-                      style = "margin-right: 20px;"
-                    )
-                  ),
-                  table_dl_popover(ns, "compounds_table_view"),
-                  bslib::tooltip(
-                    shiny::div(
-                      class = "tooltip-bttn",
-                      shiny::tags$button(
-                        type = "button",
-                        class = "btn btn-default",
-                        onclick = sprintf(
-                          "Shiny.setInputValue('%s', Math.random());",
-                          ns("mass_spectra_tooltip_bttn")
-                        ),
-                        shiny::icon("circle-question")
-                      )
-                    ),
-                    "Help",
-                    placement = "top"
-                  )
-                )
-              ),
-              shinycssloaders::withSpinner(
-                DT::DTOutput(
-                  ns("compounds_table_view")
-                ),
-                type = 1,
-                color = "#7777f9"
-              ),
-              full_screen = TRUE
-            )
-          ),
-          shiny::div(
-            class = "card-custom",
-            bslib::card(
-              bslib::card_header(
-                class = "bg-dark help-header d-flex justify-content-between",
-                "Compound Distribution",
-                shiny::div(
-                  class = "box-header-settings-help",
-                  card_settings_popover(
-                    shiny::div(
-                      shiny::radioButtons(
-                        inputId = ns("cmp_distribution_scale"),
-                        label = "Range",
-                        choices = c(
-                          "Maximum",
-                          "100"
-                        )
-                      ),
-                      shinyWidgets::materialSwitch(
-                        ns("cmp_distribution_labels"),
-                        label = "Show Labels",
-                        value = TRUE,
-                        right = TRUE
-                      ),
-                      style = "margin-right: 20px;"
-                    )
-                  ),
-                  plot_dl_popover(ns, "compounds_cmp_dist"),
-                  bslib::tooltip(
-                    shiny::div(
-                      class = "tooltip-bttn",
-                      shiny::tags$button(
-                        type = "button",
-                        class = "btn btn-default",
-                        onclick = sprintf(
-                          "Shiny.setInputValue('%s', Math.random());",
-                          ns("mass_spectra_tooltip_bttn")
-                        ),
-                        shiny::icon("circle-question")
-                      )
-                    ),
-                    "Help",
-                    placement = "top"
-                  )
-                )
-              ),
-              shiny::uiOutput(ns("compounds_compound_distribution_ui")),
-              full_screen = TRUE
-            )
-          ),
-          shiny::div(
-            class = "card-custom",
-            bslib::card(
-              bslib::card_header(
-                class = "bg-dark help-header d-flex justify-content-between",
-                "Annotated Spectrum",
-                shiny::div(
-                  class = "box-header-settings-help",
-                  card_settings_popover(
-                    shiny::div(
-                      shiny::div(
-                        class = "spectrum-radio-button",
-                        shinyWidgets::radioGroupButtons(
-                          ns("compounds_spectrum_kind"),
-                          choices = c("Cubic", "Planar")
-                        )
-                      ),
-                      sort_binding_switch("compounds_spectrum_sort_binding"),
-                      shinyWidgets::materialSwitch(
-                        ns("compounds_spectrum_labels"),
-                        label = "Show Labels",
-                        value = local({
-                          cmp <- unique(hits_summary$`Cmp Name`)[1]
-                          tbl <- hits_summary[hits_summary$`Cmp Name` == cmp, ]
-                          if (is.na(cmp) || nrow(tbl) < 2) {
-                            return(TRUE)
-                          }
-                          ids <- tbl$`Sample ID`
-                          ids <- ids[!is.na(ids)]
-                          length(unique(ids)) <= 8 &
-                            max(nchar(as.character(ids))) <= 20
-                        }),
-                        right = TRUE
-                      ),
-                      shinyWidgets::materialSwitch(
-                        ns("compounds_spectrum_symbols"),
-                        label = "Show Symbols",
-                        # Peak markers get unreadable once many spectra are
-                        # stacked, so start them off for large selections.
-                        value = local({
-                          cmp <- unique(hits_summary$`Cmp Name`)[1]
-                          if (is.na(cmp)) {
-                            return(TRUE)
-                          }
-                          ids <- hits_summary$`Sample ID`[
-                            hits_summary$`Cmp Name` == cmp
-                          ]
-                          length(unique(ids[!is.na(ids)])) <= 20
-                        }),
-                        right = TRUE
-                      ),
-                      shinyWidgets::materialSwitch(
-                        ns("compounds_spectrum_unmatched"),
-                        label = "Show Unmatched",
-                        value = FALSE,
-                        right = TRUE
-                      ),
-                      shinyWidgets::materialSwitch(
-                        ns("compounds_spectrum_legend"),
-                        label = "Show Legend",
-                        value = TRUE,
-                        right = TRUE
-                      ),
-                      style = "margin-right: 20px;"
-                    )
-                  ),
-                  plot_dl_popover(ns, "compounds_spectrum"),
-                  bslib::tooltip(
-                    shiny::div(
-                      class = "tooltip-bttn",
-                      shiny::tags$button(
-                        type = "button",
-                        class = "btn btn-default",
-                        onclick = sprintf(
-                          "Shiny.setInputValue('%s', Math.random());",
-                          ns("mass_spectra_tooltip_bttn")
-                        ),
-                        shiny::icon("circle-question")
-                      )
-                    ),
-                    "Help",
-                    placement = "top"
-                  )
-                )
-              ),
-              shiny::uiOutput(ns("cmp_annotated_spectrum_container")),
-              full_screen = TRUE
-            )
-          )
-        )
-      ),
-      shiny::tags$script(
-        popover_autoclose
-      )
-    ),
-    bslib::nav_panel(
-      title = "Protein View",
-      shiny::div(
-        class = "conversion-result-wrapper",
-        shiny::div(
-          class = "conversion-samples-wrapper",
-          shiny::div(
-            class = "conversion-samples-control",
-            shiny::div(
-              class = "sample-cmp-prot-picker",
-              shinyWidgets::pickerInput(
-                ns("conversion_protein_picker"),
-                "Select Protein",
-                choices = unique(
-                  hits_summary$`Protein`
-                )[
-                  !is.na(unique(hits_summary$`Protein`))
-                ],
-                options = shinyWidgets::pickerOptions(
-                  liveSearch = TRUE,
-                  liveSearchPlaceholder = "Search proteins ..."
-                )
-              )
-            ),
-            shiny::div(
-              class = "conversion-samples-stats",
-              shiny::div(
-                class = "card-custom",
-                bslib::card(
-                  bslib::card_header(
-                    class = "bg-dark help-header",
-                    "Mass Shifts",
-                    bslib::tooltip(
-                      shiny::div(
-                        class = "tooltip-bttn",
-                        shiny::tags$button(
-                          type = "button",
-                          class = "btn btn-default",
-                          onclick = sprintf(
-                            "Shiny.setInputValue('%s', Math.random());",
-                            ns("conversion_samples_protein_tooltip_bttn")
-                          ),
-                          shiny::icon("circle-question")
-                        )
-                      ),
-                      "Help",
-                      placement = "top"
-                    )
-                  ),
-                  shiny::div(
-                    class = "kobs-val",
-                    shinycssloaders::withSpinner(
-                      shiny::uiOutput(ns(
-                        "proteins_selected_protein"
-                      )),
-                      type = 1,
-                      color = "#7777f9"
-                    )
-                  )
-                )
-              ),
-              shiny::div(
-                class = "card-custom",
-                bslib::card(
-                  bslib::card_header(
-                    class = "bg-dark help-header d-flex justify-content-between",
-                    "Tot. Binding [%]",
-                    shiny::div(
-                      class = "box-header-settings-help",
-                      card_settings_popover(
-                        shiny::div(
-                          shinyWidgets::pickerInput(
-                            ns("total_pct_prot_binding_select"),
-                            "Select Compound",
-                            choices = unique(hits_summary$`Cmp Name`[
-                              !is.na(hits_summary$`Cmp Name`)
-                            ]),
-                            options = shinyWidgets::pickerOptions(
-                              liveSearch = TRUE,
-                              liveSearchPlaceholder = "Search compounds ..."
-                            )
-                          ),
-                          style = "margin-right: 20px;"
-                        )
-                      ),
-                      bslib::tooltip(
-                        shiny::div(
-                          class = "tooltip-bttn",
-                          shiny::tags$button(
-                            type = "button",
-                            class = "btn btn-default",
-                            onclick = sprintf(
-                              "Shiny.setInputValue('%s', Math.random());",
-                              ns("total_pct_bind_tooltip_bttn")
-                            ),
-                            shiny::icon("circle-question")
-                          )
-                        ),
-                        "Help",
-                        placement = "top"
-                      )
-                    )
-                  ),
-                  shiny::div(
-                    class = "kobs-val",
-                    shinycssloaders::withSpinner(
-                      shiny::uiOutput(ns("total_pct_prot_binding")),
-                      type = 1,
-                      color = "#7777f9"
-                    )
-                  )
-                )
-              )
-            )
-          ),
-          shiny::div(
-            class = "card-custom cmp-table",
-            bslib::card(
-              bslib::card_header(
-                class = "bg-dark help-header d-flex justify-content-between",
-                "Table View",
-                shiny::div(
-                  class = "box-header-settings-help",
-                  card_settings_popover(
-                    shiny::div(
-                      shinyWidgets::materialSwitch(
-                        ns("proteins_table_view_binding_bar"),
-                        label = "Binding [%] Bar",
-                        value = TRUE,
-                        right = TRUE
-                      ),
-                      shinyWidgets::materialSwitch(
-                        ns("proteins_table_view_tot_binding_bar"),
-                        label = "Tot. Binding [%] Bar",
-                        value = TRUE,
-                        right = TRUE
-                      ),
-                      style = "margin-right: 20px;"
-                    )
-                  ),
-                  table_dl_popover(ns, "proteins_table_view"),
-                  bslib::tooltip(
-                    shiny::div(
-                      class = "tooltip-bttn",
-                      shiny::tags$button(
-                        type = "button",
-                        class = "btn btn-default",
-                        onclick = sprintf(
-                          "Shiny.setInputValue('%s', Math.random());",
-                          ns("mass_spectra_tooltip_bttn")
-                        ),
-                        shiny::icon("circle-question")
-                      )
-                    ),
-                    "Help",
-                    placement = "top"
-                  )
-                )
-              ),
-              shinycssloaders::withSpinner(
-                DT::DTOutput(
-                  ns("proteins_table_view")
-                ),
-                type = 1,
-                color = "#7777f9"
-              ),
-              full_screen = TRUE
-            )
-          ),
-          shiny::div(
-            class = "card-custom",
-            bslib::card(
-              bslib::card_header(
-                class = "bg-dark help-header d-flex justify-content-between",
-                "Compound Distribution",
-                shiny::div(
-                  class = "box-header-settings-help",
-                  card_settings_popover(
-                    shiny::div(
-                      shiny::radioButtons(
-                        inputId = ns("protein_distribution_scale"),
-                        label = "Range",
-                        choices = c(
-                          "Maximum",
-                          "100"
-                        )
-                      ),
-                      shinyWidgets::materialSwitch(
-                        ns("protein_distribution_labels"),
-                        label = "Show Labels",
-                        value = TRUE,
-                        right = TRUE
-                      ),
-                      style = "margin-right: 20px;"
-                    )
-                  ),
-                  plot_dl_popover(ns, "proteins_cmp_dist"),
-                  bslib::tooltip(
-                    shiny::div(
-                      class = "tooltip-bttn",
-                      shiny::tags$button(
-                        type = "button",
-                        class = "btn btn-default",
-                        onclick = sprintf(
-                          "Shiny.setInputValue('%s', Math.random());",
-                          ns("mass_spectra_tooltip_bttn")
-                        ),
-                        shiny::icon("circle-question")
-                      )
-                    ),
-                    "Help",
-                    placement = "top"
-                  )
-                )
-              ),
-              shinycssloaders::withSpinner(
-                shiny::uiOutput(ns(
-                  "proteins_present_compounds_ui"
-                )),
-                type = 1,
-                color = "#7777f9"
-              ),
-              full_screen = TRUE
-            )
-          ),
-          shiny::div(
-            class = "card-custom",
-            bslib::card(
-              bslib::card_header(
-                class = "bg-dark help-header d-flex justify-content-between",
-                "Annotated Spectrum",
-                shiny::div(
-                  class = "box-header-settings-help",
-                  card_settings_popover(
-                    shiny::div(
-                      shiny::div(
-                        class = "spectrum-radio-button",
-                        shinyWidgets::radioGroupButtons(
-                          ns("proteins_spectrum_kind"),
-                          choices = c("Cubic", "Planar")
-                        )
-                      ),
-                      sort_binding_switch("proteins_spectrum_sort_binding"),
-                      shinyWidgets::materialSwitch(
-                        ns("proteins_spectrum_labels"),
-                        label = "Show Labels",
-                        value = local({
-                          prot <- unique(hits_summary$`Protein`)[1]
-                          tbl <- hits_summary[hits_summary$`Protein` == prot, ]
-                          if (is.na(prot) || nrow(tbl) < 2) {
-                            return(TRUE)
-                          }
-                          ids <- tbl$`Sample ID`
-                          ids <- ids[!is.na(ids)]
-                          length(unique(ids)) <= 8 &
-                            max(nchar(as.character(ids))) <= 20
-                        }),
-                        right = TRUE
-                      ),
-                      shinyWidgets::materialSwitch(
-                        ns("proteins_spectrum_symbols"),
-                        label = "Show Symbols",
-                        # Peak markers get unreadable once many spectra are
-                        # stacked, so start them off for large selections.
-                        value = local({
-                          prot <- unique(hits_summary$`Protein`)[1]
-                          if (is.na(prot)) {
-                            return(TRUE)
-                          }
-                          ids <- hits_summary$`Sample ID`[
-                            hits_summary$`Protein` == prot
-                          ]
-                          length(unique(ids[!is.na(ids)])) <= 20
-                        }),
-                        right = TRUE
-                      ),
-                      shinyWidgets::materialSwitch(
-                        ns("proteins_spectrum_unmatched"),
-                        label = "Show Unmatched",
-                        value = FALSE,
-                        right = TRUE
-                      ),
-                      shinyWidgets::materialSwitch(
-                        ns("proteins_spectrum_legend"),
-                        label = "Show Legend",
-                        value = TRUE,
-                        right = TRUE
-                      ),
-                      style = "margin-right: 20px;"
-                    )
-                  ),
-                  plot_dl_popover(ns, "proteins_spectrum"),
-                  bslib::tooltip(
-                    shiny::div(
-                      class = "tooltip-bttn",
-                      shiny::tags$button(
-                        type = "button",
-                        class = "btn btn-default",
-                        onclick = sprintf(
-                          "Shiny.setInputValue('%s', Math.random());",
-                          ns("mass_spectra_tooltip_bttn")
-                        ),
-                        shiny::icon("circle-question")
-                      )
-                    ),
-                    "Help",
-                    placement = "top"
-                  )
-                )
-              ),
-              shiny::uiOutput(ns("annotated_spectrum_container")),
               full_screen = TRUE
             )
           )
@@ -2488,17 +2151,6 @@ binding_results_ui <- function(ns, hits_summary, show_sort_binding = TRUE) {
           )
         ),
         shiny::uiOutput(ns("color_variable_ui")),
-        bslib::tooltip(
-          shiny::selectInput(
-            ns("color_scale"),
-            label = NULL,
-            choices = NULL,
-            width = "120px"
-          ) |>
-            shiny::tagAppendAttributes(class = "palette-select"),
-          "Color palette",
-          placement = "top"
-        ),
         bslib::tooltip(
           shiny::div(
             class = "tooltip-bttn",
@@ -2557,12 +2209,6 @@ hits_results_ui <- function(ns, hits_summary, units) {
             "Compounds"
           }
         ),
-        shiny::selectInput(
-          ns("hits_color_scale"),
-          label = "Color Scale",
-          choices = NULL
-        ) |>
-          shiny::tagAppendAttributes(class = "palette-select"),
         shinyWidgets::pickerInput(
           ns("hits_tab_sample_select"),
           label = "Select Samples",
@@ -2641,7 +2287,22 @@ hits_results_ui <- function(ns, hits_summary, units) {
         ),
         shiny::div(
           class = "hits-table-export",
-          shiny::tags$label(class = "control-label", "Export Table"),
+          shiny::div(
+            class = "label-tooltip",
+            shiny::tags$label(class = "control-label", "Export Table"),
+            bslib::tooltip(
+              shiny::div(
+                class = "tooltip-bttn",
+                shiny::actionButton(
+                  ns("hits_tooltip_bttn"),
+                  label = NULL,
+                  icon = shiny::icon("circle-question")
+                )
+              ),
+              "Help",
+              placement = "top"
+            )
+          ),
           table_dl_buttons(ns, "hits_unified_tab")
         )
       ),

@@ -121,72 +121,9 @@ hits_col_full_names <- c(
   "Time [min]"       = "Time [min]"
 )
 
-# Sequential color scales
-#' @export
-sequential_scales <- list(
-  "YlOrRd",
-  "YlOrBr",
-  "YlGnBu",
-  "YlGn",
-  "RdPu",
-  "PuRd",
-  "PuBuGn",
-  "PuBu",
-  "OrRd",
-  "GnBu",
-  "BuPu",
-  "BuGn",
-  "Purples",
-  "Reds",
-  "Oranges",
-  "Greys",
-  "Greens",
-  "Blues"
-)
-
-# Qualitative color scales
-#' @export
-qualitative_scales <- list(
-  "Set1",
-  "Set2",
-  "Set3",
-  "Pastel1",
-  "Pastel2",
-  "Dark2",
-  "Accent"
-)
-
-# Gradient color scales
-#' @export
-gradient_scales <- list(
-  "Magma" = "magma",
-  "Inferno" = "inferno",
-  "Plasma" = "plasma",
-  "Viridis" = "viridis",
-  "Cividis" = "cividis",
-  "Rocket" = "rocket",
-  "Mako" = "mako",
-  "Turbo" = "turbo"
-)
-
 # Warning symbol
 #' @export
 warning_sym <- "\u26A0"
-
-# Custom symbols for plotly plots
-#' @export
-symbols <- c(
-  "circle",
-  "triangle-up",
-  "square",
-  "star-triangle-down",
-  "diamond",
-  "triangle-down",
-  "cross",
-  "x",
-  "hexagram",
-  "hourglass"
-)
 
 # JS renderer for bar charts in tables
 #' @export

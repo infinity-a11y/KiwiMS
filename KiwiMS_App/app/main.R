@@ -672,6 +672,20 @@ ui <- function(id) {
       });
     "
     )),
+    # Hover hints written into HTML strings (table cells, value cards) carry
+    # a title attribute. Marked with data-bs-toggle="tooltip" they get the same
+    # Bootstrap tooltip as every bslib::tooltip() instead of the browser's own.
+    # Delegated, so content rendered later is covered too.
+    shiny$tags$script(shiny$HTML(
+      "
+      document.addEventListener('DOMContentLoaded', function() {
+        new bootstrap.Tooltip(document.body, {
+          selector: '[data-bs-toggle=\"tooltip\"]',
+          container: 'body'
+        });
+      });
+    "
+    )),
     useWaiter(),
     waiterShowOnLoad(
       html = shiny$tags$div(
@@ -968,7 +982,7 @@ server <- function(id) {
                         class = "settings-table-label",
                         settings_label_tooltip(
                           "Keep UniDec output files",
-                          "Keeps *_rawdata.txt and *_rawdata_unidecfiles/ after analysis"
+                          "Keeps the UniDec working files of every sample (<sample>_rawdata.txt and the <sample>_rawdata_unidecfiles folder) in the output folder. Off, the results are kept in the analysis database only."
                         )
                       ),
                       shiny$tags$td(
@@ -1145,7 +1159,7 @@ server <- function(id) {
                         class = "settings-table-label",
                         settings_label_tooltip(
                           "Elution start time [min]",
-                          "Leave blank to read from the first scan"
+                          "Default start of the retention time window that is summed for deconvolution. Leave blank to read from the first scan."
                         )
                       ),
                       shiny$tags$td(
@@ -1169,7 +1183,7 @@ server <- function(id) {
                         class = "settings-table-label",
                         settings_label_tooltip(
                           "Elution end time [min]",
-                          "Leave blank to read to the last scan"
+                          "Default end of the retention time window that is summed for deconvolution. Leave blank to read to the last scan."
                         )
                       ),
                       shiny$tags$td(

@@ -100,10 +100,12 @@ Files are named by folder: `baseline/proteins_baseline` is
 - **kinact/KI** values are in M⁻¹s⁻¹: set the Unit View to M and s to read them
   directly (334.1 M⁻¹s⁻¹ = 0.0200 µM⁻¹min⁻¹).
 - **Total % binding** comes as two numbers:
-  - **Card:** what the Tot. Binding card of the Compound and Protein View
-    shows. It is per compound and averages the compound's hit rows, so a
-    sample counts once per proteoform and mass shift carrying the compound,
-    and samples without a hit of it are left out.
+  - **Card:** what the Tot. Binding card of the former Compound and Protein
+    View showed. It is per compound and averages the compound's hit rows, so
+    a sample counts once per proteoform and mass shift carrying the compound,
+    and samples without a hit of it are left out. The Overview tab that
+    replaced both views has no such card; the number is kept to compare
+    tests (`kit_card()`).
   - **All samples:** the mean over all 122 samples, one value each, 0 % for
     samples without a hit. The app doesn't show it; it is here to compare
     tests.

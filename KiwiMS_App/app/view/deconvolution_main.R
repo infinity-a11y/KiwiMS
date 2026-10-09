@@ -20,7 +20,8 @@ box::use(
     radioGroupButtons,
     updateProgressBar,
     pickerInput,
-    pickerOptions
+    pickerOptions,
+    updatePickerInput
   ],
   clipr[write_clip],
   utils[capture.output, head, tail],
@@ -31,7 +32,13 @@ box::use(
   app /
     logic /
     deconvolution_functions[
+      add_metrics_table,
       plate_heatmap,
+      plate_highlight,
+      plate_layout,
+      plate_sample_at,
+      read_decon_metrics,
+      read_decon_peak_counts,
       spectrum_plot,
       decon_progress_count,
       decon_is_complete,
@@ -39,14 +46,17 @@ box::use(
       decon_failure_detail,
       decon_planned_samples,
       decon_sample_cap_message,
+      decon_samples_with_state,
       process_plot_data_db,
       cleanup_wal
     ],
   app / logic / helper_functions[fill_empty, get_kiwims_version],
-  app / logic / plot_download[setup_plot_dl, setup_table_dl],
+  app / logic / help_modal[bind_help],
+  app / logic / help_pages[deconvolution_help],
+  app / logic / plot_download[setup_plot_dl],
   app / logic / logging[write_log, get_log, get_session_prefix],
   app / logic / user_settings[update_user_setting, read_user_settings],
-  app / logic / conversion_functions[read_decon_metadata, read_decon_peaks_max],
+  app / logic / conversion_functions[read_decon_metadata, multiple_spectra],
   app /
     logic /
     deconvolution_ui[
@@ -136,7 +146,12 @@ server <- function(
       results_last_check = 0,
       count = 0,
       rep_count = 0,
-      rslt_df = data.frame(),
+      # Well Plate: tile layout of the run (plate_layout()) and the detected
+      # peak count of every sample done so far
+      plate = NULL,
+      peak_counts = data.frame(sample = character(0), n_peaks = integer(0)),
+      # Samples drawn by "Show All" once the run is finished
+      show_all_samples = character(0),
       failed_samples = character(0),
       logs = "",
       deconv_report_status = NULL,
@@ -161,6 +176,12 @@ server <- function(
     decon_rep_process_data <- shiny$reactiveVal(NULL)
     result_files_sel <- shiny$reactiveVal(NULL)
     target_selector_sel <- shiny$reactiveVal()
+
+    # Picker value of the "Show All" entry; no sample name looks like this
+    show_all_value <- "__show_all__"
+    is_show_all <- function(sel = result_files_sel()) {
+      identical(sel, show_all_value)
+    }
 
     shiny$observe({
       if (!is.null(input$result_picker)) {
@@ -878,22 +899,80 @@ server <- function(
       count
     }
 
-    #### current_failed_wells ----
-    # data.frame(sample, well_id) for samples currently on record as failed --
-    # plate_heatmap()'s failed_wells argument, and reused by the heatmap click
-    # and selection-highlight observers to resolve a failed well back to its
-    # sample.
-    current_failed_wells <- function() {
-      well_id <- reactVars$wells[match(
-        reactVars$failed_samples,
-        reactVars$sample_names
-      )]
-      keep <- !is.na(well_id)
-      data.frame(
-        sample = reactVars$failed_samples[keep],
-        well_id = well_id[keep],
-        stringsAsFactors = FALSE
+    #### render_result_picker ----
+    # Re-rendered only when its choices change: a re-render every poll would
+    # close the dropdown under a user who is just picking a sample.
+    picker_state <- new.env(parent = emptyenv())
+    render_result_picker <- function(choices, selected) {
+      if (identical(picker_state$choices, choices)) {
+        return(invisible(NULL))
+      }
+      picker_state$choices <- choices
+
+      output$result_picker_ui <- shiny$renderUI(
+        shiny$div(
+          class = "result-picker",
+          pickerInput(
+            ns("result_picker"),
+            "Select Sample",
+            choices = choices,
+            selected = selected,
+            options = pickerOptions(
+              liveSearch = TRUE,
+              liveSearchPlaceholder = "Search samples ..."
+            )
+          )
+        )
       )
+      session$sendCustomMessage("selectize-init", "result_picker")
+    }
+
+    #### refresh_results ----
+    # Reads which samples of the run are done or failed, and the number of
+    # peaks detected in each done one, for the Well Plate and the sample
+    # picker. Picker values are sample names in every mode. With `final` (the
+    # run is over) and more than one sample deconvoluted, "Show All" heads the
+    # picker and is selected.
+    refresh_results <- function(final = FALSE) {
+      shiny$isolate({
+        db_path <- file.path(
+          analysis_dest(),
+          paste0(trimws(input$analysis_name), ".db")
+        )
+        samples <- reactVars$sample_names
+        done_db <- decon_samples_with_state(db_path, samples, "done")
+        done <- samples[samples %in% done_db]
+        failed <- samples[
+          samples %in% reactVars$failed_samples & !samples %in% done
+        ]
+
+        counts <- read_decon_peak_counts(db_path, done)
+        if (!identical(counts, reactVars$peak_counts)) {
+          reactVars$peak_counts <- counts
+        }
+
+        choices <- stats::setNames(
+          c(done, failed),
+          c(done, sprintf("%s (failed)", failed))
+        )
+        show_all <- final && length(done) > 1
+        if (show_all) {
+          reactVars$show_all_samples <- done
+          choices <- c(stats::setNames(show_all_value, "Show All"), choices)
+        }
+        if (length(choices) == 0) {
+          return(invisible(NULL))
+        }
+
+        sel <- result_files_sel()
+        if (show_all) {
+          sel <- show_all_value
+        } else if (is.null(sel) || !sel %in% choices) {
+          sel <- unname(choices[1])
+        }
+        result_files_sel(sel)
+        render_result_picker(choices, sel)
+      })
     }
 
     #### reset_progress ----
@@ -906,8 +985,12 @@ server <- function(
       reactVars$initial_file_count <- 0
       reactVars$count <- 0
       reactVars$sample_names <- NULL
-      reactVars$wells <- NULL
-      reactVars$rslt_df <- data.frame()
+      reactVars$plate <- NULL
+      reactVars$peak_counts <- data.frame(
+        sample = character(0),
+        n_peaks = integer(0)
+      )
+      reactVars$show_all_samples <- character(0)
       reactVars$failed_samples <- character(0)
       reactVars$last_check <- Sys.time()
       reactVars$results_last_check <- Sys.time()
@@ -915,15 +998,12 @@ server <- function(
 
       decon_rep_process_data(NULL)
 
-      output$deconvolution_data <- DT::renderDataTable(
-        DT::datatable(data.frame(), options = list(dom = "", paging = FALSE)),
-        server = FALSE
-      )
       output$result_picker_ui <- shiny$renderUI(NULL)
+      picker_state$choices <- NULL
+      runjs("document.body.classList.remove('decon-show-all');")
       output$spectrum_container <- shiny$renderUI(
         withWaiter(plotlyOutput(ns("spectrum"), height = "100%"))
       )
-      output$metrics_failure_msg <- shiny$renderUI(NULL)
       result_files_sel(NULL)
 
       # Immediately clear the progress bar title so a stale title from a prior
@@ -1443,18 +1523,6 @@ server <- function(
 
           sample_names <- run_config[["Sample"]]
           raw_dirs <- raw_dirs[ms_sample_in(raw_dirs, sample_names)]
-
-          # Prepare heatmap variables — restrict to samples present in folder
-          present_in_folder <- ms_sample_in(sample_names, raw_dirs)
-          reactVars$sample_names <- ms_sample_base(sample_names[present_in_folder])
-          reactVars$sample_names <- reactVars$sample_names[nzchar(trimws(
-            reactVars$sample_names
-          ))]
-          reactVars$wells <- gsub(
-            ",",
-            "",
-            sub("^.*:", "", run_config[["Well"]][present_in_folder])
-          )
         } else if (is_ms_input(dir_path)) {
           write_log("Single target deconvolution mode")
         } else {
@@ -1542,6 +1610,23 @@ server <- function(
         }
         reactVars$stale_unidec_output <- character(0)
       }
+
+      # Well Plate: the queued samples, on the config's wells when it gives
+      # every one of them a well, in queue order otherwise (plate_layout())
+      reactVars$sample_names <- ms_sample_base(basename(raw_dirs))
+      run_wells <- if (
+        run_use_config &&
+          length(run_config) &&
+          all(c("Sample", "Well") %in% names(run_config))
+      ) {
+        # "Plate:A1" -> "A1"
+        cfg_wells <- gsub(",", "", sub("^.*:", "", run_config[["Well"]]))
+        cfg_wells[match(
+          reactVars$sample_names,
+          ms_sample_base(run_config[["Sample"]])
+        )]
+      }
+      reactVars$plate <- plate_layout(reactVars$sample_names, run_wells)
 
       # Render disabled results picker
       output$result_picker_ui <- shiny$renderUI(
@@ -1862,7 +1947,7 @@ server <- function(
         })
       })
 
-      #### Results tracking observer for heatmap ----
+      #### Results tracking observer for picker and Well Plate ----
       if (run_selected == "folder") {
         reactVars$results_observer <- shiny$observe({
           shiny$invalidateLater(10000)
@@ -1880,197 +1965,7 @@ server <- function(
             ) >=
               10
           ) {
-            if (
-              run_use_config &&
-                length(run_config) &&
-                "Well" %in% names(run_config) &&
-                any(
-                  !is.na(run_config[["Well"]]) &
-                    nzchar(trimws(as.character(run_config[["Well"]])))
-                ) &&
-                nrow(reactVars$rslt_df) < reactVars$completed_files
-            ) {
-              shiny$req(reactVars$sample_names, reactVars$wells)
-
-              db_pth <- file.path(
-                analysis_dest(),
-                paste0(trimws(input$analysis_name), ".db")
-              )
-              done_ids <- tryCatch(
-                {
-                  con_chk <- dbConnect(SQLite(), db_pth, flags = SQLITE_RO)
-                  on.exit(dbDisconnect(con_chk), add = TRUE)
-                  if (dbExistsTable(con_chk, "status")) {
-                    dbGetQuery(
-                      con_chk,
-                      "SELECT sample FROM status WHERE state='done'"
-                    )$sample
-                  } else {
-                    character(0)
-                  }
-                },
-                error = function(e) character(0)
-              )
-              done_in_run <- intersect(done_ids, reactVars$sample_names)
-              results <- file.path(
-                analysis_dest(),
-                paste0(done_in_run, "_rawdata_unidecfiles")
-              )
-
-              if (length(done_in_run)) {
-                peaks_from_db <- tryCatch(
-                  read_decon_peaks_max(db_pth, done_in_run),
-                  error = function(e) {
-                    data.frame(sample = character(), max_mass = numeric())
-                  }
-                )
-                if (nrow(peaks_from_db) > 0) {
-                  peaks_from_db$well_id <- reactVars$wells[
-                    match(peaks_from_db$sample, reactVars$sample_names)
-                  ]
-                  peaks_from_db <- peaks_from_db[
-                    !is.na(peaks_from_db$well_id) &
-                      !is.na(peaks_from_db$max_mass),
-                  ]
-                  if (nrow(peaks_from_db) > 0) {
-                    reactVars$rslt_df <- data.frame(
-                      sample = peaks_from_db$sample,
-                      well_id = peaks_from_db$well_id,
-                      value = peaks_from_db$max_mass
-                    )
-                  }
-                }
-
-                ##### Render result picker with updated choices ----
-                choices_ok <- gsub("_rawdata_unidecfiles", "", basename(results))
-
-                failed_in_run <- reactVars$failed_samples[
-                  reactVars$failed_samples %in% reactVars$sample_names
-                ]
-                failed_in_run <- failed_in_run[nzchar(failed_in_run)]
-
-                choices_failed <- character(0)
-                if (length(failed_in_run)) {
-                  choices_failed <- failed_in_run
-                }
-
-                named_choices <- character(0)
-                if (length(choices_ok) > 0) {
-                  named_choices <- c(named_choices, choices_ok)
-                  names(named_choices)[seq_along(choices_ok)] <- choices_ok
-                }
-                if (length(choices_failed) > 0) {
-                  prev_len <- length(named_choices)
-                  named_choices <- c(named_choices, choices_failed)
-                  names(named_choices)[prev_len + seq_along(choices_failed)] <-
-                    paste0(failed_in_run, " (failed)")
-                }
-                if (length(named_choices) > 0) {
-                  cur_sel <- result_files_sel()
-                  if (
-                    is.null(cur_sel) ||
-                      !nzchar(cur_sel) ||
-                      !(cur_sel %in% named_choices)
-                  ) {
-                    result_files_sel(unname(named_choices[1]))
-                  }
-
-                  output$result_picker_ui <- shiny$renderUI({
-                    shiny$div(
-                      class = "result-picker",
-                      pickerInput(
-                        ns("result_picker"),
-                        "Select Sample",
-                        choices = named_choices,
-                        selected = result_files_sel(),
-                        options = pickerOptions(
-                          liveSearch = TRUE,
-                          liveSearchPlaceholder = "Search samples ..."
-                        )
-                      )
-                    )
-                  })
-                  session$sendCustomMessage("selectize-init", "result_picker")
-                }
-              }
-            } else {
-              selected_files <- run_target_files()
-              sel_base <- ms_sample_base(basename(selected_files))
-              db <- file.path(
-                analysis_dest(),
-                paste0(trimws(input$analysis_name), ".db")
-              )
-              done_samples <- tryCatch(
-                {
-                  con_chk <- dbConnect(SQLite(), db, flags = SQLITE_RO)
-                  on.exit(dbDisconnect(con_chk), add = TRUE)
-                  if (dbExistsTable(con_chk, "status")) {
-                    dbGetQuery(
-                      con_chk,
-                      "SELECT sample FROM status WHERE state='done'"
-                    )$sample
-                  } else {
-                    character(0)
-                  }
-                },
-                error = function(e) character(0)
-              )
-              finished_files <- sel_base %in% done_samples
-              failed_mask <- sel_base %in%
-                reactVars$failed_samples &
-                !finished_files
-
-              choices_ok <- basename(selected_files)[finished_files]
-              choices_failed <- basename(selected_files)[failed_mask]
-              named_choices <- character(0)
-              if (length(choices_ok) > 0) {
-                named_choices <- c(named_choices, choices_ok)
-                names(named_choices)[seq_along(choices_ok)] <- choices_ok
-              }
-              if (length(choices_failed) > 0) {
-                prev_len <- length(named_choices)
-                named_choices <- c(named_choices, choices_failed)
-                names(named_choices)[prev_len + seq_along(choices_failed)] <-
-                  paste0(
-                    ms_sample_base(choices_failed),
-                    " (failed)"
-                  )
-              }
-
-              if (length(named_choices) > 0) {
-                cur_sel <- result_files_sel()
-                sel_default <- if (
-                  !is.null(cur_sel) &&
-                    nzchar(cur_sel) &&
-                    cur_sel %in% named_choices
-                ) {
-                  cur_sel
-                } else {
-                  unname(named_choices[1])
-                }
-
-                output$result_picker_ui <- shiny$renderUI({
-                  shiny$div(
-                    class = "result-picker",
-                    pickerInput(
-                      ns("result_picker"),
-                      "Select Sample",
-                      choices = named_choices,
-                      selected = sel_default,
-                      options = pickerOptions(
-                        liveSearch = TRUE,
-                        liveSearchPlaceholder = "Search samples ..."
-                      )
-                    )
-                  )
-                })
-                session$sendCustomMessage("selectize-init", "result_picker")
-              }
-
-              count <- sum(finished_files)
-              message("Found files: ", count)
-              count
-            }
+            refresh_results()
 
             reactVars$results_last_check <- Sys.time()
           }
@@ -2187,194 +2082,8 @@ server <- function(
               # Set reactive status variable "is_running" to FALSE
               reactVars$is_running <- FALSE
 
-              # final result check for heatmap update
-              if (
-                run_selected == "folder" &&
-                  run_use_config &&
-                  length(run_config) &&
-                  "Well" %in% names(run_config) &&
-                  any(
-                    !is.na(run_config[["Well"]]) &
-                      nzchar(trimws(as.character(run_config[["Well"]])))
-                  )
-              ) {
-                new_sample_names <- setdiff(
-                  reactVars$sample_names,
-                  reactVars$rslt_df$sample
-                )
-
-                if (length(new_sample_names)) {
-                  db_path_hm <- file.path(
-                    analysis_dest(),
-                    paste0(trimws(input$analysis_name), ".db")
-                  )
-                  peaks_max <- tryCatch(
-                    read_decon_peaks_max(db_path_hm, new_sample_names),
-                    error = function(e) {
-                      data.frame(sample = character(), max_mass = numeric())
-                    }
-                  )
-
-                  well <- character()
-                  value <- numeric()
-                  sample_names <- new_sample_names
-                  for (i in seq_along(sample_names)) {
-                    well[i] <- reactVars$wells[which(
-                      reactVars$sample_names == sample_names[i]
-                    )]
-                    row <- peaks_max[peaks_max$sample == sample_names[i], ]
-                    value[i] <- if (nrow(row) > 0 && !is.na(row$max_mass[1])) {
-                      row$max_mass[1]
-                    } else {
-                      NA
-                    }
-                  }
-
-                  new_rslt_df <- data.frame(
-                    sample = sample_names,
-                    well_id = well,
-                    value = value
-                  )
-                  new_rslt_df <- new_rslt_df[
-                    !as.logical(
-                      rowSums(is.na(new_rslt_df))
-                    ),
-                  ]
-
-                  reactVars$rslt_df <- rbind(reactVars$rslt_df, new_rslt_df)
-                }
-
-                # Update result picker with done + failed samples
-                done_bases <- reactVars$rslt_df$sample
-                failed_in_run <- reactVars$failed_samples[
-                  reactVars$failed_samples %in% reactVars$sample_names
-                ]
-                failed_in_run <- failed_in_run[nzchar(failed_in_run)]
-                choices_ok <- done_bases
-                choices_failed <- character(0)
-                if (length(failed_in_run)) {
-                  choices_failed <- failed_in_run
-                }
-                named_choices <- character(0)
-                if (length(choices_ok) > 0) {
-                  named_choices <- c(named_choices, choices_ok)
-                  names(named_choices)[seq_along(choices_ok)] <- choices_ok
-                }
-                if (length(choices_failed) > 0) {
-                  prev_len <- length(named_choices)
-                  named_choices <- c(named_choices, choices_failed)
-                  names(named_choices)[prev_len + seq_along(choices_failed)] <-
-                    paste0(failed_in_run, " (failed)")
-                }
-                if (length(named_choices) > 0) {
-                  if (is.null(result_files_sel())) {
-                    result_files_sel(unname(named_choices[1]))
-                  }
-                  output$result_picker_ui <- shiny$renderUI(
-                    shiny$div(
-                      class = "result-picker",
-                      pickerInput(
-                        ns("result_picker"),
-                        "Select Sample",
-                        choices = named_choices,
-                        selected = result_files_sel(),
-                        options = pickerOptions(
-                          liveSearch = TRUE,
-                          liveSearchPlaceholder = "Search samples ..."
-                        )
-                      )
-                    )
-                  )
-                  session$sendCustomMessage("selectize-init", "result_picker")
-                }
-
-                # Save heatmap
-                if (!file.exists(file.path(temp, "heatmap.rds"))) {
-                  heatmap <- plate_heatmap(
-                    reactVars$rslt_df,
-                    all_wells = run_config[["Well"]],
-                    failed_wells = current_failed_wells()
-                  )
-                  saveRDS(heatmap, file.path(temp, "heatmap.rds"))
-                }
-              } else {
-                selected_files <- if (
-                  run_selected == "folder"
-                ) {
-                  run_target_files()
-                } else {
-                  raw_dirs
-                }
-
-                # Build picker: successful samples + failed samples (labelled)
-                sel_base <- ms_sample_base(basename(selected_files))
-                db_fin <- file.path(
-                  analysis_dest(),
-                  paste0(trimws(input$analysis_name), ".db")
-                )
-                done_samples_fin <- tryCatch(
-                  {
-                    con_fin <- dbConnect(SQLite(), db_fin, flags = SQLITE_RO)
-                    on.exit(dbDisconnect(con_fin), add = TRUE)
-                    if (dbExistsTable(con_fin, "status")) {
-                      dbGetQuery(
-                        con_fin,
-                        "SELECT sample FROM status WHERE state='done'"
-                      )$sample
-                    } else {
-                      character(0)
-                    }
-                  },
-                  error = function(e) character(0)
-                )
-                finished_files <- sel_base %in% done_samples_fin
-                failed_mask <- sel_base %in%
-                  reactVars$failed_samples &
-                  !finished_files
-
-                choices_ok <- basename(selected_files)[finished_files]
-                choices_failed <- basename(selected_files)[failed_mask]
-
-                named_choices <- character(0)
-                if (length(choices_ok) > 0) {
-                  named_choices <- c(named_choices, choices_ok)
-                  names(named_choices)[seq_along(choices_ok)] <- choices_ok
-                }
-                if (length(choices_failed) > 0) {
-                  prev_len <- length(named_choices)
-                  named_choices <- c(named_choices, choices_failed)
-                  names(named_choices)[prev_len + seq_along(choices_failed)] <-
-                    paste0(
-                      ms_sample_base(choices_failed),
-                      " (failed)"
-                    )
-                }
-
-                if (length(named_choices) > 0) {
-                  sel_default <- if (!is.null(result_files_sel())) {
-                    result_files_sel()
-                  } else {
-                    unname(named_choices[1])
-                  }
-
-                  output$result_picker_ui <- shiny$renderUI(
-                    shiny$div(
-                      class = "result-picker",
-                      pickerInput(
-                        ns("result_picker"),
-                        "Select Sample",
-                        choices = named_choices,
-                        selected = sel_default,
-                        options = pickerOptions(
-                          liveSearch = TRUE,
-                          liveSearchPlaceholder = "Search samples ..."
-                        )
-                      )
-                    )
-                  )
-                  session$sendCustomMessage("selectize-init", "result_picker")
-                }
-              }
+              # Final picker (with "Show All") and Well Plate state
+              refresh_results(final = TRUE)
 
               # update "Abort" button to "Reset"
               shiny$updateActionButton(
@@ -2451,169 +2160,72 @@ server <- function(
         }
       })
 
-      #### Heatmap click observer ----
-      if (
-        run_selected == "folder" &&
-          run_use_config &&
-          length(run_config) &&
-          "Well" %in% names(run_config) &&
-          any(
-            !is.na(run_config[["Well"]]) &
-              nzchar(trimws(as.character(run_config[["Well"]])))
+      run_db_path <- function() {
+        file.path(
+          analysis_dest(),
+          paste0(trimws(input$analysis_name), ".db")
+        )
+      }
+
+      #### Well Plate click observer ----
+      # A click on a done or failed sample's tile selects it, in the picker
+      # too. The plate has its own plotly source, so clicks on the spectrum
+      # never land here. event_data() warns until the plate is first drawn and
+      # its click event registered, which is expected right after the start.
+      set_run_observer("heatmap_click", shiny$observeEvent(
+        suppressWarnings(event_data("plotly_click", source = "decon_plate")),
+        {
+          click <- suppressWarnings(
+            event_data("plotly_click", source = "decon_plate")
           )
-      ) {
-        # Observe clicks on interactive heatmap to show spectra
-        set_run_observer("heatmap_click", shiny$observe({
-          click_data <- event_data("plotly_click")
-          if (shiny$isolate(reactVars$heatmap_ready) > 0L) {
-            # DEBUG — remove once click behaviour is confirmed
-            message("=== HEATMAP CLICK ===")
-            message("click_data is.null: ", is.null(click_data))
-            if (!is.null(click_data)) {
-              message("  curveNumber : ", click_data$curveNumber)
-              message(
-                "  x           : ",
-                click_data$x,
-                " (class: ",
-                class(click_data$x),
-                ")"
-              )
-              message(
-                "  y           : ",
-                click_data$y,
-                " (class: ",
-                class(click_data$y),
-                ")"
-              )
-              message("  pointNumber : ", click_data$pointNumber)
-              message("  full dump   : ")
-              message(paste(capture.output(print(click_data)), collapse = "\n"))
-            }
+          shiny$req(is.numeric(click$x), is.numeric(click$y))
 
-            # curveNumber 0 = heatmap; 1 = selection scatter overlay (ignore)
-            if (
-              !is.null(click_data) &&
-                isTRUE(click_data$curveNumber == 0) &&
-                is.numeric(click_data$x)
-            ) {
-              y_val <- click_data$y
-              row <- if (is.character(y_val) && y_val %in% LETTERS[1:16]) {
-                y_val
-              } else if (is.numeric(y_val)) {
-                LETTERS[16 - floor(y_val) + 1]
-              } else {
-                NULL
-              }
-
-              message("  resolved row: ", if (is.null(row)) "NULL" else row)
-              message("  resolved col: ", round(click_data$x))
-
-              if (is.null(row)) {
-                return()
-              }
-              col <- round(click_data$x)
-              well_id <- paste0(row, col)
-
-              message("  well_id: ", well_id)
-
-              shiny$isolate(
-                clicked_sample <-
-                  reactVars$rslt_df$sample[reactVars$rslt_df$well_id == well_id]
-              )
-              # Not a done well -- try a failed one, so clicking a failed
-              # well jumps the selection there too, same as a done one.
-              if (length(clicked_sample) == 0) {
-                shiny$isolate({
-                  fw <- current_failed_wells()
-                  clicked_sample <- fw$sample[fw$well_id == well_id]
-                })
-              }
-
-              message(
-                "  clicked_sample: ",
-                paste(clicked_sample, collapse = ", ")
-              )
-
-              if (length(clicked_sample) > 0 && nzchar(clicked_sample[1])) {
-                runjs(paste0(
-                  'document.getElementById("blocking-overlay").styl',
-                  'e.display = "block";'
-                ))
-                result_files_sel(clicked_sample[1])
-                # Unblock after renders complete (delay covers spectrum + table)
-                delay(
-                  2000,
-                  runjs(paste0(
-                    'document.getElementById("blocking-overlay").styl',
-                    'e.display = "none";'
-                  ))
-                )
-              }
-            }
-          }
-        }))
-
-        #### Heatmap selection highlight observer ----
-        # Draws a green shape rectangle (data coords) around the selected well
-        set_run_observer("heatmap_highlight", shiny$observe({
-          shiny$req(result_files_sel(), reactVars$heatmap_ready > 0L)
-
-          sample_name <- ms_sample_base(result_files_sel())
-          well_id <- shiny$isolate(
-            reactVars$rslt_df$well_id[reactVars$rslt_df$sample == sample_name]
+          clicked_sample <- plate_sample_at(reactVars$plate, click$x, click$y)
+          # Pending samples have nothing to show yet
+          shiny$req(
+            length(clicked_sample) == 1,
+            clicked_sample %in% picker_state$choices
           )
-          # Not a done sample -- the selection may be a failed one instead.
-          if (length(well_id) == 0) {
-            well_id <- shiny$isolate({
-              fw <- current_failed_wells()
-              fw$well_id[fw$sample == sample_name]
-            })
-          }
 
-          if (length(well_id) > 0 && nzchar(well_id[1])) {
-            row_letter <- substring(well_id[1], 1, 1)
-            col_num <- as.numeric(substring(well_id[1], 2))
-            # y-axis is categorical: A=index 0, B=1, ... P=15
-            row_idx <- match(row_letter, LETTERS[1:16]) - 1
+          runjs(paste0(
+            'document.getElementById("blocking-overlay").styl',
+            'e.display = "block";'
+          ))
+          result_files_sel(clicked_sample)
+          updatePickerInput(session, "result_picker", selected = clicked_sample)
+          # Unblock after renders complete (delay covers the spectrum)
+          delay(
+            2000,
+            runjs(paste0(
+              'document.getElementById("blocking-overlay").styl',
+              'e.display = "none";'
+            ))
+          )
+        }
+      ))
 
-            delay(400, {
-              plotlyProxy("heatmap", session) |>
-                plotlyProxyInvoke(
-                  "relayout",
-                  list(
-                    shapes = list(list(
-                      type = "rect",
-                      xref = "x",
-                      yref = "y",
-                      x0 = col_num - 0.5,
-                      x1 = col_num + 0.5,
-                      y0 = row_idx - 0.5,
-                      y1 = row_idx + 0.5,
-                      line = list(color = "rgba(80,200,100,0.95)", width = 3),
-                      fillcolor = "rgba(0,0,0,0)"
-                    ))
-                  )
-                )
-            })
-          }
-        }))
-      } # end heatmap-click block
+      #### Well Plate selection highlight observer ----
+      # Frames the selected sample's tile; "Show All" clears the frame
+      set_run_observer("heatmap_highlight", shiny$observe({
+        sel <- result_files_sel()
+        shiny$req(reactVars$heatmap_ready > 0L)
+
+        shapes <- plate_highlight(
+          shiny$isolate(reactVars$plate),
+          if (!is.null(sel) && !is_show_all(sel)) ms_sample_base(sel)
+        )
+
+        delay(400, {
+          plotlyProxy("heatmap", session) |>
+            plotlyProxyInvoke("relayout", list(shapes = shapes))
+        })
+      }))
 
       #### Switch to running UI ----
       # Toggle to hide sidebar
       runjs("document.querySelector('button.collapse-toggle').click();")
       output$deconvolution_ui <- shiny$renderUI({
-        has_wells <- "Well" %in%
-          names(run_config) &&
-          any(
-            !is.na(run_config[["Well"]]) &
-              nzchar(trimws(as.character(run_config[["Well"]])))
-          )
-        show_heatmap <- run_selected == "folder" &&
-          run_use_config &&
-          !is.null(run_config) &&
-          has_wells
-        deconvolution_results_ui(ns, show_heatmap)
+        deconvolution_results_ui(ns)
       })
 
       # Render status spinner icon
@@ -2629,6 +2241,100 @@ server <- function(
         ignoreNULL = FALSE
       ))
 
+      # The Spectrum settings offer the Cubic/Planar switch for "Show All"
+      # and the single-sample ones otherwise. They live in a popover that is
+      # not in the DOM while closed, so the swap is a body class main.scss
+      # keys on rather than hiding the inputs themselves.
+      set_run_observer("spectrum_settings_mode", shiny$observe({
+        runjs(sprintf(
+          "document.body.classList.toggle('decon-show-all', %s);",
+          tolower(is_show_all())
+        ))
+      }))
+
+      #### All spectra ("Show All") ----
+      # Read once per finished run; switching Cubic/Planar only redraws
+      show_all_data <- shiny$reactive({
+        samples <- reactVars$show_all_samples
+        shiny$req(length(samples) > 1)
+        db <- run_db_path()
+        stats::setNames(
+          lapply(samples, function(s) process_plot_data_db(db, s)),
+          samples
+        )
+      })
+
+      all_spectra_plot <- function(theme = "light") {
+        data <- show_all_data()
+        data <- data[!vapply(data, is.null, logical(1))]
+        shiny$req(length(data) > 0)
+        samples <- names(data)
+
+        multiple_spectra(
+          results_list = NULL,
+          samples = samples,
+          cubic = !identical(input$spectrum_kind, "Planar"),
+          color_cmp = stats::setNames(
+            substr(viridisLite::viridis(length(samples), end = 0.9), 1, 7),
+            samples
+          ),
+          color_variable = "Samples",
+          # Fewer points per trace the more samples share the figure
+          max_points = max(500, min(4000, floor(200000 / length(samples)))),
+          theme = theme,
+          plot_data = data
+        )
+      }
+
+      #### Spectrum of the selection ----
+      # The selected sample's spectrum, with its fit statistics beside it
+      # while Show Metrics is on, or all spectra for "Show All". NULL when
+      # there is no data for the sample.
+      build_spectrum <- function(theme = "light") {
+        sel <- result_files_sel()
+        if (is_show_all(sel)) {
+          return(all_spectra_plot(theme))
+        }
+
+        sel_base <- ms_sample_base(sel)
+        result_dir <- file.path(analysis_dest(), ms_result_dirname(sel))
+        db_sp <- run_db_path()
+        is_raw_toggle <- isTRUE(as.logical(input$toggle_result))
+        show_labels <- !isFALSE(input$spectrum_annotation)
+
+        # Try DB first (works even when raw files were cleaned up), and fall
+        # back to the file-based reader when it is not available (older runs)
+        plot_data <- if (file.exists(db_sp)) {
+          process_plot_data_db(db_sp, sel_base, raw = is_raw_toggle)
+        }
+        plot <- if (!is.null(plot_data)) {
+          spectrum_plot(
+            plot_data = plot_data,
+            raw = is_raw_toggle,
+            show_peak_labels = show_labels,
+            show_mass_diff = FALSE,
+            theme = theme
+          )
+        } else if (dir.exists(result_dir)) {
+          spectrum_plot(
+            result_path = result_dir,
+            raw = is_raw_toggle,
+            show_peak_labels = show_labels,
+            show_mass_diff = FALSE,
+            theme = theme
+          )
+        }
+
+        if (!is.null(plot) && !isFALSE(input$spectrum_metrics)) {
+          plot <- add_metrics_table(
+            plot,
+            read_decon_metrics(db_sp, sel_base, result_dir),
+            theme = theme
+          )
+        }
+        plot
+      }
+
       setup_plot_dl(
         input,
         output,
@@ -2636,50 +2342,9 @@ server <- function(
         "decon_spectrum",
         build_fn = function(theme) {
           shiny$req(result_files_sel())
-          result_dir <- file.path(
-            analysis_dest(),
-            ms_result_dirname(result_files_sel())
-          )
-          sel_base <- ms_sample_base(result_files_sel())
-          db_sp <- file.path(
-            analysis_dest(),
-            paste0(trimws(input$analysis_name), ".db")
-          )
-          is_raw_toggle <- as.logical(ifelse(
-            !is.null(input$toggle_result),
-            input$toggle_result,
-            FALSE
-          ))
-          plot_data <- if (file.exists(db_sp)) {
-            process_plot_data_db(db_sp, sel_base, raw = is_raw_toggle)
-          } else {
-            NULL
-          }
-          show_labels <- ifelse(
-            is.null(input$spectrum_annotation),
-            TRUE,
-            input$spectrum_annotation
-          )
-
-          if (!is.null(plot_data)) {
-            spectrum_plot(
-              plot_data = plot_data,
-              raw = is_raw_toggle,
-              show_peak_labels = show_labels,
-              show_mass_diff = FALSE,
-              theme = theme
-            )
-          } else if (dir.exists(result_dir)) {
-            spectrum_plot(
-              result_path = result_dir,
-              raw = is_raw_toggle,
-              show_peak_labels = show_labels,
-              show_mass_diff = FALSE,
-              theme = theme
-            )
-          } else {
-            shiny$req(FALSE)
-          }
+          plot <- build_spectrum(theme)
+          shiny$req(plot)
+          plot
         },
         filename_fn = function() paste0(get_session_prefix(), "_Spectrum"),
         available_fn = spectrum_ready
@@ -2688,68 +2353,24 @@ server <- function(
       output$spectrum <- renderPlotly({
         shiny$req(result_files_sel())
 
-        # Check DB for failure / get plot data
-        sel_base <- ms_sample_base(result_files_sel())
-        db_sp <- file.path(
-          analysis_dest(),
-          paste0(trimws(input$analysis_name), ".db")
-        )
         # spectrum_container decides whether to mount this output at all --
         # a failed sample gets the failure message in its place instead
         # (see below). This is just a defensive backstop against a stale
         # binding rather than something expected to fire in normal use.
-        shiny$req(!(file.exists(db_sp) && sel_base %in% decon_failed_samples(db_sp)))
-
-        waiter_show(id = ns("spectrum"), html = spin_wave())
-
-        result_dir <- file.path(
-          analysis_dest(),
-          ms_result_dirname(result_files_sel())
+        db_sp <- run_db_path()
+        shiny$req(
+          is_show_all() ||
+            !(file.exists(db_sp) &&
+              ms_sample_base(result_files_sel()) %in%
+                decon_failed_samples(db_sp))
         )
 
-        is_raw_toggle <- as.logical(ifelse(
-          !is.null(input$toggle_result),
-          input$toggle_result,
-          FALSE
-        ))
+        waiter_show(id = ns("spectrum"), html = spin_wave())
+        on.exit(waiter_hide(id = ns("spectrum")))
 
-        # Try DB first (works even when raw files were cleaned up)
-        plot_data <- if (file.exists(db_sp)) {
-          process_plot_data_db(db_sp, sel_base, raw = is_raw_toggle)
-        } else {
-          NULL
-        }
-
-        # Fall back to file-based reader when DB not available (e.g. older runs)
-        if (is.null(plot_data) && dir.exists(result_dir)) {
-          spectrum <- spectrum_plot(
-            result_path = result_dir,
-            raw = is_raw_toggle,
-            show_peak_labels = ifelse(
-              is.null(input$spectrum_annotation),
-              TRUE,
-              input$spectrum_annotation
-            ),
-            show_mass_diff = FALSE
-          )
-          waiter_hide(id = ns("spectrum"))
-          spectrum_ready(TRUE)
-          return(spectrum)
-        }
-
-        if (!is.null(plot_data)) {
-          spectrum <- spectrum_plot(
-            plot_data = plot_data,
-            raw = is_raw_toggle,
-            show_peak_labels = ifelse(
-              is.null(input$spectrum_annotation),
-              TRUE,
-              input$spectrum_annotation
-            ),
-            show_mass_diff = FALSE
-          )
-          waiter_hide(id = ns("spectrum"))
-          spectrum_ready(TRUE)
+        spectrum <- build_spectrum()
+        spectrum_ready(TRUE)
+        if (!is.null(spectrum)) {
           return(spectrum)
         }
 
@@ -2757,9 +2378,7 @@ server <- function(
         # For the raw m/z view this is expected when "Keep UniDec output files" was
         # off during deconvolution, since the raw files were never written
         # to disk. Surface a hint instead of leaving a blank plot.
-        waiter_hide(id = ns("spectrum"))
-        spectrum_ready(TRUE)
-
+        is_raw_toggle <- isTRUE(as.logical(input$toggle_result))
         hint_text <- if (is_raw_toggle) {
           if (!isTRUE(read_user_settings()$deconv_keep_raw_output)) {
             paste0(
@@ -2774,220 +2393,27 @@ server <- function(
           "No spectrum data available for this sample."
         }
 
-        return(
-          plotly::plot_ly(type = "scatter", mode = "markers") |>
-            plotly::layout(
-              paper_bgcolor = "rgba(0,0,0,0)",
-              plot_bgcolor = "rgba(0,0,0,0)",
-              xaxis = list(visible = FALSE),
-              yaxis = list(visible = FALSE),
-              annotations = list(list(
-                x = 0.5,
-                y = 0.5,
-                xref = "paper",
-                yref = "paper",
-                xanchor = "center",
-                yanchor = "middle",
-                text = hint_text,
-                showarrow = FALSE,
-                font = list(size = 14, color = "white")
-              ))
-            )
-        )
+        plotly::plot_ly(type = "scatter", mode = "markers") |>
+          plotly::layout(
+            paper_bgcolor = "rgba(0,0,0,0)",
+            plot_bgcolor = "rgba(0,0,0,0)",
+            xaxis = list(visible = FALSE),
+            yaxis = list(visible = FALSE),
+            annotations = list(list(
+              x = 0.5,
+              y = 0.5,
+              xref = "paper",
+              yref = "paper",
+              xanchor = "center",
+              yanchor = "middle",
+              text = hint_text,
+              showarrow = FALSE,
+              font = list(size = 14, color = "white")
+            ))
+          )
       })
 
-      output$deconvolution_data <- DT::renderDataTable(server = FALSE, {
-        shiny$req(result_files_sel())
-
-        waiter_show(id = ns("deconvolution_data"), html = spin_wave())
-
-        result_dir <- file.path(
-          analysis_dest(),
-          ms_result_dirname(result_files_sel())
-        )
-
-        # Check DB for failure before rendering metrics
-        sel_base_dt <- ms_sample_base(result_files_sel())
-        db_dt <- file.path(
-          analysis_dest(),
-          paste0(trimws(input$analysis_name), ".db")
-        )
-        if (
-          file.exists(db_dt) && sel_base_dt %in% decon_failed_samples(db_dt)
-        ) {
-          waiter_hide(id = ns("deconvolution_data"))
-          return(
-            DT::datatable(
-              data = data.frame(),
-              options = list(dom = '', paging = FALSE)
-            )
-          )
-        }
-
-        # Try DB first, fall back to file
-        db_metrics <- file.path(
-          analysis_dest(),
-          paste0(trimws(input$analysis_name), ".db")
-        )
-        error_rows <- if (file.exists(db_metrics)) {
-          tryCatch(
-            {
-              con_m <- dbConnect(SQLite(), db_metrics, flags = SQLITE_RO)
-              on.exit(dbDisconnect(con_m), add = TRUE)
-              if (dbExistsTable(con_m, "error")) {
-                dbGetQuery(
-                  con_m,
-                  "SELECT Key, Value FROM error WHERE sample = ?",
-                  params = list(sel_base_dt)
-                )
-              } else {
-                data.frame()
-              }
-            },
-            error = function(e) data.frame()
-          )
-        } else {
-          data.frame()
-        }
-
-        if (nrow(error_rows) == 0) {
-          # Fall back to file when DB doesn't have the data yet
-          deconvolution_data_path <- file.path(
-            result_dir,
-            paste0(gsub("_unidecfiles", "", basename(result_dir)), "_error.txt")
-          )
-          if (dir.exists(result_dir) && file.exists(deconvolution_data_path)) {
-            raw_lines <- readLines(deconvolution_data_path)
-            error_rows <- data.frame(
-              Key = sub(" =.*", "", raw_lines),
-              Value = as.numeric(sub(".*= ([^ ]+).*", "\\1", raw_lines))
-            )
-          }
-        }
-
-        if (nrow(error_rows) > 0) {
-          tbl <- data.frame(
-            Parameter = c(
-              "Fitting Error",
-              "Computation Time [s]",
-              "Iteration Count",
-              "UniScore (Quality)",
-              "Sigma [m/z]",
-              "Charge Sigma [z]",
-              "Beat (Suppression)",
-              "Point Sigma"
-            )[seq_len(nrow(error_rows))],
-            Value = round(error_rows$Value, 6)
-          )
-
-          waiter_hide(id = ns("deconvolution_data"))
-
-          DT::datatable(
-            data = tbl,
-            escape = FALSE,
-            rownames = FALSE,
-            colnames = NULL,
-            class = "order-column",
-            selection = "none",
-            options = list(
-              dom = 't',
-              paging = FALSE,
-              scrollY = TRUE,
-              scrollCollapse = TRUE,
-              ordering = FALSE
-            )
-          ) |>
-            DT::formatStyle(
-              "Value",
-              textAlign = "right"
-            )
-        }
-      })
-
-      ### Deconvolution metrics export ----
-      deconvolution_metrics_raw <- shiny$reactive({
-        shiny$req(result_files_sel())
-
-        result_dir <- file.path(
-          analysis_dest(),
-          ms_result_dirname(result_files_sel())
-        )
-        sel_base <- ms_sample_base(result_files_sel())
-        db_path <- file.path(
-          analysis_dest(),
-          paste0(trimws(input$analysis_name), ".db")
-        )
-
-        if (
-          file.exists(db_path) && sel_base %in% decon_failed_samples(db_path)
-        ) {
-          return(data.frame())
-        }
-
-        error_rows <- if (file.exists(db_path)) {
-          tryCatch(
-            {
-              con_m <- dbConnect(SQLite(), db_path, flags = SQLITE_RO)
-              on.exit(dbDisconnect(con_m), add = TRUE)
-              if (dbExistsTable(con_m, "error")) {
-                dbGetQuery(
-                  con_m,
-                  "SELECT Key, Value FROM error WHERE sample = ?",
-                  params = list(sel_base)
-                )
-              } else {
-                data.frame()
-              }
-            },
-            error = function(e) data.frame()
-          )
-        } else {
-          data.frame()
-        }
-
-        if (nrow(error_rows) == 0) {
-          data_path <- file.path(
-            result_dir,
-            paste0(gsub("_unidecfiles", "", basename(result_dir)), "_error.txt")
-          )
-          if (dir.exists(result_dir) && file.exists(data_path)) {
-            raw_lines <- readLines(data_path)
-            error_rows <- data.frame(
-              Key = sub(" =.*", "", raw_lines),
-              Value = as.numeric(sub(".*= ([^ ]+).*", "\\1", raw_lines))
-            )
-          }
-        }
-
-        shiny$req(nrow(error_rows) > 0)
-
-        data.frame(
-          Parameter = c(
-            "Fitting error",
-            "Computation time [s]",
-            "Iteration count",
-            "UniScore (Quality)",
-            "m/z sigma [m/z]",
-            "z (Charge) sigma [z]",
-            "beat (Suppression)",
-            "Point sigma"
-          )[seq_len(nrow(error_rows))],
-          Value = round(error_rows$Value, 6)
-        )
-      })
-
-      setup_table_dl(
-        input,
-        output,
-        session,
-        "deconvolution_data",
-        data_fn = function() deconvolution_metrics_raw(),
-        filename_fn = function() {
-          paste0(get_session_prefix(), "_Deconvolution_Metrics")
-        }
-      )
-
-      ### Failure state for the Spectrum and Metrics cards ----
+      ### Failure state for the Spectrum card ----
 
       # current_failed_selection(): (sample, cause, detail) for whichever
       # sample is selected right now, or NULL if it did not fail ----
@@ -2995,11 +2421,11 @@ server <- function(
       # than cached, so it always reflects what is currently selected.
       current_failed_selection <- function() {
         shiny$req(result_files_sel())
+        if (is_show_all()) {
+          return(NULL)
+        }
         sel <- ms_sample_base(result_files_sel())
-        db_fm <- file.path(
-          analysis_dest(),
-          paste0(trimws(input$analysis_name), ".db")
-        )
+        db_fm <- run_db_path()
         if (!file.exists(db_fm) || !(sel %in% decon_failed_samples(db_fm))) {
           return(NULL)
         }
@@ -3056,63 +2482,28 @@ server <- function(
         )
       })
 
-      #### Metrics card: table, or a bare failure message ----
-      # No cause/detail/button here -- the Spectrum card is the one place
-      # that carries the diagnostic detail, so it isn't duplicated across
-      # cards for the same sample.
-      output$metrics_failure_msg <- shiny$renderUI({
-        shiny$req(result_files_sel())
-        sel <- ms_sample_base(result_files_sel())
-        db_fm <- file.path(
-          analysis_dest(),
-          paste0(trimws(input$analysis_name), ".db")
-        )
-        if (file.exists(db_fm) && sel %in% decon_failed_samples(db_fm)) {
-          shiny$div(
-            class = "sample-failed-msg",
-            shiny$div(
-              class = "sample-failed-msg-title",
-              "Sample failed to deconvolute"
-            )
-          )
-        }
+      ### Render Well Plate ----
+      # Drawn from the start, every sample of the run pending, and redrawn as
+      # samples finish (peak counts) or fail (crosses)
+      output$heatmap <- renderPlotly({
+        plate <- reactVars$plate
+        shiny$req(plate)
+        waiter_show(id = ns("heatmap"), html = spin_wave())
+        on.exit(waiter_hide(id = ns("heatmap")))
+
+        heatmap <- plate_heatmap(
+          plate,
+          peak_counts = reactVars$peak_counts,
+          failed = reactVars$failed_samples,
+          source = "decon_plate"
+        ) |>
+          event_register("plotly_click")
+
+        # Signal the highlight observer to re-apply the selection frame
+        reactVars$heatmap_ready <- shiny$isolate(reactVars$heatmap_ready) + 1L
+
+        heatmap
       })
-
-      ### Render heatmap when config has wells specified
-      if (
-        run_selected == "folder" &&
-          run_use_config &&
-          length(run_config) &&
-          "Well" %in% names(run_config) &&
-          any(
-            !is.na(run_config[["Well"]]) &
-              nzchar(trimws(as.character(run_config[["Well"]])))
-          )
-      ) {
-        output$heatmap <- renderPlotly({
-          # Render as soon as there is either a done or a failed sample to
-          # show, not only once something has succeeded -- otherwise a run
-          # that fails early leaves the card blank instead of flagging it.
-          shiny$req(
-            nrow(reactVars$rslt_df) > 0 || length(reactVars$failed_samples) > 0
-          )
-          waiter_show(id = ns("heatmap"), html = spin_wave())
-
-          heatmap <- plate_heatmap(
-            reactVars$rslt_df,
-            all_wells = run_config[["Well"]],
-            failed_wells = current_failed_wells()
-          ) |>
-            event_register("plotly_click")
-
-          waiter_hide(id = ns("heatmap"))
-
-          # Activate click observer / signal highlight observer to re-apply shape
-          reactVars$heatmap_ready <- shiny$isolate(reactVars$heatmap_ready) + 1L
-
-          return(heatmap)
-        })
-      }
 
       # Unblock mouse pointer
       runjs(paste0(
@@ -3971,157 +3362,8 @@ server <- function(
       reactVars$continue_conversion <- NULL
     })
 
-    ### Tooltip events ----
-    shiny$observeEvent(input$peak_parameter_tooltip_bttn, {
-      shiny$showModal(
-        shiny$div(
-          class = "start-modal",
-          shiny$modalDialog(
-            shiny$fluidRow(
-              shiny$br(),
-              shiny$column(
-                width = 11,
-                shiny$h5(
-                  "Peak Detection Threshold"
-                ),
-                shiny$div(
-                  class = "tooltip-text",
-                  "The peak detection threshold specifies how tall the relative peak height (normalized to a max spectrum intensity of 1) needs to be to considered a peak. For example, a threshold of 0.1 would mean that any peaks below a 10% max intensity would be ignored. If you set this to 0, any local maximum (within the defined detection range) are counted."
-                ),
-                shiny$br(),
-                shiny$div(
-                  class = "tooltip-text",
-                  "A peak below the threshold counts as zero in the binding calculation: a missed complex peak reads 0 % binding, a missed unbound peak 100 %. Lower it when small species matter, such as early time points, near-complete conversion or a minor proteoform; raise it when noisy spectra produce spurious low hits."
-                ),
-                shiny$br()
-              )
-            ),
-            shiny$fluidRow(
-              shiny$br(),
-              shiny$column(
-                width = 11,
-                shiny$h5(
-                  "Peak Detection Range (Da)"
-                ),
-                shiny$div(
-                  class = "tooltip-text",
-                  "The peak detection range specifies the local window to consider when detecting a peak. A peak needs to be the local max within a window of +/- this range to be considered a peak. For example, if you set the window as 10 Da, only peaks within a window of +/- 10 Da will be considered peak. Any other local maximum are ignored."
-                ),
-                shiny$br(),
-                shiny$a(
-                  href = "https://github.com/michaelmarty/UniDec/wiki/Peak-Selection-and-Plotting#picking-peaks",
-                  "UniDec Wiki - Picking Peaks",
-                  target = "_blank"
-                )
-              )
-            ),
-            title = "Peak Parameter",
-            easyClose = TRUE,
-            footer = shiny$tagList(
-              shiny$modalButton("Dismiss")
-            )
-          )
-        )
-      )
-    })
-
-    shiny$observeEvent(input$charge_range_tooltip_bttn, {
-      shiny$showModal(
-        shiny$div(
-          class = "start-modal",
-          shiny$modalDialog(
-            shiny$fluidRow(
-              shiny$br(),
-              shiny$column(
-                width = 11,
-                shiny$div(
-                  class = "tooltip-text",
-                  "The charge range sets a range of charges that can be assigned for the m/z peaks in the mass spectrum. If we set a minimum of 10 and a maximum of 25, then UniDec cannot assign a charge state of 9 or lower, nor a charge state of 26 or higher. Picking a charge range that does not include the true charge states for the m/z peaks will result in a distorted deconvolved mass spectrum or an error message. It is often better to start with a wider range of charge states and then narrow the range to the charge state distribution of interest. You can also narrow the charge range to remove artifacts."
-                ),
-                shiny$br(),
-                shiny$div(
-                  class = "tooltip-text",
-                  "The maximum charge needs to reach the upper mass limit divided by the lower m/z limit (e.g. 60,000 Da / 710 m/z = 85). Below that, the high charge states of a large protein get assigned to wrong masses, which shows up as extra peaks a few hundred Da apart or at half the protein mass."
-                ),
-                shiny$br(),
-                shiny$a(
-                  href = "https://github.com/michaelmarty/UniDec/wiki/Deconvolution-Parameters#charge-range",
-                  "UniDec Wiki - Charge Range",
-                  target = "_blank"
-                )
-              )
-            ),
-            title = "Charge Range",
-            easyClose = TRUE,
-            footer = shiny$tagList(
-              shiny$modalButton("Dismiss")
-            )
-          )
-        )
-      )
-    })
-
-    shiny$observeEvent(input$mass_range_tooltip_bttn, {
-      shiny$showModal(
-        shiny$div(
-          class = "start-modal",
-          shiny$modalDialog(
-            shiny$fluidRow(
-              shiny$br(),
-              shiny$column(
-                width = 11,
-                shiny$div(
-                  class = "tooltip-text",
-                  "Like the charge range, the mass range sets a range of masses, in Da, that can be assigned for the m/z peaks in the spectrum. Unlike zooming into the m/z range, the mass range sets the allowed deconvolved masses for the available data. Setting this mass range lower or higher than the true masses will either create artifacts, cut off certain analytes, or give an error message. Similar to the charge range, it is often better to start with a wider range then narrow the range later. Narrowing the mass range can help remove artifacts."
-                ),
-                shiny$br(),
-                shiny$a(
-                  href = "https://github.com/michaelmarty/UniDec/wiki/Deconvolution-Parameters#mass-range",
-                  "UniDec Wiki - Mass Range",
-                  target = "_blank"
-                )
-              )
-            ),
-            title = "Mass Range",
-            easyClose = TRUE,
-            footer = shiny$tagList(
-              shiny$modalButton("Dismiss")
-            )
-          )
-        )
-      )
-    })
-
-    shiny$observeEvent(input$sample_rate_tooltip_bttn, {
-      shiny$showModal(
-        shiny$div(
-          class = "start-modal",
-          shiny$modalDialog(
-            shiny$fluidRow(
-              shiny$br(),
-              shiny$column(
-                width = 11,
-                shiny$div(
-                  class = "tooltip-text",
-                  "The Sample Mass Every parameter sets a sample rate for the deconvolved mass spectrum. If a sample rate of 10 Da is set, then there will be a mass data point every 10 Da. Every mass data point would fall on an even 10, such that a data point would not appear at 66,417 Da but rather would appear at 66,420 Da in the resulting deconvolved mass spectrum. Thus, each peak will be rounded to the nearest 10 Da in this example. A sample rate of 1 Da would be needed to read a mass peak at 66,417 Da. Note: setting a smaller sample rate will slow down the algorithm in UniDec but will improve the precision."
-                ),
-                shiny$br(),
-                shiny$a(
-                  href = "https://github.com/michaelmarty/UniDec/wiki/Deconvolution-Parameters#sample-rate",
-                  "UniDec Wiki - Sample Rate",
-                  target = "_blank"
-                )
-              )
-            ),
-            title = "Sample Rate",
-            easyClose = TRUE,
-            footer = shiny$tagList(
-              shiny$modalButton("Dismiss")
-            )
-          )
-        )
-      )
-    })
+    ### Help modals ----
+    bind_help(input, deconvolution_help)
 
     return(
       shiny::reactiveValues(

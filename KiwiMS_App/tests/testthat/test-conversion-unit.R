@@ -8,15 +8,26 @@ box::use(
     add_proteoform_binding,
     check_sample_table,
     check_table,
+    color_key,
     clean_prot_comp_table,
     close_log_block,
     complex_hits,
+    compound_mass_entries,
     format_scientific,
     is_complex_row,
+    key_colors,
     make_kobs_plot,
     mass_ambiguities,
     mass_shift_label,
+    multiple_spectra,
     nest_log_block,
+    overview_choices,
+    overview_colors,
+    overview_compound_distribution,
+    overview_distribution_note,
+    overview_selection,
+    overview_status_note,
+    overview_subset,
     predict_peaks,
     proteoform_binding,
     render_hits_table,
@@ -28,7 +39,9 @@ box::use(
     unbound_species
   ],
   app/logic/conversion_ui[binding_results_ui, hits_results_ui],
+  app/logic/deconvolution_functions[spectrum_plot],
   app/logic/plot_download[prepare_hits_export],
+  app/logic/palette[status_colors],
 )
 
 # fake_session(): Stand-in for the Shiny session the progress bar writes to ----
@@ -976,4 +989,258 @@ test_that("a complex shared by two proteoforms is split between them", {
   expect_equal(binding$complex, c(20, 20))
   preferred <- hits[hits$Preferred %in% TRUE, ]
   expect_equal(sum(preferred$`% Binding`), unique(hits$`Total % Binding`))
+})
+
+# ---- Overview tab of the Relative Binding interface ----------------------------
+
+# overview_run(): A small run over three proteins and two compounds ----
+# P (1000 Da) carries compound A (100 Da) in S1, S5 and S7, and the declared
+# compound B (200 Da) without a hit in S1 and S2. Q (2000 Da) is declared with
+# A in S3 and S6, but its mass is not in their spectra. R (3000 Da) is a
+# control without compound. S7 is fully converted: only its complex peak is
+# left. Every spectrum is a grid with the peaks on it, so the plots can be
+# built too.
+overview_run <- function() {
+  peaks <- list(
+    S1 = c(`1000` = 60, `1100` = 40),
+    S2 = c(`1000` = 100),
+    S3 = c(`1000` = 100),
+    S4 = c(`1000` = 100),
+    S5 = c(`1000` = 30, `1100` = 70),
+    S6 = c(`1000` = 100),
+    S7 = c(`1100` = 100)
+  )
+  grid <- seq(900, 1300, by = 1)
+  result <- list(deconvolution = lapply(peaks, function(p) {
+    pm <- as.numeric(names(p))
+    spectrum <- vapply(
+      grid,
+      function(m) sum(p * exp(-((m - pm)^2) / 8)),
+      numeric(1)
+    )
+    list(
+      peaks = data.frame(mass = pm, intensity = unname(p)),
+      mass = data.frame(mass = grid, intensity = spectrum + 0.01)
+    )
+  }))
+
+  protein_table <- data.frame(
+    Protein = c("P", "Q", "R"),
+    `Mass 1` = c(1000, 2000, 3000),
+    check.names = FALSE
+  )
+  compound_table <- data.frame(
+    Compound = c("A", "B"),
+    `Mass 1` = c(100, 200),
+    check.names = FALSE
+  )
+  sample_table <- data.frame(
+    Sample = names(peaks),
+    Protein = c("P", "P", "Q", "R", "P", "Q", "P"),
+    `Compound 1` = c("A", "B", "A", NA, "A", "A", "A"),
+    `Compound 2` = c("B", NA, NA, NA, NA, NA, NA),
+    check.names = FALSE
+  )
+
+  result <- suppressMessages(add_hits(
+    result,
+    sample_table = sample_table,
+    protein_table = protein_table,
+    compound_table = compound_table,
+    peak_tolerance = 3,
+    max_multiples = 2,
+    session = fake_session(),
+    ns = identity
+  ))
+  result$hits_summary <- suppressMessages(
+    summarize_hits(result, sample_table = sample_table)
+  )
+
+  view <- add_proteoform_binding(transform_hits(result$hits_summary))
+  view$truncSample_ID <- view$`Sample ID`
+
+  list(
+    result = result,
+    view = view,
+    protein_table = protein_table,
+    compound_table = compound_table
+  )
+}
+
+test_that("the Overview lists proteins with hits first, controls last", {
+  run <- overview_run()
+  choices <- overview_choices(run$view)
+
+  expect_equal(choices$proteins$protein, c("P", "Q", "R"))
+  expect_equal(choices$proteins$status, c("hits", "no_hits", "none"))
+  expect_equal(
+    overview_status_note(choices$proteins$status),
+    c("", "No hits", "No compounds")
+  )
+  # A compound with a hit on the protein comes first
+  expect_equal(choices$compounds$P$compound, c("A", "B"))
+  expect_equal(choices$compounds$P$hit, c(TRUE, FALSE))
+  expect_equal(choices$compounds$Q$compound, "A")
+  expect_false(choices$compounds$Q$hit)
+  expect_equal(nrow(choices$compounds$R), 0)
+})
+
+test_that("an Overview selection is always one the pickers offer", {
+  choices <- overview_choices(overview_run()$view)
+
+  # By default the first protein with all of its compounds
+  expect_equal(overview_selection(choices), list(protein = "P", compounds = c("A", "B")))
+  # An unknown protein falls back to the default
+  expect_equal(overview_selection(choices, "X")$protein, "P")
+  # Compounds not declared with the protein are dropped, the order kept
+  expect_equal(overview_selection(choices, "P", c("B", "Z"))$compounds, "B")
+  expect_equal(overview_selection(choices, "Q", "B")$compounds, character(0))
+  expect_equal(overview_selection(choices, "R"), list(protein = "R", compounds = character(0)))
+})
+
+test_that("the Overview subset holds the picked complexes only", {
+  view <- overview_run()$view
+
+  sub <- overview_subset(view, "P", "A")
+  expect_setequal(unique(sub$`Sample ID`), c("S1", "S5", "S7"))
+  expect_true(all(sub$Protein == "P" & sub$`Cmp Name` == "A"))
+  # B is declared in S1 and S2 without an adduct
+  expect_setequal(unique(overview_subset(view, "P", "B")$`Sample ID`), c("S1", "S2"))
+  # A control belongs to no complex
+  expect_equal(nrow(overview_subset(view, "R", character(0))), 0)
+  expect_equal(nrow(overview_subset(view, NULL, "A")), 0)
+})
+
+test_that("the Overview colours are the result's fixed colours", {
+  view <- overview_run()$view
+  key <- color_key(view)
+
+  both <- overview_colors(view, "P", c("A", "B"), "Compounds", key)
+  one <- overview_colors(view, "P", "B", "Compounds", key)
+  expect_equal(names(both), c("A", "B"))
+  # A compound keeps its colour whatever else is picked
+  expect_equal(unname(one[["B"]]), unname(both[["B"]]))
+  expect_equal(both, key_colors(key, "Compounds", c("A", "B")))
+  # A compound left out is muted
+  expect_equal(unname(one[["A"]]), status_colors()$muted)
+
+  samples <- overview_colors(view, "P", "A", "Samples", key)
+  expect_setequal(names(samples), c("S1", "S5", "S7"))
+  expect_equal(samples, key_colors(key, "Samples", names(samples)))
+  expect_length(overview_colors(view, "R", character(0), "Samples", key), 0)
+  # Without a key, one is made from the table handed in
+  expect_equal(overview_colors(view, "P", c("A", "B"), "Compounds"), both)
+})
+
+test_that("the compound mass shift card names the compound once there are several", {
+  run <- overview_run()
+  sub <- overview_subset(run$view, "P", c("A", "B"))
+
+  single <- compound_mass_entries(sub, "A", run$compound_table)
+  expect_equal(single$label, "100.0 Da")
+  expect_equal(single$count, 3L)
+
+  several <- compound_mass_entries(sub, c("B", "A"), run$compound_table)
+  # The mass found comes first, the declared one without a peak after it
+  expect_equal(several$label, c("A &middot; 100.0 Da", "B &middot; 200.0 Da"))
+  expect_equal(several$present, c(TRUE, FALSE))
+  expect_equal(several$count, c(3L, 0L))
+
+  expect_equal(nrow(compound_mass_entries(sub, character(0), run$compound_table)), 0)
+})
+
+test_that("the Overview distribution plots the picked complexes with binding", {
+  view <- overview_run()$view
+  plot <- function(protein, compounds, variable = "Compounds") {
+    overview_compound_distribution(
+      view, protein, compounds,
+      color_variable = variable,
+      truncate_names = FALSE,
+      distribution_scale = "Maximum"
+    )
+  }
+
+  # A single compound: one bar per sample it was declared in
+  built <- plotly::plotly_build(plot("P", "A"))$x$data
+  bars <- built[vapply(built, `[[`, character(1), "type") == "bar"]
+  expect_setequal(unlist(lapply(bars, `[[`, "x")), c("S1", "S5", "S7"))
+
+  # B adds nothing to plot, so A is shown on its own
+  expect_s3_class(plot("P", c("A", "B"), "Samples"), "plotly")
+
+  # Nothing to plot: no binding, or not measured at all
+  expect_null(plot("P", "B"))
+  expect_null(plot("Q", "A"))
+  expect_equal(overview_distribution_note(view, "P", "B"), "No binding events")
+  expect_equal(overview_distribution_note(view, "Q", "A"), "No protein or complex peak found")
+  expect_equal(overview_distribution_note(view, "P", character(0)), "No compound selected")
+})
+
+test_that("spectra without any assigned peak are drawn", {
+  run <- overview_run()
+  colors <- overview_colors(run$view, "Q", "A", "Compounds")
+
+  # Q is in neither spectrum, so no peak is assigned
+  spectra <- multiple_spectra(
+    results_list = run$result,
+    samples = c("S3", "S6"),
+    color_cmp = colors,
+    color_variable = "Compounds",
+    hits_summary = run$view
+  )
+  expect_s3_class(plotly::plotly_build(spectra), "plotly")
+})
+
+test_that("a fully converted sample keeps its compound colour in the spectrum", {
+  run <- overview_run()
+  colors <- c(A = "#FF0000", B = "#00FF00")
+
+  # S7 has no unbound peak left, only the complex
+  built <- plotly::plotly_build(spectrum_plot(
+    sample = run$result$deconvolution$S7,
+    color_cmp = colors,
+    color_variable = "Compounds",
+    show_peak_labels = TRUE,
+    show_mass_diff = FALSE
+  ))$x$data
+  marker <- Filter(function(t) identical(t$mode, "markers"), built)
+  marker_colors <- unlist(lapply(marker, function(t) t$marker$color))
+  expect_true("#FF0000" %in% toupper(marker_colors))
+})
+
+test_that("the binding interface opens on the Overview", {
+  view <- overview_run()$view
+  html <- as.character(binding_results_ui(identity, view))
+
+  tabs <- regmatches(html, gregexpr("data-value=\"[^\"]+\"", html))[[1]]
+  expect_equal(unique(tabs)[1:2], c("data-value=\"Overview\"", "data-value=\"Sample View\""))
+  expect_false(grepl("Compound View|Protein View|Tot. Binding \\[%\\]</", html))
+
+  protein_picker <- regmatches(
+    html,
+    regexpr("overview_protein_picker.*?</select>", html)
+  )
+  expect_match(protein_picker, "value=\"P\" data-subtext=\"\" selected=\"selected\">", fixed = TRUE)
+  expect_match(protein_picker, "value=\"Q\" data-subtext=\"No hits\">", fixed = TRUE)
+  expect_match(protein_picker, "value=\"R\" data-subtext=\"No compounds\">", fixed = TRUE)
+
+  compound_picker <- regmatches(
+    html,
+    regexpr("overview_compound_picker.*?</select>", html)
+  )
+  expect_match(compound_picker, "multiple", fixed = TRUE)
+  expect_match(compound_picker, "value=\"A\" data-subtext=\"\" selected=\"selected\">", fixed = TRUE)
+  expect_match(compound_picker, "value=\"B\" data-subtext=\"No hits\" selected=\"selected\">", fixed = TRUE)
+
+  # Opened on a selection, e.g. from a click in the Hits table
+  html <- as.character(binding_results_ui(
+    identity,
+    view,
+    overview = list(protein = "Q", compounds = "A")
+  ))
+  protein_picker <- regmatches(
+    html,
+    regexpr("overview_protein_picker.*?</select>", html)
+  )
+  expect_match(protein_picker, "value=\"Q\" data-subtext=\"No hits\" selected=\"selected\">", fixed = TRUE)
 })

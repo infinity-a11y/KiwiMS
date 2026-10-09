@@ -1095,19 +1095,92 @@ deconvolute <- function(
   invisible(NULL)
 }
 
-# plate_heatmap(): Well plate occupancy heatmap ----
-# failed_wells: data.frame(sample, well_id) for samples that failed to
-# deconvolute (well_id in the same format as `data$well_id` / `all_wells`,
-# e.g. "A1"). Rendered in a distinct colour with the sample name on hover, so
-# a failure is visible -- and identifiable -- across the whole plate at a
-# glance, rather than being indistinguishable from a well nothing was ever
-# run for.
+# plate_layout(): Tile of every sample of a run on the Well Plate ----
+# With a usable, unique well for every sample ("A1" or "A01", a "Plate:"
+# prefix already stripped) the tiles are those wells, and the plate is cropped
+# to the rectangle they span. Otherwise -- no config, no Well column, or any
+# sample without a well of its own -- the samples are laid out in the order
+# they are queued, left to right and top to bottom, on 12 columns (24 beyond
+# 96 samples), so no sample of the run is ever left off the plate.
+#
+# Returns list(tiles = data.frame(sample, well_id, row, col), rows, cols,
+# by_well); row and col are plate positions (row 1 = A), rows and cols the
+# positions the plate shows.
+#' @export
+plate_layout <- function(samples, wells = NULL) {
+  samples <- as.character(samples)
+  n <- length(samples)
+
+  by_well <- FALSE
+  if (n > 0 && length(wells) == n) {
+    well_id <- gsub(
+      "^([A-Z]+)0*(\\d+)$",
+      "\\1\\2",
+      toupper(trimws(as.character(wells)))
+    )
+    row <- match(sub("\\d+$", "", well_id), LETTERS[1:16])
+    col <- suppressWarnings(as.integer(sub("^[A-Z]+", "", well_id)))
+    by_well <- !anyNA(row) &&
+      !anyNA(col) &&
+      all(col >= 1 & col <= 24) &&
+      !anyDuplicated(well_id)
+  }
+
+  if (by_well) {
+    rows <- seq(min(row), max(row))
+    cols <- seq(min(col), max(col))
+  } else {
+    n_cols <- if (n <= 96) 12L else 24L
+    pos <- seq_len(n) - 1L
+    row <- pos %/% n_cols + 1L
+    col <- pos %% n_cols + 1L
+    well_id <- rep(NA_character_, n)
+    rows <- seq_len(max(1L, ceiling(n / n_cols)))
+    cols <- seq_len(n_cols)
+  }
+
+  list(
+    tiles = data.frame(
+      sample = samples,
+      well_id = well_id,
+      row = as.integer(row),
+      col = as.integer(col),
+      stringsAsFactors = FALSE
+    ),
+    rows = rows,
+    cols = cols,
+    by_well = by_well
+  )
+}
+
+# plate_sample_at(): Sample on the tile at plate position (col, row) ----
+# For the click handler: x and y of a plotly click on plate_heatmap().
+#' @export
+plate_sample_at <- function(plate, col, row) {
+  if (is.null(plate) || length(col) != 1 || length(row) != 1) {
+    return(character(0))
+  }
+  tiles <- plate$tiles
+  tiles$sample[tiles$col == round(col) & tiles$row == round(row)]
+}
+
+# plate_heatmap(): Well plate of a run, coloured by detected peaks ----
+# plate:       plate_layout() of the run.
+# peak_counts: data.frame(sample, n_peaks) of the samples deconvoluted so far,
+#              with 0 for a sample UniDec found no peak in.
+# failed:      samples that failed to deconvolute. Their tile stays uncoloured
+#              and carries a cross, so a failure stands out from a sample that
+#              simply has not been processed yet.
+# Axes are numeric (row 1 = A, drawn top down), so a tile is addressed by the
+# same (col, row) in clicks, shapes and markers. `source` is the plotly source
+# its click events go to.
 #' @export
 plate_heatmap <- function(
-  data,
-  all_wells = NULL,
-  failed_wells = NULL,
-  theme = "light"
+  plate,
+  peak_counts = NULL,
+  failed = character(0),
+  theme = "light",
+  source = "A"
 ) {
   font_color <- if (theme == "light") "black" else "white"
   empty_color <- if (theme == "light") {
@@ -1120,143 +1193,132 @@ plate_heatmap <- function(
   } else {
     "rgba(118,120,128,0.55)"
   }
-  # Matches the app's existing error accent (.table-info-red / .table-hint-red
-  # in main.scss) so a failed well reads the same as other failure cues.
-  failed_color <- "#ff5a23"
 
-  # A caller with nothing done yet (e.g. every sample so far has failed) may
-  # pass a bare, columnless data.frame() rather than one shaped like a real
-  # result set -- normalise so the join below always has a well_id column to
-  # join on instead of erroring.
-  if (is.null(data) || !is.data.frame(data) || !"well_id" %in% names(data)) {
-    data <- data.frame(
-      sample = character(0),
-      well_id = character(0),
-      value = numeric(0)
-    )
-  }
-
-  all_rows <- LETTERS[1:16]
-  all_cols <- 1:24
-
-  # Normalize well IDs ("A01" → "A1")
-  norm_well_id <- function(w) {
-    gsub("^([A-Za-z]+)0*(\\d+)$", "\\1\\2", toupper(trimws(w)))
-  }
-
-  # Determine bounding rectangle from all_wells if provided, else from data
-  if (!is.null(all_wells) && length(all_wells) > 0) {
-    nw <- norm_well_id(stats::na.omit(as.character(all_wells)))
-    nw <- nw[nzchar(nw)]
-    row_letters <- sub("\\d+$", "", nw)
-    col_nums <- as.integer(sub("^[A-Za-z]+", "", nw))
-    used_row_idx <- range(
-      match(row_letters, all_rows, nomatch = NA_integer_),
-      na.rm = TRUE
-    )
-    used_col_idx <- range(col_nums, na.rm = TRUE)
-    row_range <- seq(used_row_idx[1], used_row_idx[2])
-    col_range <- seq(used_col_idx[1], used_col_idx[2])
-  } else {
-    row_range <- seq_len(16)
-    col_range <- seq_len(24)
-  }
-
-  rows <- all_rows[row_range]
-  cols <- all_cols[col_range]
+  rows <- plate$rows
+  cols <- plate$cols
+  tiles <- plate$tiles
   nr <- length(rows)
   nc <- length(cols)
 
-  plate_layout <- expand.grid(row = rows, col = cols) |>
-    dplyr::mutate(well_id = paste0(row, col))
-
-  plate_data <- dplyr::left_join(plate_layout, data, by = "well_id")
-
-  # failed_lookup: normalised well_id -> sample, for the failed branch below.
   if (
-    is.null(failed_wells) ||
-      !is.data.frame(failed_wells) ||
-      nrow(failed_wells) == 0 ||
-      !all(c("sample", "well_id") %in% names(failed_wells))
+    is.null(peak_counts) ||
+      !is.data.frame(peak_counts) ||
+      !all(c("sample", "n_peaks") %in% names(peak_counts))
   ) {
-    failed_lookup <- stats::setNames(character(0), character(0))
-  } else {
-    fw_id <- norm_well_id(as.character(failed_wells$well_id))
-    keep <- nzchar(fw_id) & !is.na(fw_id)
-    failed_lookup <- stats::setNames(
-      as.character(failed_wells$sample[keep]),
-      fw_id[keep]
-    )
-    # A well listed more than once keeps its first sample; duplicates are not
-    # expected, but must not error.
-    failed_lookup <- failed_lookup[!duplicated(names(failed_lookup))]
+    peak_counts <- data.frame(sample = character(0), n_peaks = integer(0))
   }
 
-  # z: 0 = empty/untargeted, 1 = done (drawn white), 2 = failed (drawn in
-  # failed_color).  A well present in both `data` and `failed_wells` -- not
-  # expected, but not impossible if a well maps to more than one sample --
-  # shows as done, since that reflects a completed result existing for it.
-  z_mat <- matrix(
-    0,
-    nrow = nr,
-    ncol = nc,
-    dimnames = list(rows, as.character(cols))
-  )
-  text_mat <- matrix(
-    "",
-    nrow = nr,
-    ncol = nc,
-    dimnames = list(rows, as.character(cols))
-  )
+  dims <- list(as.character(rows), as.character(cols))
+  z_mat <- matrix(NA_real_, nrow = nr, ncol = nc, dimnames = dims)
+  text_mat <- matrix("Empty", nrow = nr, ncol = nc, dimnames = dims)
+  if (plate$by_well) {
+    text_mat[] <- paste0(
+      "Well: ",
+      outer(LETTERS[rows], cols, paste0),
+      "<br>Empty"
+    )
+  }
 
-  for (r in rows) {
-    for (c in cols) {
-      wid <- paste0(r, c)
-      d <- plate_data[plate_data$well_id == wid, ]
-      if (nrow(d) > 0 && !is.na(d$value[1])) {
-        z_mat[r, as.character(c)] <- 1
-        text_mat[r, as.character(c)] <- paste0(
-          "Well: ",
-          wid,
-          "<br>Sample: ",
-          d$sample[1]
-        )
-      } else if (wid %in% names(failed_lookup)) {
-        z_mat[r, as.character(c)] <- 2
-        text_mat[r, as.character(c)] <- paste0(
-          "Well: ",
-          wid,
-          "<br>Sample: ",
-          failed_lookup[[wid]],
-          "<br>Failed"
-        )
-      } else {
-        text_mat[r, as.character(c)] <- paste0("Well: ", wid, "<br>Empty")
-      }
+  failed_tiles <- tiles[0, ]
+  for (i in seq_len(nrow(tiles))) {
+    r <- as.character(tiles$row[i])
+    c <- as.character(tiles$col[i])
+    s <- tiles$sample[i]
+    label <- paste0(
+      if (plate$by_well) paste0("Well: ", tiles$well_id[i], "<br>"),
+      "Sample: ",
+      s
+    )
+    n_peaks <- peak_counts$n_peaks[match(s, peak_counts$sample)]
+
+    if (!is.na(n_peaks)) {
+      z_mat[r, c] <- n_peaks
+      text_mat[r, c] <- paste0(label, "<br>Peaks: ", n_peaks)
+    } else if (s %in% failed) {
+      text_mat[r, c] <- paste0(label, "<br>Failed")
+      failed_tiles <- rbind(failed_tiles, tiles[i, ])
+    } else {
+      text_mat[r, c] <- paste0(label, "<br>Pending")
     }
   }
 
-  colorscale <- list(
-    c(0, empty_color),
-    c(0.5, "white"),
-    c(1, failed_color)
-  )
+  # Colour range over the counts on the plate. A single count is centred in
+  # the scale rather than pinned to one of its ends.
+  counts <- z_mat[!is.na(z_mat)]
+  if (length(counts) && min(counts) < max(counts)) {
+    zmin <- min(counts)
+    zmax <- max(counts)
+  } else {
+    mid <- if (length(counts)) counts[1] else 1
+    zmin <- mid - 1
+    zmax <- mid + 1
+  }
+  # Stops at orange: the count labels are white, and unreadable on yellow
+  pal <- viridisLite::plasma(9, end = 0.75)
+  colorscale <- lapply(seq_along(pal), function(i) {
+    list((i - 1) / (length(pal) - 1), pal[i])
+  })
 
-  plotly::plot_ly(
-    z = z_mat,
-    x = cols,
-    y = rows,
-    type = "heatmap",
-    colorscale = colorscale,
-    showscale = FALSE,
-    zmin = 0,
-    zmax = 2,
-    xgap = 3,
-    ygap = 3,
-    text = text_mat,
-    hovertemplate = "%{text}<extra></extra>"
-  ) |>
-    layout(
+  # Rough tile size in px for the left-hand card, to scale the count labels
+  # and the failure crosses with the plate
+  tile_px <- min(420 / nc, 360 / nr)
+
+  p <- plotly::plot_ly(source = source) |>
+    # Every tile in the empty colour underneath; the counts are drawn over it,
+    # so a tile without a count (pending, failed, empty) keeps this colour.
+    plotly::add_trace(
+      type = "heatmap",
+      z = matrix(0, nrow = nr, ncol = nc),
+      x = cols,
+      y = rows,
+      colorscale = list(list(0, empty_color), list(1, empty_color)),
+      showscale = FALSE,
+      xgap = 3,
+      ygap = 3,
+      hoverinfo = "skip"
+    ) |>
+    plotly::add_trace(
+      type = "heatmap",
+      z = z_mat,
+      x = cols,
+      y = rows,
+      colorscale = colorscale,
+      zmin = zmin,
+      zmax = zmax,
+      showscale = FALSE,
+      xgap = 3,
+      ygap = 3,
+      text = text_mat,
+      hoverongaps = TRUE,
+      hovertemplate = "%{text}<extra></extra>",
+      texttemplate = if (tile_px >= 12) "%{z}" else "",
+      textfont = list(
+        size = round(max(8, min(14, tile_px * 0.45))),
+        color = "white"
+      )
+    )
+
+  if (nrow(failed_tiles) > 0) {
+    p <- p |>
+      plotly::add_trace(
+        type = "scatter",
+        mode = "markers",
+        x = failed_tiles$col,
+        y = failed_tiles$row,
+        marker = list(
+          symbol = "x-thin",
+          size = round(max(6, min(18, tile_px * 0.55))),
+          color = font_color,
+          line = list(color = font_color, width = 2.5)
+        ),
+        # Clicks on a cross reach the heatmap below, like any other tile
+        hoverinfo = "skip",
+        showlegend = FALSE
+      )
+  }
+
+  p |>
+    plotly::layout(
       dragmode = FALSE,
       showlegend = FALSE,
       hoverlabel = list(
@@ -1269,6 +1331,8 @@ plate_heatmap <- function(
         tickmode = "array",
         tickvals = cols,
         ticktext = as.character(cols),
+        # Queue positions are no wells, so they get no well labels either
+        showticklabels = plate$by_well,
         tickfont = list(color = font_color, size = 12),
         tickangle = 0,
         ticklen = 0,
@@ -1277,23 +1341,33 @@ plate_heatmap <- function(
         automargin = FALSE,
         range = c(min(cols) - 0.5, max(cols) + 0.5),
         scaleanchor = "y",
-        scaleratio = 1
+        scaleratio = 1,
+        # Shrink the plot area to the plate rather than padding the ranges,
+        # so the background shows only between the tiles
+        constrain = "domain"
       ),
       yaxis = list(
-        autorange = "reversed",
+        tickmode = "array",
+        tickvals = rows,
+        ticktext = LETTERS[rows],
+        showticklabels = plate$by_well,
+        range = c(max(rows) + 0.5, min(rows) - 0.5),
+        constrain = "domain",
         tickfont = list(color = font_color, size = 12),
         ticklen = 0,
         showgrid = FALSE,
         zeroline = FALSE,
-        scaleanchor = "x",
-        scaleratio = 1,
         automargin = FALSE
       ),
-      margin = list(t = 25, r = 0, b = 0, l = 30),
+      margin = if (plate$by_well) {
+        list(t = 25, r = 0, b = 0, l = 30)
+      } else {
+        list(t = 5, r = 0, b = 0, l = 5)
+      },
       plot_bgcolor = tile_bg,
       paper_bgcolor = "rgba(0,0,0,0)"
     ) |>
-    config(
+    plotly::config(
       displayModeBar = "hover",
       scrollZoom = FALSE,
       modeBarButtons = list(list(
@@ -1308,6 +1382,29 @@ plate_heatmap <- function(
         filename = paste0(Sys.Date(), "_Plate_Heatmap")
       )
     )
+}
+
+# plate_highlight(): Layout shapes framing the selected sample's tile ----
+# Empty for no selection, "Show All", or a sample not on the plate, which
+# clears an earlier frame when sent through relayout.
+#' @export
+plate_highlight <- function(plate, sample) {
+  tiles <- if (is.null(plate)) NULL else plate$tiles
+  hit <- if (length(sample) == 1) match(sample, tiles$sample) else NA
+  if (is.null(tiles) || is.na(hit)) {
+    return(list())
+  }
+  list(list(
+    type = "rect",
+    xref = "x",
+    yref = "y",
+    x0 = tiles$col[hit] - 0.5,
+    x1 = tiles$col[hit] + 0.5,
+    y0 = tiles$row[hit] - 0.5,
+    y1 = tiles$row[hit] + 0.5,
+    line = list(color = "rgba(80,200,100,0.95)", width = 3),
+    fillcolor = "rgba(0,0,0,0)"
+  ))
 }
 
 # process_plot_data(): Helper function to harmonize data for plotting ----
@@ -1641,8 +1738,21 @@ spectrum_plot <- function(
     marker_border_color <- "#ffffff"
   }
 
+  # Conversion results colour the annotation like their other plots: the
+  # protein in the font colour, compounds in their own colours, or everything
+  # in the sample's colour
+  sample_color <- NULL
   if (identical(color_variable, "Samples") && !is.null(color_cmp)) {
-    data_line_color <- color_cmp
+    sample_color <- unname(color_cmp[1])
+    data_line_color <- sample_color
+  }
+  if (!is.null(color_cmp)) {
+    protein_fill_color <- font_color
+    protein_border_color <- if (tolower(theme) == "light") {
+      "#ffffff"
+    } else {
+      "#000000"
+    }
   }
 
   # Interactive plotly
@@ -1784,22 +1894,30 @@ spectrum_plot <- function(
             ),
             color = ifelse(
               name == plot_data$highlight_peaks$name[1],
-              marker_fill_color,
-              if (tolower(theme) == "light") "#e0e0e0" else "#333333"
+              protein_fill_color,
+              sample_color %||% font_color
             ),
-            linecolor = marker_border_color
+            linecolor = ifelse(
+              name == plot_data$highlight_peaks$name[1],
+              protein_border_color,
+              marker_border_color
+            )
           )
 
           # Prepare marker colors
           if (color_variable == "Compounds") {
             # The protein carries one marker color, no matter how many of its
-            # declared mass species are annotated in the spectrum
-            color_cmp <- c(marker_fill_color, color_cmp)
-            names(color_cmp) <- c(
-              unique(plot_data$highlight_peaks$name[
-                !plot_data$highlight_peaks$name %in% names(color_cmp)
-              ]),
-              names(color_cmp)[-1]
+            # declared mass species are annotated in the spectrum - or none,
+            # when no unbound species was detected
+            prot_names <- unique(plot_data$highlight_peaks$name[
+              !plot_data$highlight_peaks$name %in% names(color_cmp)
+            ])
+            color_cmp <- c(
+              stats::setNames(
+                rep(protein_fill_color, length(prot_names)),
+                prot_names
+              ),
+              color_cmp
             )
 
             plot_data$highlight_peaks$color <- color_cmp[match(
@@ -2420,6 +2538,163 @@ process_plot_data_db <- function(
       NULL
     }
   )
+}
+
+# read_decon_peak_counts(): Number of detected peaks per sample ----
+# One row per sample in `samples`, in that order; a sample without any row in
+# the peaks table (UniDec found nothing above the threshold) counts 0.
+#' @export
+read_decon_peak_counts <- function(db_path, samples) {
+  samples <- as.character(samples)
+  counts <- tryCatch(
+    {
+      con <- DBI::dbConnect(
+        RSQLite::SQLite(),
+        db_path,
+        flags = RSQLite::SQLITE_RO
+      )
+      on.exit(DBI::dbDisconnect(con), add = TRUE)
+      if (length(samples) == 0 || !DBI::dbExistsTable(con, "peaks")) {
+        data.frame(sample = character(0), n = integer(0))
+      } else {
+        ph <- paste(rep("?", length(samples)), collapse = ",")
+        DBI::dbGetQuery(
+          con,
+          sprintf(
+            "SELECT sample, COUNT(*) AS n FROM peaks WHERE sample IN (%s) GROUP BY sample",
+            ph
+          ),
+          params = as.list(samples)
+        )
+      }
+    },
+    error = function(e) data.frame(sample = character(0), n = integer(0))
+  )
+
+  n_peaks <- counts$n[match(samples, counts$sample)]
+  data.frame(
+    sample = samples,
+    n_peaks = as.integer(ifelse(is.na(n_peaks), 0L, n_peaks)),
+    stringsAsFactors = FALSE
+  )
+}
+
+# Labels of the UniDec fit statistics, in the order UniDec writes them
+decon_metric_labels <- c(
+  "Fitting Error",
+  "Computation Time [s]",
+  "Iteration Count",
+  "UniScore (Quality)",
+  "Sigma [m/z]",
+  "Charge Sigma [z]",
+  "Beta (Suppression)",
+  "Point Sigma"
+)
+
+# read_decon_metrics(): UniDec fit statistics of one sample ----
+# From the run database's error table, falling back to the sample's
+# <base>_error.txt in its UniDec output folder (older runs). Returns
+# data.frame(Parameter, Value), with no rows when neither has the sample.
+#' @export
+read_decon_metrics <- function(db_path, sample, result_dir = NULL) {
+  rows <- if (!is.null(db_path) && file.exists(db_path)) {
+    tryCatch(
+      {
+        con <- DBI::dbConnect(
+          RSQLite::SQLite(),
+          db_path,
+          flags = RSQLite::SQLITE_RO
+        )
+        on.exit(DBI::dbDisconnect(con), add = TRUE)
+        if (DBI::dbExistsTable(con, "error")) {
+          DBI::dbGetQuery(
+            con,
+            "SELECT Key, Value FROM error WHERE sample = ?",
+            params = list(sample)
+          )
+        } else {
+          data.frame()
+        }
+      },
+      error = function(e) data.frame()
+    )
+  } else {
+    data.frame()
+  }
+
+  if (nrow(rows) == 0 && !is.null(result_dir) && dir.exists(result_dir)) {
+    error_file <- file.path(
+      result_dir,
+      paste0(gsub("_unidecfiles", "", basename(result_dir)), "_error.txt")
+    )
+    if (file.exists(error_file)) {
+      raw_lines <- readLines(error_file)
+      rows <- data.frame(
+        Key = sub(" =.*", "", raw_lines),
+        Value = suppressWarnings(
+          as.numeric(sub(".*= ([^ ]+).*", "\\1", raw_lines))
+        )
+      )
+    }
+  }
+
+  if (nrow(rows) == 0) {
+    return(data.frame(Parameter = character(0), Value = numeric(0)))
+  }
+
+  rows <- utils::head(rows, length(decon_metric_labels))
+  data.frame(
+    Parameter = decon_metric_labels[seq_len(nrow(rows))],
+    Value = round(rows$Value, 6),
+    stringsAsFactors = FALSE
+  )
+}
+
+# add_metrics_table(): Fit statistics as a table beside a spectrum ----
+# A plotly table trace in a strip on the right of the figure, with the
+# spectrum's x axis narrowed to make room, so the table never covers a peak
+# and goes along with the figure into an export.
+#' @export
+add_metrics_table <- function(plot, metrics, theme = "light", width = 0.24) {
+  if (is.null(metrics) || nrow(metrics) == 0) {
+    return(plot)
+  }
+
+  dark <- tolower(theme) != "light"
+  font_color <- if (dark) "white" else "black"
+  line_color <- if (dark) "rgba(255,255,255,0.25)" else "rgba(0,0,0,0.2)"
+  header_fill <- if (dark) "rgba(255,255,255,0.12)" else "rgba(0,0,0,0.08)"
+
+  values <- vapply(
+    metrics$Value,
+    function(v) format(signif(v, 6), scientific = FALSE, trim = TRUE),
+    character(1)
+  )
+
+  plot |>
+    plotly::add_trace(
+      type = "table",
+      inherit = FALSE,
+      domain = list(x = c(1 - width, 1), y = c(0, 1)),
+      columnwidth = c(1.8, 1),
+      header = list(
+        values = list("<b>Metric</b>", "<b>Value</b>"),
+        align = c("left", "right"),
+        fill = list(color = header_fill),
+        line = list(color = line_color, width = 1),
+        font = list(color = font_color, size = 12),
+        height = 26
+      ),
+      cells = list(
+        values = list(metrics$Parameter, values),
+        align = c("left", "right"),
+        fill = list(color = "rgba(0,0,0,0)"),
+        line = list(color = line_color, width = 1),
+        font = list(color = font_color, size = 12),
+        height = 24
+      )
+    ) |>
+    plotly::layout(xaxis = list(domain = c(0, 1 - width - 0.03)))
 }
 
 # generate_decon_rslt(): Finalise the SQLite DB after all workers complete ----

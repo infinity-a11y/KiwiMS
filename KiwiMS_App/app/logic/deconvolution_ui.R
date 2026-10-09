@@ -19,7 +19,7 @@ box::use(
   app / logic / user_settings[read_user_settings],
   app /
     logic /
-    plot_download[card_settings_popover, plot_dl_popover, table_dl_popover],
+    plot_download[card_settings_popover, plot_dl_popover],
 )
 
 # Deconvolution initiation interface
@@ -89,7 +89,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                     class = "bg-dark help-header",
                     tooltip(
                       "Charge state [z]",
-                      "The number of charges the ionized molecule is expected to carry.",
+                      "The charge states UniDec may assign to the peaks of the m/z spectrum.",
                       placement = "bottom"
                     ),
                     tooltip(
@@ -194,8 +194,20 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                     class = "bg-dark help-header",
                     tooltip(
                       "Deconvolution range [m/z]",
-                      "The span of molecular weights to be deconvoluted.",
+                      "The m/z window of the measured spectrum that is deconvoluted.",
                       placement = "bottom"
+                    ),
+                    tooltip(
+                      shiny$div(
+                        class = "tooltip-bttn",
+                        shiny$actionButton(
+                          ns("mz_range_tooltip_bttn"),
+                          label = NULL,
+                          icon = shiny$icon("circle-question")
+                        )
+                      ),
+                      "Help",
+                      placement = "top"
                     )
                   ),
                   card_body(
@@ -290,7 +302,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                     class = "bg-dark help-header",
                     tooltip(
                       "Mass range [Da]",
-                      "The span of molecular weights to be deconvoluted.",
+                      "The masses the deconvoluted spectrum may contain.",
                       placement = "bottom"
                     ),
                     tooltip(
@@ -397,6 +409,18 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                       "Retention time [min]",
                       "Scans within this window are summed for deconvolution. Leave a field blank to read from the first or to the last scan; both blank uses the whole acquisition.",
                       placement = "bottom"
+                    ),
+                    tooltip(
+                      shiny$div(
+                        class = "tooltip-bttn",
+                        shiny$actionButton(
+                          ns("retention_time_tooltip_bttn"),
+                          label = NULL,
+                          icon = shiny$icon("circle-question")
+                        )
+                      ),
+                      "Help",
+                      placement = "top"
                     )
                   ),
                   card_body(
@@ -492,7 +516,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                     class = "bg-dark help-header",
                     tooltip(
                       "Peak parameters",
-                      "Expected characteristics of spectral peaks.",
+                      "How peaks are picked from the deconvoluted spectrum.",
                       placement = "bottom"
                     ),
                     tooltip(
@@ -563,7 +587,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                             style = "margin-top: 8px;"
                           ),
                           shiny$HTML(
-                            "Peak intensity normalization mode:<br> 0 = no normalization<br> 1 = max normalization<br> 2 = normalization to the sum"
+                            "How the reported peak intensities are scaled: kept as is, tallest peak = 100, or all peaks summing to 100. Binding ratios do not depend on it."
                           ),
                           placement = "left"
                         )
@@ -660,7 +684,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                     class = "bg-dark help-header",
                     tooltip(
                       "Sample Rate (Resolution)",
-                      "Discrete intervals of mass values for the spectra.",
+                      "Spacing of the mass axis of the deconvoluted spectrum.",
                       placement = "bottom"
                     ),
                     tooltip(
@@ -897,7 +921,7 @@ deconvolution_status_controls <- function(ns) {
 
 # Deconvolution running interface (no batch mode)
 #' @export
-deconvolution_results_ui <- function(ns, show_heatmap = FALSE) {
+deconvolution_results_ui <- function(ns) {
   # Deliberate delay to show spinner
   Sys.sleep(1)
 
@@ -910,21 +934,41 @@ deconvolution_results_ui <- function(ns, show_heatmap = FALSE) {
         shiny::div(
           class = "box-header-settings-help",
           card_settings_popover(
+            # Which settings apply depends on whether one sample or "Show All"
+            # is selected; see the decon-show-all body class toggled in
+            # deconvolution_main.R and the matching rules in main.scss.
             shiny::div(
+              class = "decon-spectrum-settings",
               shiny::div(
-                class = "spectrum-radio-button",
-                shiny::radioButtons(
-                  ns("toggle_result"),
-                  label = NULL,
-                  choiceNames = list("Deconvoluted", "Raw m/z"),
-                  choiceValues = list(FALSE, TRUE)
+                class = "spectrum-radio-button decon-settings-all",
+                shinyWidgets::radioGroupButtons(
+                  ns("spectrum_kind"),
+                  choices = c("Cubic", "Planar")
                 )
               ),
-              shinyWidgets::materialSwitch(
-                ns("spectrum_annotation"),
-                label = "Annotate Mass",
-                value = TRUE,
-                right = TRUE
+              shiny::div(
+                class = "decon-settings-single",
+                shiny::div(
+                  class = "spectrum-radio-button",
+                  shiny::radioButtons(
+                    ns("toggle_result"),
+                    label = NULL,
+                    choiceNames = list("Deconvoluted", "Raw m/z"),
+                    choiceValues = list(FALSE, TRUE)
+                  )
+                ),
+                shinyWidgets::materialSwitch(
+                  ns("spectrum_annotation"),
+                  label = "Annotate Mass",
+                  value = TRUE,
+                  right = TRUE
+                ),
+                shinyWidgets::materialSwitch(
+                  ns("spectrum_metrics"),
+                  label = "Show Metrics",
+                  value = TRUE,
+                  right = TRUE
+                )
               ),
               style = "padding-right: 20px;"
             )
@@ -954,6 +998,35 @@ deconvolution_results_ui <- function(ns, show_heatmap = FALSE) {
     )
   )
 
+  heatmap_card <- shiny::div(
+    class = "deconvolution-heatmap-card card-custom",
+    bslib::card(
+      bslib::card_header(
+        class = "bg-dark help-header d-flex justify-content-between",
+        "Well Plate",
+        shiny::div(
+          class = "box-header-settings-help",
+          tooltip(
+            shiny::div(
+              class = "tooltip-bttn",
+              shiny::actionButton(
+                ns("well_plate_tooltip_bttn"),
+                label = NULL,
+                icon = shiny::icon("circle-question")
+              )
+            ),
+            "Help",
+            placement = "top"
+          )
+        )
+      ),
+      shiny$div(
+        class = "heatmap-plot",
+        withWaiter(plotlyOutput(ns("heatmap"), height = "100%"))
+      )
+    )
+  )
+
   card(
     class = "deconvolution-parent-card",
     shiny$div(
@@ -972,60 +1045,9 @@ deconvolution_results_ui <- function(ns, show_heatmap = FALSE) {
                 shiny$uiOutput(ns("result_picker_ui"))
               )
             ),
-            shiny::div(
-              class = "card-custom",
-              bslib::card(
-                bslib::card_header(
-                  class = "bg-dark help-header d-flex justify-content-between",
-                  "Deconvolution Metrics",
-                  shiny::div(
-                    class = "box-header-settings-help",
-                    table_dl_popover(ns, "deconvolution_data"),
-                    tooltip(
-                      shiny::div(
-                        class = "tooltip-bttn",
-                        shiny::actionButton(
-                          ns("conversion_samples_protein_tooltip_bttn"),
-                          label = NULL,
-                          icon = shiny::icon("circle-question")
-                        )
-                      ),
-                      "Help",
-                      placement = "top"
-                    )
-                  )
-                ),
-                shiny::div(
-                  class = "deconvolution-metrics-body",
-                  withWaiter(DT::dataTableOutput(ns("deconvolution_data"))),
-                  shiny$uiOutput(ns("metrics_failure_msg"))
-                )
-              )
-            )
+            heatmap_card
           ),
-          if (show_heatmap) {
-            bslib::layout_sidebar(
-              spectrum_card,
-              sidebar = bslib::sidebar(
-                width = 550,
-                shiny::div(
-                  class = "deconvolution-heatmap-card card-custom",
-                  bslib::card(
-                    bslib::card_header(class = "bg-dark", "Well Plate"),
-                    shiny$div(
-                      class = "heatmap-plot",
-                      withWaiter(plotlyOutput(ns("heatmap"), height = "100%"))
-                    )
-                  )
-                ),
-                position = "right",
-                open = TRUE
-              ),
-              border = FALSE
-            )
-          } else {
-            spectrum_card
-          }
+          spectrum_card
         )
       )
     )

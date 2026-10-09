@@ -390,7 +390,9 @@ kit_complex_summary <- function(entry) {
   )
 }
 
-# kit_card(): The Tot. Binding card of a compound ----
+# kit_card(): The former Tot. Binding card of a compound ----
+# No longer shown in the app (the Overview tab replaced the Compound and
+# Protein View); kept as the number the READMEs compare tests by.
 # Per compound, over the samples declaring it: one value per sample, a sample
 # the compound was not found in counting with its 0 %, one without any protein
 # or complex peak (not measured, NA) left out. `samples` is the count of the
