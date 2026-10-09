@@ -15,9 +15,10 @@ Setup and conventions are in the [kit README](../README.md).
 `baseline/proteins_baseline` · `baseline/compounds_baseline` · `baseline/config_baseline`
 
 - **Declaration** passes, with no hint.
-- **Tot. Binding card** (BI-8925): 8.29–100 %, **73.19 ± 23.61**, 120 samples.
-  All samples: 70.24. The reference sample is at 12.04 %.
-- **Sample View picker**, "No Hits": two samples.
+- **Tot. Binding card** (BI-8925): 0–100 %, **70.24 ± 26.86**, one value per
+  sample, the two without a hit at 0 %; 120 samples with a hit. All samples:
+  70.24. The reference sample is at 12.04 %.
+- **Sample View picker**, marked "No hits": two samples.
   - `0_0min_R1`, the R1 control. Its third peak sits at 21,895.5 Da, 9.3 Da
     below the complex (21,904.84 Da).
   - `2o5_1min_R1`: its complex sits at 21,900.5 Da, 4.34 Da from
@@ -106,5 +107,5 @@ what it is given.
 | the peak list holds the whole MLKL series | 122 samples, 466 peaks, the design read off the names |
 | the baseline files are written and load like uploads | every file through the app's readers |
 | B0: the baseline declaration passes without a hint | declaration |
-| B0: binding of the baseline | card, all samples, reference sample, No Hits, R2 control |
+| B0: binding of the baseline | card, all samples, reference sample, "No hits" samples, R2 control |
 | B0: kinetics of the baseline | kinact/KI, CI, status, warning, series, Proteoforms tab |

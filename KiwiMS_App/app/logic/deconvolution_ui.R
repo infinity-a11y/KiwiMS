@@ -569,7 +569,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                         )
                       ),
                       shiny$column(
-                        width = 5,
+                        width = 6,
                         shiny$div(
                           class = "save-default-button",
                           shiny$div(

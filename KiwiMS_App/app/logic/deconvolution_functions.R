@@ -1107,7 +1107,7 @@ plate_heatmap <- function(
   data,
   all_wells = NULL,
   failed_wells = NULL,
-  theme = "dark"
+  theme = "light"
 ) {
   font_color <- if (theme == "light") "black" else "white"
   empty_color <- if (theme == "light") {
@@ -1400,8 +1400,9 @@ process_plot_data <- function(
 
     # Merge non-preferred hits per peak: sort preferred first, then collapse
     # multiple interpretations of the same peak into a single combined label.
+    # Complexes only: a row without an adduct names its declared compound too
     compound_hits <- sample$hits |>
-      dplyr::filter(!is.na(Compound)) |>
+      dplyr::filter(!is.na(Compound) & !is.na(`Compound Mw [Da]`)) |>
       dplyr::arrange(
         `Peak [Da]`,
         dplyr::desc(Preferred == "TRUE"),
@@ -1538,7 +1539,7 @@ unmatched_spectrum_peaks <- function(peaks, assigned, mass) {
 # line-only cross, so it stays lighter than the hit markers it sits among; 3D
 # scatter traces support only the solid "x" of the few symbols they know.
 #' @export
-unmatched_marker <- function(theme = "dark") {
+unmatched_marker <- function(theme = "light") {
   light <- tolower(theme) == "light"
   list(
     symbol = "x-thin-open",
@@ -1604,7 +1605,7 @@ spectrum_plot <- function(
   raw = FALSE,
   interactive = TRUE,
   bin_width = 0.01,
-  theme = "dark",
+  theme = "light",
   color_cmp = NULL,
   color_variable = NULL,
   show_peak_labels = TRUE,

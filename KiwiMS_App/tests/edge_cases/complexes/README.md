@@ -73,7 +73,7 @@ Tests in *italics* are synthetic, in the automated suite only.
 **Switch kinact/KI off first.** With it on, the table is blocked with "One
 compound per sample for kinact/KI (122 samples list several)" (CX4).
 
-- Results are identical to B0: Tot. Binding card (BI-8925) 73.19 ± 23.61, all
+- Results are identical to B0: Tot. Binding card (BI-8925) 70.24 ± 26.86, all
   samples 70.24.
 - Before the fix, **0 of 122** samples got a BI-8925 hit.
 
@@ -96,9 +96,10 @@ compound per sample for kinact/KI (122 samples list several)" (CX4).
 - Passes, with no hint.
 - Every sample reads as in B0 (all samples 70.24); only the compound names
   differ, and the reference sample's hit now reads BI-8926.
-- **Tot. Binding card**, per compound:
-  - BI-8925: 9.20–100 %, **83.57 ± 18.22** (the high concentrations);
-  - BI-8926: 8.29–92.78 %, **61.97 ± 23.70** (2.5, 5 and 10 µM).
+- **Tot. Binding card**, per compound, one value per sample declaring it (a
+  sample without a hit at 0 %):
+  - BI-8925: 0–100 %, **81.63 ± 21.97** (the high concentrations);
+  - BI-8926: 0–92.78 %, **58.48 ± 26.54** (2.5, 5 and 10 µM).
 - **Mass Shifts card** (Compound View): BI-8925 [266.0 Da] ×61, BI-8926 ×59.
 - **Complex picker:** BI-8925 and BI-8926 under MLKL; BI-8925 selected.
   - **BI-8925:** 62 samples (the 0 µM controls included). kinact/KI
@@ -112,8 +113,11 @@ compound per sample for kinact/KI (122 samples list several)" (CX4).
 
 **CX3b, declared complex without hits:** `baseline/proteins_baseline` · `complexes/compounds_8926_no_hits` (BI-8926 at 500 Da) · `complexes/config_split_by_conc`
 
-- Passes. Only BI-8925 has a Tot. Binding card: 9.20–100 %, **83.57 ±
-  18.22**, as in CX3a. All samples fall to 41.48.
+- Passes. BI-8925's Tot. Binding card reads 0–100 %, **81.63 ± 21.97**, as in
+  CX3a. All samples fall to 41.48.
+- BI-8926 is listed in the Compound View too: its samples name it on rows
+  without an adduct, so its card reads 0 % and its Mass Shifts card shows
+  500.0 Da unassigned.
 - The complex picker still lists **BI-8926**. Pick it: the kinetics view shows
   the "no kinetics" card with "No hits of BI-8926 in its samples".
 - The log has, under "MLKL + BI-8926 (60 samples)": "⚠ No hits of BI-8926 in

@@ -395,12 +395,13 @@ th {
 .card-log-output .bslib-card,
 .card-log-control .bslib-card {
   box-shadow: none !important;
-  border-color: rgb(255 255 255);
-  background-color: rgb(0 0 0 / 40%);
+  border-color: #fff;
+  background-color: #dbe1dc7d;
   border: none;
   border-radius: 4px;
   overflow-x: hidden;
   backdrop-filter: blur(5px);
+  color: black;
 }
 
 .card-custom .card-body {
@@ -419,10 +420,6 @@ th {
   border: 1px solid rgb(255 255 255 / 50%);
   border-bottom: none;
   align-items: center;
-}
-
-.card-custom .card-body .far {
-  color: rgb(255 255 255 / 80%);
 }
 
 .card-header .far {
@@ -1524,7 +1521,61 @@ td.listbox.htDimmed.current.highlight {
   width: 100%;
 }
 
-/* .peaknorm-selector */
+/* .peaknorm-selector: selectize styled like the sibling .form-control inputs */
+// Fixed width (same as the sibling inputs) regardless of the selected item
+.peaknorm-selector,
+.peaknorm-selector .shiny-input-container {
+  min-width: 0;
+  width: 100%;
+}
+
+.peaknorm-selector .selectize-control {
+  min-height: unset;
+  width: 100%;
+}
+
+.peaknorm-selector .selectize-control.single .selectize-input {
+  width: 100%;
+  height: 36.5px;
+  background-color: #d5d5d5;
+  background-image: none;
+  border: 1px solid #e5e5e5 !important;
+  border-radius: 3px !important;
+  box-shadow: inset 0px 0px 20px 1px rgb(255 255 255) !important;
+}
+
+.peaknorm-selector .selectize-control.single .selectize-input.disabled {
+  background: white;
+  opacity: 0.5;
+}
+
+// Open dropdown: same look as the bootstrap-select menus (e.g. Preferred Assignment)
+.peaknorm-selector .selectize-dropdown {
+  width: max-content !important;
+  min-width: 100%;
+  background: #e5e5e5;
+  border: none;
+  border-radius: 4px;
+  box-shadow: 0px 0px 10px 2px #00000087;
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+.peaknorm-selector .selectize-dropdown-content {
+  padding: 4px 0;
+}
+
+.peaknorm-selector .selectize-dropdown .option {
+  padding: 6px 15px;
+  color: black;
+  background: transparent;
+}
+
+.peaknorm-selector .selectize-dropdown .option.active,
+.peaknorm-selector .selectize-dropdown .option.selected {
+  background: #38387c !important;
+  color: white;
+}
 
 .settings-peaknorm .selectize-input,
 .settings-select .selectize-input {
@@ -1906,13 +1957,13 @@ decon-report-modal .btn-default {
 }
 
 #app-deconvolution_main-deconvolution_data td {
-  color: white;
-  border-top: 1px solid #ffffff2e;
+  color: black;
+  border-top: 1px solid #0000002e;
 }
 
 #app-deconvolution_main-deconvolution_data th {
   background: transparent;
-  color: white;
+  color: black;
 }
 
 /* ==========================================================================
@@ -2585,8 +2636,10 @@ div[data-value="Protein Conversion"] .tab-pane {
   text-decoration: none;
   border-left: none !important;
   align-content: center;
-  background: transparent;
-  color: white;
+  background: #e5e5e5;
+  color: black;
+  border-bottom: 3px solid #bbbbbb;
+  box-shadow: inset -1px 0 0 #bbbbbb;
 }
 
 #app-conversion_main-hits_unified_tab .dataTables_scrollHead th {
@@ -2638,7 +2691,7 @@ div[data-value="Protein Conversion"] .tab-pane {
   border-top-left-radius: unset;
   border-top-right-radius: unset;
   padding: unset;
-  color: white;
+  color: black;
 }
 
 /* ==========================================================================
@@ -2816,7 +2869,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 
 .protocol-log-body pre {
   background: transparent;
-  color: white;
+  color: #000000;
   border: none;
   margin: 0;
   padding: 10px;
@@ -3143,7 +3196,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 
 .kinetic-stat {
   white-space: nowrap;
-  color: rgb(255 255 255 / 62%);
+  color: #4a4a4a;
 }
 
 .kinetic-unit {
@@ -3245,7 +3298,7 @@ th.sorting {
   border-top-left-radius: unset;
   border-top-right-radius: unset;
   padding: unset;
-  color: #ffffff;
+  color: black;
 }
 
 /* ==========================================================================
@@ -5561,10 +5614,10 @@ sample-file-row .form-group {
   width: 30px;
   height: 100%;
   padding: 0;
-  border: 1px solid;
-  border-color: var(--bs-btn-border-color);
+  border: none;
   min-width: fit-content;
-  background: transparent !important;
+  background: rgb(255 255 255 / 0%) !important;
+  color: black;
 }
 
 .save-button .btn:hover {

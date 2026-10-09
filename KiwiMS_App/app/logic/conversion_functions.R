@@ -2542,25 +2542,60 @@ check_hits <- function(
     logical(nrow(peaks))
   }
 
-  if (!any(peaks_valid)) {
-    hits_df <- data.frame(
+  # Compounds declared for the sample - the compound table arrives narrowed
+  # to them
+  declared <- if (is.null(compound_mw) || !nrow(compound_mw)) {
+    character(0)
+  } else {
+    unique(as.character(compound_mw[[1]]))
+  }
+
+  # Rows without an adduct, one per given species and declared compound the
+  # species carries no complex of (`complexed`, "<species> <compound>"), so
+  # every declared protein-compound pair of the sample is listed. A sample
+  # declaring no compound - a control - gets rows that name none.
+  no_adduct_rows <- function(sp, complexed = character(0)) {
+    pairs <- expand.grid(
+      s = seq_len(nrow(sp)),
+      compound = if (length(declared)) declared else NA_character_,
+      stringsAsFactors = FALSE
+    )
+    pairs <- pairs[
+      !paste(sp$theor[pairs$s], pairs$compound) %in% complexed,
+      ,
+      drop = FALSE
+    ]
+    if (!nrow(pairs)) {
+      return(NULL)
+    }
+    sp <- sp[pairs$s, , drop = FALSE]
+
+    data.frame(
       well = well,
       sample = sample,
       protein = prot_name,
-      theor_prot = if (length(prot_masses)) prot_masses[1] else NA_real_,
-      measured_prot = NA,
-      delta_prot = NA,
-      prot_intensity = NA,
-      peak = NA,
+      theor_prot = sp$theor,
+      measured_prot = sp$measured,
+      delta_prot = sp$delta,
+      prot_intensity = ifelse(is.na(sp$measured), NA_real_, sp$intensity),
+      # The species' own signal
+      peak = sp$measured,
       intensity = NA,
-      compound = NA,
+      compound = pairs$compound,
       cmp_mass = NA,
       delta_cmp = NA,
       multiple = NA,
       preferred = NA
     )
+  }
 
-    return(hits_df)
+  if (!any(peaks_valid)) {
+    return(no_adduct_rows(data.frame(
+      theor = if (length(prot_masses)) prot_masses[1] else NA_real_,
+      measured = NA_real_,
+      delta = NA_real_,
+      intensity = NA_real_
+    )))
   }
 
   # A peak read as an unbound species can equally be a complex of another
@@ -2644,43 +2679,25 @@ check_hits <- function(
     hits_df <- rbind(hits_df, hits_add)
   }
 
-  # Detected species that no complex points back to are still part of the
-  # spectrum: emit one unbound row each so they are annotated and counted
-  detected <- species[!is.na(species$measured), , drop = FALSE]
-  unbound <- detected[!detected$theor %in% hits_df$theor_prot, , drop = FALSE]
-
-  if (nrow(hits_df) == 0 || nrow(unbound) > 0) {
-    if (nrow(hits_df) == 0 && nrow(detected) == 0) {
-      # No species detected and no complex found
-      unbound <- species[1, , drop = FALSE]
-      unbound$measured <- NA
-      unbound$delta <- NA
-    }
-
-    hits_df <- rbind(
-      hits_df,
-      data.frame(
-        well = well,
-        sample = sample,
-        protein = prot_name,
-        theor_prot = unbound$theor,
-        measured_prot = unbound$measured,
-        delta_prot = unbound$delta,
-        prot_intensity = ifelse(
-          is.na(unbound$measured),
-          NA_real_,
-          unbound$intensity
-        ),
-        peak = unbound$measured,
-        intensity = NA,
-        compound = NA,
-        cmp_mass = NA,
-        delta_cmp = NA,
-        multiple = NA,
-        preferred = NA
-      )
-    )
+  # Every species in the spectrum - detected unbound or carrying a complex -
+  # lists each declared compound it carries no complex of, so a pair whose
+  # adduct was not found is annotated and counted too
+  present <- species[
+    !is.na(species$measured) | species$theor %in% hits_df$theor_prot,
+    ,
+    drop = FALSE
+  ]
+  if (!nrow(present)) {
+    # No species detected and no complex found
+    present <- species[1, , drop = FALSE]
+    present$measured <- NA
+    present$delta <- NA
   }
+
+  hits_df <- rbind(
+    hits_df,
+    no_adduct_rows(present, paste(hits_df$theor_prot, hits_df$compound))
+  )
 
   return(hits_df)
 }
@@ -2713,6 +2730,26 @@ unbound_species <- function(hits) {
   species <- species[!duplicated(species$theor_prot), , drop = FALSE]
 
   species[order(species$theor_prot), , drop = FALSE]
+}
+
+# Whether each hits row is a complex. A row without an adduct still names the
+# compound declared for its sample (see check_hits()), so the name alone does
+# not tell - the assigned compound mass does. Accepts the hits frame in its raw
+# or its display column naming; a frame without the mass reads a named row as a
+# complex.
+#' @export
+is_complex_row <- function(hits) {
+  cols <- if ("Compound" %in% names(hits)) {
+    c("Compound", "Compound Mw [Da]")
+  } else {
+    c("Cmp Name", "Theor. Cmp [Da]")
+  }
+  named <- !is.na(hits[[cols[1]]])
+  if (!cols[2] %in% names(hits)) {
+    return(named)
+  }
+  cmp_mass <- as.character(hits[[cols[2]]])
+  named & !is.na(cmp_mass) & cmp_mass != "N/A"
 }
 
 # Format a protein species mass for use in a label
@@ -2844,7 +2881,7 @@ proteoform_binding <- function(hits) {
     unbound = num(hits[[cols[["unbound"]]]]),
     peak = num(hits[[cols[["peak"]]]]),
     complex = num(hits[[cols[["complex"]]]]),
-    is_complex = !is.na(compound) & compound != "N/A"
+    is_complex = is_complex_row(hits)
   )
   df <- df[!is.na(df$species), , drop = FALSE]
 
@@ -3598,7 +3635,7 @@ proteoform_comparison_table <- function(kinetics, pooled, binding, view) {
 # units. The k_obs points come from the table, so a proteoform whose hyperbola
 # could not be fitted still shows them.
 #' @export
-proteoform_kobs_plot <- function(entries, colors, units, theme = "dark") {
+proteoform_kobs_plot <- function(entries, colors, units, theme = "light") {
   font_color <- if (theme == "light") "black" else "white"
   grid_color <- if (theme == "light") {
     "rgba(0,0,0,0.1)"
@@ -3947,7 +3984,7 @@ proteoform_paired_has_limits <- function(binding) {
 proteoform_paired_plot <- function(
   binding,
   colors,
-  theme = "dark",
+  theme = "light",
   show_limits = FALSE
 ) {
   font_color <- if (theme == "light") "black" else "white"
@@ -4153,12 +4190,21 @@ conversion <- function(hits) {
     log_err_cols(ncol(hits))
     return(NULL)
   } else if (all(is.na(hits$intensity))) {
-    # Case only protein species detected, no complex hits
+    # Case no complex hits. With an unbound species detected the binding is a
+    # measured 0 % (below the adduct detection limit). Without any peak of the
+    # declared protein - neither unbound nor complex: a failed acquisition, or
+    # a converted protein whose adduct is not declared - it is 0 / 0, not
+    # measured. NA rather than 0, which would pull the kinetic fits down (a
+    # failed sample is "no data", Resnick et al. 2019, JACS 141, 8951).
     I_total <- sum(unbound_species(hits)$prot_intensity) # Total intensity
-    hits <- dplyr::mutate(hits, `%binding` = 0)
+    measured <- I_total > 0
+    if (!measured) {
+      log_alert("No protein or complex peak found, binding not measurable")
+    }
+    hits <- dplyr::mutate(hits, `%binding` = if (measured) 0 else NA_real_)
     hits <- dplyr::mutate(
       hits,
-      `%binding_tot` = 0,
+      `%binding_tot` = if (measured) 0 else NA_real_,
       .before = peak
     )
   } else {
@@ -4450,7 +4496,7 @@ log_hits_summary <- function(hits_summarized) {
   message(sprintf(
     "SUMMARIZING HITS\n  │\n  ├─ %s sample(s) screened\n  ├─ %s hit(s) detected in total\n  ├─ Unmatched: %.2f%% (SD: %.2f%%)\n  └─ Correct:   %.2f%% (SD: %.2f%%)\n",
     length(unique(hits_summarized$Sample)),
-    sum(!is.na(hits_summarized$Compound)),
+    sum(is_complex_row(hits_summarized)),
     mean_unmatched,
     sd_unmatched,
     mean_correct,
@@ -4872,7 +4918,11 @@ add_hits <- function(
     hits_df <- assess_quality(hits = hits_df, peaks = peaks)
 
     # Log hit search result
-    log_result(nrow(hits_df), hits_df$unmatched[1], hits_df$correct[1])
+    log_result(
+      sum(!is.na(hits_df$cmp_mass)),
+      hits_df$unmatched[1],
+      hits_df$correct[1]
+    )
 
     # Conversion of relative intensities to Binding [%]
     # Add resulting hits data frame to sample
@@ -5202,15 +5252,16 @@ complex_hits <- function(hits_summary, sample_table, protein, compound) {
 
   # The preferred rows of the compound add up to its share of the total, as a
   # peak claimed by several interpretations is split between them
-  own <- !is.na(rows$Compound) & rows$Preferred %in% TRUE
+  own <- is_complex_row(rows) & rows$Preferred %in% TRUE
   shares <- tapply(
     ifelse(own, rows$`% Binding`, 0),
     rows$Sample,
     sum,
     na.rm = TRUE
   )
+  # A sample without any protein or complex peak stays unmeasured (NA) either way
   rows$binding <- ifelse(
-    strip(rows$Sample) %in% single,
+    strip(rows$Sample) %in% single | is.na(rows$binding),
     rows$binding,
     100 * unname(shares[rows$Sample])
   )
@@ -5221,7 +5272,7 @@ complex_hits <- function(hits_summary, sample_table, protein, compound) {
 # sample table, every declared pair
 #' @export
 run_complexes <- function(hits_summary, sample_table = NULL) {
-  hits <- hits_summary[!is.na(hits_summary$Compound), , drop = FALSE]
+  hits <- hits_summary[is_complex_row(hits_summary), , drop = FALSE]
   pairs <- data.frame(
     protein = as.character(hits$Protein),
     compound = as.character(hits$Compound)
@@ -5322,7 +5373,7 @@ fit_complex <- function(hits, protein, compound, conc_time, units) {
   )
 
   # A declared complex whose compound was found in none of its samples
-  if (!any(hits$Compound %in% compound)) {
+  if (!any(is_complex_row(hits) & hits$Compound %in% compound)) {
     message(sprintf(
       "  │  └─ %s No hits of %s in its samples. Skipping binding kinetics analysis.",
       .col_warn(warning_sym),
@@ -5439,7 +5490,7 @@ make_binding_plot <- function(
   filter_conc = NULL,
   colors = NULL,
   units = NULL,
-  theme = "dark",
+  theme = "light",
   points = c("mean", "samples", "both"),
   symbol_map = NULL
 ) {
@@ -5556,7 +5607,7 @@ make_binding_plot <- function(
         marker = list(
           size = 12,
           opacity = 0.8,
-          line = list(width = 1, color = "white")
+          line = list(width = 1, color = font_color)
         ),
         legendgroup = ~concentration,
         error_y = if (has_replicates) {
@@ -5799,7 +5850,7 @@ make_kobs_plot <- function(
   kinact_ki_result,
   colors,
   units,
-  theme = "dark",
+  theme = "light",
   show_extrapolation = FALSE,
   symbol_map = NULL,
   proteoforms = NULL,
@@ -6167,7 +6218,7 @@ kinetics_top_legend <- function(p, pal) {
 }
 
 # Empty plot carrying a message (e.g. when a diagnostic does not apply)
-kinetics_message_plot <- function(message, theme = "dark") {
+kinetics_message_plot <- function(message, theme = "light") {
   pal <- kinetics_plot_colors(theme)
   plotly::plot_ly() |>
     plotly::layout(
@@ -6196,7 +6247,7 @@ make_kinetics_residual_plot <- function(
   kinact_ki_result,
   colors,
   units,
-  theme = "dark",
+  theme = "light",
   symbol_map = NULL
 ) {
   pts <- kinact_ki_result$Points
@@ -6394,7 +6445,7 @@ make_kinetics_plateau_plot <- function(
   kinact_ki_result,
   colors,
   units,
-  theme = "dark",
+  theme = "light",
   symbol_map = NULL
 ) {
   tab <- kinact_ki_result$Plateaus
@@ -6583,7 +6634,7 @@ make_kinetics_plateau_plot <- function(
 make_kinetics_series_plot <- function(
   kinact_ki_result,
   units,
-  theme = "dark"
+  theme = "light"
 ) {
   series <- kinact_ki_result$Series
   if (is.null(series) || nrow(series) < 2) {
@@ -6696,7 +6747,7 @@ make_kinetics_saturation_plot <- function(
   kinact_ki_result,
   colors,
   units,
-  theme = "dark",
+  theme = "light",
   symbol_map = NULL
 ) {
   fit <- kinact_ki_result$Fit
@@ -8605,7 +8656,7 @@ multiple_spectra <- function(
   units = NULL,
   time_factor = 1,
   max_points = 4000,
-  theme = "dark"
+  theme = "light"
 ) {
   # Omit NA in samples
   samples <- samples[!is.na(samples)]
@@ -8673,8 +8724,8 @@ multiple_spectra <- function(
               color = if (theme == "light") "black" else "white"
             )
           )),
-          paper_bgcolor = if (theme == "light") "white" else "rgba(0,0,0,0)",
-          plot_bgcolor = if (theme == "light") "white" else "rgba(0,0,0,0)"
+          paper_bgcolor = "rgba(0,0,0,0)",
+          plot_bgcolor = "rgba(0,0,0,0)"
         )
     )
   }
@@ -9923,18 +9974,19 @@ transform_per_adduct <- function(
       row_sel <- row_sel & hits_table[[species_col]] %in% species
     }
 
-    if (is.na(cmp)) {
-      hits_per_adduct <- hits_table[
-        row_sel,
-        col_names
-      ][1, ]
+    cmp_sel <- if (is.na(cmp)) {
+      is.na(hits_table$`Cmp Name`)
     } else {
-      # Build hits df per adduct
-      hits_table_subset <- hits_table[
-        row_sel & !is.na(hits_table$`Cmp Name`) & hits_table$`Cmp Name` == cmp,
-      ]
-      hits_per_adduct <- hits_table_subset[, col_names][1, ]
+      hits_table$`Cmp Name` %in% cmp
+    }
+    hits_table_subset <- hits_table[row_sel & cmp_sel, ]
+    hits_per_adduct <- hits_table_subset[, col_names][1, ]
 
+    # Without an adduct - no compound declared, or a declared one not found -
+    # the entry keeps the row's own values and gets no mass-shift columns. The
+    # empty mass of such a row must not be matched against the unused (NA)
+    # mass slots of the compound.
+    if (any(is_complex_row(hits_table_subset))) {
       # Append mass-shift columns
       mass_shifts <- unique(hits_table_subset$`Theor. Cmp [Da]`)
       cmp_mass_shifts <- as.numeric(compounds_table[
@@ -10871,10 +10923,12 @@ transform_hits <- function(hits_summary) {
   # Shared transformations
   summary_table <- hits_summary |>
     dplyr::mutate(
-      # Convert binding cols to exact percentage — rounding only happens in DT display
+      # Convert binding cols to exact percentage — rounding only happens in DT
+      # display. A sample without any protein or complex peak stays NA: not
+      # measured.
       dplyr::across(
         c(`% Binding`, `Total % Binding`),
-        ~ dplyr::if_else(is.na(.x), 0, .x * 100)
+        ~ .x * 100
       ),
       # Round protein mass columns (kept numeric for sorting/export)
       dplyr::across(
@@ -11247,13 +11301,11 @@ prot_compound_distribution <- function(
   color_scale,
   distribution_scale,
   distribution_labels = NULL,
-  theme = "dark"
+  theme = "light"
 ) {
-  tbl <- hits_summary |>
-    dplyr::filter(
-      `Protein` == protein &
-        !is.na(`Cmp Name`)
-    )
+  tbl <- hits_summary[
+    hits_summary$Protein %in% protein & is_complex_row(hits_summary),
+  ]
 
   # Adducts of different proteoforms are separate bar segments and need labels
   # that tell them apart
@@ -11667,14 +11719,27 @@ cmp_compound_distribution <- function(
   color_scale,
   distribution_scale,
   distribution_labels = NULL,
-  theme = "dark"
+  theme = "light"
 ) {
+  # A sample without any protein or complex peak has no binding to show
   tbl <- hits_summary |>
-    dplyr::filter(`Cmp Name` == compound)
+    dplyr::filter(`Cmp Name` == compound & !is.na(`Tot. Binding [%]`))
+
+  # A sample the compound was declared for but not found in stays in the plot
+  # with one empty bar at 0 %. Next to adducts, its rows without one (unbound
+  # proteoforms) would only add empty segments.
+  complex <- is_complex_row(tbl)
+  bound <- tbl$`Sample ID`[complex]
+  tbl <- tbl[
+    complex | (!tbl$`Sample ID` %in% bound & !duplicated(tbl$`Sample ID`)),
+  ]
 
   # Adducts of different proteoforms are separate bar segments and need labels
   # that tell them apart
-  multi_species <- length(unique(tbl$`Theor. Prot. [Da]`)) > 1
+  multi_species <- length(unique(
+    tbl$`Theor. Prot. [Da]`[is_complex_row(tbl)]
+  )) >
+    1
 
   # Merge non-preferred hits (same peak) into their preferred counterpart
   tbl <- tbl |>
@@ -11689,12 +11754,17 @@ cmp_compound_distribution <- function(
       `Cmp Name` = `Cmp Name`[1],
       `Tot. Binding [%]` = `Tot. Binding [%]`[1],
       `truncSample_ID` = `truncSample_ID`[1],
-      mass_stoich_raw = mass_shift_label(
-        `Theor. Cmp [Da]`,
-        `Bind. Stoich.`,
-        species_mass = `Theor. Prot. [Da]`[1],
-        multi_species = multi_species
-      ),
+      # The empty bar of a sample without an adduct carries no label
+      mass_stoich_raw = if (all(`Theor. Cmp [Da]` %in% c(NA, "N/A"))) {
+        ""
+      } else {
+        mass_shift_label(
+          `Theor. Cmp [Da]`,
+          `Bind. Stoich.`,
+          species_mass = `Theor. Prot. [Da]`[1],
+          multi_species = multi_species
+        )
+      },
       `Theor. Cmp [Da]` = `Theor. Cmp [Da]`[Preferred == "TRUE"][1],
       `Bind. Stoich.` = `Bind. Stoich.`[Preferred == "TRUE"][1],
       `Binding [%]` = {
@@ -11810,7 +11880,7 @@ cmp_compound_distribution <- function(
 
   range <- c(
     0,
-    max(tbl$`Tot. Binding [%]`) + 10
+    max(tbl$`Tot. Binding [%]`, 0, na.rm = TRUE) + 10
   )
 
   if (!is.null(distribution_scale) && distribution_scale == "100") {
@@ -11853,14 +11923,14 @@ smpl_compound_distribution <- function(
   color_variable,
   truncate_names,
   color_scale,
-  theme = "dark"
+  theme = "light"
 ) {
   tbl <- hits_summary |>
     dplyr::filter(`Sample ID` == sample)
 
   # Binding events only - a protein species without any complex sits in the
-  # table as a compound-less row and is accounted for in the unbound slices
-  adducts <- dplyr::filter(tbl, !is.na(`Cmp Name`))
+  # table as a row without an adduct and is accounted for in the unbound slices
+  adducts <- tbl[is_complex_row(tbl), ]
 
   if (nrow(adducts) == 0) {
     return(NULL)
@@ -12042,7 +12112,7 @@ hex_to_rgba <- function(hex, alpha) {
 #' @export
 stats_histogram <- function(
   hits_summary,
-  theme = "dark",
+  theme = "light",
   show = "Correct"
 ) {
   df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
@@ -12127,7 +12197,7 @@ stats_histogram <- function(
 #' @export
 stats_boxplot <- function(
   hits_summary,
-  theme = "dark",
+  theme = "light",
   show_points = TRUE,
   show = "Correct",
   fixed_range = TRUE
@@ -12453,19 +12523,15 @@ stats_scatter <- function(
   full_scale = FALSE,
   group_by = NULL,
   color_scale = "plasma",
-  theme = "dark",
+  theme = "light",
   show = "Correct"
 ) {
   metric_col <- if (show == "Unmatched") "% Unmatched" else "% Correct"
   metric_label <- if (show == "Unmatched") "Unmatched [%]" else "Correct [%]"
 
+  # A sample without any protein or complex peak (NA binding) is not drawn
   df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
-  df$`Total % Binding` <- ifelse(
-    is.na(df$`Total % Binding`),
-    0,
-    df$`Total % Binding`
-  ) *
-    100
+  df$`Total % Binding` <- df$`Total % Binding` * 100
 
   font_color <- if (theme == "light") "black" else "white"
   grid_color <- if (theme == "light") {
@@ -12678,7 +12744,7 @@ stats_violin <- function(
   hits_summary,
   group_by = "Protein",
   full_scale = FALSE,
-  theme = "dark",
+  theme = "light",
   color_scale = "plasma",
   inner = "box",
   show = "Correct"
@@ -12843,7 +12909,7 @@ batch_plate_heatmap <- function(
   variable = "Total % Binding",
   color_scale = "plasma",
   scale_mode = "minmax",
-  theme = "dark"
+  theme = "light"
 ) {
   # Only Total % Binding is stored as 0-1 fraction; % Correct / % Unmatched are 0-100
   fraction_vars <- c("Total % Binding")
@@ -12874,14 +12940,14 @@ batch_plate_heatmap <- function(
 
   # Classify each sample's well state. Evaluated over all rows of a sample
   # rather than its first one: a sample contributes one row per compound and
-  # per protein species, and an unbound species carries no compound.
+  # per protein species, and a row without an adduct is no binding event.
   prot_seen <- tapply(
     !is.na(hits_summary$`Measured Mw Protein [Da]`),
     hits_summary$Sample,
     any
   )
   cmp_seen <- tapply(
-    !is.na(hits_summary$Compound),
+    is_complex_row(hits_summary),
     hits_summary$Sample,
     any
   )

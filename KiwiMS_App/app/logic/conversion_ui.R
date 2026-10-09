@@ -16,6 +16,7 @@ box::use(
       stats_scatter,
       stats_violin,
       show_preferred_column,
+      is_complex_row,
     ],
   app / logic / helper_functions[config_icon],
   app /
@@ -1568,49 +1569,39 @@ binding_results_ui <- function(ns, hits_summary, show_sort_binding = TRUE) {
             class = "conversion-samples-control",
             shiny::div(
               class = "sample-cmp-prot-picker",
-              shinyWidgets::pickerInput(
-                ns("conversion_sample_picker"),
-                "Select Sample",
-                choices = {
-                  choices_list <- list()
-                  cmp_col <- as.character(hits_summary$`Cmp Name`)
-                  sample_col <- as.character(hits_summary$`Sample ID`)
-                  # Treat missing/blank/placeholder compound values as "no hit"
-                  no_cmp <- is.na(cmp_col) |
-                    !nzchar(trimws(cmp_col)) |
-                    trimws(cmp_col) %in% c("N/A", "NA")
-                  no_sample <- is.na(sample_col) | !nzchar(trimws(sample_col))
+              local({
+                # One ungrouped list, a sample without any binding event
+                # marked next to its name: "Not measured" when no peak of the
+                # protein was found at all, neither unbound nor complex (its
+                # binding is NA), "No hits" otherwise.
+                # A sample keeps rows without an adduct beside its hits
+                # (other proteoforms or compounds), so a complex on any of
+                # its rows counts.
+                sample_col <- as.character(hits_summary$`Sample ID`)
+                named <- !is.na(sample_col) & nzchar(trimws(sample_col))
+                samples <- unique(sample_col[named])
+                hit <- samples %in%
+                  sample_col[named & is_complex_row(hits_summary)]
+                measured <- samples %in%
+                  sample_col[named & !is.na(hits_summary$`Tot. Binding [%]`)]
 
-                  cmp_names <- unique(cmp_col[!no_cmp])
-                  for (cmp in cmp_names) {
-                    cmp_samples <- unique(sample_col[
-                      !no_cmp & !no_sample & cmp_col == cmp
-                    ])
-                    if (length(cmp_samples)) {
-                      choices_list[[paste0("Compound: ", cmp)]] <-
-                        stats::setNames(cmp_samples, cmp_samples)
-                    }
-                  }
-                  # A sample with several proteoforms has one row per
-                  # species, so a species without a complex must not list
-                  # a sample that has hits under "No Hits"
-                  no_hits_vec <- setdiff(
-                    unique(sample_col[no_cmp & !no_sample]),
-                    sample_col[!no_cmp]
-                  )
-                  if (length(no_hits_vec)) {
-                    choices_list[["No Hits"]] <- stats::setNames(
-                      no_hits_vec,
-                      no_hits_vec
+                shinyWidgets::pickerInput(
+                  ns("conversion_sample_picker"),
+                  "Select Sample",
+                  choices = samples,
+                  choicesOpt = list(
+                    subtext = ifelse(
+                      hit,
+                      "",
+                      ifelse(measured, "No hits", "Not measured")
                     )
-                  }
-                  choices_list
-                },
-                options = shinyWidgets::pickerOptions(
-                  liveSearch = TRUE,
-                  liveSearchPlaceholder = "Search samples ..."
+                  ),
+                  options = shinyWidgets::pickerOptions(
+                    liveSearch = TRUE,
+                    liveSearchPlaceholder = "Search samples ..."
+                  )
                 )
-              )
+              })
             ),
             shiny::div(
               class = "conversion-samples-stats",

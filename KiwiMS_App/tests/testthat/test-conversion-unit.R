@@ -12,6 +12,7 @@ box::use(
     close_log_block,
     complex_hits,
     format_scientific,
+    is_complex_row,
     make_kobs_plot,
     mass_ambiguities,
     mass_shift_label,
@@ -22,10 +23,11 @@ box::use(
     select_complex_kinetics,
     summarize_hits,
     transform_hits,
+    transform_per_adduct,
     unbound_label,
     unbound_species
   ],
-  app/logic/conversion_ui[hits_results_ui],
+  app/logic/conversion_ui[binding_results_ui, hits_results_ui],
   app/logic/plot_download[prepare_hits_export],
 )
 
@@ -87,6 +89,56 @@ screen <- function(
   suppressMessages(summarize_hits(result, sample_table = sample_table))
 }
 
+# screen_declared(): Display hits of one sample declaring several compounds ----
+# `compounds` maps each compound name to its single mass shift; with none the
+# sample is a protein-only control. Returns the hits as the results interface
+# holds them, together with the tables they were screened against.
+screen_declared <- function(mass, intensity, protein_masses, compounds) {
+  sample <- "S1"
+
+  protein_table <- data.frame(Protein = "P", stringsAsFactors = FALSE)
+  for (i in seq_along(protein_masses)) {
+    protein_table[[paste("Mass", i)]] <- protein_masses[i]
+  }
+
+  # "C" is declared by no sample and keeps the table filled for a control; the
+  # second mass slot stays unused, as declaration tables have a few to spare
+  compound_table <- data.frame(
+    Compound = c("C", names(compounds)),
+    `Mass 1` = c(100, unname(compounds)),
+    `Mass 2` = NA_real_,
+    check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
+
+  # A control sample leaves its compound column empty
+  declared <- if (length(compounds)) names(compounds) else NA_character_
+  sample_table <- data.frame(Sample = sample, Protein = "P")
+  for (i in seq_along(declared)) {
+    sample_table[[paste("Compound", i)]] <- declared[i]
+  }
+
+  result <- suppressMessages(add_hits(
+    make_result(sample, mass, intensity),
+    sample_table = sample_table,
+    protein_table = protein_table,
+    compound_table = compound_table,
+    peak_tolerance = 3,
+    max_multiples = 2,
+    session = fake_session(),
+    ns = identity
+  ))
+  hits <- suppressMessages(summarize_hits(result, sample_table = sample_table))
+
+  list(
+    hits = hits,
+    view = transform_hits(hits),
+    protein_table = protein_table,
+    compound_table = compound_table,
+    sample_table = sample_table
+  )
+}
+
 test_that("a single declared protein mass yields one species per hit", {
   hits <- screen(
     mass = c(1000, 1100, 1200),
@@ -124,7 +176,9 @@ test_that("the peak of a second species is not a complex of the first", {
     protein_masses = c(1000, 1100)
   )
 
-  expect_true(all(is.na(hits$Compound)))
+  # Both rows are unbound, naming the declared compound without an adduct
+  expect_false(any(is_complex_row(hits)))
+  expect_equal(hits$Compound, c("C", "C"))
   expect_equal(sort(hits$`Measured Mw Protein [Da]`), c(1000, 1100))
   expect_equal(unique(hits$`Total % Binding`), 0)
 })
@@ -288,6 +342,199 @@ test_that("the proteoform binding column is displayed like the other percentages
     export$`Prot. Binding [%]`[export$`Cmp Name` != "N/A"],
     c(100 * 24 / 124, 100 * 16 / 76)
   )
+})
+
+test_that("a row without an adduct names the compound declared for its sample", {
+  # The second species shows no complex
+  screened <- screen_declared(
+    mass = c(1000, 1010, 1100),
+    intensity = c(50, 30, 12),
+    protein_masses = c(1000, 1010),
+    compounds = c(A = 100)
+  )
+  view <- screened$view
+
+  expect_equal(nrow(view), 2)
+  expect_equal(view$`Cmp Name`, c("A", "A"))
+  complex <- is_complex_row(view)
+  expect_equal(sum(complex), 1)
+  expect_equal(view$`Theor. Prot. [Da]`[!complex], 1010)
+  expect_equal(view$`Binding [%]`[!complex], 0)
+})
+
+test_that("every species shows each declared compound once", {
+  # A binds the second species only; B is found nowhere
+  screened <- screen_declared(
+    mass = c(1000, 1010, 1110),
+    intensity = c(50, 30, 10),
+    protein_masses = c(1000, 1010),
+    compounds = c(A = 100, B = 250)
+  )
+  view <- screened$view
+  complex <- is_complex_row(view)
+  pairs <- paste(view$`Theor. Prot. [Da]`, view$`Cmp Name`)
+
+  expect_setequal(pairs, c("1000 A", "1000 B", "1010 A", "1010 B"))
+  expect_equal(pairs[complex], "1010 A")
+  expect_false(anyDuplicated(pairs) > 0)
+
+  # The species bound by A carries B as a row without an adduct, with its own
+  # signal as the peak and the sample's total binding
+  b_row <- view[pairs == "1010 B", ]
+  expect_equal(b_row$`Binding [%]`, 0)
+  expect_equal(b_row$`Theor. Cmp [Da]`, "N/A")
+  expect_equal(b_row$`Bind. Stoich.`, "N/A")
+  expect_equal(b_row$`Peak Signal [Da]`, "1010.0")
+  expect_equal(
+    b_row$`Tot. Binding [%]`,
+    view$`Tot. Binding [%]`[pairs == "1010 A"]
+  )
+})
+
+test_that("rows without an adduct leave the binding values untouched", {
+  screened <- screen_declared(
+    mass = c(1000, 1010, 1110),
+    intensity = c(50, 30, 10),
+    protein_masses = c(1000, 1010),
+    compounds = c(A = 100, B = 250)
+  )
+  hits <- screened$hits
+
+  # The raw hits carry the same rows as the display
+  expect_equal(nrow(hits), 4)
+  expect_equal(sum(is_complex_row(hits)), 1)
+  # Unbound signal counted once per species, the one complex peak once
+  expect_equal(unique(hits$`Total % Binding`), 10 / 90)
+  expect_equal(sum(hits$`% Binding`, na.rm = TRUE), 10 / 90)
+})
+
+test_that("a sample with nothing detected lists every declared compound", {
+  screened <- screen_declared(
+    mass = 500,
+    intensity = 50,
+    protein_masses = c(1000, 1010),
+    compounds = c(A = 100, B = 250)
+  )
+  view <- screened$view
+
+  expect_equal(view$`Cmp Name`, c("A", "B"))
+  expect_false(any(is_complex_row(view)))
+  expect_equal(view$`Meas. Prot. [Da]`, c("N/A", "N/A"))
+  # Neither unbound nor complex signal: binding is 0 / 0, not measured
+  expect_true(all(is.na(screened$hits$`Total % Binding`)))
+  expect_true(all(is.na(view$`Binding [%]`)))
+  expect_true(all(is.na(view$`Tot. Binding [%]`)))
+})
+
+test_that("a detected protein without an adduct reads a measured 0 %", {
+  screened <- screen_declared(
+    mass = 1000,
+    intensity = 50,
+    protein_masses = 1000,
+    compounds = c(A = 100)
+  )
+
+  expect_equal(screened$hits$`Total % Binding`, 0)
+  expect_equal(screened$view$`Tot. Binding [%]`, 0)
+})
+
+test_that("a sample without any protein peak stays unmeasured in the kinetics", {
+  # S1 and S2 both declare A and B; S2 showed no protein at all
+  hits <- data.frame(
+    Sample = c("S1", "S1", "S2", "S2"),
+    Protein = "P",
+    Compound = c("A", "B", "A", "B"),
+    `Compound Mw [Da]` = c(100, NA, NA, NA),
+    Preferred = c(TRUE, NA, NA, NA),
+    `% Binding` = c(0.2, 0, NA, NA),
+    binding = c(30, 30, NA, NA),
+    check.names = FALSE
+  )
+  st <- data.frame(
+    Sample = c("S1", "S2"),
+    Protein = "P",
+    `Compound 1` = "A",
+    `Compound 2` = "B",
+    check.names = FALSE
+  )
+
+  rows <- complex_hits(hits, st, "P", "A")
+  # S1 counts A's own share, S2 stays NA instead of a 0 % share
+  expect_equal(rows$binding[rows$Sample == "S1"], 20)
+  expect_true(is.na(rows$binding[rows$Sample == "S2"]))
+})
+
+test_that("the sample picker marks samples without a hit instead of grouping", {
+  view <- screen_declared(
+    mass = c(1000, 1100),
+    intensity = c(50, 30),
+    protein_masses = 1000,
+    compounds = c(A = 100)
+  )$view
+  unbound <- screen_declared(
+    mass = 1000,
+    intensity = 50,
+    protein_masses = 1000,
+    compounds = c(A = 100)
+  )$view
+  unbound$`Sample ID` <- "S2"
+  silent <- screen_declared(
+    mass = 500,
+    intensity = 50,
+    protein_masses = 1000,
+    compounds = c(A = 100)
+  )$view
+  silent$`Sample ID` <- "S3"
+  hits <- rbind(view, unbound, silent)
+  hits$truncSample_ID <- hits$`Sample ID`
+
+  html <- as.character(binding_results_ui(identity, hits))
+  picker <- regmatches(
+    html,
+    regexpr("conversion_sample_picker.*?</select>", html)
+  )
+
+  expect_false(grepl("<optgroup", picker, fixed = TRUE))
+  expect_match(picker, "value=\"S1\" data-subtext=\"\">", fixed = TRUE)
+  expect_match(picker, "value=\"S2\" data-subtext=\"No hits\">", fixed = TRUE)
+  expect_match(picker, "value=\"S3\" data-subtext=\"Not measured\">", fixed = TRUE)
+})
+
+test_that("a sample declaring no compound keeps its rows unnamed", {
+  screened <- screen_declared(
+    mass = c(1000, 1010),
+    intensity = c(50, 30),
+    protein_masses = c(1000, 1010),
+    compounds = numeric(0)
+  )
+
+  expect_equal(nrow(screened$view), 2)
+  expect_true(all(is.na(screened$view$`Cmp Name`)))
+  expect_false(any(is_complex_row(screened$view)))
+})
+
+test_that("the sample view gives a compound without an adduct no mass columns", {
+  screened <- screen_declared(
+    mass = c(1000, 1010, 1110),
+    intensity = c(50, 30, 10),
+    protein_masses = c(1000, 1010),
+    compounds = c(A = 100, B = 250)
+  )
+  per_adduct <- transform_per_adduct(
+    screened$view,
+    proteins_table = screened$protein_table,
+    compounds_table = screened$compound_table,
+    samples_table = screened$sample_table
+  )
+
+  # One entry per species and compound
+  expect_equal(nrow(per_adduct), 4)
+  # Only A's single mass shift on its one complex - the empty mass of a row
+  # without an adduct is not read as the unused second slot
+  expect_false(any(grepl("Mass 2", names(per_adduct))))
+  bound <- per_adduct$`Cmp Name` == "A" & per_adduct$`Theor. Prot. [Da]` == 1010
+  expect_equal(per_adduct$`Binding (Mass 1)x1 [%]`[bound], 10 / 90 * 100)
+  expect_true(all(is.na(per_adduct$`Binding (Mass 1)x1 [%]`[!bound])))
 })
 
 test_that("a proteoform is named in the labels only when there are several", {

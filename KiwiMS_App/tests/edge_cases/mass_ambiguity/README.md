@@ -157,15 +157,23 @@ is blocked earlier by the one-compound rule (CX4).
   correct: R1 and R2 of one condition now name different compounds (RP1). The
   compound guard stays silent, since compounds in different samples never
   compete for a peak.
-- The R2 samples are only screened for DECOY. Tot. Binding card, per compound:
-  BI-8925 12.01–100 %, **73.65 ± 23.11**; DECOY 12.50–100 %, **73.76 ±
-  22.56**. All samples, 13 without a hit included: 64.62.
+- The R2 samples are only screened for DECOY. Two of them, `80_40min_R2` and
+  `80_50min_R2`, are **not measured**: fully converted, no unbound peak left,
+  and their complex more than 3 Da off DECOY. Their binding is N/A, not 0 %;
+  the log warns "No protein or complex peak found, binding not measurable" and
+  the Sample View picker marks them "Not measured".
+- Tot. Binding card, per compound (a sample without a hit at 0 %, one not
+  measured left out): BI-8925 0–100 %, **69.76 ± 27.61**; DECOY 0–100 %,
+  **61.49 ± 34.33**. All samples, 11 without a hit included and the 2 not
+  measured left out: 65.69.
 - **Kinetics:** the complex picker lists BI-8925 and DECOY under MLKL.
   - **BI-8925** (selected by default): its 61 R1 samples. kinact/KI
     **327.9** M⁻¹s⁻¹ (CI 281.2–387.5). Warnings "Plateaus differ", "Early 0 %
     readings".
-  - **DECOY:** 61 R2 samples. kinact/KI **298.5** (CI 180.6–541.5), status
-    linear, warning "Saturation not reached".
+  - **DECOY:** 61 R2 samples, the 2 not measured left out of the fit.
+    kinact/KI **277.0** (CI 177.7–438.3), status linear, warning "Saturation
+    not reached". Counted as 0 %, the two would pull it to 298.5 (CI
+    180.6–541.5).
   - **Caveat:** the 268 Da mass picks up the BI-8925 complex peak (Δ 2.8–3.3
     Da), so a compound that isn't there gets a plausible kinact/KI. The only
     clues are the wide CI and the missing saturation. Nothing in the app can
@@ -193,7 +201,7 @@ is blocked earlier by the one-compound rule (CX4).
     also fits: 21,638.8 Da + BI-8925 (266.0 Da ×1)".
 - **Result:** the complex peak is read as the third proteoform, so the
   BI-8925 binding of the main form disappears:
-  - Tot. Binding card (BI-8925) falls to 4.43–21.33 %, **15.63 ± 4.53** (all
+  - Tot. Binding card (BI-8925) falls to 0–21.33 %, **14.47 ± 5.99** (all
     samples: 14.47); the reference sample is at 0 %;
   - pooled kinact/KI **290.3** (CI 257.5–342.6), carried by 21,816.84 alone.
 
@@ -242,9 +250,9 @@ hint and every sample reads as in B0.
   **12.04 %**.
 - **Pooled results:** identical to B0 (all samples 70.24, kinact/KI 334.1).
   The split never double counts.
-- **Tot. Binding card:** 8.29–100 %, **72.59 ± 24.24**, slightly below B0's
-  73.19. Every sample has the same value; the shared peak only adds hit rows
-  for the third proteoform, and the card averages over rows.
+- **Tot. Binding card:** 0–100 %, **70.24 ± 26.86**, as in B0. Every sample
+  has the same value; the shared peak only adds hit rows for the third
+  proteoform, and the card counts each sample once.
 - **Proteoforms tab:**
   - 21,638.84 drops to **210.4**, since half its complex went to the other form;
   - 21,654.84 sits at 100 % in every sample (its unbound peak is never
@@ -270,9 +278,9 @@ hint and every sample reads as in B0.
   (12.04 %). The conversion log shows "Ambiguous assignment at 21903.50 Da
   (lowest stoichiometry preferred)".
 - One sample changes. In `2o5_1min_R1` the complex sits at **21,900.5 Da**,
-  missed by 266 (4.34 Da) but caught by 264: 6.62 % binding. It leaves "No
-  Hits"; only `0_0min_R1` stays there. Open its spectrum to see the peak.
-- Tot. Binding card: 6.62–100 %, **73.05 ± 23.76**. All samples: 70.30.
+  missed by 266 (4.34 Da) but caught by 264: 6.62 % binding. It loses its
+  "No hits" mark; only `0_0min_R1` keeps it. Open its spectrum to see the peak.
+- Tot. Binding card: 0–100 %, **70.30 ± 26.73**. All samples: 70.30.
 - kinact/KI 334.9 (CI 301.6–379.1). Proteoforms tab: 358.8 for 21,638.84.
 
 **MA5b:** `baseline/proteins_baseline` · `mass_ambiguity/compounds_near_half_shift` (BI-8925 266, 133.5) · `baseline/config_baseline`

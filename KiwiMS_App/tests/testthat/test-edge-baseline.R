@@ -26,10 +26,10 @@ test_that("B0: binding of the baseline", {
   r <- kit_case("baseline/proteins_baseline", "baseline/compounds_baseline", "baseline/config_baseline")
 
   card <- kit_card(r, "BI-8925")
-  expect_rounded(card[["min"]], 8.29, 2)
+  expect_rounded(card[["min"]], 0, 2)
   expect_rounded(card[["max"]], 100, 2)
-  expect_rounded(card[["mean"]], 73.19, 2)
-  expect_rounded(card[["sd"]], 23.61, 2)
+  expect_rounded(card[["mean"]], 70.24, 2)
+  expect_rounded(card[["sd"]], 26.86, 2)
   expect_equal(card[["samples"]], 120)
   expect_rounded(kit_all_samples(r), 70.245, 3)
 

@@ -5,7 +5,7 @@
 # rules on synthetic declarations.
 
 box::use(
-  app/logic/conversion_functions[run_complexes],
+  app/logic/conversion_functions[is_complex_row, run_complexes],
 )
 
 B <- function(name) paste0("baseline/", name)
@@ -26,7 +26,7 @@ test_that("CX1: every compound of a sample is screened, whatever its column", {
   # Before the fix no sample got a BI-8925 hit: a compound was only screened
   # when its column matched its row of the compound table
   expect_equal(kit_card(r, "BI-8925")[["samples"]], 120)
-  expect_rounded(kit_card(r, "BI-8925")[["mean"]], 73.19, 2)
+  expect_rounded(kit_card(r, "BI-8925")[["mean"]], 70.24, 2)
   expect_equal(r$total, base$total[names(r$total)])
   # DECOY is declared, so its complex is listed although it has no hit
   expect_equal(r$complexes, c("MLKL + BI-8925", "MLKL + DECOY"))
@@ -51,13 +51,13 @@ test_that("CX3a: two complexes, one per concentration range, are fitted apart", 
 
   a <- kit_card(r, "BI-8925")
   b <- kit_card(r, "BI-8926")
-  expect_rounded(a[["min"]], 9.20, 2)
-  expect_rounded(a[["mean"]], 83.57, 2)
-  expect_rounded(a[["sd"]], 18.22, 2)
-  expect_rounded(b[["min"]], 8.29, 2)
+  expect_rounded(a[["min"]], 0, 2)
+  expect_rounded(a[["mean"]], 81.63, 2)
+  expect_rounded(a[["sd"]], 21.97, 2)
+  expect_rounded(b[["min"]], 0, 2)
   expect_rounded(b[["max"]], 92.78, 2)
-  expect_rounded(b[["mean"]], 61.97, 2)
-  expect_rounded(b[["sd"]], 23.70, 2)
+  expect_rounded(b[["mean"]], 58.48, 2)
+  expect_rounded(b[["sd"]], 26.54, 2)
   # Mass Shifts card: samples with a hit of each
   expect_equal(c(a[["samples"]], b[["samples"]]), c(61, 59))
 
@@ -84,8 +84,10 @@ test_that("CX3b: a declared complex without hits stays in the picker", {
   expect_equal(kit_check(B("proteins_baseline"), X("compounds_8926_no_hits"), X("config_split_by_conc"))$status, "PASS")
 
   r <- kit_case(B("proteins_baseline"), X("compounds_8926_no_hits"), X("config_split_by_conc"))
-  expect_false("BI-8926" %in% r$hits$Compound)
-  expect_rounded(kit_card(r, "BI-8925")[["mean"]], 83.57, 2)
+  # Its samples list it as a pair without an adduct, never as a complex
+  expect_true("BI-8926" %in% r$hits$Compound)
+  expect_false("BI-8926" %in% r$hits$Compound[is_complex_row(r$hits)])
+  expect_rounded(kit_card(r, "BI-8925")[["mean"]], 81.63, 2)
   expect_rounded(kit_all_samples(r), 41.48, 2)
 
   expect_equal(r$complexes, c("MLKL + BI-8925", "MLKL + BI-8926"))

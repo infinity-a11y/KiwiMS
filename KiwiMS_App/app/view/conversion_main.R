@@ -88,6 +88,7 @@ box::use(
       convert_kinact_ki_units,
       convert_result_list_units,
       add_proteoform_binding,
+      is_complex_row,
       proteoform_binding,
       proteoform_limit_note,
       proteoform_kinetics,
@@ -2613,14 +2614,13 @@ server <- function(
                 input$conversion_sample_picker
               )
 
-              # A sample can hold compound-less rows for protein species that
-              # carry no complex, so the chart is empty only when the sample has
-              # no binding event at all
-              tbl <- hits_summary |>
-                dplyr::filter(
-                  `Sample ID` == input$conversion_sample_picker &
-                    !is.na(`Cmp Name`)
-                )
+              # A sample can hold rows without an adduct for protein species
+              # that carry no complex, so the chart is empty only when the
+              # sample has no binding event at all
+              tbl <- hits_summary[
+                hits_summary$`Sample ID` %in% input$conversion_sample_picker &
+                  is_complex_row(hits_summary),
+              ]
 
               if (nrow(tbl) < 1) {
                 shiny::textOutput(ns("samples_present_compounds_na"))
@@ -2636,9 +2636,18 @@ server <- function(
               }
             })
 
-            output$samples_present_compounds_na <- shiny::renderText(
-              "No binding events"
-            )
+            output$samples_present_compounds_na <- shiny::renderText({
+              # Without any protein or complex peak there was nothing to
+              # measure, which is not the same as no binding
+              sample_total <- hits_summary$`Tot. Binding [%]`[
+                hits_summary$`Sample ID` %in% input$conversion_sample_picker
+              ]
+              if (length(sample_total) && all(is.na(sample_total))) {
+                "No protein or complex peak found"
+              } else {
+                "No binding events"
+              }
+            })
 
             output$samples_compound_distribution <- plotly::renderPlotly({
               shiny::req(
@@ -2790,11 +2799,11 @@ server <- function(
                   !is.null(input$truncate_names),
                   input$color_scale
                 )
-                tbl <- hits_summary |>
-                  dplyr::filter(
-                    `Sample ID` == input$conversion_sample_picker &
-                      !is.na(`Cmp Name`)
-                  )
+                tbl <- hits_summary[
+                  hits_summary$`Sample ID` %in%
+                    input$conversion_sample_picker &
+                    is_complex_row(hits_summary),
+                ]
 
                 # If table empty
                 if (!nrow(tbl)) {
@@ -2893,10 +2902,21 @@ server <- function(
                 return(shiny::div("N/A", class = "na-placeholder"))
               }
 
-              total_bind <- hits_summary$`Tot. Binding [%]`[
-                hits_summary$`Cmp Name` == input$conversion_compound_picker &
-                  !is.na(hits_summary$`Cmp Name`)
+              # One value per sample, the total being a sample value repeated
+              # on its rows. A sample the compound was not found in counts
+              # with its rows without an adduct; one without any protein or
+              # complex peak was not measured and is left out.
+              cmp_rows <- hits_summary[
+                hits_summary$`Cmp Name` %in% input$conversion_compound_picker,
               ]
+              total_bind <- cmp_rows$`Tot. Binding [%]`[
+                !duplicated(cmp_rows$`Sample ID`)
+              ]
+              total_bind <- total_bind[!is.na(total_bind)]
+
+              if (!length(total_bind)) {
+                return(shiny::div("N/A", class = "na-placeholder"))
+              }
 
               if (length(total_bind) == 1) {
                 msg <- paste0(sprintf("%.2f", total_bind), "%")
@@ -3469,11 +3489,19 @@ server <- function(
                 total_bind_pre$`Cmp Name`[!is.na(total_bind_pre$`Cmp Name`)][1]
               )
 
-              # Filter by selected compound
+              # Filter by selected compound, one row per sample: the total is a
+              # sample value repeated on its rows. A sample without any
+              # protein or complex peak was not measured and is left out.
               total_bind <- total_bind_pre[
-                total_bind_pre$`Cmp Name` == total_pct_prot_binding_select &
-                  !is.na(total_bind_pre$`Cmp Name`),
+                total_bind_pre$`Cmp Name` %in% total_pct_prot_binding_select,
               ]
+              total_bind <- total_bind[
+                !duplicated(total_bind$`Sample ID`) &
+                  !is.na(total_bind$`Tot. Binding [%]`),
+              ]
+              if (!nrow(total_bind)) {
+                return(shiny::div("N/A", class = "na-placeholder"))
+              }
 
               msg <- shiny::div(
                 class = "conversion-sample-protein-box",
@@ -3529,11 +3557,10 @@ server <- function(
                 input$conversion_protein_picker
               )
 
-              tbl <- hits_summary |>
-                dplyr::filter(
-                  `Protein` == input$conversion_protein_picker &
-                    !is.na(`Cmp Name`)
-                )
+              tbl <- hits_summary[
+                hits_summary$Protein %in% input$conversion_protein_picker &
+                  is_complex_row(hits_summary),
+              ]
 
               if (nrow(tbl) < 1) {
                 shiny::textOutput(ns("proteins_present_compounds_na"))
@@ -4135,10 +4162,9 @@ server <- function(
             )
 
             # Assign concentrations to reactive variable
-            conversion_vars$concentrations <- concentrations <- dplyr::filter(
-              hits_summary,
-              `Cmp Name` != "N/A"
-            ) |>
+            conversion_vars$concentrations <- concentrations <- hits_summary[
+              is_complex_row(hits_summary),
+            ] |>
               dplyr::count(
                 !!rlang::sym(units[[
                   "Concentration"
@@ -4832,7 +4858,7 @@ server <- function(
                 })
               }
 
-              build_proteoform_kobs_plot <- function(theme = "dark") {
+              build_proteoform_kobs_plot <- function(theme = "light") {
                 pooled <- view_results()
                 entries <- c(
                   list(
@@ -5024,7 +5050,7 @@ server <- function(
               output[[paste0(id, "_plot")]] <- plotly::renderPlotly({
                 res <- view_results()$kinact_ki_result
                 shiny::req(res)
-                spec$build(res, view_colors(), view_units(), "dark")
+                spec$build(res, view_colors(), view_units(), "light")
               })
 
               setup_plot_dl(
@@ -5370,7 +5396,7 @@ server <- function(
               }
               stats_histogram(
                 hs,
-                theme = "dark",
+                theme = "light",
                 show = input$stats_show_metric %||% "Correct"
               )
             })
@@ -5415,7 +5441,7 @@ server <- function(
               }
               stats_boxplot(
                 hs,
-                theme = "dark",
+                theme = "light",
                 show_points = isTRUE(input$stats_boxplot_show_points),
                 show = input$stats_show_metric %||% "Correct",
                 fixed_range = isTRUE(input$stats_boxplot_fixed_range %||% TRUE)
@@ -5441,7 +5467,7 @@ server <- function(
                 full_scale = fs,
                 group_by = grp,
                 color_scale = scatter_cs(),
-                theme = "dark",
+                theme = "light",
                 show = input$stats_show_metric %||% "Correct"
               )
             })
@@ -5464,7 +5490,7 @@ server <- function(
                 hs,
                 group_by = grp,
                 full_scale = fs,
-                theme = "dark",
+                theme = "light",
                 color_scale = violin_cs(),
                 inner = if (is.null(input$stats_violin_inner)) {
                   "Box"
@@ -5715,7 +5741,7 @@ server <- function(
                   )
                 }
 
-                output[[plot_id]] <- plotly::renderPlotly(build_heatmap("dark"))
+                output[[plot_id]] <- plotly::renderPlotly(build_heatmap("light"))
 
                 setup_plot_dl(
                   input,
@@ -5963,10 +5989,7 @@ server <- function(
               rl <- conversion_sidebar_vars$result_list()
               shiny::req(rl, rl$hits_summary)
 
-              n <- sum(
-                !is.na(rl$hits_summary$Compound) &
-                  nzchar(trimws(as.character(rl$hits_summary$Compound)))
-              )
+              n <- sum(is_complex_row(rl$hits_summary))
               shiny::div(
                 shiny::div(class = "protocol-stat-value", n),
                 shiny::div(
@@ -6338,9 +6361,11 @@ server <- function(
             })
 
             output$pstat_n_compounds <- shiny::renderUI({
-              cmp_vals <- as.character(stats::na.omit(hits_summary[[
-                "Cmp Name"
-              ]]))
+              # Counted from the adducts: a declared compound that was not
+              # found still names its rows without one
+              cmp_vals <- as.character(hits_summary$`Cmp Name`[
+                is_complex_row(hits_summary)
+              ])
               detected <- length(unique(cmp_vals[nzchar(trimws(cmp_vals))]))
               declared <- sum(
                 !is.na(compound_table_data()$Compound) &
@@ -6882,7 +6907,7 @@ server <- function(
           # Counted over the whole run: the kinetics panel narrows
           # hits_summary to the picked complex, and a changed count would
           # announce a finished analysis on every switch of the complex
-          n_hits_detected <- sum(!is.na(conversion_vars$hits_summary$`Cmp Name`))
+          n_hits_detected <- sum(is_complex_row(conversion_vars$hits_summary))
           if (!identical(show_completion_toast(), n_hits_detected)) {
             show_completion_toast(n_hits_detected)
           }

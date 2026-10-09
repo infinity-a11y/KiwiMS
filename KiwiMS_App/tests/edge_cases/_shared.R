@@ -12,6 +12,7 @@ box::use(
     check_sample_table,
     check_table,
     complex_kinetics,
+    is_complex_row,
     main_proteoform,
     process_uploaded_table,
     proteoform_binding,
@@ -390,25 +391,30 @@ kit_complex_summary <- function(entry) {
 }
 
 # kit_card(): The Tot. Binding card of a compound ----
-# Per compound, over its hit rows: a sample counts once per proteoform and
-# mass shift carrying the compound; samples without a hit are left out.
+# Per compound, over the samples declaring it: one value per sample, a sample
+# the compound was not found in counting with its 0 %, one without any protein
+# or complex peak (not measured, NA) left out. `samples` is the count of the
+# Mass Shifts card, the samples with a hit of the compound.
 kit_card <- function(run, compound) {
-  x <- run$hits$`Total % Binding`[run$hits$Compound %in% compound] * 100
+  rows <- run$hits[run$hits$Compound %in% compound, , drop = FALSE]
+  x <- rows$`Total % Binding`[!duplicated(rows$Sample)] * 100
+  x <- x[!is.na(x)]
   c(
     min = min(x),
     max = max(x),
     mean = mean(x),
     sd = stats::sd(x),
-    samples = length(unique(run$hits$Sample[run$hits$Compound %in% compound]))
+    samples = length(unique(rows$Sample[is_complex_row(rows)]))
   )
 }
 
 # kit_all_samples(): Mean Total % binding over all samples, 0 without a hit ----
-kit_all_samples <- function(run) mean(run$total)
+# A sample without any protein or complex peak was not measured and is left out.
+kit_all_samples <- function(run) mean(run$total, na.rm = TRUE)
 
-# kit_no_hits(): Samples the Sample View lists under "No Hits" ----
+# kit_no_hits(): Samples the Sample View marks "No hits" ----
 kit_no_hits <- function(run) {
-  hit <- unique(run$hits$Sample[!is.na(run$hits$Compound)])
+  hit <- unique(run$hits$Sample[is_complex_row(run$hits)])
   setdiff(unique(run$hits$Sample), hit)
 }
 

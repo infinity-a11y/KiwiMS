@@ -9,6 +9,7 @@ box::use(
     check_table,
     declaration_ambiguities,
     hit_preference_rule,
+    is_complex_row,
     log_mass_ambiguities,
     mass_ambiguities,
     prefer_hits,
@@ -162,14 +163,24 @@ test_that("MA1e: compounds in separate samples are not checked against each othe
   r <- kit_case(B("proteins_baseline"), M("compounds_decoy_268"), M("config_split_by_rep"))
   a <- kit_card(r, "BI-8925")
   b <- kit_card(r, "DECOY")
-  expect_rounded(a[["min"]], 12.01, 2)
-  expect_rounded(a[["mean"]], 73.65, 2)
-  expect_rounded(a[["sd"]], 23.11, 2)
-  expect_rounded(b[["min"]], 12.50, 2)
-  expect_rounded(b[["mean"]], 73.76, 2)
-  expect_rounded(b[["sd"]], 22.56, 2)
-  expect_rounded(kit_all_samples(r), 64.62, 2)
+  expect_rounded(a[["min"]], 0, 2)
+  expect_rounded(a[["mean"]], 69.76, 2)
+  expect_rounded(a[["sd"]], 27.61, 2)
+  expect_rounded(b[["min"]], 0, 2)
+  expect_rounded(b[["mean"]], 61.49, 2)
+  expect_rounded(b[["sd"]], 34.33, 2)
+  expect_rounded(kit_all_samples(r), 65.69, 2)
   expect_length(kit_no_hits(r), 13)
+  # Two of them are not measured: fully converted at 80 µM, their complex
+  # more than 3 Da off DECOY and no unbound peak left - binding is NA, not 0,
+  # and they stay out of DECOY's kinetics
+  expect_equal(
+    names(r$total)[is.na(r$total)],
+    c(
+      "2026-09-18_MULI+BI-8925_80_40min_R2",
+      "2026-09-18_MULI+BI-8925_80_50min_R2"
+    )
+  )
 
   expect_equal(r$complexes, c("MLKL + BI-8925", "MLKL + DECOY"))
   expect_equal(r$default, "MLKL + BI-8925")
@@ -184,9 +195,9 @@ test_that("MA1e: compounds in separate samples are not checked against each othe
   # and the missing saturation
   decoy <- r$kinetics[["MLKL + DECOY"]]
   expect_equal(decoy$n, 61)
-  expect_rounded(decoy$ratio, 298.5)
-  expect_rounded(decoy$ci[[1]], 180.6)
-  expect_rounded(decoy$ci[[2]], 541.5)
+  expect_rounded(decoy$ratio, 277.0)
+  expect_rounded(decoy$ci[[1]], 177.7)
+  expect_rounded(decoy$ci[[2]], 438.3)
   expect_equal(decoy$status, "linear")
   expect_true("Saturation not reached" %in% decoy$warnings)
   # Each complex holds one series only: no per-series fits
@@ -235,10 +246,10 @@ test_that("MA2: an unbound mass equal to a complex is read as unbound", {
   expect_equal(sum(grepl("read as unbound 21,904.8 Da, also fits", r$log)), 120)
 
   card <- kit_card(r, "BI-8925")
-  expect_rounded(card[["min"]], 4.43, 2)
+  expect_rounded(card[["min"]], 0, 2)
   expect_rounded(card[["max"]], 21.33, 2)
-  expect_rounded(card[["mean"]], 15.63, 2)
-  expect_rounded(card[["sd"]], 4.53, 2)
+  expect_rounded(card[["mean"]], 14.47, 2)
+  expect_rounded(card[["sd"]], 5.99, 2)
   expect_rounded(kit_all_samples(r), 14.47, 2)
   expect_equal(r$total[[kit_reference_sample]], 0)
 
@@ -295,8 +306,8 @@ test_that("MA4: a complex shared by two proteoforms is split between them", {
   expect_equal(r$total, base$total[names(r$total)])
 
   card <- kit_card(r, "BI-8925")
-  expect_rounded(card[["mean"]], 72.59, 2)
-  expect_rounded(card[["sd"]], 24.24, 2)
+  expect_rounded(card[["mean"]], 70.24, 2)
+  expect_rounded(card[["sd"]], 26.86, 2)
   k <- r$kinetics[["MLKL + BI-8925"]]
   expect_rounded(k$ratio, 334.1)
   expect_rounded(k$proteoforms[["21638.84"]]$ratio, 210.4)
@@ -326,9 +337,9 @@ test_that("MA5a: two close shifts of one compound resolve to the closer one", {
   expect_rounded(r$total[["2026-09-18_MULI+BI-8925_2o5_1min_R1"]], 6.62, 2)
   expect_equal(kit_no_hits(r), "2026-09-18_MULI+BI-8925_0_0min_R1")
   card <- kit_card(r, "BI-8925")
-  expect_rounded(card[["min"]], 6.62, 2)
-  expect_rounded(card[["mean"]], 73.05, 2)
-  expect_rounded(card[["sd"]], 23.76, 2)
+  expect_rounded(card[["min"]], 0, 2)
+  expect_rounded(card[["mean"]], 70.30, 2)
+  expect_rounded(card[["sd"]], 26.73, 2)
   expect_rounded(kit_all_samples(r), 70.30, 2)
   k <- r$kinetics[["MLKL + BI-8925"]]
   expect_rounded(k$ratio, 334.9)
@@ -436,7 +447,7 @@ test_that("a mass shift inside its own species' window reads the peak as unbound
 
   # One peak 2 Da above the protein: unbound, no binding
   alone <- synth_hits(1002, 100, 1000, list(A = 4))
-  expect_true(all(is.na(alone$Compound)))
+  expect_false(any(is_complex_row(alone)))
   expect_equal(unique(alone$`Total % Binding`), 0)
   # Next to a closer unbound peak, the same peak is the complex
   pair <- synth_hits(c(1000, 1003.5), c(70, 30), 1000, list(A = 4))
