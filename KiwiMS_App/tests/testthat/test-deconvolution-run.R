@@ -1,43 +1,12 @@
 # End-to-end tests: they launch the real deconvolution subprocess exactly the
-# way app/view/deconvolution_main.R does, against real Waters .raw samples.
+# way app/view/deconvolution_main.R does, against real Waters .raw samples of
+# the reference dataset kinact_MLKL_3 (tests/reference_data).
 #
-# They skip unless both a UniDec-capable Python interpreter and the .raw corpus
-# are present.  Point the suite elsewhere with KIWIMS_TEST_DATA; skip them
-# entirely with KIWIMS_SKIP_DECON_RUN=1.
-#
-# The sweep over every corpus in the data root is slow (each sample is tens of
-# seconds of UniDec time), so it only runs with KIWIMS_TEST_DECON_ALL=1.
-
-skip_unless_runnable <- function() {
-  if (nzchar(Sys.getenv("KIWIMS_SKIP_DECON_RUN"))) {
-    skip("KIWIMS_SKIP_DECON_RUN is set")
-  }
-  if (!dir.exists(kiwims_test_data_root())) {
-    skip(paste("No test data at", kiwims_test_data_root()))
-  }
-  if (!nzchar(kiwims_python())) {
-    skip("No Python interpreter that can import UniDec")
-  }
-  if (!file.exists(kiwims_rscript())) {
-    skip("No Rscript available for the deconvolution subprocess")
-  }
-}
-
-# first_corpus_with(): First test-data directory holding at least n samples ----
-first_corpus_with <- function(n) {
-  roots <- sort(list.dirs(
-    kiwims_test_data_root(),
-    recursive = FALSE,
-    full.names = TRUE
-  ))
-  roots <- roots[!grepl("\\.raw$", roots, ignore.case = TRUE)]
-  for (r in roots) {
-    if (length(kiwims_raw_dirs(r)) >= n) {
-      return(r)
-    }
-  }
-  NULL
-}
+# They skip unless the dataset is at $KIWIMS_REFERENCE_DATA and a
+# UniDec-capable Python interpreter is present, and fail when the dataset
+# differs from its manifest. Skip them entirely with KIWIMS_SKIP_DECON_RUN=1.
+# What the deconvolution finds is compared in test-reference-data.R; these
+# tests are about the pipeline around it.
 
 expect_run_succeeded <- function(res, raw_dirs) {
   expect_equal(
@@ -60,12 +29,9 @@ expect_run_succeeded <- function(res, raw_dirs) {
   expect_equal(status$state, rep("done", nrow(status)))
 }
 
-test_that("a parallel run deconvolutes every sample and finalises the database", {
-  skip_unless_runnable()
 
-  corpus <- first_corpus_with(4)
-  skip_if(is.null(corpus), "No corpus with at least 4 samples")
-  raw_dirs <- kiwims_raw_dirs(corpus, 4)
+test_that("a parallel run deconvolutes every sample and finalises the database", {
+  raw_dirs <- waters_samples(4)
 
   work <- withr::local_tempdir("kiwims-par")
   res <- kiwims_run_deconvolution(raw_dirs, work)
@@ -108,36 +74,29 @@ test_that("a parallel run deconvolutes every sample and finalises the database",
 })
 
 test_that("a long sample name does not hit Windows' path length limit", {
-  skip_unless_runnable()
-
-  # This exact sample reproduced the bug deterministically, every run: UniDec
-  # derives every intermediate filename it writes from the name of the file it
-  # opens, nested three levels deep under a scratch directory
+  # A sample with this name reproduced the bug deterministically, every run:
+  # UniDec derives every intermediate filename it writes from the name of the
+  # file it opens, nested three levels deep under a scratch directory
   # (<tmp>/<name>/<name>_rawdata_unidecfiles/<name>_rawdata_conf.dat, etc.),
-  # and this sample's ~65-character name was enough to cross Windows' 260-
-  # character MAX_PATH there.  UniDec enforces that limit itself and, having
-  # nothing to report on, fails with no R or Python exception: the pipeline
-  # just found no output, with no clue in the DB as to why.
-  long_dir <- file.path(
-    kiwims_test_data_root(),
-    "HiDrive-2025-09-04_New-Test-data",
-    "2025-08-12_RACA+P2-11_20250731_50_3h_01+P2-11_20250731_50_3h_01.raw"
-  )
-  skip_if(!dir.exists(long_dir), "Regression fixture sample not present")
-
+  # and this ~65-character name was enough to cross Windows' 260-character
+  # MAX_PATH there.  UniDec enforces that limit itself and, having nothing to
+  # report on, fails with no R or Python exception: the pipeline just found no
+  # output, with no clue in the DB as to why.  The name is what matters, so a
+  # reference sample is copied to it.
+  source_dir <- waters_samples(1)
   work <- withr::local_tempdir("kiwims-longname")
+  long_dir <- kiwims_long_name_fixture(source_dir, file.path(work, "input"))
+
   res <- kiwims_run_deconvolution(long_dir, work)
   expect_run_succeeded(res, long_dir)
 
   reason <- kiwims_db_query(res$db_path, "SELECT reason FROM status")$reason
   expect_true(is.na(reason[1]))
+  expect_gt(nrow(kiwims_db_query(res$db_path, "SELECT * FROM peaks")), 0)
 })
 
 test_that("a broken sample is recorded as failed without taking the run down", {
-  skip_unless_runnable()
-
-  corpus <- first_corpus_with(2)
-  skip_if(is.null(corpus), "No corpus with at least 2 samples")
+  samples <- waters_samples(2)
 
   work <- withr::local_tempdir("kiwims-mixed")
   # An empty .raw directory reaches UniDec and fails there, which is the
@@ -145,7 +104,7 @@ test_that("a broken sample is recorded as failed without taking the run down", {
   broken <- file.path(work, "definitely_broken.raw")
   dir.create(broken, recursive = TRUE)
 
-  raw_dirs <- c(kiwims_raw_dirs(corpus, 2), broken)
+  raw_dirs <- c(samples, broken)
   res <- kiwims_run_deconvolution(raw_dirs, work)
 
   expect_equal(res$status, 0L, info = paste("output in", res$stdout_path))
@@ -164,7 +123,7 @@ test_that("a broken sample is recorded as failed without taking the run down", {
   expect_equal(status$state[status$sample == "definitely_broken"], "failed")
   expect_equal(
     sort(status$sample[status$state == "done"]),
-    sort(kiwims_sample_bases(kiwims_raw_dirs(corpus, 2)))
+    sort(kiwims_sample_bases(samples))
   )
   expect_true("completed" %in% kiwims_db_query(
     res$db_path,
@@ -173,11 +132,7 @@ test_that("a broken sample is recorded as failed without taking the run down", {
 })
 
 test_that("a single-worker run takes the sequential path and still completes", {
-  skip_unless_runnable()
-
-  corpus <- first_corpus_with(2)
-  skip_if(is.null(corpus), "No corpus with at least 2 samples")
-  raw_dirs <- kiwims_raw_dirs(corpus, 2)
+  raw_dirs <- waters_samples(2)
 
   work <- withr::local_tempdir("kiwims-seq")
   res <- kiwims_run_deconvolution(
@@ -191,11 +146,7 @@ test_that("a single-worker run takes the sequential path and still completes", {
 })
 
 test_that("re-running extends an existing database instead of discarding it", {
-  skip_unless_runnable()
-
-  corpus <- first_corpus_with(4)
-  skip_if(is.null(corpus), "No corpus with at least 4 samples")
-  all_dirs <- kiwims_raw_dirs(corpus, 4)
+  all_dirs <- waters_samples(4)
   first_batch <- all_dirs[1:2]
   second_batch <- all_dirs[3:4]
 
@@ -226,48 +177,4 @@ test_that("re-running extends an existing database instead of discarding it", {
     ignore_attr = TRUE
   )
   expect_setequal(after$sample, kiwims_sample_bases(all_dirs))
-})
-
-test_that("every test-data corpus deconvolutes", {
-  skip_unless_runnable()
-  if (!nzchar(Sys.getenv("KIWIMS_TEST_DECON_ALL"))) {
-    skip("Set KIWIMS_TEST_DECON_ALL=1 to sweep every corpus (slow)")
-  }
-
-  corpora <- sort(list.dirs(
-    kiwims_test_data_root(),
-    recursive = FALSE,
-    full.names = TRUE
-  ))
-  corpora <- corpora[!grepl("\\.raw$", corpora, ignore.case = TRUE)]
-  corpora <- Filter(function(d) length(kiwims_raw_dirs(d)) > 0, corpora)
-  skip_if(length(corpora) == 0, "No corpora with .raw samples")
-
-  n_per <- as.integer(Sys.getenv("KIWIMS_TEST_DECON_N", "2"))
-
-  for (corpus in corpora) {
-    raw_dirs <- kiwims_raw_dirs(corpus, n_per)
-    work <- withr::local_tempdir("kiwims-sweep")
-    res <- kiwims_run_deconvolution(raw_dirs, work)
-
-    # expect_setequal() takes no `info`, so report the corpus through expect_true
-    # rather than losing which one failed.
-    expect_true(
-      res$status == 0L,
-      info = paste(basename(corpus), "->", res$stdout_path)
-    )
-    status <- kiwims_db_query(res$db_path, "SELECT * FROM status")
-    expect_true(
-      setequal(status$sample, kiwims_sample_bases(raw_dirs)),
-      info = basename(corpus)
-    )
-    expect_true(
-      all(status$state == "done"),
-      info = paste(
-        basename(corpus),
-        "->",
-        paste(status$sample[status$state != "done"], collapse = ", ")
-      )
-    )
-  }
 })

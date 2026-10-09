@@ -27,6 +27,11 @@ box::use(
   utils[read.delim, read.table],
 )
 
+box::use(
+  app / logic / conversion_constants[run_limits],
+  app / logic / ms_formats[ms_sample_base],
+)
+
 # db_with_retry(): BEGIN IMMEDIATE + body + COMMIT with R-level retry ----
 # Retries the full transaction cycle on any lock/busy error, with random jitter.
 # The body is captured unevaluated and re-evaluated on every attempt: forcing a
@@ -140,12 +145,7 @@ process_single_dir <- function(
   result_dir <- gsub("\\\\", "/", result_dir)
 
   # Derive sample base name up front so it is available in every error path
-  sample_basename <- gsub(
-    "\\.raw$",
-    "",
-    basename(input_path),
-    ignore.case = TRUE
-  )
+  sample_basename <- ms_sample_base(input_path)
 
   # When discarding raw output, route UniDec intermediates to a per-sample
   # temp dir so the target directory stays clean throughout the run.
@@ -176,8 +176,10 @@ process_single_dir <- function(
   result <- file.path(work_dir, paste0(raw_name, "_unidecfiles"))
 
   # Function to properly format parameters for Python
+  # A blank numeric input arrives as NA (or NULL); Python must see "" for it,
+  # not the bare token NA.
   format_param <- function(x) {
-    if (is.character(x) && x == "") {
+    if (length(x) == 0 || is.na(x) || (is.character(x) && x == "")) {
       return("''")
     } else {
       return(as.character(x))
@@ -215,11 +217,10 @@ process_single_dir <- function(
         # Run unidec with python
         reticulate::py_run_string(sprintf(
           '
-import sys
-import unidec
-import re
 import os
-import shutil
+import numpy as np
+import unidec
+from unidec import tools as ud
 
 # Parameters passed from R
 params = {%s}
@@ -227,19 +228,67 @@ input_file = r"%s"
 result_dir = r"%s"
 out_stub = r"%s"
 
-# Initialize UniDec engine
-engine = unidec.UniDec()
+# Vendor-agnostic read. get_importer() resolves a .raw *directory* to the Waters
+# reader and a .raw *file* to the Thermo reader -- the extension is identical,
+# so the file/folder distinction is what separates the two vendors -- and takes
+# .mzML/.mzML.gz/.mzXML to the open-format readers.
+#
+# Except a plain .mzML: get_importer() opens it with auto-gzip on, and for a
+# file over 100 MB that writes an indexed <name>.mzML.gz next to the source --
+# into the operator data folder, needing write access there, and leaving a
+# second input with the same sample name for the next folder scan. Read once,
+# the gzip pass costs more than it saves, so open it without.
+if input_file.lower().endswith(".mzml"):
+    from unidec.modules.mzMLimporter import mzMLimporter
+    importer = mzMLimporter(input_file, nogz=True)
+else:
+    importer = ud.get_importer(input_file)
+if importer is None:
+    raise IOError("Unsupported or unreadable input: " + input_file)
 
-# Convert Waters .raw to txt
-engine.raw_process(input_file)
+# Elution window. A blank bound is open: blank start reads from the first scan,
+# blank end to the last, and both blank (the default) is the whole acquisition.
+# Open bounds are resolved against the scan times of this file rather than a
+# fixed number, because acquisition lengths differ by method and vendor.
+#
+# This is applied here, at read time, because it is the only place it has any
+# effect. engine.config.time_start/time_end are set further down for the record
+# they leave in _conf.dat, but the plain UniDec engine never reads them back --
+# only ChromEng (which drives UniChrom) does.
+ts, te = params["time_start"], params["time_end"]
+time_range = None
+empty = False
+if ts != "" or te != "":
+    times = np.asarray(importer.times, dtype=float)
+    lo = float(ts) if ts != "" else float(times.min())
+    hi = float(te) if te != "" else float(times.max())
+    # An inverted range (a start past the last scan, say) selects nothing; it
+    # must fail the sample, never fall back to the whole acquisition.
+    if hi > lo:
+        time_range = (lo, hi)
+    else:
+        empty = True
 
-# Move processed file to output directory under the out_stub name (not the
-# source file own name -- see the R-side comment on raw_stub for why).
-txt_file = input_file.removesuffix(".raw") + "_rawdata.txt"
+data = None if empty else importer.get_data(time_range=time_range)
+if data is None or len(data) == 0:
+    span = ""
+    try:
+        span = (" The acquisition covers "
+                + str(round(float(importer.times.min()), 3)) + " to "
+                + str(round(float(importer.times.max()), 3)) + " min.")
+    except Exception:
+        pass
+    raise IOError("The elution window selected no scans." + span)
+
+# Written straight into the worker directory. The previous Waters-only path
+# wrote a scratch _rawdata.txt next to the operator source data and moved it
+# afterwards, which made write access to the data folder a hard requirement;
+# nothing is written outside result_dir now.
 output = os.path.join(result_dir, out_stub + "_rawdata.txt")
-shutil.move(txt_file, output)
+np.savetxt(output, data)
 
 # Make result directory
+engine = unidec.UniDec()
 engine.open_file(output)
 
 # Set configuration parameters
@@ -762,6 +811,56 @@ decon_samples_with_state <- function(db_path, sample_bases, state) {
   )
 }
 
+# decon_planned_samples(): Samples a run would leave in its database ----
+# The queried inputs plus the samples already done in the analysis database
+# at `db_path` (a sample in both counts once). The conversion takes at most
+# run_limits$max_samples, so a database must not grow beyond that. A missing
+# or unreadable database holds nothing.
+#' @export
+decon_planned_samples <- function(queried, db_path = NULL) {
+  queried <- unique(ms_sample_base(queried))
+  done <- if (!is.null(db_path) && file.exists(db_path)) {
+    tryCatch(
+      {
+        con <- DBI::dbConnect(RSQLite::SQLite(), db_path, flags = RSQLite::SQLITE_RO)
+        on.exit(DBI::dbDisconnect(con), add = TRUE)
+        if (DBI::dbExistsTable(con, "status")) {
+          DBI::dbGetQuery(con, "SELECT sample FROM status WHERE state = 'done'")$sample
+        } else {
+          character(0)
+        }
+      },
+      error = function(e) character(0)
+    )
+  } else {
+    character(0)
+  }
+
+  list(new = length(queried), total = length(union(queried, done)))
+}
+
+# decon_sample_cap_message(): Start-dialog line for a run over the cap ----
+# NULL while the planned samples fit.
+#' @export
+decon_sample_cap_message <- function(planned, max_samples = run_limits$max_samples) {
+  if (planned$total <= max_samples) {
+    return(NULL)
+  }
+  paste0(
+    "At most <b>",
+    max_samples,
+    "</b> samples per analysis database. This run would hold <b>",
+    planned$total,
+    "</b>",
+    if (planned$total > planned$new) {
+      paste0(" (", planned$new, " queried, the rest already in the database)")
+    } else {
+      ""
+    },
+    ". Select fewer samples or start a new analysis."
+  )
+}
+
 # decon_python_exe(): Resolve and validate the portable interpreter ----
 decon_python_exe <- function() {
   python_exe <- Sys.getenv("RETICULATE_PYTHON")
@@ -804,7 +903,7 @@ deconvolute <- function(
 ) {
   python_exe <- decon_python_exe()
 
-  sample_bases <- gsub("\\.raw$", "", basename(raw_dirs), ignore.case = TRUE)
+  sample_bases <- ms_sample_base(raw_dirs)
 
   # Parameters shared by every sample, identical in both processing modes.
   params_list <- list(
@@ -908,6 +1007,7 @@ deconvolute <- function(
       "write_sample_status",
       "db_with_retry",
       "read_file_safe",
+      "ms_sample_base",
       "%||%",
       "params_list"
     ),

@@ -29,3 +29,8 @@ Output/
 
 # Ignore the VC++ redistributable (fetched at build time by dev/build-installer.ps1)
 setup/VC_redist.x64.exe
+
+# Edge-case kit: generated on request by tests/edge_cases/generate_all.R
+# (the test files) and tests/edge_cases/fixture/make_fixture.R (the database)
+KiwiMS_App/tests/edge_cases/*/*.csv
+KiwiMS_App/tests/edge_cases/fixture/*.db

@@ -19,13 +19,19 @@ kiwims_app_root <- local({
 
 options(box.path = kiwims_app_root())
 
-# kiwims_test_data_root(): Root directory holding the .raw test corpora ----
-# Override with KIWIMS_TEST_DATA to point the suite at another copy.
-kiwims_test_data_root <- function() {
-  Sys.getenv("KIWIMS_TEST_DATA", unset = "E:/KF_Testing/Test-Data")
+# The test data live outside the repository: see tests/reference_data and
+# helper-reference-data.R.
+
+# kiwims_raw_usable(): TRUE when `dir` holds openable Waters acquisition data ----
+# A .raw directory can exist while being empty -- an interrupted copy.  UniDec
+# fails such a sample with a bare "File Open Error", which reads as a pipeline
+# regression rather than the missing-data problem it is; the reference
+# datasets are checked against their manifests, which catches it first.
+kiwims_raw_usable <- function(dir) {
+  dir.exists(dir) && file.exists(file.path(dir, "_FUNC001.DAT"))
 }
 
-# kiwims_raw_dirs(): Waters .raw sample directories inside `dir` ----
+# kiwims_raw_dirs(): Usable Waters .raw sample directories inside `dir` ----
 # Sorted so a run is reproducible; `n` takes the first n samples.
 kiwims_raw_dirs <- function(dir, n = Inf) {
   if (!dir.exists(dir)) {
@@ -33,7 +39,39 @@ kiwims_raw_dirs <- function(dir, n = Inf) {
   }
   dirs <- list.dirs(dir, recursive = FALSE, full.names = TRUE)
   dirs <- sort(dirs[grepl("\\.raw$", dirs, ignore.case = TRUE)])
+  dirs <- dirs[vapply(dirs, kiwims_raw_usable, logical(1))]
   head(dirs, n)
+}
+
+# kiwims_long_name_fixture(): A real sample copied to a MAX_PATH-length name ----
+# The path-length regression is a property of the sample's *name*, not of its
+# contents, so the fixture is built at run time from a reference sample rather
+# than depending on the acquisition that showed it staying present and intact.
+# The name is the one that originally reproduced the bug.
+# Returns the new directory.
+kiwims_long_name_fixture <- function(source_dir, parent) {
+  name <- paste0(
+    "2025-08-12_RACA+P2-11_20250731_50_3h_01",
+    "+P2-11_20250731_50_3h_01.raw"
+  )
+  dest <- file.path(parent, name)
+  dir.create(dest, showWarnings = FALSE, recursive = TRUE)
+  files <- list.files(source_dir, full.names = TRUE)
+  stopifnot(length(files) > 0, all(file.copy(files, dest, overwrite = TRUE)))
+  dest
+}
+
+# kiwims_thermo_files(): Thermo .raw sample *files* inside `dir` ----
+# The Thermo/Waters split is file-versus-directory, not extension, so this is
+# the mirror image of kiwims_raw_dirs(). Sorted for reproducibility.
+kiwims_thermo_files <- function(dir, n = Inf) {
+  if (!dir.exists(dir)) {
+    return(character(0))
+  }
+  files <- list.files(dir, pattern = "\\.raw$", ignore.case = TRUE,
+                      full.names = TRUE)
+  files <- sort(files[!dir.exists(files) & file.info(files)$size > 0])
+  head(files, n)
 }
 
 # kiwims_python(): Locate a Python interpreter that can import UniDec ----

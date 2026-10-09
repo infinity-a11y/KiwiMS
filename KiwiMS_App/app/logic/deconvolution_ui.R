@@ -1,7 +1,6 @@
 # app/logic/deconvolution_ui.R
 box::use(
   bslib[card, card_body, card_header, tooltip],
-  fs[dir_ls],
   plotly[event_data, event_register, plotlyOutput, renderPlotly],
   processx[process],
   shiny,
@@ -60,7 +59,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                 class = "instruction-info",
                 shiny$HTML(
                   paste(
-                    "1. Use the sidebar to select the Waters .raw folder(s) for processing.",
+                    "1. Use the sidebar to select the sample(s) for processing &mdash; Thermo .raw files, Waters .raw folders, mzML or mzXML.",
                     "<br/>",
                     "2. Check and configure parameters in the main panel and start deconvolution."
                   )
@@ -217,7 +216,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                               min = 1,
                               max = 100000,
                               value = minmz_def,
-                              step = 1
+                              step = 0.1
                             )
                           ),
                           shiny::div(
@@ -256,7 +255,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                               min = 1,
                               max = 100000,
                               value = maxmz_def,
-                              step = 1
+                              step = 0.1
                             )
                           ),
                           shiny::div(
@@ -396,7 +395,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                     class = "bg-dark help-header",
                     tooltip(
                       "Retention time [min]",
-                      "The anticipated time for the analyte to travel through a chromatography column.",
+                      "Scans within this window are summed for deconvolution. Leave a field blank to read from the first or to the last scan; both blank uses the whole acquisition.",
                       placement = "bottom"
                     )
                   ),

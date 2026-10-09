@@ -44,6 +44,7 @@ box::use(
       read_config_file,
       validate_config,
     ],
+  app / logic / ms_formats[has_ms_extension],
 )
 
 suppressWarnings(library(logr))
@@ -1139,7 +1140,10 @@ server <- function(id) {
                     shiny$tags$tr(
                       shiny$tags$td(
                         class = "settings-table-label",
-                        "Elution start time [min]"
+                        settings_label_tooltip(
+                          "Elution start time [min]",
+                          "Leave blank to read from the first scan"
+                        )
                       ),
                       shiny$tags$td(
                         shiny$numericInput(
@@ -1160,7 +1164,10 @@ server <- function(id) {
                     shiny$tags$tr(
                       shiny$tags$td(
                         class = "settings-table-label",
-                        "Elution end time [min]"
+                        settings_label_tooltip(
+                          "Elution end time [min]",
+                          "Leave blank to read to the last scan"
+                        )
                       ),
                       shiny$tags$td(
                         shiny$numericInput(
@@ -1581,11 +1588,11 @@ server <- function(id) {
           " No default set"
         ))
       }
-      if (grepl("\\.raw$", path, ignore.case = TRUE)) {
+      if (has_ms_extension(path)) {
         shiny$div(
           class = "settings-dest-feedback settings-dest-feedback--invalid",
           shiny$icon("triangle-exclamation"),
-          " Cannot use a .raw folder as default input"
+          " Cannot use a sample as default input; pick the folder holding it"
         )
       } else if (dir.exists(path)) {
         shiny$div(
@@ -1784,12 +1791,12 @@ server <- function(id) {
       settings_ok_tag("Valid")
     })
 
-    # Elution start time [min] — min 0, max 100, < time_end
+    # Elution start time [min] — blank = first scan, else 0-100, < time_end
     output$settings_time_start_feedback <- shiny$renderUI({
       val <- input$settings_time_start
       time_end <- input$settings_time_end
       if (is.null(val) || is.na(val)) {
-        return(settings_err_tag("Enter a valid number"))
+        return(settings_ok_tag("Valid"))
       }
       if (val < 0 || val > 100) {
         return(settings_err_tag("Must be between 0 and 100 min"))
@@ -1800,12 +1807,12 @@ server <- function(id) {
       settings_ok_tag("Valid")
     })
 
-    # Elution end time [min] — min 0, max 100, > time_start
+    # Elution end time [min] — blank = last scan, else 0-100, > time_start
     output$settings_time_end_feedback <- shiny$renderUI({
       val <- input$settings_time_end
       time_start <- input$settings_time_start
       if (is.null(val) || is.na(val)) {
-        return(settings_err_tag("Enter a valid number"))
+        return(settings_ok_tag("Valid"))
       }
       if (val < 0 || val > 100) {
         return(settings_err_tag("Must be between 0 and 100 min"))
@@ -1937,12 +1944,20 @@ server <- function(id) {
         if (ub_ok) current$deconv_massub <- ub
       }
 
+      # A blank elution bound is a valid choice (open window), so it is saved as
+      # NA rather than skipped -- otherwise a stored bound could never be cleared.
       ts <- input$settings_time_start
-      ts_ok <- ok(ts) && ts >= 0 && ts <= 100
       te <- input$settings_time_end
-      te_ok <- ok(te) && te >= 0 && te <= 100
+      if (!ok(ts)) {
+        ts <- NA_real_
+      }
+      if (!ok(te)) {
+        te <- NA_real_
+      }
+      ts_ok <- is.na(ts) || (ts >= 0 && ts <= 100)
+      te_ok <- is.na(te) || (te >= 0 && te <= 100)
       if (ts_ok && te_ok) {
-        if (ts < te) {
+        if (is.na(ts) || is.na(te) || ts < te) {
           current$deconv_time_start <- ts
           current$deconv_time_end <- te
         }
@@ -2004,10 +2019,10 @@ server <- function(id) {
         if (
           length(p) == 1L &&
             nzchar(p) &&
-            grepl("\\.raw$", p, ignore.case = TRUE)
+            has_ms_extension(p)
         ) {
           shinyWidgets::show_toast(
-            title = "Cannot save a .raw folder as default input.",
+            title = "Cannot save a sample as default input; pick the folder holding it.",
             text = NULL,
             type = "error",
             timer = 3000,
@@ -2155,7 +2170,7 @@ server <- function(id) {
       filename = "example_config.csv",
       content = function(file) {
         example <- data.frame(
-          Sample = c("sample_1.raw", "sample_2.raw", "sample_3.raw"),
+          Sample = c("sample_1", "sample_2", "sample_3"),
           Replicate = c("R1", "R1", "R2"),
           Protein = c("RACA", "RACA", "RACA"),
           Well = c("A1", "A2", "A3"),

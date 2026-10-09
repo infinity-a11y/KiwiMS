@@ -18,6 +18,7 @@ box::use(
       summary_results_ui,
       hits_results_ui,
     ],
+  app / logic / ms_formats[ms_sample_base],
   app /
     logic /
     conversion_functions[
@@ -428,10 +429,10 @@ server <- function(
 
     # Helper: auto-fill sample table columns from config file
     apply_config_autofill <- function(tbl, cfg) {
-      # Sample names may carry the .raw extension on one side only, as in the
+      # Sample names may carry a file extension on one side only, as in the
       # replicate lookup (add_replicate_col())
-      cfg_key <- gsub("\\.raw$", "", cfg$Sample, ignore.case = TRUE)
-      tbl_key <- gsub("\\.raw$", "", tbl$Sample, ignore.case = TRUE)
+      cfg_key <- ms_sample_base(cfg$Sample)
+      tbl_key <- ms_sample_base(tbl$Sample)
       for (i in seq_len(nrow(tbl))) {
         match_idx <- which(cfg_key == tbl_key[i])
         if (length(match_idx) == 1) {

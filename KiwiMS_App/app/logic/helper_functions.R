@@ -884,21 +884,6 @@ read_config_file <- function(path, ext) {
   utils::read.csv(text = txt, sep = sep, stringsAsFactors = FALSE)
 }
 
-# Excel and most keyboards produce the micro sign (U+00B5) for "µ", not
-# the Greek mu (U+03BC) that config_unit_choices matches against — the two
-# render identically, so uploads were silently rejected as "unknown unit".
-# Normalize both unit columns right after read so the rest of the app only
-# ever sees the Greek mu.
-#' @export
-normalize_config_units <- function(df) {
-  for (col in c("Concentration_Unit", "Time_Unit")) {
-    if (col %in% names(df)) {
-      df[[col]] <- gsub("µ", "μ", as.character(df[[col]]))
-    }
-  }
-  df
-}
-
 #' @export
 normalize_colnames <- function(df) {
   nms <- trimws(names(df))

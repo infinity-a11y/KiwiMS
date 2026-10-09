@@ -1,0 +1,13 @@
+key	value
+startz	1
+endz	50
+minmz	710
+maxmz	1100
+masslb	20500
+massub	23500
+massbins	0.5
+peakthresh	0.07
+peakwindow	40
+peaknorm	2
+time_start
+time_end

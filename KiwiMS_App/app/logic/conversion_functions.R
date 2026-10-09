@@ -23,6 +23,7 @@ box::use(
       kinetics_settings,
       run_limits
     ],
+  app / logic / ms_formats[ms_sample_base],
 )
 
 # Concentration conversion
@@ -1402,7 +1403,7 @@ check_sample_table <- function(
         ),
         details = format_listed(sprintf(
           "%s: %s",
-          sub("\\.raw$", "", sample_table[several, 1], ignore.case = TRUE),
+          ms_sample_base(sample_table[several, 1]),
           vapply(declared[several], paste, character(1), collapse = ", ")
         )),
         note = paste(
@@ -1502,7 +1503,7 @@ check_sample_table <- function(
     key[conc_time_tbl[[1]] == 0] <- NA
     key
   } else {
-    stem <- sub("\\.raw$", "", as.character(sample_table[, 1]), ignore.case = TRUE)
+    stem <- ms_sample_base(sample_table[, 1])
     ifelse(grepl("_[Rr][0-9]+$", stem), sub("_[Rr][0-9]+$", "", stem), NA)
   }
   counts <- table(condition[!is.na(condition)])
@@ -1674,7 +1675,7 @@ replicate_conflicts <- function(sample_names, replicate) {
   value_n[!grepl("[0-9]$", value)] <- NA
   suffix_n <- as.integer(sub("^R", "", suffix))
   clash <- !is.na(suffix_n) & !is.na(value_n) & value_n != suffix_n
-  stem <- sub("\\.raw$", "", as.character(sample_names), ignore.case = TRUE)
+  stem <- ms_sample_base(sample_names)
   sprintf("%s: Replicate %s", stem[clash], value[clash])
 }
 
@@ -1684,7 +1685,7 @@ replicate_conflicts <- function(sample_names, replicate) {
 # compounds and, with kinact/KI, concentration and time. One line per group,
 # naming the first column that differs.
 replicate_mismatches <- function(sample_table, conc_time_tbl = NULL) {
-  stem <- sub("\\.raw$", "", as.character(sample_table[, 1]), ignore.case = TRUE)
+  stem <- ms_sample_base(sample_table[, 1])
   group <- ifelse(
     grepl("_[Rr][0-9]+$", stem),
     sub("_[Rr][0-9]+$", "", stem),
@@ -1723,51 +1724,6 @@ replicate_mismatches <- function(sample_table, conc_time_tbl = NULL) {
   unlist(out)
 }
 
-### Check duplicated masses
-check_mass_duplicates <- function(tab, tolerance) {
-  numeric_part <- tab[, -1, drop = FALSE]
-
-  # Flatten the data frame
-  all_values <- as.vector(as.matrix(numeric_part))
-
-  # Calculate absolute difference matrix
-  diff_matrix <- abs(outer(all_values, all_values, FUN = "-"))
-
-  # Create boolean matrix for proximity: within 2 x tolerance two masses can
-  # claim the same peak, as in mass_ambiguities()
-  is_close_matrix <- diff_matrix <= 2 * tolerance + 1e-9
-
-  # Set all NA values in the boolean matrix to FALSE
-  is_close_matrix[is.na(is_close_matrix)] <- FALSE
-
-  # Remove diagonal
-  diag(is_close_matrix) <- FALSE
-
-  # Determine indices close to any other value
-  close_to_any_vector <- rowSums(is_close_matrix) > 0
-
-  # Transform resulting Boolean vector back into original data frame structure
-  result_matrix <- matrix(
-    close_to_any_vector,
-    nrow = nrow(numeric_part),
-    ncol = ncol(numeric_part),
-    byrow = FALSE
-  )
-
-  # Convert matrix to data frame and restore names
-  result_df <- as.data.frame(result_matrix)
-  colnames(result_df) <- colnames(numeric_part)
-
-  # Read protein/compound column
-  result_df <- dplyr::mutate(
-    result_df,
-    !!colnames(tab)[1] := tab[, 1],
-    .before = 1
-  )
-
-  return(result_df)
-}
-
 # Validate protein/compound table
 #' @export
 check_table <- function(tab, tolerance) {
@@ -1797,15 +1753,9 @@ check_table <- function(tab, tolerance) {
     return(paste("Duplicated names"))
   }
 
-  # Check mass shift duplicates
-  # TODO
-  # duplicate_check <- check_mass_duplicates(tab = tab, tolerance = tolerance)
-  #   if (
-  #   sum(!is.na(tab[, -1])) > 1 &&
-  #     any(rowSums(duplicate_check[, -1, drop = FALSE]) > 1)
-  # ) {
-  #   return("Mass shifts are duplicated in peak tolerance range")
-  # }
+  # Masses within the tolerance window of each other are not refused here: the
+  # tables colour them (prot_comp_handsontable()) and the Samples-table check
+  # reports what they mean for the screening (mass_ambiguities())
 
   # If all checks passed return TRUE
   return(TRUE)
@@ -2347,9 +2297,17 @@ check_hits <- function(
   species$intensity[duplicated(species_row) & !is.na(species_row)] <- 0
   species$intensity[is.na(species$intensity)] <- 0
 
-  # Keep only peaks at or above the lightest declared species
+  # Every peak the declaration predicts: each species unbound and with every
+  # mass shift of every compound at every stoichiometry. The declaration check
+  # reads the same table, so both see the same interpretations.
+  predicted <- predict_peaks(prot_masses, compound_mw, max_multiples)
+  complexes <- predicted[predicted$type == "complex", , drop = FALSE]
+
+  # Keep only peaks at or above the lightest predicted mass: usually the
+  # lightest species, lower when a negative mass shift (a compound whose
+  # binding loses more than it adds) makes a complex lighter than it
   peaks_valid <- if (length(prot_masses)) {
-    peaks$mass >= min(prot_masses) - peak_tolerance
+    peaks$mass >= min(predicted$mass) - peak_tolerance
   } else {
     logical(nrow(peaks))
   }
@@ -2374,12 +2332,6 @@ check_hits <- function(
 
     return(hits_df)
   }
-
-  # Every peak the declaration predicts: each species unbound and with every
-  # mass shift of every compound at every stoichiometry. The declaration check
-  # reads the same table, so both see the same interpretations.
-  predicted <- predict_peaks(prot_masses, compound_mw, max_multiples)
-  complexes <- predicted[predicted$type == "complex", , drop = FALSE]
 
   # A peak read as an unbound species can equally be a complex of another
   # species (its mass offset matches a compound). The species reading wins -
@@ -4589,8 +4541,8 @@ add_hits <- function(
   for (i in seq_along(samples)) {
     log_start(samples[i])
 
-    st_key <- gsub("\\.raw$", "", sample_table$Sample, ignore.case = TRUE)
-    s_key <- gsub("\\.raw$", "", samples[i], ignore.case = TRUE)
+    st_key <- ms_sample_base(sample_table$Sample)
+    s_key <- ms_sample_base(samples[i])
     present_protein <- sample_table$Protein[st_key == s_key]
     present_cmp <- sample_table[
       st_key == s_key,
@@ -4604,7 +4556,7 @@ add_hits <- function(
         "Well" %in% names(config) &&
         "Sample" %in% names(config)
     ) {
-      cfg_key <- gsub("\\.raw$", "", config[["Sample"]], ignore.case = TRUE)
+      cfg_key <- ms_sample_base(config[["Sample"]])
       idx <- match(s_key, cfg_key)
       if (!is.na(idx)) {
         raw_well <- as.character(config[["Well"]][idx])
@@ -4695,18 +4647,8 @@ summarize_hits <- function(result_list, sample_table) {
 
   if (length(conc_time) == 2) {
     sample_table_join <- sample_table[, c("Sample", conc_time)]
-    sample_table_join$Sample <- gsub(
-      "\\.raw$",
-      "",
-      sample_table_join$Sample,
-      ignore.case = TRUE
-    )
-    hits_summarized$Sample <- gsub(
-      "\\.raw$",
-      "",
-      hits_summarized$Sample,
-      ignore.case = TRUE
-    )
+    sample_table_join$Sample <- ms_sample_base(sample_table_join$Sample)
+    hits_summarized$Sample <- ms_sample_base(hits_summarized$Sample)
 
     hits_summarized <- hits_summarized |>
       dplyr::left_join(sample_table_join, by = "Sample") |>
@@ -4717,8 +4659,8 @@ summarize_hits <- function(result_list, sample_table) {
   # Join Replicate from sample_table if available
   if ("Replicate" %in% names(sample_table)) {
     rep_join <- sample_table[, c("Sample", "Replicate"), drop = FALSE]
-    rep_join$Sample <- gsub("\\.raw$", "", rep_join$Sample, ignore.case = TRUE)
-    hs_key <- gsub("\\.raw$", "", hits_summarized$Sample, ignore.case = TRUE)
+    rep_join$Sample <- ms_sample_base(rep_join$Sample)
+    hs_key <- ms_sample_base(hits_summarized$Sample)
     hits_summarized$Replicate <- rep_join$Replicate[match(
       hs_key,
       rep_join$Sample
@@ -4947,7 +4889,7 @@ complex_key <- function(protein, compound) {
 # the binding of its compound
 #' @export
 complex_hits <- function(hits_summary, sample_table, protein, compound) {
-  strip <- function(x) gsub("\\.raw$", "", x, ignore.case = TRUE)
+  strip <- ms_sample_base
 
   cmp_cols <- grep("^Compound", names(sample_table), value = TRUE)
   declared <- lapply(seq_len(nrow(sample_table)), function(i) {
@@ -6620,7 +6562,7 @@ kinetic_series_labels <- function(samples, replicate = NULL) {
     return(suffix)
   }
 
-  stem <- sub("\\.raw$", "", as.character(samples), ignore.case = TRUE)
+  stem <- ms_sample_base(samples)
   rep_chr <- trimws(as.character(replicate))
   missing <- is.na(rep_chr) |
     rep_chr == "" |
@@ -10102,8 +10044,8 @@ compute_replicate_labels <- function(sample_names, config = NULL) {
   labels[is.na(labels)] <- ""
 
   if (!is.null(config) && "Replicate" %in% names(config)) {
-    cfg_key <- gsub("\\.raw$", "", config$Sample, ignore.case = TRUE)
-    samp_key <- gsub("\\.raw$", "", sample_names, ignore.case = TRUE)
+    cfg_key <- ms_sample_base(config$Sample)
+    samp_key <- ms_sample_base(sample_names)
     matched <- trimws(as.character(config$Replicate[match(samp_key, cfg_key)]))
     from_config <- !is.na(matched) & matched != ""
     labels[from_config] <- matched[from_config]
@@ -10112,10 +10054,10 @@ compute_replicate_labels <- function(sample_names, config = NULL) {
   labels
 }
 
-# "R<n>" from an _R<n> suffix of a sample name (".raw" ignored), NA without
+# "R<n>" from an _R<n> suffix of a sample name (extension ignored), NA without
 # one. Leading zeros are dropped, so "_R01" and "_R1" name the same series.
 replicate_suffix <- function(sample_names) {
-  stem <- sub("\\.raw$", "", as.character(sample_names), ignore.case = TRUE)
+  stem <- ms_sample_base(sample_names)
   has_suffix <- grepl("_[Rr][0-9]+$", stem)
   out <- rep(NA_character_, length(stem))
   out[has_suffix] <- paste0(
@@ -10143,10 +10085,11 @@ new_sample_table <- function(
   compound_table,
   kinact_ki = FALSE
 ) {
-  sample_names <- sort(paste0(
-    result$samples %||% names(result$deconvolution),
-    ".raw"
-  ))
+  # Sample names are stored without an extension, and appending ".raw" here
+  # would label a Thermo, mzML or mzXML sample as a Waters folder. Every lookup
+  # that matches these against a config runs both sides through ms_sample_base(),
+  # so leaving them bare matches exactly as before.
+  sample_names <- sort(result$samples %||% names(result$deconvolution))
   sample_tab <- data.frame(
     Sample = sample_names,
     Protein = ifelse(
