@@ -14,7 +14,12 @@ get_default_user_settings <- function() {
     peak_tolerance = 3,
     max_multiples = 4,
     deconv_startz = 1,
-    deconv_endz = 50,
+    # Max charge must reach max mass / min m/z (60,000 / 710 = 85): below that,
+    # the high charge states of a large protein are forced onto wrong masses.
+    # At 50, 44 kDa proteins (PROTwt, RACA) showed artifact peaks ~430 Da apart
+    # and, over 10-60 kDa, fake half-mass peaks as the tallest; at 100 they were
+    # gone, and proteins up to ~30 kDa gave identical peaks.
+    deconv_endz = 100,
     deconv_minmz = 710,
     deconv_maxmz = 1100,
     deconv_masslb = 10000,
@@ -28,39 +33,64 @@ get_default_user_settings <- function() {
     deconv_time_end = NA_real_,
     deconv_peakwindow = 40,
     deconv_peaknorm = 2,
-    deconv_peakthresh = 0.07,
+    # Peak threshold, relative to the tallest point of the mass spectrum. A peak
+    # below it counts as zero, so binding snaps to 0 % (complex missed) or
+    # 100 % (unbound missed). 0.07, the earlier default, had no documented
+    # source (UniDec's own default is 0.1). Over the test corpus 0.05 removed
+    # most of that clipping -- MLKL kinact/KI 334 -> 353 (357 at 0.03), COOB
+    # fittable at all -- while raising the false-hit rate of decoy compounds by
+    # at most 2.5 points; 0.03 raised it by up to 7 and added screen hits at
+    # about the rate noise predicts.
+    deconv_peakthresh = 0.05,
     deconv_massbins = 0.5,
     deconv_keep_raw_output = FALSE,
     deconv_input_dir = "",
     log_dir = "",
-    # Marks settings as written by a release that applies the elution window;
-    # see migrate_time_window().
-    deconv_time_window_applied = TRUE
+    # Version of the stored defaults; see migrate_settings().
+    settings_version = 2L
   )
 }
 
-# migrate_time_window(): Drop the old fixed elution window from stored settings ----
-# Earlier releases defaulted the window to 0.5-1.5 min but never applied it, so
-# every deconvolution used the whole acquisition. update_user_setting() saves
-# the full merged list, so that pair was persisted for anyone who ever saved a
-# setting, whether they chose it or not. Now that the window takes effect,
-# keeping it would silently narrow their runs, so the untouched pair is dropped
-# and they get the whole acquisition, as before. A window the operator changed
-# is kept. The marker key comes in from the defaults on the next save, so this
-# runs only against files written before the change.
+# migrate_settings(): Bring settings saved by an older release up to date ----
+# update_user_setting() saves the full merged list, so every default of the
+# release that wrote the file was persisted for anyone who ever saved a
+# setting, whether they chose it or not. When a default changes, the old value
+# still sitting untouched in the file would override the new one; it is
+# dropped so the new default applies. A value the operator changed is kept --
+# though one that happens to equal the old default can't be told apart.
+# settings_version comes in from the defaults on the next save, so each step
+# runs only against files written before it.
+#   1. 0.7.5: the elution window takes effect. The never-applied 0.5-1.5 min
+#      default is dropped (blank = the whole acquisition, as before).
+#   2. Max charge 50 -> 100, peak threshold 0.07 -> 0.05.
 #' @export
-migrate_time_window <- function(stored) {
-  if (isTRUE(stored$deconv_time_window_applied)) {
-    return(stored)
+migrate_settings <- function(stored) {
+  version <- suppressWarnings(as.integer(stored$settings_version))
+  if (!length(version) || is.na(version)) {
+    # Files of the first 0.7.5 builds mark step 1 with a flag of their own
+    version <- if (isTRUE(stored$deconv_time_window_applied)) 1L else 0L
   }
-  if (
-    identical(as.numeric(stored$deconv_time_start), 0.5) &&
-      identical(as.numeric(stored$deconv_time_end), 1.5)
-  ) {
-    stored$deconv_time_start <- NULL
-    stored$deconv_time_end <- NULL
+  is_old <- function(key, value) {
+    identical(suppressWarnings(as.numeric(stored[[key]])), value)
   }
+
+  if (version < 1L) {
+    if (is_old("deconv_time_start", 0.5) && is_old("deconv_time_end", 1.5)) {
+      stored$deconv_time_start <- NULL
+      stored$deconv_time_end <- NULL
+    }
+  }
+  if (version < 2L) {
+    if (is_old("deconv_endz", 50)) {
+      stored$deconv_endz <- NULL
+    }
+    if (is_old("deconv_peakthresh", 0.07)) {
+      stored$deconv_peakthresh <- NULL
+    }
+  }
+
   stored$deconv_time_window_notice_seen <- NULL
+  stored$deconv_time_window_applied <- NULL
   stored
 }
 
@@ -75,7 +105,7 @@ read_user_settings <- function() {
   } else {
     list()
   }
-  stored <- migrate_time_window(stored)
+  stored <- migrate_settings(stored)
   # Drop any NA entries so they fall back to the built-in default rather than
   # overriding it (modifyList keeps NAs from stored, which would persist blanks).
   stored <- stored[

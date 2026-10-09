@@ -157,6 +157,9 @@ kiwims_rscript <- function() {
 }
 
 # kiwims_default_params(): The parameter frame the UI writes into config.rds ----
+# Same shape as the UI's, but UniDec's own coarse defaults (10 Da bins, a wide
+# mass range), not the app's: the pipeline tests check that a run completes,
+# and these keep them fast. Reference runs override them from params.tsv.
 kiwims_default_params <- function(...) {
   params <- data.frame(
     startz = 1,

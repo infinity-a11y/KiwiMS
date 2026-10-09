@@ -3986,7 +3986,12 @@ server <- function(
                 ),
                 shiny$div(
                   class = "tooltip-text",
-                  "The peak detection range specifies the local window to consider when detecting a peak. A peak needs to be the local max within a window of +/- this range to be considered a peak. For example, if you set the window as 10 Da, only peaks within a window of +/- 10 Da will be considered peak. Any other local maximum are ignored."
+                  "The peak detection threshold specifies how tall the relative peak height (normalized to a max spectrum intensity of 1) needs to be to considered a peak. For example, a threshold of 0.1 would mean that any peaks below a 10% max intensity would be ignored. If you set this to 0, any local maximum (within the defined detection range) are counted."
+                ),
+                shiny$br(),
+                shiny$div(
+                  class = "tooltip-text",
+                  "A peak below the threshold counts as zero in the binding calculation: a missed complex peak reads 0 % binding, a missed unbound peak 100 %. Lower it when small species matter, such as early time points, near-complete conversion or a minor proteoform; raise it when noisy spectra produce spurious low hits."
                 ),
                 shiny$br()
               )
@@ -4000,7 +4005,7 @@ server <- function(
                 ),
                 shiny$div(
                   class = "tooltip-text",
-                  "The peak detection threshold specifies how tall the relative peak height (normalized to a max spectrum intensity of 1) needs to be to considered a peak. For example, a threshold of 0.1 would mean that any peaks below a 10% max intensity would be ignored. If you set this to 0, any local maximum (within the defined detection range) are counted."
+                  "The peak detection range specifies the local window to consider when detecting a peak. A peak needs to be the local max within a window of +/- this range to be considered a peak. For example, if you set the window as 10 Da, only peaks within a window of +/- 10 Da will be considered peak. Any other local maximum are ignored."
                 ),
                 shiny$br(),
                 shiny$a(
@@ -4032,6 +4037,11 @@ server <- function(
                 shiny$div(
                   class = "tooltip-text",
                   "The charge range sets a range of charges that can be assigned for the m/z peaks in the mass spectrum. If we set a minimum of 10 and a maximum of 25, then UniDec cannot assign a charge state of 9 or lower, nor a charge state of 26 or higher. Picking a charge range that does not include the true charge states for the m/z peaks will result in a distorted deconvolved mass spectrum or an error message. It is often better to start with a wider range of charge states and then narrow the range to the charge state distribution of interest. You can also narrow the charge range to remove artifacts."
+                ),
+                shiny$br(),
+                shiny$div(
+                  class = "tooltip-text",
+                  "The maximum charge needs to reach the upper mass limit divided by the lower m/z limit (e.g. 60,000 Da / 710 m/z = 85). Below that, the high charge states of a large protein get assigned to wrong masses, which shows up as extra peaks a few hundred Da apart or at half the protein mass."
                 ),
                 shiny$br(),
                 shiny$a(

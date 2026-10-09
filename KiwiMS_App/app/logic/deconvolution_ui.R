@@ -121,7 +121,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                               ns("startz"),
                               "",
                               min = 1,
-                              max = 100,
+                              max = 200,
                               value = startz_def,
                               step = 1
                             )
@@ -160,7 +160,7 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
                               ns("endz"),
                               "",
                               min = 1,
-                              max = 100,
+                              max = 200,
                               value = endz_def,
                               step = 1
                             )

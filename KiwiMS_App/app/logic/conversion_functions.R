@@ -2391,7 +2391,8 @@ check_hits <- function(
       compound = matched$compound,
       cmp_mass = matched$cmp_mass,
       delta_cmp = abs(
-        matched$cmp_mass * matched$multiple -
+        matched$cmp_mass *
+          matched$multiple -
           (peaks_filtered[j, "mass"] - species$theor[s])
       ),
       multiple = matched$multiple,
@@ -2697,7 +2698,10 @@ collapse_species <- function(values, max_shown = 2, sep = " | ") {
     return(paste(values, collapse = sep))
   }
   paste(
-    c(values[seq_len(max_shown)], ellipsis_html(values[-seq_len(max_shown)], "\n")),
+    c(
+      values[seq_len(max_shown)],
+      ellipsis_html(values[-seq_len(max_shown)], "\n")
+    ),
     collapse = sep
   )
 }
@@ -2711,7 +2715,9 @@ species_mw_lines <- function(theor, measured, max_shown = 2) {
   measured <- suppressWarnings(as.numeric(as.character(measured)))
   species <- sort(unique(theor[!is.na(theor)]))
 
-  fmt <- function(x) format(round(x, 1), big.mark = ",", nsmall = 1, scientific = FALSE)
+  fmt <- function(x) {
+    format(round(x, 1), big.mark = ",", nsmall = 1, scientific = FALSE)
+  }
 
   lines <- vapply(
     species,
@@ -2750,7 +2756,10 @@ species_mw_lines <- function(theor, measured, max_shown = 2) {
 
   list(
     html = paste(lines, collapse = "<br>"),
-    labels = paste(c("Mw", rep("&nbsp;", max(length(lines) - 1, 0))), collapse = "<br>")
+    labels = paste(
+      c("Mw", rep("&nbsp;", max(length(lines) - 1, 0))),
+      collapse = "<br>"
+    )
   )
 }
 
@@ -2774,7 +2783,11 @@ mass_matched <- function(x, ref, tol = 0.05) {
 
 # Entries of a Mass Shifts card: label, whether it was assigned to a peak and
 # in how many samples
-mass_entries <- function(label = character(0), present = logical(0), count = integer(0)) {
+mass_entries <- function(
+  label = character(0),
+  present = logical(0),
+  count = integer(0)
+) {
   data.frame(label = label, present = present, count = count)
 }
 
@@ -2819,7 +2832,9 @@ mass_shift_entries <- function(hits, declared = numeric(0)) {
 #' @export
 protein_mass_entries <- function(hits, declared = numeric(0)) {
   theor <- suppressWarnings(as.numeric(as.character(hits$`Theor. Prot. [Da]`)))
-  measured <- suppressWarnings(as.numeric(as.character(hits$`Meas. Prot. [Da]`)))
+  measured <- suppressWarnings(as.numeric(as.character(
+    hits$`Meas. Prot. [Da]`
+  )))
   detected <- unique(theor[!is.na(theor) & !is.na(measured)])
 
   masses <- unique(c(declared, theor[!is.na(theor)]))
@@ -2837,7 +2852,12 @@ protein_mass_entries <- function(hits, declared = numeric(0)) {
 
   mass_entries(
     paste(
-      format(round(masses[order], 1), big.mark = ",", nsmall = 1, scientific = FALSE),
+      format(
+        round(masses[order], 1),
+        big.mark = ",",
+        nsmall = 1,
+        scientific = FALSE
+      ),
       "Da"
     ),
     unname(present[order]),
@@ -3047,8 +3067,7 @@ main_proteoform <- function(binding) {
     ) |>
     dplyr::group_by(protein) |>
     dplyr::mutate(
-      main = seq_along(species) ==
-        order(-(measured > 0), -share)[1]
+      main = seq_along(species) == order(-(measured > 0), -share)[1]
     ) |>
     dplyr::ungroup() |>
     as.data.frame()
@@ -3308,7 +3327,11 @@ proteoform_comparison_table <- function(kinetics, pooled, binding, view) {
   )
 
   # The reference species first, right under the pooled fit
-  is_main <- vapply(kinetics, function(k) identical(k$species, main), logical(1))
+  is_main <- vapply(
+    kinetics,
+    function(k) identical(k$species, main),
+    logical(1)
+  )
   species_rows <- c(species_rows[is_main], species_rows[!is_main])
 
   tbl <- do.call(rbind, c(list(pooled_row), unname(species_rows)))
@@ -3884,7 +3907,11 @@ proteoform_paired_plot <- function(
           xref = "x",
           yref = "y",
           showarrow = FALSE,
-          bgcolor = if (theme == "light") "rgba(255,255,255,0.8)" else "rgba(0,0,0,0.6)",
+          bgcolor = if (theme == "light") {
+            "rgba(255,255,255,0.8)"
+          } else {
+            "rgba(0,0,0,0.6)"
+          },
           font = list(size = 13, color = font_color)
         ))
       }
@@ -4233,7 +4260,8 @@ log_kobs_analysis <- function() {
 
 # Node line at column `col`: `col` characters of indentation, then a connector
 is_log_node <- function(lines, col) {
-  substr(lines, col + 1, col + 2) %in% c("├─", "└─") &
+  substr(lines, col + 1, col + 2) %in%
+    c("├─", "└─") &
     !grepl("[^ │]", substr(lines, 1, col))
 }
 
@@ -4433,7 +4461,9 @@ wrap_log_line <- function(
   head_width = nchar(head, type = "width")
 ) {
   parts <- strwrap(text, width = max(28, log_wrap_width - head_width))
-  if (length(parts) == 0) parts <- ""
+  if (length(parts) == 0) {
+    parts <- ""
+  }
   paste0(c(head, rep(cont, length(parts) - 1L)), parts)
 }
 
@@ -5258,52 +5288,54 @@ make_binding_plot <- function(
       showlegend = FALSE
     )
 
-  if (show_means) binding_plot <- binding_plot |>
-    # Mean ± SD per time point
-    plotly::add_markers(
-      data = dplyr::filter(df_points, !is.na(kobs)),
-      x = ~time,
-      y = ~binding,
-      color = ~concentration,
-      legendgroup = ~concentration,
-      colors = colors,
-      symbol = ~concentration,
-      marker = list(
-        size = 12,
-        opacity = 0.8,
-        line = list(width = 1, color = "white")
-      ),
-      legendgroup = ~concentration,
-      error_y = if (has_replicates) {
-        list(
-          type = "data",
-          array = ~binding_sd,
-          visible = TRUE,
-          thickness = 1.5,
-          width = 4
-        )
-      } else {
-        list(visible = FALSE)
-      },
-      text = ~ paste0("n = ", n, " · SD ", sd_label),
-      hovertemplate = ~ paste(
-        "<b>Mean ± SD</b> (%{text})<br>",
-        paste(
-          "Time: %{x}",
-          gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
-          "<br>"
+  if (show_means) {
+    binding_plot <- binding_plot |>
+      # Mean ± SD per time point
+      plotly::add_markers(
+        data = dplyr::filter(df_points, !is.na(kobs)),
+        x = ~time,
+        y = ~binding,
+        color = ~concentration,
+        legendgroup = ~concentration,
+        colors = colors,
+        symbol = ~concentration,
+        marker = list(
+          size = 12,
+          opacity = 0.8,
+          line = list(width = 1, color = "white")
         ),
-        "Binding [%]: %{y:.2f}<br>",
-        paste0(
-          "k<sub>obs</sub>: %{customdata:.3~g} ",
-          gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
-          "⁻¹"
+        legendgroup = ~concentration,
+        error_y = if (has_replicates) {
+          list(
+            type = "data",
+            array = ~binding_sd,
+            visible = TRUE,
+            thickness = 1.5,
+            width = 4
+          )
+        } else {
+          list(visible = FALSE)
+        },
+        text = ~ paste0("n = ", n, " · SD ", sd_label),
+        hovertemplate = ~ paste(
+          "<b>Mean ± SD</b> (%{text})<br>",
+          paste(
+            "Time: %{x}",
+            gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+            "<br>"
+          ),
+          "Binding [%]: %{y:.2f}<br>",
+          paste0(
+            "k<sub>obs</sub>: %{customdata:.3~g} ",
+            gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+            "⁻¹"
+          ),
+          "<extra></extra>"
         ),
-        "<extra></extra>"
-      ),
-      customdata = ~kobs,
-      showlegend = ifelse(is.null(filter_conc), TRUE, FALSE)
-    )
+        customdata = ~kobs,
+        showlegend = ifelse(is.null(filter_conc), TRUE, FALSE)
+      )
+  }
 
   # Individual samples: these are the points the curves were fitted to.
   if (!is.null(sample_points) && nrow(sample_points) > 0) {
@@ -5361,7 +5393,9 @@ make_binding_plot <- function(
           size = 7,
           opacity = 1,
           color = font_color,
-          symbol = unname(symbol_map[as.character(sample_points$concentration)]),
+          symbol = unname(symbol_map[as.character(
+            sample_points$concentration
+          )]),
           line = list(width = 1.5, color = ring_colors)
         ),
         text = ~Sample,
@@ -5615,17 +5649,20 @@ make_kobs_plot <- function(
   shapes <- list()
   annotations <- list()
   if (fit_failed) {
-    annotations <- c(annotations, list(list(
-      text = "k<sub>inact</sub>/K<sub>I</sub> fit failed",
-      xref = "paper",
-      yref = "paper",
-      x = 0,
-      y = 1,
-      xanchor = "left",
-      yanchor = "bottom",
-      showarrow = FALSE,
-      font = list(color = font_color, size = 13)
-    )))
+    annotations <- c(
+      annotations,
+      list(list(
+        text = "k<sub>inact</sub>/K<sub>I</sub> fit failed",
+        xref = "paper",
+        yref = "paper",
+        x = 0,
+        y = 1,
+        xanchor = "left",
+        yanchor = "bottom",
+        showarrow = FALSE,
+        font = list(color = font_color, size = 13)
+      ))
+    )
   }
 
   for (conc_name in ordered_conc) {
@@ -5717,33 +5754,39 @@ make_kobs_plot <- function(
         inherit = FALSE
       )
 
-    shapes <- c(shapes, list(list(
-      type = "rect",
-      xref = "x",
-      yref = "paper",
-      x0 = 0,
-      x1 = max_conc,
-      y0 = 0,
-      y1 = 1,
-      fillcolor = if (theme == "light") {
-        "rgba(0,0,0,0.07)"
-      } else {
-        "rgba(255,255,255,0.09)"
-      },
-      line = list(width = 0),
-      layer = "below"
-    )))
-    annotations <- c(annotations, list(list(
-      x = max_conc,
-      y = 1,
-      xref = "x",
-      yref = "paper",
-      text = "measured",
-      showarrow = FALSE,
-      xanchor = "right",
-      yanchor = "top",
-      font = list(size = 12, color = font_color)
-    )))
+    shapes <- c(
+      shapes,
+      list(list(
+        type = "rect",
+        xref = "x",
+        yref = "paper",
+        x0 = 0,
+        x1 = max_conc,
+        y0 = 0,
+        y1 = 1,
+        fillcolor = if (theme == "light") {
+          "rgba(0,0,0,0.07)"
+        } else {
+          "rgba(255,255,255,0.09)"
+        },
+        line = list(width = 0),
+        layer = "below"
+      ))
+    )
+    annotations <- c(
+      annotations,
+      list(list(
+        x = max_conc,
+        y = 1,
+        xref = "x",
+        yref = "paper",
+        text = "measured",
+        showarrow = FALSE,
+        xanchor = "right",
+        yanchor = "top",
+        font = list(size = 12, color = font_color)
+      ))
+    )
   }
 
   kobs_plot <- kobs_plot |>
@@ -5930,19 +5973,35 @@ make_kinetics_residual_plot <- function(
   multi_series <- length(series_levels) > 1
 
   pts$hover <- paste0(
-    "<b>", pts$sample, "</b>",
+    "<b>",
+    pts$sample,
+    "</b>",
     if (multi_series) paste0("<br>Series: ", pts$series) else "",
-    "<br>Concentration: ", pts$concentration, " ", conc_unit,
-    "<br>Time: ", signif(pts$time, 4), " ", time_unit,
-    "<br>Observed: ", sprintf("%.2f", pts$binding), " %",
-    "<br>Fitted: ", sprintf("%.2f", pts$fitted), " %",
-    "<br>Residual: ", sprintf("%+.2f", pts$residual), " %"
+    "<br>Concentration: ",
+    pts$concentration,
+    " ",
+    conc_unit,
+    "<br>Time: ",
+    signif(pts$time, 4),
+    " ",
+    time_unit,
+    "<br>Observed: ",
+    sprintf("%.2f", pts$binding),
+    " %",
+    "<br>Fitted: ",
+    sprintf("%.2f", pts$fitted),
+    " %",
+    "<br>Residual: ",
+    sprintf("%+.2f", pts$residual),
+    " %"
   )
 
   p <- plotly::plot_ly()
   for (conc_name in levels_desc) {
     conc_color <- unname(colors[conc_name])
-    if (is.na(conc_color)) conc_color <- pal$muted
+    if (is.na(conc_color)) {
+      conc_color <- pal$muted
+    }
     first <- TRUE
     for (s in series_levels) {
       sub <- pts[
@@ -5950,7 +6009,9 @@ make_kinetics_residual_plot <- function(
         ,
         drop = FALSE
       ]
-      if (nrow(sub) == 0) next
+      if (nrow(sub) == 0) {
+        next
+      }
       variant <- series_variant[[s]]
       open <- grepl("open", variant)
 
@@ -6012,7 +6073,11 @@ make_kinetics_residual_plot <- function(
           size = 10,
           color = pal$font,
           symbol = paste0("circle", variant),
-          line = if (grepl("open", variant)) list(width = 2) else list(width = 0)
+          line = if (grepl("open", variant)) {
+            list(width = 2)
+          } else {
+            list(width = 0)
+          }
         ),
         hoverinfo = "skip",
         inherit = FALSE
@@ -6042,7 +6107,11 @@ make_kinetics_residual_plot <- function(
       c(list(range = c(-0.03 * time_max, 1.03 * time_max)), sci_axis_ticks)
     ),
     yaxis = kinetics_axis("Residual [% binding]", pal),
-    shapes = list(guide(0, "solid"), guide(spread, "dot"), guide(-spread, "dot")),
+    shapes = list(
+      guide(0, "solid"),
+      guide(spread, "dot"),
+      guide(-spread, "dot")
+    ),
     annotations = list(list(
       x = 1,
       y = spread,
@@ -6093,7 +6162,9 @@ make_kinetics_plateau_plot <- function(
     seq_len(nrow(tab)),
     function(i) {
       sub <- pts[pts$conc == tab$conc[i], , drop = FALSE]
-      if (nrow(sub) == 0) return(c(NA_real_, NA_real_))
+      if (nrow(sub) == 0) {
+        return(c(NA_real_, NA_real_))
+      }
       t_last <- max(sub$time)
       c(mean(sub$binding[sub$time == t_last]), t_last)
     },
@@ -6504,7 +6575,12 @@ make_kinetics_saturation_plot <- function(
         y = 50,
         xref = "x",
         yref = "y",
-        text = sprintf("K<sub>i</sub> ≈ %s %s<br>%s", signif(ki, 3), conc_unit, selected_label),
+        text = sprintf(
+          "K<sub>i</sub> ≈ %s %s<br>%s",
+          signif(ki, 3),
+          conc_unit,
+          selected_label
+        ),
         showarrow = FALSE,
         xanchor = "left",
         yanchor = "top",
@@ -7229,19 +7305,22 @@ compute_kinact_ki <- function(kobs_result, units = units) {
   # Sample points of all fitted concentrations. Concentrations without any
   # response carry no information on the rate (their plateau fits 0 %, which
   # makes any kobs fit equally well) and are left out of the global fit.
-  points <- do.call(rbind, lapply(conc_names, function(i) {
-    entry <- kobs_result[[i]]
-    if (is.null(entry$hits) || isTRUE(entry$kobs == 0)) {
-      return(NULL)
-    }
-    data.frame(
-      conc = as.numeric(i),
-      time = entry$hits$time,
-      binding = entry$hits$binding,
-      series = entry$hits$series,
-      sample = entry$hits$Sample
-    )
-  }))
+  points <- do.call(
+    rbind,
+    lapply(conc_names, function(i) {
+      entry <- kobs_result[[i]]
+      if (is.null(entry$hits) || isTRUE(entry$kobs == 0)) {
+        return(NULL)
+      }
+      data.frame(
+        conc = as.numeric(i),
+        time = entry$hits$time,
+        binding = entry$hits$binding,
+        series = entry$hits$series,
+        sample = entry$hits$Sample
+      )
+    })
+  )
 
   n_conc <- if (is.null(points)) 0 else length(unique(points$conc))
   if (n_conc < 3) {
@@ -7348,7 +7427,8 @@ compute_kinact_ki <- function(kobs_result, units = units) {
   ki_n_hyp <- models$ki_n
   significant_curvature <- models$significant
   ki_in_range <- models$ki_in_range
-  curved <- identical(models$selected, hyperbolic_fit) && !is.null(hyperbolic_fit)
+  curved <- identical(models$selected, hyperbolic_fit) &&
+    !is.null(hyperbolic_fit)
 
   selected <- models$selected
   est <- global_fit_estimates(selected, conc_max, time_max)
@@ -7436,8 +7516,11 @@ compute_kinact_ki <- function(kobs_result, units = units) {
   boot <- bootstrap_global_kinetics(points, selected, conc_max, time_max)
   n_boot_ok <- if (is.null(boot)) 0L else nrow(boot)
   ci <- function(x) {
-    if (n_boot_ok < kinetics_settings$bootstrap_min_success *
-      kinetics_settings$bootstrap_n) {
+    if (
+      n_boot_ok <
+        kinetics_settings$bootstrap_min_success *
+          kinetics_settings$bootstrap_n
+    ) {
       return(c(NA_real_, NA_real_))
     }
     unname(stats::quantile(x, c(0.025, 0.975), na.rm = TRUE))
@@ -7460,8 +7543,10 @@ compute_kinact_ki <- function(kobs_result, units = units) {
   # describe (inhibitor depletion or instability, protein degradation), and
   # kinact/KI can be biased by them.
   group_plateaus <- tapply(unname(est$plateaus), groups, mean)
-  if (length(group_plateaus) >= 2 &&
-    diff(range(group_plateaus)) > kinetics_settings$plateau_max_spread) {
+  if (
+    length(group_plateaus) >= 2 &&
+      diff(range(group_plateaus)) > kinetics_settings$plateau_max_spread
+  ) {
     add_warning(kinact_ki_warning(
       "plateau_spread",
       "Plateaus differ",
@@ -7540,34 +7625,37 @@ compute_kinact_ki <- function(kobs_result, units = units) {
   series <- NULL
   labels <- unique(stats::na.omit(points$series))
   if (length(labels) >= 2) {
-    series <- do.call(rbind, lapply(sort_series(labels), function(s) {
-      sp <- points[!is.na(points$series) & points$series == s, ]
-      if (length(unique(sp$conc)) < 3) {
-        return(NULL)
-      }
-      levels_s <- sort(unique(sp$conc_n))
-      pos <- match(levels_s, selected$conc_levels)
-      groups_s <- match(groups[pos], sort(unique(groups[pos])))
-      sfit <- fit_global_best(
-        sp,
-        selected$model,
-        groups_s,
-        unname(est$plateaus[pos]),
-        c(selected$par[selected$np + 1], k2_start)
-      )
-      if (is.null(sfit)) {
-        return(NULL)
-      }
-      sest <- global_fit_estimates(sfit, conc_max, time_max)
-      data.frame(
-        series = s,
-        ratio = sest$ratio,
-        ratio_se = sest$ratio_se,
-        kinact = if (status == "saturated") sest$kinact else NA_real_,
-        KI = if (status == "saturated") sest$KI else NA_real_,
-        n = nrow(sp)
-      )
-    }))
+    series <- do.call(
+      rbind,
+      lapply(sort_series(labels), function(s) {
+        sp <- points[!is.na(points$series) & points$series == s, ]
+        if (length(unique(sp$conc)) < 3) {
+          return(NULL)
+        }
+        levels_s <- sort(unique(sp$conc_n))
+        pos <- match(levels_s, selected$conc_levels)
+        groups_s <- match(groups[pos], sort(unique(groups[pos])))
+        sfit <- fit_global_best(
+          sp,
+          selected$model,
+          groups_s,
+          unname(est$plateaus[pos]),
+          c(selected$par[selected$np + 1], k2_start)
+        )
+        if (is.null(sfit)) {
+          return(NULL)
+        }
+        sest <- global_fit_estimates(sfit, conc_max, time_max)
+        data.frame(
+          series = s,
+          ratio = sest$ratio,
+          ratio_se = sest$ratio_se,
+          kinact = if (status == "saturated") sest$kinact else NA_real_,
+          KI = if (status == "saturated") sest$KI else NA_real_,
+          n = nrow(sp)
+        )
+      })
+    )
     if (!is.null(series) && nrow(series) < 2) {
       series <- NULL
     }
@@ -9392,51 +9480,40 @@ render_table_view <- function(table, colors, tab, inputs, units) {
       scrollY = TRUE,
       scrollCollapse = TRUE,
       rowGroup = row_group,
-      columnDefs = Filter(Negate(is.null), list(
+      columnDefs = Filter(
+        Negate(is.null),
         list(
-          visible = ifelse(
-            is.null(group_variable) ||
-              length(unique(table[[group_variable]])) == nrow(table),
-            TRUE,
-            FALSE
-          ),
-          targets = group_variable
-        ),
-        list(
-          visible = FALSE,
-          targets = c(
-            "col_var",
-            "label_color",
-            "trunc_label",
-            "Theor. Prot. [Da]",
-            "Theor. Cmp [Da]",
-            "Bind. Stoich.",
-            if (tab == "Concentration") "Cmp Name"
-          )
-        ),
-        list(className = 'dt-center', targets = "_all"),
-        list(className = 'dt-nowrap', targets = "Mass Shift"),
-        list(
-          targets = "Binding [%]",
-          type = "num",
-          className = if (!is.null(render_binding)) "bar-chart-col" else NULL,
-          render = render_binding
-        ),
-        list(
-          targets = "Total %",
-          type = "num",
-          className = if (!is.null(render_tot_binding)) {
-            "bar-chart-col"
-          } else {
-            NULL
-          },
-          render = render_tot_binding
-        ),
-        # The proteoform's own binding sits next to the pooled total and
-        # follows its bar setting
-        if ("Proteoform %" %in% names(table)) {
           list(
-            targets = "Proteoform %",
+            visible = ifelse(
+              is.null(group_variable) ||
+                length(unique(table[[group_variable]])) == nrow(table),
+              TRUE,
+              FALSE
+            ),
+            targets = group_variable
+          ),
+          list(
+            visible = FALSE,
+            targets = c(
+              "col_var",
+              "label_color",
+              "trunc_label",
+              "Theor. Prot. [Da]",
+              "Theor. Cmp [Da]",
+              "Bind. Stoich.",
+              if (tab == "Concentration") "Cmp Name"
+            )
+          ),
+          list(className = 'dt-center', targets = "_all"),
+          list(className = 'dt-nowrap', targets = "Mass Shift"),
+          list(
+            targets = "Binding [%]",
+            type = "num",
+            className = if (!is.null(render_binding)) "bar-chart-col" else NULL,
+            render = render_binding
+          ),
+          list(
+            targets = "Total %",
             type = "num",
             className = if (!is.null(render_tot_binding)) {
               "bar-chart-col"
@@ -9444,13 +9521,27 @@ render_table_view <- function(table, colors, tab, inputs, units) {
               NULL
             },
             render = render_tot_binding
+          ),
+          # The proteoform's own binding sits next to the pooled total and
+          # follows its bar setting
+          if ("Proteoform %" %in% names(table)) {
+            list(
+              targets = "Proteoform %",
+              type = "num",
+              className = if (!is.null(render_tot_binding)) {
+                "bar-chart-col"
+              } else {
+                NULL
+              },
+              render = render_tot_binding
+            )
+          },
+          list(
+            targets = -1,
+            className = 'dt-last-col'
           )
-        },
-        list(
-          targets = -1,
-          className = 'dt-last-col'
         )
-      ))
+      )
     )
   ) |>
     DT::formatStyle(

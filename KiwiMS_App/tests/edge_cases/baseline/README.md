@@ -37,9 +37,30 @@ Setup and conventions are in the [kit README](../README.md).
   - the tab counts only the fitted concentrations, so the two 0 µM controls
     are left out: 120 samples, not 122.
 
-Why the +178 form behaves the way it does: UniDec's `peakthresh = 0.07` drops
-its small apo and complex peaks below the 7 % floor. Its occupancy then snaps
-to 0 % early and 100 % late, hence the many limit values.
+Why the +178 form behaves the way it does: the peak list was made with
+`peakthresh = 0.07`, which drops its small apo and complex peaks below the
+7 % floor. Its occupancy then snaps to 0 % early and 100 % late, hence the
+many limit values.
+
+## Peak threshold
+
+The kit runs on the 0.07 peak list of the
+[reference run](../../reference_data/README.md#kinact_mlkl_3), the app default
+at the time. The default is now 0.05. Picking the peaks of the same run's
+stored mass spectra again with UniDec's rule (at 0.07 it reproduces all 122
+stored peak lists exactly) and running the baseline on them:
+
+| Threshold | Samples at 100 % | kinact/KI [95 % CI] | 21,638.84 (limit values) | 21,816.84 (limit values) |
+|---|---|---|---|---|
+| 0.07 (kit) | 13 | 334.1 [300.7–378.6] | 357.6 (14/120) | 231.2 (59/120) |
+| 0.05 (default) | 7 | 353.1 [315.0–394.8] | 356.4 (8/120) | 343.2 (41/120) |
+| 0.03 | 1 | 357.4 [322.4–394.5] | 353.3 (2/120) | 375.1 (14/120) |
+
+The main form hardly moves; the pooled value rises as the +178 form stops
+snapping to its limits. Below 0.03 nothing changes any more, so the 0.07 value
+is about 7 % low from clipping. A deconvolution of this series with the
+current defaults therefore gives other numbers than the kit expects; the kit
+keeps the 0.07 list, since it tests the conversion on a fixed input.
 
 ## Background under the complex peak
 

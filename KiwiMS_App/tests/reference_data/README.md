@@ -41,14 +41,22 @@ The expected peaks are also what the [edge-case kit](../edge_cases/README.md)
 runs on, so the kit's numbers trace back to a deconvolution any machine with
 the dataset can repeat.
 
+Charge 1–50 and threshold 0.07 were the app's defaults at the time; the
+defaults are now charge 1–100 and threshold 0.05. The expected peaks stay at
+the parameters above, which the tests read from `params.tsv`: they pin a
+reproducible result, not the defaults. Charge 100 gives the same peaks for
+this ~22 kDa protein; threshold 0.05 adds the small peaks between 5 and 7 %
+of the tallest (see the [baseline](../edge_cases/baseline/README.md#peak-threshold)).
+
 ## thermo_intact
 
 Two Thermo intact-LC-MS files: `KARL_Thermo-file_intactLCMS.raw` (KRAS, peaks
 at 19,330 Da and its dimer at 38,650 Da) and `WEEX_Thermo-file.raw` (23 peaks
 between 5 and 50 kDa). A copy of `HiDrive-Thermo files intact LC-MS`, renamed
 so the dataset has a name without spaces. The expected peaks were made on
-2026-10-09 with UniDec 7.0.3 and the app's default parameters, but a mass
-range of 5,000–100,000 Da: these are ten-minute gradients, wider than the
+2026-10-09 with UniDec 7.0.3 and UniDec's own default parameters (charge
+1–50, bins 10 Da, threshold 0.1, window 500 Da, as in `params.tsv`), with a
+mass range of 5,000–100,000 Da: these are ten-minute gradients, wider than the
 Waters-era defaults assume. Two runs gave identical peaks.
 
 ## Where the data goes

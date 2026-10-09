@@ -1021,7 +1021,7 @@ server <- function(id) {
                           ns("settings_startz"),
                           label = NULL,
                           min = 1,
-                          max = 100,
+                          max = 200,
                           value = us$deconv_startz,
                           step = 1,
                           width = "200px"
@@ -1042,7 +1042,7 @@ server <- function(id) {
                           ns("settings_endz"),
                           label = NULL,
                           min = 1,
-                          max = 100,
+                          max = 200,
                           value = us$deconv_endz,
                           step = 1,
                           width = "200px"
@@ -1677,7 +1677,7 @@ server <- function(id) {
       settings_ok_tag("Valid")
     })
 
-    # Min. charge state [z] — min 1, max 100, integer, < endz
+    # Min. charge state [z] — min 1, integer, < endz
     output$settings_startz_feedback <- shiny$renderUI({
       val <- input$settings_startz
       endz <- input$settings_endz
@@ -1696,7 +1696,7 @@ server <- function(id) {
       settings_ok_tag("Valid")
     })
 
-    # Max. charge state [z] — min 1, max 100, integer, > startz
+    # Max. charge state [z] — min 1, integer, > startz
     output$settings_endz_feedback <- shiny$renderUI({
       val <- input$settings_endz
       startz <- input$settings_startz
