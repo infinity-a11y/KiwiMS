@@ -9,6 +9,7 @@ box::use(
     addWorksheet,
     createStyle,
     createWorkbook,
+    freezePane,
     saveWorkbook,
     setColWidths,
     writeData
@@ -705,14 +706,26 @@ write_export_xlsx <- function(table, path) {
   addWorksheet(wb, "Table")
   writeData(wb, 1, table, keepNA = TRUE, na.string = "N/A")
 
+  # Header row in bold and kept in view while scrolling
+  addStyle(
+    wb,
+    1,
+    style = createStyle(textDecoration = "bold"),
+    rows = 1L,
+    cols = seq_along(table),
+    gridExpand = TRUE
+  )
+  freezePane(wb, 1, firstRow = TRUE)
+
   # Percentages and masses. Not every one of them is labelled with a unit in
-  # brackets: the table views call their total column "Total %", and the adduct
-  # view's "Mass 1", "Mass 2", … hold compound masses with no [Da] suffix at
-  # all. Match those by name rather than leaving them on the General format.
+  # brackets: the table views call their total column "Total %", and the
+  # hits' Sample View "Mass 1", "Mass 1 (compound)", … hold compound masses
+  # with no [Da] suffix at all. Match those by name rather than leaving them on
+  # the General format.
   numeric_cols <- which(vapply(table, is.numeric, logical(1)))
   decimal_cols <- intersect(
     numeric_cols,
-    grep("\\[%\\]|\\[Da\\]|%$|^Mass [0-9]+$", names(table))
+    grep("\\[%\\]|\\[Da\\]|%$|^Mass [0-9]+( \\(.*\\))?$", names(table))
   )
   if (length(decimal_cols) && nrow(table)) {
     addStyle(

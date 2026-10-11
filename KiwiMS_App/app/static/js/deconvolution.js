@@ -22,6 +22,68 @@ document.addEventListener('DOMContentLoaded', function () {
   document.body.addEventListener('click', h, true);
 });
 
+// Spectrum busy state (see spectrum_busy() in deconvolution_main.R)
+// The server is done with a spectrum well before it is on screen: "Show All"
+// sends every spectrum of the run, and plotly takes seconds to draw that
+// scene. So the server only raises the spinner, as its render starts, and it
+// is lifted here once plotly has drawn the new figure (or the render failed).
+//   {output, host, block}  spinner over #host until #output is drawn; with
+//                          block, the page-wide wait-cursor overlay as well
+//   {}                     lift now (reset, abort)
+// Lifting after a draw sets the input <output>_drawn for the server.
+(function () {
+  var pending = null;
+
+  function blocker(on) {
+    var el = document.getElementById('blocking-overlay');
+    if (el) el.style.display = on ? 'block' : 'none';
+  }
+
+  function lift(p, notify) {
+    if (!p || p !== pending) return;
+    pending = null;
+    clearTimeout(p.timer);
+    var host = document.getElementById(p.host);
+    if (host) host.classList.remove('is-busy');
+    if (p.block) blocker(false);
+    if (notify) {
+      Shiny.setInputValue(p.output + '_drawn', Date.now(), { priority: 'event' });
+    }
+  }
+
+  Shiny.addCustomMessageHandler('decon-spectrum-busy', function (msg) {
+    if (!msg.output) return lift(pending, false);
+    // A render that follows one still being drawn keeps its blocking
+    var block = !!msg.block || !!(pending && pending.block);
+    if (pending) clearTimeout(pending.timer);
+    var p = { output: msg.output, host: msg.host, block: block, seen: false };
+    // Never leave the page blocked should no draw ever come
+    p.timer = setTimeout(function () { lift(p, true); }, 120000);
+    pending = p;
+    var host = document.getElementById(p.host);
+    if (host) host.classList.add('is-busy');
+    if (block) blocker(true);
+  });
+
+  // Draws before the new value arrived belong to the figure being replaced
+  $(document).on('shiny:value', function (e) {
+    if (pending && e.name === pending.output) pending.seen = true;
+  });
+
+  $(document).on('shiny:error', function (e) {
+    if (pending && e.name === pending.output) lift(pending, true);
+  });
+
+  // Two frames on, so the figure is painted when the spinner goes
+  $(document).on('plotly_afterplot', function (e) {
+    var p = pending;
+    if (!p || !p.seen || e.target.id !== p.output) return;
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () { lift(p, true); });
+    });
+  });
+})();
+
 // Target file list (Start Deconvolution dialog)
 // Spreadsheet-style selection on the .kiwi-file-list checkbox groups:
 //   click               toggle one file (it becomes the anchor)

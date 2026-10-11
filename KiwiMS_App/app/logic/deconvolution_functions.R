@@ -228,6 +228,7 @@ params = {%s}
 input_file = r"%s"
 result_dir = r"%s"
 out_stub = r"%s"
+keep_raw = %s
 
 # Vendor-agnostic read. get_importer() resolves a .raw *directory* to the Waters
 # reader and a .raw *file* to the Thermo reader -- the extension is identical,
@@ -281,16 +282,39 @@ if data is None or len(data) == 0:
         pass
     raise IOError("The elution window selected no scans." + span)
 
-# Written straight into the worker directory. The previous Waters-only path
-# wrote a scratch _rawdata.txt next to the operator source data and moved it
-# afterwards, which made write access to the data folder a hard requirement;
-# nothing is written outside result_dir now.
-output = os.path.join(result_dir, out_stub + "_rawdata.txt")
-np.savetxt(output, data)
+# Hand the spectrum to the engine in memory. engine.open_file() would take it
+# from a text file instead: written here, parsed back, and written once more
+# into _unidecfiles -- about 1.3 s of text I/O per sample, more than a third of
+# its single-sample time. What follows is open_file() minus that round trip;
+# %%.18e text holds a double exactly, so the engine sees the same numbers.
+# Nothing is written outside result_dir.
+from unidec.modules import peakstructure, unidecstructure
 
-# Make result directory
 engine = unidec.UniDec()
-engine.open_file(output)
+engine.pks = peakstructure.Peaks()
+engine.data = unidecstructure.DataContainer()
+cfg = engine.config
+cfg.dirname = result_dir
+cfg.filename = os.path.join(result_dir, out_stub + "_rawdata.txt")
+cfg.udir = os.path.join(result_dir, out_stub + "_rawdata_unidecfiles")
+os.makedirs(cfg.udir, exist_ok=True)
+cfg.outfname = os.path.join(cfg.udir, out_stub + "_rawdata")
+cfg.extension = ".txt"
+cfg.default_file_names()
+cfg.imflag = 0
+cfg.procflag = 0
+engine.data.rawdata = np.asarray(data, dtype=np.float64)
+engine.data.data2 = engine.data.rawdata
+engine.export_config()
+# Polarity stays at the engine default, as it did when open_file() got a .txt:
+# its auto_polarity() finds no importer for a text file and changes nothing.
+
+# The two text copies open_file() left behind are what "keep raw output"
+# promises -- the result viewer reads the one inside _unidecfiles -- so write
+# them only then.
+if keep_raw:
+    np.savetxt(cfg.filename, engine.data.rawdata)
+    np.savetxt(cfg.outfname + "_rawdata.txt", engine.data.rawdata)
 
 # Set configuration parameters
 engine.config.startz = params["startz"]
@@ -314,7 +338,8 @@ engine.pick_peaks()
           params_string,
           input_path,
           work_dir,
-          raw_stub
+          raw_stub,
+          if (isTRUE(keep_raw_output)) "True" else "False"
         ))
 
         # Write per-sample data to DB, or report failure if output is
@@ -491,15 +516,33 @@ engine.pick_peaks()
 }
 
 # decon_worker_count(): Worker count for a run ----
-# Never spawn more workers than there are samples, always leave two logical
-# cores for the Shiny app and the OS, and allow an override for testing/support.
+# Never spawn more workers than there are samples, and allow an override for
+# testing/support.
+#
+# The default is small on purpose. UniDec.exe is bound by memory bandwidth,
+# not by cores: every iteration streams its peak-shape table (data points x
+# kernel width floats, ~200 MB for a typical intact-protein spectrum) three
+# times. Measured on an 8-core/16-thread desktop, 56 MLKL reference samples:
+#
+#   workers x threads   s/sample
+#        1 x 16           1.88    (the Python side of each sample is not hidden)
+#        4 x 4            1.16
+#       14 x 1            1.34    (each exe 2.3x slower than alone)
+#
+# Throughput is flat from about four workers up, while each extra worker
+# costs start-up time and a few hundred MB of RAM. Half the physical cores,
+# at most four, sits on that plateau.
 #' @export
 decon_worker_count <- function(n_samples, num_cores = NULL) {
   override <- suppressWarnings(as.integer(Sys.getenv("KIWIMS_DECON_WORKERS")))
   if (!is.na(override) && override > 0) {
     num_cores <- override
   } else if (is.null(num_cores)) {
-    num_cores <- parallel::detectCores() - 2
+    physical <- parallel::detectCores(logical = FALSE)
+    if (is.na(physical)) {
+      physical <- parallel::detectCores() %/% 2L
+    }
+    num_cores <- min(4L, physical %/% 2L)
   }
   if (is.na(num_cores)) {
     num_cores <- 1L
@@ -507,14 +550,34 @@ decon_worker_count <- function(n_samples, num_cores = NULL) {
   max(1L, min(as.integer(num_cores), as.integer(n_samples)))
 }
 
+# decon_omp_threads(): OpenMP threads for each worker's UniDec.exe ----
+# UniDec.exe is an OpenMP program and by default starts one thread per logical
+# core. Every worker doing that oversubscribes the machine n_workers-fold, so
+# each gets an even share instead.
+#' @export
+decon_omp_threads <- function(n_workers) {
+  logical <- parallel::detectCores()
+  if (is.na(logical)) {
+    return(1L)
+  }
+  max(1L, as.integer(logical %/% max(1L, n_workers)))
+}
+
 # decon_worker_init(): One-shot bring-up of a parallel worker ----
 # Runs INSIDE a worker.  Returns "ok" or an "error: ..." string and never
 # signals a condition, so a single bad worker cannot abort the whole run.
 #' @export
-decon_worker_init <- function(python_exe, lib_paths) {
+decon_worker_init <- function(python_exe, lib_paths, omp_threads = NULL) {
   tryCatch(
     {
       .libPaths(lib_paths)
+
+      # Inherited by every UniDec.exe this worker starts (see
+      # decon_omp_threads()). Set before Python starts, which snapshots the
+      # environment that subprocess.run() passes on.
+      if (!is.null(omp_threads)) {
+        Sys.setenv(OMP_NUM_THREADS = omp_threads)
+      }
 
       # Give every worker its own Windows TEMP before Python is touched.
       # Conda DLL activation hooks call GetTempFileName() during
@@ -660,7 +723,13 @@ decon_prepare_python_home <- function(python_exe) {
 # workers that reported an error, and finally reports which workers are usable
 # so the run can continue on a reduced pool instead of failing.
 #' @export
-decon_start_cluster <- function(n_workers, python_exe, lib_paths, outfile) {
+decon_start_cluster <- function(
+  n_workers,
+  python_exe,
+  lib_paths,
+  outfile,
+  omp_threads = NULL
+) {
   make_pool <- function() {
     # --vanilla: workers skip the project .Rprofile (renv activation) and the
     # site profile.  Both are pure overhead here -- .libPaths() is set
@@ -677,14 +746,26 @@ decon_start_cluster <- function(n_workers, python_exe, lib_paths, outfile) {
 
   init_all <- function(cl) {
     tryCatch(
-      parallel::clusterCall(cl, decon_worker_init, python_exe, lib_paths),
+      parallel::clusterCall(
+        cl,
+        decon_worker_init,
+        python_exe,
+        lib_paths,
+        omp_threads
+      ),
       error = function(e) e
     )
   }
 
   init_one <- function(cl, i) {
     tryCatch(
-      parallel::clusterCall(cl[i], decon_worker_init, python_exe, lib_paths)[[1]],
+      parallel::clusterCall(
+        cl[i],
+        decon_worker_init,
+        python_exe,
+        lib_paths,
+        omp_threads
+      )[[1]],
       error = function(e) paste0("error: ", conditionMessage(e))
     )
   }
@@ -981,7 +1062,13 @@ deconvolute <- function(
 
   t_start <- proc.time()[["elapsed"]]
   message("Starting worker pool ...")
-  pool <- decon_start_cluster(n_workers, python_exe, .libPaths(), outfile)
+  pool <- decon_start_cluster(
+    n_workers,
+    python_exe,
+    .libPaths(),
+    outfile,
+    omp_threads = decon_omp_threads(n_workers)
+  )
   cl <- pool$cl
   on.exit(try(parallel::stopCluster(cl), silent = TRUE), add = TRUE)
 

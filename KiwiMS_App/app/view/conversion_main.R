@@ -40,6 +40,7 @@ box::use(
       render_hits_table,
       render_hits_view,
       filter_hits_table,
+      hits_bar_cols,
       hits_base_col,
       hits_col_choices,
       hits_view_table,
@@ -102,7 +103,7 @@ box::use(
       convert_kinact_ki_params,
       convert_kinact_ki_units,
       convert_result_list_units,
-      add_proteoform_binding,
+      has_proteoforms,
       is_complex_row,
       proteoform_binding,
       proteoform_limit_note,
@@ -156,6 +157,8 @@ ui <- function(id) {
 
   shiny::div(
     class = "conversion-main-spinner",
+    # Fits the Batch Control plates to their cards (batch_plate_heatmap())
+    shiny::tags$script(src = "static/js/plate_heatmap.js"),
     shiny::tags$script(shiny::HTML(
       "
       (function() {
@@ -2608,10 +2611,6 @@ server <- function(
           ### Compute hits summary ----
           hits_summary <- transform_hits(result_list$"hits_summary")
 
-          # Binding of each row's own proteoform next to the pooled total, when
-          # a protein was declared with several masses
-          hits_summary <- add_proteoform_binding(hits_summary)
-
           # Get concentration and time units
           units <- c(
             names(hits_summary)[grep("Conc.", names(hits_summary))],
@@ -3932,12 +3931,15 @@ server <- function(
               )
             })
 
-            # Per-proteoform kinetics are offered whenever a protein was
-            # declared with several masses; add_proteoform_binding() adds the
-            # column only then
-            show_proteoforms <- "Prot. Binding [%]" %in% names(hits_summary)
-            proteoform_species_binding <- if (show_proteoforms) {
-              proteoform_binding(result_list$hits_summary)
+            # Per-proteoform kinetics are offered when the complex's protein
+            # was declared with several masses, the condition
+            # proteoform_kinetics() fits them under
+            proteoform_species_binding <- proteoform_binding(
+              result_list$hits_summary
+            )
+            show_proteoforms <- has_proteoforms(proteoform_species_binding)
+            if (!show_proteoforms) {
+              proteoform_species_binding <- NULL
             }
 
             # Call function to render kinact/Ki results interface
@@ -5102,13 +5104,8 @@ server <- function(
             output$stats_histogram <- plotly::renderPlotly({
               rl <- conversion_sidebar_vars$result_list()
               shiny::req(rl, rl$hits_summary)
-              hs <- if (identical(input$stats_exclude_extremes, "Hits only")) {
-                filter_extremes(rl$hits_summary)
-              } else {
-                rl$hits_summary
-              }
               stats_histogram(
-                hs,
+                rl$hits_summary,
                 theme = "light",
                 show = input$stats_show_metric %||% "Correct"
               )
@@ -5118,13 +5115,8 @@ server <- function(
               rl <- conversion_sidebar_vars$result_list()
               shiny::req(rl, rl$hits_summary)
 
-              hs <- if (identical(input$stats_exclude_extremes, "Hits only")) {
-                filter_extremes(rl$hits_summary)
-              } else {
-                rl$hits_summary
-              }
               stats_boxplot(
-                hs,
+                rl$hits_summary,
                 theme = "light",
                 show_points = isTRUE(input$stats_boxplot_show_points),
                 show = input$stats_show_metric %||% "Correct",
@@ -5135,11 +5127,6 @@ server <- function(
             output$stats_scatter <- plotly::renderPlotly({
               rl <- conversion_sidebar_vars$result_list()
               shiny::req(rl, rl$hits_summary)
-              hs <- if (identical(input$stats_exclude_extremes, "Hits only")) {
-                filter_extremes(rl$hits_summary)
-              } else {
-                rl$hits_summary
-              }
               fs <- isTRUE(input$stats_scatter_full_scale)
               grp <- if (is.null(input$stats_scatter_groupby)) {
                 "Protein"
@@ -5147,7 +5134,7 @@ server <- function(
                 input$stats_scatter_groupby
               }
               stats_scatter(
-                hs,
+                rl$hits_summary,
                 full_scale = fs,
                 group_by = grp,
                 key = conversion_vars$color_key,
@@ -5159,11 +5146,6 @@ server <- function(
             output$stats_violin <- plotly::renderPlotly({
               rl <- conversion_sidebar_vars$result_list()
               shiny::req(rl, rl$hits_summary)
-              hs <- if (identical(input$stats_exclude_extremes, "Hits only")) {
-                filter_extremes(rl$hits_summary)
-              } else {
-                rl$hits_summary
-              }
               grp <- if (is.null(input$stats_violin_groupby)) {
                 "Protein"
               } else {
@@ -5171,7 +5153,7 @@ server <- function(
               }
               fs <- isTRUE(input$stats_violin_full_scale)
               stats_violin(
-                hs,
+                rl$hits_summary,
                 group_by = grp,
                 full_scale = fs,
                 theme = "light",
@@ -5281,7 +5263,7 @@ server <- function(
                     shinyWidgets::materialSwitch(
                       ns(paste0(vm$id, "_pct_scale_100")),
                       label = "Full Scale (0–100%)",
-                      value = TRUE,
+                      value = FALSE,
                       right = TRUE
                     )
                   },
@@ -5660,14 +5642,9 @@ server <- function(
               )
             })
 
-            # Statistics tab cards - reactive, respects stats_exclude_extremes
+            # Statistics tab cards
             output$pstat_correct_stat <- shiny::renderUI({
-              hs <- if (identical(input$stats_exclude_extremes, "Hits only")) {
-                filter_extremes(hits_summary)
-              } else {
-                hits_summary
-              }
-              hs <- dplyr::distinct(hs, `Sample ID`, .keep_all = TRUE)
+              hs <- dplyr::distinct(hits_summary, `Sample ID`, .keep_all = TRUE)
               vals <- suppressWarnings(as.numeric(hs[["Correct [%]"]]))
               m <- mean(vals, na.rm = TRUE)
               s <- stats::sd(vals, na.rm = TRUE)
@@ -5688,12 +5665,7 @@ server <- function(
             })
 
             output$pstat_unmatched_stat <- shiny::renderUI({
-              hs <- if (identical(input$stats_exclude_extremes, "Hits only")) {
-                filter_extremes(hits_summary)
-              } else {
-                hits_summary
-              }
-              hs <- dplyr::distinct(hs, `Sample ID`, .keep_all = TRUE)
+              hs <- dplyr::distinct(hits_summary, `Sample ID`, .keep_all = TRUE)
               vals <- suppressWarnings(as.numeric(hs[["Unmatched [%]"]]))
               m <- mean(vals, na.rm = TRUE)
               s <- stats::sd(vals, na.rm = TRUE)
@@ -6112,7 +6084,6 @@ server <- function(
                 input$hits_per_adduct,
                 input$hits_color_variable,
                 hits_col_selection(),
-                input$hits_binding_chart,
                 input$hits_tab_compound_select,
                 input$hits_tab_sample_select
               )
@@ -6131,12 +6102,12 @@ server <- function(
                   compounds = input$hits_tab_compound_select,
                   samples = input$hits_tab_sample_select
                 )
-                # Binding and mass-shift columns are always shown; a picked
-                # column brings the columns of all proteoforms
+                # Binding, total and mass-shift columns are always shown; a
+                # picked column brings the columns of all proteoforms
                 always_cols <- c(
                   "Tot. Binding [%]",
                   grep(
-                    "^(Binding|Total Binding) \\(|^Mass ",
+                    "^(Binding|Total Binding|Tot\\. Binding) \\(|^Mass ",
                     names(hits_table),
                     value = TRUE
                   )
@@ -6181,7 +6152,8 @@ server <- function(
                 } else {
                   NULL
                 },
-                bar_chart = input$hits_binding_chart,
+                # Every percentage as a bar in its cell
+                bar_chart = hits_bar_cols(hits_table),
                 # Compounds by their row's compound; samples by their own
                 # colour, their protein's or their time's
                 colors = if (input$hits_color_variable == "Compounds") {
@@ -6245,7 +6217,7 @@ server <- function(
                     sample_view_table()
                   )))
                   adduct_binding_cols <- grep(
-                    "^(Binding|Total Binding) \\(",
+                    "^(Binding|Total Binding|Tot\\. Binding) \\(",
                     adduct_cols,
                     value = TRUE
                   )
@@ -6259,7 +6231,6 @@ server <- function(
                       c(
                         "Theor. Prot. [Da]",
                         "Int. Prot. [%]",
-                        "Prot. Binding [%]",
                         "Theor. Cmp [Da]",
                         "Bind. Stoich.",
                         "Binding [%]",
@@ -6494,38 +6465,6 @@ server <- function(
       }
     )
 
-    # Samples matching nothing (0 % correct, 100 % unmatched) left out of the
-    # Summary statistics on "Hits only". At server level, as the exports below
-    # use it too.
-    filter_extremes <- function(hs) {
-      sample_col <- intersect(c("Sample", "Sample ID"), names(hs))[1]
-      correct_col <- intersect(
-        c("% Correct", "Correct [%]"),
-        names(hs)
-      )[1]
-      unmatched_col <- intersect(
-        c("% Unmatched", "Unmatched [%]"),
-        names(hs)
-      )[1]
-      if (
-        is.na(sample_col) || is.na(correct_col) || is.na(unmatched_col)
-      ) {
-        return(hs)
-      }
-      samples_out <- dplyr::distinct(
-        hs,
-        !!rlang::sym(sample_col),
-        .keep_all = TRUE
-      ) |>
-        dplyr::filter(
-          suppressWarnings(as.numeric(!!rlang::sym(correct_col))) == 0 &
-            suppressWarnings(as.numeric(!!rlang::sym(unmatched_col))) ==
-              100
-        ) |>
-        dplyr::pull(!!rlang::sym(sample_col))
-      dplyr::filter(hs, !(!!rlang::sym(sample_col)) %in% samples_out)
-    }
-
     ## Plot download handlers ----
 
     setup_plot_dl(
@@ -6725,13 +6664,8 @@ server <- function(
       build_fn = function(theme) {
         rl <- conversion_sidebar_vars$result_list()
         shiny::req(rl, rl$hits_summary)
-        hs <- if (identical(input$stats_exclude_extremes, "Hits only")) {
-          filter_extremes(rl$hits_summary)
-        } else {
-          rl$hits_summary
-        }
         stats_histogram(
-          hs,
+          rl$hits_summary,
           theme = theme,
           show = input$stats_show_metric %||% "Correct"
         )
@@ -6749,13 +6683,8 @@ server <- function(
       build_fn = function(theme) {
         rl <- conversion_sidebar_vars$result_list()
         shiny::req(rl, rl$hits_summary)
-        hs <- if (identical(input$stats_exclude_extremes, "Hits only")) {
-          filter_extremes(rl$hits_summary)
-        } else {
-          rl$hits_summary
-        }
         stats_boxplot(
-          hs,
+          rl$hits_summary,
           theme = theme,
           show_points = isTRUE(input$stats_boxplot_show_points),
           show = input$stats_show_metric %||% "Correct",
@@ -6781,13 +6710,8 @@ server <- function(
         } else {
           input$stats_scatter_groupby
         }
-        hs <- if (identical(input$stats_exclude_extremes, "Hits only")) {
-          filter_extremes(rl$hits_summary)
-        } else {
-          rl$hits_summary
-        }
         stats_scatter(
-          hs,
+          rl$hits_summary,
           full_scale = fs,
           group_by = grp,
           key = conversion_vars$color_key,
@@ -6814,13 +6738,8 @@ server <- function(
           input$stats_violin_groupby
         }
         fs <- isTRUE(input$stats_violin_full_scale)
-        hs <- if (identical(input$stats_exclude_extremes, "Hits only")) {
-          filter_extremes(rl$hits_summary)
-        } else {
-          rl$hits_summary
-        }
         stats_violin(
-          hs,
+          rl$hits_summary,
           group_by = grp,
           full_scale = fs,
           theme = theme,

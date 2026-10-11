@@ -3438,6 +3438,7 @@ mass_shift_card <- function(
 }
 
 # Whether any protein of the proteoform binding table carries several species
+#' @export
 has_proteoforms <- function(binding) {
   if (!nrow(binding)) {
     return(FALSE)
@@ -3457,32 +3458,6 @@ proteoform_limit_note <- function(limit) {
       "Unbound peak not detected: binding may be overestimated",
       "No complex detected: binding may be underestimated"
     )
-  )
-}
-
-# Adds the binding of each row's own species to the display hits table as
-# `Prot. Binding [%]`, next to the pooled total. Left out when no protein has
-# more than one declared mass - the value would only repeat the total.
-#' @export
-add_proteoform_binding <- function(hits_summary) {
-  binding <- proteoform_binding(hits_summary)
-
-  if (!has_proteoforms(binding)) {
-    return(hits_summary)
-  }
-
-  species <- suppressWarnings(as.numeric(as.character(
-    hits_summary$`Theor. Prot. [Da]`
-  )))
-  hits_summary$`Prot. Binding [%]` <- binding$binding[match(
-    paste(hits_summary$`Sample ID`, species),
-    paste(binding$sample, binding$species)
-  )]
-
-  dplyr::relocate(
-    hits_summary,
-    `Prot. Binding [%]`,
-    .after = dplyr::any_of("Tot. Binding [%]")
   )
 }
 
@@ -10130,10 +10105,7 @@ filter_table_view <- function(table, colors, inputs, units) {
         pref <- `Binding [%]`[Preferred == "TRUE"]
         if (length(pref) > 0) pref[1] else `Binding [%]`[1]
       },
-      `Tot. Binding [%]` = `Tot. Binding [%]`[1],
-      # Binding of the row's own proteoform, present with several declared
-      # masses only (see add_proteoform_binding())
-      dplyr::across(dplyr::any_of("Prot. Binding [%]"), ~ .x[1])
+      `Tot. Binding [%]` = `Tot. Binding [%]`[1]
     ) |>
     dplyr::select(-`Peak Signal [Da]`)
 
@@ -10166,7 +10138,6 @@ filter_table_view <- function(table, colors, inputs, units) {
       `Theor. Cmp [Da]` = `Theor. Cmp [Da]`,
       `Bind. Stoich.` = `Bind. Stoich.`,
       `Binding [%]` = `Binding [%]`,
-      dplyr::any_of(c(`Proteoform %` = "Prot. Binding [%]")),
       `Total %` = `Tot. Binding [%]`
     ) |>
     dplyr::mutate(
@@ -10280,9 +10251,6 @@ render_table_view <- function(table, colors, tab, inputs, units) {
   }
   if (!is.null(inputs$tot_binding_bar) && !isTRUE(inputs$tot_binding_bar)) {
     table[["Total %"]] <- sprintf("%.2f", table[["Total %"]])
-    if ("Proteoform %" %in% names(table)) {
-      table[["Proteoform %"]] <- sprintf("%.2f", table[["Proteoform %"]])
-    }
   }
 
   # Add  prefix to group rows
@@ -10358,20 +10326,6 @@ render_table_view <- function(table, colors, tab, inputs, units) {
             },
             render = render_tot_binding
           ),
-          # The proteoform's own binding sits next to the pooled total and
-          # follows its bar setting
-          if ("Proteoform %" %in% names(table)) {
-            list(
-              targets = "Proteoform %",
-              type = "num",
-              className = if (!is.null(render_tot_binding)) {
-                "bar-chart-col"
-              } else {
-                NULL
-              },
-              render = render_tot_binding
-            )
-          },
           list(
             targets = -1,
             className = 'dt-last-col'
@@ -10409,19 +10363,11 @@ render_table_view <- function(table, colors, tab, inputs, units) {
     })()
 }
 
-# Percentage columns of the hits table that can be drawn as bars. Prot.
-# Binding [%] exists only when a protein was declared with several masses.
+# Percentage columns of a hits table, drawn as bars in their cells: those of
+# the Adduct View and the binding columns of the Sample View
 #' @export
 hits_bar_cols <- function(hits) {
-  c(
-    "Binding [%]",
-    "Tot. Binding [%]",
-    if ("Prot. Binding [%]" %in% names(hits)) "Prot. Binding [%]",
-    "Int. Prot. [%]",
-    "Int. Cmp [%]",
-    "Unmatched [%]",
-    "Correct [%]"
-  )
+  grep("\\[%\\]$", names(hits), value = TRUE)
 }
 
 # Columns of the hits table to pick from, and those picked by default. The
@@ -10576,8 +10522,7 @@ sample_view_species_cols <- c(
   "Theor. Prot. [Da]",
   "Meas. Prot. [Da]",
   "Δ Prot. [Da]",
-  "Int. Prot. [%]",
-  "Prot. Binding [%]"
+  "Int. Prot. [%]"
 )
 
 # Column names of the Sample View without their proteoform, so "Int. Prot.
@@ -10626,7 +10571,18 @@ hits_col_tooltip <- function(cols) {
         return(paste0(
           "Total binding of ",
           total[2],
-          ": its preferred readings over all stoichiometries"
+          ": its preferred readings over all proteoforms and stoichiometries"
+        ))
+      }
+      complex <- regmatches(
+        col,
+        regexec("^Tot\\. Binding \\((.*)\\) \\[%\\]$", col)
+      )[[1]]
+      if (length(complex)) {
+        return(paste0(
+          "Total binding of the complex with ",
+          complex[2],
+          ", all proteoforms and mass shifts pooled"
         ))
       }
       mass <- regmatches(
@@ -10652,13 +10608,14 @@ hits_col_tooltip <- function(cols) {
 # proteoform carry its mass in the column name ("Int. Prot. (21,816.8 Da)
 # [%]") once a sample holds several proteoforms; Theor. Prot. [Da] is then
 # left out, the name says it. A sample declaring several compounds lists them
-# in Cmp Name, and its binding columns carry the compound. Every complex gets a
-# column per declared mass shift of its compound (Mass n of the Compounds
-# table) and stoichiometry, e.g. "Binding (21,816.8 Da, Mass 1)x1 [%]"; a
-# reading that is not the preferred one of its peak is marked with an
-# asterisk, "Binding (Mass 2*)x1 [%]". Total Binding (Mass n) sums the
-# preferred readings only, so the totals of a sample add up to its Tot.
-# Binding [%] as the rows of the Adduct View do.
+# in Cmp Name, its binding columns carry the compound and each complex gets its
+# own Tot. Binding (compound) [%]. Every complex gets a column per declared
+# mass shift of its compound (Mass n of the Compounds table), proteoform and
+# stoichiometry, e.g. "Binding (21,816.8 Da, Mass 1)x1 [%]"; a reading that is
+# not the preferred one of its peak is marked with an asterisk, "Binding
+# (Mass 2*)x1 [%]". Total Binding (Mass n) sums the preferred readings of the
+# shift over all proteoforms and stoichiometries, so the totals of a sample add
+# up to its Tot. Binding [%] as the rows of the Adduct View do.
 #' @export
 transform_per_adduct <- function(
   hits_table,
@@ -10775,8 +10732,43 @@ transform_per_adduct <- function(
     }
   }
 
+  # A sample declaring several compounds gets the binding of each complex -
+  # the protein, all its proteoforms pooled, with one compound - next to its
+  # Tot. Binding [%], which pools the compounds too. The kinetics of a complex
+  # are fitted to this value (complex_hits()).
+  is_cx <- is_complex_row(hits_table)
+  is_preferred <- if ("Preferred" %in% names(hits_table)) {
+    !as.character(hits_table$Preferred) %in% "FALSE"
+  } else {
+    rep(TRUE, nrow(hits_table))
+  }
+  if (by_cmp && "Binding [%]" %in% names(hits_table)) {
+    named <- which(!is.na(cmp))
+    # Rows without a complex carry 0 % (NA for an unmeasured sample)
+    share <- ifelse(
+      is_cx[named] & !is_preferred[named],
+      0,
+      num(hits_table$`Binding [%]`[named])
+    )
+    complexes <- unique(cmp[named])
+    complexes <- complexes[order(cmp_rank(complexes))]
+    complex_tot_cols <- paste0("Tot. Binding (", complexes, ") [%]")
+    summed <- tapply(share, paste(sample[named], cmp[named], sep = "\r"), sum)
+    for (k in seq_along(complexes)) {
+      out[[complex_tot_cols[k]]] <- as.vector(
+        summed[paste(samples, complexes[k], sep = "\r")]
+      )
+    }
+    at <- match("Tot. Binding [%]", col_order)
+    col_order <- append(
+      col_order,
+      complex_tot_cols,
+      after = if (is.na(at)) length(col_order) else at
+    )
+  }
+
   # Readings of the complexes, one column each
-  cx <- which(is_complex_row(hits_table))
+  cx <- which(is_cx)
   binding_cols <- character(0)
   if (length(cx)) {
     shift <- num(hits_table$`Theor. Cmp [Da]`[cx])
@@ -10818,19 +10810,20 @@ transform_per_adduct <- function(
 
   if (length(cx)) {
     stoich <- as.character(hits_table$`Bind. Stoich.`[cx])
-    preferred <- if ("Preferred" %in% names(hits_table)) {
-      !as.character(hits_table$Preferred[cx]) %in% "FALSE"
-    } else {
-      rep(TRUE, length(cx))
-    }
+    preferred <- is_preferred[cx]
     binding <- num(hits_table$`Binding [%]`[cx])
     sp_k <- match(species[cx], species_set)
 
-    qualifier <- paste0(
-      if (by_species) paste0(species_lab[sp_k], ", ") else "",
+    # The totals pool the proteoforms, as Tot. Binding [%] and the kinetics
+    # do: they are forms of one protein
+    total_qualifier <- paste0(
       if (by_cmp) paste0(cmp[cx], ", ") else "",
       "Mass ",
       mass_no
+    )
+    qualifier <- paste0(
+      if (by_species) paste0(species_lab[sp_k], ", ") else "",
+      total_qualifier
     )
     mass_col <- if (by_cmp) {
       paste0("Mass ", mass_no, " (", cmp[cx], ")")
@@ -10872,12 +10865,12 @@ transform_per_adduct <- function(
       ),
       data.frame(
         sample = sample[cx],
-        col = paste0("Total Binding (", qualifier, ") [%]"),
+        col = paste0("Total Binding (", total_qualifier, ") [%]"),
         value = ifelse(preferred, binding, 0),
         stat = "sum",
         rank_cmp = cmp_rank(cmp[cx]),
         rank_mass = mass_no,
-        rank_species = sp_k,
+        rank_species = Inf,
         rank_kind = 2,
         rank_stoich = 0,
         rank_star = 0
@@ -10905,7 +10898,7 @@ transform_per_adduct <- function(
     names(first_value) <- key[!duplicated(key)]
     for (i in seq_len(nrow(cols))) {
       at <- paste(samples, cols$col[i], sep = "\r")
-      out[[cols$col[i]]] <- unname(if (cols$stat[i] == "sum") {
+      out[[cols$col[i]]] <- as.vector(if (cols$stat[i] == "sum") {
         summed[at]
       } else {
         first_value[at]
@@ -10936,7 +10929,9 @@ render_hits_table <- function(
   # Bars and number formats are picked by column; a proteoform's column of
   # the Sample View takes those of its plain column (see hits_base_col())
   base_cols <- hits_base_col(names(hits_table))
-  bar_chart <- names(hits_table)[base_cols %in% bar_chart]
+  bar_chart <- names(hits_table)[
+    base_cols %in% bar_chart | names(hits_table) %in% bar_chart
+  ]
 
   # Adapt table layout
   if (!is.null(single_conc)) {
@@ -11027,7 +11022,6 @@ render_hits_table <- function(
         c(
           "Binding [%]",
           "Tot. Binding [%]",
-          "Prot. Binding [%]",
           "Unmatched [%]",
           "Correct [%]",
           "Int. Prot. [%]",
@@ -12059,9 +12053,9 @@ key_ramp_position <- function(values, known) {
 # (as.character). levels defaults to all levels of the key. For samples,
 # trunc = TRUE takes and returns the short sample IDs.
 #
-# - compound / protein: categorical, repeating past eighteen (see level_tier).
-# - sample: categorical up to twelve samples in the result, otherwise spread
-#   over the sample ramp in name order.
+# - compound / protein: categorical while the result has at most twelve of
+#   them together, otherwise spread over the hue gradient in key order.
+# - sample: the same, over the samples of the result in key order.
 # - concentration: the 0 control in the control grey, the others over the
 #   concentration ramp, low to high.
 # - time: over the time ramp, early to late.
@@ -12104,7 +12098,8 @@ key_colors <- function(
     lv[lv %in% "N/A"] <- NA
     idx <- key_index(lv, key$entities)
     ok <- !is.na(idx)
-    out[ok] <- categorical_colors(max(c(idx[ok], 0L)), theme)[idx[ok]]
+    n_all <- max(c(length(key$entities), idx[ok]))
+    out[ok] <- sample_colors(n_all, theme)[idx[ok]]
   } else if (var == "sample") {
     lv <- as.character(levels)
     if (isTRUE(trunc) && length(key$sample_labels)) {
@@ -12232,7 +12227,7 @@ key_order <- function(key, variable, levels) {
   lv[order(is.na(lv), key_index(as.character(lv), known))]
 }
 
-# Repeat round of each level's categorical colour (0 within the first eighteen),
+# Round of twelve of each level (0 within the first twelve),
 # for the plots that switch symbol, pattern or dash past the palette.
 # Ordered variables and ramp-coloured samples are always round 0.
 #' @export
@@ -13775,7 +13770,7 @@ stats_scatter <- function(
     "rgba(255,255,255,0.7)"
   }
 
-  # No groups left (e.g. "Hits only" filtered out every sample)
+  # No groups left (e.g. no sample has a value for the metric)
   ensure_trace(p) |>
     plotly::layout(
       paper_bgcolor = "rgba(0,0,0,0)",
@@ -14050,7 +14045,7 @@ stats_violin <- function(
     }
   }
 
-  # No groups when no sample is left (e.g. "Hits only" filtered out all)
+  # No groups when no sample has a value for the metric
   ensure_trace(p) |>
     plotly::layout(
       paper_bgcolor = "rgba(0,0,0,0)",
@@ -14330,19 +14325,11 @@ batch_plate_heatmap <- function(
     cb_title <- variable
   }
 
-  # The colorbar in the lower half, under the Well States legend at the top
-  # when that has entries. Placed by a fraction of the plot's height per
-  # entry, it ran into the legend on a short card, and reaching past the plot
-  # it pushed the margins until plotly failed ("axis scaling"). An offset in
-  # pixels (ypad) pushes them too.
-  n_ws_items <- as.integer(length(no_prot_row_vals) > 0) +
-    as.integer(length(no_hit_row_vals) > 0) +
-    as.integer(has_empty_in_rect)
-  cb_pos <- if (n_ws_items > 0L) {
-    list(y = 0, yanchor = "bottom", len = 0.5)
-  } else {
-    list(y = 0.5, yanchor = "middle", len = 0.8)
-  }
+  # The well states go in a row of their own under the plate (legend2), so
+  # beside the plate only the levels or the colorbar take room
+  has_well_states <- length(no_prot_row_vals) > 0 ||
+    length(no_hit_row_vals) > 0 ||
+    has_empty_in_rect
 
   # Rows by their position (1 = A), labelled by letter: plotly keeps the
   # tiles square (scaleanchor) only between axes of the same type, and a
@@ -14391,14 +14378,20 @@ batch_plate_heatmap <- function(
       ygap = tile_gap,
       text = text_mat,
       hoverinfo = "text",
+      # Level with the plate, its title turned along the bar so the bar takes
+      # little width (static/js/plate_heatmap.js fits its length to the plate)
       colorbar = list(
-        title = list(text = cb_title, font = list(color = font_color, size = 13)),
+        title = list(
+          text = cb_title,
+          side = "right",
+          font = list(color = font_color, size = 12)
+        ),
         tickfont = list(color = font_color, size = 11),
         outlinecolor = font_color,
-        thickness = 14,
-        y = cb_pos$y,
-        yanchor = cb_pos$yanchor,
-        len = cb_pos$len
+        thickness = 12,
+        y = 1,
+        yanchor = "top",
+        len = 1
       )
     )
   } else {
@@ -14490,7 +14483,7 @@ batch_plate_heatmap <- function(
           hoverinfo = "skip",
           legendrank = 200 + i,
           legendgrouptitle = if (i == 1) {
-            list(text = cb_title, font = list(color = font_color, size = 13))
+            list(text = cb_title, font = list(color = font_color, size = 12))
           }
         )
     }
@@ -14543,31 +14536,39 @@ batch_plate_heatmap <- function(
   } else {
     list()
   }
+  # A key of the well states in the row under the plate (legend2), with
+  # short names: the long ones made the legend beside the plate wide. Each in
+  # a group of its own, as a horizontal legend stacks a group's entries.
+  well_state_key <- function(p, name, marker, rank) {
+    plotly::add_trace(
+      p,
+      type = "scatter",
+      mode = "markers",
+      x = min(cols) - 10000,
+      y = 1,
+      visible = TRUE,
+      marker = marker,
+      name = name,
+      legend = "legend2",
+      showlegend = TRUE,
+      inherit = FALSE,
+      hoverinfo = "skip",
+      legendrank = rank,
+      legendgroup = legend_key_group(paste0("well_states-", rank))
+    )
+  }
   if (has_no_prot) {
-    p <- p |>
-      plotly::add_trace(
-        type = "scatter",
-        mode = "markers",
-        x = min(cols) - 10000,
-        y = 1,
-        visible = TRUE,
-        marker = list(
-          symbol = "x-thin",
-          size = 10,
-          color = "rgba(0,0,0,0)",
-          line = list(color = font_color, width = 2.5)
-        ),
-        name = "No Protein Peak",
-        showlegend = TRUE,
-        inherit = FALSE,
-        hoverinfo = "skip",
-        legendrank = 100,
-        legendgroup = legend_key_group("well_states"),
-        legendgrouptitle = list(
-          text = "Well States",
-          font = list(color = font_color, size = 13)
-        )
-      )
+    p <- well_state_key(
+      p,
+      "No Protein",
+      list(
+        symbol = "x-thin",
+        size = 9,
+        color = "rgba(0,0,0,0)",
+        line = list(color = font_color, width = 2.5)
+      ),
+      rank = 102
+    )
   }
 
   has_no_hit <- length(no_hit_col_vals) > 0
@@ -14594,64 +14595,40 @@ batch_plate_heatmap <- function(
     list()
   }
   if (has_no_hit) {
-    p <- p |>
-      plotly::add_trace(
-        type = "scatter",
-        mode = "markers",
-        x = min(cols) - 10000,
-        y = 1,
-        visible = TRUE,
-        marker = list(
-          symbol = "circle-open",
-          size = 10,
-          color = font_color,
-          line = list(color = font_color, width = 2)
-        ),
-        name = "No Compound Binding",
-        showlegend = TRUE,
-        inherit = FALSE,
-        hoverinfo = "skip",
-        legendrank = 100,
-        legendgroup = legend_key_group("well_states"),
-        legendgrouptitle = list(
-          text = "Well States",
-          font = list(color = font_color, size = 13)
-        )
-      )
+    p <- well_state_key(
+      p,
+      "No Binding",
+      list(
+        symbol = "circle-open",
+        size = 9,
+        color = font_color,
+        line = list(color = font_color, width = 2)
+      ),
+      rank = 101
+    )
   }
-
-  # Empty well: legend swatch
   if (has_empty_in_rect) {
-    p <- p |>
-      plotly::add_trace(
-        type = "scatter",
-        mode = "markers",
-        x = min(cols) - 10000,
-        y = 1,
-        visible = TRUE,
-        marker = list(
-          symbol = "square",
-          size = 10,
-          color = tile_bg,
-          line = list(color = "rgba(130,132,140,0.6)", width = 1)
-        ),
-        name = "Empty",
-        showlegend = TRUE,
-        inherit = FALSE,
-        hoverinfo = "skip",
-        legendrank = 100,
-        legendgroup = legend_key_group("well_states"),
-        legendgrouptitle = list(
-          text = "Well States",
-          font = list(color = font_color, size = 13)
-        )
-      )
+    p <- well_state_key(
+      p,
+      "Empty",
+      list(
+        symbol = "square",
+        size = 10,
+        color = tile_bg,
+        line = list(color = "rgba(130,132,140,0.6)", width = 1)
+      ),
+      rank = 103
+    )
   }
 
-  show_legend_any <- !is_numeric_var ||
-    has_no_prot ||
-    has_no_hit ||
-    has_empty_in_rect
+  show_legend_any <- !is_numeric_var || has_well_states
+  # Plot margins, the row labels left and the column labels on top; below,
+  # the row of well states
+  plate_margin <- list(
+    l = if (big_plate) 22 else 26,
+    t = 20,
+    b = if (has_well_states) 28 else 8
+  )
 
   p_out <- p |>
     plotly::layout(
@@ -14659,13 +14636,25 @@ batch_plate_heatmap <- function(
       dragmode = "zoom",
       showlegend = show_legend_any,
       legend = list(
-        font = list(color = font_color, size = 11),
+        # Numbered names ("12 · COM-3818744") a size smaller, they set the
+        # width of the legend beside the plate
+        font = list(color = font_color, size = if (is.null(tile_codes)) 11 else 10),
         bgcolor = "rgba(0,0,0,0)",
         y = 1,
         yanchor = "top",
         # Every level is a legend group of its own (chip + tiles); keep
         # them packed like one list
         tracegroupgap = 2
+      ),
+      legend2 = list(
+        orientation = "h",
+        font = list(color = font_color, size = 11),
+        bgcolor = "rgba(0,0,0,0)",
+        x = 0,
+        xanchor = "left",
+        y = 0,
+        yanchor = "top",
+        itemwidth = 30
       ),
       hoverlabel = list(
         bgcolor = "rgba(56, 56, 124, 0.86)",
@@ -14675,6 +14664,9 @@ batch_plate_heatmap <- function(
       # Square tiles, the plot area shrunk to the plate (as the deconvolution's
       # Sample Distribution) and kept at the top, level with the legend. The
       # 384-well plate labels every other column, its numbers ran together.
+      # In the app, plate_heatmap.js takes over the plate's geometry: plotly
+      # kept the domain of a first drawing made while the tab was hidden,
+      # which left the plate a fraction of its card.
       xaxis = list(
         side = "top",
         tickmode = "array",
@@ -14706,7 +14698,12 @@ batch_plate_heatmap <- function(
       ),
       # Room under the plate for half of the last row's label, which plotly
       # hid once the plate filled the plot's height
-      margin = list(t = 25, r = if (is_numeric_var) 0 else 10, b = 8, l = 30),
+      margin = list(
+        t = plate_margin$t,
+        r = 0,
+        b = plate_margin$b,
+        l = plate_margin$l
+      ),
       # The empty wells are tiles of their own now (empty_plate), so the gaps
       # between all tiles show the card
       plot_bgcolor = "rgba(0,0,0,0)",
@@ -14727,5 +14724,13 @@ batch_plate_heatmap <- function(
         filename = paste0(Sys.Date(), "_Batch_Heatmap")
       )
     )
-  p_out
+  # A no-op where the script is not loaded (an exported HTML page): there the
+  # constraints above size the plate, drawn once at its final size
+  htmlwidgets::onRender(
+    p_out,
+    "function(el, x, data) {
+      if (window.kiwiMS_fitPlate) window.kiwiMS_fitPlate(el, data);
+    }",
+    data = c(list(cols = length(cols), rows = length(rows)), plate_margin)
+  )
 }

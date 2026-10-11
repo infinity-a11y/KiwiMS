@@ -1003,10 +1003,15 @@ deconvolution_results_ui <- function(ns) {
         )
       ),
       shiny$div(
+        id = ns("spectrum_plot"),
         class = "spectrum-plot",
         # Holds either the plot or the failure message, never both -- see
         # output$spectrum_container in deconvolution_main.R for why.
-        shiny$uiOutput(ns("spectrum_container"), style = "height: 100%;")
+        shiny$uiOutput(ns("spectrum_container"), style = "height: 100%;"),
+        # Shown while a spectrum is drawn, see spectrum_busy() in
+        # deconvolution_main.R. Outside spectrum_container, so a re-render of
+        # that does not take the spinner with it.
+        shiny$div(class = "spectrum-busy", spin_wave())
       ),
       full_screen = TRUE
     )

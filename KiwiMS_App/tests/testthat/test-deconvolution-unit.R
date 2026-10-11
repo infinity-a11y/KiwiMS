@@ -9,6 +9,7 @@ box::use(
     decon_failure_detail,
     decon_is_complete,
     decon_mark_unprocessed,
+    decon_omp_threads,
     decon_progress_count,
     decon_samples_with_state,
     decon_worker_count,
@@ -85,8 +86,10 @@ test_that("worker count stays at least one for degenerate inputs", {
 
 test_that("worker count falls back to the machine size and honours the override", {
   withr::local_envvar(KIWIMS_DECON_WORKERS = NA)
-  expected <- max(1L, min(parallel::detectCores() - 2L, 1000L))
+  # Half the physical cores, at most four: UniDec is memory-bound beyond that.
+  expected <- max(1L, min(4L, parallel::detectCores(logical = FALSE) %/% 2L))
   expect_equal(decon_worker_count(1000, NULL), as.integer(expected))
+  expect_lte(decon_worker_count(1000, NULL), 4L)
 
   withr::local_envvar(KIWIMS_DECON_WORKERS = "2")
   expect_equal(decon_worker_count(1000, NULL), 2L)
@@ -95,6 +98,14 @@ test_that("worker count falls back to the machine size and honours the override"
   # Junk in the override must not take the run down.
   withr::local_envvar(KIWIMS_DECON_WORKERS = "not-a-number")
   expect_equal(decon_worker_count(6, 4), 4L)
+})
+
+test_that("each worker's UniDec gets an even share of the threads", {
+  logical <- parallel::detectCores()
+  expect_equal(decon_omp_threads(1), as.integer(logical))
+  expect_equal(decon_omp_threads(4), max(1L, as.integer(logical %/% 4L)))
+  # More workers than threads still leaves every UniDec one thread.
+  expect_equal(decon_omp_threads(logical * 2L), 1L)
 })
 
 test_that("unprocessed samples are marked failed without touching known rows", {

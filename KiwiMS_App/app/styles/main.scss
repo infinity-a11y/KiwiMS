@@ -107,19 +107,6 @@
 /* ==========================================================================
    1. ANIMATIONS (KEYFRAMES)
    ========================================================================== */
-@keyframes pulsate-shadow {
-  0%,
-  100% {
-    box-shadow: 0 0 12px rgb(0 0 0 / 80%);
-  }
-
-  50% {
-    box-shadow:
-      0 0 20px rgba(0, 0, 0, 1),
-      0 0 16px rgba(0, 0, 0, 0.8);
-  }
-}
-
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -1677,6 +1664,23 @@ td.listbox.htDimmed.current.highlight {
   position: relative;
 }
 
+// Spinner over the Spectrum card while a spectrum is drawn, raised and lifted
+// by the decon-spectrum-busy handler in static/js/deconvolution.js. Looks like
+// the waiter overlays on the other plots.
+.spectrum-busy {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 9999;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(255, 255, 255, 0.39);
+}
+
+.spectrum-plot.is-busy > .spectrum-busy {
+  display: flex;
+}
+
 .sample-failed-msg {
   position: absolute;
   top: 50%;
@@ -2761,6 +2765,12 @@ div[data-value="Protein Conversion"] .tab-pane {
       background: none;
       opacity: 1;
     }
+
+    // The icon takes the button's white; the result panels draw their
+    // regular icons black (.conversion-result-wrapper .far)
+    .far {
+      color: inherit;
+    }
   }
 
   > .dataTables_filter {
@@ -2950,8 +2960,8 @@ div[data-value="Protein Conversion"] .tab-pane {
 // two where the tab is wide: two by three made wide, low cards whose tiles
 // the height kept small. Where three columns leave the tiles small, two
 // columns, each row as high as the plate needs at the card's width (about
-// 240 px of a card beside the plate, 110 px above and below it), and the
-// tab scrolls.
+// 140 px of a card beside the plate, legend included, and 120 px above and
+// below it, header and well states included), and the tab scrolls.
 .batch-control-tab {
   height: 100%;
   display: flex;
@@ -2973,7 +2983,7 @@ div[data-value="Protein Conversion"] .tab-pane {
   gap: 1rem;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-auto-rows: minmax(
-    clamp(280px, calc((var(--batch-card-width) - 240px) * 2 / 3 + 110px), 400px),
+    clamp(280px, calc((var(--batch-card-width) - 140px) * 2 / 3 + 120px), 420px),
     1fr
   );
 }
@@ -2997,6 +3007,11 @@ div[data-value="Protein Conversion"] .tab-pane {
 
 .batch-heatmap-grid .card-custom {
   min-height: 0;
+}
+
+// The plot fits plate and legend to the card itself (plate_heatmap.js)
+.batch-heatmap-grid .card-body {
+  padding: 0.5rem;
 }
 
 .protocol-tab {

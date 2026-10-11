@@ -18,14 +18,13 @@
 #
 # Categorical colours are ordered so that every prefix is as distinct as
 # possible: the first five stay apart under deuteranopia and protanopia too
-# (CIEDE2000 >= 14), the first twelve under normal vision (>= 10). Six light
-# accents follow (lighter than the twelve, which sets them apart for colour
-# blind eyes too); all eighteen keep CIEDE2000 >= 9. That is about as many
-# colours as stay apart at all: past eighteen levels the colours repeat and
-# other channels carry the identity - marker symbol (level_tier()), labels on
-# the batch heatmap tiles, legend click to hide or isolate a level.
-# The accents suit areas and outlined markers; thin lines and samples keep to
-# the twelve saturated colours (base_colors).
+# (CIEDE2000 >= 14), all twelve under normal vision (>= 10). Past twelve no
+# set of colours tells the levels apart any more, so samples, compounds and
+# proteins with more levels than that are spread over a gradient of the same
+# hues instead (sample_colors()), which still shows where a level sits in the
+# order. Identity then comes from other channels - marker symbol
+# (level_tier()), labels on the batch heatmap tiles, legend click to hide or
+# isolate a level.
 #
 # Greys are kept out of the categorical palette: they mean something
 # (controls, unpicked compounds, unbound protein; see status_colors()).
@@ -48,13 +47,7 @@ categorical_palette <- list(
     "#0369A1", # cerulean
     "#A21CAF", # fuchsia
     "#4D7C0F", # olive
-    "#92400E", # brown
-    "#F285D0", # light accents: pink
-    "#FE7B89", # coral
-    "#FF9845", # apricot
-    "#85C3FF", # sky
-    "#00E4D1", # aqua
-    "#00ECFF" # cyan
+    "#92400E" # brown
   ),
   dark = c(
     "#4586FF",
@@ -68,19 +61,12 @@ categorical_palette <- list(
     "#4598D3",
     "#E062ED",
     "#699936",
-    "#E2885C",
-    # Deep twins of the light accents, the dark export's second round
-    "#A43686",
-    "#B52F48",
-    "#AE4300",
-    "#2563C8",
-    "#008575",
-    "#007E9E"
+    "#E2885C"
   )
 )
 
-# How many of the categorical colours are the saturated first round, the
-# ones that also hold up as thin lines
+# How many levels get a categorical colour of their own; past it the levels
+# are spread over the hue gradient (sample_colors())
 #' @export
 base_colors <- 12L
 
@@ -90,8 +76,10 @@ base_colors <- 12L
 #   and on the grey cards.
 # - time: blue -> teal -> green -> lime, early to late; viridis-like, again
 #   without yellow, and starting where the concentration scale does not.
-# - sample: the categorical hues in hue order, for results with more samples
-#   than categorical colours.
+# - sample: the categorical hues in hue order (blue -> violet -> raspberry ->
+#   orange -> ochre -> olive -> emerald), for samples, compounds and proteins
+#   once there are more of them than categorical colours. It stops short of
+#   the blues, so its two ends stay apart.
 # - binding, correct, unmatched: heatmap fills from "nothing" to "all".
 # - count: the peak counts of the deconvolution plate, navy -> violet -> red.
 #   Every stop is dark enough for the white count labels (>= 4.5:1), so it
@@ -114,8 +102,7 @@ ramp_anchors <- list(
       "#EA580C",
       "#A16207",
       "#4D7C0F",
-      "#047857",
-      "#0369A1"
+      "#047857"
     ),
     dark = c(
       "#4586FF",
@@ -125,8 +112,7 @@ ramp_anchors <- list(
       "#EF5C16",
       "#BE7D31",
       "#699936",
-      "#3C9B78",
-      "#4598D3"
+      "#3C9B78"
     )
   ),
   count = list(
@@ -223,7 +209,7 @@ status_colors <- function(theme = "light") {
   status_palette[[palette_variant(theme)]]
 }
 
-# The first n categorical colours, repeating past eighteen
+# The first n categorical colours, repeating past twelve
 #' @export
 categorical_colors <- function(n, theme = "light") {
   pal <- categorical_palette[[palette_variant(theme)]]
@@ -233,8 +219,9 @@ categorical_colors <- function(n, theme = "light") {
   pal[(seq_len(n) - 1L) %% length(pal) + 1L]
 }
 
-# Repeat round of each of n categorical levels: 0 for the first eighteen, 1
-# for the next eighteen, ... Plots that can, switch symbol, pattern or dash.
+# Round of twelve of each of n levels: 0 for the first twelve, 1 for the next
+# twelve, ... Plots that can, switch marker symbol with it, so levels the
+# gradient colours alike still differ in shape.
 #' @export
 level_tier <- function(n) {
   (seq_len(n) - 1L) %/% length(categorical_palette$light)
@@ -283,8 +270,9 @@ ramp_colors <- function(n, ramp, theme = "light") {
   ramp_at(if (n == 1) 0.5 else seq(0, 1, length.out = n), ramp, theme)
 }
 
-# Colours of n samples in their order: the categorical colours while they
-# suffice, otherwise spread over the sample ramp
+# Colours of n nominal levels in their order - samples, or proteins and
+# compounds together: the categorical colours while they suffice, otherwise
+# spread over the hue gradient
 #' @export
 sample_colors <- function(n, theme = "light") {
   if (n <= base_colors) {

@@ -17,7 +17,6 @@ box::use(
       stats_boxplot,
       stats_scatter,
       stats_violin,
-      hits_bar_cols,
       hits_col_choices,
       is_complex_row,
       overview_choices,
@@ -1237,19 +1236,6 @@ summary_results_ui <- function(ns, batch_control) {
                   selected = "Correct",
                   size = "sm"
                 )
-              ),
-              shiny::div(
-                class = "panel-group",
-                shiny::tags$label(
-                  "Include only hits"
-                ),
-                shinyWidgets::radioGroupButtons(
-                  ns("stats_exclude_extremes"),
-                  label = NULL,
-                  choices = c("All", "Hits only"),
-                  selected = "All",
-                  size = "sm"
-                )
               )
             ),
             shiny::div(
@@ -2164,8 +2150,6 @@ hits_col_picker <- function(id, cols) {
 # Unified Hits interface (single card, no tabs)
 #' @export
 hits_results_ui <- function(ns, hits_summary, units, key = NULL) {
-  bar_cols <- hits_bar_cols(hits_summary)
-
   bslib::card(
     class = "hits-unified-card",
     bslib::card_body(
@@ -2234,14 +2218,6 @@ hits_results_ui <- function(ns, hits_summary, units, key = NULL) {
         hits_col_picker(
           ns("hits_tab_col_select"),
           hits_col_choices(hits_summary, units)
-        ),
-        shinyWidgets::pickerInput(
-          ns("hits_binding_chart"),
-          label = "Show % Bar",
-          choices = bar_cols,
-          selected = bar_cols,
-          multiple = TRUE,
-          options = list(`actions-box` = TRUE)
         ),
         shiny::div(
           class = "hits-table-export",

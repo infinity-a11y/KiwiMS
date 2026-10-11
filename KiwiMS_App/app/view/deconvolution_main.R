@@ -155,6 +155,9 @@ server <- function(
       peak_counts = data.frame(sample = character(0), n_peaks = integer(0)),
       # Samples drawn by "Show All" once the run is finished
       show_all_samples = character(0),
+      # Progress bar title and status icon of a finished run, held back until
+      # its "Show All" spectra are on screen (see input$spectrum_drawn)
+      pending_finish = NULL,
       failed_samples = character(0),
       logs = "",
       deconv_report_status = NULL,
@@ -1006,9 +1009,47 @@ server <- function(
       ))
     }
 
+    #### spectrum_busy ----
+    # Spinner over the Spectrum card, raised as the spectrum render starts and
+    # lifted by static/js/deconvolution.js once plotly has drawn the figure,
+    # which for "Show All" is seconds after the server is done. With `block`
+    # the page waits too (blocking overlay, wait cursor). `on = FALSE` lifts
+    # it right away.
+    spectrum_busy <- function(on = TRUE, block = FALSE) {
+      session$sendCustomMessage(
+        "decon-spectrum-busy",
+        if (on) {
+          list(output = ns("spectrum"), host = ns("spectrum_plot"), block = block)
+        } else {
+          list()
+        }
+      )
+    }
+
+    #### progress_drawing ----
+    # Animated stripes on the full progress bar: the run is done, but its
+    # results are still being drawn
+    progress_drawing <- function(on) {
+      runjs(sprintf(
+        paste0(
+          "var b = document.getElementById('%s');",
+          "if (b) {",
+          "  b.classList.toggle('progress-bar-striped', %s);",
+          "  b.classList.toggle('progress-bar-animated', %s);",
+          "}"
+        ),
+        ns("progressBar"),
+        tolower(on),
+        tolower(on)
+      ))
+    }
+
     #### reset_progress ----
     reset_progress <- function() {
       reactVars$is_running <- FALSE
+      reactVars$pending_finish <- NULL
+      spectrum_busy(FALSE)
+      progress_drawing(FALSE)
       reactVars$heatmap_ready <- 0L
       reactVars$completed_files <- 0
       reactVars$current_total_files <- 0
@@ -1546,10 +1587,6 @@ server <- function(
       runjs(paste0(
         'document.getElementById("blocking-overlay").style.display ',
         '= "block";'
-      ))
-      runjs(paste0(
-        "document.getElementById('deconvolution_main-deconvo",
-        "lute_start').style.animation = 'none';"
       ))
 
       ##### Deconvolution init and mode ----
@@ -2155,13 +2192,12 @@ server <- function(
               )
 
               # Change spinner: error icon when all samples failed, check otherwise
-              hide(selector = "#app-deconvolution_main-processing")
               n_succeeded <- reactVars$current_total_files -
                 reactVars$initial_file_count
               n_failed <- length(reactVars$failed_samples)
               n_total <- reactVars$expected_files
               if (n_succeeded == 0 && n_failed > 0) {
-                show(selector = "#app-deconvolution_main-processing_error")
+                final_icon <- "#app-deconvolution_main-processing_error"
                 title <- paste0(
                   "Finalized with errors (",
                   n_failed,
@@ -2177,7 +2213,7 @@ server <- function(
                   "sample(s) failed"
                 ))
               } else {
-                show(selector = "#app-deconvolution_main-processing_fin")
+                final_icon <- "#app-deconvolution_main-processing_fin"
                 if (n_failed > 0) {
                   title <- paste0(
                     "Finalized (",
@@ -2198,6 +2234,17 @@ server <- function(
                 } else {
                   write_log("Deconvolution finalized")
                 }
+              }
+
+              if (is_show_all(shiny$isolate(result_files_sel()))) {
+                # "Show All" takes the browser seconds to draw: the run reads
+                # as finished once it is on screen (input$spectrum_drawn)
+                reactVars$pending_finish <- list(title = title, icon = final_icon)
+                title <- "Loading Spectra ..."
+                progress_drawing(TRUE)
+              } else {
+                hide(selector = "#app-deconvolution_main-processing")
+                show(selector = final_icon)
               }
             }
           }
@@ -2496,8 +2543,8 @@ server <- function(
                 decon_failed_samples(db_sp))
         )
 
-        waiter_show(id = ns("spectrum"), html = spin_wave())
-        on.exit(waiter_hide(id = ns("spectrum")))
+        # Lifted by the browser once drawn; all spectra block the page meanwhile
+        spectrum_busy(block = is_show_all())
 
         spectrum <- build_spectrum()
         spectrum_ready(TRUE)
@@ -2648,6 +2695,24 @@ server <- function(
         'document.getElementById("blocking-overlay").style.display ',
         '= "none";'
       ))
+    })
+
+    ### Event spectrum drawn ----
+    # Completes the finish of a run held back while "Show All" was drawn
+    shiny$observeEvent(input$spectrum_drawn, {
+      finish <- reactVars$pending_finish
+      shiny$req(finish)
+      reactVars$pending_finish <- NULL
+
+      progress_drawing(FALSE)
+      hide(selector = "#app-deconvolution_main-processing")
+      show(selector = finish$icon)
+      updateProgressBar(
+        session = session,
+        id = ns("progressBar"),
+        value = 100,
+        title = finish$title
+      )
     })
 
     ### Event end/reset deconvolution ----

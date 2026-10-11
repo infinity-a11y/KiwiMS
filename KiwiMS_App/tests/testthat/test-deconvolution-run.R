@@ -131,6 +131,25 @@ test_that("a broken sample is recorded as failed without taking the run down", {
   )$name)
 })
 
+test_that("keep_raw_output leaves each sample's UniDec working files", {
+  # The engine gets its spectrum in memory, so the text copies it used to
+  # read back are written for this setting only. The result viewer
+  # (process_plot_data()) reads the one inside _unidecfiles.
+  raw_dirs <- waters_samples(2)
+
+  work <- withr::local_tempdir("kiwims-keep")
+  res <- kiwims_run_deconvolution(raw_dirs, work, keep_raw_output = TRUE)
+  expect_run_succeeded(res, raw_dirs)
+
+  for (s in kiwims_sample_bases(raw_dirs)) {
+    udir <- file.path(res$result_dir, paste0(s, "_rawdata_unidecfiles"))
+    expect_true(file.exists(file.path(res$result_dir, paste0(s, "_rawdata.txt"))))
+    for (f in c("_rawdata_rawdata.txt", "_rawdata_mass.txt", "_rawdata_peaks.dat")) {
+      expect_true(file.exists(file.path(udir, paste0(s, f))), info = f)
+    }
+  }
+})
+
 test_that("a single-worker run takes the sequential path and still completes", {
   raw_dirs <- waters_samples(2)
 

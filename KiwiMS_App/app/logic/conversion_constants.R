@@ -218,7 +218,6 @@ hits_col_full_names <- c(
   "Preferred"        = "Preferred Hit",
   "Binding [%]"      = "Binding [%]",
   "Tot. Binding [%]" = "Total Binding [%]",
-  "Prot. Binding [%]" = "Proteoform Binding [%]",
   "Unmatched [%]"    = "Unmatched [%]",
   "Correct [%]"      = "Correct [%]",
   "Replicate"        = "Replicate",

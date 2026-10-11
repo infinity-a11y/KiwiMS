@@ -35,6 +35,7 @@ box::use(
     key_symbols,
     key_tiers,
     key_variable,
+    legend_key_group,
     proteoform_colors,
     stats_scatter,
     stats_violin,
@@ -94,7 +95,7 @@ fake_hits <- function(
 
 test_that("every palette colour is a plain hex colour", {
   for (v in c("light", "dark")) {
-    expect_length(categorical_palette[[v]], 18)
+    expect_length(categorical_palette[[v]], base_colors)
     expect_true(hex_ok(categorical_palette[[v]]))
     expect_true(hex_ok(unlist(status_colors(v))))
     for (r in c("concentration", "time", "sample", "count", "binding", "correct", "unmatched")) {
@@ -104,7 +105,7 @@ test_that("every palette colour is a plain hex colour", {
 })
 
 test_that("the light colours stand out on the grey cards and on white", {
-  base <- categorical_palette$light[seq_len(base_colors)]
+  base <- categorical_palette$light
   light <- c(
     base,
     ramp_colors(11, "concentration"),
@@ -117,13 +118,6 @@ test_that("the light colours stand out on the grey cards and on white", {
   expect_gte(min(de2000(light, "#FFFFFF")), 30)
   # Graphical objects: at least 3:1 against a white export
   expect_gte(min(wcag_contrast(base, "#FFFFFF")), 3)
-  # The light accents fill areas and outlined markers: clear of the greys,
-  # and light enough for black text
-  accents <- categorical_palette$light[-seq_len(base_colors)]
-  for (g in c(card_greys, "#FFFFFF")) {
-    expect_gte(min(de2000(accents, g)), 20)
-  }
-  expect_gte(min(wcag_contrast(accents, "#000000")), 7)
   # The fixed meanings too, the muted grey included
   status <- unlist(status_colors("light"))
   for (g in card_greys) {
@@ -138,19 +132,15 @@ test_that("the dark colours stand out on the dark export", {
     ramp_colors(11, "time", "dark"),
     unlist(status_colors("dark"))
   )
-  expect_gte(min(de2000(dark, dark_background)), 35)
-  base <- categorical_palette$dark[seq_len(base_colors)]
-  expect_gte(min(de2000(base, dark_background)), 40)
-  expect_gte(min(wcag_contrast(base, dark_background)), 4.5)
-  # The deep twins of the accents are areas: 3:1 like graphical objects
-  expect_gte(min(wcag_contrast(categorical_palette$dark, dark_background)), 3)
+  expect_gte(min(de2000(dark, dark_background)), 40)
+  expect_gte(min(wcag_contrast(categorical_palette$dark, dark_background)), 4.5)
+  expect_gte(min(de2000(ramp_colors(9, "sample", "dark"), dark_background)), 40)
 })
 
 test_that("the categorical colours stay apart", {
   for (v in c("light", "dark")) {
     pal <- categorical_palette[[v]]
     expect_gte(min_pair(pal), 9)
-    expect_gte(min_pair(pal[seq_len(base_colors)]), 9)
     expect_gte(min_pair(pal[1:5]), 17)
     expect_gte(min_pair(pal[1:2]), 45)
   }
@@ -167,25 +157,22 @@ test_that("light and dark variants keep the hue of each colour", {
   hue <- function(x) farver::convert_colour(t(grDevices::col2rgb(x)), "rgb", "oklch")[, 3]
   d <- abs(hue(categorical_palette$light) - hue(categorical_palette$dark))
   d <- pmin(d, 360 - d)
-  expect_lte(max(d[seq_len(base_colors)]), 10)
-  # The deep twins of the accents give up a little hue to stay in gamut
-  expect_lte(max(d), 20)
+  expect_lte(max(d), 10)
 })
 
-test_that("categorical colours repeat past eighteen, with a tier per round", {
+test_that("categorical colours repeat past twelve, with a tier per round", {
   expect_equal(categorical_colors(0), character(0))
   expect_equal(categorical_colors(3), categorical_palette$light[1:3])
   expect_equal(categorical_colors(3, "dark"), categorical_palette$dark[1:3])
   # Anything but "dark" is the light variant
   expect_equal(categorical_colors(2, NULL), categorical_palette$light[1:2])
   c40 <- categorical_colors(40)
-  expect_equal(anyDuplicated(c40[1:18]), 0)
-  expect_equal(c40[19], c40[1])
-  expect_equal(c40[37], c40[1])
-  expect_equal(level_tier(40), rep(0:2, c(18, 18, 4)))
+  expect_equal(anyDuplicated(c40[1:12]), 0)
+  expect_equal(c40[13], c40[1])
+  expect_equal(level_tier(40), rep(0:3, c(12, 12, 12, 4)))
   # Colour and tier together tell apart many levels
-  sym <- tier_symbol(level_tier(140))
-  expect_equal(anyDuplicated(paste(categorical_colors(140), sym)), 0)
+  sym <- tier_symbol(level_tier(96))
+  expect_equal(anyDuplicated(paste(categorical_colors(96), sym)), 0)
   expect_equal(tier_symbol(0), "circle")
   expect_equal(tier_pattern(0), "")
   expect_equal(tier_dash(0), "solid")
@@ -221,6 +208,30 @@ test_that("the count ramp keeps the white count labels readable", {
       expect_gte(min(de2000(cols, g)), 20)
     }
   }
+})
+
+test_that("past twelve levels the colours run as a gradient", {
+  expect_equal(sample_colors(12), categorical_palette$light)
+  g <- sample_colors(22)
+  expect_equal(g[1], ramp_at(0, "sample"))
+  expect_equal(g[22], ramp_at(1, "sample"))
+  # Neighbours step evenly, the two ends stay apart
+  steps <- vapply(1:21, function(i) de2000(g[i], g[i + 1])[1, 1], 0)
+  expect_true(all(steps > 2))
+  expect_gte(de2000(g[1], g[22])[1, 1], 30)
+  # 22 compounds: each one its own colour from the gradient, the same in
+  # every subset
+  cmps <- sprintf("COM-%02d", 1:22)
+  key <- color_key(fake_hits(samples = paste0("S", 1:22), compounds = cmps))
+  cols <- key_colors(key, "Compounds")
+  expect_equal(anyDuplicated(cols), 0)
+  expect_equal(unname(cols), sample_colors(23)[-1])
+  expect_equal(key_colors(key, "Compounds", c("COM-20", "COM-02")), cols[c("COM-20", "COM-02")])
+  # Proteins count with the compounds: one protein and eleven compounds stay
+  # categorical, the protein first
+  small <- color_key(fake_hits(samples = paste0("S", 1:11), compounds = cmps[1:11]))
+  expect_equal(unname(key_colors(small, "Protein")), categorical_palette$light[1])
+  expect_equal(unname(key_colors(small, "Compounds")), categorical_palette$light[2:12])
 })
 
 test_that("samples share one rule in every interface", {
@@ -397,13 +408,13 @@ test_that("short sample IDs map to the same colour as the full ones", {
   expect_named(key_colors(key, "Samples", trunc = TRUE), hits$truncSample_ID)
 })
 
-test_that("forty compounds: colours repeat, the tier tells them apart", {
+test_that("forty compounds: gradient colours, the tier tells them apart", {
   cmps <- sprintf("CMP-%02d", 1:40)
   key <- color_key(fake_hits(samples = paste0("S", 1:40), compounds = cmps))
   cols <- key_colors(key, "Compounds")
   tiers <- key_tiers(key, "Compounds", names(cols))
   # P comes first in the entity sequence
-  expect_equal(unname(tiers[c("CMP-01", "CMP-17", "CMP-18", "CMP-40")]), c(0L, 0L, 1L, 2L))
+  expect_equal(unname(tiers[c("CMP-01", "CMP-11", "CMP-12", "CMP-40")]), c(0L, 0L, 1L, 3L))
   expect_equal(anyDuplicated(paste(cols, tier_symbol(tiers))), 0)
 })
 
@@ -413,10 +424,10 @@ test_that("compound markers change shape past the colours, never into the protei
   key <- color_key(fake_hits(samples = paste0("S", 1:40), compounds = cmps))
   sym <- key_marker_symbols(key, "Compounds", cmps)
   expect_named(sym, cmps)
-  # P is the first entity, so CMP-17 is the eighteenth colour
+  # P is the first entity, so CMP-11 is the twelfth level
   expect_equal(
-    unname(sym[c("CMP-01", "CMP-17", "CMP-18", "CMP-40")]),
-    c("circle", "circle", "square", "triangle-up")
+    unname(sym[c("CMP-01", "CMP-11", "CMP-12", "CMP-40")]),
+    c("circle", "circle", "square", "triangle-down")
   )
 })
 
@@ -580,8 +591,8 @@ test_that("many compounds on the batch heatmap: labelled tiles, one legend group
     vapply(chips, function(t) t$marker$color, ""),
     unname(key_colors(key, "Compound", levels_))
   )
-  # Up to eighteen the colours suffice: no numbers
-  few <- stats_table(n_groups = 18, n = 30)
+  # Up to twelve the colours suffice: no numbers
+  few <- stats_table(n_groups = 11, n = 30)
   built <- plotly::plotly_build(batch_plate_heatmap(few, "Compound", key = color_key(few)))$x$data
   tiles <- Filter(function(t) identical(t$type, "heatmap") && !is.null(t$legendgroup), built)
   expect_true(all(vapply(tiles, function(t) is.null(t$texttemplate), TRUE)))
@@ -644,6 +655,33 @@ test_that("the batch heatmap keeps its tiles square and its marks in plate units
   cross <- Filter(function(s) identical(s$type, "line"), shapes)
   expect_length(cross, 2)
   expect_true(all(vapply(cross, function(s) abs(s$x0 - 2) < 0.5 && abs(s$y0 - 2) < 0.5, TRUE)))
+})
+
+test_that("the batch heatmap keys the well states in a row under the plate", {
+  hs <- stats_table(n = 12)
+  hs$`Compound Mw [Da]`[1] <- NA
+  hs$`Compound Mw [Da]`[12] <- NA
+  hs$`Measured Mw Protein [Da]`[12] <- NA
+  p <- batch_plate_heatmap(hs, "Compound", key = color_key(hs))
+  built <- plotly::plotly_build(p)$x
+  keys <- Filter(function(t) identical(t$legend, "legend2"), built$data)
+  expect_equal(
+    vapply(keys, `[[`, "", "name"),
+    c("No Protein", "No Binding", "Empty")
+  )
+  # A group each (a horizontal legend stacks a group's entries), all of them
+  # key rows the legend guard leaves alone
+  groups <- vapply(keys, `[[`, "", "legendgroup")
+  expect_equal(anyDuplicated(groups), 0)
+  expect_true(all(startsWith(groups, legend_key_group(""))))
+  expect_identical(built$layout$legend2$orientation, "h")
+  # The levels keep the legend beside the plate
+  levels_ <- Filter(function(t) grepl("^level-", t$legendgroup %||% ""), built$data)
+  expect_false(any(vapply(levels_, function(t) identical(t$legend, "legend2"), TRUE)))
+  # plate_heatmap.js fits the plate in the app, told the plate's size
+  hook <- p$jsHooks$render[[1]]
+  expect_match(hook$code, "kiwiMS_fitPlate")
+  expect_equal(hook$data[c("cols", "rows")], list(cols = 12L, rows = 8L))
 })
 
 test_that("the batch heatmap takes the key colours and orders times by value", {

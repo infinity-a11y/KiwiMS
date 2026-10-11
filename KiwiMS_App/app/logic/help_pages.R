@@ -206,13 +206,8 @@ hit_columns <- function() {
     ),
     help_def(
       "Tot. Binding [%]",
-      "Binding of the sample: all complex peaks together (see formula above)."
-    ),
-    help_def(
-      "Prot. Binding [%]",
-      "Binding of this proteoform on its own: its complexes over its own ",
-      "unbound plus complex signal. Only present when a protein was declared ",
-      "with several masses."
+      "Binding of the sample: all complex peaks together, over all ",
+      "proteoforms, mass shifts and compounds (see formula above)."
     ),
     help_def(
       "Unmatched [%] / Correct [%]",
@@ -1865,12 +1860,12 @@ hits_page <- function() {
         help_def(
           "Select Samples / Compounds / Columns",
           "Narrow the table; the export follows the selection."
-        ),
-        help_def("Show % Bar", "Percentage columns drawn as bars in their cells.")
+        )
       ),
       shiny::p(
-        "Click a sample to open it in the Sample View, a protein or compound ",
-        "to open it in the Overview, and a concentration to open its kinetics."
+        "Percentages are drawn as bars in their cells. Click a sample to open ",
+        "it in the Sample View, a protein or compound to open it in the ",
+        "Overview, and a concentration to open its kinetics."
       )
     ),
     help_section(
@@ -1903,9 +1898,9 @@ hits_page <- function() {
         ),
         help_def(
           "Total Binding (Mass n) [%]",
-          "Binding of mass shift n over all stoichiometries. Only preferred ",
-          "readings count, so the totals of a sample add up to its Tot. ",
-          "Binding [%]."
+          "Binding of mass shift n over all proteoforms and stoichiometries. ",
+          "Only preferred readings count, so the totals of a sample add up to ",
+          "its Tot. Binding [%]."
         ),
         help_def(
           "*",
@@ -1918,22 +1913,24 @@ hits_page <- function() {
           "Proteoforms",
           "When a sample holds several proteoforms (a protein declared with ",
           "several masses), the columns of each carry its declared mass: Int. ",
-          "Prot. (21,816.8 Da) [%], Prot. Binding (21,816.8 Da) [%], Binding ",
-          "(21,816.8 Da, Mass 1)x1 [%]. Theor. Prot. [Da] is then left out, as ",
-          "the names give it. Select Columns picks a column for every ",
-          "proteoform at once."
+          "Prot. (21,816.8 Da) [%], Binding (21,816.8 Da, Mass 1)x1 [%]. ",
+          "Theor. Prot. [Da] is then left out, as the names give it. Select ",
+          "Columns picks a column for every proteoform at once. The totals ",
+          "pool the proteoforms: they are forms of one protein."
         ),
         help_def(
           "Several compounds",
           "A sample declaring several compounds lists them in Cmp Name (A, B), ",
           "and its mass-shift columns carry the compound: Mass 1 (A), Binding ",
-          "(A, Mass 1)x1 [%]. A click on Cmp Name opens the first compound ",
+          "(A, Mass 1)x1 [%]. Tot. Binding (A) [%] is the binding of each ",
+          "complex, the value its kinetics are fitted to; Tot. Binding [%] ",
+          "pools the compounds. A click on Cmp Name opens the first compound ",
           "listed."
         )
       ),
       shiny::p(
-        "Mass-shift and binding columns are always shown. Hover over a header ",
-        "for its full name."
+        "Mass-shift, binding and total columns are always shown. Hover over a ",
+        "header for its full name."
       )
     ),
     help_section("Columns", hit_columns()),
@@ -2123,10 +2120,6 @@ run_quality_page <- function() {
       "± SD over all samples, one value per sample. Values turn orange below ",
       "50 % Correct (above 50 % Unmatched) and red below 10 % (above 90 %)."
     ),
-    shiny::p(
-      "In the Statistics tab, Include only hits → Hits only leaves out the ",
-      "samples without any assigned peak (Correct 0 %, Unmatched 100 %)."
-    ),
     help_note(
       "A high Unmatched [%] points at undeclared species, such as a further ",
       "proteoform or adduct, at a Peak Tolerance that is too tight, or at ",
@@ -2140,11 +2133,6 @@ stats_controls <- function() {
     help_def(
       "Hit Rate Parameter",
       "Shows Correct [%] or Unmatched [%] in all plots of the tab."
-    ),
-    help_def(
-      "Include only hits",
-      "Hits only leaves out the samples without any assigned peak (Correct ",
-      "0 %, Unmatched 100 %), such as failed acquisitions."
     )
   )
 }
@@ -2189,7 +2177,8 @@ stats_scatter_page <- function() {
     shiny::p(
       "Every sample as a point: its Tot. Binding [%] against its hit rate, ",
       "coloured by protein, compound or concentration (Settings → Color By). ",
-      "Past eighteen groups the colours repeat with another marker shape. The ",
+      "Past twelve groups the colours run as a gradient, and the marker shape ",
+      "changes every twelve groups. The ",
       "dashed line ",
       "marks the mean hit rate, the dotted lines ± 1 SD."
     ),
@@ -2249,8 +2238,9 @@ batch_heatmap_page <- function() {
     ),
     shiny::p(
       "Compound, protein, concentration and time take the colours they have ",
-      "in every other view. For the percentages, Settings → Full Scale ",
-      "(0–100%) fixes the colour scale to the whole percentage range."
+      "in every other view. The percentages are coloured over the range of ",
+      "the data; Settings → Full Scale (0–100%) fixes the colour scale to ",
+      "the whole percentage range."
     ),
     shiny::p(
       "With more compounds or proteins than colours, every tile carries a ",

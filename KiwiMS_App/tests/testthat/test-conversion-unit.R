@@ -5,7 +5,6 @@
 box::use(
   app/logic/conversion_functions[
     add_hits,
-    add_proteoform_binding,
     check_sample_table,
     check_table,
     color_key,
@@ -289,80 +288,53 @@ test_that("a proteoform binding pinned by an undetected peak is flagged", {
   expect_true(is.na(binding$limit[binding$species == 1000]))
 })
 
-test_that("the proteoform binding column is only added for several masses", {
-  single <- screen(
-    mass = c(1000, 1100),
-    intensity = c(50, 30),
-    protein_masses = 1000
-  )
+test_that("the hits table pools the proteoforms in its binding columns", {
   multi <- screen(
     mass = c(1000, 1010, 1100, 1110),
     intensity = c(50, 30, 12, 8),
     protein_masses = c(1000, 1010)
   )
+  view <- transform_hits(multi)
 
-  single_view <- add_proteoform_binding(transform_hits(single))
-  multi_view <- add_proteoform_binding(transform_hits(multi))
-
-  expect_false("Prot. Binding [%]" %in% names(single_view))
-  expect_true("Prot. Binding [%]" %in% names(multi_view))
-  complexes <- multi_view[multi_view$`Cmp Name` != "N/A", ]
-  expect_equal(
-    complexes$`Prot. Binding [%]`,
-    c(100 * 24 / 124, 100 * 16 / 76)
-  )
+  # No binding of a proteoform on its own; the total pools them
+  expect_false(any(grepl("Prot. Binding", names(view), fixed = TRUE)))
+  expect_false("Prot. Binding [%]" %in% hits_col_choices(view, character())$choices)
+  expect_equal(unique(view$`Tot. Binding [%]`), 100 * 20 / 100)
 })
 
-test_that("the proteoform binding column is displayed like the other percentages", {
+test_that("every percentage of the hits table is drawn as a bar", {
   multi <- screen(
     mass = c(1000, 1010, 1100, 1110),
     intensity = c(50, 30, 12, 8),
     protein_masses = c(1000, 1010)
   )
-  view <- add_proteoform_binding(transform_hits(multi))
+  view <- transform_hits(multi)
 
-  # Offered as a % bar only when the column exists
-  bar_choices <- function(hits) {
-    html <- as.character(hits_results_ui(identity, hits, units = character()))
-    picker <- regmatches(
-      html,
-      regexpr("hits_binding_chart.*?</select>", html)
-    )
-    grepl("Prot. Binding [%]", picker, fixed = TRUE)
-  }
-  expect_true(bar_choices(view))
-  expect_false(bar_choices(view[, names(view) != "Prot. Binding [%]"]))
+  # No picker for the bars: the table draws them all
+  html <- as.character(hits_results_ui(identity, view, units = character()))
+  expect_false(grepl("hits_binding_chart", html, fixed = TRUE))
 
-  # Rounded for display, both as plain number and as bar
-  render_defs <- function(bar_chart) {
-    dt <- render_hits_table(
-      view,
-      concentration_colors = NULL,
-      bar_chart = bar_chart,
-      units = character()
-    )
-    # DT turns the target names into 0-based column indices
-    col <- which(names(view) == "Prot. Binding [%]") - 1
-    defs <- dt$x$options$columnDefs
-    defs[vapply(
-      defs,
-      function(d) !is.null(d$render) && col %in% d$targets,
-      logical(1)
-    )]
-  }
-  plain <- render_defs(character())
-  bar <- render_defs("Prot. Binding [%]")
-  expect_length(plain, 1)
-  expect_match(as.character(plain[[1]]$render), "toFixed(2)", fixed = TRUE)
-  expect_length(bar, 1)
-  expect_equal(bar[[1]]$className, "bar-chart-col")
+  pct <- grep("\\[%\\]$", names(view), value = TRUE)
+  expect_setequal(hits_bar_cols(view), pct)
+  dt <- render_hits_table(
+    view,
+    concentration_colors = NULL,
+    bar_chart = hits_bar_cols(view),
+    units = character()
+  )
+  bar_def <- Filter(
+    function(d) identical(d$className, "bar-chart-col"),
+    dt$x$options$columnDefs
+  )[[1]]
+  # DT turns the target names into 0-based column indices
+  expect_setequal(unlist(bar_def$targets), match(pct, names(view)) - 1)
 
   # Exported unrounded and numeric
   export <- prepare_hits_export(view)
-  expect_type(export$`Prot. Binding [%]`, "double")
+  expect_type(export$`Binding [%]`, "double")
   expect_equal(
-    export$`Prot. Binding [%]`[export$`Cmp Name` != "N/A"],
-    c(100 * 24 / 124, 100 * 16 / 76)
+    export$`Binding [%]`[export$`Cmp Name` != "N/A"],
+    c(100 * 12 / 100, 100 * 8 / 100)
   )
 })
 
@@ -562,6 +534,15 @@ test_that("the sample view gives a compound without an adduct no mass columns", 
     per_adduct$`Binding (1,010 Da, A, Mass 1)x1 [%]`,
     10 / 90 * 100
   )
+  expect_equal(per_adduct$`Total Binding (A, Mass 1) [%]`, 10 / 90 * 100)
+  # The binding of each complex, the value its kinetics are fitted to, next
+  # to the sample's total
+  expect_equal(
+    names(per_adduct)[grepl("^Tot\\. Binding", names(per_adduct))],
+    c("Tot. Binding [%]", "Tot. Binding (A) [%]", "Tot. Binding (B) [%]")
+  )
+  expect_equal(per_adduct$`Tot. Binding (A) [%]`, 10 / 90 * 100)
+  expect_equal(per_adduct$`Tot. Binding (B) [%]`, 0)
 })
 
 test_that("the sample view gives every proteoform its columns, named by mass", {
@@ -571,9 +552,8 @@ test_that("the sample view gives every proteoform its columns, named by mass", {
     protein_masses = c(1000, 1010),
     compounds = c(A = 100)
   )
-  view <- add_proteoform_binding(screened$view)
   per_adduct <- transform_per_adduct(
-    view,
+    screened$view,
     proteins_table = screened$protein_table,
     compounds_table = screened$compound_table,
     samples_table = screened$sample_table
@@ -583,30 +563,29 @@ test_that("the sample view gives every proteoform its columns, named by mass", {
   # The mass in the name replaces Theor. Prot. [Da]
   expect_false("Theor. Prot. [Da]" %in% names(per_adduct))
   expect_true(all(
-    c(
-      "Int. Prot. (1,000 Da) [%]",
-      "Int. Prot. (1,010 Da) [%]",
-      "Prot. Binding (1,000 Da) [%]",
-      "Prot. Binding (1,010 Da) [%]"
-    ) %in%
+    c("Int. Prot. (1,000 Da) [%]", "Int. Prot. (1,010 Da) [%]") %in%
       names(per_adduct)
   ))
+  expect_false(any(grepl("Prot. Binding", names(per_adduct), fixed = TRUE)))
+  # A reading per proteoform; the total of the shift pools them, as Tot.
+  # Binding [%] does
   expect_equal(
     names(per_adduct)[grepl("^(Mass|Binding|Total)", names(per_adduct))],
     c(
       "Mass 1",
       "Binding (1,000 Da, Mass 1)x1 [%]",
-      "Total Binding (1,000 Da, Mass 1) [%]",
       "Binding (1,010 Da, Mass 1)x1 [%]",
-      "Total Binding (1,010 Da, Mass 1) [%]"
+      "Total Binding (Mass 1) [%]"
     )
   )
-  expect_equal(per_adduct$`Prot. Binding (1,010 Da) [%]`, 10 / 30 * 100)
+  expect_equal(per_adduct$`Binding (1,010 Da, Mass 1)x1 [%]`, 10)
+  expect_equal(per_adduct$`Total Binding (Mass 1) [%]`, 40)
   expect_equal(
-    per_adduct$`Total Binding (1,000 Da, Mass 1) [%]` +
-      per_adduct$`Total Binding (1,010 Da, Mass 1) [%]`,
+    per_adduct$`Total Binding (Mass 1) [%]`,
     per_adduct$`Tot. Binding [%]`
   )
+  # One compound per sample: no total per complex next to the sample's
+  expect_false(any(grepl("^Tot\\. Binding \\(", names(per_adduct))))
   # Pickers, bars and number formats read the plain column
   expect_equal(
     hits_base_col(c("Int. Prot. (1,010 Da) [%]", "Binding (1,010 Da, Mass 1)x1 [%]")),
@@ -631,6 +610,21 @@ test_that("the sample view gives every proteoform its columns, named by mass", {
     ) -
       1
   )
+  # The Hits interface passes the columns by their full names
+  all_bars <- Filter(
+    function(d) identical(d$className, "bar-chart-col"),
+    render_hits_table(
+      per_adduct,
+      concentration_colors = NULL,
+      bar_chart = hits_bar_cols(per_adduct),
+      units = character(0)
+    )$x$options$columnDefs
+  )[[1]]
+  expect_setequal(
+    unlist(all_bars$targets),
+    match(hits_bar_cols(per_adduct), names(per_adduct)) - 1
+  )
+  expect_true("Int. Prot. (1,010 Da) [%]" %in% hits_bar_cols(per_adduct))
 })
 
 test_that("the sample view stars a reading that is not preferred and leaves it out of the totals", {
@@ -1181,7 +1175,7 @@ overview_run <- function() {
     summarize_hits(result, sample_table = sample_table)
   )
 
-  view <- add_proteoform_binding(transform_hits(result$hits_summary))
+  view <- transform_hits(result$hits_summary)
   view$truncSample_ID <- view$`Sample ID`
 
   list(
