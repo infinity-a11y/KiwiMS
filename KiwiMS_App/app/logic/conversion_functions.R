@@ -10571,7 +10571,94 @@ filter_hits_table <- function(
   return(hits_table)
 }
 
-# Transform per hit table to display per-adduct entries
+# Columns of the hits table that describe a protein species (proteoform)
+sample_view_species_cols <- c(
+  "Theor. Prot. [Da]",
+  "Meas. Prot. [Da]",
+  "Δ Prot. [Da]",
+  "Int. Prot. [%]",
+  "Prot. Binding [%]"
+)
+
+# Column names of the Sample View without their proteoform, so "Int. Prot.
+# (21,816.8 Da) [%]" reads as "Int. Prot. [%]": the column pickers, bars and
+# number formats of the hits table name the columns this way.
+#' @export
+hits_base_col <- function(cols) {
+  sub(" \\([0-9][0-9,.]* Da\\) \\[", " [", cols)
+}
+
+# Header tooltip of a hits table column: its full name, with the proteoform,
+# compound and mass shift a Sample View column belongs to
+#' @export
+hits_col_tooltip <- function(cols) {
+  vapply(
+    cols,
+    function(col) {
+      if (col %in% names(hits_col_full_names)) {
+        return(hits_col_full_names[[col]])
+      }
+      base <- hits_base_col(col)
+      if (base != col && base %in% names(hits_col_full_names)) {
+        species <- sub("^.* \\(([0-9][0-9,.]* Da)\\) \\[.*$", "\\1", col)
+        return(paste0(hits_col_full_names[[base]], ", proteoform ", species))
+      }
+      binding <- regmatches(
+        col,
+        regexec("^Binding \\((.*?)(\\*?)\\)x([0-9]+) \\[%\\]$", col)
+      )[[1]]
+      if (length(binding)) {
+        return(paste0(
+          "Binding [%] of ",
+          binding[2],
+          " at stoichiometry ",
+          binding[4],
+          if (nzchar(binding[3])) {
+            ". *: not the preferred reading of its peak, not counted in the totals"
+          }
+        ))
+      }
+      total <- regmatches(
+        col,
+        regexec("^Total Binding \\((.*)\\) \\[%\\]$", col)
+      )[[1]]
+      if (length(total)) {
+        return(paste0(
+          "Total binding of ",
+          total[2],
+          ": its preferred readings over all stoichiometries"
+        ))
+      }
+      mass <- regmatches(
+        col,
+        regexec("^Mass ([0-9]+)( \\((.*)\\))?$", col)
+      )[[1]]
+      if (length(mass)) {
+        return(paste0(
+          "Declared mass shift ",
+          mass[2],
+          if (nzchar(mass[4])) paste0(" of ", mass[4]),
+          " [Da]"
+        ))
+      }
+      col
+    },
+    character(1),
+    USE.NAMES = FALSE
+  )
+}
+
+# Sample View of the hits table: one row per sample. The values of a
+# proteoform carry its mass in the column name ("Int. Prot. (21,816.8 Da)
+# [%]") once a sample holds several proteoforms; Theor. Prot. [Da] is then
+# left out, the name says it. A sample declaring several compounds lists them
+# in Cmp Name, and its binding columns carry the compound. Every complex gets a
+# column per declared mass shift of its compound (Mass n of the Compounds
+# table) and stoichiometry, e.g. "Binding (21,816.8 Da, Mass 1)x1 [%]"; a
+# reading that is not the preferred one of its peak is marked with an
+# asterisk, "Binding (Mass 2*)x1 [%]". Total Binding (Mass n) sums the
+# preferred readings only, so the totals of a sample add up to its Tot.
+# Binding [%] as the rows of the Adduct View do.
 #' @export
 transform_per_adduct <- function(
   hits_table,
@@ -10579,183 +10666,254 @@ transform_per_adduct <- function(
   compounds_table,
   samples_table
 ) {
-  # Get distinct adducts. A protein declared with several masses contributes one
-  # entry per species, so the species mass is part of the grouping key.
-  species_col <- "Theor. Prot. [Da]"
-  has_species <- species_col %in% names(hits_table)
+  if (!nrow(hits_table)) {
+    return(hits_table)
+  }
 
-  distinct_adducts <- if (has_species) {
-    dplyr::distinct(
-      hits_table,
-      `Sample ID`,
-      !!rlang::sym(species_col),
-      `Cmp Name`
-    )
+  complex_cols <- c(
+    "Peak Signal [Da]",
+    "Int. Cmp [%]",
+    "Theor. Cmp [Da]",
+    "Δ Cmp [Da]",
+    "Bind. Stoich.",
+    "Preferred",
+    "Binding [%]"
+  )
+  num <- function(x) suppressWarnings(as.numeric(as.character(x)))
+
+  sample <- as.character(hits_table$`Sample ID`)
+  samples <- unique(sample)
+  species <- if ("Theor. Prot. [Da]" %in% names(hits_table)) {
+    num(hits_table$`Theor. Prot. [Da]`)
   } else {
-    dplyr::distinct(hits_table, `Sample ID`, `Cmp Name`)
+    rep(NA_real_, nrow(hits_table))
+  }
+  cmp <- as.character(hits_table$`Cmp Name`)
+
+  # Qualified only when one sample holds several, so a table of one
+  # proteoform and compound per sample keeps its plain column names
+  several <- function(x) {
+    known <- !is.na(x)
+    any(tapply(x[known], sample[known], function(v) length(unique(v))) > 1)
+  }
+  by_species <- several(species)
+  by_cmp <- several(cmp)
+
+  # Proteoforms by mass; more decimals only if one place cannot tell them
+  # apart
+  species_set <- sort(unique(species[!is.na(species)]))
+  species_lab <- paste(fmt_species_mass(species_set), "Da")
+  if (anyDuplicated(species_lab)) {
+    species_lab <- paste(
+      formatC(species_set, format = "f", digits = 3, big.mark = ","),
+      "Da"
+    )
+  }
+  with_species <- function(col, lab) {
+    vapply(
+      lab,
+      function(l) sub("^(.*) (\\[[^]]*\\])$", paste0("\\1 (", l, ") \\2"), col),
+      character(1),
+      USE.NAMES = FALSE
+    )
   }
 
-  # Get colnames of retained columns subset
-  col_names <- names(hits_table)[
-    !names(hits_table) %in%
-      c(
-        "Peak Signal [Da]",
-        "Int. Cmp [%]",
-        "Theor. Cmp [Da]",
-        "Δ Cmp [Da]",
-        "Bind. Stoich.",
-        "Preferred",
-        "Binding [%]"
-      )
-  ]
+  # Compounds in the order of the Compounds table
+  cmp_rank <- function(x) {
+    rank <- match(x, compounds_table$Compound)
+    rank[is.na(rank)] <- length(compounds_table$Compound) +
+      match(x[is.na(rank)], sort(unique(x)))
+    rank
+  }
 
-  # Initiate list object to store table intermediates
-  entries <- vector("list", nrow(distinct_adducts))
-
-  # Iterate generating one table per distinct adduct
-  for (i in seq_len(nrow(distinct_adducts))) {
-    sample <- distinct_adducts$`Sample ID`[i] # Current sample
-    cmp <- distinct_adducts$`Cmp Name`[i] # Current compound
-
-    row_sel <- hits_table$`Sample ID` == sample
-    if (has_species) {
-      species <- distinct_adducts[[species_col]][i] # Current protein species
-      row_sel <- row_sel & hits_table[[species_col]] %in% species
-    }
-
-    cmp_sel <- if (is.na(cmp)) {
-      is.na(hits_table$`Cmp Name`)
-    } else {
-      hits_table$`Cmp Name` %in% cmp
-    }
-    hits_table_subset <- hits_table[row_sel & cmp_sel, ]
-    hits_per_adduct <- hits_table_subset[, col_names][1, ]
-
-    # Without an adduct - no compound declared, or a declared one not found -
-    # the entry keeps the row's own values and gets no mass-shift columns. The
-    # empty mass of such a row must not be matched against the unused (NA)
-    # mass slots of the compound.
-    if (any(is_complex_row(hits_table_subset))) {
-      # Append mass-shift columns
-      mass_shifts <- unique(hits_table_subset$`Theor. Cmp [Da]`)
-      cmp_mass_shifts <- as.numeric(compounds_table[
-        compounds_table$Compound == cmp,
-        -1
-      ])
-
-      for (mass_shift in mass_shifts) {
-        hits_table_subset_mass_shift <- hits_table_subset[
-          hits_table_subset$`Theor. Cmp [Da]` == mass_shift,
-        ]
-
-        mass_no <- which(cmp_mass_shifts %in% as.numeric(mass_shift))
-        if (length(mass_no) == 0) {
-          next
-        }
-
-        binding_vals <- as.list(hits_table_subset_mass_shift$`Binding [%]`)
-        names(binding_vals) <- paste0(
-          "Binding (Mass ",
-          mass_no,
-          ifelse(hits_table_subset_mass_shift$Preferred == "FALSE", "*", ""),
-          ")x",
-          hits_table_subset_mass_shift$`Bind. Stoich.`,
-          " [%]"
-        )
-        binding_vals[[paste0("Total Binding (Mass ", mass_no, ") [%]")]] <-
-          sum(hits_table_subset_mass_shift$`Binding [%]`)
-
-        binding_vals[[paste("Mass", mass_no)]] <- cmp_mass_shifts[[mass_no]]
-
-        hits_per_adduct <- dplyr::mutate(hits_per_adduct, !!!binding_vals)
+  # Values of the sample, from its first row
+  sample_cols <- setdiff(
+    names(hits_table),
+    c(complex_cols, if (by_species) sample_view_species_cols)
+  )
+  out <- hits_table[!duplicated(sample), sample_cols, drop = FALSE]
+  cmp_lists <- split(cmp, factor(sample, levels = samples))
+  out$`Cmp Name` <- vapply(
+    cmp_lists,
+    function(x) {
+      x <- unique(x[!is.na(x)])
+      if (!length(x)) {
+        NA_character_
+      } else {
+        paste(x[order(cmp_rank(x))], collapse = ", ")
       }
+    },
+    character(1),
+    USE.NAMES = FALSE
+  )
 
-      # Attach mass shifts for respective compound
-      # hits_per_adduct <- dplyr::bind_cols(
-      #   hits_per_adduct,
-      #   compounds_table[compounds_table$Compound == cmp, -1]
-      # )
+  # Values of each proteoform, expanded in place of the plain column
+  col_order <- names(hits_table)[!names(hits_table) %in% complex_cols]
+  if (by_species) {
+    first_of_species <- !duplicated(paste(sample, species)) & !is.na(species)
+    species_cols <- intersect(
+      setdiff(sample_view_species_cols, "Theor. Prot. [Da]"),
+      names(hits_table)
+    )
+    col_order <- unlist(lapply(col_order, function(col) {
+      if (col == "Theor. Prot. [Da]") {
+        return(character(0))
+      }
+      if (!col %in% species_cols) {
+        return(col)
+      }
+      with_species(col, species_lab)
+    }))
+    for (k in seq_along(species_set)) {
+      rows <- which(first_of_species & species == species_set[k])
+      at <- match(samples, sample[rows])
+      for (col in species_cols) {
+        out[[with_species(col, species_lab[k])]] <- hits_table[[col]][
+          rows[at]
+        ]
+      }
+    }
+  }
+
+  # Readings of the complexes, one column each
+  cx <- which(is_complex_row(hits_table))
+  binding_cols <- character(0)
+  if (length(cx)) {
+    shift <- num(hits_table$`Theor. Cmp [Da]`[cx])
+    # Position of the shift among the declared shifts of its compound. The
+    # Compounds table refuses shifts within 0.01 Da of each other, so the
+    # closest one within that is the one assigned.
+    # Without its declaration (results loaded on their own) the shifts of a
+    # compound are numbered by size
+    declared_shifts <- lapply(
+      stats::setNames(nm = unique(cmp[cx])),
+      function(compound) {
+        row <- match(compound, compounds_table$Compound)
+        declared <- if (is.na(row)) {
+          numeric(0)
+        } else {
+          num(unlist(compounds_table[row, -1, drop = FALSE]))
+        }
+        if (!any(!is.na(declared))) {
+          declared <- sort(unique(round(shift[cmp[cx] %in% compound], 4)))
+        }
+        declared
+      }
+    )
+    mass_no <- mapply(
+      function(compound, m) {
+        declared <- declared_shifts[[compound]]
+        hit <- which(abs(declared - m) < 0.01)
+        if (length(hit)) hit[which.min(abs(declared[hit] - m))] else NA_integer_
+      },
+      cmp[cx],
+      shift,
+      USE.NAMES = FALSE
+    )
+    keep <- !is.na(mass_no)
+    cx <- cx[keep]
+    shift <- shift[keep]
+    mass_no <- mass_no[keep]
+  }
+
+  if (length(cx)) {
+    stoich <- as.character(hits_table$`Bind. Stoich.`[cx])
+    preferred <- if ("Preferred" %in% names(hits_table)) {
+      !as.character(hits_table$Preferred[cx]) %in% "FALSE"
+    } else {
+      rep(TRUE, length(cx))
+    }
+    binding <- num(hits_table$`Binding [%]`[cx])
+    sp_k <- match(species[cx], species_set)
+
+    qualifier <- paste0(
+      if (by_species) paste0(species_lab[sp_k], ", ") else "",
+      if (by_cmp) paste0(cmp[cx], ", ") else "",
+      "Mass ",
+      mass_no
+    )
+    mass_col <- if (by_cmp) {
+      paste0("Mass ", mass_no, " (", cmp[cx], ")")
+    } else {
+      paste("Mass", mass_no)
     }
 
-    ## TODO
-    # # Optionally adding concentration and time columns
-    # if ("Concentration" %in% names(units)) {
-    #   hits_per_adduct <- dplyr::mutate(
-    #     hits_per_adduct,
-    #     !!rlang::sym(
-    #       units[[
-    #         "Concentration"
-    #       ]]
-    #     ) := hits_table_subset$concentration,
-    #     !!rlang::sym(units[["Time"]]) := hits_table_subset$time,
-    #     .after = Protein
-    #   )
-    # }
+    readings <- rbind(
+      data.frame(
+        sample = sample[cx],
+        col = mass_col,
+        value = shift,
+        stat = "first",
+        rank_cmp = cmp_rank(cmp[cx]),
+        rank_mass = mass_no,
+        rank_species = 0,
+        rank_kind = 0,
+        rank_stoich = 0,
+        rank_star = 0
+      ),
+      data.frame(
+        sample = sample[cx],
+        col = paste0(
+          "Binding (",
+          qualifier,
+          ifelse(preferred, "", "*"),
+          ")x",
+          stoich,
+          " [%]"
+        ),
+        value = binding,
+        stat = "sum",
+        rank_cmp = cmp_rank(cmp[cx]),
+        rank_mass = mass_no,
+        rank_species = sp_k,
+        rank_kind = 1,
+        rank_stoich = num(stoich),
+        rank_star = as.numeric(!preferred)
+      ),
+      data.frame(
+        sample = sample[cx],
+        col = paste0("Total Binding (", qualifier, ") [%]"),
+        value = ifelse(preferred, binding, 0),
+        stat = "sum",
+        rank_cmp = cmp_rank(cmp[cx]),
+        rank_mass = mass_no,
+        rank_species = sp_k,
+        rank_kind = 2,
+        rank_stoich = 0,
+        rank_star = 0
+      )
+    )
 
-    entries[[i]] <- hits_per_adduct
+    first <- !duplicated(readings$col)
+    cols <- readings[first, ]
+    cols <- cols[
+      order(
+        cols$rank_cmp,
+        cols$rank_mass,
+        cols$rank_kind > 0,
+        cols$rank_species,
+        cols$rank_kind,
+        cols$rank_stoich,
+        cols$rank_star
+      ),
+    ]
+    binding_cols <- cols$col
+
+    key <- paste(readings$sample, readings$col, sep = "\r")
+    summed <- tapply(readings$value, key, sum)
+    first_value <- readings$value[!duplicated(key)]
+    names(first_value) <- key[!duplicated(key)]
+    for (i in seq_len(nrow(cols))) {
+      at <- paste(samples, cols$col[i], sep = "\r")
+      out[[cols$col[i]]] <- unname(if (cols$stat[i] == "sum") {
+        summed[at]
+      } else {
+        first_value[at]
+      })
+    }
   }
 
-  # Join all hits_per_adduct tables
-  hits_table <- suppressMessages(Reduce(dplyr::full_join, entries))
-
-  ### Sort mass-shift columns by mass
-  all_cols <- names(hits_table)
-
-  # 1. Define helper to extract numbers from strings
-  get_number <- function(string, pattern) {
-    matches <- regmatches(string, regexpr(pattern, string, perl = TRUE))
-    as.numeric(gsub("[^0-9]", "", matches))
-  }
-
-  # 2. Identify and define the raw mass columns
-  is_raw_mass <- grepl("^Mass [0-9]+$", all_cols)
-  raw_mass_names <- all_cols[is_raw_mass]
-  is_binding <- grepl("^(Binding|Total Binding) \\(", all_cols)
-  binding_cols <- all_cols[is_binding]
-
-  # 3. Calculate Stoichiometry for binding_cols
-  # We look for the "x" followed by a number
-  stoich_vals <- suppressWarnings(as.numeric(sub(
-    ".*x([0-9]+).*",
-    "\\1",
-    binding_cols
-  )))
-  stoich_vals[is.na(stoich_vals)] <- Inf # Totals get Inf to move to the end
-
-  # 4. Get the Mass ID for all components
-  all_relevant_cols <- c(raw_mass_names, binding_cols)
-  all_mass_ids <- c(
-    get_number(raw_mass_names, "[0-9]+"),
-    get_number(binding_cols, "(?<=Mass )[0-9]+")
-  )
-
-  # 5. Define hierarchy for sorting
-  # Raw Mass = 1, Binding = 2, Total = 3
-  type_rank <- ifelse(
-    grepl("^Mass [0-9]+$", all_relevant_cols),
-    1,
-    ifelse(grepl("^Total", all_relevant_cols), 3, 2)
-  )
-
-  # 6. Perform the sort
-  # Order by: Mass ID -> Type Rank -> Stoichiometry
-  # Note: For raw mass columns, we assign a stoich of 0 to ensure they come first
-  all_stoich <- c(rep(0, length(raw_mass_names)), stoich_vals)
-
-  final_sorted_relevant <- all_relevant_cols[order(
-    all_mass_ids,
-    type_rank,
-    all_stoich
-  )]
-
-  # 7. Final full vector
-  fixed_cols <- all_cols[
-    !grepl("^Mass [0-9]+$", all_cols) &
-      !grepl("^(Binding|Total Binding) \\(", all_cols)
-  ]
-  final_column_order <- c(fixed_cols, final_sorted_relevant)
-
-  return(hits_table[, final_column_order])
+  out[, c(col_order, binding_cols), drop = FALSE]
 }
 
 # Rendering function of hits table
@@ -10775,6 +10933,11 @@ render_hits_table <- function(
   empty_message = NULL,
   units
 ) {
+  # Bars and number formats are picked by column; a proteoform's column of
+  # the Sample View takes those of its plain column (see hits_base_col())
+  base_cols <- hits_base_col(names(hits_table))
+  bar_chart <- names(hits_table)[base_cols %in% bar_chart]
+
   # Adapt table layout
   if (!is.null(single_conc)) {
     menu_length <- list(c(25, -1), c('25', 'All'))
@@ -10859,18 +11022,18 @@ render_hits_table <- function(
   # Percentage columns formatted to 2 d.p. via columnDefs render (not formatRound)
   # so null cells survive rowCallback as "N/A" without post-draw interference.
   binding_fmt_cols <- setdiff(
-    intersect(
-      c(
-        "Binding [%]",
-        "Tot. Binding [%]",
-        "Prot. Binding [%]",
-        "Unmatched [%]",
-        "Correct [%]",
-        "Int. Prot. [%]",
-        "Int. Cmp [%]"
-      ),
-      names(hits_table)
-    ),
+    names(hits_table)[
+      base_cols %in%
+        c(
+          "Binding [%]",
+          "Tot. Binding [%]",
+          "Prot. Binding [%]",
+          "Unmatched [%]",
+          "Correct [%]",
+          "Int. Prot. [%]",
+          "Int. Cmp [%]"
+        )
+    ],
     bar_chart
   )
 
@@ -10887,11 +11050,9 @@ render_hits_table <- function(
       rowCallback = htmlwidgets::JS(rowCallback),
       headerCallback = htmlwidgets::JS({
         visible_cols <- names(hits_table)[names(hits_table) != "truncSample_ID"]
-        tooltip_names <- ifelse(
-          visible_cols %in% names(hits_col_full_names),
-          hits_col_full_names[visible_cols],
-          visible_cols
-        )
+        tooltip_names <- hits_col_tooltip(visible_cols)
+        # Breaks only after the first two words, never inside "Mass 1", a
+        # proteoform's "21,816.8 Da" or at the hyphen of a compound name
         paste0(
           "function(thead, data, start, end, display) {",
           "  var names = ",
@@ -10899,7 +11060,8 @@ render_hits_table <- function(
           ";",
           "  $(thead).find('th').each(function(i) {",
           "    if (i < names.length) $(this).attr('title', names[i]);",
-          "    var h = $(this).html().replace(/Mass (\\d)/g, 'Mass\\u00a0$1');",
+          "    var h = $(this).html().replace(/Mass (\\d)/g, 'Mass\\u00a0$1')",
+          "      .replace(/(\\d) Da\\b/g, '$1\\u00a0Da').replace(/-/g, '\\u2011');",
           "    var n = 0;",
           "    h = h.replace(/ /g, function(m) { return ++n <= 2 ? m : '\\u00a0'; });",
           "    $(this).html(h);",
@@ -10983,6 +11145,16 @@ render_hits_table <- function(
       columns = which(names(hits_table) %in% adduct_fmt_cols),
       digits = 2
     )
+  }
+
+  # An empty colour map (e.g. no compound selected) colours nothing: given to
+  # DT::styleEqual() it renders a callback that is not valid JavaScript, and
+  # the browser then drops the rest of the update it came with
+  if (!length(concentration_colors)) {
+    concentration_colors <- NULL
+  }
+  if (!length(colors)) {
+    colors <- NULL
   }
 
   # Rows in a light tint of the plots' colours, read in black

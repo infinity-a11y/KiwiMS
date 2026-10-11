@@ -1847,10 +1847,10 @@ hits_page <- function() {
         help_def(
           "Display",
           shiny::strong("Adduct View", .noWS = "after"),
-          ": one row per assignment of a peak, with the columns below. ",
+          ": one row per assignment of a peak. ",
           shiny::strong("Sample View", .noWS = "after"),
-          ": one row per sample and protein–compound pair, with a binding ",
-          "column per declared mass shift and stoichiometry."
+          ": one row per sample, with a binding column per declared mass ",
+          "shift and stoichiometry (see below)."
         ),
         help_def(
           "Color Variable",
@@ -1871,6 +1871,69 @@ hits_page <- function() {
       shiny::p(
         "Click a sample to open it in the Sample View, a protein or compound ",
         "to open it in the Overview, and a concentration to open its kinetics."
+      )
+    ),
+    help_section(
+      "Adduct View",
+      shiny::p(
+        "Every assignment of a peak is a row of its own, with the columns ",
+        "listed under Columns, so a sample with several proteoforms, ",
+        "compounds or complexes takes several rows. A peak that fits several ",
+        "readings ",
+        "is listed once per reading; Preferred tells which one names the peak ",
+        "and counts towards the binding."
+      )
+    ),
+    help_section(
+      "Sample View",
+      shiny::p(
+        "Each sample is a single row. The sample, protein and quality columns ",
+        "are those of the Adduct View; the assignments of its peaks become ",
+        "columns:"
+      ),
+      help_defs(
+        help_def(
+          "Mass n",
+          "Declared mass shift n of the compound (Mass n of the Compounds table)."
+        ),
+        help_def(
+          "Binding (Mass n)xk [%]",
+          "Binding of the complex carrying k molecules of mass shift n: the ",
+          "Binding [%] of its peak."
+        ),
+        help_def(
+          "Total Binding (Mass n) [%]",
+          "Binding of mass shift n over all stoichiometries. Only preferred ",
+          "readings count, so the totals of a sample add up to its Tot. ",
+          "Binding [%]."
+        ),
+        help_def(
+          "*",
+          "A reading that is not the preferred one of its peak, e.g. Binding ",
+          "(Mass 2*)x1 [%]. Its value is listed but not counted in the totals; ",
+          "the preferred reading of the same peak has a column without the ",
+          "asterisk (see Preferred Assignment in the sidebar)."
+        ),
+        help_def(
+          "Proteoforms",
+          "When a sample holds several proteoforms (a protein declared with ",
+          "several masses), the columns of each carry its declared mass: Int. ",
+          "Prot. (21,816.8 Da) [%], Prot. Binding (21,816.8 Da) [%], Binding ",
+          "(21,816.8 Da, Mass 1)x1 [%]. Theor. Prot. [Da] is then left out, as ",
+          "the names give it. Select Columns picks a column for every ",
+          "proteoform at once."
+        ),
+        help_def(
+          "Several compounds",
+          "A sample declaring several compounds lists them in Cmp Name (A, B), ",
+          "and its mass-shift columns carry the compound: Mass 1 (A), Binding ",
+          "(A, Mass 1)x1 [%]. A click on Cmp Name opens the first compound ",
+          "listed."
+        )
+      ),
+      shiny::p(
+        "Mass-shift and binding columns are always shown. Hover over a header ",
+        "for its full name."
       )
     ),
     help_section("Columns", hit_columns()),

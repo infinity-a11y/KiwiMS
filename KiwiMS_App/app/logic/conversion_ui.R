@@ -2284,6 +2284,36 @@ hits_results_ui <- function(ns, hits_summary, units, key = NULL) {
       ns("hits_unified_tab"),
       gsub("\"", "\\\\\"", as.character(shiny::icon("circle-question"))),
       ns("hits_tooltip_bttn")
+    ))),
+    # A switch of the Display rebuilds the whole table. The page is blocked and
+    # the table's spinner shown at the click, not only once the server gets to
+    # the render, until the new table (or an error) arrives; the timeout
+    # releases the page should no render follow.
+    shiny::tags$script(shiny::HTML(sprintf(
+      "
+      $(document)
+        .off('change.kiwiHitsDisplay')
+        .on('change.kiwiHitsDisplay', '#%s input[type=\"radio\"]', function() {
+          var id = '%s';
+          var overlay = document.getElementById('blocking-overlay');
+          var timer;
+          function release() {
+            clearTimeout(timer);
+            overlay.style.display = 'none';
+            $(document).off('shiny:value.kiwiHitsDisplay shiny:error.kiwiHitsDisplay');
+          }
+          overlay.style.display = 'block';
+          $('#' + id).addClass('recalculating').trigger('shiny:outputinvalidated');
+          $(document)
+            .off('shiny:value.kiwiHitsDisplay shiny:error.kiwiHitsDisplay')
+            .on('shiny:value.kiwiHitsDisplay shiny:error.kiwiHitsDisplay', function(e) {
+              if (e.target && e.target.id === id) release();
+            });
+          timer = setTimeout(release, 15000);
+        });
+      ",
+      ns("hits_per_adduct"),
+      ns("hits_unified_tab")
     )))
   )
 }

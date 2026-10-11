@@ -16,7 +16,9 @@ box::use(
     ensure_trace,
     format_scientific,
     hits_bar_cols,
+    hits_base_col,
     hits_col_choices,
+    hits_col_tooltip,
     hits_view_table,
     is_complex_row,
     key_colors,
@@ -547,14 +549,130 @@ test_that("the sample view gives a compound without an adduct no mass columns", 
     samples_table = screened$sample_table
   )
 
-  # One entry per species and compound
-  expect_equal(nrow(per_adduct), 4)
+  # One row for the sample, its compounds listed in the declared order
+  expect_equal(nrow(per_adduct), 1)
+  expect_equal(per_adduct$`Cmp Name`, "A, B")
   # Only A's single mass shift on its one complex - the empty mass of a row
-  # without an adduct is not read as the unused second slot
+  # without an adduct is not read as the unused second slot - and nothing for
+  # B, which has no complex
   expect_false(any(grepl("Mass 2", names(per_adduct))))
-  bound <- per_adduct$`Cmp Name` == "A" & per_adduct$`Theor. Prot. [Da]` == 1010
-  expect_equal(per_adduct$`Binding (Mass 1)x1 [%]`[bound], 10 / 90 * 100)
-  expect_true(all(is.na(per_adduct$`Binding (Mass 1)x1 [%]`[!bound])))
+  expect_false(any(grepl("\\bB\\b", grep("Mass", names(per_adduct), value = TRUE))))
+  expect_equal(per_adduct$`Mass 1 (A)`, 100)
+  expect_equal(
+    per_adduct$`Binding (1,010 Da, A, Mass 1)x1 [%]`,
+    10 / 90 * 100
+  )
+})
+
+test_that("the sample view gives every proteoform its columns, named by mass", {
+  screened <- screen_declared(
+    mass = c(1000, 1010, 1100, 1110),
+    intensity = c(40, 20, 30, 10),
+    protein_masses = c(1000, 1010),
+    compounds = c(A = 100)
+  )
+  view <- add_proteoform_binding(screened$view)
+  per_adduct <- transform_per_adduct(
+    view,
+    proteins_table = screened$protein_table,
+    compounds_table = screened$compound_table,
+    samples_table = screened$sample_table
+  )
+
+  expect_equal(nrow(per_adduct), 1)
+  # The mass in the name replaces Theor. Prot. [Da]
+  expect_false("Theor. Prot. [Da]" %in% names(per_adduct))
+  expect_true(all(
+    c(
+      "Int. Prot. (1,000 Da) [%]",
+      "Int. Prot. (1,010 Da) [%]",
+      "Prot. Binding (1,000 Da) [%]",
+      "Prot. Binding (1,010 Da) [%]"
+    ) %in%
+      names(per_adduct)
+  ))
+  expect_equal(
+    names(per_adduct)[grepl("^(Mass|Binding|Total)", names(per_adduct))],
+    c(
+      "Mass 1",
+      "Binding (1,000 Da, Mass 1)x1 [%]",
+      "Total Binding (1,000 Da, Mass 1) [%]",
+      "Binding (1,010 Da, Mass 1)x1 [%]",
+      "Total Binding (1,010 Da, Mass 1) [%]"
+    )
+  )
+  expect_equal(per_adduct$`Prot. Binding (1,010 Da) [%]`, 10 / 30 * 100)
+  expect_equal(
+    per_adduct$`Total Binding (1,000 Da, Mass 1) [%]` +
+      per_adduct$`Total Binding (1,010 Da, Mass 1) [%]`,
+    per_adduct$`Tot. Binding [%]`
+  )
+  # Pickers, bars and number formats read the plain column
+  expect_equal(
+    hits_base_col(c("Int. Prot. (1,010 Da) [%]", "Binding (1,010 Da, Mass 1)x1 [%]")),
+    c("Int. Prot. [%]", "Binding (1,010 Da, Mass 1)x1 [%]")
+  )
+  dt <- render_hits_table(
+    per_adduct,
+    concentration_colors = NULL,
+    bar_chart = "Int. Prot. [%]",
+    units = character(0)
+  )
+  bar_def <- Filter(
+    function(d) identical(d$className, "bar-chart-col"),
+    dt$x$options$columnDefs
+  )[[1]]
+  # DT turns the names into 0-based positions
+  expect_setequal(
+    unlist(bar_def$targets),
+    match(
+      c("Int. Prot. (1,000 Da) [%]", "Int. Prot. (1,010 Da) [%]"),
+      names(per_adduct)
+    ) -
+      1
+  )
+})
+
+test_that("the sample view stars a reading that is not preferred and leaves it out of the totals", {
+  protein_table <- data.frame(Protein = "P", `Mass 1` = 1000, check.names = FALSE)
+  # 1100 is A's first shift once and, 1 Da off, its second shift twice
+  compound_table <- data.frame(
+    Compound = "A",
+    `Mass 1` = 100,
+    `Mass 2` = 50.5,
+    check.names = FALSE
+  )
+  sample_table <- data.frame(Sample = "S1", Protein = "P", `Compound 1` = "A", check.names = FALSE)
+  result <- suppressMessages(add_hits(
+    make_result("S1", c(1000, 1100), c(60, 40)),
+    sample_table = sample_table,
+    protein_table = protein_table,
+    compound_table = compound_table,
+    peak_tolerance = 3,
+    max_multiples = 2,
+    session = fake_session(),
+    ns = identity
+  ))
+  view <- transform_hits(suppressMessages(
+    summarize_hits(result, sample_table = sample_table)
+  ))
+  per_adduct <- transform_per_adduct(view, protein_table, compound_table, sample_table)
+
+  expect_equal(nrow(per_adduct), 1)
+  expect_equal(per_adduct$`Binding (Mass 1)x1 [%]`, 40)
+  expect_equal(per_adduct$`Binding (Mass 2*)x2 [%]`, 40)
+  expect_equal(per_adduct$`Total Binding (Mass 1) [%]`, 40)
+  expect_equal(per_adduct$`Total Binding (Mass 2) [%]`, 0)
+  expect_match(
+    hits_col_tooltip("Binding (Mass 2*)x2 [%]"),
+    "not the preferred reading"
+  )
+
+  # Without the declaration the shifts are numbered by size
+  undeclared <- transform_per_adduct(view, protein_table, compound_table[0, ], sample_table)
+  expect_equal(undeclared$`Mass 1`, 50.5)
+  expect_equal(undeclared$`Binding (Mass 1*)x2 [%]`, 40)
+  expect_equal(undeclared$`Total Binding (Mass 2) [%]`, 40)
 })
 
 test_that("a proteoform is named in the labels only when there are several", {
@@ -1480,4 +1598,20 @@ test_that("the Table Views draw every percentage as a bar", {
     empty_message = "No compound selected"
   )
   expect_equal(empty$x$options$language$emptyTable, "No compound selected")
+})
+
+test_that("an empty colour map leaves the rows uncoloured", {
+  # Nothing picked in the Overview: the colours come as an empty map, which
+  # DT::styleEqual() would turn into a callback the browser cannot parse
+  tbl <- data.frame(`Sample ID` = character(0), `Cmp Name` = character(0), check.names = FALSE)
+  for (cv in c("Compounds", "Samples")) {
+    dt <- render_hits_view(
+      tbl,
+      colors = stats::setNames(character(0), character(0)),
+      color_variable = cv,
+      units = character(),
+      empty_message = "No compound selected"
+    )
+    expect_false(grepl("''", dt$x$options$rowCallback, fixed = TRUE))
+  }
 })

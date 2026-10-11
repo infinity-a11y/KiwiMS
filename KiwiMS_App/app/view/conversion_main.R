@@ -40,6 +40,7 @@ box::use(
       render_hits_table,
       render_hits_view,
       filter_hits_table,
+      hits_base_col,
       hits_col_choices,
       hits_view_table,
       sort_hits_table,
@@ -765,6 +766,9 @@ server <- function(
 
     #### Tab info text ----
     output$declaration_info_ui <- shiny::renderUI({
+      # The Relative Binding tabs share the "tabs" id; checked first, so this
+      # does not follow them while the results are shown
+      shiny::req(is.null(conversion_sidebar_vars$result_list()))
       shiny::req(input$tabs %in% c("Proteins", "Compounds", "Samples"))
 
       if (input$tabs == "Proteins") {
@@ -2294,7 +2298,17 @@ server <- function(
 
     render_result_interface <- function(key, ui) {
       # The declaration interface and the result panels are mutually
-      # exclusive; clearing it here also keeps its tab ids unique.
+      # exclusive; clearing it here also keeps its tab ids unique. It is
+      # emptied in the browser at once too: the emptied output arrives with
+      # the panel, which the browser can insert first.
+      shinyjs::runjs(sprintf(
+        paste0(
+          "(function(){var el=document.getElementById('%s');",
+          "if(el && el.children.length){Shiny.unbindAll(el); el.innerHTML='';}",
+          "})();"
+        ),
+        ns("conversion_ui")
+      ))
       output$conversion_ui <- shiny::renderUI(NULL)
       output[[paste0("iface_", key)]] <- shiny::renderUI(ui)
       iface_state$built <- unique(c(iface_state$built, key))
@@ -2306,6 +2320,20 @@ server <- function(
       iface_state$observers <- list()
       iface_state$built <- character(0)
       iface_state$overview_choices <- NULL
+
+      # Empty the panels in the browser at once. The emptied outputs below
+      # arrive with the flush, together with the declaration interface a reset
+      # renders next, which the browser can insert first - its inputs would
+      # meet the panels' (both have "tabs") and the old content would linger
+      # while it is built.
+      shinyjs::runjs(sprintf(
+        paste0(
+          "(function(){var s=document.getElementById('%s'); if(!s) return;",
+          "s.querySelectorAll('.result-interface-panel > .shiny-html-output')",
+          ".forEach(function(el){Shiny.unbindAll(el); el.innerHTML='';});})();"
+        ),
+        ns("result_interface_stack")
+      ))
       lapply(iface_keys, function(key) {
         output[[paste0("iface_", key)]] <- shiny::renderUI(NULL)
       })
@@ -6038,31 +6066,10 @@ server <- function(
               )
             }))
 
-            track_iface_observer(shiny::observe({
-              rl <- conversion_sidebar_vars$result_list()
-              shiny::req(rl, rl$hits_summary)
-              has_well <- "Well" %in%
-                names(rl$hits_summary) &&
-                any(
-                  !is.na(rl$hits_summary$Well) &
-                    nzchar(trimws(as.character(rl$hits_summary$Well)))
-                )
-              if (has_well) {
-                bslib::nav_show(
-                  "summary_tabs",
-                  "Batch Control",
-                  session = session
-                )
-              } else {
-                bslib::nav_hide(
-                  "summary_tabs",
-                  "Batch Control",
-                  session = session
-                )
-              }
-            }))
-
-            set_selected_tab("Protocol", session, id = "summary_tabs")
+            # The Batch Control tab is built only when the samples have wells
+            # (summary_results_ui()) and Protocol is the first tab, so the
+            # panel needs no tab commands - sent with the panel's first render
+            # they reach the browser before the tabs exist.
           } else if (iface == "hits") {
             #### Render unified Hits interface ----
             render_result_interface(
@@ -6076,9 +6083,33 @@ server <- function(
               hits_col_choices(hits_summary, units)$selected
             )
 
+            # Sample View of the picked samples and compounds, one row per
+            # sample (transform_per_adduct()). Filtered before the rows are
+            # combined, so Cmp Name and the compound columns follow the
+            # compound selection.
+            sample_view_table <- function(compounds = NULL, samples = NULL) {
+              transform_per_adduct(
+                filter_hits_table(
+                  sort_hits_table(hits_summary, units),
+                  selected_cols = names(hits_summary),
+                  compounds = compounds,
+                  samples = samples,
+                  units = units
+                ),
+                proteins_table = protein_table_data(),
+                compounds_table = compound_table_data(),
+                samples_table = declaration_vars$sample_table
+              )
+            }
+
+            # The table has its own colour settings: the Relative Binding
+            # colour kick (render_trigger) is not one of its events, so it is
+            # not rebuilt while the other panels are used. The Display is one
+            # of them, so a switch always renders (and releases the overlay
+            # its click put up, see hits_results_ui()).
             hits_tab_trigger <- shiny::reactive({
               list(
-                render_trigger(),
+                input$hits_per_adduct,
                 input$hits_color_variable,
                 hits_col_selection(),
                 input$hits_binding_chart,
@@ -6096,39 +6127,27 @@ server <- function(
                 input$hits_color_variable
               )
               if (isTRUE(input$hits_per_adduct == "Sample View")) {
-                hits_table <- transform_per_adduct(
-                  sort_hits_table(hits_summary, units),
-                  proteins_table = protein_table_data(),
-                  compounds_table = compound_table_data(),
-                  samples_table = declaration_vars$sample_table
+                hits_table <- sample_view_table(
+                  compounds = input$hits_tab_compound_select,
+                  samples = input$hits_tab_sample_select
                 )
-                adduct_binding_cols <- grep(
-                  "^(Binding|Total Binding) \\(",
-                  names(hits_table),
-                  value = TRUE
-                )
-                adduct_mass_cols <- grep(
-                  "^Mass ",
-                  names(hits_table),
-                  value = TRUE
-                )
-                valid_adduct_cols <- intersect(
-                  hits_col_selection(),
-                  names(hits_table)
-                )
+                # Binding and mass-shift columns are always shown; a picked
+                # column brings the columns of all proteoforms
                 always_cols <- c(
                   "Tot. Binding [%]",
-                  adduct_binding_cols,
-                  adduct_mass_cols
+                  grep(
+                    "^(Binding|Total Binding) \\(|^Mass ",
+                    names(hits_table),
+                    value = TRUE
+                  )
                 )
-                all_selected <- names(hits_table)[
-                  names(hits_table) %in% union(valid_adduct_cols, always_cols)
-                ]
                 hits_table <- filter_hits_table(
                   hits_table,
-                  selected_cols = all_selected,
-                  compounds = input$hits_tab_compound_select,
-                  samples = input$hits_tab_sample_select,
+                  selected_cols = names(hits_table)[
+                    names(hits_table) %in% always_cols |
+                      hits_base_col(names(hits_table)) %in%
+                        hits_col_selection()
+                  ],
                   units = units
                 )
               } else {
@@ -6221,12 +6240,10 @@ server <- function(
                 )
 
                 if (input$hits_per_adduct == "Sample View") {
-                  adduct_cols <- names(transform_per_adduct(
-                    hits_summary,
-                    proteins_table = protein_table_data(),
-                    compounds_table = compound_table_data(),
-                    samples_table = declaration_vars$sample_table
-                  ))
+                  # A proteoform's columns are picked by their plain name
+                  adduct_cols <- unique(hits_base_col(names(
+                    sample_view_table()
+                  )))
                   adduct_binding_cols <- grep(
                     "^(Binding|Total Binding) \\(",
                     adduct_cols,
@@ -6242,6 +6259,7 @@ server <- function(
                       c(
                         "Theor. Prot. [Da]",
                         "Int. Prot. [%]",
+                        "Prot. Binding [%]",
                         "Theor. Cmp [Da]",
                         "Bind. Stoich.",
                         "Binding [%]",
@@ -6308,8 +6326,22 @@ server <- function(
                     }
                     as.character(data[[col]][cell_clicked$row])
                   }
+                  # A Sample View row lists every compound of its sample
+                  # ("A, B"); it opens with the first one
+                  first_compound <- function(value) {
+                    known <- unique(stats::na.omit(hits_summary$`Cmp Name`))
+                    if (is.na(value) || value %in% known) {
+                      return(value)
+                    }
+                    listed <- known[startsWith(value, paste0(known, ", "))]
+                    if (length(listed)) {
+                      listed[which.max(nchar(listed))]
+                    } else {
+                      value
+                    }
+                  }
                   row_protein <- row_value("Protein")
-                  row_compound <- row_value("Cmp Name")
+                  row_compound <- first_compound(row_value("Cmp Name"))
 
                   select_interface <- function(value) {
                     shinyjs::runjs(sprintf(
@@ -6334,7 +6366,7 @@ server <- function(
                     navigate_overview(as.character(cell_clicked$value))
                     select_interface(2)
                   } else if (length(cmp_col) && cell_clicked$col == cmp_col) {
-                    compound <- as.character(cell_clicked$value)
+                    compound <- row_compound
                     protein <- row_protein
                     # Without the row's protein, the first protein the
                     # compound was declared with
@@ -6844,19 +6876,16 @@ server <- function(
     ## Events for conversion result interface ----
 
     ### Re-render the Relative Binding views on another colour variable ----
+    # Only on a change of the variable itself. A built panel stays rendered
+    # while other interfaces or tabs are shown, so switching the Results Menu
+    # must not trigger it; a newly built panel renders on its own, and the
+    # variable arriving with it (or changing from the previous build's) counts
+    # as a change.
     safe_observe(
-      event_expr = list(
-        input$color_variable,
-        conversion_sidebar_vars$analysis_select(),
-        conversion_sidebar_vars$run_analysis()
-      ),
+      event_expr = input$color_variable,
       observer_name = "Color Variable Change",
       handler_fn = function() {
-        shiny::req(
-          conversion_vars$hits_summary,
-          input$color_variable,
-          conversion_sidebar_vars$analysis_select() == 2
-        )
+        shiny::req(conversion_vars$hits_summary, input$color_variable)
         render_trigger(render_trigger() + 1)
       }
     )
