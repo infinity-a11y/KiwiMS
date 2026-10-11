@@ -13,11 +13,16 @@ box::use(
     close_log_block,
     complex_hits,
     compound_mass_entries,
+    ensure_trace,
     format_scientific,
+    hits_bar_cols,
+    hits_col_choices,
+    hits_view_table,
     is_complex_row,
     key_colors,
     make_kobs_plot,
     mass_ambiguities,
+    mass_shift_card,
     mass_shift_label,
     multiple_spectra,
     nest_log_block,
@@ -30,7 +35,9 @@ box::use(
     overview_subset,
     predict_peaks,
     proteoform_binding,
+    read_uploaded_file,
     render_hits_table,
+    render_hits_view,
     select_complex_kinetics,
     summarize_hits,
     transform_hits,
@@ -1149,6 +1156,28 @@ test_that("the compound mass shift card names the compound once there are severa
   expect_equal(nrow(compound_mass_entries(sub, character(0), run$compound_table)), 0)
 })
 
+test_that("the mass shift hover list stops after its lines and counts the rest", {
+  entries <- data.frame(
+    label = sprintf("%d.0 Da", 1:40),
+    present = rep(c(TRUE, FALSE), each = 20),
+    count = rep(c(2L, 0L), each = 20)
+  )
+  html <- as.character(mass_shift_card(entries, max_tooltip_lines = 10))
+
+  expect_match(html, "37 more", fixed = TRUE)
+  expect_match(html, "(20 without peak)", fixed = TRUE)
+  expect_match(html, "13.0 Da", fixed = TRUE)
+  expect_false(grepl("14.0 Da", html, fixed = TRUE))
+  expect_match(html, "27 more not listed", fixed = TRUE)
+  # The legend for greyed lines only shows with one of them listed
+  expect_false(grepl("Grey:", html, fixed = TRUE))
+  expect_false(grepl("overflow-y", html, fixed = TRUE))
+
+  all_listed <- as.character(mass_shift_card(entries, max_tooltip_lines = 50))
+  expect_false(grepl("not listed", all_listed, fixed = TRUE))
+  expect_match(all_listed, "Grey:", fixed = TRUE)
+})
+
 test_that("the Overview distribution plots the picked complexes with binding", {
   view <- overview_run()$view
   plot <- function(protein, compounds, variable = "Compounds") {
@@ -1174,6 +1203,90 @@ test_that("the Overview distribution plots the picked complexes with binding", {
   expect_equal(overview_distribution_note(view, "P", "B"), "No binding events")
   expect_equal(overview_distribution_note(view, "Q", "A"), "No protein or complex peak found")
   expect_equal(overview_distribution_note(view, "P", character(0)), "No compound selected")
+})
+
+test_that("the Overview distribution follows a given sample order", {
+  view <- overview_run()$view
+  bars_x <- function(order) {
+    built <- plotly::plotly_build(overview_compound_distribution(
+      view, "P", "A",
+      color_variable = "Samples",
+      truncate_names = FALSE,
+      distribution_scale = "Maximum",
+      sample_order = order
+    ))
+    axis <- built$x$layout$xaxis$categoryarray
+    if (length(axis)) as.character(axis) else unique(unlist(lapply(
+      Filter(function(t) identical(t$type, "bar"), built$x$data),
+      function(t) as.character(t$x)
+    )))
+  }
+  # By binding without an order, as given with one
+  expect_equal(bars_x(NULL), c("S1", "S5", "S7"))
+  expect_equal(bars_x(c("S7", "S1", "S5")), c("S7", "S1", "S5"))
+  # Samples the order does not name keep their place after it
+  expect_equal(bars_x(c("S5")), c("S5", "S1", "S7"))
+})
+
+test_that("the Hits table offers every colour variable", {
+  hits <- overview_run()$view
+  html <- as.character(hits_results_ui(identity, hits, units = character()))
+  for (v in c("Protein", "Compound", "Sample", "None")) {
+    expect_match(html, paste0(">", v, "<"), fixed = TRUE)
+  }
+})
+
+test_that("the time view takes times from the sample table and keeps replicates apart", {
+  # Names say nothing about the time; the declared table does
+  samples <- c("A", "B", "C", "D")
+  spectrum <- function(shift) {
+    mass <- data.frame(mass = seq(1000, 1200, by = 1), intensity = 1)
+    mass$intensity[mass$mass == 1100 + shift] <- 100
+    list(mass = mass, highlight_peaks = mass[mass$mass == 1100 + shift, ])
+  }
+  plot_data <- stats::setNames(lapply(c(0, 2, 4, 6), spectrum), samples)
+  hits <- data.frame(
+    `Sample ID` = samples,
+    Replicate = c("R1", "R2", "R1", "R2"),
+    `Time [h]` = c(1, 1, 4, 4),
+    `Meas. Prot. [Da]` = NA_real_,
+    check.names = FALSE
+  )
+  units <- c(Concentration = "Conc. [µM]", Time = "Time [h]")
+
+  for (cubic in c(TRUE, FALSE)) {
+    built <- plotly::plotly_build(multiple_spectra(
+      NULL,
+      samples,
+      cubic = cubic,
+      time = TRUE,
+      hits_summary = hits,
+      units = units,
+      plot_data = plot_data
+    ))$x$data
+    lines <- Filter(function(t) identical(t$mode, "lines"), built)
+
+    # Every replicate its own spectrum, named by its time point
+    expect_length(lines, 4)
+    expect_setequal(vapply(lines, `[[`, "", "name"), c("1", "4"))
+    # One legend row per time point
+    expect_equal(sum(vapply(lines, function(t) isTRUE(t$showlegend), NA)), 2)
+    hovers <- vapply(lines, `[[`, "", "hovertemplate")
+    expect_true(any(grepl("Time: %{fullData.name} h (R2)", hovers, fixed = TRUE)))
+  }
+
+  # Cubic: the replicates of a time side by side, closer than the next time
+  built <- plotly::plotly_build(multiple_spectra(
+    NULL, samples, cubic = TRUE, time = TRUE,
+    hits_summary = hits, units = units, plot_data = plot_data
+  ))$x$data
+  lines <- Filter(function(t) identical(t$mode, "lines"), built)
+  z <- vapply(lines, function(t) as.numeric(t$z)[1], 0)
+  names(z) <- paste(vapply(lines, `[[`, "", "name"), seq_along(z))
+  within <- abs(diff(z[1:2]))
+  between <- abs(mean(z[3:4]) - mean(z[1:2]))
+  expect_gt(within, 0)
+  expect_lt(within, between / 2)
 })
 
 test_that("spectra without any assigned peak are drawn", {
@@ -1243,4 +1356,128 @@ test_that("the binding interface opens on the Overview", {
     regexpr("overview_protein_picker.*?</select>", html)
   )
   expect_match(protein_picker, "value=\"Q\" data-subtext=\"No hits\" selected=\"selected\">", fixed = TRUE)
+})
+
+test_that("uploaded tables without a trailing newline read without warnings", {
+  txt <- tempfile(fileext = ".txt")
+  csv <- tempfile(fileext = ".csv")
+  on.exit(unlink(c(txt, csv)))
+  writeChar("Protein\tMass\nP1\t25000", txt, eos = NULL)
+  writeChar("Compound;Mass\nC1;350.2", csv, eos = NULL)
+
+  expect_no_warning(df <- read_uploaded_file(txt, "txt"))
+  expect_equal(dim(df), c(2L, 2L))
+  expect_equal(df[2, 2], "25000")
+
+  expect_no_warning(df <- read_uploaded_file(csv, "csv"))
+  expect_equal(dim(df), c(2L, 2L))
+  expect_equal(df[2, 1], "C1")
+})
+
+test_that("plots without any trace build without plotly's trace type warning", {
+  message_plot <- plotly::plot_ly() |>
+    plotly::layout(annotations = list(list(text = "Nothing to show")))
+  built <- expect_no_warning(plotly::plotly_build(ensure_trace(message_plot)))
+  expect_length(built$x$data, 1)
+  expect_equal(built$x$data[[1]]$type, "scatter")
+  expect_false(built$x$data[[1]]$showlegend)
+
+  # Plots that already carry traces are left alone
+  drawn <- plotly::plot_ly() |>
+    plotly::add_markers(x = 1:3, y = 1:3, name = "a") |>
+    plotly::add_markers(x = 1:3, y = 3:1, name = "b")
+  expect_identical(ensure_trace(drawn), drawn)
+  typed <- plotly::plot_ly(x = 1, y = 1, type = "bar")
+  expect_identical(ensure_trace(typed), typed)
+})
+
+test_that("the Table Views are subsets of the hits table", {
+  view <- overview_run()$view
+  units <- character()
+  cols <- hits_col_choices(view, units)
+
+  # The identifying columns and the total binding are always shown
+  fixed <- c("Sample ID", "Protein", "Cmp Name", "truncSample_ID")
+  expect_false(any(c(fixed, "Tot. Binding [%]") %in% cols$choices))
+  expect_true(all(cols$selected %in% cols$choices))
+  expect_false(any(c("Well", "Meas. Prot. [Da]") %in% cols$selected))
+
+  full <- hits_view_table(view, cols$selected, units)
+  rows <- function(keep) {
+    out <- full[keep, ]
+    rownames(out) <- NULL
+    out
+  }
+  expect_equal(
+    match("Tot. Binding [%]", names(full)),
+    match("Binding [%]", names(full)) + 1
+  )
+  expect_named(
+    hits_view_table(view, NULL, units),
+    c(fixed, "Tot. Binding [%]")
+  )
+
+  # Overview: the rows of the protein with the picked compounds
+  overview <- hits_view_table(
+    overview_subset(view, "P", "A"),
+    cols$selected,
+    units
+  )
+  expect_gt(nrow(overview), 0)
+  expect_equal(
+    overview,
+    rows(full$Protein == "P" & full$`Cmp Name` %in% "A")
+  )
+
+  # Sample View: the rows of the sample
+  sample <- hits_view_table(view, cols$selected, units, samples = "S1")
+  expect_equal(sample, rows(full$`Sample ID` == "S1"))
+})
+
+test_that("the Table Views draw every percentage as a bar", {
+  view <- overview_run()$view
+  tbl <- hits_view_table(
+    view,
+    hits_col_choices(view, character())$choices,
+    character()
+  )
+  dt <- render_hits_view(
+    tbl,
+    colors = key_colors(color_key(view), "Compounds", c("A", "B")),
+    color_variable = "Compounds",
+    units = character()
+  )
+
+  expect_equal(dt$x$options$dom, "t")
+  expect_null(dt$x$options$language)
+  bars <- Filter(
+    function(d) identical(d$className, "bar-chart-col"),
+    dt$x$options$columnDefs
+  )
+  expect_length(bars, 1)
+  # DT turns the target names into 0-based column indices
+  expect_setequal(
+    names(tbl)[bars[[1]]$targets + 1],
+    intersect(hits_bar_cols(tbl), names(tbl))
+  )
+
+  # Short sample IDs on display only
+  tbl$truncSample_ID <- paste0(tbl$`Sample ID`, "_short")
+  short <- render_hits_view(
+    tbl,
+    colors = NULL,
+    color_variable = "Samples",
+    truncate_names = TRUE,
+    units = character()
+  )
+  expect_true(all(endsWith(short$x$data$`Sample ID`, "_short")))
+
+  empty <- render_hits_view(
+    tbl[0, ],
+    colors = NULL,
+    color_variable = "Compounds",
+    units = character(),
+    empty_message = "No compound selected"
+  )
+  expect_equal(empty$x$options$language$emptyTable, "No compound selected")
 })

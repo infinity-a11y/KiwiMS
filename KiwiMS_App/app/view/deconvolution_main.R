@@ -32,7 +32,8 @@ box::use(
   app /
     logic /
     deconvolution_functions[
-      add_metrics_table,
+      add_side_tables,
+      decon_param_rows,
       plate_heatmap,
       plate_highlight,
       plate_layout,
@@ -40,6 +41,7 @@ box::use(
       read_decon_metrics,
       read_decon_peak_counts,
       spectrum_plot,
+      summarise_decon_metrics,
       decon_progress_count,
       decon_is_complete,
       decon_failed_samples,
@@ -57,6 +59,7 @@ box::use(
   app / logic / logging[write_log, get_log, get_session_prefix],
   app / logic / user_settings[update_user_setting, read_user_settings],
   app / logic / conversion_functions[read_decon_metadata, multiple_spectra],
+  app / logic / palette[sample_colors],
   app /
     logic /
     deconvolution_ui[
@@ -146,7 +149,7 @@ server <- function(
       results_last_check = 0,
       count = 0,
       rep_count = 0,
-      # Well Plate: tile layout of the run (plate_layout()) and the detected
+      # Sample Distribution: tile layout of the run (plate_layout()) and the detected
       # peak count of every sample done so far
       plate = NULL,
       peak_counts = data.frame(sample = character(0), n_peaks = integer(0)),
@@ -929,7 +932,7 @@ server <- function(
 
     #### refresh_results ----
     # Reads which samples of the run are done or failed, and the number of
-    # peaks detected in each done one, for the Well Plate and the sample
+    # peaks detected in each done one, for the Sample Distribution and the sample
     # picker. Picker values are sample names in every mode. With `final` (the
     # run is over) and more than one sample deconvoluted, "Show All" heads the
     # picker and is selected.
@@ -973,6 +976,34 @@ server <- function(
         result_files_sel(sel)
         render_result_picker(choices, sel)
       })
+    }
+
+    #### collapse_decon_sidebar ----
+    # Closes the deconvolution sidebar for the running interface and hides its
+    # toggle until Reset brings both back. It closes rather than toggles (a
+    # click on the first collapse toggle of the page, as before, reopened a
+    # sidebar that was collapsed already), and it targets this page's sidebar
+    # by its class, so calling it again is harmless. The toggle is hidden only
+    # after the closing transition: bslib finalises the state when the
+    # toggle's icon finishes its transition, which a hidden icon never does.
+    collapse_decon_sidebar <- function() {
+      runjs(paste0(
+        "(function() {",
+        "  var aside = document.querySelector('aside.deconvolution-sidebar');",
+        "  var layout = aside ? aside.closest('.bslib-sidebar-layout') : null;",
+        "  if (!layout) return;",
+        "  var toggle = layout.querySelector(':scope > .collapse-toggle');",
+        "  if (!layout.classList.contains('sidebar-collapsed')) {",
+        "    var sb = window.bslib && window.bslib.Sidebar &&",
+        "      window.bslib.Sidebar.getInstance(layout);",
+        "    if (sb) sb.toggle('close');",
+        "    else if (toggle) toggle.click();",
+        "  }",
+        "  if (toggle) {",
+        "    setTimeout(function() { toggle.style.display = 'none'; }, 500);",
+        "  }",
+        "})();"
+      ))
     }
 
     #### reset_progress ----
@@ -1426,6 +1457,28 @@ server <- function(
             shortcut(key("Ctrl"), " + ", key("A"), " All / None")
           )
         )
+      } else if (
+        !is_raw_itself &&
+          deconvolution_sidebar_vars$selected() == "folder" &&
+          isTRUE(deconvolution_sidebar_vars$use_config()) &&
+          length(config_file())
+      ) {
+        # Config decides the targets: list the queued files read-only
+        raw_dirs <- list_ms_inputs(dir_sel)
+        queued <- basename(raw_dirs)[
+          ms_sample_in(raw_dirs, config_file()[["Sample"]])
+        ]
+        if (length(queued) > 0) {
+          picker <- shiny$div(
+            class = "kiwi-file-selector kiwi-file-selector-readonly",
+            shiny$div(
+              class = "kiwi-file-list",
+              lapply(queued, function(f) {
+                shiny$div(class = "kiwi-file-item", f)
+              })
+            )
+          )
+        }
       }
 
       return(picker)
@@ -1498,13 +1551,6 @@ server <- function(
         "document.getElementById('deconvolution_main-deconvo",
         "lute_start').style.animation = 'none';"
       ))
-      delay(
-        500,
-        runjs(paste0(
-          "document.querySelector('.bslib-sidebar-layout.sidebar-coll",
-          "apsed>.collapse-toggle').style.display = 'none';"
-        ))
-      )
 
       ##### Deconvolution init and mode ----
       if (run_selected == "folder") {
@@ -1611,7 +1657,7 @@ server <- function(
         reactVars$stale_unidec_output <- character(0)
       }
 
-      # Well Plate: the queued samples, on the config's wells when it gives
+      # Sample Distribution: the queued samples, on the config's wells when it gives
       # every one of them a well, in queue order otherwise (plate_layout())
       reactVars$sample_names <- ms_sample_base(basename(raw_dirs))
       run_wells <- if (
@@ -1674,6 +1720,8 @@ server <- function(
         dirs = raw_dirs,
         selected = run_selected
       )
+      # The same for every spectrum of this run (Spectrum card's Parameters)
+      run_params <- config$params
 
       # Place config parameter in temporary file
       config_path <- file.path(temp, "config.rds")
@@ -1947,7 +1995,7 @@ server <- function(
         })
       })
 
-      #### Results tracking observer for picker and Well Plate ----
+      #### Results tracking observer for picker and Sample Distribution ----
       if (run_selected == "folder") {
         reactVars$results_observer <- shiny$observe({
           shiny$invalidateLater(10000)
@@ -2082,8 +2130,11 @@ server <- function(
               # Set reactive status variable "is_running" to FALSE
               reactVars$is_running <- FALSE
 
-              # Final picker (with "Show All") and Well Plate state
+              # Final picker (with "Show All") and Sample Distribution state
               refresh_results(final = TRUE)
+
+              # The sidebar stays hidden until Reset, however the run went
+              collapse_decon_sidebar()
 
               # update "Abort" button to "Reset"
               shiny$updateActionButton(
@@ -2167,17 +2218,19 @@ server <- function(
         )
       }
 
-      #### Well Plate click observer ----
+      #### Sample Distribution click observer ----
       # A click on a done or failed sample's tile selects it, in the picker
       # too. The plate has its own plotly source, so clicks on the spectrum
-      # never land here. event_data() warns until the plate is first drawn and
-      # its click event registered, which is expected right after the start.
+      # never land here. Clicks are only read once the plate has been drawn:
+      # event_data() on a source no rendered plot has registered yet warns
+      # (deferred to the end of the flush, so it cannot be suppressed here).
+      # A reactiveVal, unlike reactVars$heatmap_ready, triggers this once
+      # rather than on every redraw, which would replay the last click.
+      plate_shown <- shiny$reactiveVal(FALSE)
       set_run_observer("heatmap_click", shiny$observeEvent(
-        suppressWarnings(event_data("plotly_click", source = "decon_plate")),
+        if (plate_shown()) event_data("plotly_click", source = "decon_plate"),
         {
-          click <- suppressWarnings(
-            event_data("plotly_click", source = "decon_plate")
-          )
+          click <- event_data("plotly_click", source = "decon_plate")
           shiny$req(is.numeric(click$x), is.numeric(click$y))
 
           clicked_sample <- plate_sample_at(reactVars$plate, click$x, click$y)
@@ -2204,7 +2257,7 @@ server <- function(
         }
       ))
 
-      #### Well Plate selection highlight observer ----
+      #### Sample Distribution selection highlight observer ----
       # Frames the selected sample's tile; "Show All" clears the frame
       set_run_observer("heatmap_highlight", shiny$observe({
         sel <- result_files_sel()
@@ -2222,8 +2275,8 @@ server <- function(
       }))
 
       #### Switch to running UI ----
-      # Toggle to hide sidebar
-      runjs("document.querySelector('button.collapse-toggle').click();")
+      # Hide the sidebar for the run
+      collapse_decon_sidebar()
       output$deconvolution_ui <- shiny$renderUI({
         deconvolution_results_ui(ns)
       })
@@ -2264,25 +2317,99 @@ server <- function(
         )
       })
 
+      show_all_metrics <- shiny$reactive({
+        samples <- reactVars$show_all_samples
+        shiny$req(length(samples) > 1)
+        summarise_decon_metrics(run_db_path(), samples)
+      })
+
+      # Show Symbols is isolated: flipping it toggles the marker traces on the
+      # figure already on screen (observer below) instead of rebuilding it.
+      # Read here, a rebuild for any other reason starts from the current view.
+      show_peak_symbols <- function() {
+        !isFALSE(shiny$isolate(input$spectrum_symbols))
+      }
+
+      # The peak markers are the figure's only marker traces (the lines are
+      # "lines", the metrics annotations), single sample and "Show All" alike
+      set_run_observer("spectrum_symbols", shiny$observeEvent(
+        input$spectrum_symbols,
+        {
+          runjs(sprintf(
+            paste0(
+              "var gd = document.getElementById('%s');",
+              "if (gd && gd.data) {",
+              "  var idx = [];",
+              "  gd.data.forEach(function(t, i) {",
+              "    if (t.mode === 'markers') idx.push(i);",
+              "  });",
+              "  if (idx.length) Plotly.restyle(gd, {visible: %s}, idx);",
+              "}"
+            ),
+            ns("spectrum"),
+            tolower(isTRUE(input$spectrum_symbols))
+          ))
+        },
+        ignoreInit = TRUE
+      ))
+
       all_spectra_plot <- function(theme = "light") {
         data <- show_all_data()
         data <- data[!vapply(data, is.null, logical(1))]
         shiny$req(length(data) > 0)
         samples <- names(data)
 
-        multiple_spectra(
+        plot <- multiple_spectra(
           results_list = NULL,
           samples = samples,
           cubic = !identical(input$spectrum_kind, "Planar"),
+          # Same rule as the conversion results: the categorical colours
+          # while they suffice, the sample ramp beyond
           color_cmp = stats::setNames(
-            substr(viridisLite::viridis(length(samples), end = 0.9), 1, 7),
+            sample_colors(length(samples), theme),
             samples
           ),
           color_variable = "Samples",
-          # Fewer points per trace the more samples share the figure
-          max_points = max(500, min(4000, floor(200000 / length(samples)))),
+          # (points per spectrum: multiple_spectra()'s budget for the figure)
+          # A legend this long would run into the metrics; hover and the
+          # sample axis still name the spectra
+          legend_show = length(samples) <= 12,
+          symbols_show = show_peak_symbols(),
           theme = theme,
           plot_data = data
+        )
+
+        blocks <- side_blocks(
+          function() show_all_metrics(),
+          sprintf("Metrics (mean ± SD, n = %d)", length(samples))
+        )
+        if (length(blocks) == 0) {
+          return(plot)
+        }
+        # No sample legend beside the tables: with sample names this long and
+        # the card this narrow, it ran into them on the right and took most of
+        # the height above the plot. The hover names every spectrum (and the
+        # cubic view's sample axis does when the names are short). Set on the
+        # built figure directly; layout() would make add_side_tables() build
+        # all of it again.
+        plot$x$layout$showlegend <- FALSE
+        add_side_tables(plot, blocks, theme = theme)
+      }
+
+      # side_blocks(): The tables beside the spectrum, as switched on ----
+      # The metrics (`metrics_fn` is only called while they are shown, as it
+      # reads the database) and the run's deconvolution settings.
+      side_blocks <- function(metrics_fn, metrics_caption = "Metrics") {
+        Filter(
+          Negate(is.null),
+          list(
+            if (!isFALSE(input$spectrum_metrics)) {
+              list(rows = metrics_fn(), caption = metrics_caption)
+            },
+            if (!isFALSE(input$spectrum_params)) {
+              list(rows = decon_param_rows(run_params), caption = "Parameters")
+            }
+          )
         )
       }
 
@@ -2313,6 +2440,7 @@ server <- function(
             raw = is_raw_toggle,
             show_peak_labels = show_labels,
             show_mass_diff = FALSE,
+            show_peak_symbols = show_peak_symbols(),
             theme = theme
           )
         } else if (dir.exists(result_dir)) {
@@ -2321,14 +2449,17 @@ server <- function(
             raw = is_raw_toggle,
             show_peak_labels = show_labels,
             show_mass_diff = FALSE,
+            show_peak_symbols = show_peak_symbols(),
             theme = theme
           )
         }
 
-        if (!is.null(plot) && !isFALSE(input$spectrum_metrics)) {
-          plot <- add_metrics_table(
+        if (!is.null(plot)) {
+          plot <- add_side_tables(
             plot,
-            read_decon_metrics(db_sp, sel_base, result_dir),
+            side_blocks(function() {
+              read_decon_metrics(db_sp, sel_base, result_dir)
+            }),
             theme = theme
           )
         }
@@ -2482,12 +2613,17 @@ server <- function(
         )
       })
 
-      ### Render Well Plate ----
-      # Drawn from the start, every sample of the run pending, and redrawn as
-      # samples finish (peak counts) or fail (crosses)
+      ### Render Sample Distribution ----
+      # Drawn once the first sample is done or failed, and redrawn as samples
+      # finish (peak counts) or fail (crosses). An all-pending plate has
+      # nothing to show or click on.
       output$heatmap <- renderPlotly({
         plate <- reactVars$plate
-        shiny$req(plate)
+        shiny$req(
+          plate,
+          nrow(reactVars$peak_counts) > 0 ||
+            any(plate$tiles$sample %in% reactVars$failed_samples)
+        )
         waiter_show(id = ns("heatmap"), html = spin_wave())
         on.exit(waiter_hide(id = ns("heatmap")))
 
@@ -2499,8 +2635,10 @@ server <- function(
         ) |>
           event_register("plotly_click")
 
-        # Signal the highlight observer to re-apply the selection frame
+        # Signal the highlight observer to re-apply the selection frame, and
+        # the click observer that the click event is registered now
         reactVars$heatmap_ready <- shiny$isolate(reactVars$heatmap_ready) + 1L
+        plate_shown(TRUE)
 
         heatmap
       })

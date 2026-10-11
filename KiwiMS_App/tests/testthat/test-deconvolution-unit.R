@@ -13,14 +13,22 @@ box::use(
     decon_samples_with_state,
     decon_worker_count,
     deconvolute,
-    add_metrics_table,
+    add_side_tables,
+    bin_spectrum,
+    decon_param_rows,
+    downsample_spectrum,
     generate_decon_rslt,
     plate_heatmap,
+    process_plot_data,
     plate_highlight,
     plate_layout,
+    plate_format,
     plate_sample_at,
+    parse_wells,
     read_decon_metrics,
-    read_decon_peak_counts
+    read_decon_peak_counts,
+    spectrum_plot,
+    summarise_decon_metrics
   ],
 )
 
@@ -296,16 +304,49 @@ test_that("WAL cleanup leaves the database readable and the sidecars gone", {
   expect_equal(nrow(kiwims_db_query(db, "SELECT * FROM peaks")), 1L)
 })
 
-test_that("plate_layout uses the config wells when every sample has one", {
+test_that("parse_wells normalises well IDs and drops anything off the plate", {
+  pos <- parse_wells(c("A1", "a01", " B012 ", "P24", "Q1", "A25", "X", NA))
+  expect_equal(pos$well_id[1:4], c("A1", "A1", "B12", "P24"))
+  expect_equal(pos$row, c(1L, 1L, 2L, 16L, NA, NA, NA, NA))
+  expect_equal(pos$col, c(1L, 1L, 12L, 24L, NA, NA, NA, NA))
+})
+
+test_that("plate_format picks 96 or 384 wells, never a size in between", {
+  expect_equal(plate_format(c("A1", "A2"))$wells, 96L)
+  expect_equal(plate_format("H12")$wells, 96L)
+  expect_equal(plate_format(c("A1", "I1"))$wells, 384L)
+  expect_equal(plate_format(c("A1", "A13"))$wells, 384L)
+  # Off the plate does not count
+  expect_equal(plate_format(c("A1", "Z99"))$wells, 96L)
+  big <- plate_format("P24")
+  expect_equal(big$rows, 1:16)
+  expect_equal(big$cols, 1:24)
+  small <- plate_format(character(0))
+  expect_equal(small$rows, 1:8)
+  expect_equal(small$cols, 1:12)
+  # Without wells, the number of samples decides
+  expect_equal(plate_format(n_samples = 96)$wells, 96L)
+  expect_equal(plate_format(n_samples = 97)$wells, 384L)
+})
+
+test_that("plate_layout puts samples on their config wells, on the whole plate", {
   plate <- plate_layout(c("s1", "s2", "s3"), c("B2", "c03", "B4"))
 
   expect_true(plate$by_well)
   expect_equal(plate$tiles$well_id, c("B2", "C3", "B4"))
   expect_equal(plate$tiles$row, c(2L, 3L, 2L))
   expect_equal(plate$tiles$col, c(2L, 3L, 4L))
-  # Cropped to the rectangle the wells span
-  expect_equal(plate$rows, 2:3)
-  expect_equal(plate$cols, 2:4)
+  # The whole 96-well plate, not just the wells in use
+  expect_equal(plate$rows, 1:8)
+  expect_equal(plate$cols, 1:12)
+
+  # Any well beyond H12 makes it a 384-well plate
+  for (wells in list(c("A1", "I1"), c("A1", "A13"))) {
+    big <- plate_layout(c("s1", "s2"), wells)
+    expect_true(big$by_well)
+    expect_equal(big$rows, 1:16)
+    expect_equal(big$cols, 1:24)
+  }
 })
 
 test_that("plate_layout falls back to queue order without usable wells", {
@@ -319,22 +360,26 @@ test_that("plate_layout falls back to queue order without usable wells", {
   )) {
     plate <- plate_layout(samples, wells)
     expect_false(plate$by_well)
-    # Left to right, then the next row, on 12 columns
+    # Left to right, then the next row, on a 96-well plate
     expect_equal(plate$tiles$row, c(rep(1L, 12), 2L, 2L))
     expect_equal(plate$tiles$col, c(1:12, 1:2))
-    expect_equal(plate$rows, 1:2)
+    expect_equal(plate$tiles$well_id[13], "B1")
+    expect_equal(plate$rows, 1:8)
     expect_equal(plate$cols, 1:12)
   }
 
-  # 24 columns once the samples no longer fit a 96-well plate
-  big <- plate_layout(paste0("s", 1:100))
+  # A 384-well plate once the samples no longer fit 96 wells
+  exactly_96 <- plate_layout(paste0("s", 1:96))
+  expect_equal(exactly_96$cols, 1:12)
+  big <- plate_layout(paste0("s", 1:97))
+  expect_equal(big$rows, 1:16)
   expect_equal(big$cols, 1:24)
-  expect_equal(big$rows, 1:5)
+  expect_equal(big$tiles$well_id[25], "B1")
 
   # No samples yet still makes a (blank) plate
   empty <- plate_layout(character(0))
   expect_equal(nrow(empty$tiles), 0L)
-  expect_equal(empty$rows, 1L)
+  expect_equal(empty$rows, 1:8)
 })
 
 test_that("plate_sample_at and plate_highlight address tiles by position", {
@@ -364,14 +409,18 @@ test_that("plate_heatmap colours done tiles by peak count and crosses failures",
   built <- plotly::plotly_build(hm)
   traces <- built$x$data
   peaks <- traces[[2]]
-  z <- matrix(unlist(peaks$z), nrow = 1)
+  as_rows <- function(m) if (is.list(m)) do.call(rbind, m) else as.matrix(m)
+  z <- as_rows(peaks$z)
+  text <- as_rows(peaks$text)
 
+  # The whole 96-well plate is drawn
+  expect_equal(dim(z), c(8L, 12L))
   expect_equal(as.numeric(z[1, 1:2]), c(3, 0)) # done, 0 peaks still coloured
   expect_true(all(is.na(z[1, 3:4]))) # failed and pending stay uncoloured
-  text <- unlist(peaks$text)
-  expect_match(text[1], "Sample: s1.*Peaks: 3")
-  expect_match(text[3], "Sample: s3.*Failed")
-  expect_match(text[4], "Sample: s4.*Pending")
+  expect_match(text[1, 1], "Well: A1.*Sample: s1.*Peaks: 3")
+  expect_match(text[1, 3], "Sample: s3.*Failed")
+  expect_match(text[1, 4], "Sample: s4.*Pending")
+  expect_match(text[8, 12], "Well: H12.*Empty")
 
   # One cross, on the failed tile
   crosses <- Filter(function(t) identical(t$type, "scatter"), traces)
@@ -449,14 +498,210 @@ test_that("read_decon_metrics labels the error table and add_metrics_table shows
     y = ~intensity,
     type = "scatter",
     mode = "lines"
+  ) |>
+    plotly::layout(annotations = list(list(text = "peak label", x = 2, y = 5)))
+  built <- plotly::plotly_build(
+    add_side_tables(base, list(list(rows = metrics)))
   )
-  built <- plotly::plotly_build(add_metrics_table(base, metrics))
-  table <- Filter(function(t) identical(t$type, "table"), built$x$data)
-  expect_length(table, 1)
-  expect_equal(unlist(table[[1]]$cells$values[[1]]), metrics$Parameter)
-  # The spectrum makes room for the table instead of running under it
-  expect_lt(built$x$layout$xaxis$domain[2], table[[1]]$domain$x[1])
+  texts <- vapply(built$x$layout$annotations, function(a) a$text, "")
+  # The spectrum's own annotations stay, the table's cells are added
+  expect_true("peak label" %in% texts)
+  expect_true(all(metrics$Parameter %in% texts))
+  expect_true("123.46" %in% texts) # always two decimals
+  # No header row: nothing but the statistics and their values
+  expect_length(texts, 1 + 2 * nrow(metrics))
+  # Inner borders only: lines between the rows and one between the columns
+  expect_length(built$x$layout$shapes, nrow(metrics))
+  # The table sits in the right margin, widened to hold it, so the spectrum
+  # never runs under it
+  cells <- built$x$layout$annotations[-1]
+  expect_true(all(vapply(cells, function(a) a$x == 1 && a$xshift > 0, NA)))
+  widest <- max(vapply(cells, function(a) a$xshift, 0))
+  expect_gte(built$x$layout$margin$r, widest)
 
-  # No metrics, no table
-  expect_identical(add_metrics_table(base, metrics[0, ]), base)
+  # A second block stacks below the first, each with its caption
+  params <- decon_param_rows(data.frame(startz = 1, endz = 100, peaknorm = 2))
+  two <- plotly::plotly_build(add_side_tables(
+    base,
+    list(
+      list(rows = metrics, caption = "Metrics"),
+      list(rows = params, caption = "Parameters")
+    )
+  ))
+  ann <- two$x$layout$annotations
+  depth <- function(text) -ann[[match(text, vapply(ann, `[[`, "", "text"))]]$yshift
+  expect_lt(depth(metrics$Parameter[nrow(metrics)]), depth("<i>Parameters</i>"))
+  expect_lt(depth("<i>Parameters</i>"), depth("Charge State [z]"))
+
+  # No rows, no table
+  expect_identical(add_side_tables(base, list(list(rows = metrics[0, ]))), base)
+  expect_identical(add_side_tables(base, list()), base)
+})
+
+test_that("decon_param_rows labels the run's settings like the start form", {
+  params <- data.frame(
+    startz = 1,
+    endz = 100,
+    minmz = 710,
+    maxmz = 1100,
+    masslb = 10000,
+    massub = 60000,
+    massbins = 0.5,
+    peakthresh = 0.05,
+    peakwindow = 40,
+    peaknorm = 2,
+    time_start = NA_real_,
+    time_end = 1.5
+  )
+  rows <- decon_param_rows(params)
+  value <- function(name) rows$Value[rows$Parameter == name]
+
+  expect_equal(nrow(rows), 8L)
+  expect_match(value("Charge State [z]"), "^1 . 100$")
+  expect_match(value("Mass Range [Da]"), "^10000 . 60000$")
+  expect_equal(value("Sample Rate [Da]"), "0.5")
+  expect_equal(value("Peak Normalization"), "Normalization to Sum")
+  expect_equal(value("Retention Time [min]"), "up to 1.5")
+
+  params$time_end <- NA_real_
+  expect_equal(
+    decon_param_rows(params)$Value[4],
+    "Whole run"
+  )
+  expect_equal(nrow(decon_param_rows(NULL)), 0L)
+})
+
+test_that("spectrum_plot draws at display resolution: 1 Da, or 0.1 m/z raw", {
+  points <- function(plot) {
+    length(plotly::plotly_build(plot)$x$data[[1]]$x)
+  }
+
+  # Deconvoluted, sampled every 0.5 Da: one point per Da
+  mass <- data.frame(mass = seq(1000, 1999.5, by = 0.5), intensity = 1)
+  mass$intensity[701] <- 100
+  deconv <- spectrum_plot(plot_data = list(mass = mass, highlight_peaks = NULL))
+  expect_equal(points(deconv), 1000L)
+
+  # Raw, read in 0.01 m/z bins: one point per 0.1 m/z, apex kept
+  raw <- data.frame(mass = seq(500, 599.99, by = 0.01), intensity = 1)
+  raw$intensity[5003] <- 100
+  raw_plot <- spectrum_plot(plot_data = list(mass = raw), raw = TRUE)
+  built <- plotly::plotly_build(raw_plot)$x$data[[1]]
+  expect_equal(length(built$x), 1000L)
+  expect_true(raw$mass[5003] %in% built$x)
+})
+
+test_that("spectrum_plot can build its peak markers hidden", {
+  mass <- data.frame(mass = 1000 + 0:200, intensity = c(0:100, 99:0))
+  plot_data <- list(mass = mass, highlight_peaks = mass[101, ])
+  markers <- function(show) {
+    built <- plotly::plotly_build(
+      spectrum_plot(plot_data = plot_data, show_peak_symbols = show)
+    )
+    Filter(function(t) identical(t$mode, "markers"), built$x$data)
+  }
+
+  expect_length(markers(TRUE), 1)
+  # Still built, so the figure on screen can show them again
+  hidden <- markers(FALSE)
+  expect_length(hidden, 1)
+  expect_false(isTRUE(hidden[[1]]$visible))
+})
+
+test_that("summarise_decon_metrics gives mean and SD per statistic", {
+  db <- withr::local_tempfile(fileext = ".db")
+  con <- DBI::dbConnect(RSQLite::SQLite(), db)
+  DBI::dbWriteTable(
+    con,
+    "error",
+    data.frame(
+      sample = rep(c("s1", "s2", "s3"), each = 2),
+      Key = rep(c("error", "time"), 3),
+      Value = c(10, 1, 20, 1, 99, 5)
+    )
+  )
+  DBI::dbDisconnect(con)
+
+  summary <- summarise_decon_metrics(db, c("s1", "s2"))
+  expect_equal(summary$Parameter, c("Fitting Error", "Computation Time [s]"))
+  expect_equal(
+    summary$Value,
+    c("15.00 \u00b1 7.07", "1.00 \u00b1 0.00")
+  )
+  expect_equal(nrow(summarise_decon_metrics(db, character(0))), 0L)
+  expect_equal(nrow(summarise_decon_metrics(db, "missing")), 0L)
+})
+
+test_that("bin_spectrum keeps the apex of every 1 Da bin", {
+  df <- data.frame(
+    mass = c(100.1, 100.4, 100.9, 101.2, 101.7, 102.5),
+    intensity = c(1, 7, 3, 2, 9, 4)
+  )
+  binned <- bin_spectrum(df)
+  expect_equal(binned$mass, c(100.4, 101.7, 102.5))
+  expect_equal(binned$intensity, c(7, 9, 4))
+  expect_identical(bin_spectrum(df[1, ]), df[1, ])
+  expect_null(bin_spectrum(NULL))
+})
+
+test_that("downsample_spectrum caps the points and keeps every apex", {
+  set.seed(1)
+  df <- data.frame(mass = seq_len(10000), intensity = stats::runif(10000))
+  df$intensity[c(1234, 8765)] <- c(50, 80)
+  small <- downsample_spectrum(df, max_points = 500)
+  expect_lte(nrow(small), 502)
+  expect_true(all(c(1L, 1234L, 8765L, 10000L) %in% small$mass))
+  expect_false(is.unsorted(small$mass))
+  expect_identical(downsample_spectrum(df[1:10, ], max_points = 500), df[1:10, ])
+})
+
+test_that("bin_spectrum and downsample_spectrum keep every detected peak", {
+  # A small peak (1002, 40 %) two Da from a tall one (1000, 100 %)
+  df <- data.frame(mass = seq(900, 1100, by = 0.5), intensity = 1)
+  df$intensity[df$mass == 1000] <- 100
+  df$intensity[df$mass == 1002] <- 40
+  peaks <- c(1000, 1002)
+
+  # Squeezed to 20 points, the small apex shares a bucket with the tall one
+  lost <- downsample_spectrum(df, max_points = 20)
+  expect_false(1002 %in% lost$mass)
+  kept <- downsample_spectrum(df, max_points = 20, peaks = peaks)
+  expect_true(all(peaks %in% kept$mass))
+  expect_equal(kept$intensity[kept$mass == 1002], 40)
+
+  # In 5 Da bins they share a bin too
+  expect_false(1002 %in% bin_spectrum(df, width = 5)$mass)
+  binned <- bin_spectrum(df, width = 5, peaks = peaks)
+  expect_true(all(peaks %in% binned$mass))
+  expect_false(is.unsorted(binned$mass))
+})
+
+test_that("a peak's hover names every interpretation, the preferred one marked", {
+  hit <- function(peak, cmp, mw, stoich, preferred) {
+    data.frame(
+      Protein = "P", `Mw Protein [Da]` = 1000, `Measured Mw Protein [Da]` = 1000,
+      `Peak [Da]` = peak, Compound = cmp, `Compound Mw [Da]` = mw,
+      `Binding Stoichiometry` = stoich, Preferred = preferred,
+      check.names = FALSE
+    )
+  }
+  sample <- list(
+    mass = data.frame(mass = seq(900, 1400, by = 1), intensity = 1),
+    peaks = data.frame(mass = c(1000, 1100, 1200), intensity = c(1, 1, 1)),
+    hits = rbind(
+      hit(1100, "A", 100, 1, TRUE),
+      hit(1100, "A", 99, 1, FALSE),
+      hit(1100, "B", 50, 2, FALSE),
+      hit(1200, "A", 200, 1, TRUE)
+    )
+  )
+  peaks <- process_plot_data(sample)$highlight_peaks
+  label <- function(m) peaks$mass_stoich_label[peaks$mass == m]
+
+  expect_equal(
+    label(1100),
+    "[100] x1 (preferred)\nAlternatives: [99] x1, [50] x2 (B)"
+  )
+  # One interpretation: no marking needed
+  expect_equal(label(1200), "[200] x1")
 })

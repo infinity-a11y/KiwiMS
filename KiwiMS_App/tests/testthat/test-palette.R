@@ -4,6 +4,7 @@
 
 box::use(
   app/logic/palette[
+    base_colors,
     categorical_colors,
     categorical_palette,
     concentration_symbols,
@@ -13,6 +14,7 @@ box::use(
     ramp_at,
     ramp_colors,
     ramp_colorscale,
+    sample_colors,
     status_colors,
     tier_dash,
     tier_pattern,
@@ -23,7 +25,12 @@ box::use(
     batch_plate_heatmap,
     color_key,
     concentration_symbol_map,
+    default_color_role,
+    overview_colors,
+    sample_level_colors,
+    sample_view_colors,
     key_colors,
+    key_marker_symbols,
     key_order,
     key_symbols,
     key_tiers,
@@ -87,18 +94,19 @@ fake_hits <- function(
 
 test_that("every palette colour is a plain hex colour", {
   for (v in c("light", "dark")) {
-    expect_length(categorical_palette[[v]], 12)
+    expect_length(categorical_palette[[v]], 18)
     expect_true(hex_ok(categorical_palette[[v]]))
     expect_true(hex_ok(unlist(status_colors(v))))
-    for (r in c("concentration", "time", "sample", "binding", "correct", "unmatched")) {
+    for (r in c("concentration", "time", "sample", "count", "binding", "correct", "unmatched")) {
       expect_true(hex_ok(ramp_colors(11, r, v)), info = paste(r, v))
     }
   }
 })
 
 test_that("the light colours stand out on the grey cards and on white", {
+  base <- categorical_palette$light[seq_len(base_colors)]
   light <- c(
-    categorical_palette$light,
+    base,
     ramp_colors(11, "concentration"),
     ramp_colors(11, "time"),
     ramp_colors(9, "sample")
@@ -108,7 +116,14 @@ test_that("the light colours stand out on the grey cards and on white", {
   }
   expect_gte(min(de2000(light, "#FFFFFF")), 30)
   # Graphical objects: at least 3:1 against a white export
-  expect_gte(min(wcag_contrast(categorical_palette$light, "#FFFFFF")), 3)
+  expect_gte(min(wcag_contrast(base, "#FFFFFF")), 3)
+  # The light accents fill areas and outlined markers: clear of the greys,
+  # and light enough for black text
+  accents <- categorical_palette$light[-seq_len(base_colors)]
+  for (g in c(card_greys, "#FFFFFF")) {
+    expect_gte(min(de2000(accents, g)), 20)
+  }
+  expect_gte(min(wcag_contrast(accents, "#000000")), 7)
   # The fixed meanings too, the muted grey included
   status <- unlist(status_colors("light"))
   for (g in card_greys) {
@@ -123,14 +138,19 @@ test_that("the dark colours stand out on the dark export", {
     ramp_colors(11, "time", "dark"),
     unlist(status_colors("dark"))
   )
-  expect_gte(min(de2000(dark, dark_background)), 40)
-  expect_gte(min(wcag_contrast(categorical_palette$dark, dark_background)), 4.5)
+  expect_gte(min(de2000(dark, dark_background)), 35)
+  base <- categorical_palette$dark[seq_len(base_colors)]
+  expect_gte(min(de2000(base, dark_background)), 40)
+  expect_gte(min(wcag_contrast(base, dark_background)), 4.5)
+  # The deep twins of the accents are areas: 3:1 like graphical objects
+  expect_gte(min(wcag_contrast(categorical_palette$dark, dark_background)), 3)
 })
 
 test_that("the categorical colours stay apart", {
   for (v in c("light", "dark")) {
     pal <- categorical_palette[[v]]
     expect_gte(min_pair(pal), 9)
+    expect_gte(min_pair(pal[seq_len(base_colors)]), 9)
     expect_gte(min_pair(pal[1:5]), 17)
     expect_gte(min_pair(pal[1:2]), 45)
   }
@@ -147,22 +167,25 @@ test_that("light and dark variants keep the hue of each colour", {
   hue <- function(x) farver::convert_colour(t(grDevices::col2rgb(x)), "rgb", "oklch")[, 3]
   d <- abs(hue(categorical_palette$light) - hue(categorical_palette$dark))
   d <- pmin(d, 360 - d)
-  expect_lte(max(d), 10)
+  expect_lte(max(d[seq_len(base_colors)]), 10)
+  # The deep twins of the accents give up a little hue to stay in gamut
+  expect_lte(max(d), 20)
 })
 
-test_that("categorical colours repeat past twelve, with a tier per round", {
+test_that("categorical colours repeat past eighteen, with a tier per round", {
   expect_equal(categorical_colors(0), character(0))
   expect_equal(categorical_colors(3), categorical_palette$light[1:3])
   expect_equal(categorical_colors(3, "dark"), categorical_palette$dark[1:3])
   # Anything but "dark" is the light variant
   expect_equal(categorical_colors(2, NULL), categorical_palette$light[1:2])
-  c30 <- categorical_colors(30)
-  expect_equal(c30[13], c30[1])
-  expect_equal(c30[25], c30[1])
-  expect_equal(level_tier(30), rep(0:2, c(12, 12, 6)))
+  c40 <- categorical_colors(40)
+  expect_equal(anyDuplicated(c40[1:18]), 0)
+  expect_equal(c40[19], c40[1])
+  expect_equal(c40[37], c40[1])
+  expect_equal(level_tier(40), rep(0:2, c(18, 18, 4)))
   # Colour and tier together tell apart many levels
-  sym <- tier_symbol(level_tier(96))
-  expect_equal(anyDuplicated(paste(categorical_colors(96), sym)), 0)
+  sym <- tier_symbol(level_tier(140))
+  expect_equal(anyDuplicated(paste(categorical_colors(140), sym)), 0)
   expect_equal(tier_symbol(0), "circle")
   expect_equal(tier_pattern(0), "")
   expect_equal(tier_dash(0), "solid")
@@ -188,6 +211,25 @@ test_that("ramps run from one end to the other and are ordered", {
   expect_equal(cs[[1]][[1]], 0)
   expect_equal(cs[[9]][[1]], 1)
   expect_error(ramp_colors(3, "nope"))
+})
+
+test_that("the count ramp keeps the white count labels readable", {
+  for (v in c("light", "dark")) {
+    cols <- ramp_colors(25, "count", v)
+    expect_gte(min(wcag_contrast(cols, "#FFFFFF")), 4.5)
+    for (g in card_greys) {
+      expect_gte(min(de2000(cols, g)), 20)
+    }
+  }
+})
+
+test_that("samples share one rule in every interface", {
+  expect_equal(sample_colors(5), categorical_palette$light[1:5])
+  expect_equal(sample_colors(12, "dark"), categorical_palette$dark[1:12])
+  expect_equal(sample_colors(13), ramp_colors(13, "sample"))
+  expect_equal(sample_colors(0), character(0))
+  key <- color_key(fake_hits(samples = paste0("S", 1:20)))
+  expect_equal(unname(key_colors(key, "Samples")), sample_colors(20))
 })
 
 test_that("tints are light enough for black text and keep their names", {
@@ -361,8 +403,87 @@ test_that("forty compounds: colours repeat, the tier tells them apart", {
   cols <- key_colors(key, "Compounds")
   tiers <- key_tiers(key, "Compounds", names(cols))
   # P comes first in the entity sequence
-  expect_equal(unname(tiers[c("CMP-01", "CMP-11", "CMP-12", "CMP-40")]), c(0L, 0L, 1L, 3L))
+  expect_equal(unname(tiers[c("CMP-01", "CMP-17", "CMP-18", "CMP-40")]), c(0L, 0L, 1L, 2L))
   expect_equal(anyDuplicated(paste(cols, tier_symbol(tiers))), 0)
+})
+
+test_that("compound markers change shape past the colours, never into the protein diamond", {
+  expect_false("diamond" %in% tier_symbol(0:20))
+  cmps <- sprintf("CMP-%02d", 1:40)
+  key <- color_key(fake_hits(samples = paste0("S", 1:40), compounds = cmps))
+  sym <- key_marker_symbols(key, "Compounds", cmps)
+  expect_named(sym, cmps)
+  # P is the first entity, so CMP-17 is the eighteenth colour
+  expect_equal(
+    unname(sym[c("CMP-01", "CMP-17", "CMP-18", "CMP-40")]),
+    c("circle", "circle", "square", "triangle-up")
+  )
+})
+
+# What to colour ----
+
+test_that("views open on the experiment's main factor", {
+  roles <- c("protein", "compound", "concentration", "time", "sample")
+  # Kinetics of one compound: the concentrations
+  kin <- color_key(fake_hits(compounds = "A", conc = c(0, 2.5, 10, 40)))
+  expect_equal(default_color_role(kin, roles), "concentration")
+  # A screen at one concentration: the compounds
+  screen <- color_key(fake_hits(compounds = c("A", "B"), conc = c(0, 10)))
+  expect_equal(default_color_role(screen, roles), "compound")
+  # One compound, one concentration, several proteins: the proteins
+  prot <- color_key(fake_hits(proteins = c("P", "Q"), compounds = "A", conc = 10, time = 60))
+  expect_equal(default_color_role(prot, roles), "protein")
+  # Nothing varies but the samples
+  one <- color_key(fake_hits(compounds = "A", conc = 10, time = 60))
+  expect_equal(default_color_role(one, roles), "sample")
+  # Only what a view offers is chosen
+  expect_equal(default_color_role(kin, c("compound", "sample")), "sample")
+  expect_equal(default_color_role(prot, c("compound", "concentration", "sample")), "sample")
+  # Time decides where concentrations do not
+  times <- color_key(fake_hits(compounds = "A", conc = 10, time = c(5, 10, 60, 120)))
+  expect_equal(default_color_role(times, roles), "time")
+})
+
+test_that("samples keep the table order, and know their own variables", {
+  hits <- fake_hits(samples = c("S10", "S2", "S1", "S3"), conc = c(40, 0, 10, 2.5))
+  # By name without an order...
+  expect_equal(color_key(hits)$samples, c("S1", "S2", "S3", "S10"))
+  # ... in the table's order with one
+  table_order <- hits$`Sample ID`[order(hits$`Conc. [μM]`)]
+  key <- color_key(hits, sample_order = table_order)
+  expect_equal(key$samples, c("S2", "S3", "S1", "S10"))
+  info <- key$sample_info
+  expect_equal(info$concentration[info$sample == "S10"], 40)
+  expect_equal(info$compound[info$sample == "S2"], "B")
+  # Samples by their concentration take the concentration's colour
+  cols <- sample_level_colors(key, "Concentration", c("S10", "S2"))
+  expect_named(cols, c("S10", "S2"))
+  expect_equal(unname(cols), unname(key_colors(key, "Concentration", c(40, 0))))
+  # Short IDs work the same
+  short <- sample_level_colors(key, "Concentration", c("s1", "s2"), trunc = TRUE)
+  expect_equal(unname(short), unname(key_colors(key, "Concentration", c(40, 0))))
+  # By sample, their own colour; protein and time alike
+  expect_equal(sample_level_colors(key, "Samples", "S3"), key_colors(key, "Samples", "S3"))
+  expect_equal(
+    unname(sample_level_colors(key, "Protein", "S3")),
+    unname(key_colors(key, "Protein", "P"))
+  )
+})
+
+test_that("the Overview and Sample View colour samples by the variable picked", {
+  hits <- fake_hits(compounds = "A", conc = c(0, 2.5, 10, 40))
+  hits$`Tot. Binding [%]` <- c(0, 20, 50, 90)
+  key <- color_key(hits)
+  by_conc <- overview_colors(hits, "P", "A", "Concentration", key = key)
+  expect_setequal(names(by_conc), hits$`Sample ID`)
+  expect_equal(
+    unname(by_conc[hits$`Sample ID`]),
+    unname(key_colors(key, "Concentration", hits$`Conc. [μM]`))
+  )
+  one <- sample_view_colors(hits, key, "Time", "S4")
+  expect_equal(unname(one), unname(key_colors(key, "Time", 60)))
+  cmp <- sample_view_colors(hits, key, "Compounds", "S4")
+  expect_equal(cmp, key_colors(key, "Compounds", "A"))
 })
 
 test_that("key_order sorts like the key", {
@@ -432,6 +553,99 @@ test_that("the stats violin mutes the groups without a value", {
   expect_true(grepl(sprintf("rgba\\(%d,%d,%d", muted[1], muted[2], muted[3]), col))
 })
 
+test_that("many compounds on the batch heatmap: labelled tiles, one legend group each", {
+  hs <- stats_table(n_groups = 22, n = 30)
+  key <- color_key(hs)
+  built <- plotly::plotly_build(batch_plate_heatmap(hs, "Compound", key = key))$x$data
+  levels_ <- sprintf("C%02d", 1:22)
+  tiles <- Filter(function(t) identical(t$type, "heatmap") && !is.null(t$legendgroup), built)
+  chips <- Filter(function(t) identical(t$type, "scatter") && grepl("^level-", t$legendgroup %||% ""), built)
+  expect_length(tiles, 22)
+  expect_length(chips, 22)
+  # Each level's tiles and chip share a legend group, so a click on the chip
+  # hides or isolates the tiles
+  expect_equal(
+    vapply(tiles, `[[`, "", "legendgroup"),
+    vapply(chips, `[[`, "", "legendgroup")
+  )
+  # Past the colours, numbers on the tiles, named in the legend
+  expect_true(all(vapply(tiles, `[[`, "", "texttemplate") == "%{text}"))
+  # Each label only on its own wells
+  expect_equal(
+    vapply(tiles, function(t) paste(setdiff(unique(as.vector(t$text)), ""), collapse = ","), ""),
+    as.character(1:22)
+  )
+  expect_equal(vapply(chips, `[[`, "", "name"), paste0(1:22, " \u00b7 ", levels_))
+  expect_equal(
+    vapply(chips, function(t) t$marker$color, ""),
+    unname(key_colors(key, "Compound", levels_))
+  )
+  # Up to eighteen the colours suffice: no numbers
+  few <- stats_table(n_groups = 18, n = 30)
+  built <- plotly::plotly_build(batch_plate_heatmap(few, "Compound", key = color_key(few)))$x$data
+  tiles <- Filter(function(t) identical(t$type, "heatmap") && !is.null(t$legendgroup), built)
+  expect_true(all(vapply(tiles, function(t) is.null(t$texttemplate), TRUE)))
+  # The hover sits on the plate underneath, one trace for every well
+  # (below it only the tiles of the empty wells, which take no hover)
+  base <- Filter(
+    function(t) {
+      identical(t$type, "heatmap") &&
+        is.null(t$legendgroup) &&
+        !identical(t$hoverinfo, "skip")
+    },
+    built
+  )
+  expect_length(base, 1)
+  expect_identical(base[[1]]$hoverinfo, "text")
+})
+
+test_that("the batch heatmap draws the whole 96- or 384-well plate", {
+  plate_dims <- function(hs) {
+    built <- plotly::plotly_build(
+      batch_plate_heatmap(hs, "Total % Binding", key = color_key(hs))
+    )$x$data
+    base <- Filter(function(t) identical(t$type, "heatmap"), built)[[1]]
+    z <- base$z
+    if (is.list(z)) z <- do.call(rbind, z)
+    c(nrow(z), ncol(z))
+  }
+
+  # A few wells of one row: still the full 96-well plate, not that row
+  few <- stats_table(n = 8)
+  expect_equal(plate_dims(few), c(8L, 12L))
+
+  # One well beyond H12 makes it a 384-well plate
+  big <- few
+  big$Well[1] <- "I13"
+  expect_equal(plate_dims(big), c(16L, 24L))
+})
+
+test_that("the batch heatmap keeps its tiles square and its marks in plate units", {
+  hs <- stats_table(n = 12)
+  hs$`Compound Mw [Da]`[1] <- NA # A1: no compound binding
+  hs$`Compound Mw [Da]`[12] <- NA # B2: no protein peak either
+  hs$`Measured Mw Protein [Da]`[12] <- NA
+  lay <- plotly::plotly_build(
+    batch_plate_heatmap(hs, "Total % Binding", key = color_key(hs))
+  )$x$layout
+  # scaleanchor holds only between axes of one type: the rows by position,
+  # labelled by letter, not a category axis against the linear columns
+  expect_identical(lay$yaxis$scaleanchor, "x")
+  expect_false(identical(lay$yaxis$type, "category"))
+  expect_equal(unlist(lay$yaxis$tickvals), 1:8)
+  expect_equal(unlist(lay$yaxis$ticktext), LETTERS[1:8])
+  # The marks in plate units within their tile, not in pixels
+  shapes <- lay$shapes
+  expect_true(all(vapply(shapes, function(s) is.null(s$xsizemode), TRUE)))
+  ring <- Filter(function(s) identical(s$type, "circle"), shapes)
+  expect_length(ring, 1)
+  expect_equal(c(ring[[1]]$x0, ring[[1]]$x1), c(1 - 0.3, 1 + 0.3))
+  expect_equal(c(ring[[1]]$y0, ring[[1]]$y1), c(1 - 0.3, 1 + 0.3))
+  cross <- Filter(function(s) identical(s$type, "line"), shapes)
+  expect_length(cross, 2)
+  expect_true(all(vapply(cross, function(s) abs(s$x0 - 2) < 0.5 && abs(s$y0 - 2) < 0.5, TRUE)))
+})
+
 test_that("the batch heatmap takes the key colours and orders times by value", {
   hs <- stats_table()
   key <- color_key(hs)
@@ -444,7 +658,7 @@ test_that("the batch heatmap takes the key colours and orders times by value", {
     }
   }
   built <- plotly::plotly_build(batch_plate_heatmap(hs, "Time", key = key))$x$data
-  legend <- Filter(function(t) identical(t$legendgroup, "categories"), built)
+  legend <- Filter(function(t) identical(t$type, "scatter") && grepl("^level-", t$legendgroup %||% ""), built)
   expect_equal(vapply(legend, function(t) t$name, ""), c("5", "10", "60"))
   expect_equal(
     vapply(legend, function(t) t$marker$color, ""),

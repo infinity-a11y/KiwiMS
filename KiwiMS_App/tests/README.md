@@ -30,7 +30,7 @@ In PowerShell, set the variable first: `$env:KIWIMS_SKIP_DECON_RUN = "1"`.
 
 | Layer | Files | Needs | Time |
 |---|---|---|---|
-| Unit | `test-conversion-unit.R`, `test-deconvolution-unit.R`, `test-ms-formats.R`, `test-user-settings.R` | nothing | < 1 min |
+| Unit | `test-conversion-unit.R`, `test-deconvolution-unit.R`, `test-ms-formats.R`, `test-palette.R`, `test-sample-inclusion.R`, `test-user-settings.R` | nothing | < 1 min |
 | Edge cases | `test-edge-*.R` ([edge_cases](edge_cases/README.md)) | nothing: they run on the committed MLKL peak list | < 1 min |
 | Reference datasets | `test-reference-data.R` ([reference_data](reference_data/README.md)) | the datasets, Python with UniDec | ~1 min |
 | Deconvolution pipeline | `test-deconvolution-run.R`, `test-ms-vendor-formats.R` | kinact_MLKL_3, Python with UniDec | ~3.5 min |

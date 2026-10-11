@@ -23,7 +23,6 @@ box::use(
   app /
     logic /
     conversion_functions[
-      show_preferred_column,
       add_kobs_binding_result,
       add_kinact_ki_result,
       sample_handsontable,
@@ -39,12 +38,21 @@ box::use(
       relayout_spectrum_legend,
       relayout_spectrum_labels,
       render_hits_table,
+      render_hits_view,
       filter_hits_table,
+      hits_col_choices,
+      hits_view_table,
+      sort_hits_table,
       transform_per_adduct,
       checkboxColumn,
       js_code_gen,
       new_sample_table,
       restore_conc_time,
+      restore_inclusion,
+      sample_inclusion,
+      confirm_sample_table,
+      conversion_input_result,
+      order_sample_cols,
       compute_replicate_labels,
       confirm_ui_changes,
       edit_ui_changes,
@@ -58,7 +66,11 @@ box::use(
       label_smart_clean,
       color_key,
       key_colors,
+      key_marker_symbols,
       key_symbols,
+      default_color_role,
+      sample_view_colors,
+      sample_level_colors,
       render_table_view,
       filter_table_view,
       make_kobs_plot,
@@ -68,7 +80,6 @@ box::use(
       make_kinetics_saturation_plot,
       empty_prot_comp_tbl,
       read_decon_metadata,
-      read_decon_result,
       validate_decon_db,
       overview_choices,
       overview_selection,
@@ -436,11 +447,7 @@ server <- function(
     # Helper: compute and inject Replicate column (right after Sample)
     add_replicate_col <- function(tbl, config = NULL) {
       tbl$Replicate <- compute_replicate_labels(tbl$Sample, config)
-      tbl[, c(
-        "Sample",
-        "Replicate",
-        setdiff(names(tbl), c("Sample", "Replicate"))
-      )]
+      order_sample_cols(tbl)
     }
 
     # Helper: auto-fill sample table columns from config file
@@ -735,6 +742,26 @@ server <- function(
         list(sample_table_trigger()),
         ignoreInit = FALSE
       )
+
+    #### Samples left out of the conversion ----
+    # Counted on the table as edited, so the count follows every click on an
+    # Include box
+    output$samples_table_exclusion <- shiny::renderUI({
+      tbl <- sample_table_data()
+      shiny::req(is.data.frame(tbl), nrow(tbl) > 0)
+      n_out <- sum(!sample_inclusion(tbl))
+      if (n_out == 0) {
+        return(NULL)
+      }
+      shiny::div(
+        class = "table-hint table-hint-exclusion",
+        shiny::icon("eye-slash"),
+        shiny::span(
+          class = "table-hint-text",
+          sprintf("%d of %d samples excluded", n_out, nrow(tbl))
+        )
+      )
+    })
 
     #### Tab info text ----
     output$declaration_info_ui <- shiny::renderUI({
@@ -1140,8 +1167,12 @@ server <- function(
 
       cfg <- config_file()
       cleared_tbl <- sample_table_data()
-      # Exclude Replicate from clearing — it is auto-computed, not user-entered
-      non_sample_cols <- setdiff(names(cleared_tbl), c("Sample", "Replicate"))
+      # Exclude Replicate from clearing — it is auto-computed, not user-entered —
+      # and Include, which is the user's choice of samples, not a declaration
+      non_sample_cols <- setdiff(
+        names(cleared_tbl),
+        c("Include", "Sample", "Replicate")
+      )
       for (col in non_sample_cols) {
         cleared_tbl[[col]] <- if (is.numeric(cleared_tbl[[col]])) {
           NA_real_
@@ -1624,7 +1655,10 @@ server <- function(
               ),
               config_file()
             )
-            new_table <- restore_conc_time(new_table, old_table)
+            new_table <- restore_inclusion(
+              restore_conc_time(new_table, old_table),
+              old_table
+            )
             sample_table_data(new_table)
             sample_table_trigger(sample_table_trigger() + 1)
           }
@@ -1675,7 +1709,10 @@ server <- function(
               ),
               config_file()
             )
-            new_table <- restore_conc_time(new_table, old_table)
+            new_table <- restore_inclusion(
+              restore_conc_time(new_table, old_table),
+              old_table
+            )
             sample_table_data(new_table)
             sample_table_trigger(sample_table_trigger() + 1)
           }
@@ -1743,14 +1780,32 @@ server <- function(
             }
           }
 
-          sample_table <- clean_sample_table(
+          # The checked table can lag the last click on an Include box by the
+          # debounce; never hand on a table without samples
+          if (!any(sample_inclusion(raw_input))) {
+            shinyjs::runjs(paste0(
+              'document.getElementById("blocking-overlay").style.display ',
+              '= "none";'
+            ))
+            return()
+          }
+
+          # The table shown keeps every sample, the left-out ones unticked, so
+          # they can be included again; the conversion gets the included ones
+          confirmed <- confirm_sample_table(
             raw_input,
             units = list(conc = input$conc_unit, time = input$time_unit)
           )
+          sample_table <- confirmed$shown
+          converted_table <- confirmed$converted
+          excluded <- confirmed$excluded
           write_log(paste0(
             "Sample table confirmed: ",
-            nrow(sample_table),
+            nrow(converted_table),
             " sample(s)",
+            if (length(excluded)) {
+              paste0(" (", length(excluded), " excluded)")
+            },
             if (length(conc_time_cols) == 2) {
               paste0(
                 " · units: ",
@@ -1760,9 +1815,15 @@ server <- function(
               )
             }
           ))
+          if (length(excluded)) {
+            write_log(paste(
+              "Samples excluded from the conversion:",
+              paste(excluded, collapse = ", ")
+            ))
+          }
 
           # Assign table to reactive variables
-          declaration_vars$sample_table <- sample_table
+          declaration_vars$sample_table <- converted_table
           sample_table_data(sample_table)
 
           # Trigger re-rendering of sample table
@@ -2166,6 +2227,31 @@ server <- function(
       invisible(observer)
     }
 
+    # The columns picked in a hits table column picker (hits_col_picker()),
+    # starting at its default. Only a change re-renders the table: a picker in
+    # a settings popover is bound on its first opening only and then reports
+    # the default it already has.
+    picked_cols <- function(id, selected) {
+      cols <- shiny::reactiveVal(selected)
+      track_iface_observer(shiny::observeEvent(
+        input[[id]],
+        {
+          if (!identical(cols(), input[[id]])) {
+            cols(input[[id]])
+          }
+        },
+        ignoreInit = TRUE,
+        ignoreNULL = FALSE
+      ))
+      cols
+    }
+
+    # The plots colour either compounds or samples; a sample's colour may
+    # stand for its concentration, time or protein (see overview_colors())
+    color_mode <- function(variable) {
+      if (identical(variable, "Compounds")) "Compounds" else "Samples"
+    }
+
     iface_key <- function(analysis_select) {
       switch(
         as.character(analysis_select),
@@ -2549,7 +2635,10 @@ server <- function(
           # Colours of the result, fixed from all of it before any view
           # filters it (see color_key()): every interface and export reads
           # them from here
-          ckey <- color_key(hits_summary)
+          ckey <- color_key(
+            hits_summary,
+            sample_order = sort_hits_table(hits_summary, units)$`Sample ID`
+          )
           conversion_vars$color_key <- ckey
 
           shinyWidgets::updateMaterialSwitch(
@@ -2593,6 +2682,7 @@ server <- function(
               binding_results_ui(
                 ns,
                 hits_summary,
+                units = units,
                 show_sort_binding = has_concentration || isTRUE(run_kinact_ki),
                 overview = ov_initial
               )
@@ -2794,7 +2884,10 @@ server <- function(
               ]
 
               if (nrow(tbl) < 1) {
-                shiny::textOutput(ns("samples_present_compounds_na"))
+                shiny::div(
+                  class = "plot-placeholder",
+                  shiny::textOutput(ns("samples_present_compounds_na"))
+                )
               } else {
                 shinycssloaders::withSpinner(
                   plotly::plotlyOutput(
@@ -2831,9 +2924,16 @@ server <- function(
               smpl_compound_distribution(
                 hits_summary = hits_summary,
                 sample = input$conversion_sample_picker,
-                color_variable = input$color_variable,
+                color_variable = color_mode(input$color_variable),
                 truncate_names = input$truncate_names,
-                key = ckey
+                key = ckey,
+                colors = sample_view_colors(
+                  hits_summary,
+                  ckey,
+                  input$color_variable,
+                  input$conversion_sample_picker,
+                  trunc = input$truncate_names
+                )
               )
             }) |>
               shiny::bindEvent(
@@ -2847,9 +2947,7 @@ server <- function(
             # open. Using observeEvent(ignoreInit=TRUE) + reactiveVal ensures those
             # initialization events never trigger a re-render.
             smpl_spectrum_settings <- shiny::reactiveVal(0L)
-            smpl_table_settings <- shiny::reactiveVal(0L)
             ov_dist_settings <- shiny::reactiveVal(0L)
-            ov_table_settings <- shiny::reactiveVal(0L)
 
             track_iface_observer(shiny::observeEvent(
               list(
@@ -2863,31 +2961,19 @@ server <- function(
             ))
             track_iface_observer(shiny::observeEvent(
               list(
-                input$samples_table_view_binding_bar,
-                input$samples_table_view_tot_binding_bar
-              ),
-              smpl_table_settings(smpl_table_settings() + 1L),
-              ignoreInit = TRUE,
-              ignoreNULL = TRUE
-            ))
-            track_iface_observer(shiny::observeEvent(
-              list(
                 input$overview_distribution_labels,
-                input$overview_distribution_scale
+                input$overview_distribution_scale,
+                input$overview_distribution_sort_binding
               ),
               ov_dist_settings(ov_dist_settings() + 1L),
               ignoreInit = TRUE,
               ignoreNULL = TRUE
             ))
-            track_iface_observer(shiny::observeEvent(
-              list(
-                input$overview_table_view_binding_bar,
-                input$overview_table_view_tot_binding_bar
-              ),
-              ov_table_settings(ov_table_settings() + 1L),
-              ignoreInit = TRUE,
-              ignoreNULL = TRUE
-            ))
+
+            # Columns of the two Table Views, picked like in the Hits table
+            table_cols <- hits_col_choices(hits_summary, units)$selected
+            smpl_table_cols <- picked_cols("samples_table_col_select", table_cols)
+            ov_table_cols <- picked_cols("overview_table_col_select", table_cols)
 
             ###### Annotated spectrum ----
             output$samples_annotated_spectrum <- plotly::renderPlotly({
@@ -2911,16 +2997,20 @@ server <- function(
                 sample = result_list$deconvolution[[
                   selected_sample
                 ]],
-                color_cmp = key_colors(
+                color_cmp = sample_view_colors(
+                  hits_summary,
                   ckey,
                   color_variable,
-                  if (color_variable == "Samples") {
-                    selected_sample
-                  } else {
-                    unique(stats::na.omit(tbl$`Cmp Name`))
-                  }
+                  selected_sample
                 ),
-                color_variable = color_variable,
+                symbol_cmp = if (color_variable == "Compounds") {
+                  key_marker_symbols(
+                    ckey,
+                    "Compounds",
+                    unique(stats::na.omit(tbl$`Cmp Name`))
+                  )
+                },
+                color_variable = color_mode(color_variable),
                 show_peak_labels = ifelse(
                   is.null(input$sample_view_spectrum_annotation),
                   FALSE,
@@ -2942,6 +3032,7 @@ server <- function(
               )
 
             ###### Samples view table ----
+            # The hits table of the selected sample
             output$samples_table_view <- DT::renderDataTable(
               {
                 shiny::req(
@@ -2950,80 +3041,27 @@ server <- function(
                   input$color_variable,
                   !is.null(input$truncate_names)
                 )
-                tbl <- hits_summary[
-                  hits_summary$`Sample ID` %in%
-                    input$conversion_sample_picker &
-                    is_complex_row(hits_summary),
-                ]
-
-                # If table empty
-                if (!nrow(tbl)) {
-                  empty_df <- data.frame(rep(list(as.character()), 5)) |>
-                    stats::setNames(c(
-                      "Sample ID",
-                      "Cmp Name",
-                      "Mass Shift",
-                      "Binding [%]",
-                      "Total %"
-                    ))
-
-                  # Assign filtered table to reactive for eventual export
-                  samples_table_view_raw(empty_df)
-
-                  return(
-                    DT::datatable(
-                      empty_df,
-                      selection = "none",
-                      class = "order-column",
-                      options = list(
-                        dom = 't',
-                        paging = FALSE
-                      )
-                    )
-                  )
-                }
-
-                # Summarize inputs
-                inputs <- list(
-                  binding_bar = input$samples_table_view_binding_bar,
-                  tot_binding_bar = input$samples_table_view_tot_binding_bar,
-                  truncate_names = input$truncate_names,
-                  color_variable = input$color_variable
-                )
-
-                # Get colors
-                colors <- key_colors(
-                  ckey,
-                  input$color_variable,
-                  if (input$color_variable == "Samples") {
-                    unique(if (isTRUE(input$truncate_names)) {
-                      tbl$truncSample_ID
-                    } else {
-                      tbl$`Sample ID`
-                    })
-                  } else {
-                    unique(stats::na.omit(tbl$`Cmp Name`))
-                  },
-                  trunc = input$truncate_names
-                )
-
-                # Prefiltering of table
-                tbl <- filter_table_view(
-                  table = tbl,
-                  colors = colors,
-                  inputs = inputs,
-                  units = units
+                tbl <- hits_view_table(
+                  hits_summary,
+                  smpl_table_cols(),
+                  units = units,
+                  samples = input$conversion_sample_picker
                 )
 
                 # Assign filtered table to reactive for eventual export
                 samples_table_view_raw(tbl)
 
-                # Create DT table
-                render_table_view(
-                  table = tbl,
-                  colors = colors,
-                  tab = "Samples",
-                  inputs = inputs,
+                render_hits_view(
+                  tbl,
+                  colors = sample_view_colors(
+                    hits_summary,
+                    ckey,
+                    input$color_variable,
+                    input$conversion_sample_picker,
+                    trunc = input$truncate_names
+                  ),
+                  color_variable = color_mode(input$color_variable),
+                  truncate_names = input$truncate_names,
                   units = units
                 )
               },
@@ -3033,7 +3071,7 @@ server <- function(
                 input$conversion_sample_picker,
                 render_trigger(),
                 input$truncate_names,
-                smpl_table_settings()
+                smpl_table_cols()
               )
 
             ##### Overview tab ----
@@ -3143,7 +3181,10 @@ server <- function(
               shiny::req(!is.na(ov_has_binding()))
 
               if (!ov_has_binding()) {
-                shiny::textOutput(ns("overview_distribution_na"))
+                shiny::div(
+                  class = "plot-placeholder",
+                  shiny::textOutput(ns("overview_distribution_na"))
+                )
               } else {
                 shinycssloaders::withSpinner(
                   plotly::plotlyOutput(
@@ -3179,7 +3220,14 @@ server <- function(
                 truncate_names = input$truncate_names,
                 key = ckey,
                 distribution_scale = input$overview_distribution_scale,
-                distribution_labels = input$overview_distribution_labels
+                distribution_labels = input$overview_distribution_labels,
+                # The order of the table and the sample colours, unless
+                # ranked by binding
+                sample_order = if (
+                  !isTRUE(input$overview_distribution_sort_binding)
+                ) {
+                  ckey$samples
+                }
               )
               shiny::req(plot)
               plot
@@ -3222,10 +3270,10 @@ server <- function(
 
             ###### Annotated spectrum ----
 
-            # The switch is absent from the settings popover when there is no
-            # concentration grouping to undo, so an unset input means "on".
+            # Spectra stack in the order of the table and the sample colours
+            # unless ranked by binding (switch offered with concentrations)
             ov_sort_binding <- shiny::reactive({
-              !isFALSE(input$overview_spectrum_sort_binding)
+              isTRUE(input$overview_spectrum_sort_binding)
             })
 
             # Sample labels and peak symbols the figure is built with. A new
@@ -3322,7 +3370,10 @@ server <- function(
 
               switch(
                 mode,
-                none = shiny::textOutput(ns("overview_spectrum_na")),
+                none = shiny::div(
+                  class = "plot-placeholder",
+                  shiny::textOutput(ns("overview_spectrum_na"))
+                ),
                 plot = shinycssloaders::withSpinner(
                   plotly::plotlyOutput(
                     ns("overview_annotated_spectrum"),
@@ -3332,7 +3383,7 @@ server <- function(
                   color = "#7777f9"
                 ),
                 prompt = shiny::div(
-                  class = "spectrum-render-prompt",
+                  class = "plot-placeholder spectrum-render-prompt",
                   shiny::p(shiny::textOutput(
                     ns("overview_spectrum_prompt"),
                     inline = TRUE
@@ -3364,6 +3415,9 @@ server <- function(
                 sort_by_binding = ov_sort_binding(),
                 by_mean = TRUE
               )
+              if (!ov_sort_binding()) {
+                samples <- samples[order(match(samples, ckey$samples))]
+              }
               shiny::req(
                 length(samples),
                 length(samples) < 30 || manual_render_spectrum() > 0L
@@ -3392,12 +3446,17 @@ server <- function(
                 key = ckey,
                 trunc = truncate_names
               )
+              # Past the colours, compound peaks change shape
+              ov_symbols <- if (identical(color_variable, "Compounds")) {
+                key_marker_symbols(ckey, "Compounds", names(colors))
+              }
 
               if (length(samples) == 1) {
                 plot <- spectrum_plot(
                   sample = result_list$deconvolution[[samples]],
                   color_cmp = colors,
-                  color_variable = color_variable,
+                  symbol_cmp = ov_symbols,
+                  color_variable = color_mode(color_variable),
                   show_peak_labels = TRUE,
                   show_mass_diff = FALSE,
                   show_unmatched = isTRUE(shiny::isolate(
@@ -3411,8 +3470,9 @@ server <- function(
                   cubic = is.null(input$overview_spectrum_kind) ||
                     input$overview_spectrum_kind == "Cubic",
                   color_cmp = colors,
+                  symbol_cmp = ov_symbols,
                   truncated = if (truncate_names) mapping else FALSE,
-                  color_variable = color_variable,
+                  color_variable = color_mode(color_variable),
                   hits_summary = hits_summary,
                   # View-only settings are isolated: they are applied to the
                   # live figure by the proxy observers below, so reading them
@@ -3573,6 +3633,7 @@ server <- function(
             ))
 
             ###### Overview table ----
+            # The hits table of the selected protein and compounds
             output$overview_table_view <- DT::renderDataTable(
               {
                 shiny::req(
@@ -3580,82 +3641,28 @@ server <- function(
                   !is.null(input$truncate_names)
                 )
                 sel <- ov_selection()
-                tbl <- ov_subset()
-
-                # Nothing picked, or a protein declared without compounds
-                if (!nrow(tbl)) {
-                  empty_df <- data.frame(rep(list(as.character()), 5)) |>
-                    stats::setNames(c(
-                      "Sample ID",
-                      "Cmp Name",
-                      "Mass Shift",
-                      "Binding [%]",
-                      "Total %"
-                    ))
-
-                  # Assign filtered table to reactive for eventual export
-                  overview_table_view_raw(empty_df)
-
-                  return(
-                    DT::datatable(
-                      empty_df,
-                      selection = "none",
-                      class = "order-column",
-                      options = list(
-                        dom = 't',
-                        paging = FALSE,
-                        language = list(
-                          emptyTable = if (length(sel$compounds)) {
-                            "No data available in table"
-                          } else {
-                            "No compound selected"
-                          }
-                        )
-                      )
-                    )
-                  )
-                }
-
-                # Summarize inputs
-                inputs <- list(
-                  binding_bar = input$overview_table_view_binding_bar,
-                  tot_binding_bar = input$overview_table_view_tot_binding_bar,
-                  truncate_names = input$truncate_names,
-                  color_variable = input$color_variable
-                )
-
-                colors <- overview_colors(
-                  hits_summary,
-                  sel$protein,
-                  sel$compounds,
-                  variable = input$color_variable,
-                  key = ckey,
-                  trunc = input$truncate_names
-                )
-
-                # Prefiltering of table
-                tbl <- filter_table_view(
-                  table = tbl,
-                  colors = colors,
-                  inputs = inputs,
-                  units = units
-                )
+                tbl <- hits_view_table(ov_subset(), ov_table_cols(), units)
 
                 # Assign filtered table to reactive for eventual export
                 overview_table_view_raw(tbl)
 
-                # Several compounds are grouped by compound, the hits of a
-                # single one by sample
-                render_table_view(
-                  table = tbl,
-                  colors = colors,
-                  tab = if (length(unique(tbl$`Cmp Name`)) > 1) {
-                    "Proteins"
-                  } else {
-                    "Compounds"
-                  },
-                  inputs = inputs,
-                  units = units
+                render_hits_view(
+                  tbl,
+                  colors = overview_colors(
+                    hits_summary,
+                    sel$protein,
+                    sel$compounds,
+                    variable = input$color_variable,
+                    key = ckey,
+                    trunc = input$truncate_names
+                  ),
+                  color_variable = color_mode(input$color_variable),
+                  truncate_names = input$truncate_names,
+                  units = units,
+                  # Nothing picked, or a protein declared without compounds
+                  empty_message = if (!length(sel$compounds)) {
+                    "No compound selected"
+                  }
                 )
               },
               server = FALSE
@@ -3664,27 +3671,46 @@ server <- function(
                 ov_selection(),
                 render_trigger(),
                 input$truncate_names,
-                ov_table_settings()
+                ov_table_cols()
               )
 
             ##### Color variable UI ----
             output$color_variable_ui <- shiny::renderUI({
               shiny::req(hits_summary)
 
+              # Every variable the samples here can differ in (one protein
+              # at a time); opens on the experiment's main factor
+              choices <- c(
+                Compound = "Compounds",
+                Concentration = if ("Concentration" %in% names(units)) {
+                  "Concentration"
+                },
+                Time = if ("Time" %in% names(units)) "Time",
+                Sample = "Samples"
+              )
+              role <- default_color_role(
+                ckey,
+                c(
+                  "compound",
+                  if ("Concentration" %in% names(units)) "concentration",
+                  if ("Time" %in% names(units)) "time",
+                  "sample"
+                )
+              )
+
               bslib::tooltip(
                 shiny::selectInput(
                   ns("color_variable"),
                   label = NULL,
-                  choices = c("Samples", "Compounds"),
-                  selected = ifelse(
-                    length(unique(hits_summary$`Cmp Name`[
-                      !is.na(hits_summary$`Cmp Name`)
-                    ])) ==
-                      1,
-                    "Samples",
-                    "Compounds"
+                  choices = choices,
+                  selected = switch(
+                    role,
+                    compound = "Compounds",
+                    concentration = "Concentration",
+                    time = "Time",
+                    "Samples"
                   ),
-                  width = "120px"
+                  width = "140px"
                 ),
                 "Color mapping",
                 placement = "top"
@@ -4295,12 +4321,19 @@ server <- function(
                   options = list(
                     dom = "t",
                     paging = FALSE,
-                    autoWidth = TRUE,
                     scrollX = TRUE,
                     scrollY = TRUE,
                     scrollCollapse = TRUE,
                     fixedHeader = TRUE,
                     stripe = FALSE,
+                    # Full card width: the columns are sized once the table
+                    # is laid out, not fixed while its tab may still be hidden
+                    initComplete = htmlwidgets::JS(
+                      "function(settings, json) {",
+                      "  var api = this.api();",
+                      "  setTimeout(function() { api.columns.adjust(); }, 50);",
+                      "}"
+                    ),
                     columnDefs = list(
                       list(targets = "_all", className = 'dt-center'),
                       list(targets = -1, className = 'dt-last-col dt-center')
@@ -4555,12 +4588,17 @@ server <- function(
                     dom = "t",
                     paging = FALSE,
                     ordering = FALSE,
-                    autoWidth = TRUE,
                     scrollX = TRUE,
                     scrollY = TRUE,
                     scrollCollapse = TRUE,
                     fixedHeader = TRUE,
                     stripe = FALSE,
+                    initComplete = htmlwidgets::JS(
+                      "function(settings, json) {",
+                      "  var api = this.api();",
+                      "  setTimeout(function() { api.columns.adjust(); }, 50);",
+                      "}"
+                    ),
                     columnDefs = list(
                       list(targets = "_all", className = "dt-center"),
                       list(targets = -1, className = "dt-last-col dt-center")
@@ -5257,9 +5295,14 @@ server <- function(
                   )
                 )
               })
+              cards <- Filter(Negate(is.null), cards)
+              # Six cards go three by two, four two by two (main.scss)
               shiny::div(
-                class = "batch-heatmap-grid",
-                do.call(shiny::tagList, Filter(Negate(is.null), cards))
+                class = paste0(
+                  "batch-heatmap-grid batch-heatmap-grid-",
+                  length(cards)
+                ),
+                do.call(shiny::tagList, cards)
               )
             })
 
@@ -5378,8 +5421,9 @@ server <- function(
                   "Sample"
                 }
                 shiny::req("Well" %in% names(hs), sample_col %in% names(hs))
+                # The heatmaps place the rows by position, 1 = A
                 well_id <- paste0(
-                  as.character(click$y),
+                  LETTERS[as.integer(click$y)],
                   as.integer(click$x)
                 )
                 norm_wells <- gsub(
@@ -5935,30 +5979,32 @@ server <- function(
               rl <- conversion_sidebar_vars$result_list()
               shiny::req(rl, rl$hits_summary)
               hs <- rl$hits_summary
-              conc_col <- grep("^Concentration", names(hs), value = TRUE)
-              base_choices <- c("Protein", "Compound")
-              extra <- if (length(conc_col) == 1) {
-                c("Concentration" = conc_col)
-              } else {
-                character(0)
-              }
-              choices <- c(base_choices, extra)
-
-              smart_default <- function() {
-                if (length(conc_col) == 1) {
-                  return(conc_col)
-                }
-                n_prot <- length(unique(stats::na.omit(hs[["protein"]])))
-                if (is.null(n_prot) || n_prot == 0) {
-                  n_prot <- length(unique(stats::na.omit(hs[["Protein"]])))
-                }
-                if (n_prot > 1) {
-                  return("Protein")
-                }
-                return("Compound")
-              }
-
-              default_grp <- smart_default()
+              conc_col <- grep("^Concentration", names(hs), value = TRUE)[1]
+              time_col <- grep("^Time", names(hs), value = TRUE)[1]
+              # Every variable the samples can differ in; opens on the
+              # experiment's main factor, as every coloured view does
+              choices <- c(
+                Protein = "Protein",
+                Compound = "Compound",
+                Concentration = if (!is.na(conc_col)) conc_col,
+                Time = if (!is.na(time_col)) time_col
+              )
+              default_grp <- switch(
+                default_color_role(
+                  conversion_vars$color_key %||% color_key(hs),
+                  c(
+                    "protein",
+                    "compound",
+                    if (!is.na(conc_col)) "concentration",
+                    if (!is.na(time_col)) "time"
+                  )
+                ),
+                protein = "Protein",
+                compound = "Compound",
+                concentration = conc_col,
+                time = time_col,
+                "Compound"
+              )
               # Isolated: reacting to the inputs updated below would re-trigger
               # this observer with every selection it sends
               cur_violin <- shiny::isolate(input$stats_violin_groupby)
@@ -5995,11 +6041,11 @@ server <- function(
             track_iface_observer(shiny::observe({
               rl <- conversion_sidebar_vars$result_list()
               shiny::req(rl, rl$hits_summary)
-              has_well <- "well" %in%
+              has_well <- "Well" %in%
                 names(rl$hits_summary) &&
                 any(
-                  !is.na(rl$hits_summary$well) &
-                    nzchar(trimws(as.character(rl$hits_summary$well)))
+                  !is.na(rl$hits_summary$Well) &
+                    nzchar(trimws(as.character(rl$hits_summary$Well)))
                 )
               if (has_well) {
                 bslib::nav_show(
@@ -6021,24 +6067,14 @@ server <- function(
             #### Render unified Hits interface ----
             render_result_interface(
               "hits",
-              hits_results_ui(ns, hits_summary, units)
+              hits_results_ui(ns, hits_summary, units, key = ckey)
             )
 
             ##### Hits unified table ----
-            hits_col_selection <- shiny::reactiveVal(NULL)
-
-            track_iface_observer(shiny::observeEvent(
-              input$hits_tab_col_select,
-              {
-                if (
-                  !identical(hits_col_selection(), input$hits_tab_col_select)
-                ) {
-                  hits_col_selection(input$hits_tab_col_select)
-                }
-              },
-              ignoreInit = TRUE,
-              ignoreNULL = FALSE
-            ))
+            hits_col_selection <- picked_cols(
+              "hits_tab_col_select",
+              hits_col_choices(hits_summary, units)$selected
+            )
 
             hits_tab_trigger <- shiny::reactive({
               list(
@@ -6059,26 +6095,9 @@ server <- function(
                 input$hits_tab_compound_select,
                 input$hits_color_variable
               )
-              num_sort_cols <- c()
-              if ("Concentration" %in% names(units)) {
-                num_sort_cols <- c(num_sort_cols, units[["Concentration"]])
-              }
-              if ("Time" %in% names(units)) {
-                num_sort_cols <- c(num_sort_cols, units[["Time"]])
-              }
-
-              hits_table <- hits_summary |>
-                dplyr::arrange(
-                  Protein,
-                  dplyr::across(
-                    dplyr::all_of(num_sort_cols),
-                    as.numeric
-                  )
-                )
-
               if (isTRUE(input$hits_per_adduct == "Sample View")) {
                 hits_table <- transform_per_adduct(
-                  hits_table,
+                  sort_hits_table(hits_summary, units),
                   proteins_table = protein_table_data(),
                   compounds_table = compound_table_data(),
                   samples_table = declaration_vars$sample_table
@@ -6094,11 +6113,7 @@ server <- function(
                   value = TRUE
                 )
                 valid_adduct_cols <- intersect(
-                  if (is.null(hits_col_selection())) {
-                    input$hits_tab_col_select
-                  } else {
-                    hits_col_selection()
-                  },
+                  hits_col_selection(),
                   names(hits_table)
                 )
                 always_cols <- c(
@@ -6117,27 +6132,12 @@ server <- function(
                   units = units
                 )
               } else {
-                hits_sel <- if (is.null(hits_col_selection())) {
-                  input$hits_tab_col_select
-                } else {
-                  hits_col_selection()
-                }
-                binding_pos <- which(hits_sel == "Binding [%]")
-                if (length(binding_pos) > 0) {
-                  hits_sel <- append(
-                    hits_sel,
-                    "Tot. Binding [%]",
-                    after = binding_pos
-                  )
-                } else {
-                  hits_sel <- union(hits_sel, "Tot. Binding [%]")
-                }
-                hits_table <- filter_hits_table(
-                  hits_table,
-                  selected_cols = hits_sel,
+                hits_table <- hits_view_table(
+                  hits_summary,
+                  hits_col_selection(),
+                  units = units,
                   compounds = input$hits_tab_compound_select,
-                  samples = input$hits_tab_sample_select,
-                  units = units
+                  samples = input$hits_tab_sample_select
                 )
               }
 
@@ -6163,24 +6163,22 @@ server <- function(
                   NULL
                 },
                 bar_chart = input$hits_binding_chart,
-                colors = if (
-                  input$hits_color_variable %in% c("Compounds", "Samples")
+                # Compounds by their row's compound; samples by their own
+                # colour, their protein's or their time's
+                colors = if (input$hits_color_variable == "Compounds") {
+                  key_colors(ckey, "Compounds", unique(hits_table$`Cmp Name`))
+                } else if (
+                  input$hits_color_variable %in% c("Samples", "Protein", "Time")
                 ) {
-                  key_colors(
+                  sample_level_colors(
                     ckey,
                     input$hits_color_variable,
-                    unique(
-                      if (input$hits_color_variable == "Samples") {
-                        hits_table$`Sample ID`
-                      } else {
-                        hits_table$`Cmp Name`
-                      }
-                    )
+                    unique(hits_table$`Sample ID`)
                   )
                 } else {
                   NULL
                 },
-                color_variable = input$hits_color_variable,
+                color_variable = color_mode(input$hits_color_variable),
                 truncated = FALSE,
                 clickable = clickable_cols,
                 per_adduct = input$hits_per_adduct,
@@ -6258,29 +6256,13 @@ server <- function(
                     selected = adduct_selected
                   )
                 } else {
-                  per_hit_choices <- names(hits_summary)[
-                    !names(hits_summary) %in% always_excluded
-                  ]
-                  per_hit_selected <- per_hit_choices[
-                    !per_hit_choices %in%
-                      c(
-                        "Well",
-                        "Replicate",
-                        "Unmatched [%]",
-                        if (!show_preferred_column(hits_summary)) "Preferred",
-                        "Meas. Prot. [Da]",
-                        "Δ Prot. [Da]",
-                        "Int. Prot. [%]",
-                        "Int. Cmp [%]",
-                        "Δ Cmp [Da]"
-                      )
-                  ]
-                  hits_col_selection(per_hit_selected)
+                  per_hit <- hits_col_choices(hits_summary, units)
+                  hits_col_selection(per_hit$selected)
                   shinyWidgets::updatePickerInput(
                     session,
                     "hits_tab_col_select",
-                    choices = per_hit_choices,
-                    selected = per_hit_selected
+                    choices = per_hit$choices,
+                    selected = per_hit$selected
                   )
                 }
               },
@@ -6527,17 +6509,21 @@ server <- function(
           dplyr::filter(`Sample ID` == selected_sample)
         spectrum_plot(
           sample = result_list$deconvolution[[selected_sample]],
-          color_cmp = key_colors(
+          color_cmp = sample_view_colors(
+            conversion_vars$hits_summary,
             conversion_vars$color_key,
             input$color_variable,
-            if (identical(input$color_variable, "Samples")) {
-              selected_sample
-            } else {
-              unique(stats::na.omit(tbl$`Cmp Name`))
-            },
+            selected_sample,
             theme = theme
           ),
-          color_variable = input$color_variable,
+          symbol_cmp = if (identical(input$color_variable, "Compounds")) {
+            key_marker_symbols(
+              conversion_vars$color_key,
+              "Compounds",
+              unique(stats::na.omit(tbl$`Cmp Name`))
+            )
+          },
+          color_variable = color_mode(input$color_variable),
           show_peak_labels = isTRUE(input$sample_view_spectrum_annotation),
           show_mass_diff = !isFALSE(input$sample_view_spectrum_diff),
           show_unmatched = isTRUE(input$sample_view_spectrum_unmatched),
@@ -6564,10 +6550,18 @@ server <- function(
         smpl_compound_distribution(
           hits_summary = conversion_vars$hits_summary,
           sample = input$conversion_sample_picker,
-          color_variable = input$color_variable,
+          color_variable = color_mode(input$color_variable),
           truncate_names = input$truncate_names,
           key = conversion_vars$color_key,
-          theme = theme
+          theme = theme,
+          colors = sample_view_colors(
+            conversion_vars$hits_summary,
+            conversion_vars$color_key,
+            input$color_variable,
+            input$conversion_sample_picker,
+            trunc = input$truncate_names,
+            theme = theme
+          )
         )
       },
       filename_fn = function() {
@@ -6600,19 +6594,30 @@ server <- function(
           trunc = input$truncate_names,
           theme = theme
         )
+        ov_symbols <- if (identical(input$color_variable, "Compounds")) {
+          key_marker_symbols(
+            conversion_vars$color_key,
+            "Compounds",
+            names(colors)
+          )
+        }
         samples <- spectrum_sample_ids(
           overview_subset(hits_summary, protein, compounds),
           "Protein",
           protein,
-          sort_by_binding = !isFALSE(input$overview_spectrum_sort_binding),
+          sort_by_binding = isTRUE(input$overview_spectrum_sort_binding),
           by_mean = TRUE
         )
+        if (!isTRUE(input$overview_spectrum_sort_binding)) {
+          samples <- samples[order(match(samples, conversion_vars$color_key$samples))]
+        }
         shiny::req(length(samples))
         if (length(samples) == 1) {
           spectrum_plot(
             sample = result_list$deconvolution[[samples]],
             color_cmp = colors,
-            color_variable = input$color_variable,
+            symbol_cmp = ov_symbols,
+            color_variable = color_mode(input$color_variable),
             show_peak_labels = TRUE,
             show_mass_diff = FALSE,
             show_unmatched = isTRUE(input$overview_spectrum_unmatched),
@@ -6629,8 +6634,9 @@ server <- function(
             cubic = is.null(input$overview_spectrum_kind) ||
               input$overview_spectrum_kind == "Cubic",
             color_cmp = colors,
+            symbol_cmp = ov_symbols,
             truncated = if (input$truncate_names) id_mapping else FALSE,
-            color_variable = input$color_variable,
+            color_variable = color_mode(input$color_variable),
             hits_summary = hits_summary,
             labels_show = input$overview_spectrum_labels,
             symbols_show = input$overview_spectrum_symbols,
@@ -6666,7 +6672,10 @@ server <- function(
           key = conversion_vars$color_key,
           distribution_scale = input$overview_distribution_scale,
           distribution_labels = input$overview_distribution_labels,
-          theme = theme
+          theme = theme,
+          sample_order = if (!isTRUE(input$overview_distribution_sort_binding)) {
+            conversion_vars$color_key$samples
+          }
         )
         shiny::req(plot)
         plot
@@ -6958,11 +6967,12 @@ server <- function(
         Protein_Table = protein_table_data(),
         Compound_Table = compound_table_data(),
         Samples_Table = declaration_vars$sample_table,
-        result = if (!is.null(declaration_vars$result$.db_path)) {
-          read_decon_result(declaration_vars$result$.db_path)
-        } else {
-          declaration_vars$result
-        }
+        # The samples of the confirmed table only; those left out of the
+        # conversion are not read at all
+        result = conversion_input_result(
+          declaration_vars$result,
+          samples = declaration_vars$sample_table$Sample
+        )
       )),
       samples_confirmed = shiny::reactive(declaration_vars$samples_confirmed),
       config_apply_block = config_apply_block,

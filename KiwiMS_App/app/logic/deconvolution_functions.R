@@ -30,6 +30,7 @@ box::use(
 box::use(
   app / logic / conversion_constants[run_limits],
   app / logic / ms_formats[ms_sample_base],
+  app / logic / palette[ramp_colorscale, status_colors],
 )
 
 # db_with_retry(): BEGIN IMMEDIATE + body + COMMIT with R-level retry ----
@@ -1095,17 +1096,58 @@ deconvolute <- function(
   invisible(NULL)
 }
 
+# parse_wells(): Plate positions of well IDs ----
+# "A1", "a01" and "A001" all give row 1 (A), column 1. Anything that is no
+# well of a 384-well plate (rows A-P, columns 1-24) gives NA.
+# Returns data.frame(well_id, row, col), well_id normalised to "A1".
+#' @export
+parse_wells <- function(wells) {
+  well_id <- gsub(
+    "^([A-Z]+)0*(\\d+)$",
+    "\\1\\2",
+    toupper(trimws(as.character(wells)))
+  )
+  row <- match(sub("\\d+$", "", well_id), LETTERS[1:16])
+  col <- suppressWarnings(as.integer(sub("^[A-Z]+", "", well_id)))
+  off <- is.na(row) | is.na(col) | col < 1 | col > 24
+  row[off] <- NA_integer_
+  col[off] <- NA_integer_
+  data.frame(well_id = well_id, row = row, col = col, stringsAsFactors = FALSE)
+}
+
+# plate_format(): The 96- or 384-well plate a set of wells belongs to ----
+# A 384-well plate once any well lies beyond row H or column 12, a 96-well
+# plate otherwise -- never a size in between, however few wells are used.
+# Wells off the plate are ignored. For samples without wells (laid out in
+# queue order), `n_samples` decides: a 384-well plate beyond 96 samples.
+# Shared by the deconvolution's Sample Distribution and the conversion's
+# Batch Control heatmaps.
+# Returns list(wells, rows, cols), rows and cols as plate positions.
+#' @export
+plate_format <- function(wells = character(0), n_samples = 0) {
+  pos <- parse_wells(wells)
+  big <- any(pos$row > 8 | pos$col > 12, na.rm = TRUE) || n_samples > 96
+  list(
+    wells = if (big) 384L else 96L,
+    rows = seq_len(if (big) 16L else 8L),
+    cols = seq_len(if (big) 24L else 12L)
+  )
+}
+
 # plate_layout(): Tile of every sample of a run on the Well Plate ----
-# With a usable, unique well for every sample ("A1" or "A01", a "Plate:"
-# prefix already stripped) the tiles are those wells, and the plate is cropped
-# to the rectangle they span. Otherwise -- no config, no Well column, or any
-# sample without a well of its own -- the samples are laid out in the order
-# they are queued, left to right and top to bottom, on 12 columns (24 beyond
-# 96 samples), so no sample of the run is ever left off the plate.
+# The plate is always shown whole, as a 96-well (8 x 12) or a 384-well
+# (16 x 24) plate. With a usable, unique well for every sample ("A1" or
+# "A01", a "Plate:" prefix already stripped) the tiles are those wells, on a
+# 384-well plate once any well lies beyond row H or column 12 (plate_format(),
+# which the conversion's Batch Control heatmaps use too). Otherwise --
+# no config, no Well column, or any sample without a well of its own -- the
+# samples fill the plate in the order they are queued, left to right and top
+# to bottom, on a 96-well plate up to 96 samples, so no sample of the run is
+# ever left off the plate.
 #
 # Returns list(tiles = data.frame(sample, well_id, row, col), rows, cols,
-# by_well); row and col are plate positions (row 1 = A), rows and cols the
-# positions the plate shows.
+# by_well); row and col are plate positions (row 1 = A), well_id the well, or
+# for queue order the position, as "A1"; rows and cols span the plate.
 #' @export
 plate_layout <- function(samples, wells = NULL) {
   samples <- as.character(samples)
@@ -1113,30 +1155,22 @@ plate_layout <- function(samples, wells = NULL) {
 
   by_well <- FALSE
   if (n > 0 && length(wells) == n) {
-    well_id <- gsub(
-      "^([A-Z]+)0*(\\d+)$",
-      "\\1\\2",
-      toupper(trimws(as.character(wells)))
-    )
-    row <- match(sub("\\d+$", "", well_id), LETTERS[1:16])
-    col <- suppressWarnings(as.integer(sub("^[A-Z]+", "", well_id)))
-    by_well <- !anyNA(row) &&
-      !anyNA(col) &&
-      all(col >= 1 & col <= 24) &&
-      !anyDuplicated(well_id)
+    pos <- parse_wells(wells)
+    well_id <- pos$well_id
+    row <- pos$row
+    col <- pos$col
+    by_well <- !anyNA(row) && !anyDuplicated(well_id)
   }
 
-  if (by_well) {
-    rows <- seq(min(row), max(row))
-    cols <- seq(min(col), max(col))
-  } else {
-    n_cols <- if (n <= 96) 12L else 24L
+  format <- if (by_well) plate_format(well_id) else plate_format(n_samples = n)
+  rows <- format$rows
+  cols <- format$cols
+
+  if (!by_well) {
     pos <- seq_len(n) - 1L
-    row <- pos %/% n_cols + 1L
-    col <- pos %% n_cols + 1L
-    well_id <- rep(NA_character_, n)
-    rows <- seq_len(max(1L, ceiling(n / n_cols)))
-    cols <- seq_len(n_cols)
+    row <- pos %/% length(cols) + 1L
+    col <- pos %% length(cols) + 1L
+    well_id <- paste0(LETTERS[row], col)
   }
 
   list(
@@ -1210,25 +1244,21 @@ plate_heatmap <- function(
 
   dims <- list(as.character(rows), as.character(cols))
   z_mat <- matrix(NA_real_, nrow = nr, ncol = nc, dimnames = dims)
-  text_mat <- matrix("Empty", nrow = nr, ncol = nc, dimnames = dims)
-  if (plate$by_well) {
-    text_mat[] <- paste0(
-      "Well: ",
-      outer(LETTERS[rows], cols, paste0),
-      "<br>Empty"
-    )
-  }
+  # Queue order puts a sample on a tile, not in that well
+  pos_label <- if (plate$by_well) "Well: " else "Position: "
+  text_mat <- matrix(
+    paste0(pos_label, outer(LETTERS[rows], cols, paste0), "<br>Empty"),
+    nrow = nr,
+    ncol = nc,
+    dimnames = dims
+  )
 
   failed_tiles <- tiles[0, ]
   for (i in seq_len(nrow(tiles))) {
     r <- as.character(tiles$row[i])
     c <- as.character(tiles$col[i])
     s <- tiles$sample[i]
-    label <- paste0(
-      if (plate$by_well) paste0("Well: ", tiles$well_id[i], "<br>"),
-      "Sample: ",
-      s
-    )
+    label <- paste0(pos_label, tiles$well_id[i], "<br>Sample: ", s)
     n_peaks <- peak_counts$n_peaks[match(s, peak_counts$sample)]
 
     if (!is.na(n_peaks)) {
@@ -1253,11 +1283,8 @@ plate_heatmap <- function(
     zmin <- mid - 1
     zmax <- mid + 1
   }
-  # Stops at orange: the count labels are white, and unreadable on yellow
-  pal <- viridisLite::plasma(9, end = 0.75)
-  colorscale <- lapply(seq_along(pal), function(i) {
-    list((i - 1) / (length(pal) - 1), pal[i])
-  })
+  # A ramp dark enough throughout for the white count labels
+  colorscale <- ramp_colorscale("count", theme)
 
   # Rough tile size in px for the left-hand card, to scale the count labels
   # and the failure crosses with the plate
@@ -1331,8 +1358,6 @@ plate_heatmap <- function(
         tickmode = "array",
         tickvals = cols,
         ticktext = as.character(cols),
-        # Queue positions are no wells, so they get no well labels either
-        showticklabels = plate$by_well,
         tickfont = list(color = font_color, size = 12),
         tickangle = 0,
         ticklen = 0,
@@ -1350,7 +1375,6 @@ plate_heatmap <- function(
         tickmode = "array",
         tickvals = rows,
         ticktext = LETTERS[rows],
-        showticklabels = plate$by_well,
         range = c(max(rows) + 0.5, min(rows) - 0.5),
         constrain = "domain",
         tickfont = list(color = font_color, size = 12),
@@ -1359,11 +1383,7 @@ plate_heatmap <- function(
         zeroline = FALSE,
         automargin = FALSE
       ),
-      margin = if (plate$by_well) {
-        list(t = 25, r = 0, b = 0, l = 30)
-      } else {
-        list(t = 5, r = 0, b = 0, l = 5)
-      },
+      margin = list(t = 25, r = 0, b = 0, l = 30),
       plot_bgcolor = tile_bg,
       paper_bgcolor = "rgba(0,0,0,0)"
     ) |>
@@ -1486,8 +1506,13 @@ process_plot_data <- function(
       return()
     }
 
-    # Read mass spectrum and filter zero intensity values
-    mass <- sample$mass |> dplyr::filter(intensity != 0) |> as.data.frame()
+    # Read mass spectrum and filter zero intensity values. Base R throughout
+    # this branch: it runs once per sample of a spectrum figure, and dplyr's
+    # fixed cost per call on these small tables made up most of the time a
+    # figure of a hundred samples took to build.
+    mass <- as.data.frame(sample$mass)
+    mass <- mass[which(mass$intensity != 0), , drop = FALSE]
+    rownames(mass) <- NULL
 
     # Cut off outer limits
     mass <- mass[-c(1, nrow(mass)), ]
@@ -1498,28 +1523,83 @@ process_plot_data <- function(
     # Merge non-preferred hits per peak: sort preferred first, then collapse
     # multiple interpretations of the same peak into a single combined label.
     # Complexes only: a row without an adduct names its declared compound too
-    compound_hits <- sample$hits |>
-      dplyr::filter(!is.na(Compound) & !is.na(`Compound Mw [Da]`)) |>
-      dplyr::arrange(
-        `Peak [Da]`,
-        dplyr::desc(Preferred == "TRUE"),
-        dplyr::desc(suppressWarnings(as.numeric(`Compound Mw [Da]`)))
-      ) |>
-      dplyr::group_by(`Peak [Da]`) |>
-      dplyr::reframe(
-        Compound = Compound[Preferred == "TRUE"][1],
-        `Compound Mw [Da]` = `Compound Mw [Da]`[Preferred == "TRUE"][1],
-        `Binding Stoichiometry` = `Binding Stoichiometry`[Preferred == "TRUE"][
-          1
-        ],
-        # Protein species the adduct sits on, so the spectrum can relate the
-        # peak to its own proteoform rather than to the lightest one
-        parent_prot = `Measured Mw Protein [Da]`[Preferred == "TRUE"][1],
-        mass_stoich_label = paste(
-          paste0("[", `Compound Mw [Da]`, "] x", `Binding Stoichiometry`),
-          collapse = " + "
-        )
-      )
+    hits <- as.data.frame(sample$hits)
+    hits <- hits[
+      !is.na(hits$Compound) & !is.na(hits$`Compound Mw [Da]`),
+      ,
+      drop = FALSE
+    ]
+    preferred <- hits$Preferred == "TRUE"
+    # By peak, the preferred hit first, then the heavier compound; NA last
+    hits <- hits[
+      order(
+        hits$`Peak [Da]`,
+        preferred,
+        suppressWarnings(as.numeric(hits$`Compound Mw [Da]`)),
+        decreasing = c(FALSE, TRUE, TRUE),
+        method = "radix"
+      ),
+      ,
+      drop = FALSE
+    ]
+    preferred <- hits$Preferred == "TRUE"
+    # Grouped by the exact peak mass, in ascending order: split() on the
+    # numbers themselves would group by their 15-digit text, merging peaks
+    # whose masses differ only in the last digits
+    peak_mass <- unique(hits$`Peak [Da]`)
+    by_peak <- split(
+      seq_len(nrow(hits)),
+      factor(match(hits$`Peak [Da]`, peak_mass), levels = seq_along(peak_mass))
+    )
+    # The preferred hit's value of a peak, NA without one
+    pick <- function(col) {
+      unname(vapply(
+        by_peak,
+        function(i) hits[[col]][i[which(preferred[i])[1]]],
+        hits[[col]][NA_integer_]
+      ))
+    }
+    compound_hits <- data.frame(
+      `Peak [Da]` = peak_mass,
+      Compound = pick("Compound"),
+      `Compound Mw [Da]` = pick("Compound Mw [Da]"),
+      `Binding Stoichiometry` = pick("Binding Stoichiometry"),
+      # Protein species the adduct sits on, so the spectrum can relate the
+      # peak to its own proteoform rather than to the lightest one
+      parent_prot = pick("Measured Mw Protein [Da]"),
+      # Every interpretation of the peak for its hover: the preferred one,
+      # marked, then the alternatives (heavier compound first), named with
+      # their compound where it is not the preferred one's
+      mass_stoich_label = unname(vapply(
+        by_peak,
+        function(i) {
+          shift <- paste0(
+            "[",
+            hits$`Compound Mw [Da]`[i],
+            "] x",
+            hits$`Binding Stoichiometry`[i]
+          )
+          p <- which(preferred[i])[1]
+          if (length(i) == 1 || is.na(p)) {
+            return(paste(shift, collapse = ", "))
+          }
+          alt <- shift[-p]
+          alt_cmp <- hits$Compound[i][-p]
+          other <- alt_cmp != hits$Compound[i][p]
+          alt[other] <- paste0(alt[other], " (", alt_cmp[other], ")")
+          paste0(
+            shift[p],
+            " (preferred)\nAlternative",
+            if (length(alt) > 1) "s",
+            ": ",
+            paste(alt, collapse = ", ")
+          )
+        },
+        character(1)
+      )),
+      check.names = FALSE,
+      stringsAsFactors = FALSE
+    )
 
     # Unbound protein species, kept ahead of the compound peaks so the protein
     # stays the first entry. A protein can be declared with several masses (e.g.
@@ -1581,8 +1661,9 @@ process_plot_data <- function(
       multiple,
       mass_stoich_label,
       parent_prot
-    ) |>
-      dplyr::filter(!is.na(name))
+    )
+    highlight_peaks <- highlight_peaks[!is.na(highlight_peaks$name), ]
+    rownames(highlight_peaks) <- NULL
 
     unmatched_peaks <- unmatched_spectrum_peaks(
       sample$peaks,
@@ -1641,7 +1722,9 @@ unmatched_marker <- function(theme = "light") {
   list(
     symbol = "x-thin-open",
     symbol_3d = "x",
-    color = if (light) "#6e6e6e" else "#b4b4b4",
+    color = status_colors(if (light) "light" else "dark")$unassigned,
+    # The thin cross is drawn by its line alone
+    width = 2,
     line = if (light) "#000000" else "#ffffff"
   )
 }
@@ -1693,6 +1776,125 @@ mass_diff_groups <- function(highlight_peaks) {
   groups
 }
 
+# Mass resolution of a deconvoluted spectrum on screen, whatever sample rate
+# the deconvolution ran at: finer than 1 Da is not visible at any useful zoom
+# and only costs serialisation and drawing time.
+#' @export
+spectrum_display_bin <- 1
+
+# The same for the raw m/z spectrum: a charge-state peak of an intact protein
+# is several tenths of an m/z wide, so 0.1 still draws it with points to
+# spare (about 11k for a 500 - 1600 m/z scan, against 110k at the 0.01 the
+# raw data is read at).
+#' @export
+spectrum_display_bin_mz <- 0.1
+
+# bin_spectrum(): One point per `width` Da, for display ----
+# Keeps the most intense point of every bin (not a bin average), so a peak
+# apex keeps its exact mass and height and the peak markers, drawn from the
+# unbinned peak table, still sit on top of it.
+#' @export
+bin_spectrum <- function(df, width = spectrum_display_bin, peaks = NULL) {
+  if (
+    is.null(df) ||
+      nrow(df) < 2 ||
+      !all(c("mass", "intensity") %in% names(df)) ||
+      !is.finite(width) ||
+      width <= 0
+  ) {
+    return(df)
+  }
+
+  bin <- floor(df$mass / width)
+  by_height <- order(bin, -df$intensity)
+  keep <- by_height[!duplicated(bin[by_height])]
+  df[sort(unique(c(keep, peak_rows(df, peaks)))), , drop = FALSE]
+}
+
+# peak_rows(): Rows of a spectrum that lie on a detected peak ----
+# bin_spectrum() and downsample_spectrum() always keep these, so the line
+# passes through every peak the markers mark: a small peak next to a taller
+# point would otherwise lose its apex to the bin or bucket they share, and
+# its marker would float above the line.
+peak_rows <- function(df, peaks) {
+  if (length(peaks) == 0) {
+    return(integer(0))
+  }
+  which(df$mass %in% peaks)
+}
+
+# slim_spectrum(): Build a spectrum figure, trimming what goes to the browser ----
+# Once a trace maps a colour, plotly recycles attributes that may vary by
+# point (hovertemplate, text, meta) to one copy per point, so a single hover
+# template went out 50,000 times. Copies that all agree are collapsed back to
+# one value, and line coordinates are rounded to what the screen can show
+# (0.01 Da / m/z, 0.01 % intensity) instead of 17 digits. Peak markers keep
+# their exact values. Returns the built figure, which further plotly calls
+# (layout(), add_trace(), plotly_build()) accept as usual.
+#' @export
+slim_spectrum <- function(plot) {
+  built <- plotly::plotly_build(plot)
+  built$x$data <- lapply(built$x$data, function(trace) {
+    for (key in c("hovertemplate", "text", "meta")) {
+      v <- trace[[key]]
+      if (length(v) > 1 && length(unique(v)) == 1) {
+        trace[[key]] <- v[[1]]
+      }
+    }
+    if (identical(trace$mode, "lines")) {
+      if (is.numeric(trace$x)) trace$x <- round(trace$x, 2)
+      if (is.numeric(trace$y)) trace$y <- round(trace$y, 2)
+    }
+    trace
+  })
+  built
+}
+
+# downsample_spectrum(): Reduce one spectrum to at most `max_points` points ----
+#
+# Min/max decimation: the trace is cut into buckets and only the lowest and
+# highest intensity point of each bucket survives. Unlike plain thinning this
+# never shaves a peak apex — the maximum of every bucket is kept by
+# construction — so the envelope on screen is the same one the full trace
+# would draw, while the baseline points that overplot each other anyway are
+# dropped. Peak markers are annotated from `highlight_peaks` and are never
+# downsampled, so hit positions stay exact.
+#' @export
+downsample_spectrum <- function(df, max_points = 4000, peaks = NULL) {
+  n <- nrow(df)
+
+  if (
+    !is.finite(max_points) ||
+      max_points <= 0 ||
+      n <= max_points ||
+      !all(c("mass", "intensity") %in% names(df))
+  ) {
+    return(df)
+  }
+
+  # Two points survive per bucket, so ask for half as many buckets; buckets
+  # are runs of equal length along the trace.
+  # Buckets of equal length as the columns of a matrix (the last one padded),
+  # so the lowest and highest point of every bucket come from one vectorised
+  # pass rather than a sort of the whole spectrum
+  n_buckets <- max(1L, as.integer(max_points %/% 2))
+  len <- ceiling(n / n_buckets)
+  pad <- len * ceiling(n / len) - n
+  # Padding and missing intensities can win neither the high nor the low
+  y <- df$intensity
+  y_high <- c(replace(y, is.na(y), -Inf), rep(-Inf, pad))
+  y_low <- c(replace(y, is.na(y), Inf), rep(Inf, pad))
+  high <- max.col(t(matrix(y_high, nrow = len)), "first")
+  low <- max.col(t(matrix(-y_low, nrow = len)), "first")
+  offset <- (seq_along(high) - 1) * len
+  keep <- c(offset + low, offset + high)
+  keep <- keep[keep <= n]
+
+  # Keep the original mass order and both endpoints so the trace still spans
+  # the full mass range, and every detected peak (peak_rows()).
+  df[sort(unique(c(1L, keep, n, peak_rows(df, peaks)))), , drop = FALSE]
+}
+
 # spectrum_plot(): Make spectrum plot interactively (plotly) or non-interactively (ggplot2) ----
 #' @export
 spectrum_plot <- function(
@@ -1705,9 +1907,11 @@ spectrum_plot <- function(
   theme = "light",
   color_cmp = NULL,
   color_variable = NULL,
+  symbol_cmp = NULL,
   show_peak_labels = TRUE,
   show_mass_diff = TRUE,
-  show_unmatched = FALSE
+  show_unmatched = FALSE,
+  show_peak_symbols = TRUE
 ) {
   if (is.null(plot_data)) {
     plot_data <- process_plot_data(
@@ -1758,20 +1962,15 @@ spectrum_plot <- function(
   # Interactive plotly
   if (raw) {
     plot <- plotly::plot_ly(
-      plot_data$mass,
+      # Display resolution only, as for the deconvoluted spectrum below
+      bin_spectrum(as.data.frame(plot_data$mass), spectrum_display_bin_mz),
       x = ~mass,
       y = ~intensity,
       type = "scattergl",
       mode = "lines",
       color = I(data_line_color),
-      hoverinfo = "text",
-      text = ~ paste0(
-        "Mass: ",
-        mass,
-        " Da\nIntensity: ",
-        round(intensity, 2),
-        "%"
-      )
+      # A template, not a text string per point (most of the payload)
+      hovertemplate = "Mass: %{x:.2f} Da<br>Intensity: %{y:.2f}%<extra></extra>"
     ) |>
       plotly::layout(
         hovermode = "closest",
@@ -1812,21 +2011,20 @@ spectrum_plot <- function(
       )
   } else {
     plot <- plotly::plot_ly(
-      plot_data$mass,
+      # Display resolution only; the peaks and labels below use the full data,
+      # and the line keeps every peak's point, so the markers sit on it
+      bin_spectrum(
+        plot_data$mass,
+        peaks = c(plot_data$highlight_peaks$mass, plot_data$unmatched_peaks$mass)
+      ),
       x = ~mass,
       y = ~intensity,
       type = "scattergl",
       mode = "lines",
       color = I(data_line_color),
-      hoverinfo = "text",
       showlegend = FALSE,
-      text = ~ paste0(
-        "Mass: ",
-        mass,
-        " Da\nIntensity: ",
-        round(intensity, 2),
-        "%"
-      )
+      # A template, not a text string per point (most of the payload)
+      hovertemplate = "Mass: %{x:.1f} Da<br>Intensity: %{y:.2f}%<extra></extra>"
     )
 
     # Prepare yaxis list
@@ -1880,6 +2078,9 @@ spectrum_plot <- function(
             round(intensity, 2),
             "%"
           ),
+          # Always built, only hidden, so the figure on screen can show them
+          # again without a rebuild
+          visible = isTRUE(show_peak_symbols),
           showlegend = FALSE
         )
       } else {
@@ -1887,10 +2088,18 @@ spectrum_plot <- function(
           # Prepare marker symbols
           plot_data$highlight_peaks <- dplyr::mutate(
             plot_data$highlight_peaks,
+            # Compounds in the shape of their colour round when given
             symbol = ifelse(
               name == plot_data$highlight_peaks$name[1],
               "diamond",
-              "circle"
+              if (is.null(symbol_cmp)) {
+                "circle"
+              } else {
+                dplyr::coalesce(
+                  unname(symbol_cmp[as.character(name)]),
+                  "circle"
+                )
+              }
             ),
             color = ifelse(
               name == plot_data$highlight_peaks$name[1],
@@ -1969,6 +2178,7 @@ spectrum_plot <- function(
                 paste0("Mass Shifts: ", mass_stoich_label)
               )
             ),
+            visible = isTRUE(show_peak_symbols),
             showlegend = TRUE
           )
         }
@@ -2249,7 +2459,7 @@ spectrum_plot <- function(
         # Open symbols are drawn by their line alone
         marker = list(
           color = um$color,
-          line = list(color = um$color, width = 1.5),
+          line = list(color = um$color, width = um$width),
           symbol = um$symbol,
           size = 9,
           zindex = 90
@@ -2300,7 +2510,7 @@ spectrum_plot <- function(
       )
   }
 
-  return(plot)
+  slim_spectrum(plot)
 }
 
 # read_file_safe(): Optimized file reader function ----
@@ -2591,6 +2801,10 @@ decon_metric_labels <- c(
   "Point Sigma"
 )
 
+# Metrics are shown with two decimals throughout, whatever their magnitude,
+# so the values of one table (and of samples against each other) line up
+format_metric <- function(v) sprintf("%.2f", v)
+
 # read_decon_metrics(): UniDec fit statistics of one sample ----
 # From the run database's error table, falling back to the sample's
 # <base>_error.txt in its UniDec output folder (older runs). Returns
@@ -2650,51 +2864,292 @@ read_decon_metrics <- function(db_path, sample, result_dir = NULL) {
   )
 }
 
-# add_metrics_table(): Fit statistics as a table beside a spectrum ----
-# A plotly table trace in a strip on the right of the figure, with the
-# spectrum's x axis narrowed to make room, so the table never covers a peak
-# and goes along with the figure into an export.
+# summarise_decon_metrics(): Mean and SD of the fit statistics of samples ----
+# For "Show All": one row per statistic over `samples`, from the run
+# database's error table. Value is "mean ± SD" ready for add_side_tables().
 #' @export
-add_metrics_table <- function(plot, metrics, theme = "light", width = 0.24) {
-  if (is.null(metrics) || nrow(metrics) == 0) {
+summarise_decon_metrics <- function(db_path, samples) {
+  empty <- data.frame(Parameter = character(0), Value = character(0))
+  if (length(samples) == 0 || is.null(db_path) || !file.exists(db_path)) {
+    return(empty)
+  }
+
+  rows <- tryCatch(
+    {
+      con <- DBI::dbConnect(
+        RSQLite::SQLite(),
+        db_path,
+        flags = RSQLite::SQLITE_RO
+      )
+      on.exit(DBI::dbDisconnect(con), add = TRUE)
+      if (!DBI::dbExistsTable(con, "error")) {
+        data.frame()
+      } else {
+        ph <- paste(rep("?", length(samples)), collapse = ",")
+        DBI::dbGetQuery(
+          con,
+          sprintf(
+            "SELECT sample, Value FROM error WHERE sample IN (%s) ORDER BY rowid",
+            ph
+          ),
+          params = as.list(as.character(samples))
+        )
+      }
+    },
+    error = function(e) data.frame()
+  )
+  if (nrow(rows) == 0) {
+    return(empty)
+  }
+
+  # A statistic is identified by its position within the sample's rows, as
+  # in read_decon_metrics()
+  rows$idx <- stats::ave(seq_len(nrow(rows)), rows$sample, FUN = seq_along)
+  rows <- rows[rows$idx <= length(decon_metric_labels), ]
+  idx <- sort(unique(rows$idx))
+  mean_v <- vapply(idx, function(i) mean(rows$Value[rows$idx == i]), 0)
+  sd_v <- vapply(
+    idx,
+    function(i) {
+      v <- rows$Value[rows$idx == i]
+      if (length(v) > 1) stats::sd(v) else 0
+    },
+    0
+  )
+
+  data.frame(
+    Parameter = decon_metric_labels[idx],
+    Value = paste(format_metric(mean_v), "±", format_metric(sd_v)),
+    stringsAsFactors = FALSE
+  )
+}
+
+# decon_param_rows(): The run's deconvolution settings, for a side table ----
+# `params` is the one-row data.frame of the start form's values the run was
+# launched with (config$params in deconvolution_main.R), so it holds for
+# every spectrum of the run. Labelled and grouped as the start form shows
+# them. Returns data.frame(Parameter, Value).
+#' @export
+decon_param_rows <- function(params) {
+  if (is.null(params) || !is.data.frame(params) || nrow(params) == 0) {
+    return(data.frame(Parameter = character(0), Value = character(0)))
+  }
+
+  num <- function(key) {
+    v <- suppressWarnings(as.numeric(params[[key]][1]))
+    if (length(v) == 0) NA_real_ else v
+  }
+  fmt <- function(v) {
+    if (is.na(v)) "–" else format(v, scientific = FALSE, trim = TRUE)
+  }
+  range <- function(lo, hi) paste(fmt(num(lo)), "–", fmt(num(hi)))
+
+  t_start <- num("time_start")
+  t_end <- num("time_end")
+  time <- if (is.na(t_start) && is.na(t_end)) {
+    "Whole run"
+  } else if (is.na(t_end)) {
+    paste("from", fmt(t_start))
+  } else if (is.na(t_start)) {
+    paste("up to", fmt(t_end))
+  } else {
+    paste(fmt(t_start), "–", fmt(t_end))
+  }
+
+  peaknorm <- c(
+    "0" = "No normalization",
+    "1" = "Max Normalization",
+    "2" = "Normalization to Sum"
+  )[as.character(num("peaknorm"))]
+
+  data.frame(
+    Parameter = c(
+      "Charge State [z]",
+      "Deconvolution Range [m/z]",
+      "Mass Range [Da]",
+      "Retention Time [min]",
+      "Detection Window [Da]",
+      "Peak Threshold",
+      "Peak Normalization",
+      "Sample Rate [Da]"
+    ),
+    Value = c(
+      range("startz", "endz"),
+      range("minmz", "maxmz"),
+      range("masslb", "massub"),
+      time,
+      fmt(num("peakwindow")),
+      fmt(num("peakthresh")),
+      if (is.na(peaknorm)) fmt(num("peaknorm")) else unname(peaknorm),
+      fmt(num("massbins"))
+    ),
+    stringsAsFactors = FALSE
+  )
+}
+
+# add_side_tables(): Tables beside a spectrum ----
+# Blocks of two columns (name, value), each without a header and with inner
+# borders only, stacked in the figure's right margin. The margin is widened
+# to the tables, so the plot area (axes or a cubic view's 3D scene) shrinks
+# by exactly that much and they never cover a peak, whatever the card's size.
+# They go along with the figure into an export. A legend, if any, belongs
+# below them in the same margin (see the "Show All" plot in
+# deconvolution_main.R).
+#
+# Drawn from annotations and line shapes rather than plotly table traces,
+# which always outline every cell. All of it is placed in pixels from the
+# top right corner of the plot area, with the columns of all blocks sized
+# from their longest text so they line up.
+#
+# `blocks` is a list of list(rows = data.frame(Parameter, Value), caption);
+# a numeric Value is formatted here (format_metric(): two decimals), a
+# character one is shown as it is, and the optional caption is a line above
+# its block. Blocks without rows are skipped.
+#' @export
+add_side_tables <- function(plot, blocks, theme = "light") {
+  blocks <- Filter(function(b) !is.null(b$rows) && nrow(b$rows) > 0, blocks)
+  if (length(blocks) == 0) {
     return(plot)
   }
 
   dark <- tolower(theme) != "light"
   font_color <- if (dark) "white" else "black"
-  line_color <- if (dark) "rgba(255,255,255,0.25)" else "rgba(0,0,0,0.2)"
-  header_fill <- if (dark) "rgba(255,255,255,0.12)" else "rgba(0,0,0,0.08)"
+  line_color <- if (dark) "rgba(255,255,255,0.3)" else "rgba(0,0,0,0.25)"
 
-  values <- vapply(
-    metrics$Value,
-    function(v) format(signif(v, 6), scientific = FALSE, trim = TRUE),
-    character(1)
+  blocks <- lapply(blocks, function(b) {
+    b$values <- if (is.numeric(b$rows$Value)) {
+      format_metric(b$rows$Value)
+    } else {
+      as.character(b$rows$Value)
+    }
+    b
+  })
+
+  row_h <- 22
+  caption_h <- 24
+  block_gap <- 14
+  # Column widths from the text: about 7 px per character at 12 px, plus
+  # padding on both sides of the cell
+  pad <- 8
+  char_w <- 7
+  labels <- unlist(lapply(blocks, function(b) b$rows$Parameter))
+  values <- unlist(lapply(blocks, function(b) b$values))
+  captions <- unlist(lapply(blocks, function(b) b$caption))
+  label_w <- max(nchar(labels)) * char_w + 2 * pad
+  value_w <- max(nchar(values)) * char_w + 2 * pad
+  table_w <- max(
+    label_w + value_w,
+    if (length(captions)) max(nchar(captions)) * 6.5 + 2 * pad else 0
   )
+  value_w <- table_w - label_w
+  gap <- 16 # between the plot area and the tables
 
-  plot |>
-    plotly::add_trace(
-      type = "table",
-      inherit = FALSE,
-      domain = list(x = c(1 - width, 1), y = c(0, 1)),
-      columnwidth = c(1.8, 1),
-      header = list(
-        values = list("<b>Metric</b>", "<b>Value</b>"),
-        align = c("left", "right"),
-        fill = list(color = header_fill),
-        line = list(color = line_color, width = 1),
-        font = list(color = font_color, size = 12),
-        height = 26
-      ),
-      cells = list(
-        values = list(metrics$Parameter, values),
-        align = c("left", "right"),
-        fill = list(color = "rgba(0,0,0,0)"),
-        line = list(color = line_color, width = 1),
-        font = list(color = font_color, size = 12),
-        height = 24
+  text_ann <- function(text, xanchor, xshift, offset, size = 12) {
+    list(
+      text = text,
+      x = 1,
+      y = 1,
+      xref = "paper",
+      yref = "paper",
+      xanchor = xanchor,
+      yanchor = "middle",
+      xshift = xshift,
+      yshift = -offset,
+      showarrow = FALSE,
+      font = list(color = font_color, size = size)
+    )
+  }
+  line_px <- function(x0, x1, y0, y1) {
+    list(
+      type = "line",
+      xref = "paper",
+      xsizemode = "pixel",
+      xanchor = 1,
+      x0 = x0,
+      x1 = x1,
+      yref = "paper",
+      ysizemode = "pixel",
+      yanchor = 1,
+      y0 = y0,
+      y1 = y1,
+      line = list(color = line_color, width = 1)
+    )
+  }
+
+  annotations <- list()
+  shapes <- list()
+  top <- 0
+  for (b in blocks) {
+    if (!is.null(b$caption)) {
+      annotations <- c(annotations, list(text_ann(
+        paste0("<i>", b$caption, "</i>"),
+        "left",
+        gap + pad,
+        top + caption_h / 2,
+        size = 11
+      )))
+      top <- top + caption_h
+    }
+    n <- nrow(b$rows)
+    for (i in seq_len(n)) {
+      offset <- top + (i - 0.5) * row_h
+      annotations <- c(
+        annotations,
+        list(
+          text_ann(b$rows$Parameter[i], "left", gap + pad, offset),
+          text_ann(b$values[i], "right", gap + table_w - pad, offset)
+        )
       )
-    ) |>
-    plotly::layout(xaxis = list(domain = c(0, 1 - width - 0.03)))
+      if (i < n) {
+        y <- -(top + i * row_h)
+        shapes <- c(shapes, list(line_px(gap, gap + table_w, y, y)))
+      }
+    }
+    shapes <- c(
+      shapes,
+      list(line_px(gap + label_w, gap + label_w, -top, -(top + n * row_h)))
+    )
+    top <- top + n * row_h + block_gap
+  }
+
+  # Appended to the built layout: layout(shapes = ...) would replace the
+  # spectrum's own peak label shapes and annotations instead. A figure that
+  # is built already (spectrum_plot() and multiple_spectra() return one) and
+  # has no layout() change pending is not built again: that re-checks every
+  # trace, a noticeable cost with hundreds of spectra.
+  built <- if (length(plot$x$data) > 0 && length(plot$x$layoutAttrs) == 0) {
+    plot
+  } else {
+    plotly::plotly_build(plot)
+  }
+  lay <- built$x$layout
+  lay$annotations <- c(lay$annotations, annotations)
+  lay$shapes <- c(lay$shapes, shapes)
+  lay$margin$r <- gap + table_w + pad
+  if (!is.null(lay$scene)) {
+    # The legend no longer runs over the scene, so it needs no dodging. The
+    # tilted view projects the cube left of the camera's target; aiming a
+    # little to its left centres the cube in the scene.
+    lay$scene$camera$center$x <- -0.2
+    # The cube's projection is not confined to its scene, and plotly scales
+    # it by the scene's height: with the scene narrowed by the tables (tall
+    # and narrow in the card), its near corner ran under them. The scene ends
+    # short of the tables, and the camera moves back (the same view, smaller)
+    # so the cube fits inside it.
+    lay$scene$domain <- list(x = c(0, 0.9), y = c(0, 1))
+    eye <- lay$scene$camera$eye
+    if (!is.null(eye)) {
+      lay$scene$camera$eye <- lapply(eye, function(v) v * 1.3)
+    }
+    # plotly's default margins (100 px top, 80 px bottom and left) are for
+    # axes outside the plot area, which a 3D scene draws inside its own; as
+    # the projection scales with the scene's height, they only shrank it
+    lay$margin$t <- 10
+    lay$margin$b <- 10
+    lay$margin$l <- 40
+  }
+  built$x$layout <- lay
+  built
 }
 
 # generate_decon_rslt(): Finalise the SQLite DB after all workers complete ----

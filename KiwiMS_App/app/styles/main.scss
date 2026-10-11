@@ -61,6 +61,22 @@
         position: static;
       }
     }
+
+    /* Read-only rows (targets fixed by the experiment config) */
+    .kiwi-file-item {
+      font-size: 0.8rem;
+      padding: 2px 1rem;
+      border-bottom: 1px solid #e5e5e5;
+    }
+
+    .kiwi-file-item:last-child {
+      border-bottom: none;
+    }
+  }
+
+  &.kiwi-file-selector-readonly .kiwi-file-list {
+    padding-top: 0;
+    user-select: text;
   }
 
   /* Light-background take on .shortcut-bar (conversion tab) */
@@ -580,15 +596,10 @@ button .sF-modal {
   --help-modal-margin: max(1rem, 3vh);
   --help-modal-max-height: calc(100vh - 2 * var(--help-modal-margin));
   --help-modal-max-height: calc(100dvh - 2 * var(--help-modal-margin));
-  --help-math-font: "Cambria Math", "STIX Two Math", "Latin Modern Math",
-    "Times New Roman", serif;
+  --help-math-font: "Cambria Math", "STIX Two Math", "Latin Modern Math", "Times New Roman", serif;
 
   .modal-dialog {
-    width: min(
-      50rem,
-      calc(100vw - 2rem),
-      max(26rem, calc(var(--help-modal-max-height) * 0.8))
-    );
+    width: min(54rem, calc(100vw - 2rem), max(28rem, calc(var(--help-modal-max-height) * 0.86)));
     max-width: none;
     min-height: var(--help-modal-max-height);
     margin: var(--help-modal-margin) auto;
@@ -609,6 +620,7 @@ button .sF-modal {
 }
 
 .help-modal-body {
+  container: help-body / inline-size;
   font-size: 1rem;
   line-height: 1.55;
 
@@ -646,26 +658,33 @@ button .sF-modal {
   border-bottom: 1px solid rgb(0 0 0 / 12%);
 }
 
+/* Term / description lists. The term column fits its terms but never takes
+   more than about a quarter of the width: longer terms ("Select Samples /
+   Compounds / Columns") wrap instead of squeezing the descriptions into a
+   narrow, tall column. In a narrow modal the terms go above their
+   descriptions. */
 .help-defs {
   display: grid;
-  grid-template-columns: minmax(7rem, max-content) 1fr;
-  gap: 0.5rem 1.25rem;
+  grid-template-columns: fit-content(26%) 1fr;
+  gap: 0.55rem 1.1rem;
   margin: 0 0 0.75rem;
 
   dt {
     font-weight: 600;
+    line-height: 1.35;
+    padding-top: 0.1em;
   }
 
   dd {
     margin: 0;
   }
 
-  @media (max-width: 36rem) {
+  @container help-body (max-width: 32rem) {
     grid-template-columns: 1fr;
-    row-gap: 0.15rem;
+    row-gap: 0.1rem;
 
     dd {
-      margin-bottom: 0.4rem;
+      margin-bottom: 0.5rem;
     }
   }
 }
@@ -1407,6 +1426,30 @@ td.listbox.htDimmed.current.highlight {
   cursor: pointer;
 }
 
+// Samples left out of the conversion (Include unticked): greyed, the sample
+// name struck through. Outranks the plain cell background above.
+.handsontable td.sample-excluded,
+.table-legend-element .cell.excluded-sample {
+  background: #d2d2d7;
+  color: #7c7c84;
+}
+
+.handsontable td.sample-excluded-name {
+  text-decoration: line-through;
+}
+
+.handsontable input.sample-include-all,
+.handsontable .htCheckboxRendererInput {
+  margin: 0;
+  vertical-align: middle;
+  cursor: pointer;
+  accent-color: #35357a;
+
+  &:disabled {
+    cursor: default;
+  }
+}
+
 /* --- Plotly & MathJax --- */
 
 .js-plotly-plot .plotly svg {
@@ -1794,7 +1837,7 @@ td.listbox.htDimmed.current.highlight {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  min-width: 450px;
+  width: 60%;
 }
 
 .deconvolution-result-controls .card,
@@ -2619,26 +2662,6 @@ div[data-value="Protein Conversion"] .tab-pane {
   padding-bottom: 2px !important;
 }
 
-#app-conversion_main-kobs_result,
-#app-conversion_main-proteoform_table {
-  width: 99% !important;
-  height: 1px !important;
-  flex-basis: unset !important;
-}
-
-#app-conversion_main-kobs_result .dataTables_scrollBody,
-#app-conversion_main-proteoform_table .dataTables_scrollBody,
-#app-conversion_main-kobs_result .dataTables_scrollHead,
-#app-conversion_main-proteoform_table .dataTables_scrollHead {
-  width: 99% !important;
-}
-
-#app-conversion_main-kobs_result .table,
-#app-conversion_main-proteoform_table .table {
-  margin-top: 0px !important;
-  width: 100% !important;
-}
-
 #app-conversion_main-kobs_result .form-group,
 #app-conversion_main-kobs_result .shiny-input-container .checkbox {
   margin: 0;
@@ -2707,7 +2730,7 @@ div[data-value="Protein Conversion"] .tab-pane {
 #app-conversion_main-hits_unified_tab .dataTables_wrapper {
   display: grid;
   grid-template-rows: auto 1fr auto;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: auto auto 1fr auto;
   height: 100%;
 
   > .dataTables_info {
@@ -2718,9 +2741,31 @@ div[data-value="Protein Conversion"] .tab-pane {
     font-style: italic;
   }
 
-  > .dataTables_filter {
+  /* Help button inserted after the entries count (hits_results_ui()) */
+  > .hits-dt-help {
     grid-row: 1;
     grid-column: 2;
+    align-self: center;
+    margin-left: 0.9rem;
+    padding: 0;
+    border: none;
+    background: none;
+    color: #fff;
+    font-size: 1.15rem;
+    line-height: 1;
+    opacity: 0.85;
+
+    &:hover,
+    &:focus-visible {
+      color: #fff;
+      background: none;
+      opacity: 1;
+    }
+  }
+
+  > .dataTables_filter {
+    grid-row: 1;
+    grid-column: 4;
     padding-bottom: 0;
   }
 
@@ -2763,12 +2808,7 @@ div[data-value="Protein Conversion"] .tab-pane {
   color: black;
 }
 
-#app-conversion_main-hits_unified_tab div.dataTables_scrollBody,
-#app-conversion_main-samples_table_view div.dataTables_scrollBody,
-#app-conversion_main-overview_table_view div.dataTables_scrollBody,
-#app-conversion_main-kobs_result div.dataTables_scrollBody,
-#app-conversion_main-proteoform_table div.dataTables_scrollBody,
-.conc-hits-table div.dataTables_scrollBody {
+#app-conversion_main-hits_unified_tab div.dataTables_scrollBody {
   border: none !important;
   border-radius: 4px;
 }
@@ -2906,23 +2946,53 @@ div[data-value="Protein Conversion"] .tab-pane {
   grid-column: span 3;
 }
 
+// The plates are 3:2 with the legend beside them, so the cards go three by
+// two where the tab is wide: two by three made wide, low cards whose tiles
+// the height kept small. Where three columns leave the tiles small, two
+// columns, each row as high as the plate needs at the card's width (about
+// 240 px of a card beside the plate, 110 px above and below it), and the
+// tab scrolls.
 .batch-control-tab {
   height: 100%;
   display: flex;
   flex-direction: column;
+  container-type: inline-size;
 }
 
 .batch-control-tab > div {
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .batch-heatmap-grid {
-  height: 100%;
+  --batch-card-width: calc((100cqi - 1rem) / 2);
+  min-height: 100%;
   display: grid;
   gap: 1rem;
-  grid-template-columns: 1fr 1fr;
-  grid-auto-rows: 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(
+    clamp(280px, calc((var(--batch-card-width) - 240px) * 2 / 3 + 110px), 400px),
+    1fr
+  );
+}
+
+@container (min-width: 1440px) {
+  .batch-heatmap-grid {
+    grid-auto-rows: minmax(280px, 1fr);
+  }
+
+  .batch-heatmap-grid:not(.batch-heatmap-grid-4) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container (max-width: 760px) {
+  .batch-heatmap-grid {
+    --batch-card-width: 100cqi;
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .batch-heatmap-grid .card-custom {
@@ -3132,14 +3202,15 @@ div[data-value="Protein Conversion"] .tab-pane {
   border-bottom: none;
 }
 
-.binding-analysis-tab .card-custom .card .card-body,
-.kinetics-diagnostics-tab .card-custom .card .card-body,
-.statistics-tab .card-custom .card .card-body,
-.batch-control-tab .card-custom .card .card-body,
-.protocol-tab .card-custom .card .card-body,
-.conversion-samples-wrapper .card-custom .card .card-body {
-  padding: 1%;
-}
+// TODO
+// .binding-analysis-tab .card-custom .card .card-body,
+// .kinetics-diagnostics-tab .card-custom .card .card-body,
+// .statistics-tab .card-custom .card .card-body,
+// .batch-control-tab .card-custom .card .card-body,
+// .protocol-tab .card-custom .card .card-body,
+// .conversion-samples-wrapper .card-custom .card .card-body {
+//   padding: 1%;
+// }
 
 .conversion-samples-wrapper .card-custom .card .card-body {
   overflow: hidden;
@@ -3150,7 +3221,9 @@ div[data-value="Protein Conversion"] .tab-pane {
   background: #ddddde !important;
 }
 
-.deconvolution-spectrum-card .plotly #scene,
+// The Spectrum card's 3D scene ("Show All", cubic) keeps plotly's own size
+// and position: forced to the full width, it ignored its domain and ran
+// under the metrics and parameters tables in the figure's margin.
 .deconvolution-spectrum-card .plot-container .plotly,
 .deconvolution-spectrum-card .plotly .gl-container,
 .deconvolution-heatmap-card .plotly #scene,
@@ -3213,14 +3286,25 @@ div[data-value="Protein Conversion"] .tab-pane {
   margin-bottom: 1.5em;
 }
 
-.spectrum-render-prompt {
+// Text shown in place of a plot ("No binding events", ...). Centred over the
+// whole card body, independent of how tall the output wrappers end up.
+.card-body:has(.plot-placeholder) {
+  position: relative;
+}
+
+.plot-placeholder {
+  position: absolute;
+  inset: 0;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 300px;
-  gap: 1rem;
   padding: 1rem;
+  text-align: center;
+}
+
+.spectrum-render-prompt {
+  flex-direction: column;
+  gap: 1rem;
 
   p {
     font-size: 0.9em;
@@ -3671,6 +3755,24 @@ html body.swal2-toast-shown .swal2-container {
   max-width: min(32rem, calc(100vw - 2rem));
 }
 
+// Count of the samples left out of the conversion, at the right end of the
+// hint row (the table is 99% wide)
+.table-hint.table-hint-exclusion {
+  left: auto;
+  right: 1%;
+
+  svg,
+  i {
+    color: rgb(255 255 255 / 70%);
+  }
+}
+
+// Leaves room for the count next to a long hint
+.table-hint-anchor:has(.table-hint-exclusion)
+  .table-hint:not(.table-hint-exclusion) {
+  max-width: calc(99% - 15rem);
+}
+
 .table-hint-red i {
   color: #ff5a23;
 }
@@ -3787,6 +3889,13 @@ html body.swal2-toast-shown .swal2-container {
   width: 50px;
   height: 20px;
   border: 1px solid #e5e5e5;
+}
+
+.table-legend-element .cell.excluded-sample {
+  font-size: 10px;
+  line-height: 18px;
+  text-align: center;
+  text-decoration: line-through;
 }
 
 /* ==========================================================================
@@ -3925,27 +4034,12 @@ html body.swal2-toast-shown .swal2-container {
   background-color: inherit !important;
 }
 
-#app-conversion_main-samples_table_view div.dataTables_scrollBody,
-#app-conversion_main-samples_table_view div.dataTables_scrollHead,
-#app-conversion_main-overview_table_view div.dataTables_scrollBody,
-#app-conversion_main-overview_table_view div.dataTables_scrollHead,
-#app-conversion_main-kobs_result div.dataTables_scrollBody,
-#app-conversion_main-proteoform_table div.dataTables_scrollBody,
-#app-conversion_main-kobs_result div.dataTables_scrollHead,
-#app-conversion_main-proteoform_table div.dataTables_scrollHead,
-.conc-hits-table div.dataTables_scrollBody,
-.conc-hits-table div.dataTables_scrollHead,
 #app-deconvolution_main-deconvolution_data div.dataTables_scrollBody,
 #app-deconvolution_main-deconvolution_data div.dataTables_scrollHead {
   width: 99% !important;
   flex-basis: unset !important;
 }
 
-#app-conversion_main-samples_table_view .table,
-#app-conversion_main-overview_table_view .table,
-#app-conversion_main-kobs_result .table,
-#app-conversion_main-proteoform_table .table,
-.conc-hits-table .table,
 #app-deconvolution_main-deconvolution_data .table {
   margin-top: 0px !important;
   width: 100% !important;
@@ -3965,7 +4059,9 @@ html body.swal2-toast-shown .swal2-container {
 .conversion-samples-wrapper {
   display: grid;
   gap: 10px;
-  grid-template-columns: 1fr 1fr;
+  // minmax(0, ...): a wide table scrolls inside its card instead of widening
+  // the column past the screen
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-rows: 2fr 3fr;
   height: 100%;
   width: 100%;
@@ -4018,11 +4114,14 @@ html body.swal2-toast-shown .swal2-container {
 }
 
 // Option annotations (subtext, e.g. "No hits") right aligned in the dropdown;
-// .bootstrap-select outranks bootstrap-select's own inline-block rule
+// .bootstrap-select outranks bootstrap-select's own inline-block rule. As a
+// block-level flex box the text fills the option up to bootstrap-select's
+// margin-right (34px, kept clear for the check mark); width: 100% would add
+// that margin on top and push the annotation under the check mark.
 .sample-cmp-prot-picker .bootstrap-select .dropdown-menu li a span.text {
   display: flex;
   align-items: baseline;
-  width: 100%;
+  margin-right: 34px;
 
   small.text-muted {
     margin-left: auto;
@@ -4162,41 +4261,70 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   padding-top: 0.5em !important;
 }
 
-.cmp-table .card .card-body {
-  padding-left: 15px !important;
+/* Table View cards (Overview, Sample View): the table spans the whole card
+   body without padding or gaps and scrolls itself, the card body never */
+.table-view-card,
+.table-view-card .card {
+  min-width: 0;
 }
 
-#app-conversion_main-overview_table_view,
-#app-conversion_main-samples_table_view,
-#app-conversion_main-kobs_result,
-#app-conversion_main-proteoform_table,
-.conc-hits-table .datatables {
-  width: 99% !important;
-  height: 80% !important;
-  flex-basis: unset !important;
+.table-view-card .card .card-body {
+  padding: 0;
+  gap: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.table-view-card .datatables {
+  width: 100% !important;
+  height: 100% !important;
   font-size: 12px;
 }
 
-#app-conversion_main-overview_table_view > div,
-#app-conversion_main-overview_table_view .dataTables_scroll,
-#app-conversion_main-samples_table_view > div,
-#app-conversion_main-samples_table_view .dataTables_scroll,
-#app-conversion_main-kobs_result > div,
-#app-conversion_main-proteoform_table > div,
-#app-conversion_main-kobs_result .dataTables_scroll,
-#app-conversion_main-proteoform_table .dataTables_scroll,
-.conc-hits-table .datatables > div,
-.conc-hits-table .datatables .dataTables_scroll,
+.table-view-card .dataTables_wrapper,
+.table-view-card .dataTables_scroll {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.table-view-card div.dataTables_scrollHead,
+.table-view-card div.dataTables_scrollBody {
+  width: 100% !important;
+}
+
+.table-view-card div.dataTables_scrollHead {
+  flex: 0 0 auto;
+}
+
+.table-view-card div.dataTables_scrollBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto !important;
+  max-height: none !important;
+  overflow: auto !important;
+  border: none !important;
+  // Square, since the scroll body clips the corners of its edge rows
+  border-radius: 0;
+}
+
+.table-view-card .bar {
+  border-radius: 0;
+}
+
+// No forced width: with horizontal scrolling DataTables sizes the header
+// table to the body table, and both must keep that width to stay aligned
+.table-view-card .table {
+  margin: 0 !important;
+  --bs-table-bg: transparent;
+}
+
 #app-deconvolution_main-deconvolution_data > div,
 #app-deconvolution_main-deconvolution_data .dataTables_scroll {
   height: 100% !important;
 }
 
-#app-conversion_main-overview_table_view .dataTables_scrollBody,
-#app-conversion_main-samples_table_view .dataTables_scrollBody,
-#app-conversion_main-kobs_result .dataTables_scrollBody,
-#app-conversion_main-proteoform_table .dataTables_scrollBody,
-.conc-hits-table .datatables .dataTables_scrollBody,
 #app-deconvolution_main-deconvolution_data .dataTables_scrollBody {
   height: 100% !important;
   max-height: unset !important;
@@ -5099,21 +5227,6 @@ sample-file-row .form-group {
   align-content: center;
 }
 
-/* Export label with the Help button of the Hits table at its right end */
-.hits-table-export .label-tooltip {
-  flex-wrap: nowrap;
-  align-items: center;
-
-  label {
-    width: auto !important;
-  }
-
-  .tooltip-bttn .btn {
-    height: auto;
-    width: auto;
-  }
-}
-
 .table-dl-buttons {
   display: flex;
   gap: 4px;
@@ -5203,6 +5316,14 @@ sample-file-row .form-group {
 .popover .btn-group > .btn,
 .popover .btn-group > .btn:hover {
   border: 1px solid #656565 !important;
+}
+
+// Popover body and picker toggle share #e5e5e5, so the picker needs an edge
+.popover .bootstrap-select > .dropdown-toggle,
+.popover .bootstrap-select > .dropdown-toggle:hover,
+.popover .bootstrap-select > .dropdown-toggle:focus,
+.popover .bootstrap-select.show > .dropdown-toggle {
+  border: 1px solid #656565;
 }
 
 .popover .material-switch label {

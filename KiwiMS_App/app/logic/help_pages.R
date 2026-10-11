@@ -457,8 +457,8 @@ decon_spectrum_page <- function() {
   help_modal(
     "Spectrum",
     shiny::p(
-      "The spectrum of the sample selected above (or clicked in the Well ",
-      "Plate). The Settings switch between two views:"
+      "The spectrum of the sample selected above (or clicked in the Sample ",
+      "Distribution). The Settings switch between two views:"
     ),
     help_defs(
       help_def(
@@ -472,10 +472,16 @@ decon_spectrum_page <- function() {
         "against m/z, with the charge-state envelope of the protein."
       ),
       help_def("Annotate Mass", "Labels the peaks with their mass."),
+      help_def("Show Symbols", "Marks the detected peaks with a symbol."),
       help_def(
         "Show Metrics",
         "Lists the statistics UniDec reports for the sample in a table ",
         "beside the spectrum (see below)."
+      ),
+      help_def(
+        "Show Parameters",
+        "Lists the deconvolution settings the run was started with, below ",
+        "the metrics. They are the same for every sample of the run."
       )
     ),
     shiny::p(
@@ -488,7 +494,8 @@ decon_spectrum_page <- function() {
       "Show All (selected at the end of the run) draws the deconvoluted ",
       "spectra of all of them together, failed samples left out. The ",
       "Settings then switch between Cubic (one spectrum behind the other) ",
-      "and Planar (all on the same axes)."
+      "and Planar (all on the same axes), and Show Metrics lists the mean ",
+      "and standard deviation of each metric over these samples."
     ),
     shiny::p(
       "A sample that failed shows the reason instead of a spectrum; Copy ",
@@ -546,18 +553,24 @@ decon_spectrum_page <- function() {
 
 well_plate_page <- function() {
   help_modal(
-    "Well Plate",
+    "Sample Distribution",
     shiny::p(
-      "One tile per sample of the run. When the experiment configuration ",
-      "gives every sample a well, the tiles are those wells. Otherwise the ",
-      "samples fill the tiles in the order they are processed, left to right ",
-      "and top to bottom."
+      "The samples of the run on a whole 96- or 384-well plate. When the ",
+      "experiment configuration gives every sample a well, the samples sit ",
+      "on those wells, on a 384-well plate if any well lies beyond H12. ",
+      "Otherwise they fill the plate in the order they are processed, left ",
+      "to right and top to bottom, on a 96-well plate for up to 96 samples."
     ),
     help_defs(
       help_def(
         "Coloured",
-        "Deconvoluted. The colour and the number on the tile give how many ",
-        "peaks UniDec detected in the sample."
+        "Deconvoluted. The tile shows the number of peaks UniDec detected in ",
+        "the sample; the colour encodes the same count."
+      ),
+      help_def(
+        "Number",
+        "The number of peaks detected in the sample, the same count the ",
+        "colour stands for."
       ),
       help_def(
         "Cross",
@@ -566,7 +579,8 @@ well_plate_page <- function() {
       help_def("Grey", "Not deconvoluted yet, or no sample in this well.")
     ),
     shiny::p(
-      "Click a tile to show its sample in the Spectrum card."
+      "The plate appears once the first sample is deconvoluted or has ",
+      "failed. Click a tile to show its sample in the Spectrum card."
     )
   )
 }
@@ -756,6 +770,14 @@ samples_declaration_page <- function() {
     help_section(
       "Columns",
       help_defs(
+        help_def(
+          "Include (checkbox)",
+          "Untick a sample to leave it out of the conversion, e.g. a failed ",
+          "measurement. Left-out samples stay in the table, greyed, and are ",
+          "neither checked nor screened; tick them to include them again. The ",
+          "box in the column header includes or excludes all samples at once, ",
+          "and Space toggles the selected cells."
+        ),
         help_def("Sample", "Sample name from the deconvolution (read-only)."),
         help_def("Protein", "A protein of the Proteins table."),
         help_def(
@@ -843,8 +865,9 @@ samples_declaration_page <- function() {
         ),
         help_def(
           "The same incubation injected more than once",
-          "Include one injection per incubation only, by leaving the others ",
-          "out of the deconvolution or the configuration. Declared as ",
+          "Include one injection per incubation only: untick the others in ",
+          "the Include column, or leave them out of the deconvolution or the ",
+          "configuration. Declared as ",
           "replicates or as a second series, they make the confidence ",
           "intervals too narrow and the series agree by construction."
         )
@@ -852,7 +875,7 @@ samples_declaration_page <- function() {
     ),
     help_note(
       shiny::strong("Limits: "),
-      "at most ",
+      "counted over the included samples, at most ",
       run_limits$max_samples,
       " samples per run, ",
       run_limits$max_series,
@@ -970,7 +993,13 @@ relative_binding_page <- function() {
         ),
         help_def(
           "Color Variable",
-          "Colours plots and tables by compound or by sample."
+          paste0(
+            "Colours plots and tables by compound, or each sample by its ",
+            "concentration, time or by sample. It opens on what the ",
+            "experiment varies: the concentration when several were dosed, ",
+            "otherwise the compound when there are several, otherwise the ",
+            "sample."
+          )
         ),
         help_def(
           "Colours",
@@ -1053,15 +1082,16 @@ table_view_page <- function() {
   help_modal(
     "Table View",
     shiny::p(
-      "The hits behind the plots: in the Sample View those of the selected ",
-      "sample, in the Overview those of the selected protein and compounds ",
-      "over all samples. One row per assignment of a peak."
+      "The rows of the Hits table behind the plots: in the Sample View those ",
+      "of the selected sample, in the Overview those of the selected protein ",
+      "and compounds over all samples. One row per assignment of a peak, the ",
+      "percentages drawn as bars in their cells."
     ),
     help_section("Columns", hit_columns()),
     intensity_note(),
     shiny::p(
-      "Settings → Binding [%] Bar and Tot. Binding [%] Bar draw these values ",
-      "as bars in their cells."
+      "Settings → Select Columns picks the columns shown, as in the Hits ",
+      "table; the export follows the selection."
     )
   )
 }
@@ -1086,8 +1116,10 @@ compound_distribution_page <- function() {
         "bar per sample, stacked from its complexes (mass shift × ",
         "stoichiometry) with the sample's total written above. With one ",
         "compound the bars stand side by side; with several they are grouped ",
-        "by compound. Samples run from least to most bound; a sample declared ",
-        "with the compound but without a hit of it stays at 0 %."
+        "by compound. Samples follow the order of the Table View and the ",
+        "sample colours (concentration, then time; otherwise from least to ",
+        "most bound); a sample declared with the compound but without a hit ",
+        "of it stays at 0 %."
       ),
       help_defs(
         help_def(
@@ -1095,7 +1127,11 @@ compound_distribution_page <- function() {
           "Maximum scales the axis to the highest binding, 100 to the full ",
           "0 – 100 %."
         ),
-        help_def("Show Labels", "Writes the values onto the bars.")
+        help_def("Show Labels", "Writes the values onto the bars."),
+        help_def(
+          "Sort by Binding",
+          "With concentrations: ranks the samples from least to most bound."
+        )
       )
     ),
     shiny::p(
@@ -1136,8 +1172,8 @@ annotated_spectrum_page <- function() {
         ),
         help_def(
           "Sort by Binding",
-          "Orders the spectra by binding, like the Compound Distribution and ",
-          "the Table View. Off, they are grouped by concentration."
+          "Orders the spectra by binding. Off, they follow the Table View ",
+          "(concentration, then time) and the sample colours."
         ),
         help_def(
           "Show Labels / Symbols / Legend",
@@ -1810,17 +1846,20 @@ hits_page <- function() {
       help_defs(
         help_def(
           "Display",
-          shiny::strong("Adduct View"),
+          shiny::strong("Adduct View", .noWS = "after"),
           ": one row per assignment of a peak, with the columns below. ",
-          shiny::strong("Sample View"),
+          shiny::strong("Sample View", .noWS = "after"),
           ": one row per sample and protein–compound pair, with a binding ",
           "column per declared mass shift and stoichiometry."
         ),
         help_def(
           "Color Variable",
           paste0(
-            "Colour the table by concentration, compound or sample, or not ",
-            "at all. Rows take a light tint of the colour the plots use."
+            "Colour the table by protein, compound, concentration, time or ",
+            "sample, or not at all. It opens on what the experiment varies: ",
+            "the concentration when several were dosed, otherwise the ",
+            "compound, otherwise the protein. Rows take a light tint of the ",
+            "colour the plots use."
           )
         ),
         help_def(
@@ -2087,9 +2126,13 @@ stats_scatter_page <- function() {
     shiny::p(
       "Every sample as a point: its Tot. Binding [%] against its hit rate, ",
       "coloured by protein, compound or concentration (Settings → Color By). ",
-      "Past twelve groups the colours repeat with another marker shape. The ",
+      "Past eighteen groups the colours repeat with another marker shape. The ",
       "dashed line ",
       "marks the mean hit rate, the dotted lines ± 1 SD."
+    ),
+    shiny::p(
+      "With many groups, hover a point to highlight its group. A click on a ",
+      "legend entry hides that group, a double click shows it alone."
     ),
     shiny::p(
       "Low Correct [%] together with low binding can mean that complexes ",
@@ -2145,6 +2188,12 @@ batch_heatmap_page <- function() {
       "Compound, protein, concentration and time take the colours they have ",
       "in every other view. For the percentages, Settings → Full Scale ",
       "(0–100%) fixes the colour scale to the whole percentage range."
+    ),
+    shiny::p(
+      "With more compounds or proteins than colours, every tile carries a ",
+      "number, named in the legend. A click on a legend entry hides its ",
+      "wells, a double click shows them alone; another double click shows ",
+      "all wells again."
     )
   )
 }

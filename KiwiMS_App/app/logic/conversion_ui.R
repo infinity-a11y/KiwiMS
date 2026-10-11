@@ -9,13 +9,16 @@ box::use(
   app /
     logic /
     conversion_functions[
+      color_key,
+      default_color_role,
       format_scientific,
       unit_symbol,
       stats_histogram,
       stats_boxplot,
       stats_scatter,
       stats_violin,
-      show_preferred_column,
+      hits_bar_cols,
+      hits_col_choices,
       is_complex_row,
       overview_choices,
       overview_status_note,
@@ -114,7 +117,7 @@ kinact_ki_concentrations_panel <- function(
         ),
         # Top right: hits of the concentration
         shiny::div(
-          class = "card-custom hits",
+          class = "card-custom hits table-view-card",
           bslib::card(
             bslib::card_header(
               class = "bg-dark help-header d-flex justify-content-between",
@@ -427,7 +430,7 @@ kinact_ki_results_ui <- function(
             )
           ),
           shiny::div(
-            class = "card-custom",
+            class = "card-custom table-view-card",
             bslib::card(
               full_screen = TRUE,
               bslib::card_header(
@@ -734,9 +737,9 @@ proteoform_results_panel <- function(ns, paired_limits = FALSE) {
     )
   }
 
-  result_card <- function(title, download, output, style = NULL) {
+  result_card <- function(title, download, output, style = NULL, class = NULL) {
     shiny::div(
-      class = "card-custom",
+      class = paste(c("card-custom", class), collapse = " "),
       style = style,
       bslib::card(
         full_screen = TRUE,
@@ -792,7 +795,8 @@ proteoform_results_panel <- function(ns, paired_limits = FALSE) {
           "Proteoform Kinetics",
           table_dl_popover(ns, "proteoform_table"),
           DT::DTOutput(ns("proteoform_table")),
-          style = "grid-column: span 2; min-height: 0;"
+          style = "grid-column: span 2; min-height: 0;",
+          class = "table-view-card"
         )
       )
     ),
@@ -1537,13 +1541,15 @@ summary_results_ui <- function(ns, batch_control) {
 
 # Overview tab of the binding results interface: one protein with any of the
 # compounds declared with it, picked above the two Mass Shifts cards.
-# `selected` is an overview_selection() of `choices`.
+# `selected` is an overview_selection() of `choices`, `table_cols` the
+# hits_col_choices() of the Table View.
 overview_results_panel <- function(
   ns,
   hits_summary,
   choices,
   selected,
-  sort_binding_switch
+  sort_binding_switch,
+  table_cols
 ) {
   proteins <- choices$proteins
   compounds <- if (is.na(selected$protein)) {
@@ -1667,7 +1673,7 @@ overview_results_panel <- function(
           )
         ),
         shiny::div(
-          class = "card-custom cmp-table",
+          class = "card-custom table-view-card",
           bslib::card(
             bslib::card_header(
               class = "bg-dark help-header d-flex justify-content-between",
@@ -1675,21 +1681,7 @@ overview_results_panel <- function(
               shiny::div(
                 class = "box-header-settings-help",
                 card_settings_popover(
-                  shiny::div(
-                    shinyWidgets::materialSwitch(
-                      ns("overview_table_view_binding_bar"),
-                      label = "Binding [%] Bar",
-                      value = TRUE,
-                      right = TRUE
-                    ),
-                    shinyWidgets::materialSwitch(
-                      ns("overview_table_view_tot_binding_bar"),
-                      label = "Tot. Binding [%] Bar",
-                      value = TRUE,
-                      right = TRUE
-                    ),
-                    style = "margin-right: 20px;"
-                  )
+                  hits_col_picker(ns("overview_table_col_select"), table_cols)
                 ),
                 table_dl_popover(ns, "overview_table_view"),
                 help_button("table_view_tooltip_bttn")
@@ -1724,6 +1716,7 @@ overview_results_panel <- function(
                       value = TRUE,
                       right = TRUE
                     ),
+                    sort_binding_switch("overview_distribution_sort_binding"),
                     style = "margin-right: 20px;"
                   )
                 ),
@@ -1822,6 +1815,7 @@ overview_compound_picker_options <- function(has_compounds = TRUE) {
 binding_results_ui <- function(
   ns,
   hits_summary,
+  units = character(),
   show_sort_binding = TRUE,
   overview = NULL
 ) {
@@ -1832,10 +1826,11 @@ binding_results_ui <- function(
     if (!isTRUE(show_sort_binding)) {
       return(NULL)
     }
+    # Off: samples in the order of the table and the sample colours
     shinyWidgets::materialSwitch(
       ns(id),
       label = "Sort by Binding",
-      value = TRUE,
+      value = FALSE,
       right = TRUE
     )
   }
@@ -1845,6 +1840,9 @@ binding_results_ui <- function(
     overview <- overview_selection(choices)
   }
 
+  # Both Table Views are subsets of the hits table, with its columns
+  table_cols <- hits_col_choices(hits_summary, units)
+
   bslib::navset_card_tab(
     id = ns("tabs"),
     overview_results_panel(
@@ -1852,7 +1850,8 @@ binding_results_ui <- function(
       hits_summary,
       choices,
       overview,
-      sort_binding_switch
+      sort_binding_switch,
+      table_cols
     ),
     bslib::nav_panel(
       title = "Sample View",
@@ -1971,7 +1970,7 @@ binding_results_ui <- function(
             )
           ),
           shiny::div(
-            class = "card-custom cmp-table",
+            class = "card-custom table-view-card",
             id = "upper-section",
             bslib::card(
               bslib::card_header(
@@ -1980,25 +1979,7 @@ binding_results_ui <- function(
                 shiny::div(
                   class = "box-header-settings-help",
                   card_settings_popover(
-                    shiny::div(
-                      shinyWidgets::materialSwitch(
-                        ns(
-                          "samples_table_view_binding_bar"
-                        ),
-                        label = "Binding [%] Bar",
-                        value = TRUE,
-                        right = TRUE
-                      ),
-                      shinyWidgets::materialSwitch(
-                        ns(
-                          "samples_table_view_tot_binding_bar"
-                        ),
-                        label = "Tot. Binding [%] Bar",
-                        value = TRUE,
-                        right = TRUE
-                      ),
-                      style = "margin-right: 20px;"
-                    )
+                    hits_col_picker(ns("samples_table_col_select"), table_cols)
                   ),
                   table_dl_popover(ns, "samples_table_view"),
                   bslib::tooltip(
@@ -2168,20 +2149,22 @@ binding_results_ui <- function(
   )
 }
 
+# Column picker of a hits table, `cols` from hits_col_choices()
+hits_col_picker <- function(id, cols) {
+  shinyWidgets::pickerInput(
+    id,
+    label = "Select Columns",
+    choices = cols$choices,
+    selected = cols$selected,
+    multiple = TRUE,
+    options = list(`actions-box` = TRUE)
+  )
+}
+
 # Unified Hits interface (single card, no tabs)
 #' @export
-hits_results_ui <- function(ns, hits_summary, units) {
-  # Percentage columns offered as bars; Prot. Binding [%] exists only when a
-  # protein was declared with several masses
-  bar_cols <- c(
-    "Binding [%]",
-    "Tot. Binding [%]",
-    if ("Prot. Binding [%]" %in% names(hits_summary)) "Prot. Binding [%]",
-    "Int. Prot. [%]",
-    "Int. Cmp [%]",
-    "Unmatched [%]",
-    "Correct [%]"
-  )
+hits_results_ui <- function(ns, hits_summary, units, key = NULL) {
+  bar_cols <- hits_bar_cols(hits_summary)
 
   bslib::card(
     class = "hits-unified-card",
@@ -2195,19 +2178,38 @@ hits_results_ui <- function(ns, hits_summary, units) {
           choices = c("Adduct View", "Sample View"),
           selected = "Adduct View"
         ),
+        # Every variable the rows can differ in; opens on the experiment's
+        # main factor (see default_color_role())
         shinyWidgets::pickerInput(
           ns("hits_color_variable"),
           label = "Color Variable",
-          choices = if ("Concentration" %in% names(units)) {
-            c("Concentration", "Compounds", "Samples", "None")
-          } else {
-            c("Compounds", "Samples", "None")
-          },
-          selected = if ("Concentration" %in% names(units)) {
-            "Concentration"
-          } else {
-            "Compounds"
-          }
+          choices = c(
+            Protein = "Protein",
+            Compound = "Compounds",
+            Concentration = if ("Concentration" %in% names(units)) {
+              "Concentration"
+            },
+            Time = if ("Time" %in% names(units)) "Time",
+            Sample = "Samples",
+            None = "None"
+          ),
+          selected = switch(
+            default_color_role(
+              key %||% color_key(hits_summary),
+              c(
+                "protein",
+                "compound",
+                if ("Concentration" %in% names(units)) "concentration",
+                if ("Time" %in% names(units)) "time",
+                "sample"
+              )
+            ),
+            protein = "Protein",
+            compound = "Compounds",
+            concentration = "Concentration",
+            time = "Time",
+            "Samples"
+          )
         ),
         shinyWidgets::pickerInput(
           ns("hits_tab_sample_select"),
@@ -2229,53 +2231,9 @@ hits_results_ui <- function(ns, hits_summary, units) {
           multiple = TRUE,
           options = list(`actions-box` = TRUE)
         ),
-        shinyWidgets::pickerInput(
+        hits_col_picker(
           ns("hits_tab_col_select"),
-          label = "Select Columns",
-          choices = names(hits_summary)[
-            !names(hits_summary) %in%
-              c(
-                "Sample ID",
-                "Protein",
-                "Cmp Name",
-                "truncSample_ID",
-                "Tot. Binding [%]",
-                if ("Concentration" %in% names(units)) {
-                  units[["Concentration"]]
-                } else {
-                  NULL
-                },
-                if ("Time" %in% names(units)) units[["Time"]] else NULL
-              )
-          ],
-          selected = names(hits_summary)[
-            !names(hits_summary) %in%
-              c(
-                "Sample ID",
-                "Protein",
-                "Cmp Name",
-                "truncSample_ID",
-                "Tot. Binding [%]",
-                if ("Concentration" %in% names(units)) {
-                  units[["Concentration"]]
-                } else {
-                  NULL
-                },
-                if ("Time" %in% names(units)) units[["Time"]] else NULL,
-                "Well",
-                "Replicate",
-                "Unmatched [%]",
-                # Shown when a peak had a reading that was not preferred
-                if (!show_preferred_column(hits_summary)) "Preferred",
-                "Meas. Prot. [Da]",
-                "Δ Prot. [Da]",
-                "Int. Prot. [%]",
-                "Int. Cmp [%]",
-                "Δ Cmp [Da]"
-              )
-          ],
-          multiple = TRUE,
-          options = list(`actions-box` = TRUE)
+          hits_col_choices(hits_summary, units)
         ),
         shinyWidgets::pickerInput(
           ns("hits_binding_chart"),
@@ -2287,22 +2245,7 @@ hits_results_ui <- function(ns, hits_summary, units) {
         ),
         shiny::div(
           class = "hits-table-export",
-          shiny::div(
-            class = "label-tooltip",
-            shiny::tags$label(class = "control-label", "Export Table"),
-            bslib::tooltip(
-              shiny::div(
-                class = "tooltip-bttn",
-                shiny::actionButton(
-                  ns("hits_tooltip_bttn"),
-                  label = NULL,
-                  icon = shiny::icon("circle-question")
-                )
-              ),
-              "Help",
-              placement = "top"
-            )
-          ),
+          shiny::tags$label(class = "control-label", "Export Table"),
           table_dl_buttons(ns, "hits_unified_tab")
         )
       ),
@@ -2315,7 +2258,33 @@ hits_results_ui <- function(ns, hits_summary, units) {
         )
       )
     ),
-    shiny::tags$script(popover_autoclose)
+    shiny::tags$script(popover_autoclose),
+    # The Help button sits in the table's own header, right after "Showing 1
+    # to n of n entries", so it reads as help on the table rather than on a
+    # control. DataTables rebuilds that header on every render, so the button
+    # is inserted again each time; its "Help" hover comes from the delegated
+    # [data-bs-toggle="tooltip"] tooltips (main.R).
+    shiny::tags$script(shiny::HTML(sprintf(
+      "
+      $(document)
+        .off('init.dt.kiwiHitsHelp')
+        .on('init.dt.kiwiHitsHelp', function(e, settings) {
+          var wrapper = $(settings.nTableWrapper);
+          if (!wrapper.closest('#%s').length) return;
+          if (wrapper.children('.hits-dt-help').length) return;
+          $('<button type=\"button\" class=\"btn hits-dt-help\"' +
+            ' data-bs-toggle=\"tooltip\" title=\"Help\" aria-label=\"Help\">' +
+            '%s</button>')
+            .on('click', function() {
+              Shiny.setInputValue('%s', Math.random(), {priority: 'event'});
+            })
+            .insertAfter(wrapper.children('.dataTables_info'));
+        });
+      ",
+      ns("hits_unified_tab"),
+      gsub("\"", "\\\\\"", as.character(shiny::icon("circle-question"))),
+      ns("hits_tooltip_bttn")
+    )))
   )
 }
 
@@ -2716,7 +2685,8 @@ conversion_declaration_ui <- function(
           width = 12,
           shiny::div(
             class = "table-hint-anchor",
-            shiny::uiOutput(ns("samples_table_hint"))
+            shiny::uiOutput(ns("samples_table_hint")),
+            shiny::uiOutput(ns("samples_table_exclusion"))
           ),
           rhandsontable::rHandsontableOutput(ns("samples_table"), width = "99%")
         )
@@ -2978,6 +2948,17 @@ sample_table_legend <- shiny::div(
     shiny::div(
       class = "table-legend-desc",
       "= protein contains duplicated compound masses (proximity < peak tolerance)"
+    )
+  ),
+  shiny::div(
+    class = "table-legend-element",
+    shiny::div(
+      class = "cell excluded-sample",
+      "Sample"
+    ),
+    shiny::div(
+      class = "table-legend-desc",
+      "= excluded from the conversion (unticked)"
     )
   )
 )

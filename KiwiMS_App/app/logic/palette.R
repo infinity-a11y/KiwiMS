@@ -18,9 +18,14 @@
 #
 # Categorical colours are ordered so that every prefix is as distinct as
 # possible: the first five stay apart under deuteranopia and protanopia too
-# (CIEDE2000 >= 14), all twelve under normal vision (>= 10). Past twelve
-# levels the colours repeat and a second channel (marker symbol, bar pattern
-# or line dash, see level_tier()) tells them apart.
+# (CIEDE2000 >= 14), the first twelve under normal vision (>= 10). Six light
+# accents follow (lighter than the twelve, which sets them apart for colour
+# blind eyes too); all eighteen keep CIEDE2000 >= 9. That is about as many
+# colours as stay apart at all: past eighteen levels the colours repeat and
+# other channels carry the identity - marker symbol (level_tier()), labels on
+# the batch heatmap tiles, legend click to hide or isolate a level.
+# The accents suit areas and outlined markers; thin lines and samples keep to
+# the twelve saturated colours (base_colors).
 #
 # Greys are kept out of the categorical palette: they mean something
 # (controls, unpicked compounds, unbound protein; see status_colors()).
@@ -43,7 +48,13 @@ categorical_palette <- list(
     "#0369A1", # cerulean
     "#A21CAF", # fuchsia
     "#4D7C0F", # olive
-    "#92400E" # brown
+    "#92400E", # brown
+    "#F285D0", # light accents: pink
+    "#FE7B89", # coral
+    "#FF9845", # apricot
+    "#85C3FF", # sky
+    "#00E4D1", # aqua
+    "#00ECFF" # cyan
   ),
   dark = c(
     "#4586FF",
@@ -57,9 +68,21 @@ categorical_palette <- list(
     "#4598D3",
     "#E062ED",
     "#699936",
-    "#E2885C"
+    "#E2885C",
+    # Deep twins of the light accents, the dark export's second round
+    "#A43686",
+    "#B52F48",
+    "#AE4300",
+    "#2563C8",
+    "#008575",
+    "#007E9E"
   )
 )
+
+# How many of the categorical colours are the saturated first round, the
+# ones that also hold up as thin lines
+#' @export
+base_colors <- 12L
 
 # Anchor stops of the ordered and continuous scales, interpolated in CIELAB.
 # - concentration: violet -> magenta -> red -> orange -> amber. Low to high
@@ -70,6 +93,9 @@ categorical_palette <- list(
 # - sample: the categorical hues in hue order, for results with more samples
 #   than categorical colours.
 # - binding, correct, unmatched: heatmap fills from "nothing" to "all".
+# - count: the peak counts of the deconvolution plate, navy -> violet -> red.
+#   Every stop is dark enough for the white count labels (>= 4.5:1), so it
+#   is the same in both themes.
 ramp_anchors <- list(
   concentration = list(
     light = c("#4A0097", "#90007F", "#C41844", "#E14F00", "#E98000"),
@@ -103,6 +129,10 @@ ramp_anchors <- list(
       "#4598D3"
     )
   ),
+  count = list(
+    light = c("#101A5C", "#33288E", "#6E2E9C", "#A8336F", "#C9452C"),
+    dark = c("#101A5C", "#33288E", "#6E2E9C", "#A8336F", "#C9452C")
+  ),
   binding = list(
     light = c("#EEEFF8", "#B9BBE6", "#7A7CCB", "#4A4BA6", "#26266E"),
     dark = c("#22243A", "#383A6E", "#5A5CB0", "#8F91E6", "#D2D3FF")
@@ -123,6 +153,8 @@ ramp_anchors <- list(
 # - control: the 0 concentration, outside the concentration scale.
 # - unbound: the unbound share of the protein in the distribution donut.
 # - correct / unmatched: the two hit-rate metrics.
+# - unassigned: the cross marking spectrum peaks no hit explains. Lighter
+#   than the black protein marker, yet clear of both card greys.
 # - accent: the app's accent colour.
 status_palette <- list(
   light = list(
@@ -131,6 +163,7 @@ status_palette <- list(
     unbound = "#3B3B42",
     correct = "#15803D",
     unmatched = "#DC2626",
+    unassigned = "#454B57",
     accent = "#7777F9"
   ),
   dark = list(
@@ -139,6 +172,7 @@ status_palette <- list(
     unbound = "#C9C9D1",
     correct = "#4ADE80",
     unmatched = "#F87171",
+    unassigned = "#C4C8D0",
     accent = "#9D9DFF"
   )
 )
@@ -162,15 +196,16 @@ concentration_symbols <- c(
 #' @export
 control_symbol <- "circle-cross"
 
+# No diamond: in the spectra it marks the protein
 tier_symbols <- c(
   "circle",
   "square",
-  "diamond",
   "triangle-up",
   "triangle-down",
   "pentagon",
   "hexagram",
-  "star"
+  "star",
+  "hourglass"
 )
 
 tier_patterns <- c("", "/", "\\", "x", ".", "-", "|", "+")
@@ -188,7 +223,7 @@ status_colors <- function(theme = "light") {
   status_palette[[palette_variant(theme)]]
 }
 
-# The first n categorical colours, repeating past twelve
+# The first n categorical colours, repeating past eighteen
 #' @export
 categorical_colors <- function(n, theme = "light") {
   pal <- categorical_palette[[palette_variant(theme)]]
@@ -198,8 +233,8 @@ categorical_colors <- function(n, theme = "light") {
   pal[(seq_len(n) - 1L) %% length(pal) + 1L]
 }
 
-# Repeat round of each of n categorical levels: 0 for the first twelve, 1 for
-# the next twelve, ... Plots that can, switch symbol, pattern or dash with it.
+# Repeat round of each of n categorical levels: 0 for the first eighteen, 1
+# for the next eighteen, ... Plots that can, switch symbol, pattern or dash.
 #' @export
 level_tier <- function(n) {
   (seq_len(n) - 1L) %/% length(categorical_palette$light)
@@ -246,6 +281,17 @@ ramp_colors <- function(n, ramp, theme = "light") {
     return(character(0))
   }
   ramp_at(if (n == 1) 0.5 else seq(0, 1, length.out = n), ramp, theme)
+}
+
+# Colours of n samples in their order: the categorical colours while they
+# suffice, otherwise spread over the sample ramp
+#' @export
+sample_colors <- function(n, theme = "light") {
+  if (n <= base_colors) {
+    categorical_colors(n, theme)
+  } else {
+    ramp_colors(n, "sample", theme)
+  }
 }
 
 # Plotly colorscale of a ramp

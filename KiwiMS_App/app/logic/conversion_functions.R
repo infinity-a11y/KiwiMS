@@ -4,6 +4,11 @@ box::use(
   app /
     logic /
     deconvolution_functions[
+      bin_spectrum,
+      downsample_spectrum,
+      parse_wells,
+      plate_format,
+      slim_spectrum,
       spectrum_plot,
       process_plot_data,
       unmatched_marker,
@@ -15,6 +20,7 @@ box::use(
       warning_sym,
       chart_js,
       paste_hook_js,
+      sample_include_js,
       hits_col_full_names,
       kinetics_settings,
       run_limits,
@@ -33,6 +39,7 @@ box::use(
       level_tier,
       ramp_at,
       ramp_colorscale,
+      sample_colors,
       status_colors,
       tier_pattern,
       tier_symbol,
@@ -647,22 +654,33 @@ read_decon_result <- function(db_path, samples = NULL) {
 # Helper function to read uploaded files
 #' @export
 read_uploaded_file <- function(file_path, ext) {
+  # Files saved without a trailing newline (common for hand-edited tables)
+  # read fine, but read.table() warns about the incomplete final line. The
+  # message is translated, so match the (untranslated) function name
+  muffle_final_line <- function(expr) {
+    withCallingHandlers(expr, warning = function(w) {
+      if (grepl("readTableHeader", conditionMessage(w), fixed = TRUE)) {
+        invokeRestart("muffleWarning")
+      }
+    })
+  }
+
   if (ext %in% c("csv")) {
-    df <- utils::read.csv(
+    df <- muffle_final_line(utils::read.csv(
       file_path,
       stringsAsFactors = FALSE,
       sep = ",",
       header = FALSE
-    )
+    ))
 
     # If only one column read, try semicolon separator
     if (ncol(df) == 1) {
-      df <- utils::read.csv(
+      df <- muffle_final_line(utils::read.csv(
         file_path,
         stringsAsFactors = FALSE,
         sep = ";",
         header = FALSE
-      )
+      ))
     }
   } else if (ext == "tsv") {
     df <- suppressMessages(readr::read_tsv(
@@ -671,11 +689,11 @@ read_uploaded_file <- function(file_path, ext) {
       col_names = FALSE
     ))
   } else if (ext == "txt") {
-    df <- utils::read.delim(
+    df <- muffle_final_line(utils::read.delim(
       file_path,
       stringsAsFactors = FALSE,
       header = FALSE
-    )
+    ))
   } else if (ext %in% c("xlsx", "xls")) {
     df <- suppressMessages(readxl::read_excel(file_path, col_names = FALSE))
   } else {
@@ -852,15 +870,20 @@ sample_handsontable <- function(
   replicate_idx <- grep("^Replicate$", colnames(tab))
   has_replicate <- length(replicate_idx) > 0
 
+  # Include checkboxes: a cleared one leaves the sample out of the conversion
+  include_idx <- match("Include", colnames(tab))
+  has_include <- !is.na(include_idx)
+
   # All columns that must be skipped by the JS renderer (no validation/duplicate check)
   skip_cols <- c(
     conc_time_idx,
     if (has_replicate) replicate_idx else integer(0)
   )
 
-  # Protein and compound column 0-indexed JS positions shift when Replicate is present
-  protein_col_js <- if (has_replicate) 2L else 1L
-  compound_col_js <- if (has_replicate) 3L else 2L
+  # 0-indexed JS positions of the protein, first compound and Include columns
+  protein_col_js <- match("Protein", colnames(tab)) - 1L
+  compound_col_js <- min(cmp_cols) - 1L
+  include_col_js <- if (has_include) include_idx - 1L else -1L
 
   # Allowed protein and compound values
   if (!is.null(proteins) && !is.null(compounds)) {
@@ -876,6 +899,12 @@ sample_handsontable <- function(
     Handsontable.renderers.TextRenderer.apply(this, arguments);
 
     td.style.background = ''; // Clear existing background for new rendering
+
+    // Samples left out of the conversion are not checked
+    var includeCol = %d;
+    if (includeCol >= 0 && instance.getDataAtCell(row, includeCol) === false) {
+      return;
+    }
 
     // Skipped columns: Concentration, Time, and Replicate
     var concTimeCols = %s;
@@ -910,12 +939,13 @@ sample_handsontable <- function(
     }
 
     // --- 3. Check Duplication (Orange Highlight Logic) ---
-    // Exclude col 0 (Sample) and skipped columns from duplicate scan
+    // Scan from the protein column on (Include, Sample and Replicate lie
+    // before it) and leave out the skipped columns
     var isDuplicated = false;
     if (normalizedValue !== '') {
       var rowData = instance.getDataAtRow(row);
       var valueCounts = {};
-      for (var i = 1; i < rowData.length; i++) {
+      for (var i = %d; i < rowData.length; i++) {
           if (concTimeCols.indexOf(i) !== -1) { continue; }
           var cellValue = rowData[i];
           var trimmedValue = cellValue == null ? '' : String(cellValue).trim();
@@ -935,9 +965,11 @@ sample_handsontable <- function(
       td.style.background = 'orange';
     }
   }",
+      include_col_js,
       paste0("[", paste(skip_cols - 1L, collapse = ","), "]"),
       protein_col_js,
-      compound_col_js
+      compound_col_js,
+      protein_col_js
     )
   } else {
     allowed_per_col <- list(NULL)
@@ -961,7 +993,8 @@ sample_handsontable <- function(
     stretchH = "all"
   ) |>
     rhandsontable::hot_cols(
-      fixedColumnsLeft = if (has_replicate) 3L else 2L,
+      # Everything up to the protein stays in view
+      fixedColumnsLeft = protein_col_js + 1L,
       type = "text",
       readOnly = ifelse(disabled, TRUE, FALSE)
     ) |>
@@ -971,7 +1004,10 @@ sample_handsontable <- function(
       source = proteins,
       strict = FALSE
     ) |>
-    rhandsontable::hot_col(col = 2:max(cmp_cols), renderer = renderer_js) |>
+    rhandsontable::hot_col(
+      col = (match("Sample", colnames(tab)) + 1L):max(cmp_cols),
+      renderer = renderer_js
+    ) |>
     rhandsontable::hot_col("Sample", readOnly = TRUE) |>
     rhandsontable::hot_col(
       col = min(cmp_cols):max(cmp_cols),
@@ -1000,21 +1036,112 @@ sample_handsontable <- function(
     )
   }
 
+  # Include as checkboxes (hot_cols above made every column text), with a
+  # select-all box in the header and the left-out rows greyed
+  if (has_include) {
+    handsontable <- handsontable |>
+      rhandsontable::hot_col(
+        "Include",
+        type = "checkbox",
+        halign = "htCenter",
+        width = 40
+      ) |>
+      htmlwidgets::onRender(sample_include_js)
+  }
+
   return(handsontable)
+}
+
+# Samples of the Samples table that enter the conversion: all but those whose
+# Include box is cleared. Only an explicit FALSE leaves a sample out, so a
+# table without the column (as built outside the declaration interface) keeps
+# every sample.
+#' @export
+sample_inclusion <- function(sample_table) {
+  if (!"Include" %in% names(sample_table)) {
+    return(rep(TRUE, nrow(sample_table)))
+  }
+  !(as.logical(sample_table$Include) %in% FALSE)
+}
+
+# The included rows of a Samples table, without the Include column: the table
+# the checks and the conversion work on
+#' @export
+included_sample_rows <- function(sample_table) {
+  out <- sample_table[
+    sample_inclusion(sample_table),
+    names(sample_table) != "Include",
+    drop = FALSE
+  ]
+  rownames(out) <- NULL
+  out
+}
+
+# Carry the Include state of an old Samples table over to a rebuilt one,
+# matched by sample name. Samples new to the table are included.
+#' @export
+restore_inclusion <- function(new_table, old_table) {
+  if (
+    is.null(old_table) ||
+      !"Include" %in% names(old_table) ||
+      !"Include" %in% names(new_table)
+  ) {
+    return(new_table)
+  }
+  old <- sample_inclusion(old_table)[match(new_table$Sample, old_table$Sample)]
+  new_table$Include <- is.na(old) | old
+  new_table
+}
+
+# The tables a confirmed Samples table yields: `shown` keeps every sample, the
+# left-out ones unticked so they can be included again, and `converted` holds
+# the included samples only and is what the conversion works on. `excluded`
+# names the samples left out. Needs at least one included sample.
+#' @export
+confirm_sample_table <- function(sample_table, units = NULL) {
+  included <- sample_inclusion(sample_table)
+  list(
+    shown = clean_sample_table(sample_table, units = units),
+    converted = clean_sample_table(
+      included_sample_rows(sample_table),
+      units = units
+    ),
+    excluded = as.character(sample_table$Sample[!included])
+  )
+}
+
+# The deconvolution result of the samples a conversion screens: read from its
+# database, which leaves the other samples unread, or cut from a result held
+# in memory. With `samples` NULL every sample is kept.
+#' @export
+conversion_input_result <- function(result, samples = NULL) {
+  if (!is.null(result$.db_path)) {
+    return(read_decon_result(result$.db_path, samples = samples))
+  }
+  if (!is.null(samples) && !is.null(result$deconvolution)) {
+    result$deconvolution <- result$deconvolution[
+      names(result$deconvolution) %in% samples
+    ]
+  }
+  result
+}
+
+# Columns of a Samples table in display order: Include, Sample and Replicate
+# lead, the others keep their order
+#' @export
+order_sample_cols <- function(sample_table) {
+  lead <- intersect(c("Include", "Sample", "Replicate"), names(sample_table))
+  sample_table[, c(lead, setdiff(names(sample_table), lead)), drop = FALSE]
 }
 
 # Function to fill missing columns in sample table
 #' @export
 fill_sample_table <- function(sample_table, kinact_ki) {
-  # Stash Replicate (not part of the 7-col standard) to avoid count mismatch
-  has_rep <- "Replicate" %in% names(sample_table)
-  rep_col <- if (has_rep) sample_table[["Replicate"]] else NULL
-  if (has_rep) {
-    sample_table <- sample_table[,
-      names(sample_table) != "Replicate",
-      drop = FALSE
-    ]
-  }
+  # Stash Include and Replicate (not part of the 7-col standard) to avoid
+  # count mismatch
+  lead <- intersect(c("Include", "Replicate"), names(sample_table))
+  lead_cols <- sample_table[, lead, drop = FALSE]
+  sample_table <- sample_table[, !names(sample_table) %in% lead, drop = FALSE]
 
   if (kinact_ki) {
     conc_time <- sample_table[, sapply(
@@ -1049,13 +1176,9 @@ fill_sample_table <- function(sample_table, kinact_ki) {
     sample_table <- cbind(sample_table, conc_time)
   }
 
-  # Reattach Replicate right after Sample
-  if (has_rep) {
-    sample_table <- cbind(
-      sample_table[, "Sample", drop = FALSE],
-      Replicate = rep_col,
-      sample_table[, setdiff(names(sample_table), "Sample"), drop = FALSE]
-    )
+  # Reattach Include before and Replicate right after Sample
+  if (length(lead)) {
+    sample_table <- order_sample_cols(cbind(sample_table, lead_cols))
   }
 
   return(sample_table)
@@ -1070,7 +1193,10 @@ clean_sample_table <- function(sample_table, units = NULL) {
   time_col <- grep("^Time", names(sample_table), value = TRUE)
   has_conc_time <- length(conc_col) == 1 && length(time_col) == 1
 
-  no_cmp_cols <- grepl("^Sample$|^Protein$|^Replicate$", names(sample_table)) |
+  no_cmp_cols <- grepl(
+    "^Include$|^Sample$|^Protein$|^Replicate$",
+    names(sample_table)
+  ) |
     (has_conc_time & names(sample_table) %in% c(conc_col, time_col))
 
   extra_cmp_section <- sample_table[,
@@ -1115,9 +1241,10 @@ clean_sample_table <- function(sample_table, units = NULL) {
     df <- as.data.frame(apply(df, c(1, 2), as.character))
   }
 
-  # Reattach Sample, Replicate (if present), and Protein; then compound columns
+  # Reattach Include, Sample, Replicate (if present), and Protein; then
+  # compound columns
   header_cols <- intersect(
-    c("Sample", "Replicate", "Protein"),
+    c("Include", "Sample", "Replicate", "Protein"),
     names(sample_table)
   )
   df <- cbind(sample_table[, header_cols, drop = FALSE], df)
@@ -1282,6 +1409,18 @@ check_sample_table <- function(
   tolerance = NULL,
   max_multiples = NULL
 ) {
+  # Samples left out of the conversion are not checked: every rule below
+  # applies to the samples that are converted
+  if ("Include" %in% names(sample_table)) {
+    if (!any(sample_inclusion(sample_table))) {
+      return(structure(
+        "No sample included",
+        note = "Tick the samples to convert in the first column of the table."
+      ))
+    }
+    sample_table <- included_sample_rows(sample_table)
+  }
+
   conc_col <- grep("^Concentration", names(sample_table), value = TRUE)
   time_col <- grep("^Time", names(sample_table), value = TRUE)
   has_conc_time <- length(conc_col) == 1 && length(time_col) == 1
@@ -3172,12 +3311,17 @@ compound_mass_entries <- function(hits, compounds, compound_table = NULL) {
 }
 
 # Mass Shifts card content from mass_entries(): the first `max_lines` entries,
-# then a "N more" hint listing the rest on hover. Entries without a peak are
-# greyed out and say so on hover. The hover lists are styled inline like the
-# Protocol tab's warning tooltip, as bslib reparents them into a popup where
-# stylesheet classes are unreliable.
+# then a "N more" hint listing the rest on hover, up to `max_tooltip_lines` of
+# them. Entries without a peak are greyed out and say so on hover. The hover
+# lists are styled inline like the Protocol tab's warning tooltip, as bslib
+# reparents them into a popup where stylesheet classes are unreliable.
 #' @export
-mass_shift_card <- function(entries, max_lines = 3, accent = "#7777f9") {
+mass_shift_card <- function(
+  entries,
+  max_lines = 3,
+  max_tooltip_lines = 20,
+  accent = "#7777f9"
+) {
   if (!nrow(entries)) {
     return(shiny::div("N/A", class = "na-placeholder"))
   }
@@ -3213,45 +3357,57 @@ mass_shift_card <- function(entries, max_lines = 3, accent = "#7777f9") {
     )
   }
 
-  tooltip_items <- lapply(hidden, function(i) {
+  # The hover list shows one small line per entry and stops after
+  # `max_tooltip_lines`, naming how many are left out - a tooltip cannot scroll
+  listed <- utils::head(hidden, max_tooltip_lines)
+  unlisted <- length(hidden) - length(listed)
+
+  tooltip_items <- lapply(listed, function(i) {
     color <- if (entries$present[i]) accent else "#9a9a9a"
     shiny::div(
       style = paste(
-        "text-align:left; padding:0.35rem 0 0.35rem 0.6rem;",
-        "border-left:3px solid",
+        "display:flex; justify-content:space-between; align-items:baseline;",
+        "gap:0.6rem; padding-left:0.4rem; border-left:2px solid",
         paste0(color, ";"),
-        "line-height:1.35;"
+        "color:",
+        paste0(color, ";"),
+        "font-weight:", if (entries$present[i]) "700;" else "400;",
+        "white-space:nowrap;"
       ),
-      shiny::div(
-        style = paste(
-          "display:flex; justify-content:space-between;",
-          "align-items:baseline; gap:0.75rem;",
-          "font-weight:700; font-size:0.85rem; color:",
-          paste0(color, ";")
-        ),
-        shiny::span(shiny::HTML(entries$label[i])),
-        if (entries$present[i]) {
-          shiny::span(
-            style = paste(
-              "flex-shrink:0; font-weight:400; opacity:0.8;",
-              "font-variant-numeric:tabular-nums;"
-            ),
-            title = count_hint(entries$count[i]),
-            paste0("×", entries$count[i])
-          )
-        }
+      shiny::span(
+        style = "min-width:0; overflow:hidden; text-overflow:ellipsis;",
+        shiny::HTML(entries$label[i])
       ),
-      if (!entries$present[i]) {
-        shiny::div(
+      if (entries$present[i]) {
+        shiny::span(
           style = paste(
-            "font-size:0.78rem; color:#fff; opacity:0.9;",
-            "margin-top:0.15rem;"
+            "flex-shrink:0; font-weight:400; opacity:0.8;",
+            "font-variant-numeric:tabular-nums;"
           ),
-          absent_hint
+          paste0("×", entries$count[i])
         )
       }
     )
   })
+
+  tooltip_footer <- shiny::div(
+    style = paste(
+      "margin-top:0.25rem; color:#fff; opacity:0.85;",
+      "white-space:nowrap;"
+    ),
+    if (unlisted) {
+      shiny::tagList(
+        shiny::div("…"),
+        shiny::div(sprintf("%d more not listed", unlisted))
+      )
+    },
+    if (any(!entries$present[listed])) {
+      shiny::div(
+        style = "color:#9a9a9a;",
+        "Grey: declared, but not assigned to any peak"
+      )
+    }
+  )
 
   shiny::div(
     class = "mass-shift-list",
@@ -3268,11 +3424,12 @@ mass_shift_card <- function(entries, max_lines = 3, accent = "#7777f9") {
         ),
         shiny::div(
           style = paste(
-            "display:flex; flex-direction:column; gap:0.5rem;",
-            "max-height:50vh; max-width:22rem; width:max-content;",
-            "overflow-y:auto; text-align:left;"
+            "display:flex; flex-direction:column; gap:0.1rem;",
+            "max-width:22rem; width:max-content; text-align:left;",
+            "font-size:0.7rem; line-height:1.25;"
           ),
-          tooltip_items
+          tooltip_items,
+          tooltip_footer
         ),
         placement = "auto"
       )
@@ -3701,6 +3858,7 @@ proteoform_kobs_plot <- function(entries, colors, units, theme = "light") {
       time_unit = time_unit,
       subtle = "Pooled"
     ) |>
+    ensure_trace() |>
     plotly::layout(
       hovermode = "closest",
       paper_bgcolor = "rgba(0,0,0,0)",
@@ -4084,7 +4242,7 @@ proteoform_paired_plot <- function(
           x = -100,
           y = -100,
           name = label,
-          legendgroup = label,
+          legendgroup = legend_key_group(label),
           marker = list(
             size = 7,
             color = "rgba(0,0,0,0)",
@@ -4151,6 +4309,7 @@ proteoform_paired_plot <- function(
       x = -100,
       y = -100,
       name = "Detection limit",
+      legendgroup = legend_key_group("limit"),
       marker = list(
         size = 7,
         color = "rgba(0,0,0,0)",
@@ -5049,16 +5208,6 @@ summarize_hits <- function(result_list, sample_table) {
   return(hits_summarized)
 }
 
-# Function to extract minutes information from sample names
-extract_minutes <- function(strings) {
-  # Find pattern: one or more digits followed by "min"
-  minutes <- regmatches(strings, regexpr("\\d+(?=min)", strings, perl = TRUE))
-
-  # Convert to numeric, replace empty matches with NA
-  minutes <- ifelse(minutes == "", NA, minutes)
-  as.numeric(minutes)
-}
-
 # Function perform checks for kinact/Ki analysis prerequisites
 #' @export
 check_filter_hits <- function(result_list) {
@@ -5817,7 +5966,7 @@ make_binding_plot <- function(
           x = 0,
           y = 0,
           name = conc_name,
-          legendgroup = conc_name,
+          legendgroup = legend_key_group(conc_name),
           marker = list(
             size = 12,
             color = unname(colors[conc_name]),
@@ -6143,7 +6292,8 @@ make_kobs_plot <- function(
     )
   }
 
-  kobs_plot <- kobs_plot |>
+  # A failed fit without any usable kobs point leaves no trace
+  kobs_plot <- ensure_trace(kobs_plot) |>
     plotly::layout(
       shapes = shapes,
       annotations = annotations,
@@ -6266,10 +6416,32 @@ kinetics_top_legend <- function(p, pal) {
   )
 }
 
+# plotly_build() warns "No trace type specified and no positional attributes
+# specified" for a plot_ly() root that never got a trace, as in message-only
+# placeholders or a trace loop over empty data. An empty, typed trace keeps
+# such plots quiet without drawing anything.
+#' @export
+ensure_trace <- function(p) {
+  attrs <- p$x$attrs
+  if (length(attrs) > 1 || !is.null(attrs[[1]]$type)) {
+    return(p)
+  }
+  plotly::add_trace(
+    p,
+    type = "scatter",
+    mode = "markers",
+    x = numeric(0),
+    y = numeric(0),
+    showlegend = FALSE,
+    hoverinfo = "skip"
+  )
+}
+
 # Empty plot carrying a message (e.g. when a diagnostic does not apply)
 kinetics_message_plot <- function(message, theme = "light") {
   pal <- kinetics_plot_colors(theme)
   plotly::plot_ly() |>
+    ensure_trace() |>
     plotly::layout(
       paper_bgcolor = "rgba(0,0,0,0)",
       plot_bgcolor = "rgba(0,0,0,0)",
@@ -6419,7 +6591,7 @@ make_kinetics_residual_plot <- function(
         x = numeric(0),
         y = numeric(0),
         name = s,
-        legendgroup = "series",
+        legendgroup = legend_key_group("series"),
         legendgrouptitle = if (i == 1) {
           list(text = "Replicate series", font = list(color = pal$font))
         },
@@ -6651,6 +6823,7 @@ make_kinetics_plateau_plot <- function(
         line = list(width = 1, color = pal$font)
       ),
       name = "Observed at last time point",
+      legendgroup = legend_key_group("observed"),
       legendrank = 1,
       inherit = FALSE
     )
@@ -8472,6 +8645,16 @@ label_smart_clean <- function(files) {
 #' @export
 peaks_trace_tag <- "kiwims-peak-symbols"
 
+# Legend group of a legend row that only explains a symbol or colour and draws
+# no data of its own. A click on such a row would hide nothing but the row, and
+# a double click would hide every trace with data, leaving an empty figure, so
+# the app-wide legend guard (main.R) ignores clicks on rows in these groups.
+# The prefix is what the guard checks.
+#' @export
+legend_key_group <- function(id) {
+  paste0("kiwims-key-", id)
+}
+
 # 0-based indices of the tagged traces in a built plotly figure, ready to hand
 # to plotlyProxyInvoke("restyle", ...), which indexes traces the JS way. The
 # hit markers carry peaks_trace_tag, the unmatched peaks unmatched_trace_tag.
@@ -8504,11 +8687,17 @@ spectrum_legend_camera_x <- 0.33
 
 # The three settings below only change how the figure is presented, never the
 # data behind it, so they are pushed to the figure that is already on screen
-# with plotlyProxy rather than costing a full rebuild and re-serialization.
+# (plotlyProxy, or plain JS where the legend state matters) rather than costing
+# a full rebuild and re-serialization.
 
 # Show or hide the peak symbols and the legend rows that name them. The traces
 # are always built, so this only flips their `visible` flag. `tag` picks the
 # hit markers or the unmatched peaks.
+#
+# Markers grouped with a sample follow that sample's line when shown: a sample
+# hidden in the legend (or every other one, after a double-click) keeps its
+# markers hidden. Only the browser knows the legend state, so the visibility
+# is resolved there rather than sent as a flat `visible = TRUE`.
 #' @export
 restyle_peak_symbols <- function(
   session,
@@ -8529,12 +8718,34 @@ restyle_peak_symbols <- function(
     return(invisible(NULL))
   }
 
-  plotly::plotlyProxyInvoke(
-    plotly::plotlyProxy(output_id, session),
-    "restyle",
-    list(visible = isTRUE(show)),
-    as.list(indices)
-  )
+  shinyjs::runjs(sprintf(
+    paste0(
+      "(function() {",
+      "  var gd = document.getElementById('%s');",
+      "  if (!gd || !gd.data) return;",
+      "  var idx = [%s].filter(function(i) { return i < gd.data.length; });",
+      "  if (!idx.length) return;",
+      "  var show = %s;",
+      "  var vis = idx.map(function(i) {",
+      "    if (!show) return false;",
+      "    var g = gd.data[i].legendgroup;",
+      "    if (!g) return true;",
+      "    for (var j = 0; j < gd.data.length; j++) {",
+      "      var t = gd.data[j];",
+      "      if (t.mode === 'lines' && t.legendgroup === g) {",
+      "        return (t.visible === 'legendonly' || t.visible === false) ?",
+      "          'legendonly' : true;",
+      "      }",
+      "    }",
+      "    return true;",
+      "  });",
+      "  Plotly.restyle(gd, {visible: vis}, idx);",
+      "})();"
+    ),
+    session$ns(output_id),
+    paste(indices, collapse = ","),
+    tolower(isTRUE(show))
+  ))
 
   invisible(NULL)
 }
@@ -8580,49 +8791,10 @@ relayout_spectrum_labels <- function(session, output_id, show, cubic = TRUE) {
   invisible(NULL)
 }
 
-# Reduce one spectrum to at most `max_points` points before plotting.
-#
-# Min/max decimation: the trace is cut into buckets and only the lowest and
-# highest intensity point of each bucket survives. Unlike plain thinning this
-# never shaves a peak apex — the maximum of every bucket is kept by
-# construction — so the envelope on screen is the same one the full trace
-# would draw, while the baseline points that overplot each other anyway are
-# dropped. Peak markers are annotated from `highlight_peaks` and are never
-# downsampled, so hit positions stay exact.
-downsample_spectrum <- function(df, max_points = 4000) {
-  n <- nrow(df)
-
-  if (
-    !is.finite(max_points) ||
-      max_points <= 0 ||
-      n <= max_points ||
-      !all(c("mass", "intensity") %in% names(df))
-  ) {
-    return(df)
-  }
-
-  # Two points survive per bucket, so ask for half as many buckets.
-  n_buckets <- max(1L, as.integer(max_points %/% 2))
-  bucket <- as.integer(cut(seq_len(n), breaks = n_buckets, labels = FALSE))
-
-  keep <- unlist(
-    lapply(split(seq_len(n), bucket), function(idx) {
-      intensity <- df$intensity[idx]
-      c(idx[which.min(intensity)], idx[which.max(intensity)])
-    }),
-    use.names = FALSE
-  )
-
-  # Keep the original mass order and both endpoints so the trace still spans
-  # the full mass range.
-  df[sort(unique(c(1L, keep, n))), , drop = FALSE]
-}
-
 # Order hit rows so that their samples run from least to most bound
 #
-# This is the order the Compound Distribution plots put their samples in, and
-# the one the sample colour scale is built from, so total binding stays the
-# single source of truth for which sample gets which colour. `by_mean` picks
+# This is the order the Compound Distribution plots put their samples in (their
+# colours are fixed by the result's colour key, see color_key()). `by_mean` picks
 # the Proteins View variant: a sample there carries several compounds, so its
 # rank comes from the mean of its total binding rather than from a single row.
 #' @export
@@ -8785,9 +8957,10 @@ overview_subset <- function(hits_summary, protein, compounds) {
 
 # Colours of the Overview selection, shared by its distribution plot, spectra
 # and table: the result's fixed colours (see color_key()) of the picked
-# compounds, or of the selection's samples. The protein's other compounds are
-# muted, as their peaks still show in the spectra of samples carrying several
-# compounds.
+# compounds ("Compounds"), or of the selection's samples - their own colour
+# ("Samples") or that of their concentration, time or protein (named by the
+# samples either way). The protein's other compounds are muted, as their
+# peaks still show in the spectra of samples carrying several compounds.
 #' @export
 overview_colors <- function(
   hits_summary,
@@ -8820,7 +8993,11 @@ overview_colors <- function(
   }
 
   c(
-    key_colors(key, variable, picked, theme = theme, trunc = trunc),
+    if (identical(variable, "Compounds")) {
+      key_colors(key, variable, picked, theme = theme, trunc = trunc)
+    } else {
+      sample_level_colors(key, variable, picked, theme = theme, trunc = trunc)
+    },
     stats::setNames(rep(status_colors(theme)$muted, length(rest)), rest)
   )
 }
@@ -8837,12 +9014,15 @@ multiple_spectra <- function(
   unmatched_show = FALSE,
   time = FALSE,
   color_cmp = NULL,
+  symbol_cmp = NULL,
   truncated = FALSE,
   color_variable = NULL,
   hits_summary = NULL,
   units = NULL,
+  # Declared to displayed time unit, for the colour key's times (the
+  # spectra's own times come in the displayed unit with `hits_summary`)
   time_factor = 1,
-  max_points = 4000,
+  max_points = NULL,
   theme = "light",
   plot_data = NULL,
   key = NULL
@@ -8854,6 +9034,14 @@ multiple_spectra <- function(
   symbols_show <- !isFALSE(symbols_show)
   legend_show <- !isFALSE(legend_show)
 
+  # Points per spectrum, after the 1 Da display bins: at most 1500, fewer the
+  # more spectra share the figure, about 40k in all. Min/max decimation keeps
+  # every peak apex. A full plate used to send hundreds of thousands of
+  # points (some 8 MB for 108 spectra), slow to build, send and draw.
+  if (is.null(max_points)) {
+    max_points <- max(250, min(1500, floor(40000 / max(1, length(samples)))))
+  }
+
   # Get spectrum and peaks data. process_plot_data() parses the whole sample,
   # so call it once and take both pieces from the same result. Collecting the
   # per-sample frames in a list and binding once at the end avoids the
@@ -8862,7 +9050,27 @@ multiple_spectra <- function(
   peaks_parts <- vector("list", length(samples))
   unmatched_parts <- vector("list", length(samples))
 
+  # Time view: each spectrum's time and replicate as declared in the sample
+  # table, from the hits table the caller passes (its time column already in
+  # the displayed unit). Nothing is read from sample names.
+  if (time) {
+    declared <- match(samples, hits_summary$`Sample ID`)
+    time_of <- suppressWarnings(
+      as.numeric(hits_summary[[units[["Time"]]]][declared])
+    )
+    replicate_of <- if ("Replicate" %in% names(hits_summary)) {
+      as.character(hits_summary$Replicate[declared])
+    } else {
+      rep(NA_character_, length(samples))
+    }
+  }
+
   for (i in seq_along(samples)) {
+    # A spectrum without a declared time has no place on the time axis
+    if (time && is.na(time_of[i])) {
+      next
+    }
+
     # `plot_data` hands over the spectra ready-made, one per sample and named
     # by it (the deconvolution page reads them from the run database), in
     # place of parsing them from results_list.
@@ -8875,28 +9083,40 @@ multiple_spectra <- function(
       )
     }
 
-    z_value <- if (time) {
-      extract_minutes(samples[i]) * time_factor
-    } else {
-      samples[i]
-    }
+    z_value <- if (time) time_of[i] else samples[i]
 
     mass_df <- sample_data$mass
     if (!is.null(mass_df) && nrow(mass_df) > 0) {
-      spectrum_parts[[i]] <- dplyr::mutate(
-        downsample_spectrum(mass_df, max_points = max_points),
-        z = z_value
+      # The per-trace budget first, then at most one point per Da (display
+      # resolution): binning the few points left is cheap, binning the full
+      # spectrum first was not. Columns are set directly; dplyr::mutate() per
+      # sample cost more than the rest of the loop. The peaks the markers
+      # mark stay on the line, at their exact mass and height.
+      peaks <- c(
+        sample_data$highlight_peaks$mass,
+        sample_data$unmatched_peaks$mass
       )
+      part <- bin_spectrum(
+        downsample_spectrum(mass_df, max_points = max_points, peaks = peaks),
+        peaks = peaks
+      )
+      part$z <- z_value
+      part$sample_key <- samples[i]
+      spectrum_parts[[i]] <- part
     }
 
     peaks_df <- sample_data$highlight_peaks
     if (!is.null(peaks_df) && nrow(peaks_df) > 0) {
-      peaks_parts[[i]] <- dplyr::mutate(peaks_df, z = z_value)
+      peaks_df$z <- z_value
+      peaks_df$sample_key <- samples[i]
+      peaks_parts[[i]] <- peaks_df
     }
 
     unmatched_df <- sample_data$unmatched_peaks
     if (!is.null(unmatched_df) && nrow(unmatched_df) > 0) {
-      unmatched_parts[[i]] <- dplyr::mutate(unmatched_df, z = z_value)
+      unmatched_df$z <- z_value
+      unmatched_df$sample_key <- samples[i]
+      unmatched_parts[[i]] <- unmatched_df
     }
   }
 
@@ -8913,6 +9133,7 @@ multiple_spectra <- function(
   if (nrow(spectrum_data) == 0 || !("mass" %in% names(spectrum_data))) {
     return(
       plotly::plot_ly() |>
+        ensure_trace() |>
         plotly::layout(
           annotations = list(list(
             text = "No spectrum data available",
@@ -8987,6 +9208,59 @@ multiple_spectra <- function(
       levels = levels(spectrum_data$z)
     )
   }
+
+  # The cubic view plots each spectrum at its position on the sample axis and
+  # names the positions with tick labels. As a category axis, every point
+  # carried its sample's name, which made up most of a large figure.
+  # A level is a sample, or in the time view a time point; its spectra (the
+  # replicates of that time) sit side by side around the level's position,
+  # closer to each other than to the next level, in the order of their
+  # declared replicates. Each spectrum is a trace of its own.
+  spectra <- unique(spectrum_data$sample_key)
+  spectrum_level <- as.integer(spectrum_data$z[
+    match(spectra, spectrum_data$sample_key)
+  ])
+  replicate_label <- if (time) {
+    replicate_of[match(spectra, samples)]
+  } else {
+    rep(NA_character_, length(spectra))
+  }
+  spectrum_order <- order(
+    spectrum_level,
+    replicate_label,
+    match(spectra, samples),
+    na.last = TRUE
+  )
+  spectra <- spectra[spectrum_order]
+  spectrum_level <- spectrum_level[spectrum_order]
+  replicate_label <- replicate_label[spectrum_order]
+  spectrum_pos <- stats::setNames(numeric(length(spectra)), spectra)
+  for (lvl in unique(spectrum_level)) {
+    in_level <- spectrum_level == lvl
+    m <- sum(in_level)
+    gap <- if (m > 1) min(0.25, 0.7 / (m - 1)) else 0
+    spectrum_pos[in_level] <- lvl + (seq_len(m) - (m + 1) / 2) * gap
+  }
+  # Named in hovers by their replicate, or their sample without one
+  spectrum_suffix <- stats::setNames(
+    ifelse(
+      !is.na(replicate_label) & nzchar(trimws(replicate_label)),
+      paste0(" (", replicate_label, ")"),
+      ""
+    ),
+    spectra
+  )
+  shared <- spectrum_level %in% spectrum_level[duplicated(spectrum_level)]
+  unnamed <- shared & !nzchar(spectrum_suffix)
+  spectrum_suffix[unnamed] <- paste0(" (", spectra[unnamed], ")")
+
+  spectrum_data$z_pos <- unname(spectrum_pos[spectrum_data$sample_key])
+  if (nrow(peaks_data) > 0) {
+    peaks_data$z_pos <- unname(spectrum_pos[peaks_data$sample_key])
+  }
+  if (nrow(unmatched_data) > 0) {
+    unmatched_data$z_pos <- unname(spectrum_pos[unmatched_data$sample_key])
+  }
   unmatched_show <- isTRUE(unmatched_show)
   um <- unmatched_marker(theme)
 
@@ -9014,9 +9288,20 @@ multiple_spectra <- function(
 
     prot_names <- unique(peaks_data$name[peaks_data$mass %in% prot_peaks])
 
+    # Compounds in the shape of their colour round when one is given; the
+    # 3D view draws only circles, squares, diamonds and crosses
+    cmp_symbol <- if (is.null(symbol_cmp)) {
+      rep("circle", nrow(peaks_data))
+    } else {
+      s <- unname(symbol_cmp[as.character(peaks_data$name)])
+      ifelse(is.na(s), "circle", s)
+    }
+    if (cubic) {
+      cmp_symbol <- ifelse(cmp_symbol == "circle", "circle", "square")
+    }
     peaks_data <- dplyr::mutate(
       peaks_data,
-      symbol = ifelse(mass %in% prot_peaks, "diamond", "circle"),
+      symbol = ifelse(mass %in% prot_peaks, "diamond", cmp_symbol),
       linecolor = font_color
     )
   } else {
@@ -9056,11 +9341,6 @@ multiple_spectra <- function(
       } else {
         peaks_data$color
       }
-
-      # Declare coloring variables for graph elements
-      color <- NULL
-      line <- list(color = font_color, width = 1)
-      z_linecolor <- list(color = font_color, width = 1)
     } else if (color_variable == "Samples") {
       # Match colors to peaks and spectrum data
       peaks_data$z_color <- color_cmp[match(peaks_data$z, names(color_cmp))]
@@ -9076,12 +9356,6 @@ multiple_spectra <- function(
       )
 
       peaks_data$mk_color <- peaks_data$z_color
-
-      # Declare coloring variables for graph elements
-      color <- ~ I(z_color)
-      line <- list(width = 1)
-      marker_color <- ~ I(z_color)
-      z_linecolor <- list(width = 1)
     }
   } else {
     # Time colours, placed among all times of the result when its colour
@@ -9100,10 +9374,16 @@ multiple_spectra <- function(
       theme = theme
     )
 
-    # Adding protein peak marker
+    # Protein peaks in the font colour, compound peaks in the colour of their
+    # time point: an inverse (white or black) fill would vanish on the
+    # export background of the same shade
     peaks_data <- dplyr::mutate(
       peaks_data,
-      color = ifelse(symbol == "diamond", font_color, inv_color)
+      color = ifelse(
+        symbol == "diamond",
+        font_color,
+        unname(color_cmp[match(as.character(z), names(color_cmp))])
+      )
     )
     peaks_data$mk_color <- peaks_data$color
     marker_color <- ~ I(color)
@@ -9113,11 +9393,6 @@ multiple_spectra <- function(
       spectrum_data$z,
       names(color_cmp)
     )]
-
-    # Declare coloring variables for graph elements
-    color <- ~ I(z_color)
-    line <- list(width = 1)
-    z_linecolor <- list(width = 1)
   }
 
   # Condition on data size
@@ -9131,105 +9406,173 @@ multiple_spectra <- function(
   # Remove NA peaks
   peaks_data <- peaks_data[!is.na(peaks_data$mass), ]
 
-  if (cubic) {
-    plot <- plotly::plot_ly(
-      data = spectrum_data,
-      x = ~mass,
-      y = ~intensity,
-      z = ~z,
-      split = ~z,
-      legendgroup = ~z,
-      color = color,
-      line = z_linecolor,
-      type = "scatter3d",
-      mode = "lines",
-      showlegend = TRUE,
-      hoverinfo = "text",
-      text = ~ paste0(
-        "Mass: ",
-        mass,
-        " Da\nIntensity: ",
-        round(intensity, 2),
-        "%",
-        ifelse(
-          time == TRUE,
-          "\nTime: ",
-          "\nSample: "
-        ),
-        z,
-        ifelse(
-          time == TRUE,
-          paste0(" ", gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])),
-          ""
+  # Hover of the spectrum lines as a template, not a text string per point:
+  # those strings made up most of the figure sent to the browser. The cubic
+  # view reads the sample from its z axis, the planar one from the trace name.
+  line_hover <- function(sample_ref, suffix = "") {
+    paste0(
+      "Mass: %{x:.1f} Da<br>Intensity: %{y:.2f}%<br>",
+      if (time) {
+        paste0(
+          "Time: ",
+          sample_ref,
+          " ",
+          gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])
         )
-      )
+      } else {
+        paste0("Sample: ", sample_ref)
+      },
+      suffix,
+      "<extra></extra>"
     )
+  }
 
-    # Add hit markers. marker.color and marker.symbol are both arrayOk, so a
-    # whole sample's peaks fit into one trace instead of the one-trace-per-peak
-    # fan-out this used to build. Splitting at the sample level rather than
-    # collapsing to a single trace keeps the legendgroup link intact, so
-    # hiding a sample in the legend still hides its markers.
+  # The per-sample traces -- each sample's spectrum line, then each sample's
+  # peak markers -- ready-made, in sample order. They are appended to the
+  # figure after plotly_build() (end of function): plotly spends some 20 ms
+  # on every trace it builds, two per sample, so a full plate took seconds.
+  # They are what plotly would have built; I() keeps the data arrays arrays.
+  # The markers carry peaks_trace_tag and stay grouped with their sample, so
+  # hiding a sample in the legend still hides its markers.
+  # `line_color(lvl, rows)` gives a sample's colour; `marker` the marker trace
+  # type, size and outline width.
+  time_unit <- if (time) {
+    paste0(" ", gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]))
+  } else {
+    ""
+  }
+  sample_traces <- function(type, line_color, line_width, marker) {
+    # One legend row per level (a time point's replicates share it, and a
+    # click on it hides them all)
+    lines <- list()
+    rows_by_spectrum <- split(
+      seq_len(nrow(spectrum_data)),
+      spectrum_data$sample_key
+    )
+    shown_levels <- character(0)
+    for (s in spectra) {
+      rows <- spectrum_data[rows_by_spectrum[[s]], , drop = FALSE]
+      if (nrow(rows) == 0) {
+        next
+      }
+      lvl <- as.character(rows$z[1])
+      trace <- list(
+        type = type,
+        mode = "lines",
+        x = I(round(rows$mass, 2)),
+        y = I(round(rows$intensity, 2)),
+        name = lvl,
+        legendgroup = lvl,
+        showlegend = !lvl %in% shown_levels,
+        line = c(
+          list(color = line_color(lvl, rows)),
+          if (!is.null(line_width)) list(width = line_width)
+        ),
+        hovertemplate = line_hover("%{fullData.name}", spectrum_suffix[[s]])
+      )
+      shown_levels <- c(shown_levels, lvl)
+      if (type == "scatter3d") {
+        trace$z <- I(rows$z_pos)
+      }
+      lines[[length(lines) + 1]] <- trace
+    }
+
+    markers <- list()
     if (nrow(peaks_data) > 0) {
-      for (lvl in levels(peaks_data$z)) {
-        peaks_lvl <- peaks_data[
-          !is.na(peaks_data$z) & peaks_data$z == lvl,
-          ,
-          drop = FALSE
-        ]
-
+      peaks_by_spectrum <- split(
+        seq_len(nrow(peaks_data)),
+        peaks_data$sample_key
+      )
+      for (s in intersect(spectra, names(peaks_by_spectrum))) {
+        peaks_lvl <- peaks_data[peaks_by_spectrum[[s]], , drop = FALSE]
+        peaks_lvl <- peaks_lvl[!is.na(peaks_lvl$z), , drop = FALSE]
         if (nrow(peaks_lvl) == 0) {
           next
         }
-
-        plot <- plot |>
-          plotly::add_markers(
-            data = peaks_lvl,
-            x = ~mass,
-            y = ~intensity,
-            z = ~z,
-            legendgroup = lvl,
-            mode = "markers",
-            inherit = FALSE,
-            visible = symbols_show,
-            meta = peaks_trace_tag,
-            marker = list(
-              color = peaks_lvl$mk_color,
-              symbol = peaks_lvl$symbol,
-              size = 5,
-              zindex = 100,
-              line = list(color = inv_color, width = 3)
+        lvl <- as.character(peaks_lvl$z[1])
+        trace <- list(
+          type = marker$type,
+          mode = "markers",
+          x = I(peaks_lvl$mass),
+          y = I(peaks_lvl$intensity),
+          legendgroup = lvl,
+          showlegend = FALSE,
+          visible = symbols_show,
+          meta = peaks_trace_tag,
+          marker = list(
+            color = I(peaks_lvl$mk_color),
+            symbol = I(peaks_lvl$symbol),
+            size = marker$size,
+            zindex = 100,
+            line = list(color = inv_color, width = marker$line_width)
+          ),
+          hoverinfo = "text",
+          text = I(paste0(
+            ifelse(
+              is.na(peaks_lvl$name),
+              "",
+              paste0("Name: ", peaks_lvl$name, "<br>")
             ),
-            hoverinfo = "text",
-            text = ~ paste0(
-              ifelse(is.na(name), "", paste0("Name: ", name, "\n")),
-              "Measured: ",
-              mass,
-              " Da\nIntensity: ",
-              round(intensity, 2),
-              ifelse(time, "%\nTime: ", "%\nSample: "),
-              z,
-              ifelse(
-                time,
-                paste0(" ", gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])),
-                ""
-              ),
-              ifelse(is.na(mw), "", paste0("\nTheor. Mw: ", mw))
-            ),
-            showlegend = FALSE
-          )
+            "Measured: ",
+            peaks_lvl$mass,
+            " Da<br>Intensity: ",
+            round(peaks_lvl$intensity, 2),
+            if (time) "%<br>Time: " else "%<br>Sample: ",
+            lvl,
+            time_unit,
+            spectrum_suffix[[s]],
+            ifelse(
+              is.na(peaks_lvl$mw),
+              "",
+              paste0("<br>Theor. Mw: ", peaks_lvl$mw)
+            )
+          ))
+        )
+        if (marker$type == "scatter3d") {
+          trace$z <- I(peaks_lvl$z_pos)
+        }
+        markers[[length(markers) + 1]] <- trace
       }
     }
 
+    c(lines, markers)
+  }
+
+  # Built and trimmed for the browser at the end (slim_spectrum())
+  group_title <- NULL
+  fig <- if (cubic) {
+    # The sample's colour, or the font colour when the compounds carry it.
+    # 3D markers are sized on a different scale than 2D ones.
+    per_sample <- sample_traces(
+      "scatter3d",
+      function(lvl, rows) {
+        if ("z_color" %in% names(rows)) rows$z_color[1] else font_color
+      },
+      line_width = 1,
+      marker = list(type = "scatter3d", size = 5, line_width = 3)
+    )
+    plot <- plotly::plot_ly()
+
+    per_sample <- c(
+      per_sample,
+      unmatched_sample_traces(
+        unmatched_data,
+        spectra = spectra,
+        suffix = spectrum_suffix,
+        cubic = TRUE,
+        visible = unmatched_show,
+        um = um,
+        inv_color = inv_color,
+        time = time,
+        units = units
+      )
+    )
     plot <- add_unmatched_traces(
       plot,
       unmatched_data,
       cubic = TRUE,
       visible = unmatched_show,
       um = um,
-      inv_color = inv_color,
-      time = time,
-      units = units,
       legend = !time
     )
 
@@ -9247,7 +9590,16 @@ multiple_spectra <- function(
         sym <- name_entries$symbol[i]
         first_peak <- peaks_data[peaks_data$name == entry_name, ][1, ]
         is_protein <- sym == "diamond"
-        lg <- if (is_protein) "proteins" else "compounds"
+        lg <- legend_key_group(if (is_protein) "proteins" else "compounds")
+        # Coloured by compound, a compound's row shows its colour and shape:
+        # the legend is where the colours are named
+        chip_color <- if (
+          !is_protein &&
+            identical(color_variable, "Compounds") &&
+            entry_name %in% names(color_cmp)
+        ) {
+          unname(color_cmp[[entry_name]])
+        }
 
         args <- list(
           p = plot,
@@ -9259,9 +9611,10 @@ multiple_spectra <- function(
           name = entry_name,
           legendgroup = lg,
           marker = list(
-            color = font_color,
-            symbol = paste0(sym, "-open"),
-            size = 8
+            color = chip_color %||% font_color,
+            symbol = if (is.null(chip_color)) paste0(sym, "-open") else sym,
+            size = 8,
+            line = list(color = inv_color, width = if (is.null(chip_color)) 0 else 1)
           ),
           visible = symbols_show,
           meta = peaks_trace_tag,
@@ -9272,13 +9625,20 @@ multiple_spectra <- function(
         plot <- do.call(plotly::add_trace, args)
       }
 
-      plot <- plotly::style(
-        plot,
-        legendgrouptitle = list(
-          text = "Samples",
-          font = list(color = font_color)
-        ),
-        traces = 1
+      # The spectra are the time points of one concentration in time
+      # mode; the marker rows above them need no title of their own.
+      # Set on the first trace after the final build (end of function).
+      group_title <- list(
+        text = if (time) {
+          paste0(
+            "Time [",
+            gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+            "]"
+          )
+        } else {
+          "Samples"
+        },
+        font = list(color = font_color)
       )
     }
 
@@ -9306,18 +9666,7 @@ multiple_spectra <- function(
           font = list(size = 11, color = font_color),
           itemsizing = "constant",
           tracegroupgap = 4,
-          title = list(
-            text = if (time) {
-              paste0(
-                "<b> Time [",
-                gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
-                "]  </b>"
-              )
-            } else {
-              ""
-            },
-            color = font_color
-          )
+          title = list(text = "", color = font_color)
         ),
         # 3D Scene Styling
         scene = list(
@@ -9376,8 +9725,9 @@ multiple_spectra <- function(
             showticklabels = labels_show,
             showspikes = FALSE,
             showbackground = FALSE,
-            type = 'category',
-            tickvals = levels(spectrum_data$z)
+            # Sample positions (z_pos), named by their samples
+            tickvals = seq_along(levels(spectrum_data$z)),
+            ticktext = levels(spectrum_data$z)
           ),
           camera = list(
             # center = list(x = 0.33, y = -0.05, z = 0.05),
@@ -9421,112 +9771,44 @@ multiple_spectra <- function(
       color_cmp
     }
 
-    plot_2d <- plotly::plot_ly(
-      data = spectrum_data,
-      x = ~mass,
-      y = ~intensity,
-      color = ~z,
-      colors = planar_colors,
-      legendgroup = ~z,
-      # WebGL rather than SVG: a spectrum runs to thousands of points per
-      # sample, which the SVG renderer draws one path node at a time. The
-      # single-sample spectrum_plot() already uses scattergl for the same
-      # reason. Downloads go out via saveWidget(), so WebGL traces export fine.
-      type = "scattergl",
-      mode = "lines",
-      hoverinfo = "text",
-      text = ~ paste0(
-        "Mass: ",
-        mass,
-        " Da\nIntensity: ",
-        round(intensity, 2),
-        "%",
-        ifelse(
-          time == TRUE,
-          "\nTime: ",
-          "\nSample: "
-        ),
-        z,
-        ifelse(
-          time == TRUE,
-          paste(" ", gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])),
-          ""
-        )
-      ),
-      showlegend = TRUE
+    # Lines as WebGL rather than SVG: a spectrum runs to thousands of points
+    # per sample, which the SVG renderer draws one path node at a time. The
+    # single-sample spectrum_plot() already uses scattergl for the same
+    # reason. Downloads go out via saveWidget(), so WebGL traces export fine.
+    # Markers as SVG, though: plotly.js draws the WebGL canvas underneath the
+    # SVG layers, so an SVG marker trace is always in front of the spectrum
+    # lines. There are only a handful of peaks per sample, so nothing is lost.
+    per_sample <- sample_traces(
+      "scattergl",
+      function(lvl, rows) {
+        col <- unname(planar_colors[lvl])
+        if (length(col) == 1 && !is.na(col)) col else font_color
+      },
+      line_width = NULL,
+      marker = list(type = "scatter", size = 10, line_width = 1.5)
     )
+    plot_2d <- plotly::plot_ly()
 
-    # One marker trace per sample rather than one per peak — see the cubic
-    # branch above for why the split stays at the sample level.
-    if (nrow(peaks_data) > 0) {
-      for (lvl in levels(peaks_data$z)) {
-        peaks_lvl <- peaks_data[
-          !is.na(peaks_data$z) & peaks_data$z == lvl,
-          ,
-          drop = FALSE
-        ]
-
-        if (nrow(peaks_lvl) == 0) {
-          next
-        }
-
-        plot_2d <- plot_2d |>
-          plotly::add_markers(
-            data = peaks_lvl,
-            x = ~mass,
-            y = ~intensity,
-            legendgroup = lvl,
-            # SVG, not WebGL, even though the lines above are scattergl:
-            # plotly.js draws the WebGL canvas underneath the SVG layers, so an
-            # SVG marker trace is always in front of the spectrum lines no
-            # matter how the traces are ordered. There are only a handful of
-            # peaks per sample, so nothing is lost by drawing them as SVG.
-            type = "scatter",
-            mode = "markers",
-            inherit = FALSE,
-            visible = symbols_show,
-            meta = peaks_trace_tag,
-            marker = list(
-              color = peaks_lvl$mk_color,
-              symbol = peaks_lvl$symbol,
-              size = 10,
-              zindex = 100,
-              line = list(color = inv_color, width = 1.5)
-            ),
-            hoverinfo = "text",
-            text = ~ paste0(
-              ifelse(is.na(name), "", paste0("Name: ", name, "\n")),
-              "Measured: ",
-              mass,
-              " Da\nIntensity: ",
-              round(intensity, 2),
-              ifelse(
-                time,
-                "%\nTime: ",
-                "%\nSample: "
-              ),
-              z,
-              ifelse(
-                time,
-                paste0(" ", gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])),
-                ""
-              ),
-              ifelse(is.na(mw), "", paste0("\nTheor. Mw: ", mw))
-            ),
-            showlegend = FALSE
-          )
-      }
-    }
-
+    per_sample <- c(
+      per_sample,
+      unmatched_sample_traces(
+        unmatched_data,
+        spectra = spectra,
+        suffix = spectrum_suffix,
+        cubic = FALSE,
+        visible = unmatched_show,
+        um = um,
+        inv_color = inv_color,
+        time = time,
+        units = units
+      )
+    )
     plot_2d <- add_unmatched_traces(
       plot_2d,
       unmatched_data,
       cubic = FALSE,
       visible = unmatched_show,
       um = um,
-      inv_color = inv_color,
-      time = time,
-      units = units,
       legend = TRUE
     )
 
@@ -9544,7 +9826,16 @@ multiple_spectra <- function(
         sym <- name_entries$symbol[i]
         first_peak <- peaks_data[peaks_data$name == entry_name, ][1, ]
         is_protein <- sym == "diamond"
-        lg <- if (is_protein) "proteins" else "compounds"
+        lg <- legend_key_group(if (is_protein) "proteins" else "compounds")
+        # Coloured by compound, a compound's row shows its colour and shape:
+        # the legend is where the colours are named
+        chip_color <- if (
+          !is_protein &&
+            identical(color_variable, "Compounds") &&
+            entry_name %in% names(color_cmp)
+        ) {
+          unname(color_cmp[[entry_name]])
+        }
 
         args <- list(
           p = plot_2d,
@@ -9558,9 +9849,14 @@ multiple_spectra <- function(
           name = entry_name,
           legendgroup = lg,
           marker = list(
-            color = font_color,
-            symbol = if (is_protein) sym else paste0(sym, "-open"),
-            size = 8
+            color = chip_color %||% font_color,
+            symbol = if (is_protein || !is.null(chip_color)) {
+              sym
+            } else {
+              paste0(sym, "-open")
+            },
+            size = 8,
+            line = list(color = inv_color, width = if (is.null(chip_color)) 0 else 1)
           ),
           visible = symbols_show,
           meta = peaks_trace_tag,
@@ -9571,13 +9867,18 @@ multiple_spectra <- function(
         plot_2d <- do.call(plotly::add_trace, args)
       }
 
-      plot_2d <- plotly::style(
-        plot_2d,
-        legendgrouptitle = list(
-          text = "Samples",
-          font = list(color = font_color)
-        ),
-        traces = 1
+      # As in the cubic branch: set after the final build
+      group_title <- list(
+        text = if (time) {
+          paste0(
+            "Time [",
+            gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
+            "]"
+          )
+        } else {
+          "Samples"
+        },
+        font = list(color = font_color)
       )
     }
 
@@ -9619,42 +9920,52 @@ multiple_spectra <- function(
           font = list(size = 11, color = font_color),
           itemsizing = "constant",
           tracegroupgap = 4,
-          title = list(
-            text = if (time) {
-              paste0(
-                "<b> Time [",
-                gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
-                "]  </b>"
-              )
-            } else {
-              ""
-            },
-            color = font_color
-          )
+          title = list(text = "", color = font_color)
         )
       )
   }
+
+  # One build for the rest of the figure (legend rows, unmatched peaks,
+  # layout), then the per-sample traces in front of it, as plotly would have
+  # ordered them. The first spectrum titles the legend group (plotly::style()
+  # built the whole figure once more just for that).
+  # Without legend rows or unmatched peaks the rest has no trace of its own,
+  # and plotly would build a placeholder one (and warn) from the bare
+  # plot_ly(); only that bare entry is left in attrs then.
+  if (length(fig$x$attrs) <= 1) {
+    fig$x$attrs <- fig$x$attrs[0]
+  }
+  fig <- slim_spectrum(fig)
+  if (length(per_sample) > 0 && !is.null(group_title)) {
+    per_sample[[1]]$legendgrouptitle <- group_title
+  }
+  fig$x$data <- c(per_sample, fig$x$data)
+  fig
 }
 
-# Add the unmatched peak markers of multiple_spectra() ----
+# Unmatched peak markers of multiple_spectra() ----
 #
 # One trace per sample, grouped with that sample's spectrum so hiding it in the
 # legend hides its unmatched peaks too, plus a single legend row naming the
 # symbol. Every trace carries unmatched_trace_tag, so the peaks are toggled on
 # the rendered figure rather than by a rebuild.
-add_unmatched_traces <- function(
-  plot,
+#
+# unmatched_sample_traces() gives the per-sample traces ready-made, appended
+# with the other per-sample traces after plotly_build() (see multiple_spectra()
+# for why); add_unmatched_traces() adds the legend row through plotly.
+unmatched_sample_traces <- function(
   unmatched_data,
+  spectra,
+  suffix,
   cubic,
   visible,
   um,
   inv_color,
   time = FALSE,
-  units = NULL,
-  legend = TRUE
+  units = NULL
 ) {
   if (is.null(unmatched_data) || nrow(unmatched_data) == 0) {
-    return(plot)
+    return(list())
   }
 
   time_unit <- if (time) {
@@ -9663,25 +9974,26 @@ add_unmatched_traces <- function(
     ""
   }
 
-  for (lvl in levels(unmatched_data$z)) {
-    um_lvl <- unmatched_data[
-      !is.na(unmatched_data$z) & unmatched_data$z == lvl,
-      ,
-      drop = FALSE
-    ]
+  # One trace per spectrum (`spectra`, in their order), grouped with its
+  # level; `suffix` names a spectrum among the replicates of its level
+  traces <- list()
+  by_spectrum <- split(seq_len(nrow(unmatched_data)), unmatched_data$sample_key)
+  for (s in intersect(spectra, names(by_spectrum))) {
+    um_lvl <- unmatched_data[by_spectrum[[s]], , drop = FALSE]
+    um_lvl <- um_lvl[!is.na(um_lvl$z), , drop = FALSE]
 
     if (nrow(um_lvl) == 0) {
       next
     }
+    lvl <- as.character(um_lvl$z[1])
 
-    args <- list(
-      p = plot,
-      data = um_lvl,
-      x = ~mass,
-      y = ~intensity,
-      legendgroup = lvl,
+    trace <- list(
+      # SVG like the hit markers, so they draw above the WebGL spectrum lines
+      type = if (cubic) "scatter3d" else "scatter",
       mode = "markers",
-      inherit = FALSE,
+      x = I(um_lvl$mass),
+      y = I(um_lvl$intensity),
+      legendgroup = lvl,
       visible = visible,
       meta = unmatched_trace_tag,
       # 3D markers are sized in a different scale than 2D ones. The 2D cross
@@ -9693,68 +10005,73 @@ add_unmatched_traces <- function(
         size = if (cubic) 3 else 8,
         line = list(
           color = if (cubic) inv_color else um$color,
-          width = if (cubic) 2 else 1.5
+          width = if (cubic) 2 else um$width
         )
       ),
       hoverinfo = "text",
-      text = ~ paste0(
+      text = I(paste0(
         "Unmatched Peak",
-        "\nMeasured: ",
-        mass,
-        " Da\nIntensity: ",
-        round(intensity, 2),
-        if (time) "%\nTime: " else "%\nSample: ",
-        z,
-        time_unit
-      ),
+        "<br>Measured: ",
+        um_lvl$mass,
+        " Da<br>Intensity: ",
+        round(um_lvl$intensity, 2),
+        if (time) "%<br>Time: " else "%<br>Sample: ",
+        lvl,
+        time_unit,
+        suffix[[s]]
+      )),
       showlegend = FALSE
     )
-
     if (cubic) {
-      args$z <- ~z
-      args$type <- "scatter3d"
-    } else {
-      # SVG like the hit markers, so they draw above the WebGL spectrum lines
-      args$type <- "scatter"
+      trace$z <- I(um_lvl$z_pos)
     }
+    traces[[length(traces) + 1]] <- trace
+  }
+  traces
+}
 
-    plot <- do.call(plotly::add_trace, args)
+add_unmatched_traces <- function(
+  plot,
+  unmatched_data,
+  cubic,
+  visible,
+  um,
+  legend = TRUE
+) {
+  if (is.null(unmatched_data) || nrow(unmatched_data) == 0 || !legend) {
+    return(plot)
   }
 
-  if (legend) {
-    args <- list(
-      p = plot,
-      inherit = FALSE,
-      type = "scatter",
-      mode = "markers",
-      x = 0,
-      y = 0,
-      name = "Unmatched",
-      legendgroup = "unmatched",
-      marker = list(
-        color = um$color,
-        symbol = um$symbol,
-        size = 8,
-        line = list(color = um$color, width = 1.5)
-      ),
-      visible = visible,
-      meta = unmatched_trace_tag,
-      showlegend = TRUE,
-      # After the protein and compound rows (ranked 1..n), ahead of the
-      # sample rows (plotly's default rank of 1000)
-      legendrank = 999,
-      hoverinfo = "skip"
-    )
+  args <- list(
+    p = plot,
+    inherit = FALSE,
+    type = "scatter",
+    mode = "markers",
+    x = 0,
+    y = 0,
+    name = "Unmatched",
+    legendgroup = legend_key_group("unmatched"),
+    marker = list(
+      color = um$color,
+      symbol = um$symbol,
+      size = 8,
+      line = list(color = um$color, width = um$width)
+    ),
+    visible = visible,
+    meta = unmatched_trace_tag,
+    showlegend = TRUE,
+    # After the protein and compound rows (ranked 1..n), ahead of the
+    # sample rows (plotly's default rank of 1000)
+    legendrank = 999,
+    hoverinfo = "skip"
+  )
 
-    if (!cubic) {
-      args$xaxis <- "x2"
-      args$yaxis <- "y2"
-    }
-
-    plot <- do.call(plotly::add_trace, args)
+  if (!cubic) {
+    args$xaxis <- "x2"
+    args$yaxis <- "y2"
   }
 
-  plot
+  do.call(plotly::add_trace, args)
 }
 
 # Filter function for table view
@@ -9988,8 +10305,16 @@ render_table_view <- function(table, colors, tab, inputs, units) {
       dom = 't',
       paging = FALSE,
       ordering = FALSE,
+      # A table wider than its card scrolls sideways with its header
+      scrollX = TRUE,
       scrollY = TRUE,
       scrollCollapse = TRUE,
+      initComplete = htmlwidgets::JS(
+        "function(settings, json) {",
+        "  var api = this.api();",
+        "  setTimeout(function() { api.columns.adjust(); }, 50);",
+        "}"
+      ),
       rowGroup = row_group,
       columnDefs = Filter(
         Negate(is.null),
@@ -10082,6 +10407,123 @@ render_table_view <- function(table, colors, tab, inputs, units) {
         dt
       }
     })()
+}
+
+# Percentage columns of the hits table that can be drawn as bars. Prot.
+# Binding [%] exists only when a protein was declared with several masses.
+#' @export
+hits_bar_cols <- function(hits) {
+  c(
+    "Binding [%]",
+    "Tot. Binding [%]",
+    if ("Prot. Binding [%]" %in% names(hits)) "Prot. Binding [%]",
+    "Int. Prot. [%]",
+    "Int. Cmp [%]",
+    "Unmatched [%]",
+    "Correct [%]"
+  )
+}
+
+# Columns of the hits table to pick from, and those picked by default. The
+# sample, protein, compound, concentration and time are always shown, and so
+# is Tot. Binding [%], which follows Binding [%] (see hits_view_table()).
+#' @export
+hits_col_choices <- function(hits, units) {
+  fixed <- c(
+    "Sample ID",
+    "Protein",
+    "Cmp Name",
+    "truncSample_ID",
+    "Tot. Binding [%]",
+    if ("Concentration" %in% names(units)) units[["Concentration"]],
+    if ("Time" %in% names(units)) units[["Time"]]
+  )
+  choices <- setdiff(names(hits), fixed)
+  hidden <- c(
+    "Well",
+    "Replicate",
+    "Unmatched [%]",
+    # Shown when a peak had a reading that was not preferred
+    if (!show_preferred_column(hits)) "Preferred",
+    "Meas. Prot. [Da]",
+    "Δ Prot. [Da]",
+    "Int. Prot. [%]",
+    "Int. Cmp [%]",
+    "Δ Cmp [Da]"
+  )
+
+  list(choices = choices, selected = setdiff(choices, hidden))
+}
+
+# Hits in the order of the hits table: by protein, then by concentration and
+# time
+#' @export
+sort_hits_table <- function(hits, units) {
+  num_sort_cols <- unname(units[intersect(
+    c("Concentration", "Time"),
+    names(units)
+  )])
+
+  dplyr::arrange(
+    hits,
+    Protein,
+    dplyr::across(dplyr::all_of(num_sort_cols), as.numeric)
+  )
+}
+
+# The hits table, one row per assignment of a peak, at the picked columns with
+# Tot. Binding [%] right after Binding [%]. Every view of the hits (the Hits
+# interface, the Table View of the Overview and Sample View) is a subset of it.
+#' @export
+hits_view_table <- function(
+  hits,
+  selected_cols,
+  units,
+  compounds = NULL,
+  samples = NULL
+) {
+  binding_pos <- match("Binding [%]", selected_cols)
+  selected_cols <- if (is.na(binding_pos)) {
+    union(selected_cols, "Tot. Binding [%]")
+  } else {
+    append(selected_cols, "Tot. Binding [%]", after = binding_pos)
+  }
+
+  filter_hits_table(
+    sort_hits_table(hits, units),
+    selected_cols = selected_cols,
+    compounds = compounds,
+    samples = samples,
+    units = units
+  )
+}
+
+# Table View of the Relative Binding interface: a hits_view_table() subset in
+# the colours of the plots, with all percentages as bars
+#' @export
+render_hits_view <- function(
+  hits_table,
+  colors,
+  color_variable,
+  truncate_names = FALSE,
+  units,
+  empty_message = NULL
+) {
+  if (isTRUE(truncate_names)) {
+    hits_table$`Sample ID` <- hits_table$truncSample_ID
+  }
+
+  render_hits_table(
+    hits_table,
+    concentration_colors = NULL,
+    bar_chart = hits_bar_cols(hits_table),
+    colors = colors,
+    color_variable = color_variable,
+    truncated = FALSE,
+    dom = "t",
+    empty_message = empty_message,
+    units = units
+  )
 }
 
 # Selection and filtering of hits table
@@ -10329,6 +10771,8 @@ render_hits_table <- function(
   clickable = FALSE,
   valid_concentrations = NULL,
   per_adduct = FALSE,
+  dom = NULL,
+  empty_message = NULL,
   units
 ) {
   # Adapt table layout
@@ -10342,6 +10786,7 @@ render_hits_table <- function(
     )
     dom_value <- "fti"
   }
+  dom_value <- dom %||% dom_value
 
   # 0-based indices of hidden columns (truncSample_ID); used to align
   # td:eq() visible-index with the data-array index in rowCallback
@@ -10524,6 +10969,10 @@ render_hits_table <- function(
     )
   )
 
+  if (!is.null(empty_message)) {
+    hits_datatable$x$options$language <- list(emptyTable = empty_message)
+  }
+
   adduct_fmt_cols <- setdiff(
     grep("^(Binding|Total Binding) \\(", names(hits_table), value = TRUE),
     bar_chart
@@ -10703,6 +11152,7 @@ new_sample_table <- function(
   # so leaving them bare matches exactly as before.
   sample_names <- sort(result$samples %||% names(result$deconvolution))
   sample_tab <- data.frame(
+    Include = rep(TRUE, length(sample_names)),
     Sample = sample_names,
     Protein = ifelse(
       length(protein_table$Protein) == 1,
@@ -10726,6 +11176,7 @@ new_sample_table <- function(
   }
 
   colnames(sample_tab) <- c(
+    "Include",
     "Sample",
     "Protein",
     paste("Compound", 1:5),
@@ -11275,14 +11726,19 @@ get_contrast_color <- function(hex_codes) {
 # - Proteins and compounds share one sequence (proteins first, then the
 #   compounds, each sorted), so a protein and a compound never share a colour
 #   where they are shown side by side (batch heatmaps, spectra).
-# - Samples follow their natural name order ("S2" before "S10").
+# - Samples follow `sample_order`, the order the result table lists them in
+#   (protein, compound, then concentration and time or binding), so a sample
+#   gradient runs along the table and the plots ordered like it. Without it,
+#   their natural name order ("S2" before "S10").
 # - Concentrations and times are numeric and ordered.
+# - sample_info holds each sample's protein, compound, concentration and
+#   time, so a sample can be coloured by any of them (sample_level_colors()).
 #
 # Works on the result table as stored (Sample, Compound, Concentration [..])
 # and on its display form (Sample ID, Cmp Name, Conc. [..]) alike, which hold
 # the same values.
 #' @export
-color_key <- function(hits_summary) {
+color_key <- function(hits_summary, sample_order = NULL) {
   nms <- names(hits_summary)
   pick <- function(cands) intersect(cands, nms)[1]
   col_values <- function(col) {
@@ -11305,6 +11761,35 @@ color_key <- function(hits_summary) {
   compounds <- sort(col_values(pick(c("Cmp Name", "Compound"))), method = "radix")
   sample_col <- pick(c("Sample ID", "Sample"))
   samples <- natural_sort(col_values(sample_col))
+  if (length(sample_order)) {
+    sample_order <- unique(as.character(sample_order))
+    samples <- c(
+      sample_order[sample_order %in% samples],
+      samples[!samples %in% sample_order]
+    )
+  }
+
+  # Per sample: its protein, its (first) compound, concentration and time
+  value_col <- function(col) {
+    if (is.na(col)) {
+      return(rep(NA_character_, length(samples)))
+    }
+    x <- as.character(hits_summary[[col]])
+    x[!is.na(x) & x == "N/A"] <- NA
+    ids <- as.character(hits_summary[[sample_col]])
+    first <- tapply(x, ids, function(v) v[!is.na(v)][1])
+    unname(first[samples])
+  }
+  sample_info <- data.frame(
+    sample = samples,
+    protein = value_col(pick("Protein")),
+    compound = value_col(pick(c("Cmp Name", "Compound"))),
+    concentration = suppressWarnings(as.numeric(
+      value_col(nms[grepl("^Conc", nms)][1])
+    )),
+    time = suppressWarnings(as.numeric(value_col(nms[grepl("^Time", nms)][1]))),
+    stringsAsFactors = FALSE
+  )
 
   # Short sample IDs, when the table carries them
   sample_labels <- if (
@@ -11326,6 +11811,7 @@ color_key <- function(hits_summary) {
     compounds = compounds,
     samples = samples,
     sample_labels = sample_labels,
+    sample_info = sample_info,
     concentrations = num_values("^Conc"),
     times = num_values("^Time")
   )
@@ -11401,7 +11887,7 @@ key_ramp_position <- function(values, known) {
 # (as.character). levels defaults to all levels of the key. For samples,
 # trunc = TRUE takes and returns the short sample IDs.
 #
-# - compound / protein: categorical, repeating past twelve (see level_tier).
+# - compound / protein: categorical, repeating past eighteen (see level_tier).
 # - sample: categorical up to twelve samples in the result, otherwise spread
 #   over the sample ramp in name order.
 # - concentration: the 0 control in the control grey, the others over the
@@ -11456,11 +11942,7 @@ key_colors <- function(
     idx <- key_index(lv, key$samples)
     ok <- !is.na(idx)
     n_all <- max(c(length(key$samples), idx[ok]))
-    if (n_all <= length(categorical_palette$light)) {
-      out[ok] <- categorical_colors(n_all, theme)[idx[ok]]
-    } else {
-      out[ok] <- ramp_at((idx[ok] - 1) / (n_all - 1), "sample", theme)
-    }
+    out[ok] <- sample_colors(n_all, theme)[idx[ok]]
   } else if (var == "concentration") {
     v <- suppressWarnings(as.numeric(as.character(levels)))
     known <- key$concentrations[key$concentrations != 0]
@@ -11479,6 +11961,83 @@ key_colors <- function(
   }
 
   stats::setNames(out, lvl_names)
+}
+
+# Colours of samples by a variable of theirs, named by the samples as given:
+# their own colour ("Samples"), or the colour of their protein, compound,
+# concentration or time. With trunc = TRUE the samples are short sample IDs.
+# This is how a view colours its per-sample marks (bars, spectra, table rows)
+# by a property of the sample.
+#' @export
+sample_level_colors <- function(
+  key,
+  variable,
+  samples,
+  theme = "light",
+  trunc = FALSE
+) {
+  var <- key_variable(variable)
+  samples <- as.character(samples)
+  if (is.na(var) || var == "sample" || is.null(key$sample_info)) {
+    return(key_colors(key, "Samples", samples, theme = theme, trunc = trunc))
+  }
+  ids <- samples
+  if (isTRUE(trunc) && length(key$sample_labels)) {
+    full <- names(key$sample_labels)[match(ids, key$sample_labels)]
+    ids <- ifelse(is.na(full), ids, full)
+  }
+  values <- key$sample_info[[var]][match(ids, key$sample_info$sample)]
+  stats::setNames(
+    unname(key_colors(key, variable, values, theme = theme)),
+    samples
+  )
+}
+
+# Colours of the Sample View, one sample: its compounds' colours
+# ("Compounds"), or the sample's colour by the variable picked - its own, its
+# concentration's, time's or protein's - named by its (short) sample ID
+#' @export
+sample_view_colors <- function(
+  hits_summary,
+  key,
+  variable,
+  sample,
+  trunc = FALSE,
+  theme = "light"
+) {
+  rows <- hits_summary[hits_summary$`Sample ID` %in% sample, , drop = FALSE]
+  if (identical(variable, "Compounds")) {
+    cmps <- as.character(rows$`Cmp Name`)
+    cmps <- unique(cmps[!is.na(cmps) & cmps != "N/A"])
+    return(key_colors(key, "Compounds", cmps, theme = theme))
+  }
+  label <- if (isTRUE(trunc) && "truncSample_ID" %in% names(rows)) {
+    unique(as.character(rows$truncSample_ID))
+  } else {
+    as.character(sample)
+  }
+  sample_level_colors(key, variable, label, theme = theme, trunc = trunc)
+}
+
+# The colour variable a view opens with: the experiment's main factor among
+# the `roles` it offers ("concentration", "compound", "time", "protein",
+# "sample"): the concentration when several were dosed, else the compound
+# when there are several, else time, protein - whatever varies - and the
+# sample when nothing else does. Returns the role.
+#' @export
+default_color_role <- function(key, roles) {
+  varies <- c(
+    concentration = sum(key$concentrations != 0) > 1,
+    compound = length(key$compounds) > 1,
+    time = sum(key$times != 0) > 1,
+    protein = length(key$proteins) > 1
+  )
+  for (role in names(varies)) {
+    if (role %in% roles && varies[[role]]) {
+      return(role)
+    }
+  }
+  if ("sample" %in% roles) "sample" else roles[1]
 }
 
 # Levels sorted the way the key orders them: numerically for concentrations
@@ -11501,7 +12060,7 @@ key_order <- function(key, variable, levels) {
   lv[order(is.na(lv), key_index(as.character(lv), known))]
 }
 
-# Repeat round of each level's categorical colour (0 within the first twelve),
+# Repeat round of each level's categorical colour (0 within the first eighteen),
 # for the plots that switch symbol, pattern or dash past the palette.
 # Ordered variables and ramp-coloured samples are always round 0.
 #' @export
@@ -11516,6 +12075,16 @@ key_tiers <- function(key, variable, levels) {
     ]
   }
   stats::setNames(tiers, lv)
+}
+
+# Marker symbol of each level, named by the levels as given: a circle in the
+# first round of colours, another shape in each later one (see level_tier)
+#' @export
+key_marker_symbols <- function(key, variable, levels) {
+  stats::setNames(
+    tier_symbol(unname(key_tiers(key, variable, levels))),
+    as.character(levels)
+  )
 }
 
 # Marker symbol of each concentration, named by the levels as given: the
@@ -11600,7 +12169,8 @@ prot_compound_distribution <- function(
   distribution_scale,
   distribution_labels = NULL,
   theme = "light",
-  colors = NULL
+  colors = NULL,
+  sample_order = NULL
 ) {
   tbl <- hits_summary[
     hits_summary$Protein %in% protein & is_complex_row(hits_summary),
@@ -11659,6 +12229,17 @@ prot_compound_distribution <- function(
     ) |>
     dplyr::arrange(.mean_tb, .sid) |>
     dplyr::pull(.sid)
+
+  # A given sample order (the Overview's) replaces the ranking by binding
+  if (length(sample_order)) {
+    given <- if (truncate_names) {
+      tbl$truncSample_ID[match(sample_order, tbl$`Sample ID`)]
+    } else {
+      sample_order
+    }
+    given <- unique(given[!is.na(given) & given %in% global_sample_order])
+    global_sample_order <- c(given, setdiff(global_sample_order, given))
+  }
 
   # Colours handed in are shared with the other cards of a view
   if (is.null(colors)) {
@@ -12023,7 +12604,8 @@ cmp_compound_distribution <- function(
   distribution_scale,
   distribution_labels = NULL,
   theme = "light",
-  colors = NULL
+  colors = NULL,
+  sample_order = NULL
 ) {
   # A sample without any protein or complex peak has no binding to show
   tbl <- hits_summary |>
@@ -12077,10 +12659,16 @@ cmp_compound_distribution <- function(
       }
     ) |>
     dplyr::select(-`Peak Signal [Da]`) |>
-    dplyr::arrange(`Tot. Binding [%]`, `Binding [%]`, `Sample ID`) |>
-    dplyr::mutate(
-      `Sample ID` = if (truncate_names) `truncSample_ID` else `Sample ID`
-    )
+    dplyr::arrange(`Tot. Binding [%]`, `Binding [%]`, `Sample ID`)
+
+  # A given sample order (the Overview's) replaces the ranking by binding
+  if (length(sample_order)) {
+    tbl <- tbl[order(match(tbl$`Sample ID`, sample_order)), , drop = FALSE]
+  }
+  tbl <- dplyr::mutate(
+    tbl,
+    `Sample ID` = if (truncate_names) `truncSample_ID` else `Sample ID`
+  )
 
   tbl$`Sample ID` <- factor(
     tbl$`Sample ID`,
@@ -12242,7 +12830,8 @@ overview_compound_distribution <- function(
   distribution_scale,
   distribution_labels = NULL,
   theme = "light",
-  colors = NULL
+  colors = NULL,
+  sample_order = NULL
 ) {
   tbl <- overview_subset(hits_summary, protein, compounds)
   if (!any(is_complex_row(tbl))) {
@@ -12261,6 +12850,10 @@ overview_compound_distribution <- function(
     )
   }
 
+  # The plots colour compounds or samples; a sample's colour may stand for
+  # its concentration, time or protein (see overview_colors())
+  mode <- if (identical(color_variable, "Compounds")) "Compounds" else "Samples"
+
   # Compounds without a hit add nothing to the plot, so one with hits among
   # several picked ones is shown on its own
   hit_cmps <- unique(tbl$`Cmp Name`[is_complex_row(tbl)])
@@ -12269,25 +12862,27 @@ overview_compound_distribution <- function(
     cmp_compound_distribution(
       hits_summary = tbl,
       compound = hit_cmps,
-      color_variable = color_variable,
+      color_variable = mode,
       truncate_names = truncate_names,
       key = key,
       distribution_scale = distribution_scale,
       distribution_labels = distribution_labels,
       theme = theme,
-      colors = colors
+      colors = colors,
+      sample_order = sample_order
     )
   } else {
     prot_compound_distribution(
       hits_summary = tbl,
       protein = protein,
-      color_variable = color_variable,
+      color_variable = mode,
       truncate_names = truncate_names,
       key = key,
       distribution_scale = distribution_scale,
       distribution_labels = distribution_labels,
       theme = theme,
-      colors = colors
+      colors = colors,
+      sample_order = sample_order
     )
   }
 }
@@ -12316,7 +12911,8 @@ smpl_compound_distribution <- function(
   color_variable,
   truncate_names,
   key = NULL,
-  theme = "light"
+  theme = "light",
+  colors = NULL
 ) {
   tbl <- hits_summary |>
     dplyr::filter(`Sample ID` == sample)
@@ -12390,7 +12986,7 @@ smpl_compound_distribution <- function(
     )
   }
 
-  colors <- key_colors(
+  colors <- colors %||% key_colors(
     key %||% color_key(hits_summary),
     color_variable,
     if (color_variable == "Compounds") {
@@ -13007,7 +13603,8 @@ stats_scatter <- function(
     "rgba(255,255,255,0.7)"
   }
 
-  p |>
+  # No groups left (e.g. "Hits only" filtered out every sample)
+  ensure_trace(p) |>
     plotly::layout(
       paper_bgcolor = "rgba(0,0,0,0)",
       plot_bgcolor = "rgba(0,0,0,0)",
@@ -13108,8 +13705,32 @@ stats_scatter <- function(
           list()
         }
       )
-    )
+    ) |>
+    htmlwidgets::onRender(group_highlight_js)
 }
+
+# Fades every other group while a point is hovered, so a group stays easy to
+# pick out when the colours repeat. Opacity only: the traces stay as built.
+group_highlight_js <- "
+function(el) {
+  var base = null;
+  el.on('plotly_hover', function(d) {
+    if (!d || !d.points || !d.points.length || el.data.length < 2) return;
+    if (base === null) {
+      base = el.data.map(function(t) {
+        return (t.marker && t.marker.opacity !== undefined) ? t.marker.opacity : 1;
+      });
+    }
+    var cn = d.points[0].curveNumber;
+    Plotly.restyle(el, {'marker.opacity': base.map(function(o, i) {
+      return i === cn ? 1 : 0.12;
+    })});
+  });
+  el.on('plotly_unhover', function() {
+    if (base !== null) Plotly.restyle(el, {'marker.opacity': base});
+  });
+}
+"
 
 #' @export
 stats_violin <- function(
@@ -13257,7 +13878,8 @@ stats_violin <- function(
     }
   }
 
-  p |>
+  # No groups when no sample is left (e.g. "Hits only" filtered out all)
+  ensure_trace(p) |>
     plotly::layout(
       paper_bgcolor = "rgba(0,0,0,0)",
       plot_bgcolor = "rgba(0,0,0,0)",
@@ -13318,7 +13940,7 @@ batch_plate_heatmap <- function(
     }
   }
   if (!variable %in% names(df)) {
-    return(plotly::plotly_empty())
+    return(ensure_trace(plotly::plotly_empty()))
   }
 
   if (
@@ -13326,7 +13948,7 @@ batch_plate_heatmap <- function(
       all(is.na(df[["Well"]])) ||
       all(trimws(as.character(df[["Well"]])) %in% c("", "NA", "N/A"))
   ) {
-    return(plotly::plotly_empty())
+    return(ensure_trace(plotly::plotly_empty()))
   }
 
   # Classify each sample's well state. Evaluated over all rows of a sample
@@ -13377,9 +13999,9 @@ batch_plate_heatmap <- function(
     }
   }
 
-  # Normalize well IDs: "A01" → "A1", "B12" → "B12"
-  raw_wells <- toupper(as.character(df[["Well"]]))
-  norm_wells <- gsub("^([A-Z]+)0*(\\d+)$", "\\1\\2", raw_wells)
+  # Normalize well IDs: "A01" → "A1", "B12" → "B12" (as the deconvolution's
+  # Sample Distribution reads them)
+  norm_wells <- parse_wells(df[["Well"]])$well_id
 
   data <- data.frame(
     well_id = norm_wells,
@@ -13485,13 +14107,15 @@ batch_plate_heatmap <- function(
     }
   }
 
-  # Trim to bounding rectangle of all wells present in dataset
+  # The whole plate the wells belong to, 96 or 384 wells (plate_format(), as
+  # the deconvolution's Sample Distribution), with all its row and column
+  # labels. Cropping to the occupied wells drew a single row for a run that
+  # used only a few wells.
   has_empty_in_rect <- FALSE
-  used_row_idx <- which(rowSums(presence_mat) > 0)
-  used_col_idx <- which(colSums(presence_mat) > 0)
-  if (length(used_row_idx) > 0 && length(used_col_idx) > 0) {
-    row_range <- seq(min(used_row_idx), max(used_row_idx))
-    col_range <- seq(min(used_col_idx), max(used_col_idx))
+  if (any(presence_mat)) {
+    format <- plate_format(data$well_id)
+    row_range <- format$rows
+    col_range <- format$cols
     display_rows <- rows[row_range]
     display_cols <- cols[col_range]
     z_mat <- z_mat[row_range, col_range, drop = FALSE]
@@ -13528,60 +14152,157 @@ batch_plate_heatmap <- function(
   } else {
     n_cats <- length(cat_levels)
     pal <- unname(key_colors(key, variable, cat_levels, theme = theme))
-    if (n_cats <= 1) {
-      cs <- list(list(0, pal[1]), list(1, pal[1]))
-    } else {
-      cs <- lapply(seq_len(n_cats), function(i) {
-        list((i - 1) / (n_cats - 1), pal[i])
-      })
-    }
     zmin <- 1
     zmax <- max(n_cats, 2)
     show_scale <- FALSE
     cb_title <- variable
   }
 
-  # Position colorbar below the Well States legend group when it has entries
+  # The colorbar in the lower half, under the Well States legend at the top
+  # when that has entries. Placed by a fraction of the plot's height per
+  # entry, it ran into the legend on a short card, and reaching past the plot
+  # it pushed the margins until plotly failed ("axis scaling"). An offset in
+  # pixels (ypad) pushes them too.
   n_ws_items <- as.integer(length(no_prot_row_vals) > 0) +
     as.integer(length(no_hit_row_vals) > 0) +
     as.integer(has_empty_in_rect)
-  cb_y <- if (is_numeric_var && n_ws_items > 0L) {
-    max(0.05, 1.0 - (n_ws_items + 1L) * 0.08 - 0.04)
+  cb_pos <- if (n_ws_items > 0L) {
+    list(y = 0, yanchor = "bottom", len = 0.5)
   } else {
-    0.5
+    list(y = 0.5, yanchor = "middle", len = 0.8)
   }
 
-  p <- plotly::plot_ly(
-    z = z_mat,
-    x = cols,
-    y = rows,
-    type = "heatmap",
-    colorscale = cs,
-    showscale = show_scale,
-    zmin = zmin,
-    zmax = zmax,
-    xgap = 3,
-    ygap = 3,
-    text = text_mat,
-    hoverinfo = "text",
-    colorbar = list(
-      title = list(text = cb_title, font = list(color = font_color, size = 13)),
-      tickfont = list(color = font_color, size = 11),
-      outlinecolor = font_color,
-      y = cb_y,
-      yanchor = "top"
-    )
-  )
+  # Rows by their position (1 = A), labelled by letter: plotly keeps the
+  # tiles square (scaleanchor) only between axes of the same type, and a
+  # category axis of row letters against the linear columns stretched the
+  # tiles to the card's shape
+  row_pos <- seq_along(rows)
+  big_plate <- length(cols) > 12
 
-  if (!is_numeric_var && !is.null(cat_levels) && length(cat_levels) > 0) {
-    n_cats <- length(cat_levels)
-    pal <- unname(key_colors(key, variable, cat_levels, theme = theme))
+  # Text for the tiles of a Batch Control card, about 25 px on a 96-well and
+  # 12 px on a 384-well plate (the marks follow the tiles, being in plate units)
+  label_size <- if (big_plate) 8 else 10
+  tick_size <- if (big_plate) 10 else 12
+  x_ticks <- if (big_plate) cols[cols %% 2 == 1] else cols
+  tile_codes <- NULL
+
+  # Every well as a tile underneath, in the colour of the "Empty" legend chip,
+  # so an empty well looks like a well and the whole plate reads as one (as
+  # the deconvolution's Sample Distribution); the gaps between the tiles show
+  # the card through. Empty wells used to merge into one grey block.
+  tile_gap <- if (big_plate) 2 else 3
+  empty_plate <- plotly::plot_ly() |>
+    plotly::add_trace(
+      type = "heatmap",
+      z = matrix(0, nrow = length(rows), ncol = length(cols)),
+      x = cols,
+      y = row_pos,
+      colorscale = list(list(0, tile_bg), list(1, tile_bg)),
+      showscale = FALSE,
+      xgap = tile_gap,
+      ygap = tile_gap,
+      hoverinfo = "skip"
+    )
+
+  if (is_numeric_var) {
+    p <- plotly::add_trace(
+      empty_plate,
+      z = z_mat,
+      x = cols,
+      y = row_pos,
+      type = "heatmap",
+      colorscale = cs,
+      showscale = show_scale,
+      zmin = zmin,
+      zmax = zmax,
+      xgap = tile_gap,
+      ygap = tile_gap,
+      text = text_mat,
+      hoverinfo = "text",
+      colorbar = list(
+        title = list(text = cb_title, font = list(color = font_color, size = 13)),
+        tickfont = list(color = font_color, size = 11),
+        outlinecolor = font_color,
+        thickness = 14,
+        y = cb_pos$y,
+        yanchor = cb_pos$yanchor,
+        len = cb_pos$len
+      )
+    )
+  } else {
+    # Labels on the tiles once colour alone no longer tells the levels apart:
+    # past the categorical colours a number, named in the legend; concentrations
+    # and times by their value, when that is short enough for a tile (a
+    # 96-well one: a 384-well tile holds a number, not a value of four digits)
+    ordered_var <- key_variable(variable) %in% c("concentration", "time")
+    if (n_cats > 0) {
+      if (!ordered_var && n_cats > length(categorical_palette$light)) {
+        tile_codes <- as.character(seq_len(n_cats))
+      } else if (
+        ordered_var &&
+          !big_plate &&
+          n_cats > 8 &&
+          all(nchar(cat_levels) <= 4)
+      ) {
+        tile_codes <- cat_levels
+      }
+    }
+    legend_names <- if (!is.null(tile_codes) && !ordered_var) {
+      paste0(tile_codes, " · ", cat_levels)
+    } else {
+      cat_levels
+    }
+
+    # The plate in a faded grey underneath. It carries the hover text and the
+    # clicks, and shows where a level is hidden from the legend.
+    faded <- color_alpha(status_colors(theme)$muted, 0.3)
+    p <- plotly::add_trace(
+      empty_plate,
+      z = ifelse(is.na(z_mat), NA_real_, 1),
+      x = cols,
+      y = row_pos,
+      type = "heatmap",
+      colorscale = list(list(0, faded), list(1, faded)),
+      showscale = FALSE,
+      xgap = tile_gap,
+      ygap = tile_gap,
+      text = text_mat,
+      hoverinfo = "text"
+    )
+
+    # One trace per level, in a legend group with its legend chip: a click on
+    # the chip hides the level's wells, a double click shows them alone
     for (i in seq_len(n_cats)) {
+      group <- paste0("level-", i)
+      is_level <- !is.na(z_mat) & z_mat == i
       p <- p |>
+        plotly::add_trace(
+          type = "heatmap",
+          z = ifelse(is_level, 1, NA_real_),
+          x = cols,
+          y = row_pos,
+          colorscale = list(list(0, pal[i]), list(1, pal[i])),
+          showscale = FALSE,
+          xgap = tile_gap,
+          ygap = tile_gap,
+          name = cat_levels[i],
+          legendgroup = group,
+          showlegend = FALSE,
+          hoverinfo = "skip",
+          # A literal template would print on every cell of the trace, the
+          # gaps included: the label goes into the level's own cells only
+          text = if (!is.null(tile_codes)) ifelse(is_level, tile_codes[i], ""),
+          texttemplate = if (!is.null(tile_codes)) "%{text}",
+          textfont = list(
+            size = label_size,
+            color = unname(get_contrast_color(pal[i]))
+          ),
+          inherit = FALSE
+        ) |>
         plotly::add_trace(
           type = "scatter",
           x = min(cols) - 10000,
-          y = rows[1],
+          y = 1,
           mode = "markers",
           visible = TRUE,
           marker = list(
@@ -13590,60 +14311,60 @@ batch_plate_heatmap <- function(
             size = 10,
             line = list(width = 0)
           ),
-          name = cat_levels[i],
+          name = legend_names[i],
+          legendgroup = group,
           showlegend = TRUE,
           inherit = FALSE,
           hoverinfo = "skip",
-          legendrank = 200,
-          legendgroup = "categories",
-          legendgrouptitle = list(
-            text = cb_title,
-            font = list(color = font_color, size = 13)
-          )
+          legendrank = 200 + i,
+          legendgrouptitle = if (i == 1) {
+            list(text = cb_title, font = list(color = font_color, size = 13))
+          }
         )
     }
   }
 
+  # Well-state marks in black or white, whichever stands out on their tile;
+  # a tile without a value shows the light empty-tile grey
+  mark_color <- function(row, col) {
+    v <- suppressWarnings(as.numeric(z_mat[row, as.character(col)]))
+    if (!length(v) || is.na(v)) {
+      return(if (theme == "light") "#000000" else "#ffffff")
+    }
+    tile <- if (is_numeric_var) {
+      ramp_at((v - zmin) / (zmax - zmin), numeric_ramps[[variable]], theme)
+    } else {
+      pal[min(max(1L, as.integer(v)), length(pal))]
+    }
+    unname(get_contrast_color(tile))
+  }
+
+  # The marks in plate units, so they keep to their tile at any card size;
+  # sized in pixels for an assumed tile, they spilled over the tiles of a
+  # short card and of a 384-well plate. Around a label the ring is wider.
   has_no_prot <- length(no_prot_row_vals) > 0
-  tile_px_est <- min(480 / length(cols), 360 / length(rows))
-  d_np <- as.integer(max(4L, min(11L, round(tile_px_est * 0.24))))
-  d_nh <- as.integer(max(4L, min(12L, round(tile_px_est * 0.27))))
+  mark_width <- if (big_plate) 1.5 else 2
+  r_np <- 0.24
+  r_nh <- if (is.null(tile_codes)) 0.3 else 0.4
   np_shapes <- if (has_no_prot) {
-    d <- d_np
     unlist(
       lapply(seq_along(no_prot_col_vals), function(i) {
         cx <- no_prot_col_vals[i]
-        cy <- which(rows == no_prot_row_vals[i]) - 1L
-        list(
+        cy <- which(rows == no_prot_row_vals[i])
+        col <- mark_color(no_prot_row_vals[i], cx)
+        cross_line <- function(dy) {
           list(
             type = "line",
             xref = "x",
             yref = "y",
-            xsizemode = "pixel",
-            ysizemode = "pixel",
-            xanchor = cx,
-            yanchor = cy,
-            x0 = -d,
-            y0 = -d,
-            x1 = d,
-            y1 = d,
-            line = list(color = "black", width = 2.5)
-          ),
-          list(
-            type = "line",
-            xref = "x",
-            yref = "y",
-            xsizemode = "pixel",
-            ysizemode = "pixel",
-            xanchor = cx,
-            yanchor = cy,
-            x0 = -d,
-            y0 = d,
-            x1 = d,
-            y1 = -d,
-            line = list(color = "black", width = 2.5)
+            x0 = cx - r_np,
+            y0 = cy - dy,
+            x1 = cx + r_np,
+            y1 = cy + dy,
+            line = list(color = col, width = mark_width + 0.5)
           )
-        )
+        }
+        list(cross_line(r_np), cross_line(-r_np))
       }),
       recursive = FALSE
     )
@@ -13656,7 +14377,7 @@ batch_plate_heatmap <- function(
         type = "scatter",
         mode = "markers",
         x = min(cols) - 10000,
-        y = rows[1],
+        y = 1,
         visible = TRUE,
         marker = list(
           symbol = "x-thin",
@@ -13669,7 +14390,7 @@ batch_plate_heatmap <- function(
         inherit = FALSE,
         hoverinfo = "skip",
         legendrank = 100,
-        legendgroup = "well_states",
+        legendgroup = legend_key_group("well_states"),
         legendgrouptitle = list(
           text = "Well States",
           font = list(color = font_color, size = 13)
@@ -13679,24 +14400,22 @@ batch_plate_heatmap <- function(
 
   has_no_hit <- length(no_hit_col_vals) > 0
   nh_shapes <- if (has_no_hit) {
-    d <- d_nh
     lapply(seq_along(no_hit_col_vals), function(i) {
       cx <- no_hit_col_vals[i]
-      cy <- which(rows == no_hit_row_vals[i]) - 1L
+      cy <- which(rows == no_hit_row_vals[i])
       list(
         type = "circle",
         xref = "x",
         yref = "y",
-        xsizemode = "pixel",
-        ysizemode = "pixel",
-        xanchor = cx,
-        yanchor = cy,
-        x0 = -d,
-        y0 = -d,
-        x1 = d,
-        y1 = d,
+        x0 = cx - r_nh,
+        y0 = cy - r_nh,
+        x1 = cx + r_nh,
+        y1 = cy + r_nh,
         fillcolor = "rgba(0,0,0,0)",
-        line = list(color = "black", width = 2)
+        line = list(
+          color = mark_color(no_hit_row_vals[i], cx),
+          width = mark_width
+        )
       )
     })
   } else {
@@ -13708,7 +14427,7 @@ batch_plate_heatmap <- function(
         type = "scatter",
         mode = "markers",
         x = min(cols) - 10000,
-        y = rows[1],
+        y = 1,
         visible = TRUE,
         marker = list(
           symbol = "circle-open",
@@ -13721,7 +14440,7 @@ batch_plate_heatmap <- function(
         inherit = FALSE,
         hoverinfo = "skip",
         legendrank = 100,
-        legendgroup = "well_states",
+        legendgroup = legend_key_group("well_states"),
         legendgrouptitle = list(
           text = "Well States",
           font = list(color = font_color, size = 13)
@@ -13736,7 +14455,7 @@ batch_plate_heatmap <- function(
         type = "scatter",
         mode = "markers",
         x = min(cols) - 10000,
-        y = rows[1],
+        y = 1,
         visible = TRUE,
         marker = list(
           symbol = "square",
@@ -13749,7 +14468,7 @@ batch_plate_heatmap <- function(
         inherit = FALSE,
         hoverinfo = "skip",
         legendrank = 100,
-        legendgroup = "well_states",
+        legendgroup = legend_key_group("well_states"),
         legendgrouptitle = list(
           text = "Well States",
           font = list(color = font_color, size = 13)
@@ -13771,38 +14490,54 @@ batch_plate_heatmap <- function(
         font = list(color = font_color, size = 11),
         bgcolor = "rgba(0,0,0,0)",
         y = 1,
-        yanchor = "top"
+        yanchor = "top",
+        # Every level is a legend group of its own (chip + tiles); keep
+        # them packed like one list
+        tracegroupgap = 2
       ),
       hoverlabel = list(
         bgcolor = "rgba(56, 56, 124, 0.86)",
         font = list(size = 14, color = "white"),
         bordercolor = "white"
       ),
+      # Square tiles, the plot area shrunk to the plate (as the deconvolution's
+      # Sample Distribution) and kept at the top, level with the legend. The
+      # 384-well plate labels every other column, its numbers ran together.
       xaxis = list(
         side = "top",
         tickmode = "array",
-        tickvals = cols,
-        ticktext = as.character(cols),
-        tickfont = list(color = font_color, size = 12),
+        tickvals = x_ticks,
+        ticktext = as.character(x_ticks),
+        tickfont = list(color = font_color, size = tick_size),
         tickangle = 0,
         ticklen = 0,
         showgrid = FALSE,
         zeroline = FALSE,
         automargin = FALSE,
-        range = c(min(cols) - 0.5, max(cols) + 0.5)
+        range = c(min(cols) - 0.5, max(cols) + 0.5),
+        constrain = "domain"
       ),
       yaxis = list(
-        range = c(length(rows) - 0.5, -0.5),
-        tickfont = list(color = font_color, size = 12),
+        tickmode = "array",
+        tickvals = row_pos,
+        ticktext = rows,
+        range = c(length(rows) + 0.5, 0.5),
+        tickfont = list(color = font_color, size = tick_size),
         ticklen = 0,
         showgrid = FALSE,
         zeroline = FALSE,
         scaleanchor = "x",
         scaleratio = 1,
+        constrain = "domain",
+        constraintoward = "top",
         automargin = FALSE
       ),
-      margin = list(t = 25, r = if (is_numeric_var) 0 else 10, b = 0, l = 30),
-      plot_bgcolor = tile_bg,
+      # Room under the plate for half of the last row's label, which plotly
+      # hid once the plate filled the plot's height
+      margin = list(t = 25, r = if (is_numeric_var) 0 else 10, b = 8, l = 30),
+      # The empty wells are tiles of their own now (empty_plate), so the gaps
+      # between all tiles show the card
+      plot_bgcolor = "rgba(0,0,0,0)",
       paper_bgcolor = "rgba(0,0,0,0)"
     ) |>
     plotly::config(

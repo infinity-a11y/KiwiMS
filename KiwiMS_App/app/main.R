@@ -95,6 +95,30 @@ ui <- function(id) {
     )),
     shiny$tags$script(shiny$HTML(
       "
+      // Legend rows that only explain a symbol or colour (legendgroup prefix
+      // 'kiwims-key-', see legend_key_group()) draw no data, so a click would
+      // only grey out the row and a double click would hide every trace that
+      // does. plotly cancels the click when a jQuery handler on the plot
+      // returns false; plots announce themselves through the bubbling
+      // plotly_afterplot event, and the handler is bound once per plot.
+      (function() {
+        function keyRowClick(e, d) {
+          var t = d && d.fullData && d.fullData[d.curveNumber];
+          if (t && String(t.legendgroup || '').indexOf('kiwims-key-') === 0) {
+            return false;
+          }
+        }
+        $(document).on('plotly_afterplot', function(e) {
+          var $gd = $(e.target);
+          if ($gd.data('kiwiKeyGuard')) return;
+          $gd.data('kiwiKeyGuard', true);
+          $gd.on('plotly_legendclick.kiwiKey', keyRowClick);
+        });
+      })();
+    "
+    )),
+    shiny$tags$script(shiny$HTML(
+      "
       // Captured from the on-screen plot at click time (see the click handler
       // below) so a zoomed-in export matches what the user is looking at
       // instead of always re-rendering the full, unzoomed figure — the

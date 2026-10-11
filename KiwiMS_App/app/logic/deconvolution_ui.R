@@ -962,13 +962,27 @@ deconvolution_results_ui <- function(ns) {
                   label = "Annotate Mass",
                   value = TRUE,
                   right = TRUE
-                ),
-                shinyWidgets::materialSwitch(
-                  ns("spectrum_metrics"),
-                  label = "Show Metrics",
-                  value = TRUE,
-                  right = TRUE
                 )
+              ),
+              shinyWidgets::materialSwitch(
+                ns("spectrum_symbols"),
+                label = "Show Symbols",
+                value = TRUE,
+                right = TRUE
+              ),
+              # The sample's metrics, or their mean and SD for "Show All"
+              shinyWidgets::materialSwitch(
+                ns("spectrum_metrics"),
+                label = "Show Metrics",
+                value = TRUE,
+                right = TRUE
+              ),
+              # The run's deconvolution settings, the same for every spectrum
+              shinyWidgets::materialSwitch(
+                ns("spectrum_params"),
+                label = "Show Parameters",
+                value = TRUE,
+                right = TRUE
               ),
               style = "padding-right: 20px;"
             )
@@ -1003,7 +1017,7 @@ deconvolution_results_ui <- function(ns) {
     bslib::card(
       bslib::card_header(
         class = "bg-dark help-header d-flex justify-content-between",
-        "Well Plate",
+        "Sample Distribution",
         shiny::div(
           class = "box-header-settings-help",
           tooltip(

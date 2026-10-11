@@ -53,6 +53,116 @@ paste_hook_js <- "function(el, x) {
     });
   }"
 
+# Include column of the Samples table: values kept true/false, a select-all
+# box in the column header (indeterminate while only some samples are
+# included) and the rows of left-out samples greyed. Attached once per table
+# instance, which outlives re-renders of the widget; the column is looked up
+# on use, and read-only state on click, as both can change between renders.
+#' @export
+sample_include_js <- "function(el, x) {
+    var hot = this.hot;
+    if (hot._includeHookAttached) return;
+    hot._includeHookAttached = true;
+
+    var colOf = function(name) {
+      var cols = hot.params && hot.params.rColnames;
+      return cols ? cols.indexOf(name) : -1;
+    };
+
+    // A checkbox reads true/false only, as does the server; pasted or
+    // deleted values are mapped onto them
+    var toBool = function(v) {
+      if (typeof v === 'boolean') return v;
+      var s = v == null ? '' : String(v).trim().toLowerCase();
+      return ['', 'false', 'f', '0', 'no', 'null', 'na'].indexOf(s) === -1;
+    };
+    hot.addHook('beforeChange', function(changes) {
+      var col = colOf('Include');
+      if (col < 0 || !changes) return;
+      for (var i = 0; i < changes.length; i++) {
+        if (changes[i] && hot.propToCol(changes[i][1]) === col) {
+          changes[i][3] = toBool(changes[i][3]);
+        }
+      }
+    });
+
+    // Rows of left-out samples: greyed, the sample name struck through
+    hot.addHook('afterRenderer', function(td, row, col) {
+      var inc = colOf('Include');
+      var off = inc >= 0 && col !== inc &&
+        hot.getDataAtCell(row, inc) === false;
+      td.classList.toggle('sample-excluded', off);
+      td.classList.toggle(
+        'sample-excluded-name',
+        off && col === colOf('Sample')
+      );
+    });
+
+    var includeState = function() {
+      var col = colOf('Include');
+      var data = col < 0 ? [] : hot.getDataAtCol(col);
+      var n = data.length, k = 0;
+      for (var i = 0; i < n; i++) if (data[i] !== false) k++;
+      return {
+        col: col, data: data, n: n, k: k,
+        readOnly: n > 0 && !!hot.getCellMeta(0, col).readOnly
+      };
+    };
+    var syncBox = function(box, s) {
+      box.checked = s.n > 0 && s.k === s.n;
+      box.indeterminate = s.k > 0 && s.k < s.n;
+      box.disabled = s.readOnly;
+    };
+    var syncHeader = function() {
+      var s = includeState();
+      el.querySelectorAll('input.sample-include-all').forEach(function(box) {
+        syncBox(box, s);
+      });
+    };
+
+    // Handsontable rewrites the header label on every render, so the box is
+    // put back each time (once per clone the fixed columns create)
+    hot.addHook('afterGetColHeader', function(col, th) {
+      if (col < 0 || col !== colOf('Include')) return;
+      var label = th.querySelector('.colHeader');
+      if (!label) return;
+      label.textContent = '';
+      var box = document.createElement('input');
+      box.type = 'checkbox';
+      box.className = 'sample-include-all';
+      box.title = 'Include all samples in the conversion';
+      box.setAttribute('aria-label', box.title);
+      label.appendChild(box);
+      syncBox(box, includeState());
+    });
+    hot.addHook('afterChange', function() { syncHeader(); });
+
+    // The box sits in a header cell: keep the click from selecting the
+    // column, and set every sample from it. Partly or not included turns all
+    // samples on, all included turns them off.
+    el.addEventListener('mousedown', function(e) {
+      if (e.target.classList.contains('sample-include-all')) {
+        e.stopPropagation();
+      }
+    }, true);
+    el.addEventListener('click', function(e) {
+      if (!e.target.classList.contains('sample-include-all')) return;
+      e.stopPropagation();
+      e.preventDefault();
+      var s = includeState();
+      if (s.col >= 0 && s.n > 0 && !s.readOnly) {
+        var value = s.k < s.n;
+        var changes = [];
+        for (var r = 0; r < s.n; r++) {
+          if ((s.data[r] !== false) !== value) changes.push([r, s.col, value]);
+        }
+        if (changes.length) hot.setDataAtCell(changes);
+      }
+      // After the click's own toggle of the box has been undone
+      setTimeout(syncHeader, 0);
+    }, true);
+  }"
+
 # Popover JS auto-close
 #' @export
 popover_autoclose <- shiny::HTML(
