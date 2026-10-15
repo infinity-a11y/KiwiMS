@@ -17,6 +17,7 @@ box::use(
       kinact_ki_results_ui,
       summary_results_ui,
       hits_results_ui,
+      hits_col_picker,
       overview_compound_picker_options,
     ],
   app / logic / ms_formats[ms_sample_base],
@@ -75,6 +76,7 @@ box::use(
       sample_level_colors,
       render_table_view,
       filter_table_view,
+      table_view_col_choices,
       make_kobs_plot,
       make_kinetics_residual_plot,
       make_kinetics_plateau_plot,
@@ -124,7 +126,6 @@ box::use(
   app /
     logic /
     helper_functions[
-      safe_observe,
       config_units,
     ],
   app / logic / deconvolution_functions[spectrum_plot, unmatched_trace_tag, ],
@@ -495,28 +496,29 @@ server <- function(
 
     ## Concentration/Time UI ----
     # Remember the picked units so they survive the re-render on reset
-    safe_observe(
-      event_expr = input$conc_unit,
-      observer_name = "Concentration Unit Memory",
-      handler_fn = function() {
+    shiny::observeEvent(
+      input$conc_unit,
+      {
         shiny::req(input$conc_unit)
         conc_unit_selected(input$conc_unit)
-      }
+      },
+      ignoreInit = TRUE,
+      label = "Concentration Unit Memory"
     )
 
-    safe_observe(
-      event_expr = input$time_unit,
-      observer_name = "Time Unit Memory",
-      handler_fn = function() {
+    shiny::observeEvent(
+      input$time_unit,
+      {
         shiny::req(input$time_unit)
         time_unit_selected(input$time_unit)
-      }
+      },
+      ignoreInit = TRUE,
+      label = "Time Unit Memory"
     )
 
     # Conditional adaption of concentration/time input UI
-    safe_observe(
-      observer_name = "Conditional Adaption of Concentration/Time Input UI",
-      handler_fn = function() {
+    shiny::observe(
+      {
         if (isTRUE(conversion_sidebar_vars$run_kinact_ki())) {
           shinyjs::removeClass(
             selector = ".unit-selectors .form-group .bootstrap-select",
@@ -536,15 +538,15 @@ server <- function(
             class = "custom-disable"
           )
         }
-      }
+      },
+      label = "Conditional Adaption of Concentration/Time Input UI"
     )
 
     ## Data table input events ----
     # Silently update table data table input status variables
-    safe_observe(
-      event_expr = input$proteins_table,
-      observer_name = "Protein Table Input Status",
-      handler_fn = function() {
+    shiny::observeEvent(
+      input$proteins_table,
+      {
         shiny::req(input$proteins_table)
 
         # Save current table input
@@ -552,13 +554,14 @@ server <- function(
           protein_table_data(rhandsontable::hot_to_r(input$proteins_table))
         })
       },
-      priority = 100
+      ignoreInit = TRUE,
+      priority = 100,
+      label = "Protein Table Input Status"
     )
 
-    safe_observe(
-      event_expr = input$compounds_table,
-      observer_name = "Compound Table Input Status",
-      handler_fn = function() {
+    shiny::observeEvent(
+      input$compounds_table,
+      {
         shiny::req(input$compounds_table)
 
         # Save current table input
@@ -566,13 +569,14 @@ server <- function(
           compound_table_data(rhandsontable::hot_to_r(input$compounds_table))
         })
       },
-      priority = 100
+      ignoreInit = TRUE,
+      priority = 100,
+      label = "Compound Table Input Status"
     )
 
-    safe_observe(
-      event_expr = input$samples_table,
-      observer_name = "Samples Table Input Status",
-      handler_fn = function() {
+    shiny::observeEvent(
+      input$samples_table,
+      {
         shiny::req(input$samples_table)
 
         # Save current table input
@@ -599,7 +603,9 @@ server <- function(
         # Assign to reactive variable
         sample_table_data(samples_table)
       },
-      priority = 100
+      ignoreInit = TRUE,
+      priority = 100,
+      label = "Samples Table Input Status"
     )
 
     ## Conversion Declaration UI ----
@@ -869,10 +875,9 @@ server <- function(
     )
 
     ### Table pasting feedback ----
-    safe_observe(
-      event_expr = input$table_paste_instant,
-      observer_name = "Table Pasting Feedback",
-      handler_fn = function() {
+    shiny::observeEvent(
+      input$table_paste_instant,
+      {
         # Block UI
         shinyjs::runjs(paste0(
           'document.getElementById("blocking-overlay").style.display ',
@@ -894,36 +899,39 @@ server <- function(
         )]] <- shiny::renderText(
           "Loading ..."
         )
-      }
+      },
+      ignoreInit = TRUE,
+      label = "Table Pasting Feedback"
     )
 
     ## Clear tables ----
-    safe_observe(
-      event_expr = input$clear_proteins,
-      observer_name = "Clear Protein Table",
-      handler_fn = function() {
+    shiny::observeEvent(
+      input$clear_proteins,
+      {
         write_log("Protein table cleared")
         protein_table_data(empty_prot_comp_tbl(type = "Protein"))
 
         protein_table_trigger(protein_table_trigger() + 1)
-      }
+      },
+      ignoreInit = TRUE,
+      label = "Clear Protein Table"
     )
 
-    safe_observe(
-      event_expr = input$clear_compounds,
-      observer_name = "Clear Compound Table",
-      handler_fn = function() {
+    shiny::observeEvent(
+      input$clear_compounds,
+      {
         write_log("Compound table cleared")
         compound_table_data(empty_prot_comp_tbl(type = "Compound"))
 
         compound_table_trigger(compound_table_trigger() + 1)
-      }
+      },
+      ignoreInit = TRUE,
+      label = "Clear Compound Table"
     )
 
-    safe_observe(
-      event_expr = input$clear_samples,
-      observer_name = "Clear Sample Table",
-      handler_fn = function() {
+    shiny::observeEvent(
+      input$clear_samples,
+      {
         write_log("Sample table cleared")
         sample_table_data(add_replicate_col(
           new_sample_table(
@@ -935,15 +943,16 @@ server <- function(
           config_file()
         ))
         sample_table_trigger(sample_table_trigger() + 1)
-      }
+      },
+      ignoreInit = TRUE,
+      label = "Clear Sample Table"
     )
 
     ## File upload handler ----
     ### Protein table file upload ----
-    safe_observe(
-      event_expr = input$proteins_fileinput,
-      observer_name = "Protein Table File Upload",
-      handler_fn = function() {
+    shiny::observeEvent(
+      input$proteins_fileinput,
+      {
         protein_table_input <- handle_file_upload(
           file_input = input$proteins_fileinput,
           type = "Protein",
@@ -967,14 +976,15 @@ server <- function(
           # Trigger table render
           protein_table_trigger(protein_table_trigger() + 1)
         }
-      }
+      },
+      ignoreInit = TRUE,
+      label = "Protein Table File Upload"
     )
 
     ### Compound table file upload ----
-    safe_observe(
-      event_expr = input$compounds_fileinput,
-      observer_name = "Compound Table File Upload",
-      handler_fn = function() {
+    shiny::observeEvent(
+      input$compounds_fileinput,
+      {
         write_log(paste(
           "Compound table loaded from file:",
           input$compounds_fileinput$name
@@ -987,14 +997,15 @@ server <- function(
         ))
         declaration_vars$compound_table_disabled <- FALSE
         compound_table_trigger(compound_table_trigger() + 1)
-      }
+      },
+      ignoreInit = TRUE,
+      label = "Compound Table File Upload"
     )
 
     ### Sample file upload ----
-    safe_observe(
-      event_expr = input$samples_fileinput,
-      observer_name = "Sample Table File Upload",
-      handler_fn = function() {
+    shiny::observeEvent(
+      input$samples_fileinput,
+      {
         shiny::req(
           declaration_vars$protein_table,
           declaration_vars$compound_table
@@ -1063,7 +1074,9 @@ server <- function(
 
         # Safety net in case the render is never reported
         shinyjs::delay(10000, finish_sample_upload(upload_id))
-      }
+      },
+      ignoreInit = TRUE,
+      label = "Sample Table File Upload"
     )
 
     ### Sample file upload completion ----
@@ -1105,10 +1118,9 @@ server <- function(
       ))
     }
 
-    safe_observe(
-      event_expr = input$samples_table_rendered,
-      observer_name = "Sample Table Render Feedback",
-      handler_fn = function() {
+    shiny::observeEvent(
+      input$samples_table_rendered,
+      {
         pending <- sample_upload_pending()
         shiny::req(!is.null(pending), !isTRUE(pending$rendered))
         sample_upload_pending(list(id = pending$id, rendered = TRUE))
@@ -1118,7 +1130,9 @@ server <- function(
         # ends; its status observer run then completes the upload. An
         # unchanged table is not sent again and is completed here.
         shinyjs::delay(750, finish_sample_upload(pending$id))
-      }
+      },
+      ignoreInit = TRUE,
+      label = "Sample Table Render Feedback"
     )
 
     ## Sample table re-check on changed screening settings ----
@@ -1156,15 +1170,15 @@ server <- function(
     })
 
     ## Config autofill button state ----
-    safe_observe(
-      observer_name = "Use Config Button State",
-      handler_fn = function() {
+    shiny::observe(
+      {
         if (!is.null(config_file()) && is.null(config_apply_block())) {
           shinyjs::enable("use_config")
         } else {
           shinyjs::disable("use_config")
         }
-      }
+      },
+      label = "Use Config Button State"
     )
 
     ## Config autofill ----
@@ -1223,34 +1237,35 @@ server <- function(
       }
     }
 
-    safe_observe(
-      event_expr = input$use_config,
-      observer_name = "Config Autofill",
-      handler_fn = function() {
+    shiny::observeEvent(
+      input$use_config,
+      {
         shiny::req(input$use_config > 0)
         apply_config_to_samples()
       },
-      priority = -5
+      ignoreInit = TRUE,
+      priority = -5,
+      label = "Config Autofill"
     )
 
     # Same autofill, requested from the config modal ("Confirm & Apply")
     if (!is.null(config_apply_trigger)) {
-      safe_observe(
-        event_expr = config_apply_trigger(),
-        observer_name = "Config Autofill — Modal",
-        handler_fn = function() {
+      shiny::observeEvent(
+        config_apply_trigger(),
+        {
           shiny::req(config_apply_trigger() > 0)
           apply_config_to_samples()
         },
-        priority = -5
+        ignoreInit = TRUE,
+        priority = -5,
+        label = "Config Autofill — Modal"
       )
     }
 
     ## Replicate column — refresh when config changes ----
-    safe_observe(
-      event_expr = config_file(),
-      observer_name = "Replicate Column — Config Change",
-      handler_fn = function() {
+    shiny::observeEvent(
+      config_file(),
+      {
         tbl <- sample_table_data()
         if (is.null(tbl) || nrow(tbl) == 0) {
           return()
@@ -1260,16 +1275,17 @@ server <- function(
           sample_table_data(updated)
           sample_table_trigger(sample_table_trigger() + 1)
         }
-      }
+      },
+      ignoreInit = TRUE,
+      label = "Replicate Column — Config Change"
     )
 
     ## Unit selection — adopt the units declared in the config ----
     # The config carries concentration and time as bare numbers, so its
     # optional unit columns are the only way it can say what they mean.
-    safe_observe(
-      event_expr = config_file(),
-      observer_name = "Unit Selection — Config Change",
-      handler_fn = function() {
+    shiny::observeEvent(
+      config_file(),
+      {
         cfg_units <- config_units(config_file())
         if (!is.null(cfg_units$conc)) {
           conc_unit_selected(cfg_units$conc)
@@ -1297,14 +1313,15 @@ server <- function(
             paste(declared, collapse = " / ")
           ))
         }
-      }
+      },
+      ignoreInit = TRUE,
+      label = "Unit Selection — Config Change"
     )
 
     ## Table status observer ----
     ### Observe table status for protein table ----
-    safe_observe(
-      observer_name = "Protein Table Status Observer",
-      handler_fn = function() {
+    shiny::observe(
+      {
         shiny::req(
           protein_table_input(),
           declaration_vars$protein_table_active
@@ -1331,13 +1348,13 @@ server <- function(
           '= "none";'
         ))
       },
-      priority = 100
+      priority = 100,
+      label = "Protein Table Status Observer"
     )
 
     ### Observe table status for compound table ----
-    safe_observe(
-      observer_name = "Compound Table Status Observer",
-      handler_fn = function() {
+    shiny::observe(
+      {
         shiny::req(
           compound_table_input(),
           declaration_vars$compound_table_active
@@ -1364,13 +1381,13 @@ server <- function(
           '= "none";'
         ))
       },
-      priority = 100
+      priority = 100,
+      label = "Compound Table Status Observer"
     )
 
     ### Observe table status for samples table ----
-    safe_observe(
-      observer_name = "Sample Table Status Observer",
-      handler_fn = function() {
+    shiny::observe(
+      {
         samples_table_input <- sample_table_input()
 
         # Conditional observe actions
@@ -1448,14 +1465,14 @@ server <- function(
           '= "none";'
         ))
       },
-      priority = 100
+      priority = 100,
+      label = "Sample Table Status Observer"
     )
 
     ## Event activate kinact_ki analysis ----
-    safe_observe(
-      event_expr = conversion_sidebar_vars$run_kinact_ki(),
-      observer_name = "kinact/Ki Activation",
-      handler_fn = function() {
+    shiny::observeEvent(
+      conversion_sidebar_vars$run_kinact_ki(),
+      {
         shiny::req(
           input$samples_table,
           sample_table_data()
@@ -1517,18 +1534,19 @@ server <- function(
         }
 
         sample_table_trigger(sample_table_trigger() + 1)
-      }
+      },
+      ignoreInit = TRUE,
+      label = "kinact/KI Activation"
     )
 
     ## Edit button event ----
-    safe_observe(
-      event_expr = list(
+    shiny::observeEvent(
+      list(
         input$edit_proteins,
         input$edit_compounds,
         input$edit_samples
       ),
-      observer_name = "Edit Table Event",
-      handler_fn = function() {
+      {
         shiny::req(input$tabs)
         shiny::req(
           isTRUE(input$edit_proteins > 0) ||
@@ -1602,18 +1620,19 @@ server <- function(
           # Make table observer active
           declaration_vars$compound_table_active <- TRUE
         }
-      }
+      },
+      ignoreInit = TRUE,
+      label = "Edit Table Event"
     )
 
     ## Confirm button event ----
-    safe_observe(
-      event_expr = list(
+    shiny::observeEvent(
+      list(
         input$confirm_proteins,
         input$confirm_compounds,
         input$confirm_samples
       ),
-      observer_name = "Confirm Table Event",
-      handler_fn = function() {
+      {
         # Guard against spurious fires when buttons are re-initialized to 0
         shiny::req(
           isTRUE(input$confirm_proteins > 0) ||
@@ -1858,13 +1877,14 @@ server <- function(
           'document.getElementById("blocking-overlay").style.display ',
           '= "none";'
         ))
-      }
+      },
+      ignoreInit = TRUE,
+      label = "Confirm Table Event"
     )
 
     ## Observe conversion readiness ----
-    safe_observe(
-      observer_name = "Conversion Readiness Observer",
-      handler_fn = function() {
+    shiny::observe(
+      {
         if (
           isTRUE(declaration_vars$protein_table_status) &
             isTRUE(
@@ -1877,15 +1897,15 @@ server <- function(
         } else {
           declaration_vars$conversion_ready <- FALSE
         }
-      }
+      },
+      label = "Conversion Readiness Observer"
     )
 
     ## Continuation from deconvolution to conversion ----
     ### Transfer results from deconvolution to sample table ----
-    safe_observe(
-      event_expr = deconvolution_main_vars$continue_conversion(),
-      observer_name = "Deconvolution Results Transfer",
-      handler_fn = function() {
+    shiny::observeEvent(
+      deconvolution_main_vars$continue_conversion(),
+      {
         # If present sample table ask confirmation
         if (!is.null(input$samples_table)) {
           # Switch to samples table tab
@@ -1991,14 +2011,15 @@ server <- function(
           'document.getElementById("blocking-overlay").style.display ',
           '= "none";'
         ))
-      }
+      },
+      ignoreInit = TRUE,
+      label = "Deconvolution Results Transfer"
     )
 
     ### User confirms samples table overwrite ----
-    safe_observe(
-      event_expr = input$conversion_cont_conf,
-      observer_name = "Samples Table Overwrite",
-      handler_fn = function() {
+    shiny::observeEvent(
+      input$conversion_cont_conf,
+      {
         # UI Blocking
         shinyjs::runjs(paste0(
           'document.getElementById("blocking-overlay").style.display ',
@@ -2140,7 +2161,9 @@ server <- function(
           },
           once = TRUE
         )
-      }
+      },
+      ignoreInit = TRUE,
+      label = "Samples Table Overwrite"
     )
 
     ### User cancels samples table overwrite ----
@@ -2183,7 +2206,7 @@ server <- function(
       )
     })
 
-    # Infer kinact/Ki result from selected samples
+    # Infer kinact/KI result from selected samples
     kinact_ki_result <- shiny::reactive({
       shiny::req(conversion_sidebar_vars$result_list())
 
@@ -2225,6 +2248,10 @@ server <- function(
     iface_state <- new.env(parent = emptyenv())
     iface_state$built <- character(0)
     iface_state$observers <- list()
+    # The inputs there were before the first panel of a result was built, and
+    # every input a result has added since (see wipe_result_state())
+    iface_state$input_baseline <- NULL
+    iface_state$result_inputs <- character(0)
 
     # Observers created while building a panel belong to that build. They are
     # destroyed on reset; otherwise every re-run would stack another copy on
@@ -2250,6 +2277,33 @@ server <- function(
         ignoreInit = TRUE,
         ignoreNULL = FALSE
       ))
+      cols
+    }
+
+    # The columns of a Table View: Binding [%], and Preferred while the rows
+    # shown (`shown()`, a subset of hits_summary) have a reading that was not
+    # preferred. The picker (`<id>` swapped for `<id>_ui`, rendered when its
+    # popover is first opened) follows that default; picks are kept until the
+    # default changes.
+    table_view_cols <- function(id, hits_summary, units, shown) {
+      choices <- hits_col_choices(hits_summary, units)$choices
+      default_cols <- function() {
+        table_view_col_choices(hits_summary, shown(), units)$selected
+      }
+
+      default <- shiny::reactiveVal(shiny::isolate(default_cols()))
+      track_iface_observer(shiny::observe(default(default_cols())))
+
+      cols <- picked_cols(id, shiny::isolate(default()))
+      track_iface_observer(shiny::observeEvent(
+        default(),
+        cols(default()),
+        ignoreInit = TRUE
+      ))
+
+      output[[sub("select$", "ui", id)]] <- shiny::renderUI(
+        hits_col_picker(ns(id), list(choices = choices, selected = default()))
+      )
       cols
     }
 
@@ -2299,7 +2353,137 @@ server <- function(
       ))
     }
 
+    ### Wiping a result ----
+    # Emptying the panels removes their elements, but not what Shiny keeps of
+    # them: the server keeps the last value of every input, and the browser the
+    # last value of every output. A panel built for the next result has the
+    # same ids, so it rendered the old figures from the browser's copy for as
+    # long as the new ones took, and its observers read the old picks (the
+    # Group By of a result with many compounds stayed on "Compound" for one
+    # with a single compound). Everything a result added is therefore dropped
+    # on both sides. What a result added is what was not there when its first
+    # panel was built: the declaration's inputs and outputs stay, as do the
+    # export handlers, registered once per session (setup_plot_dl()).
+    result_js_state <- paste0(
+      "var st = (window.kiwiResultState = window.kiwiResultState || {});",
+      "st = st[p] = st[p] || {known: {}};"
+    )
+
+    mark_result_baseline <- function() {
+      iface_state$input_baseline <- setdiff(
+        shiny::isolate(names(input)),
+        iface_state$result_inputs
+      )
+      shinyjs::runjs(sprintf(
+        paste0(
+          "(function(p){",
+          result_js_state,
+          "st.baseline = {};",
+          "var app = Shiny.shinyapp;",
+          "[app.$values, app.$errors].forEach(function(store){",
+          "Object.keys(store || {}).forEach(function(k){",
+          "if (k.indexOf(p) === 0 && !st.known[k]) st.baseline[k] = true;",
+          "});});})('%s');"
+        ),
+        ns("")
+      ))
+    }
+
+    # Drops the browser's copies of the outputs in the panel `key`
+    forget_panel_outputs <- function(key) {
+      shinyjs::runjs(sprintf(
+        paste0(
+          "(function(){var s=document.getElementById('%s'); if(!s) return;",
+          "var panel = s.querySelector('[data-iface=\"%s\"]'); if(!panel) return;",
+          "var app = Shiny.shinyapp;",
+          "panel.querySelectorAll('.shiny-bound-output').forEach(function(el){",
+          "if (!el.id || el.id.indexOf('%s') === 0 ||",
+          "el.classList.contains('shiny-download-link')) return;",
+          "delete app.$values[el.id]; if (app.$errors) delete app.$errors[el.id];",
+          "});})();"
+        ),
+        ns("result_interface_stack"),
+        key,
+        ns("iface_")
+      ))
+    }
+
+    wipe_result_state <- function() {
+      # Inputs: cleared on the server at once, so nothing built afterwards
+      # reads them, and in the browser, whose record of what it last sent
+      # would otherwise hold back a value equal to the old one
+      ids <- iface_state$result_inputs
+      if (!is.null(iface_state$input_baseline)) {
+        ids <- union(
+          ids,
+          setdiff(shiny::isolate(names(input)), iface_state$input_baseline)
+        )
+      }
+      iface_state$result_inputs <- ids
+      if (length(ids) > 0) {
+        session$manageInputs(
+          stats::setNames(vector("list", length(ids)), ns(ids)),
+          now = TRUE
+        )
+      }
+
+      # Outputs: the browser's copies of everything not in the baseline. The
+      # export handlers (dl_*) and the panel containers stay.
+      shinyjs::runjs(sprintf(
+        paste0(
+          "(function(p, inputs){",
+          result_js_state,
+          "var app = Shiny.shinyapp;",
+          "if (st.baseline) {",
+          "var keep = [p + 'dl_', p + 'iface_'];",
+          "[app.$values, app.$errors].forEach(function(store){",
+          "Object.keys(store || {}).forEach(function(k){",
+          "if (k.indexOf(p) !== 0 || st.baseline[k]) return;",
+          "if (keep.some(function(q){ return k.indexOf(q) === 0; })) return;",
+          "st.known[k] = true; delete store[k];",
+          "});});}",
+          "inputs.forEach(function(id){ Shiny.setInputValue(id, null); });",
+          "})('%s', %s);"
+        ),
+        ns(""),
+        jsonlite::toJSON(ns(ids))
+      ))
+
+      # Server-side state of the result
+      conversion_vars$modified_results <- NULL
+      conversion_vars$select_concentration <- NULL
+      conversion_vars$conc_colors <- NULL
+      conversion_vars$expand_helper <- FALSE
+      conversion_vars$hits_summary <- NULL
+      conversion_vars$hits_summary_adduct <- NULL
+      conversion_vars$formatted_hits <- NULL
+      conversion_vars$concentrations <- NULL
+      conversion_vars$units <- NULL
+      conversion_vars$color_key <- NULL
+      hits_unified_current(NULL)
+      hits_unified_raw(NULL)
+      hits_pending_nav(NULL)
+      samples_table_view_raw(NULL)
+      overview_table_view_raw(NULL)
+      kobs_result_raw(NULL)
+      heatmap_pending_sample(NULL)
+      stats_scatter_pending_sample(NULL)
+      stats_boxplot_pending_sample(NULL)
+      stats_violin_pending_sample(NULL)
+      overview_protein(NULL)
+      overview_compounds(character(0))
+      spectrum_cache$reset()
+      invisible(NULL)
+    }
+
     render_result_interface <- function(key, ui) {
+      # The first panel of a result: what exists now is not the result's
+      if (length(iface_state$built) == 0) {
+        mark_result_baseline()
+      }
+      # A panel built again (the kinetics of another complex) would show the
+      # figures of its last build until the new ones arrive
+      forget_panel_outputs(key)
       # The declaration interface and the result panels are mutually
       # exclusive; clearing it here also keeps its tab ids unique. It is
       # emptied in the browser at once too: the emptied output arrives with
@@ -2321,8 +2505,21 @@ server <- function(
     reset_result_interfaces <- function() {
       lapply(iface_state$observers, function(observer) observer$destroy())
       iface_state$observers <- list()
+      lapply(iface_state$kinetics_observers, function(observer) {
+        observer$destroy()
+      })
+      iface_state$kinetics_observers <- NULL
       iface_state$built <- character(0)
       iface_state$overview_choices <- NULL
+      iface_state$overview_nav <- NULL
+      iface_state$kinetics_nav <- NULL
+      iface_state$kinetics_fitted_conc <- NULL
+      iface_state$complex <- NULL
+      iface_state$result_token <- NULL
+
+      # Before the panels are emptied: their observers are gone, so nothing
+      # reacts to the inputs being cleared
+      wipe_result_state()
 
       # Empty the panels in the browser at once. The emptied outputs below
       # arrive with the flush, together with the declaration interface a reset
@@ -2437,9 +2634,8 @@ server <- function(
     }
 
     # Activate observer on analysis launch
-    safe_observe(
-      observer_name = "Results Observer Activation",
-      handler_fn = function() {
+    shiny::observe(
+      {
         shiny::req(results_observer)
 
         if (is.null(conversion_sidebar_vars$result_list())) {
@@ -2447,19 +2643,36 @@ server <- function(
         } else {
           results_observer$resume()
         }
-      }
+      },
+      label = "Results Observer Activation"
     )
 
     # Observer rendering UI on conditions
-    results_observer <- safe_observe(
-      observer_name = "Conditional Results Rendering",
-      handler_fn = function() {
+    results_observer <- shiny::observe(
+      {
         result_list <- kinetics_result_list()
 
         analysis_select <- conversion_sidebar_vars$analysis_select()
         shiny::req(length(analysis_select) > 0)
 
         iface <- iface_key(analysis_select)
+
+        # Panels of another result are wiped first, also when it arrives
+        # without the reset in between (this observer is suspended while
+        # there is no result, so it may never have seen that)
+        run_result <- shiny::isolate(conversion_sidebar_vars$result_list())
+        result_token <- if (!is.null(run_result)) {
+          rlang::obj_address(run_result)
+        }
+        if (
+          !is.null(result_token) &&
+            !identical(result_token, iface_state$result_token)
+        ) {
+          if (length(iface_state$built) > 0) {
+            reset_result_interfaces()
+          }
+          iface_state$result_token <- result_token
+        }
 
         # Another complex picked: the kinetics panel is built anew for it, the
         # other panels do not depend on the complex
@@ -2997,10 +3210,20 @@ server <- function(
               ignoreNULL = TRUE
             ))
 
-            # Columns of the two Table Views, picked like in the Hits table
-            table_cols <- hits_col_choices(hits_summary, units)$selected
-            smpl_table_cols <- picked_cols("samples_table_col_select", table_cols)
-            ov_table_cols <- picked_cols("overview_table_col_select", table_cols)
+            # Columns of the Sample View's Table View: the rows of the
+            # selected sample
+            smpl_table_cols <- table_view_cols(
+              "samples_table_col_select",
+              hits_summary,
+              units,
+              shiny::reactive(
+                hits_summary[
+                  hits_summary$`Sample ID` %in% input$conversion_sample_picker,
+                  ,
+                  drop = FALSE
+                ]
+              )
+            )
 
             ###### Annotated spectrum ----
             output$samples_annotated_spectrum <- plotly::renderPlotly({
@@ -3122,6 +3345,15 @@ server <- function(
                 overview_compounds()
               )
             })
+
+            # Columns of the Overview's Table View: the rows of the selected
+            # protein and compounds
+            ov_table_cols <- table_view_cols(
+              "overview_table_col_select",
+              hits_summary,
+              units,
+              ov_subset
+            )
 
             ov_n_samples <- shiny::reactive({
               length(unique(stats::na.omit(ov_subset()$`Sample ID`)))
@@ -3744,7 +3976,7 @@ server <- function(
               )
             })
           } else if (iface == "kinetics") {
-            #### Render kinact/Ki interface ----
+            #### Render kinact/KI interface ----
             # Reset any prior concentration exclusions so plots match the table
             conversion_vars$modified_results <- NULL
 
@@ -3942,7 +4174,7 @@ server <- function(
               proteoform_species_binding <- NULL
             }
 
-            # Call function to render kinact/Ki results interface
+            # Call function to render kinact/KI results interface
             render_result_interface(
               "kinetics",
               kinact_ki_results_ui(
@@ -4055,24 +4287,41 @@ server <- function(
               )
             }
 
-            card_warnings <- function(res, codes = NULL) {
+            # The fit warnings are plain text (they also go to the protocol
+            # log); set the kinetic parameters with their subscripts here
+            kinetic_symbols_html <- function(x) {
+              x <- htmltools::htmlEscape(x)
+              x <- gsub("\\bkinact\\b", "k<sub>inact</sub>", x, perl = TRUE)
+              x <- gsub("\\bKI\\b", "K<sub>I</sub>", x, perl = TRUE)
+              gsub("\\bk_obs\\b", "k<sub>obs</sub>", x, perl = TRUE)
+            }
+
+            card_warnings <- function(
+              res,
+              codes = NULL,
+              exclude = NULL,
+              class = NULL
+            ) {
               warnings <- res$Warnings
               if (!is.null(codes)) {
                 warnings <- Filter(function(w) w$code %in% codes, warnings)
+              }
+              if (!is.null(exclude)) {
+                warnings <- Filter(function(w) !w$code %in% exclude, warnings)
               }
               if (length(warnings) == 0) {
                 return(NULL)
               }
               shiny::div(
-                class = "result-warnings",
+                class = paste(c("result-warnings", class), collapse = " "),
                 lapply(warnings, function(w) {
                   hover_info(
                     shiny::div(
                       class = "result-warning",
                       shiny::icon("triangle-exclamation"),
-                      w$title
+                      shiny::span(shiny::HTML(kinetic_symbols_html(w$title)))
                     ),
-                    detail = w$detail,
+                    detail = kinetic_symbols_html(w$detail),
                     accent = "#ffa53a"
                   )
                 })
@@ -4151,10 +4400,12 @@ server <- function(
               params <- res$Params
               if (res$Status != "saturated" || is.na(params[row, 1])) {
                 # The warnings say why (saturation not reached / KI not
-                # determinable), so the value itself only reads n.d.
+                # determinable), so the value itself only reads n.d. The card
+                # holds nothing else, so the badges can be larger.
                 warnings <- card_warnings(
                   res,
-                  c("no_saturation", "ki_undetermined")
+                  c("no_saturation", "ki_undetermined"),
+                  class = "result-warnings-lg"
                 )
                 return(kinetic_card(
                   hover_info(
@@ -4193,7 +4444,7 @@ server <- function(
               param_card(res, "kinact", paste0(unit_view()$time_unit, "⁻¹"))
             })
 
-            ###### Calculated Ki value ----
+            ###### Calculated KI value ----
             output$Ki <- shiny::renderUI({
               res <- view_kinact_ki()
               if (is.null(res)) {
@@ -4202,7 +4453,7 @@ server <- function(
               param_card(res, "KI", unit_view()$conc_unit)
             })
 
-            ###### Calculated kinact/Ki value ----
+            ###### Calculated kinact/KI value ----
             output$Kinact_Ki <- shiny::renderUI({
               res <- view_kinact_ki()
               if (is.null(res)) {
@@ -4262,9 +4513,14 @@ server <- function(
                 ),
                 kinetic_line(
                   series_text,
-                  title = "kinact/Ki fitted to each replicate series on its own"
+                  title = "kinact/KI fitted to each replicate series on its own"
                 ),
-                card_warnings(res),
+                # Saturation is already stated by the model line and shown
+                # in the kinact and KI cards
+                card_warnings(
+                  res,
+                  exclude = c("no_saturation", "ki_undetermined")
+                ),
                 skipped_conc_warning(
                   convert_kobs_result_units(
                     result_list$binding_kobs_result,
@@ -5119,8 +5375,7 @@ server <- function(
                 rl$hits_summary,
                 theme = "light",
                 show_points = isTRUE(input$stats_boxplot_show_points),
-                show = input$stats_show_metric %||% "Correct",
-                fixed_range = isTRUE(input$stats_boxplot_fixed_range %||% TRUE)
+                show = input$stats_show_metric %||% "Correct"
               )
             })
 
@@ -5151,11 +5406,9 @@ server <- function(
               } else {
                 input$stats_violin_groupby
               }
-              fs <- isTRUE(input$stats_violin_full_scale)
               stats_violin(
                 rl$hits_summary,
                 group_by = grp,
-                full_scale = fs,
                 theme = "light",
                 key = conversion_vars$color_key,
                 inner = if (is.null(input$stats_violin_inner)) {
@@ -5775,7 +6028,7 @@ server <- function(
               shiny::div(
                 style = paste(
                   "display:flex; flex-direction:column; gap:0.5rem;",
-                  "max-height:50vh; max-width:22rem; width:max-content;",
+                  "max-height:50vh; max-width:100%;",
                   "overflow-y:auto; text-align:left;"
                 ),
                 items
@@ -6081,21 +6334,28 @@ server <- function(
             # its click put up, see hits_results_ui()).
             hits_tab_trigger <- shiny::reactive({
               list(
-                input$hits_per_adduct,
-                input$hits_color_variable,
-                hits_col_selection(),
-                input$hits_tab_compound_select,
-                input$hits_tab_sample_select
+                per_adduct = input$hits_per_adduct,
+                color_variable = input$hits_color_variable,
+                cols = hits_col_selection(),
+                compounds = input$hits_tab_compound_select,
+                samples = input$hits_tab_sample_select
               )
             }) |>
               shiny::debounce(200)
 
             output$hits_unified_tab <- DT::renderDT({
+              # Waits for the debounced pickers, not only the inputs: the
+              # output's first run comes once the pickers are bound but before
+              # the debounce has passed them on, and its table was built again
+              # 200 ms later. That run leaves the output (and its spinner) as
+              # it is rather than clearing it.
+              tab_inputs <- hits_tab_trigger()
               shiny::req(
                 hits_summary,
-                input$hits_tab_sample_select,
-                input$hits_tab_compound_select,
-                input$hits_color_variable
+                tab_inputs$samples,
+                tab_inputs$compounds,
+                tab_inputs$color_variable,
+                cancelOutput = TRUE
               )
               if (isTRUE(input$hits_per_adduct == "Sample View")) {
                 hits_table <- sample_view_table(
@@ -6386,7 +6646,8 @@ server <- function(
           '= "none";'
         ))
       },
-      suspended = TRUE
+      suspended = TRUE,
+      label = "Conditional Results Rendering"
     )
 
     shiny::observeEvent(
@@ -6443,10 +6704,9 @@ server <- function(
       )
     })
 
-    safe_observe(
-      event_expr = input$save_protocol_log,
-      observer_name = "Conversion Log Saver",
-      handler_fn = function() {
+    shiny::observeEvent(
+      input$save_protocol_log,
+      {
         fname <- paste0(get_session_prefix(), "_Protocol.txt")
         shinyjs::runjs(sprintf(
           "var el = document.getElementById('%s');
@@ -6462,7 +6722,9 @@ server <- function(
           ns("protocol_log"),
           fname
         ))
-      }
+      },
+      ignoreInit = TRUE,
+      label = "Conversion Log Saver"
     )
 
     ## Plot download handlers ----
@@ -6687,8 +6949,7 @@ server <- function(
           rl$hits_summary,
           theme = theme,
           show_points = isTRUE(input$stats_boxplot_show_points),
-          show = input$stats_show_metric %||% "Correct",
-          fixed_range = isTRUE(input$stats_boxplot_fixed_range %||% TRUE)
+          show = input$stats_show_metric %||% "Correct"
         )
       },
       filename_fn = function() {
@@ -6737,11 +6998,9 @@ server <- function(
         } else {
           input$stats_violin_groupby
         }
-        fs <- isTRUE(input$stats_violin_full_scale)
         stats_violin(
           rl$hits_summary,
           group_by = grp,
-          full_scale = fs,
           theme = theme,
           key = conversion_vars$color_key,
           inner = if (is.null(input$stats_violin_inner)) {
@@ -6800,20 +7059,20 @@ server <- function(
     # must not trigger it; a newly built panel renders on its own, and the
     # variable arriving with it (or changing from the previous build's) counts
     # as a change.
-    safe_observe(
-      event_expr = input$color_variable,
-      observer_name = "Color Variable Change",
-      handler_fn = function() {
+    shiny::observeEvent(
+      input$color_variable,
+      {
         shiny::req(conversion_vars$hits_summary, input$color_variable)
         render_trigger(render_trigger() + 1)
-      }
+      },
+      ignoreInit = TRUE,
+      label = "Color Variable Change"
     )
 
     ### Recalculate results depending on excluded concentrations ----
-    safe_observe(
-      event_expr = input[["kobs_result_cell_edit"]],
-      observer_name = "Deconvolution Results Transfer",
-      handler_fn = function() {
+    shiny::observeEvent(
+      input[["kobs_result_cell_edit"]],
+      {
         # Resolve row index to concentration name to avoid positional offset bugs
         result_list_local <- kinetics_result_list()
         shiny::req(result_list_local)
@@ -6885,7 +7144,7 @@ server <- function(
           return(NULL)
         }
 
-        # Add kinact/Ki results to result list
+        # Add kinact/KI results to result list
         result_list$kinact_ki_result <- add_kinact_ki_result(
           result_list,
           units = units_adapt
@@ -6893,7 +7152,9 @@ server <- function(
 
         # Assign modified results to reactive variable
         conversion_vars$modified_results <- result_list
-      }
+      },
+      ignoreInit = TRUE,
+      label = "Deconvolution Results Transfer"
     )
 
     # Help modals ----

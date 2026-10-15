@@ -149,7 +149,7 @@ k_obs <- function() mvar("k", "obs")
 k_inact <- function() mvar("k", "inact")
 
 #' @export
-K_i <- function() mvar("K", "i")
+K_i <- function() mvar("K", "I")
 
 # [C], the compound concentration
 #' @export

@@ -161,6 +161,14 @@ sub {
   left: -0.2em;
 }
 
+/* Running text (tooltips, warning badges): keep subscripts clear of the
+   preceding letter instead of tucking them under it */
+.tooltip sub,
+.result-warning sub {
+  left: 0;
+  margin-left: 0.05em;
+}
+
 th {
   font-weight: normal;
 }
@@ -737,7 +745,7 @@ button .sF-modal {
   /* Italic correction: keeps the slanted symbol off its sub/superscript */
   sub,
   sup {
-    margin-left: 0.2em;
+    margin-left: 0.4em;
     font-style: normal;
   }
 }
@@ -3086,7 +3094,12 @@ div[data-value="Protein Conversion"] .tab-pane {
 }
 
 .protocol-stat-warn {
-  color: darkorange;
+  color: #a34f00;
+}
+
+/* The large count reads well in the tooltips' lighter amber */
+.protocol-stat-value.protocol-stat-warn {
+  color: #ffa53a;
 }
 
 .protocol-stat-err {
@@ -3333,7 +3346,7 @@ div[data-value="Protein Conversion"] .tab-pane {
   text-align: left;
 }
 
-/* Kinetic Analysis result cards (kinact, Ki, kinact/Ki): compact content that
+/* Kinetic Analysis result cards (kinact, KI, kinact/KI): compact content that
    stays inside the card; it scrolls rather than clipping on small screens */
 .binding-analysis-tab .result-cards {
   display: grid;
@@ -3341,7 +3354,7 @@ div[data-value="Protein Conversion"] .tab-pane {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-rows: repeat(2, minmax(0, 1fr));
 
-  /* kinact/Ki takes the right half, kinact and Ki stack in the left half */
+  /* kinact/KI takes the right half, kinact and KI stack in the left half */
   > .card-custom:nth-child(3) {
     grid-column: 2;
     grid-row: 1 / span 2;
@@ -3386,7 +3399,7 @@ div[data-value="Protein Conversion"] .tab-pane {
   }
 }
 
-/* kinact and Ki: the text scales down with the card instead of overflowing
+/* kinact and KI: the text scales down with the card instead of overflowing
    it. A short value with stats beside it fits on one line, a long value (e.g.
    9.8 x 10^-5 M) pushes the stats onto a line of their own, so the height
    limit allows for the value plus up to three stat lines. */
@@ -3502,21 +3515,37 @@ div[data-value="Protein Conversion"] .tab-pane {
   font-style: italic;
 }
 
+/* Badges pack side by side and wrap, instead of one line each */
 .result-warnings {
   display: flex;
-  flex-direction: column;
-  gap: 0.2em;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.25em 0.3em;
   margin-top: 0.35em;
   font-size: 0.42em;
   text-align: left;
   min-width: 0;
 }
 
+/* n.d. cards: the badges are the only content beside the value */
+.result-warnings.result-warnings-lg {
+  font-size: 0.6em;
+}
+
+/* Warning badge: dark amber text on a pale amber fill, so it stays legible
+   on the light result cards and still reads as a warning */
 .result-warning {
   display: flex;
   align-items: baseline;
+  align-self: flex-start;
+  max-width: 100%;
   gap: 0.45em;
-  color: darkorange;
+  padding: 0.05em 0.5em;
+  border: 1px solid #f0c08c;
+  border-radius: 0.5em;
+  background: #fff3e2;
+  color: #a34f00;
   font-weight: 600;
   cursor: help;
   white-space: nowrap;
@@ -3527,6 +3556,12 @@ div[data-value="Protein Conversion"] .tab-pane {
   .fas,
   svg {
     flex-shrink: 0;
+  }
+
+  > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 

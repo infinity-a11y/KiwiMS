@@ -3131,8 +3131,14 @@ add_side_tables <- function(plot, blocks, theme = "light") {
   value_w <- table_w - label_w
   gap <- 16 # between the plot area and the tables
 
+  # Every annotation and line of the tables carries this name, which is how
+  # the image export (the downloadPlot handler in main.R) finds them: it grows
+  # the canvas to fit them rather than squeezing the plot.
+  side_table_name <- "kiwims-side-table"
+
   text_ann <- function(text, xanchor, xshift, offset, size = 12) {
     list(
+      name = side_table_name,
       text = text,
       x = 1,
       y = 1,
@@ -3148,6 +3154,7 @@ add_side_tables <- function(plot, blocks, theme = "light") {
   }
   line_px <- function(x0, x1, y0, y1) {
     list(
+      name = side_table_name,
       type = "line",
       xref = "paper",
       xsizemode = "pixel",

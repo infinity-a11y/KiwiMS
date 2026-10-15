@@ -35,7 +35,7 @@ Replicates are counted per condition, series across the whole experiment.
   in the column. `sort_series()` orders series naturally (R2 before R10).
 - **What uses them:** every sample enters the fits on its own; replicates are
   never averaged before fitting (means ± SD in the Binding Curve are for
-  display). The series drive the per-series fits ("kinact/Ki by Replicate
+  display). The series drive the per-series fits ("kinact/KI by Replicate
   Series") and the marker fill of the Fit plots (R1 filled, R2 open, R3
   dotted, R4 open with dot).
 - **Checks in `check_sample_table()`:**
@@ -168,7 +168,7 @@ Tests in *italics* are synthetic, in the automated suite only.
   the standard errors and confidence intervals come out too narrow. The data
   can't reveal this, so the app explains it where the user decides or reads
   the result: the Samples Declaration help ("?" next to Browse), the kinact/KI
-  help (the ± and the 95 % CI assume separate incubations) and the kinact/Ki
+  help (the ± and the 95 % CI assume separate incubations) and the kinact/KI
   by Replicate Series help (series made of re-injections agree by
   construction).
 - **Other naming:** only `_R<n>` at the end of a name is recognised; `-R1`,

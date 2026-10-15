@@ -35,7 +35,7 @@ box::use(
     ],
 )
 
-# Concentrations tab of the kinact/Ki results interface: one concentration at a
+# Concentrations tab of the kinact/KI results interface: one concentration at a
 # time, picked like a sample in the Samples View of the Relative Binding
 # interface. `concentrations` are the fitted concentration keys in the declared
 # unit; the picker labels follow the unit view (updated by the server).
@@ -272,7 +272,7 @@ kinact_ki_concentrations_panel <- function(
   )
 }
 
-# kinact/Ki results interface. With `selected_conc`, one of the fitted
+# kinact/KI results interface. With `selected_conc`, one of the fitted
 # `concentrations`, it opens on that concentration in the Concentrations tab.
 #' @export
 kinact_ki_results_ui <- function(
@@ -505,7 +505,7 @@ kinact_ki_results_ui <- function(
                   htmltools::tagList(
                     shiny::div(
                       "K",
-                      htmltools::tags$sub("i")
+                      htmltools::tags$sub("I")
                     )
                   ),
                   bslib::tooltip(
@@ -541,7 +541,7 @@ kinact_ki_results_ui <- function(
                       "k",
                       htmltools::tags$sub("inact"),
                       "/ K",
-                      htmltools::tags$sub("i"),
+                      htmltools::tags$sub("I"),
                     )
                   ),
                   bslib::tooltip(
@@ -640,7 +640,7 @@ kinact_ki_results_ui <- function(
             "k",
             htmltools::tags$sub("inact"),
             "/K",
-            htmltools::tags$sub("i"),
+            htmltools::tags$sub("I"),
             " by Replicate Series"
           )),
           "diag_series",
@@ -1353,12 +1353,6 @@ summary_results_ui <- function(ns, batch_control) {
                       value = TRUE,
                       right = TRUE
                     ),
-                    shinyWidgets::materialSwitch(
-                      ns("stats_boxplot_fixed_range"),
-                      label = "Full Scale (0–100%)",
-                      value = FALSE,
-                      right = TRUE
-                    ),
                     style = "margin-right:20px;"
                   )),
                   plot_dl_popover(ns, "stats_boxplot"),
@@ -1447,12 +1441,6 @@ summary_results_ui <- function(ns, batch_control) {
                       selected = "Protein",
                       width = "140px"
                     ),
-                    shinyWidgets::materialSwitch(
-                      ns("stats_violin_full_scale"),
-                      label = "Full Scale (0–100%)",
-                      value = FALSE,
-                      right = TRUE
-                    ),
                     shiny::div(
                       class = "conversion-tab-items-label",
                       shiny::HTML("Inner")
@@ -1527,15 +1515,13 @@ summary_results_ui <- function(ns, batch_control) {
 
 # Overview tab of the binding results interface: one protein with any of the
 # compounds declared with it, picked above the two Mass Shifts cards.
-# `selected` is an overview_selection() of `choices`, `table_cols` the
-# hits_col_choices() of the Table View.
+# `selected` is an overview_selection() of `choices`.
 overview_results_panel <- function(
   ns,
   hits_summary,
   choices,
   selected,
-  sort_binding_switch,
-  table_cols
+  sort_binding_switch
 ) {
   proteins <- choices$proteins
   compounds <- if (is.na(selected$protein)) {
@@ -1667,7 +1653,7 @@ overview_results_panel <- function(
               shiny::div(
                 class = "box-header-settings-help",
                 card_settings_popover(
-                  hits_col_picker(ns("overview_table_col_select"), table_cols)
+                  shiny::uiOutput(ns("overview_table_col_ui"))
                 ),
                 table_dl_popover(ns, "overview_table_view"),
                 help_button("table_view_tooltip_bttn")
@@ -1826,9 +1812,6 @@ binding_results_ui <- function(
     overview <- overview_selection(choices)
   }
 
-  # Both Table Views are subsets of the hits table, with its columns
-  table_cols <- hits_col_choices(hits_summary, units)
-
   bslib::navset_card_tab(
     id = ns("tabs"),
     overview_results_panel(
@@ -1836,8 +1819,7 @@ binding_results_ui <- function(
       hits_summary,
       choices,
       overview,
-      sort_binding_switch,
-      table_cols
+      sort_binding_switch
     ),
     bslib::nav_panel(
       title = "Sample View",
@@ -1965,7 +1947,7 @@ binding_results_ui <- function(
                 shiny::div(
                   class = "box-header-settings-help",
                   card_settings_popover(
-                    hits_col_picker(ns("samples_table_col_select"), table_cols)
+                    shiny::uiOutput(ns("samples_table_col_ui"))
                   ),
                   table_dl_popover(ns, "samples_table_view"),
                   bslib::tooltip(
@@ -2136,6 +2118,7 @@ binding_results_ui <- function(
 }
 
 # Column picker of a hits table, `cols` from hits_col_choices()
+#' @export
 hits_col_picker <- function(id, cols) {
   shinyWidgets::pickerInput(
     id,

@@ -139,8 +139,14 @@ ui <- function(id) {
         var paper = div.getBoundingClientRect();
         if (!paper.width || !paper.height) return Promise.resolve();
         var grow = { l: 0, t: 0, b: 0 };
+        var anns = (div.layout && div.layout.annotations) || [];
         var nodes = div.querySelectorAll('.infolayer .annotation, .infolayer .g-gtitle');
         Array.prototype.forEach.call(nodes, function(node) {
+          // The side tables hang from the top of the plot area, so a bigger
+          // bottom margin never brings them back onto the canvas - it only
+          // squashed the spectrum. kiwiFitSideTables sizes the canvas for them.
+          var ann = anns[+node.getAttribute('data-index')];
+          if (node.classList.contains('annotation') && kiwiIsSideTable(ann)) return;
           var b = node.getBoundingClientRect();
           if (!b.width && !b.height) return;
           grow.l = Math.max(grow.l, paper.left - b.left);
@@ -156,6 +162,39 @@ ui <- function(id) {
           }
         });
         return any ? Plotly.relayout(div, update) : Promise.resolve();
+      }
+
+      // The tables add_side_tables() (deconvolution_functions.R) draws beside
+      // a spectrum: annotations and pixel-sized lines carrying this name.
+      function kiwiIsSideTable(item) {
+        return !!item && item.name === 'kiwims-side-table';
+      }
+
+      function kiwiHasSideTables(layout) {
+        return (layout.shapes || []).some(kiwiIsSideTable);
+      }
+
+      // The tables are placed in pixels down from the top of the plot area,
+      // so once their text is scaled up for export they can run longer than
+      // the plot is tall and off the bottom of the canvas. Grow the canvas by
+      // exactly the shortfall: the top margin stays put, so the plot area
+      // takes all of the extra height and the tables end inside it. Resolves
+      // to the canvas height.
+      function kiwiFitSideTables(div, height) {
+        var extent = 0;
+        ((div.layout && div.layout.shapes) || []).forEach(function(s) {
+          if (!kiwiIsSideTable(s) || s.ysizemode !== 'pixel') return;
+          extent = Math.max(extent, -Math.min(s.y0, s.y1));
+        });
+        var plotHeight = div._fullLayout && div._fullLayout._size &&
+                         div._fullLayout._size.h;
+        if (!(extent > 0) || !(plotHeight > 0)) return Promise.resolve(height);
+        var shortfall = Math.ceil(extent + 8 - plotHeight);
+        if (shortfall <= 0) return Promise.resolve(height);
+        var newHeight = height + shortfall;
+        div.style.height = newHeight + 'px';
+        return Plotly.relayout(div, { height: newHeight })
+          .then(function() { return newHeight; });
       }
 
       // A legend at the default x=1.02/xref='paper' is NOT positioned relative
@@ -474,6 +513,21 @@ ui <- function(id) {
               if (typeof shape[key] === 'number')
                 shape[key] = roundW(shape[key] * contextScale);
             });
+            // A shape sized in pixels (the grid of the spectrum's side tables)
+            // is placed like an annotation's xshift/yshift - a pixel offset
+            // from its anchor - so it has to grow by the same factor. Left
+            // alone, the table lines stayed at their on-screen size in the
+            // top corner while the text they divide grew away from them.
+            if (shape.xsizemode === 'pixel')
+              ['x0', 'x1'].forEach(function(key) {
+                if (typeof shape[key] === 'number')
+                  shape[key] = Math.round(shape[key] * contextScale);
+              });
+            if (shape.ysizemode === 'pixel')
+              ['y0', 'y1'].forEach(function(key) {
+                if (typeof shape[key] === 'number')
+                  shape[key] = Math.round(shape[key] * contextScale);
+              });
           });
           // xshift/yshift are the pixel gaps that hold a label clear of what it
           // labels - the mass-difference text sitting above its connector, for
@@ -568,9 +622,17 @@ ui <- function(id) {
             legend.itemwidth = Math.max(
               30, Math.round(LEGEND_MARKER_MAX * legendSymbolScale * 2.2));
         }
+        // The spectrum's side tables live in margin.r, which grew with the
+        // labels above - at the larger label sizes to well over half the
+        // canvas, leaving the spectrum a sliver. Append that gutter to the
+        // canvas instead, the way kiwiFitLegend does for a legend, so the plot
+        // keeps the size it has without tables.
+        var exportWidth = q.width, exportHeight = q.height;
+        if (kiwiHasSideTables(fig.layout))
+          exportWidth += (fig.layout.margin && fig.layout.margin.r) || 0;
         document.body.style.cursor = 'progress';
         var div = document.createElement('div');
-        div.style.width  = q.width  + 'px';
+        div.style.width  = exportWidth + 'px';
         div.style.height = q.height + 'px';
         if (isCubicSpectra) {
           // WebGL (scatter3d) requires the element to be in the visible viewport —
@@ -592,13 +654,16 @@ ui <- function(id) {
         }).then(function() {
           return kiwiFitPaper(div);
         }).then(function() {
-          return kiwiFitLegend(div, q.width);
+          return kiwiFitSideTables(div, q.height);
+        }).then(function(finalHeight) {
+          exportHeight = finalHeight;
+          return kiwiFitLegend(div, exportWidth);
         }).then(function(finalWidth) {
           kiwiScaleLegendSymbols(div, legendSymbolScale);
           // After the symbols, so the clip is fitted to the final contents.
           kiwiFitLegendClip(div);
           return kiwiSaveImage(
-            div, msg.format, finalWidth, q.height,
+            div, msg.format, finalWidth, exportHeight,
             msg.format === 'svg' ? 1 : q.scale, msg.filename);
         }).catch(function(err) {
           // Without this a failed export leaves the busy cursor up for good and

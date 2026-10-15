@@ -29,7 +29,6 @@ box::use(
     helper_functions[
       config_badge,
       config_icon,
-      safe_observe,
     ],
   app /
     logic /
@@ -226,7 +225,7 @@ server <- function(
           tooltip(
             shiny::span(class = "settings-label-tooltip", "Run Kinetics Analysis"),
             paste(
-              "Fits binding over time and kinact/Ki. Every sample then needs",
+              "Fits binding over time and kinact/KI. Every sample then needs",
               "a concentration and an incubation time: at least three non-zero",
               "concentrations, each with three samples at two or more time",
               "points."
@@ -321,22 +320,22 @@ server <- function(
     })
 
     # Activate kinact_ki from config autofill signal ----
-    safe_observe(
-      event_expr = conversion_main_vars$activate_kinact_ki(),
-      observer_name = "Activate kinact/Ki from Config",
-      handler_fn = function() {
+    shiny::observeEvent(
+      conversion_main_vars$activate_kinact_ki(),
+      {
         shiny::req(conversion_main_vars$activate_kinact_ki() > 0)
         shiny::updateCheckboxInput(session, "run_kinact_ki", value = TRUE)
-      }
+      },
+      ignoreInit = TRUE,
+      label = "Activate kinact/KI from Config"
     )
 
     # Analysis launch UI ----
     ## Idle checkbox ----
     # Temporarily blocking UI and wait for conversion main module server answer to allow Start button to react
-    safe_observe(
-      event_expr = input$run_kinact_ki,
-      observer_name = "Checkbox Idle",
-      handler_fn = function() {
+    shiny::observeEvent(
+      input$run_kinact_ki,
+      {
         # Block UI
         shinyjs::runjs(paste0(
           'document.getElementById("blocking-overlay").style.display ',
@@ -351,17 +350,20 @@ server <- function(
             '= "none";'
           ))
         )
-      }
+      },
+      ignoreInit = TRUE,
+      label = "Checkbox Idle"
     )
 
     ## Checkbox Toggle ----
-    # safe_observe(
-    #   event_expr = conversion_main_vars$samples_confirmed(),
-    #   observer_name = "Checkbox Toggle",
-    #   handler_fn = function() {
+    # shiny::observeEvent(
+    #   conversion_main_vars$samples_confirmed(),
+    #   {
     #     shinyjs::toggleState("run_kinact_ki")
     #     shinyjs::toggleClass(selector = ".checkbox", class = "checkbox-disable")
-    #   }
+    #   },
+    #   ignoreInit = TRUE,
+    #   label = "Checkbox Toggle"
     # )
 
     ## Conditional tooltip for launch button ----
@@ -430,17 +432,16 @@ server <- function(
     }
 
     # Update UI on reset results event ----
-    safe_observe(
-      event_expr = deconvolution_main_vars$continue_conversion(),
-      observer_name = "Results Resetter",
-      handler_fn = function() {
+    shiny::observeEvent(
+      deconvolution_main_vars$continue_conversion(),
+      {
         shiny::updateActionButton(
           session = session,
           "run_binding_analysis",
           label = "Start",
           icon = shiny::icon("play")
         )
-        # Enable kinact/Ki analysis checkbox
+        # Enable kinact/KI analysis checkbox
         shinyjs::enable("run_kinact_ki")
         shinyjs::removeClass(
           selector = ".checkbox",
@@ -455,19 +456,20 @@ server <- function(
         # without this, result_list() stays populated with the previous
         # dataset's results and kinact_ki_available() stays TRUE, so the
         # Results Menu keeps offering (and rendering) stale interfaces,
-        # including Ki/kinact when the new dataset was never run with it.
+        # including KI/kinact when the new dataset was never run with it.
         result_list(NULL)
         kinact_ki_available(FALSE)
-      }
+      },
+      ignoreInit = TRUE,
+      label = "Results Resetter"
     )
 
     # Analysis run event ----
 
     ## Conditional processing ----
-    safe_observe(
-      event_expr = input$run_binding_analysis,
-      observer_name = "Conversion Processing",
-      handler_fn = function() {
+    shiny::observeEvent(
+      input$run_binding_analysis,
+      {
         # Release the overlay the button's onclick put up, on every way out
         # (refused run, no hits, results, reset, error)
         on.exit(shinyjs::runjs(
@@ -533,7 +535,7 @@ server <- function(
             "Conversion parameters:\n",
             paste(
               c(
-                paste("kinact/Ki =", isTRUE(input$run_kinact_ki)),
+                paste("kinact/KI =", isTRUE(input$run_kinact_ki)),
                 paste("Peak Tolerance =", input$peak_tolerance, "Da"),
                 paste("Max. Stoichiometry =", input$max_multiples),
                 paste(
@@ -544,7 +546,7 @@ server <- function(
               collapse = "\n "
             )
           ))
-          # Disable kinact/Ki analysis checkbox
+          # Disable kinact/KI analysis checkbox
           shinyjs::disable("run_kinact_ki")
           shinyjs::addClass(selector = ".checkbox", class = "checkbox-disable")
 
@@ -555,7 +557,7 @@ server <- function(
           kinact_ki_check <- FALSE
           no_hits_found <- FALSE
 
-          # Clear any kinact/Ki availability left over from a previous run —
+          # Clear any kinact/KI availability left over from a previous run —
           # it is only ever set back to TRUE below when this run both
           # requests and successfully computes it, so an unchecked run must
           # not inherit an earlier "available" state.
@@ -596,7 +598,7 @@ server <- function(
                 )
               }
 
-              # If kinact/Ki analysis is set to be performed
+              # If kinact/KI analysis is set to be performed
               if (!no_hits_found && input$run_kinact_ki) {
                 message(paste("COMPUTING BINDING KINETICS\n  │"))
 
@@ -717,7 +719,7 @@ server <- function(
           kinact_ki_available(FALSE)
           analysis_status("pending")
 
-          # Enable kinact/Ki analysis checkbox
+          # Enable kinact/KI analysis checkbox
           shinyjs::enable("run_kinact_ki")
           shinyjs::removeClass(
             selector = ".checkbox",
@@ -767,7 +769,9 @@ server <- function(
             disabled = FALSE
           )
         }
-      }
+      },
+      ignoreInit = TRUE,
+      label = "Conversion Processing"
     )
 
     ## Render analysis select input element ----
@@ -800,9 +804,8 @@ server <- function(
 
     # Analysis select UI conditional rendering ----
     ## Toggle classes ----
-    safe_observe(
-      observer_name = "Toggle Converion Sidebar Inputs",
-      handler_fn = function() {
+    shiny::observe(
+      {
         shiny::req(input$analysis_select)
 
         # Block UI
@@ -832,7 +835,8 @@ server <- function(
             asis = TRUE
           )
         }
-      }
+      },
+      label = "Toggle Converion Sidebar Inputs"
     )
 
     shiny::observeEvent(input$run_binding_analysis, {

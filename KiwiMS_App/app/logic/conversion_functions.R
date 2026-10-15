@@ -263,7 +263,7 @@ convert_kobs_result_units <- function(binding_kobs_result, view) {
   binding_kobs_result
 }
 
-# Rescale the kinact/Ki parameter matrix: kinact is a rate, KI a
+# Rescale the kinact/KI parameter matrix: kinact is a rate, KI a
 # concentration; t value and Pr(>|t|) are dimensionless.
 #' @export
 convert_kinact_ki_params <- function(params, view) {
@@ -277,7 +277,7 @@ convert_kinact_ki_params <- function(params, view) {
   params
 }
 
-# Rescale the complete kinact/Ki result (parameters and fitted kobs curve)
+# Rescale the complete kinact/KI result (parameters and fitted kobs curve)
 #' @export
 convert_kinact_ki_units <- function(kinact_ki_result, view) {
   if (is.null(kinact_ki_result) || view$identity) {
@@ -2004,8 +2004,7 @@ shift_multiples_message <- function(multiples, max_listed = 2) {
 # something: when at least one peak had a reading that was not preferred
 #' @export
 show_preferred_column <- function(hits) {
-  "Preferred" %in% names(hits) &&
-    any(as.character(hits$Preferred) %in% "FALSE")
+  "Preferred" %in% names(hits) && any(as.character(hits$Preferred) %in% "FALSE")
 }
 
 # Validate protein/compound table. `type` is "proteins" or "compounds"; the
@@ -3371,7 +3370,8 @@ mass_shift_card <- function(
         paste0(color, ";"),
         "color:",
         paste0(color, ";"),
-        "font-weight:", if (entries$present[i]) "700;" else "400;",
+        "font-weight:",
+        if (entries$present[i]) "700;" else "400;",
         "white-space:nowrap;"
       ),
       shiny::span(
@@ -3468,11 +3468,13 @@ proteoform_limit_note <- function(limit) {
 #' @export
 proteoform_colors <- function(species, theme = "light") {
   cool_first <- c(1L, 6L, 4L, 9L, 11L, 8L, 7L, 3L, 10L, 12L, 5L, 2L)
-  palette <- categorical_palette[[if (identical(theme, "dark")) {
-    "dark"
-  } else {
-    "light"
-  }]][cool_first]
+  palette <- categorical_palette[[
+    if (identical(theme, "dark")) {
+      "dark"
+    } else {
+      "light"
+    }
+  ]][cool_first]
   species <- sort(unique(species))
   stats::setNames(
     palette[(seq_along(species) - 1) %% length(palette) + 1],
@@ -3687,7 +3689,10 @@ proteoform_comparison_table <- function(kinetics, pooled, binding, view) {
       if (x != "N/A" || is.null(k$reason)) {
         return(x)
       }
-      sprintf("<span data-bs-toggle=\"tooltip\" title=\"%s\">N/A</span>", k$reason)
+      sprintf(
+        "<span data-bs-toggle=\"tooltip\" title=\"%s\">N/A</span>",
+        k$reason
+      )
     }
 
     delta <- if (identical(k$species, main)) {
@@ -4940,7 +4945,7 @@ wrap_log_line <- function(
   paste0(c(head, rep(cont, length(parts) - 1L)), parts)
 }
 
-# Log kinact/Ki warning. The headline sits on the branch, the explanation
+# Log kinact/KI warning. The headline sits on the branch, the explanation
 # hangs off it one level deeper — the same shape the kobs steps use — so no
 # single row grows past the width of the log card.
 log_kinact_ki_warning <- function(msg, detail = NULL) {
@@ -4957,7 +4962,7 @@ log_kinact_ki_analysis <- function() {
   message(paste("  │\n", " └─ Infer second-order rate constant Kᵢ/kᵢₙₐ꜀ₜ"))
 }
 
-# Log kinact/Ki results
+# Log kinact/KI results
 log_kinact_ki_results <- function(results, units) {
   fit <- results$Fit
   model_label <- if (results$Model == "hyperbolic") {
@@ -5121,7 +5126,10 @@ assess_quality <- function(hits, peaks) {
       peaks$mass %in% detected_species
     ])
 
-    hits$correct <- correct <- 100 * known_peak_intensity / total_peak_intensity
+    # Ratio first: 100 * a / a can land one ulp off 100, which plots that
+    # autoscale to the data then zoom into as if it were a real spread
+    hits$correct <- correct <- 100 *
+      (known_peak_intensity / total_peak_intensity)
     hits$unmatched <- 100 - correct
   } else {
     # Assigned separately so correct precedes unmatched, the column order
@@ -5183,7 +5191,7 @@ summarize_hits <- function(result_list, sample_table) {
   return(hits_summarized)
 }
 
-# Function perform checks for kinact/Ki analysis prerequisites
+# Function perform checks for kinact/KI analysis prerequisites
 #' @export
 check_filter_hits <- function(result_list) {
   # Check if hits summary is present and contains hits
@@ -5351,19 +5359,19 @@ add_kobs_binding_result <- function(
   return(binding_kobs_result)
 }
 
-# Function to add kinact/Ki results to result list
+# Function to add kinact/KI results to result list
 #' @export
 add_kinact_ki_result <- function(result_list, units) {
   # Log (Kᵢ/kᵢₙₐ꜀ₜ) analysis initiation
   log_kinact_ki_analysis()
 
-  # Calculcate kinact/Ki from binding/kobs result
+  # Calculcate kinact/KI from binding/kobs result
   kinact_ki_result <- compute_kinact_ki(
     result_list[["binding_kobs_result"]],
     units = units
   )
 
-  # Log kinact/Ki results
+  # Log kinact/KI results
   if (!is.null(kinact_ki_result)) {
     log_kinact_ki_results(results = kinact_ki_result, units = units)
   }
@@ -6607,7 +6615,7 @@ make_kinetics_residual_plot <- function(
       pal,
       c(list(range = c(-0.03 * time_max, 1.03 * time_max)), sci_axis_ticks)
     ),
-    yaxis = kinetics_axis("Residual [% binding]", pal),
+    yaxis = kinetics_axis("Residual [% Binding]", pal),
     shapes = list(
       guide(0, "solid"),
       guide(spread, "dot"),
@@ -6869,7 +6877,7 @@ make_kinetics_series_plot <- function(
       ),
       text = paste0("n = ", series$n, " samples"),
       hovertemplate = paste0(
-        "<b>%{y}</b><br>k<sub>inact</sub>/K<sub>i</sub>: %{x:.4~g} ",
+        "<b>%{y}</b><br>k<sub>inact</sub>/K<sub>I</sub>: %{x:.4~g} ",
         ratio_unit,
         "<br>%{text}<extra></extra>"
       ),
@@ -6905,7 +6913,7 @@ make_kinetics_series_plot <- function(
         )
       },
       hovertemplate = paste0(
-        "<b>All samples</b><br>k<sub>inact</sub>/K<sub>i</sub>: %{x:.4~g} ",
+        "<b>All samples</b><br>k<sub>inact</sub>/K<sub>I</sub>: %{x:.4~g} ",
         ratio_unit,
         "<extra></extra>"
       ),
@@ -6917,7 +6925,7 @@ make_kinetics_series_plot <- function(
     pal,
     units,
     xaxis = kinetics_axis(
-      paste0("k<sub>inact</sub>/K<sub>i</sub> [", ratio_unit, "]"),
+      paste0("k<sub>inact</sub>/K<sub>I</sub> [", ratio_unit, "]"),
       pal,
       sci_axis_ticks
     ),
@@ -7078,7 +7086,7 @@ make_kinetics_saturation_plot <- function(
         xref = "x",
         yref = "y",
         text = sprintf(
-          "K<sub>i</sub> ≈ %s %s<br>%s",
+          "K<sub>I</sub> ≈ %s %s<br>%s",
           signif(ki, 3),
           conc_unit,
           selected_label
@@ -8871,7 +8879,13 @@ overview_choices <- function(hits_summary) {
   status <- vapply(
     compounds,
     function(d) {
-      if (!nrow(d)) "none" else if (any(d$hit)) "hits" else "no_hits"
+      if (!nrow(d)) {
+        "none"
+      } else if (any(d$hit)) {
+        "hits"
+      } else {
+        "no_hits"
+      }
     },
     character(1)
   )
@@ -8923,8 +8937,7 @@ overview_selection <- function(choices, protein = NULL, compounds = NULL) {
 #' @export
 overview_subset <- function(hits_summary, protein, compounds) {
   hits_summary[
-    hits_summary$Protein %in% protein &
-      hits_summary$`Cmp Name` %in% compounds,
+    hits_summary$Protein %in% protein & hits_summary$`Cmp Name` %in% compounds,
     ,
     drop = FALSE
   ]
@@ -9101,7 +9114,9 @@ multiple_spectra <- function(
 
   # Peaks straight from a deconvolution carry no assignment yet
   if (nrow(peaks_data) > 0) {
-    if (!"name" %in% names(peaks_data)) peaks_data$name <- NA_character_
+    if (!"name" %in% names(peaks_data)) {
+      peaks_data$name <- NA_character_
+    }
     if (!"mw" %in% names(peaks_data)) peaks_data$mw <- NA_real_
   }
 
@@ -9589,7 +9604,10 @@ multiple_spectra <- function(
             color = chip_color %||% font_color,
             symbol = if (is.null(chip_color)) paste0(sym, "-open") else sym,
             size = 8,
-            line = list(color = inv_color, width = if (is.null(chip_color)) 0 else 1)
+            line = list(
+              color = inv_color,
+              width = if (is.null(chip_color)) 0 else 1
+            )
           ),
           visible = symbols_show,
           meta = peaks_trace_tag,
@@ -9831,7 +9849,10 @@ multiple_spectra <- function(
               paste0(sym, "-open")
             },
             size = 8,
-            line = list(color = inv_color, width = if (is.null(chip_color)) 0 else 1)
+            line = list(
+              color = inv_color,
+              width = if (is.null(chip_color)) 0 else 1
+            )
           ),
           visible = symbols_show,
           meta = peaks_trace_tag,
@@ -9911,6 +9932,12 @@ multiple_spectra <- function(
     fig$x$attrs <- fig$x$attrs[0]
   }
   fig <- slim_spectrum(fig)
+  # A build without traces counts as parcoords to plotly, which drops the top
+  # margin then; plotly.js falls back to 100 px, and the legend hanging from
+  # the plot area lost that much height and scrolled
+  if (is.null(fig$x$layout$margin$t)) {
+    fig$x$layout$margin$t <- 25
+  }
   if (length(per_sample) > 0 && !is.null(group_title)) {
     per_sample[[1]]$legendgrouptitle <- group_title
   }
@@ -10401,6 +10428,21 @@ hits_col_choices <- function(hits, units) {
   list(choices = choices, selected = setdiff(choices, hidden))
 }
 
+# Columns of the two Table Views to pick from (those of the hits table), and
+# those picked by default: Binding [%], and Preferred when the rows shown
+# (`shown`, a subset of `hits`) include a reading that was not preferred
+#' @export
+table_view_col_choices <- function(hits, shown, units) {
+  choices <- hits_col_choices(hits, units)$choices
+  list(
+    choices = choices,
+    selected = intersect(
+      c("Binding [%]", if (show_preferred_column(shown)) "Preferred"),
+      choices
+    )
+  )
+}
+
 # Hits in the order of the hits table: by protein, then by concentration and
 # time
 #' @export
@@ -10831,13 +10873,19 @@ transform_per_adduct <- function(
       paste("Mass", mass_no)
     }
 
+    # Column order by what the names tell apart. Without the compound (or the
+    # proteoform) in the name, the samples of different compounds share a
+    # column, which must not take the rank of whichever compound came first.
+    rank_cmp <- if (by_cmp) cmp_rank(cmp[cx]) else 0
+    sp_k <- if (by_species) sp_k else rep(0, length(cx))
+
     readings <- rbind(
       data.frame(
         sample = sample[cx],
         col = mass_col,
         value = shift,
         stat = "first",
-        rank_cmp = cmp_rank(cmp[cx]),
+        rank_cmp = rank_cmp,
         rank_mass = mass_no,
         rank_species = 0,
         rank_kind = 0,
@@ -10856,7 +10904,7 @@ transform_per_adduct <- function(
         ),
         value = binding,
         stat = "sum",
-        rank_cmp = cmp_rank(cmp[cx]),
+        rank_cmp = rank_cmp,
         rank_mass = mass_no,
         rank_species = sp_k,
         rank_kind = 1,
@@ -10868,7 +10916,7 @@ transform_per_adduct <- function(
         col = paste0("Total Binding (", total_qualifier, ") [%]"),
         value = ifelse(preferred, binding, 0),
         stat = "sum",
-        rank_cmp = cmp_rank(cmp[cx]),
+        rank_cmp = rank_cmp,
         rank_mass = mass_no,
         rank_species = Inf,
         rank_kind = 2,
@@ -10898,11 +10946,13 @@ transform_per_adduct <- function(
     names(first_value) <- key[!duplicated(key)]
     for (i in seq_len(nrow(cols))) {
       at <- paste(samples, cols$col[i], sep = "\r")
-      out[[cols$col[i]]] <- as.vector(if (cols$stat[i] == "sum") {
-        summed[at]
-      } else {
-        first_value[at]
-      })
+      out[[cols$col[i]]] <- as.vector(
+        if (cols$stat[i] == "sum") {
+          summed[at]
+        } else {
+          first_value[at]
+        }
+      )
     }
   }
 
@@ -11924,7 +11974,10 @@ color_key <- function(hits_summary, sample_order = NULL) {
   }
 
   proteins <- sort(col_values(pick("Protein")), method = "radix")
-  compounds <- sort(col_values(pick(c("Cmp Name", "Compound"))), method = "radix")
+  compounds <- sort(
+    col_values(pick(c("Cmp Name", "Compound"))),
+    method = "radix"
+  )
   sample_col <- pick(c("Sample ID", "Sample"))
   samples <- natural_sort(col_values(sample_col))
   if (length(sample_order)) {
@@ -11958,9 +12011,7 @@ color_key <- function(hits_summary, sample_order = NULL) {
   )
 
   # Short sample IDs, when the table carries them
-  sample_labels <- if (
-    !is.na(sample_col) && "truncSample_ID" %in% nms
-  ) {
+  sample_labels <- if (!is.na(sample_col) && "truncSample_ID" %in% nms) {
     keep <- !duplicated(hits_summary[[sample_col]]) &
       !is.na(hits_summary[[sample_col]])
     stats::setNames(
@@ -13153,17 +13204,18 @@ smpl_compound_distribution <- function(
     )
   }
 
-  colors <- colors %||% key_colors(
-    key %||% color_key(hits_summary),
-    color_variable,
-    if (color_variable == "Compounds") {
-      unique(as.character(cmp_table$`Cmp Name`))
-    } else {
-      unique(as.character(cmp_table$`Sample ID`))
-    },
-    theme = theme,
-    trunc = truncate_names
-  )
+  colors <- colors %||%
+    key_colors(
+      key %||% color_key(hits_summary),
+      color_variable,
+      if (color_variable == "Compounds") {
+        unique(as.character(cmp_table$`Cmp Name`))
+      } else {
+        unique(as.character(cmp_table$`Sample ID`))
+      },
+      theme = theme,
+      trunc = truncate_names
+    )
 
   if (color_variable == "Compounds") {
     cmp_table$color <- colors[match(cmp_table$`Cmp Name`, names(colors))]
@@ -13246,7 +13298,12 @@ stats_histogram <- function(
 ) {
   df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
 
-  x_col <- if (show == "Unmatched") df$`% Unmatched` else df$`% Correct`
+  # A sample without any protein or complex peak has no value to count
+  # (plotly warns about every NA it is handed)
+  metric_col <- if (show == "Unmatched") "% Unmatched" else "% Correct"
+  df <- df[!is.na(df[[metric_col]]), , drop = FALSE]
+
+  x_col <- df[[metric_col]]
   bin_counts <- tabulate(floor(x_col) + 1L)
   max_count <- if (length(bin_counts) > 0) max(bin_counts) else 1L
   y_dtick <- max(1L, ceiling(max_count / 8))
@@ -13323,26 +13380,78 @@ stats_histogram <- function(
     )
 }
 
+# Axis range fitted to the data: 5% of the spread on either side, at least half
+# a percentage point so a box of identical values is not stretched over noise
+data_axis_range <- function(vals) {
+  vals <- vals[is.finite(vals)]
+  if (length(vals) == 0) {
+    return(c(-5, 105))
+  }
+  pad <- max(diff(range(vals)) * 0.05, 0.5)
+  range(vals) + c(-pad, pad)
+}
+
+# Label heights for values on a vertical axis: each label sits at its value
+# unless it would come closer than min_gap to a neighbour, in which case the
+# crowded labels are spread evenly around their mean value. Order is kept, and
+# the labels stay within lower/upper (half a gap from either end)
+spread_label_positions <- function(vals, min_gap, lower = -Inf, upper = Inf) {
+  n <- length(vals)
+  if (n == 0) {
+    return(numeric(0))
+  }
+  ord <- order(vals)
+  target <- vals[ord]
+  lo <- lower + min_gap / 2
+  hi <- upper - min_gap / 2
+  # Clusters of neighbouring labels, each placed as one block
+  clusters <- as.list(seq_len(n))
+  place <- function(idx) {
+    k <- length(idx)
+    centre <- mean(target[idx])
+    first <- centre - (k - 1) * min_gap / 2
+    first <- min(max(first, lo), hi - (k - 1) * min_gap)
+    first + (seq_len(k) - 1) * min_gap
+  }
+  repeat {
+    pos <- unlist(lapply(clusters, place))
+    tops <- cumsum(lengths(clusters))
+    gaps <- diff(pos)[tops[-length(tops)]]
+    clash <- which(gaps < min_gap - 1e-9)
+    if (length(clash) == 0) {
+      break
+    }
+    i <- clash[1]
+    clusters[[i]] <- c(clusters[[i]], clusters[[i + 1]])
+    clusters[[i + 1]] <- NULL
+  }
+  out <- numeric(n)
+  out[ord] <- pos
+  out
+}
+
 #' @export
 stats_boxplot <- function(
   hits_summary,
   theme = "light",
   show_points = TRUE,
-  show = "Correct",
-  fixed_range = TRUE
+  show = "Correct"
 ) {
   df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
+
+  # A sample without any protein or complex peak (NA values) is not drawn, and
+  # would turn the whisker fences below into NA
+  df <- df[
+    !is.na(df[[if (show == "Unmatched") "% Unmatched" else "% Correct"]]),
+    ,
+    drop = FALSE
+  ]
 
   font_color <- if (theme == "light") "black" else "white"
   grid_color <- if (theme == "light") {
     "rgba(0,0,0,0.1)"
   } else {
     "rgba(255,255,255,0.2)"
-  }
-  zeroline_color <- if (theme == "light") {
-    "rgba(0,0,0,0.5)"
-  } else {
-    "rgba(255,255,255,0.5)"
   }
   dot_border_color <- if (theme == "light") {
     "rgba(0,0,0,0.5)"
@@ -13500,120 +13609,86 @@ stats_boxplot <- function(
     )
   }
 
-  correct_sd_bp <- stats::sd(df$`% Correct`, na.rm = TRUE)
-  unmatched_sd_bp <- stats::sd(df$`% Unmatched`, na.rm = TRUE)
-  correct_mean_bp <- mean(df$`% Correct`, na.rm = TRUE)
-  unmatched_mean_bp <- mean(df$`% Unmatched`, na.rm = TRUE)
+  # The axis spans the data, so the box uses the plot's full height; the label
+  # spacing below is a share of that axis
+  y_range_bp <- data_axis_range(metric_vals_bp)
 
-  bp_annots <- list()
-  if (show_correct && !is.na(correct_sd_bp) && correct_sd_bp < 0.005) {
-    bp_annots <- c(
-      bp_annots,
-      list(list(
-        x = 0,
+  # Statistics beside the box, each at the height of the line it describes.
+  # Statistics equal at the shown precision share one label ("Median = Q3").
+  # Only labels too close to be read apart are moved, and only those get a
+  # short connector back to their line.
+  stat_vals <- c(Q1 = q1_bp, Median = med_bp, Mean = mean_bp, Q3 = q3_bp)
+  stat_vals <- stat_vals[is.finite(stat_vals)]
+  stat_txt <- sprintf("%.2f", stat_vals)
+  label_groups <- split(names(stat_vals), factor(stat_txt, unique(stat_txt)))
+  label_vals <- vapply(
+    label_groups,
+    function(nm) mean(stat_vals[nm]),
+    numeric(1)
+  )
+  label_text <- vapply(
+    names(label_groups),
+    function(txt) {
+      nm <- label_groups[[txt]]
+      if (length(nm) == 4 && diff(range(metric_vals_bp)) < 0.005) {
+        sprintf("All values: %s%%", txt)
+      } else {
+        sprintf("%s: %s%%", paste(nm, collapse = " = "), txt)
+      }
+    },
+    character(1)
+  )
+  min_gap_bp <- 0.075 * diff(y_range_bp)
+  label_ys <- spread_label_positions(
+    label_vals,
+    min_gap = min_gap_bp,
+    lower = y_range_bp[1],
+    upper = y_range_bp[2]
+  )
+  moved <- abs(label_ys - label_vals) > 0.1 * min_gap_bp
+
+  # The gap between box and label is in pixels (xshift, pixel-sized shapes),
+  # which the image export scales along with the label text. Connectors are
+  # shapes rather than annotation arrows, whose tails ran into enlarged text.
+  label_shift_px <- 16
+  connector_shapes <- unname(Map(
+    function(val, lab_y) {
+      list(
+        type = "line",
         xref = "x",
-        y = correct_mean_bp - 4,
         yref = "y",
-        text = sprintf("All values: %.2f%%", correct_mean_bp),
-        showarrow = FALSE,
-        yanchor = "top",
-        font = list(color = font_color, size = 11)
-      ))
-    )
-  }
-  if (show_unmatched && !is.na(unmatched_sd_bp) && unmatched_sd_bp < 0.005) {
-    bp_annots <- c(
-      bp_annots,
-      list(list(
-        x = 0,
-        xref = "x",
-        y = unmatched_mean_bp - 4,
-        yref = "y",
-        text = sprintf("All values: %.2f%%", unmatched_mean_bp),
-        showarrow = FALSE,
-        yanchor = "top",
-        font = list(color = font_color, size = 11)
-      ))
-    )
-  }
+        xsizemode = "pixel",
+        xanchor = box_half_width,
+        x0 = 1,
+        x1 = label_shift_px - 4,
+        y0 = val,
+        y1 = lab_y,
+        line = list(color = hex_to_rgba(hex_base, 0.6), width = 1)
+      )
+    },
+    label_vals[moved],
+    label_ys[moved]
+  ))
 
   sa_font <- list(color = font_color, size = 10)
-  # Spread all four label y-positions by actual value with a minimum gap
-  spread_ys <- local({
-    min_gap <- 5
-    raw <- c(q1_bp, med_bp, mean_bp, q3_bp)
-    idx <- order(raw)
-    s <- raw[idx]
-    for (iter in seq_len(50)) {
-      changed <- FALSE
-      for (i in seq_len(3)) {
-        if (s[i + 1] - s[i] < min_gap) {
-          mid <- (s[i] + s[i + 1]) / 2
-          s[i] <- mid - min_gap / 2
-          s[i + 1] <- mid + min_gap / 2
-          changed <- TRUE
-        }
-      }
-      if (!changed) break
-    }
-    result <- raw
-    result[idx] <- s
-    result
-  })
-  q1_y <- spread_ys[1]
-  med_y <- spread_ys[2]
-  mean_y <- spread_ys[3]
-  q3_y <- spread_ys[4]
-
-  bp_annots <- c(
-    bp_annots,
-    list(
+  bp_annots <- unname(Map(
+    function(lab_y, txt) {
       list(
-        x = 0.65,
-        xref = "paper",
-        y = q1_y,
+        x = box_half_width,
+        y = lab_y,
+        xref = "x",
         yref = "y",
-        text = sprintf("Q1: %.2f%%", q1_bp),
-        showarrow = FALSE,
-        xanchor = "left",
-        yanchor = "middle",
-        font = sa_font
-      ),
-      list(
-        x = 0.65,
-        xref = "paper",
-        y = med_y,
-        yref = "y",
-        text = sprintf("Median: %.2f%%", med_bp),
-        showarrow = FALSE,
-        xanchor = "left",
-        yanchor = "middle",
-        font = sa_font
-      ),
-      list(
-        x = 0.65,
-        xref = "paper",
-        y = mean_y,
-        yref = "y",
-        text = sprintf("Mean: %.2f%%", mean_bp),
-        showarrow = FALSE,
-        xanchor = "left",
-        yanchor = "middle",
-        font = sa_font
-      ),
-      list(
-        x = 0.65,
-        xref = "paper",
-        y = q3_y,
-        yref = "y",
-        text = sprintf("Q3: %.2f%%", q3_bp),
+        xshift = label_shift_px,
+        text = txt,
         showarrow = FALSE,
         xanchor = "left",
         yanchor = "middle",
         font = sa_font
       )
-    )
-  )
+    },
+    label_ys,
+    label_text
+  ))
 
   p |>
     plotly::layout(
@@ -13639,14 +13714,19 @@ stats_boxplot <- function(
       ),
       yaxis = list(
         title = paste(show, "[%]"),
-        range = if (fixed_range) c(-5, 105) else NULL,
+        range = y_range_bp,
         color = font_color,
         gridcolor = grid_color,
-        zerolinecolor = zeroline_color,
+        # Now that the axis ends at the data, a zero line would sit on the
+        # lower whisker of a box reaching 0%
+        zeroline = FALSE,
         hoverformat = ".2f"
       ),
+      # The x axis has no labels and the statistics sit inside the plot, so
+      # plotly's default margins (80-100 px) would only shrink the box
+      margin = list(l = 70, r = 10, t = 20, b = 20),
       annotations = if (length(bp_annots) > 0) bp_annots else NULL,
-      shapes = box_shapes
+      shapes = c(box_shapes, connector_shapes)
     )
 }
 
@@ -13664,6 +13744,11 @@ stats_scatter <- function(
 
   # A sample without any protein or complex peak (NA binding) is not drawn
   df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
+  df <- df[
+    !is.na(df[[metric_col]]) & !is.na(df$`Total % Binding`),
+    ,
+    drop = FALSE
+  ]
   df$`Total % Binding` <- df$`Total % Binding` * 100
 
   font_color <- if (theme == "light") "black" else "white"
@@ -13903,7 +13988,6 @@ function(el) {
 stats_violin <- function(
   hits_summary,
   group_by = "Protein",
-  full_scale = FALSE,
   theme = "light",
   key = NULL,
   inner = "box",
@@ -13913,7 +13997,9 @@ stats_violin <- function(
   metric_label <- if (show == "Unmatched") "Unmatched [%]" else "Correct [%]"
   hover_label <- if (show == "Unmatched") "Unmatched [%]" else "Correct [%]"
 
+  # A sample without any protein or complex peak (NA value) is not drawn
   df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
+  df <- df[!is.na(df[[metric_col]]), , drop = FALSE]
   df[[group_by]] <- ifelse(
     is.na(df[[group_by]]),
     "Unknown",
@@ -13945,7 +14031,12 @@ stats_violin <- function(
   show_box <- inner != "Points"
   show_points <- inner == "Points"
 
-  y_range <- if (full_scale) c(-5, 105) else NULL
+  y_range <- NULL
+  # Autoscale would stretch a float-noise spread across the whole axis
+  y_vals <- df[[metric_col]]
+  if (length(y_vals) > 0 && diff(range(y_vals)) < 0.01) {
+    y_range <- mean(range(y_vals)) + c(-1, 1)
+  }
 
   # Groups in key order, the ones without a value ("Unknown") last and muted
   key <- key %||% color_key(hits_summary)
@@ -14638,7 +14729,10 @@ batch_plate_heatmap <- function(
       legend = list(
         # Numbered names ("12 · COM-3818744") a size smaller, they set the
         # width of the legend beside the plate
-        font = list(color = font_color, size = if (is.null(tile_codes)) 11 else 10),
+        font = list(
+          color = font_color,
+          size = if (is.null(tile_codes)) 11 else 10
+        ),
         bgcolor = "rgba(0,0,0,0)",
         y = 1,
         yanchor = "top",

@@ -2157,15 +2157,13 @@ stats_boxplot_page <- function() {
       "The hit rate of all samples as a box plot: the box spans the middle ",
       "half of the samples (25th to 75th percentile) with the median as its ",
       "line, and the whiskers reach the most extreme samples within 1.5 times ",
-      "the box height. Quartiles, median and mean are written beside it."
+      "the box height. Quartiles, median and mean (dotted line) are written ",
+      "beside the line they belong to; values that are equal share one label, ",
+      "and labels too close together are moved apart with a line to their ",
+      "value. The axis spans the range of the data."
     ),
     help_defs(
-      help_def("Show Points", "(Settings) Draws every sample as a point."),
-      help_def(
-        "Full Scale (0–100%)",
-        "(Settings) Shows the whole percentage range instead of the range of ",
-        "the data."
-      )
+      help_def("Show Points", "(Settings) Draws every sample as a point.")
     ),
     stats_controls()
   )

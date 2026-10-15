@@ -40,6 +40,10 @@ box::use(
     render_hits_table,
     render_hits_view,
     select_complex_kinetics,
+    stats_boxplot,
+    stats_histogram,
+    stats_scatter,
+    stats_violin,
     summarize_hits,
     transform_hits,
     transform_per_adduct,
@@ -543,6 +547,45 @@ test_that("the sample view gives a compound without an adduct no mass columns", 
   )
   expect_equal(per_adduct$`Tot. Binding (A) [%]`, 10 / 90 * 100)
   expect_equal(per_adduct$`Tot. Binding (B) [%]`, 0)
+})
+
+test_that("the sample view orders shared columns by mass shift and stoichiometry", {
+  # One compound per sample, so the compounds share their columns. A, listed
+  # first, binds twice only; B once.
+  a <- screen_declared(
+    mass = c(1000, 1200),
+    intensity = c(50, 50),
+    protein_masses = 1000,
+    compounds = c(A = 100)
+  )
+  b <- screen_declared(
+    mass = c(1000, 1150),
+    intensity = c(50, 50),
+    protein_masses = 1000,
+    compounds = c(B = 150)
+  )
+  b$view$`Sample ID` <- "S2"
+  compound_table <- rbind(
+    a$compound_table,
+    b$compound_table[b$compound_table$Compound == "B", ]
+  )
+  per_adduct <- transform_per_adduct(
+    rbind(a$view, b$view),
+    proteins_table = a$protein_table,
+    compounds_table = compound_table,
+    samples_table = rbind(a$sample_table, data.frame(Sample = "S2", Protein = "P", `Compound 1` = "B", check.names = FALSE))
+  )
+
+  expect_equal(nrow(per_adduct), 2)
+  expect_equal(
+    names(per_adduct)[grepl("^(Mass|Binding|Total)", names(per_adduct))],
+    c(
+      "Mass 1",
+      "Binding (Mass 1)x1 [%]",
+      "Binding (Mass 1)x2 [%]",
+      "Total Binding (Mass 1) [%]"
+    )
+  )
 })
 
 test_that("the sample view gives every proteoform its columns, named by mass", {
@@ -1607,5 +1650,38 @@ test_that("an empty colour map leaves the rows uncoloured", {
       empty_message = "No compound selected"
     )
     expect_false(grepl("''", dt$x$options$rowCallback, fixed = TRUE))
+  }
+})
+
+test_that("the statistics plots leave out a sample without a value, without a warning", {
+  # A sample without any protein or complex peak has NA percentages; plotly
+  # warns about each NA it is handed ("Ignoring 1 observations")
+  hs <- data.frame(
+    Sample = paste0("S", 1:6),
+    Protein = c("P", "P", "P", "Q", "Q", "Q"),
+    `% Correct` = c(90, 80, NA, 70, 65, 60),
+    `% Unmatched` = c(10, 20, NA, 30, 35, 40),
+    `Total % Binding` = c(0.5, 0.4, NA, 0.2, 0.2, 0.1),
+    check.names = FALSE
+  )
+  drawn <- function(trace) sum(!is.na(trace$y))
+
+  for (show in c("Correct", "Unmatched")) {
+    expect_no_warning(built <- plotly::plotly_build(stats_histogram(hs, show = show)))
+    expect_equal(sum(built$x$data[[1]]$x >= 0), 5)
+
+    expect_no_warning(built <- plotly::plotly_build(stats_boxplot(hs, show = show)))
+    expect_equal(drawn(built$x$data[[1]]), 5)
+    expect_false(anyNA(unlist(lapply(built$x$layout$shapes, `[`, c("y0", "y1")))))
+
+    expect_no_warning(built <- plotly::plotly_build(stats_scatter(hs, show = show)))
+    expect_equal(sum(vapply(built$x$data, drawn, numeric(1))), 5)
+
+    for (inner in c("Box", "Points")) {
+      expect_no_warning(built <- plotly::plotly_build(
+        stats_violin(hs, inner = inner, show = show)
+      ))
+      expect_false(anyNA(unlist(lapply(built$x$data, `[[`, "y"))))
+    }
   }
 })
