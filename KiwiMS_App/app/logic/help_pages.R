@@ -1109,7 +1109,7 @@ compound_distribution_page <- function() {
       shiny::p(
         "The binding of the selected compounds on the selected protein, one ",
         "bar per sample, stacked from its complexes (mass shift × ",
-        "stoichiometry) with the sample's total written above. With one ",
+        "stoichiometry); hover a bar for its binding. With one ",
         "compound the bars stand side by side; with several they are grouped ",
         "by compound. Samples follow the order of the Table View and the ",
         "sample colours (concentration, then time; otherwise from least to ",
@@ -1122,7 +1122,7 @@ compound_distribution_page <- function() {
           "Maximum scales the axis to the highest binding, 100 to the full ",
           "0 – 100 %."
         ),
-        help_def("Show Labels", "Writes the values onto the bars."),
+        help_def("Show Labels", "Writes the names below the bars."),
         help_def(
           "Sort by Binding",
           "With concentrations: ranks the samples from least to most bound."
@@ -2160,10 +2160,16 @@ stats_boxplot_page <- function() {
       "the box height. Quartiles, median and mean (dotted line) are written ",
       "beside the line they belong to; values that are equal share one label, ",
       "and labels too close together are moved apart with a line to their ",
-      "value. The axis spans the range of the data."
+      "value. The axis spans the range of the data; without Show Points, ",
+      "samples beyond the whiskers are drawn as single points (outliers)."
     ),
     help_defs(
-      help_def("Show Points", "(Settings) Draws every sample as a point.")
+      help_def("Show Points", "(Settings) Draws every sample as a point."),
+      help_def(
+        "Fit to Box",
+        "(Settings) Fits the axis to the whiskers and the mean, so the box ",
+        "fills the plot. Samples left out are counted above or below the plot."
+      )
     ),
     stats_controls()
   )

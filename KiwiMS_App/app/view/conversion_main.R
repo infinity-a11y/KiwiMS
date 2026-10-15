@@ -152,6 +152,15 @@ box::use(
     ],
 )
 
+# Fit warnings and log entries are plain text (they also go to the protocol
+# log); set the kinetic parameters with their subscripts where shown as HTML
+kinetic_symbols_html <- function(x) {
+  x <- htmltools::htmlEscape(x)
+  x <- gsub("\\bkinact\\b", "k<sub>inact</sub>", x, perl = TRUE)
+  x <- gsub("\\bKI\\b", "K<sub>I</sub>", x, perl = TRUE)
+  gsub("\\bk_obs\\b", "k<sub>obs</sub>", x, perl = TRUE)
+}
+
 #' @export
 ui <- function(id) {
   ns <- NS(id)
@@ -4287,15 +4296,6 @@ server <- function(
               )
             }
 
-            # The fit warnings are plain text (they also go to the protocol
-            # log); set the kinetic parameters with their subscripts here
-            kinetic_symbols_html <- function(x) {
-              x <- htmltools::htmlEscape(x)
-              x <- gsub("\\bkinact\\b", "k<sub>inact</sub>", x, perl = TRUE)
-              x <- gsub("\\bKI\\b", "K<sub>I</sub>", x, perl = TRUE)
-              gsub("\\bk_obs\\b", "k<sub>obs</sub>", x, perl = TRUE)
-            }
-
             card_warnings <- function(
               res,
               codes = NULL,
@@ -5375,7 +5375,8 @@ server <- function(
                 rl$hits_summary,
                 theme = "light",
                 show_points = isTRUE(input$stats_boxplot_show_points),
-                show = input$stats_show_metric %||% "Correct"
+                show = input$stats_show_metric %||% "Correct",
+                fit_box = isTRUE(input$stats_boxplot_fit_box)
               )
             })
 
@@ -6003,7 +6004,7 @@ server <- function(
                       "font-weight:700; font-size:0.85rem; color:",
                       paste0(accent, ";")
                     ),
-                    shiny::span(title),
+                    shiny::span(shiny::HTML(kinetic_symbols_html(title))),
                     if (cnt > 1) {
                       shiny::span(
                         style = paste(
@@ -6020,7 +6021,7 @@ server <- function(
                         "font-size:0.78rem; color:#fff; opacity:0.9;",
                         "margin-top:0.15rem;"
                       ),
-                      detail
+                      shiny::HTML(kinetic_symbols_html(detail))
                     )
                   }
                 )
@@ -6070,8 +6071,8 @@ server <- function(
               lines <- character(0)
               if (!is.null(snapshot) && nzchar(snapshot)) {
                 lines <- strsplit(snapshot, "<br>", fixed = TRUE)[[1]]
-                err_idx <- grep("color: #e53935", lines, fixed = TRUE)
-                warn_idx <- grep("color: darkorange", lines, fixed = TRUE)
+                err_idx <- grep("class=\"log-err\"", lines, fixed = TRUE)
+                warn_idx <- grep("class=\"log-warn\"", lines, fixed = TRUE)
                 excl_idx <- grep("Unmatched:|Correct:", lines)
                 warn_idx <- setdiff(warn_idx, excl_idx)
                 n_err <- length(err_idx)
@@ -6949,7 +6950,8 @@ server <- function(
           rl$hits_summary,
           theme = theme,
           show_points = isTRUE(input$stats_boxplot_show_points),
-          show = input$stats_show_metric %||% "Correct"
+          show = input$stats_show_metric %||% "Correct",
+          fit_box = isTRUE(input$stats_boxplot_fit_box)
         )
       },
       filename_fn = function() {

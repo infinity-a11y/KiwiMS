@@ -1,4 +1,19 @@
 /* ==========================================================================
+   STATUS COLOURS
+   Warnings and errors on the light cards (and the mid-grey result cards):
+   dark text on a pale fill. The accents are for text on dark backgrounds
+   (tooltips, large values on the grey cards); conversion_main.R repeats them
+   for the inline tooltip styles.
+   ========================================================================== */
+$warn-text: #a34f00;
+$warn-fill: #fff3e2;
+$warn-border: #f0c08c;
+$warn-accent: #ffa53a;
+$err-text: #b3201c;
+$err-fill: #fde8e7;
+$err-accent: #ff6b66;
+
+/* ==========================================================================
    TARGET FILE SELECTOR
    ========================================================================== */
 .kiwi-file-selector {
@@ -167,6 +182,12 @@ sub {
 .result-warning sub {
   left: 0;
   margin-left: 0.05em;
+}
+
+/* The bold badge text sits tighter than running text; give the subscript
+   a little more room */
+.result-warning sub {
+  margin-left: 0.15em;
 }
 
 th {
@@ -3094,16 +3115,58 @@ div[data-value="Protein Conversion"] .tab-pane {
 }
 
 .protocol-stat-warn {
-  color: #a34f00;
-}
-
-/* The large count reads well in the tooltips' lighter amber */
-.protocol-stat-value.protocol-stat-warn {
-  color: #ffa53a;
+  color: $warn-text;
 }
 
 .protocol-stat-err {
+  color: $err-text;
+}
+
+/* The large values sit on the mid-grey cards: the lighter accents of the
+   tooltips read better there than the dark text colours */
+.protocol-stat-value.protocol-stat-warn {
+  color: $warn-accent;
+}
+
+.protocol-stat-value.protocol-stat-err {
+  color: $err-accent;
+}
+
+/* Thin small text in table cells needs weight (Proteoform Kinetics) */
+table .protocol-stat-warn {
+  font-weight: 600;
+}
+
+/* Conversion log lines (class set in conversion_functions.R). The sidebar
+   console keeps the plain colours; in the Protocol tab, on the grey card, the
+   message gets a pale fill like the other warnings. */
+.log-warn {
+  color: darkorange;
+}
+
+.log-err {
   color: #e53935;
+}
+
+.protocol-log-body {
+  .log-warn,
+  .log-err {
+    padding: 0 0.4em;
+    margin-left: -0.4em;
+    border-radius: 0.4em;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+
+  .log-warn {
+    background: $warn-fill;
+    color: $warn-text;
+  }
+
+  .log-err {
+    background: $err-fill;
+    color: $err-text;
+  }
 }
 
 /* Grid and flex children default to their content width; long warning
@@ -3542,10 +3605,10 @@ div[data-value="Protein Conversion"] .tab-pane {
   max-width: 100%;
   gap: 0.45em;
   padding: 0.05em 0.5em;
-  border: 1px solid #f0c08c;
+  border: 1px solid $warn-border;
   border-radius: 0.5em;
-  background: #fff3e2;
-  color: #a34f00;
+  background: $warn-fill;
+  color: $warn-text;
   font-weight: 600;
   cursor: help;
   white-space: nowrap;
@@ -4224,6 +4287,27 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 
 .conversion-sample-protein {
   font-weight: 400;
+
+  /* Quality values sit on the mid-grey card, where the plain warning colours
+     lose contrast: pale pill with dark text, as in the result-card badges.
+     No vertical padding or border, so the line spacing stays the same. */
+  .protocol-stat-warn,
+  .protocol-stat-err {
+    padding: 0 0.45em;
+    margin-left: -0.45em;
+    border-radius: 0.5em;
+    font-weight: 600;
+  }
+
+  .protocol-stat-warn {
+    background: $warn-fill;
+    color: $warn-text;
+  }
+
+  .protocol-stat-err {
+    background: $err-fill;
+    color: $err-text;
+  }
 }
 
 .conversion-sample-protein-box {

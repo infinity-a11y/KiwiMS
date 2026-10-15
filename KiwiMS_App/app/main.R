@@ -339,6 +339,438 @@ ui <- function(id) {
         });
       }
 
+      function kiwiWait(ms) {
+        return new Promise(function(resolve) { setTimeout(resolve, ms); });
+      }
+
+      // A 3D scene is drawn by WebGL onto a transparent canvas laid over its
+      // part of the plot. Draws a frame of it and reads it back at layout
+      // pixels, whatever ratio the canvas is drawn at: { px (RGBA), w, h,
+      // frame }, the frame being the canvas's box in the div's own pixels.
+      function kiwiScenePixels(div, key) {
+        var scene = div._fullLayout[key] && div._fullLayout[key]._scene;
+        var canvas = scene && ((scene.glplot && scene.glplot.canvas) || scene.canvas);
+        if (!canvas || !canvas.width) return null;
+        var page = div.getBoundingClientRect();
+        var box = canvas.getBoundingClientRect();
+        var w = Math.max(1, Math.round(box.width));
+        var h = Math.max(1, Math.round(box.height));
+        var probe = document.createElement('canvas');
+        probe.width = w;
+        probe.height = h;
+        var ctx = probe.getContext('2d', { willReadFrequently: true });
+        // The canvas only holds a frame until the browser has shown it, so
+        // draw one and read it in the same go, as Plotly's own toImage does.
+        if (scene.glplot && scene.glplot.redraw) scene.glplot.redraw();
+        ctx.drawImage(canvas, 0, 0, w, h);
+        var l = box.left - page.left, t = box.top - page.top;
+        return {
+          px: ctx.getImageData(0, 0, w, h).data, w: w, h: h,
+          frame: { left: l, top: t, right: l + w, bottom: t + h }
+        };
+      }
+
+      // Whatever is not transparent on the scene's canvas is the figure
+      // itself: lines, markers, grid and axis labels. Returns its box in the
+      // div's own pixels, along with the box of the canvas (frame), or null.
+      function kiwiSceneContentBox(div, key) {
+        var shot = kiwiScenePixels(div, key);
+        if (!shot) return null;
+        var w = shot.w, h = shot.h, px = shot.px;
+        var x0 = w, y0 = h, x1 = -1, y1 = -1;
+        for (var y = 0; y < h; y++) {
+          for (var x = 0; x < w; x++) {
+            if (px[(y * w + x) * 4 + 3] <= 8) continue;
+            if (x < x0) x0 = x;
+            if (x > x1) x1 = x;
+            if (y < y0) y0 = y;
+            y1 = y;
+          }
+        }
+        if (x1 < 0) return null;
+        var f = shot.frame;
+        return {
+          left: f.left + x0, top: f.top + y0, right: f.left + x1 + 1,
+          bottom: f.top + y1 + 1, frame: f
+        };
+      }
+
+      // The pixels that differ between two reads of the scene, as a 0/1 mask
+      function kiwiPixelDiff(a, b) {
+        var n = a.w * a.h, mask = new Uint8Array(n);
+        for (var i = 0; i < n; i++) {
+          var k = i * 4;
+          if (Math.abs(a.px[k] - b.px[k]) + Math.abs(a.px[k + 1] - b.px[k + 1]) +
+              Math.abs(a.px[k + 2] - b.px[k + 2]) + Math.abs(a.px[k + 3] - b.px[k + 3]) > 40)
+            mask[i] = 1;
+        }
+        return mask;
+      }
+
+      // Grows a mask by r pixels in every direction (a square neighbourhood)
+      function kiwiDilate(mask, w, h, r) {
+        var tmp = new Uint8Array(w * h), out = new Uint8Array(w * h);
+        for (var y = 0; y < h; y++) {
+          var run = -Infinity;
+          for (var x = 0; x < w; x++) {
+            if (mask[y * w + x]) run = x;
+            if (x - run <= r) tmp[y * w + x] = 1;
+          }
+          run = Infinity;
+          for (x = w - 1; x >= 0; x--) {
+            if (mask[y * w + x]) run = x;
+            if (run - x <= r) tmp[y * w + x] = 1;
+          }
+        }
+        for (x = 0; x < w; x++) {
+          run = -Infinity;
+          for (y = 0; y < h; y++) {
+            if (tmp[y * w + x]) run = y;
+            if (y - run <= r) out[y * w + x] = 1;
+          }
+          run = Infinity;
+          for (y = h - 1; y >= 0; y--) {
+            if (tmp[y * w + x]) run = y;
+            if (run - y <= r) out[y * w + x] = 1;
+          }
+        }
+        return out;
+      }
+
+      // Plotly places 3D tick labels and axis titles fixed distances out from
+      // their axes (tickPad, labelPad), whatever size they are drawn at, so
+      // at larger label sizes, or with long tick labels, the ticks run into
+      // the titles, and the tick labels of two axes into each other where
+      // the axes meet. Nothing in the layout reaches those distances, but the
+      // scene keeps them on its axes options, where a replot leaves them
+      // alone.
+      //
+      // How the pads work, as plotly's gl3d axes draw them: an axis's labels
+      // are pushed out at right angles to it, component j of that push
+      // scaled by pad[j] - so pad[j] moves the labels of every axis whose
+      // push has a j part, and never those of axis j itself. A title is
+      // pushed on from where its tick labels were pushed to, so it has to be
+      // measured with them in place: they are made transparent, not hidden.
+      //
+      // The labels are drawn a group at a time and compared pixel by pixel,
+      // a clash being any pixel of one within a gap of another. Each round
+      // tries growing each pad component and keeps the one that leaves the
+      // least clash - first among the tick labels of different axes, then
+      // between the titles and the tick labels - until nothing clashes, or
+      // no step helps any more.
+      //
+      // Where two axes meet, both their end labels are pushed the same way,
+      // and no pad parts them. What is left of such a clash is resolved by
+      // leaving out the clashing tick label of the axis that has more of
+      // them (the intensity axis's 0 rather than the first mass), through
+      // the axis's tickvals, and checking again.
+      //
+      // Resolves to whether anything moved.
+      function kiwiSeparateSceneLabels(div, key, depth) {
+        depth = depth || 0;
+        var scene = div._fullLayout[key] && div._fullLayout[key]._scene;
+        var opts = scene && scene.axesOptions;
+        if (!opts || !opts.labelPad || !opts.tickPad || !opts.tickColor ||
+            !opts.ticks || !scene.glplot || !scene.glplot.axes)
+          return Promise.resolve(false);
+        var ticksOn = opts.tickEnable.slice(), titlesOn = opts.labelEnable.slice();
+        var tickColors = opts.tickColor.map(function(c) { return c.slice(); });
+        var ALL = 3, NONE = -1;
+        // Draws the tick labels of one axis (or ALL, or NONE) and one title
+        function shoot(tickAxis, titleAxis) {
+          for (var i = 0; i < 3; i++) {
+            var c = tickColors[i];
+            var shown = tickAxis === ALL || tickAxis === i;
+            opts.tickColor[i] = [c[0], c[1], c[2], shown ? c[3] : 0];
+            opts.labelEnable[i] = i === titleAxis && titlesOn[i];
+          }
+          scene.glplot.axes.update(opts);
+          return kiwiScenePixels(div, key);
+        }
+        function overlap(a, b) {
+          var n = 0;
+          for (var p = 0; p < a.length; p++) if (a[p] === 1 && b[p] === 1) n++;
+          return n;
+        }
+        var moved = false, drop = null;
+        var bare, gap, step;
+        function relieve(pads, clash) {
+          var now = clash();
+          for (var round = 0; round < 16 && now > 0; round++) {
+            var best = -1, least = now;
+            for (var j = 0; j < 3; j++) {
+              pads[j] += step;
+              var c = clash();
+              pads[j] -= step;
+              if (c < least) { best = j; least = c; }
+            }
+            if (best < 0) break;
+            pads[best] += step;
+            now = least;
+            moved = true;
+          }
+          return now;
+        }
+        function ownTicks() {
+          return [0, 1, 2].map(function(a) {
+            return ticksOn[a] ? kiwiPixelDiff(shoot(a, NONE), bare) : null;
+          });
+        }
+        // The pairs of axes whose tick labels clash, and by how much
+        function tickPairs(own) {
+          var pairs = [];
+          for (var i = 0; i < 3; i++) {
+            if (!own[i]) continue;
+            var near = null;
+            for (var k = i + 1; k < 3; k++) {
+              if (!own[k]) continue;
+              near = near || kiwiDilate(own[i], bare.w, bare.h, gap);
+              var n = overlap(near, own[k]);
+              if (n > 0) pairs.push({ a: i, b: k, n: n });
+            }
+          }
+          return pairs;
+        }
+        // The tickvals that leave out the labels of one axis clashing with
+        // another's - of the pair, the axis with more labels
+        function dropClashing(own, pair) {
+          var d = opts.ticks[pair.a].length > opts.ticks[pair.b].length ? pair.a : pair.b;
+          var other = kiwiDilate(own[d === pair.a ? pair.b : pair.a], bare.w, bare.h, gap);
+          // The scene works its ticks out from the axis afresh on every
+          // redraw, so each label is drawn alone by giving the axis that one
+          // tick for the moment
+          var axis = div._fullLayout[key][['xaxis', 'yaxis', 'zaxis'][d]];
+          var saved = { tickmode: axis.tickmode, tickvals: axis.tickvals, ticktext: axis.ticktext };
+          var ticks = opts.ticks[d].slice(), keep = [];
+          try {
+            ticks.forEach(function(tick) {
+              var value = tick.x / scene.dataScale[d];
+              axis.tickmode = 'array';
+              axis.tickvals = [value];
+              axis.ticktext = [tick.text];
+              if (overlap(kiwiPixelDiff(shoot(d, NONE), bare), other) === 0)
+                keep.push(value);
+            });
+          } finally {
+            axis.tickmode = saved.tickmode;
+            axis.tickvals = saved.tickvals;
+            axis.ticktext = saved.ticktext;
+          }
+          if (keep.length === ticks.length || keep.length < 2) return null;
+          var update = {};
+          update[key + '.' + ['xaxis', 'yaxis', 'zaxis'][d] + '.tickvals'] = keep;
+          return update;
+        }
+        try {
+          bare = shoot(NONE, NONE);
+          if (!bare) return Promise.resolve(false);
+          var size = Math.max.apply(null, opts.tickSize.concat(opts.labelSize));
+          gap = Math.max(3, Math.round(0.3 * size));
+          step = Math.max(2, Math.round(0.25 * size));
+          var left = relieve(opts.tickPad, function() {
+            return tickPairs(ownTicks()).reduce(function(n, p) { return n + p.n; }, 0);
+          });
+          if (left > 0 && depth < 3) {
+            var own = ownTicks(), pairs = tickPairs(own);
+            if (pairs.length) drop = dropClashing(own, pairs[0]);
+          }
+          var ticks = kiwiDilate(kiwiPixelDiff(shoot(ALL, NONE), bare), bare.w, bare.h, gap);
+          relieve(opts.labelPad, function() {
+            var n = 0;
+            for (var i = 0; i < 3; i++) {
+              if (!titlesOn[i] || !opts.labels[i]) continue;
+              n += overlap(kiwiPixelDiff(shoot(NONE, i), bare), ticks);
+            }
+            return n;
+          });
+        } finally {
+          for (var j = 0; j < 3; j++) {
+            opts.tickColor[j] = tickColors[j];
+            opts.labelEnable[j] = titlesOn[j];
+          }
+          scene.glplot.axes.update(opts);
+          if (scene.glplot.redraw) scene.glplot.redraw();
+        }
+        if (!drop) return Promise.resolve(moved);
+        return Plotly.relayout(div, drop).then(function() {
+          return kiwiWait(300);
+        }).then(function() {
+          return kiwiSeparateSceneLabels(div, key, depth + 1);
+        }).then(function() { return true; });
+      }
+
+      // Points the scene's camera from `distance` away along the direction it
+      // already looks in, at a target panned by dx/dy pixels on screen.
+      // Camera and target move together, so the view direction - and a
+      // rotation set on screen - is kept.
+      function kiwiMoveCamera(div, key, distance, dx, dy, frameHeight) {
+        var cam = div._fullLayout[key]._scene.getCamera();
+        var c = cam.center, e = cam.eye, u = cam.up;
+        function cross(a, b) {
+          return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2],
+                  a[0] * b[1] - a[1] * b[0]];
+        }
+        function unit(a) {
+          var n = Math.sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]) || 1;
+          return [a[0] / n, a[1] / n, a[2] / n];
+        }
+        var toward = [c.x - e.x, c.y - e.y, c.z - e.z];
+        var dist = Math.sqrt(toward[0] * toward[0] + toward[1] * toward[1] +
+                             toward[2] * toward[2]);
+        var look = unit(toward);
+        var right = unit(cross(look, [u.x, u.y, u.z]));
+        var upScreen = unit(cross(right, look));
+        // Scene units per pixel at the target's depth, for the 45 degree
+        // vertical field of view plotly's 3D camera uses
+        var perPx = 2 * dist * Math.tan(Math.PI / 8) / frameHeight;
+        var nc = [0, 1, 2].map(function(i) {
+          return [c.x, c.y, c.z][i] + (dx * right[i] - dy * upScreen[i]) * perPx;
+        });
+        var update = {};
+        update[key + '.camera'] = {
+          up: u, projection: cam.projection,
+          center: { x: nc[0], y: nc[1], z: nc[2] },
+          eye: {
+            x: nc[0] - look[0] * distance,
+            y: nc[1] - look[1] * distance,
+            z: nc[2] - look[2] * distance
+          }
+        };
+        return Plotly.relayout(div, update).then(function() { return kiwiWait(300); });
+      }
+
+      function kiwiCameraDistance(div, key) {
+        var cam = div._fullLayout[key]._scene.getCamera();
+        var c = cam.center, e = cam.eye;
+        return Math.sqrt(Math.pow(c.x - e.x, 2) + Math.pow(c.y - e.y, 2) +
+                         Math.pow(c.z - e.z, 2));
+      }
+
+      // Centres the drawn scene in its frame and sets the camera's distance
+      // so that it fills 96% of the frame on its tightest side. Under
+      // perspective neither the pan nor the zoom is exact, so each step is
+      // measured again. Anything reaching the edge of the frame may be cut
+      // off there, so the distance is bracketed between the closest one known
+      // to fit and the farthest one known to reach the edge: a step never
+      // goes back past either, which is what keeps the search from swinging
+      // between the two, and it always ends on a distance that fits.
+      function kiwiZoomToFit(div, key, round, bracket) {
+        bracket = bracket || { fit: Infinity, clip: 0 };
+        var box = kiwiSceneContentBox(div, key);
+        if (!box) return Promise.resolve(null);
+        var f = box.frame;
+        var fw = f.right - f.left, fh = f.bottom - f.top;
+        var d = kiwiCameraDistance(div, key);
+        var touches = box.left <= f.left + 1 || box.top <= f.top + 1 ||
+                      box.right >= f.right - 1 || box.bottom >= f.bottom - 1;
+        var dx = 0, dy = 0, target;
+        if (touches) {
+          bracket.clip = Math.max(bracket.clip, d);
+          target = isFinite(bracket.fit) ? (d + bracket.fit) / 2 : d / 0.7;
+        } else {
+          bracket.fit = Math.min(bracket.fit, d);
+          // How far the drawing's centre sits from the frame's, in pixels
+          dx = (box.left + box.right - f.left - f.right) / 2;
+          dy = (box.top + box.bottom - f.top - f.bottom) / 2;
+          var zoom = 0.96 * Math.min(fw / (box.right - box.left),
+                                     fh / (box.bottom - box.top));
+          target = Math.max(d / zoom, (d + bracket.clip) / 2);
+          var settled = Math.abs(target / d - 1) < 0.02 &&
+                        Math.abs(dx) < 0.01 * fw && Math.abs(dy) < 0.01 * fh;
+          if (settled || round >= 10) return Promise.resolve(box);
+        }
+        if (round >= 10) {
+          // Out of steps on a distance that reaches the edge: go back to the
+          // closest one that fitted, or well clear of this one
+          var safe = isFinite(bracket.fit) ? bracket.fit : d / 0.5;
+          return kiwiMoveCamera(div, key, safe, 0, 0, fh).then(function() {
+            return kiwiSceneContentBox(div, key);
+          });
+        }
+        return kiwiMoveCamera(div, key, target, dx, dy, fh).then(function() {
+          return kiwiZoomToFit(div, key, round + 1, bracket);
+        });
+      }
+
+      // The cubic spectrum's export. The legend gets a gutter of its own at
+      // the right of the canvas, the axis labels are moved clear of each
+      // other, the camera is zoomed to fill what is left, and the legend is
+      // then pulled in beside the drawn scene, top-aligned with it. Resolves
+      // to the scene's content box (kiwiSceneContentBox).
+      function kiwiFitCubic(div) {
+        var key = (div._fullLayout._subplots.gl3d || [])[0];
+        if (!key) return Promise.resolve(null);
+        var hasLegend = div._fullLayout.showlegend !== false &&
+                        !!div.querySelector('.infolayer .legend');
+        var pad = kiwiLegendSafetyPad(div);
+        // The legend, the gap before it, and room for kiwiFitLegendClip
+        var gutter = hasLegend ? Math.ceil(kiwiLegendWidth(div) + 3 * pad) : 0;
+        var start = gutter > 0 ?
+          Plotly.relayout(div, { 'margin.r': gutter }).then(function() { return kiwiWait(300); }) :
+          Promise.resolve();
+        return start.then(function() {
+          return kiwiSeparateSceneLabels(div, key);
+        }).then(function() {
+          return kiwiZoomToFit(div, key, 0);
+        }).then(function(box) {
+          // The projection of the axes shifts a little as the camera moves,
+          // so the labels are checked again at the final view, and the fit
+          // redone if any had to move.
+          return kiwiSeparateSceneLabels(div, key).then(function(moved) {
+            return moved ? kiwiZoomToFit(div, key, 0) : box;
+          });
+        }).then(function(box) {
+          if (!box || !hasLegend) return box;
+          var size = div._fullLayout._size;
+          return Plotly.relayout(div, {
+            'legend.x': (box.right + pad - size.l) / size.w,
+            'legend.xanchor': 'left',
+            'legend.y': 1 - (box.top - size.t) / size.h,
+            'legend.yanchor': 'top'
+          }).then(function() { return box; });
+        });
+      }
+
+      // The part of the canvas to keep: the drawn scene and the legend, with
+      // `pad` pixels all round, in the div's own pixels.
+      function kiwiCubicCrop(div, box, pad) {
+        var W = div._fullLayout.width, H = div._fullLayout.height;
+        if (!box) return { x: 0, y: 0, w: W, h: H };
+        var l = box.left, t = box.top, r = box.right, b = box.bottom;
+        var legend = div._fullLayout.showlegend !== false &&
+                     div.querySelector('.infolayer .legend .scrollbox');
+        if (legend) {
+          var page = div.getBoundingClientRect();
+          var lb = legend.getBoundingClientRect();
+          if (lb.width && lb.height) {
+            l = Math.min(l, lb.left - page.left);
+            t = Math.min(t, lb.top - page.top);
+            r = Math.max(r, lb.right - page.left);
+            b = Math.max(b, lb.bottom - page.top);
+          }
+        }
+        var x = Math.max(0, Math.floor(l - pad));
+        var y = Math.max(0, Math.floor(t - pad));
+        return {
+          x: x, y: y,
+          w: Math.min(W, Math.ceil(r + pad)) - x,
+          h: Math.min(H, Math.ceil(b + pad)) - y
+        };
+      }
+
+      // Cuts the serialised figure down to `crop` by moving its viewBox. The
+      // 3D scene sits in it as an image placed in absolute pixels, so it is
+      // cut along with everything else.
+      function kiwiCropSVG(svg, crop) {
+        var doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+        var root = doc.documentElement;
+        if (!root || root.nodeName !== 'svg') return svg;
+        root.setAttribute('viewBox', [crop.x, crop.y, crop.w, crop.h].join(' '));
+        root.setAttribute('width', crop.w);
+        root.setAttribute('height', crop.h);
+        return new XMLSerializer().serializeToString(doc);
+      }
+
       // Plotly.downloadImage does NOT serialise the plot it is handed: it
       // clones the figure into a fresh element, re-plots it from layout/data and
       // serialises the clone. Anything written into the rendered SVG - the
@@ -348,8 +780,9 @@ ui <- function(id) {
       // Snapshot.toSVG serialises the node it is given, so this hands it the
       // node that was actually measured and adjusted. It bakes any WebGL canvas
       // into the SVG as a raster image on the way, so 3D scenes survive too.
-      function kiwiSaveImage(div, format, width, height, scale, filename) {
+      function kiwiSaveImage(div, format, width, height, scale, filename, crop) {
         var svg = Plotly.Snapshot.toSVG(div, format, 1);
+        if (crop) svg = kiwiCropSVG(svg, crop);
         if (format === 'svg') {
           kiwiSaveBlob(new Blob([svg], { type: 'image/svg+xml' }), filename + '.svg');
           return Promise.resolve();
@@ -404,6 +837,33 @@ ui <- function(id) {
         // them onto each other at some scales.
         function roundW(v) { return Math.round(v * 10) / 10; }
         var fig = JSON.parse(JSON.stringify(msg.json));
+        // The image is drawn from the SVG in isolation, where none of the web
+        // fonts the page loads are available - the app loads Open Sans, the
+        // first family in plotly's default list - so the browser falls back
+        // to the next one, Verdana, which runs some 16% wider. Everything was
+        // measured in the page's font and drawn in the wider one: the end of
+        // a long legend entry ran off the canvas however much room had been
+        // left for it. Dropping the page's web fonts from every family list
+        // makes the export measure in the font it will be drawn in.
+        var webFonts = {};
+        if (document.fonts && document.fonts.forEach)
+          document.fonts.forEach(function(face) {
+            webFonts[String(face.family).replace(/['\"]/g, '').trim().toLowerCase()] = true;
+          });
+        function localFamily(family) {
+          var kept = String(family).split(',').filter(function(name) {
+            return !webFonts[name.replace(/['\"]/g, '').trim().toLowerCase()];
+          });
+          return kept.length ? kept.join(',').trim() : 'verdana, arial, sans-serif';
+        }
+        fig.layout.font = fig.layout.font || {};
+        fig.layout.font.family = fig.layout.font.family ||
+          '\"Open Sans\", verdana, arial, sans-serif';
+        (function localFonts(obj) {
+          if (!obj || typeof obj !== 'object') return;
+          if (typeof obj.family === 'string') obj.family = localFamily(obj.family);
+          Object.values(obj).forEach(localFonts);
+        })({ layout: fig.layout, data: fig.data });
         if (_kiwiPendingZoomRange) {
           Object.keys(_kiwiPendingZoomRange).forEach(function(axisKey) {
             if (!fig.layout[axisKey]) return;
@@ -414,6 +874,18 @@ ui <- function(id) {
           });
           _kiwiPendingZoomRange = null;
         }
+        // On screen the cubic spectrum's legend overlays its scene, and the
+        // figure nudges the camera sideways to clear it (camera.center.x,
+        // spectrum_legend_camera_x in R). The export gives the legend a
+        // gutter of its own, so that nudge only pushes the spectrum off
+        // centre. Read it off the figure as built, before the on-screen
+        // camera replaces it.
+        var legendDodge = {};
+        Object.keys(fig.layout).forEach(function(key) {
+          if (!/^scene[0-9]*$/.test(key)) return;
+          var cam = fig.layout[key] && fig.layout[key].camera;
+          legendDodge[key] = (cam && cam.center && cam.center.x) || 0;
+        });
         if (_kiwiPendingCamera) {
           Object.keys(_kiwiPendingCamera).forEach(function(sceneKey) {
             if (!fig.layout[sceneKey]) return;
@@ -582,19 +1054,31 @@ ui <- function(id) {
             if (axis.type !== 'category' && typeof axis.nticks !== 'number')
               axis.nticks = 5;
           });
-          // multiple_spectra() sets no margin, so the figure falls back to
-          // Plotly's defaults - a fixed pixel count that does not grow with
-          // the labels and does not know how big this canvas is. The tick
-          // labels at the ends of the mass axis sit right on the scene edge,
-          // so as soon as they are scaled up they run past it and come out
-          // clipped mid-glyph. Give the figure room in proportion to the
-          // labels it is actually drawing; an explicit margin from R still
-          // wins.
-          var pad = Math.round(90 * scene3DScale);
-          fig.layout.margin = Object.assign(
-            { l: pad, r: pad, t: pad, b: pad, pad: 0 },
-            fig.layout.margin || {}
-          );
+          // How much of the scene's box the projected cube fills depends on
+          // the camera, so no fixed margin fits: Plotly's defaults left the
+          // spectrum floating in empty space, or its edge labels clipped
+          // mid-glyph once they were scaled up. kiwiFitCubic zooms the
+          // camera to the scene's box and the image is cropped to what was
+          // drawn, so the scene gets the whole canvas here - including the
+          // margins plotly's R package fills in by default. Nor may plotly
+          // grow them itself: moving a legend taller than the canvas made it
+          // push the bottom margin out, which shrank the scene after it had
+          // been fitted.
+          fig.layout.margin = { l: 0, r: 0, t: 0, b: 0, pad: 0, autoexpand: false };
+          if (fig.layout.showlegend !== false) {
+            Object.keys(legendDodge).forEach(function(key) {
+              var cam = fig.layout[key].camera = fig.layout[key].camera || {};
+              cam.center = Object.assign({ x: 0, y: 0, z: 0 }, cam.center);
+              cam.center.x -= legendDodge[key];
+            });
+          }
+          // The scene reaches the file as a raster of its WebGL canvas, which
+          // is drawn at the screen's pixel ratio - upscaled, and soft, in an
+          // export at twice that. Draw it at the export's own scale instead,
+          // capped where the canvas grows past what WebGL reliably allocates.
+          fig.config = Object.assign({}, fig.config, {
+            plotGlPixelRatio: Math.max(window.devicePixelRatio || 1, Math.min(q.scale, 2))
+          });
         }
 
         // Plotly hard-clamps a legend key symbol to 16px whatever the trace's
@@ -648,23 +1132,33 @@ ui <- function(id) {
           div.className = 'plotly-dl-offscreen';
         }
         document.body.appendChild(div);
+        var outScale = msg.format === 'svg' ? 1 : q.scale;
         Plotly.newPlot(div, fig.data, fig.layout, fig.config || {}).then(function() {
           // For WebGL/3D, wait for the GPU to finish rendering before screenshotting.
           return new Promise(function(resolve) { setTimeout(resolve, isCubicSpectra ? 800 : 0); });
         }).then(function() {
-          return kiwiFitPaper(div);
-        }).then(function() {
-          return kiwiFitSideTables(div, q.height);
-        }).then(function(finalHeight) {
-          exportHeight = finalHeight;
-          return kiwiFitLegend(div, exportWidth);
-        }).then(function(finalWidth) {
-          kiwiScaleLegendSymbols(div, legendSymbolScale);
-          // After the symbols, so the clip is fitted to the final contents.
-          kiwiFitLegendClip(div);
-          return kiwiSaveImage(
-            div, msg.format, finalWidth, exportHeight,
-            msg.format === 'svg' ? 1 : q.scale, msg.filename);
+          if (isCubicSpectra) {
+            return kiwiFitCubic(div).then(function(sceneBox) {
+              kiwiScaleLegendSymbols(div, legendSymbolScale);
+              kiwiFitLegendClip(div);
+              // A margin of 3% of the canvas height all round what was drawn
+              var crop = kiwiCubicCrop(div, sceneBox, Math.round(0.03 * q.height));
+              return kiwiSaveImage(
+                div, msg.format, crop.w, crop.h, outScale, msg.filename, crop);
+            });
+          }
+          return kiwiFitPaper(div).then(function() {
+            return kiwiFitSideTables(div, q.height);
+          }).then(function(finalHeight) {
+            exportHeight = finalHeight;
+            return kiwiFitLegend(div, exportWidth);
+          }).then(function(finalWidth) {
+            kiwiScaleLegendSymbols(div, legendSymbolScale);
+            // After the symbols, so the clip is fitted to the final contents.
+            kiwiFitLegendClip(div);
+            return kiwiSaveImage(
+              div, msg.format, finalWidth, exportHeight, outScale, msg.filename);
+          });
         }).catch(function(err) {
           // Without this a failed export leaves the busy cursor up for good and
           // the offscreen figure attached to the page, with nothing said.

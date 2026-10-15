@@ -4593,14 +4593,17 @@ log_mass_ambiguities <- function(amb, tolerance) {
 
 .col_warn <- function(x) {
   if (!is.null(shiny::getDefaultReactiveDomain())) {
-    paste0('<span style="color: darkorange; font-weight: bold;">', x, "</span>")
+    # Colour by class (see .log-warn in main.scss): the Protocol tab and the
+    # sidebar console show the log on different backgrounds, and the Alerts
+    # and Warnings counts find the lines by this class
+    paste0('<span class="log-warn" style="font-weight: bold;">', x, "</span>")
   } else {
     paste0("\033[33m", x, "\033[39m")
   }
 }
 .col_err <- function(x) {
   if (!is.null(shiny::getDefaultReactiveDomain())) {
-    paste0('<span style="color: #e53935; font-weight: bold;">', x, "</span>")
+    paste0('<span class="log-err" style="font-weight: bold;">', x, "</span>")
   } else {
     paste0("\033[31m", x, "\033[39m")
   }
@@ -4957,9 +4960,9 @@ log_kinact_ki_warning <- function(msg, detail = NULL) {
   message(paste(lines, collapse = "\n"))
 }
 
-# Log (Kᵢ/kᵢₙₐ꜀ₜ) analysis initiation
+# Log (kinact/KI) analysis initiation
 log_kinact_ki_analysis <- function() {
-  message(paste("  │\n", " └─ Infer second-order rate constant Kᵢ/kᵢₙₐ꜀ₜ"))
+  message(paste("  │\n", " └─ Infer second-order rate constant kinact/KI"))
 }
 
 # Log kinact/KI results
@@ -5000,23 +5003,23 @@ log_kinact_ki_results <- function(results, units) {
     if (results$Status == "saturated") {
       c(
         sprintf(
-          "     ├─ kᵢₙₐ꜀ₜ = %s ± %s %s⁻¹",
+          "     ├─ kinact = %s ± %s %s⁻¹",
           fmt_log(results$Params[1, 1]),
           fmt_log(results$Params[1, 2]),
           units[["Time"]]
         ),
         sprintf(
-          "     ├─ Kᵢ     = %s ± %s %s",
+          "     ├─ KI     = %s ± %s %s",
           fmt_log(results$Params[2, 1]),
           fmt_log(results$Params[2, 2]),
           units[["Concentration"]]
         )
       )
     } else {
-      "     ├─ kᵢₙₐ꜀ₜ, Kᵢ = not determinable"
+      "     ├─ kinact, KI = not determinable"
     },
     sprintf(
-      "     └─ kᵢₙₐ꜀ₜ/Kᵢ = %s ± %s %s⁻¹ %s⁻¹%s",
+      "     └─ kinact/KI = %s ± %s %s⁻¹ %s⁻¹%s",
       fmt_log(ratio[["Estimate"]]),
       fmt_log(ratio[["Std. Error"]]),
       units[["Concentration"]],
@@ -5362,7 +5365,7 @@ add_kobs_binding_result <- function(
 # Function to add kinact/KI results to result list
 #' @export
 add_kinact_ki_result <- function(result_list, units) {
-  # Log (Kᵢ/kᵢₙₐ꜀ₜ) analysis initiation
+  # Log (kinact/KI) analysis initiation
   log_kinact_ki_analysis()
 
   # Calculcate kinact/KI from binding/kobs result
@@ -8668,6 +8671,40 @@ peaks_trace_indices <- function(built_plot, tag = peaks_trace_tag) {
 #' @export
 spectrum_legend_camera_x <- 0.33
 
+# The marker rows of a spectra legend (name, symbol): each protein by name,
+# then each compound by name when the compounds carry the colours. Coloured
+# by anything else, every compound's row would show the same uncoloured
+# shape - a list as long as the compounds that tells them apart by nothing -
+# so compounds sharing a shape share one "Compounds" row instead. A shape
+# only one compound has still names it.
+spectrum_marker_entries <- function(peaks_data, color_variable) {
+  entries <- dplyr::distinct(
+    peaks_data[!is.na(peaks_data$name), c("name", "symbol"), drop = FALSE]
+  )
+  # radix: the C-locale order dplyr::arrange() gives, as elsewhere
+  entries <- entries[order(entries$name, method = "radix"), , drop = FALSE]
+  proteins <- entries[entries$symbol == "diamond", , drop = FALSE]
+  compounds <- entries[entries$symbol != "diamond", , drop = FALSE]
+  if (!identical(color_variable, "Compounds") && nrow(compounds)) {
+    shared <- names(which(table(compounds$symbol) > 1))
+    collapsed <- if (length(shared)) {
+      data.frame(
+        name = if (length(unique(compounds$symbol)) == 1) {
+          "Compounds"
+        } else {
+          paste0("Compounds (", gsub("-", " ", shared), ")")
+        },
+        symbol = shared
+      )
+    }
+    compounds <- rbind(
+      compounds[!compounds$symbol %in% shared, , drop = FALSE],
+      collapsed
+    )
+  }
+  rbind(proteins, compounds)
+}
+
 # The three settings below only change how the figure is presented, never the
 # data behind it, so they are pushed to the figure that is already on screen
 # (plotlyProxy, or plain JS where the legend state matters) rather than costing
@@ -9567,10 +9604,7 @@ multiple_spectra <- function(
     )
 
     if (nrow(peaks_data) > 0 && !time) {
-      name_entries <- peaks_data |>
-        dplyr::filter(!is.na(name)) |>
-        dplyr::distinct(name, symbol) |>
-        dplyr::arrange(dplyr::desc(symbol == "diamond"), name)
+      name_entries <- spectrum_marker_entries(peaks_data, color_variable)
 
       # Marker symbols are listed without group titles: the symbol and name
       # say what each one marks, and a "Compounds" title would also seem to
@@ -9578,11 +9612,11 @@ multiple_spectra <- function(
       for (i in seq_len(nrow(name_entries))) {
         entry_name <- name_entries$name[i]
         sym <- name_entries$symbol[i]
-        first_peak <- peaks_data[peaks_data$name == entry_name, ][1, ]
         is_protein <- sym == "diamond"
         lg <- legend_key_group(if (is_protein) "proteins" else "compounds")
         # Coloured by compound, a compound's row shows its colour and shape:
-        # the legend is where the colours are named
+        # the legend is where the colours are named. Otherwise it shows the
+        # shape in the font colour, filled and outlined like the peaks.
         chip_color <- if (
           !is_protein &&
             identical(color_variable, "Compounds") &&
@@ -9602,12 +9636,9 @@ multiple_spectra <- function(
           legendgroup = lg,
           marker = list(
             color = chip_color %||% font_color,
-            symbol = if (is.null(chip_color)) paste0(sym, "-open") else sym,
+            symbol = sym,
             size = 8,
-            line = list(
-              color = inv_color,
-              width = if (is.null(chip_color)) 0 else 1
-            )
+            line = list(color = inv_color, width = 1)
           ),
           visible = symbols_show,
           meta = peaks_trace_tag,
@@ -9806,10 +9837,7 @@ multiple_spectra <- function(
     )
 
     if (nrow(peaks_data) > 0) {
-      name_entries <- peaks_data |>
-        dplyr::filter(!is.na(name)) |>
-        dplyr::distinct(name, symbol) |>
-        dplyr::arrange(dplyr::desc(symbol == "diamond"), name)
+      name_entries <- spectrum_marker_entries(peaks_data, color_variable)
 
       # Marker symbols are listed without group titles: the symbol and name
       # say what each one marks, and a "Compounds" title would also seem to
@@ -9817,11 +9845,10 @@ multiple_spectra <- function(
       for (i in seq_len(nrow(name_entries))) {
         entry_name <- name_entries$name[i]
         sym <- name_entries$symbol[i]
-        first_peak <- peaks_data[peaks_data$name == entry_name, ][1, ]
         is_protein <- sym == "diamond"
         lg <- legend_key_group(if (is_protein) "proteins" else "compounds")
-        # Coloured by compound, a compound's row shows its colour and shape:
-        # the legend is where the colours are named
+        # As in the cubic branch: the compound's colour when it has one,
+        # otherwise the font colour, always filled and outlined like the peaks
         chip_color <- if (
           !is_protein &&
             identical(color_variable, "Compounds") &&
@@ -9843,16 +9870,9 @@ multiple_spectra <- function(
           legendgroup = lg,
           marker = list(
             color = chip_color %||% font_color,
-            symbol = if (is_protein || !is.null(chip_color)) {
-              sym
-            } else {
-              paste0(sym, "-open")
-            },
+            symbol = sym,
             size = 8,
-            line = list(
-              color = inv_color,
-              width = if (is.null(chip_color)) 0 else 1
-            )
+            line = list(color = inv_color, width = 1)
           ),
           visible = symbols_show,
           meta = peaks_trace_tag,
@@ -12673,54 +12693,8 @@ prot_compound_distribution <- function(
       )
     }
 
-    # Total % binding annotation above each (Cmp Name, Sample) bar stack
-    totals_cmp_grp <- tbl |>
-      dplyr::group_by(`Cmp Name`, Group) |>
-      dplyr::summarize(
-        total_val = sum(as.numeric(as.character(`Binding [%]`))),
-        .groups = "drop"
-      )
-
-    cmp_levels <- levels(tbl$`Cmp Name`)
-
-    if (nrow(totals_cmp_grp) <= 30) {
-      annots <- vector("list", nrow(totals_cmp_grp))
-      for (j in seq_len(nrow(totals_cmp_grp))) {
-        tot_row <- totals_cmp_grp[j, ]
-        g <- tot_row$Group[[1]]
-        local_n <- compound_local_n_map[[as.character(tot_row$`Cmp Name`[[1]])]]
-        local_cluster_width <- local_n *
-          bar_width +
-          max(0, local_n - 1) * group_gap
-        local_i <- local_i_map$local_i[
-          local_i_map$`Cmp Name` == as.character(tot_row$`Cmp Name`[[1]]) &
-            local_i_map$Group == g
-        ]
-        off <- -local_cluster_width / 2 + local_i * (bar_width + group_gap)
-        cmp_idx <- which(cmp_levels == as.character(tot_row$`Cmp Name`[[1]])) -
-          1L
-        annots[[j]] <- list(
-          x = cmp_idx + off + bar_width / 2,
-          y = tot_row$total_val[[1]],
-          text = paste0(sprintf("%.2f", tot_row$total_val[[1]]), "%"),
-          xref = "x",
-          yref = "y",
-          xanchor = "center",
-          yanchor = "bottom",
-          showarrow = FALSE,
-          font = list(color = axis_color, size = 12),
-          yshift = 4
-        )
-      }
-      bar_chart <- bar_chart |>
-        plotly::layout(
-          xaxis = list(title = list(text = NULL)),
-          annotations = annots
-        )
-    } else {
-      bar_chart <- bar_chart |>
-        plotly::layout(xaxis = list(title = list(text = NULL)))
-    }
+    bar_chart <- bar_chart |>
+      plotly::layout(xaxis = list(title = list(text = NULL)))
   } else {
     bar_chart <- plotly::plot_ly(data = tbl) |>
       plotly::add_trace(
@@ -12753,36 +12727,6 @@ prot_compound_distribution <- function(
         marker = list(line = list(color = axis_color, width = 1)),
         showlegend = FALSE
       )
-
-    if (length(tbl$`Sample ID`) <= 20) {
-      totals <- dplyr::group_by(tbl, `Sample ID`) |>
-        dplyr::summarize(
-          total_val = sum(as.numeric(as.character(`Binding [%]`)))
-        )
-      bar_chart <- bar_chart |>
-        plotly::add_trace(
-          data = totals,
-          x = ~`Sample ID`,
-          y = ~total_val,
-          type = 'scatter',
-          mode = 'text',
-          text = ~ paste0(sprintf("%.2f", total_val), "%"),
-          textposition = 'top center',
-          showlegend = FALSE,
-          hoverinfo = 'none',
-          inherit = FALSE,
-          textfont = list(
-            color = axis_color,
-            size = if (length(tbl$`Sample ID`) <= 8) {
-              16
-            } else if (length(tbl$`Sample ID`) <= 16) {
-              14
-            } else {
-              12
-            }
-          )
-        )
-    }
 
     bar_chart <- bar_chart |>
       plotly::layout(
@@ -13435,7 +13379,8 @@ stats_boxplot <- function(
   hits_summary,
   theme = "light",
   show_points = TRUE,
-  show = "Correct"
+  show = "Correct",
+  fit_box = FALSE
 ) {
   df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
 
@@ -13565,15 +13510,26 @@ stats_boxplot <- function(
     )
   )
 
-  if (show_points) {
-    x_jit <- stats::runif(nrow(df), -box_half_width, box_half_width)
+  # Without Show Points the samples beyond the whiskers are still drawn, as
+  # outliers on the box's centre line (Tukey's box plot); the axis spans them,
+  # and was left empty below the whisker while they were hidden
+  is_outlier <- metric_vals_bp < lo_fence_bp | metric_vals_bp > hi_fence_bp
+  pt_idx <- if (show_points) seq_len(nrow(df)) else which(is_outlier)
+  if (length(pt_idx) > 0) {
+    x_pts <- if (show_points) {
+      stats::runif(length(pt_idx), -box_half_width, box_half_width)
+    } else {
+      rep(0, length(pt_idx))
+    }
     p <- plotly::plot_ly(
       type = "scatter",
       mode = "markers",
-      x = x_jit,
-      y = metric_vals_bp,
-      text = df$Sample,
-      customdata = df$Sample,
+      x = x_pts,
+      y = metric_vals_bp[pt_idx],
+      # I(): a single outlier would otherwise go out as a scalar, which the
+      # hover showed as a literal "%{text}"
+      text = I(df$Sample[pt_idx]),
+      customdata = I(df$Sample[pt_idx]),
       hovertemplate = hover_tmpl,
       showlegend = FALSE,
       hoverlabel = list(
@@ -13609,9 +13565,49 @@ stats_boxplot <- function(
     )
   }
 
-  # The axis spans the data, so the box uses the plot's full height; the label
-  # spacing below is a share of that axis
-  y_range_bp <- data_axis_range(metric_vals_bp)
+  # The axis spans the data (box, whiskers and outliers), or with Fit to Box
+  # only the whiskers and the mean; the label spacing below is a share of it
+  y_range_bp <- if (fit_box && is.finite(lo_fence_bp)) {
+    data_axis_range(c(lo_fence_bp, hi_fence_bp, mean_bp))
+  } else {
+    data_axis_range(metric_vals_bp)
+  }
+
+  # Samples the fitted axis leaves out are counted in the margin above or
+  # below the plot, so a zoomed box does not pass for the whole data
+  off_scale_annots <- list()
+  if (fit_box) {
+    below <- metric_vals_bp[metric_vals_bp < y_range_bp[1]]
+    above <- metric_vals_bp[metric_vals_bp > y_range_bp[2]]
+    off_scale_note <- function(vals, side) {
+      if (length(vals) == 0) {
+        return(NULL)
+      }
+      list(
+        x = 1,
+        xref = "paper",
+        xanchor = "right",
+        y = if (side == "below") 0 else 1,
+        yref = "paper",
+        yanchor = if (side == "below") "top" else "bottom",
+        text = sprintf(
+          "%s %d sample%s %s the axis (%s %.2f%%)",
+          if (side == "below") "▾" else "▴",
+          length(vals),
+          if (length(vals) == 1) "" else "s",
+          side,
+          if (side == "below") "lowest" else "highest",
+          if (side == "below") min(vals) else max(vals)
+        ),
+        showarrow = FALSE,
+        font = list(color = font_color, size = 10)
+      )
+    }
+    off_scale_annots <- Filter(
+      Negate(is.null),
+      list(off_scale_note(below, "below"), off_scale_note(above, "above"))
+    )
+  }
 
   # Statistics beside the box, each at the height of the line it describes.
   # Statistics equal at the shown precision share one label ("Median = Q3").
@@ -13689,6 +13685,7 @@ stats_boxplot <- function(
     label_ys,
     label_text
   ))
+  bp_annots <- c(bp_annots, off_scale_annots)
 
   p |>
     plotly::layout(

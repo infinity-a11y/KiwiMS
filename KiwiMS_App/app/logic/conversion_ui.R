@@ -1353,6 +1353,12 @@ summary_results_ui <- function(ns, batch_control) {
                       value = TRUE,
                       right = TRUE
                     ),
+                    shinyWidgets::materialSwitch(
+                      ns("stats_boxplot_fit_box"),
+                      label = "Fit to Box",
+                      value = FALSE,
+                      right = TRUE
+                    ),
                     style = "margin-right:20px;"
                   )),
                   plot_dl_popover(ns, "stats_boxplot"),
