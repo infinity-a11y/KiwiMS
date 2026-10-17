@@ -44,6 +44,7 @@ box::use(
       summarise_decon_metrics,
       decon_progress_count,
       decon_is_complete,
+      decon_engine_ready,
       decon_failed_samples,
       decon_failure_detail,
       decon_planned_samples,
@@ -1044,8 +1045,34 @@ server <- function(
       ))
     }
 
+    #### init_hint ----
+    # A note on why "Initializing" is taking so long, shown only while the
+    # engine is still starting (see the progress observer). The first run
+    # after an install or update can spend minutes there while Windows scans
+    # the Python engine on first load, against seconds on every later run.
+    init_hint <- function(on) {
+      if (on) {
+        shiny$showNotification(
+          paste(
+            "Still starting the deconvolution engine. The first run after",
+            "installing or updating KiwiMS can take a few minutes to get",
+            "going; later runs start much faster."
+          ),
+          id = ns("init_hint"),
+          type = "message",
+          duration = NULL
+        )
+      } else {
+        shiny$removeNotification(ns("init_hint"))
+      }
+      reactVars$init_hint_shown <- on
+    }
+
     #### reset_progress ----
     reset_progress <- function() {
+      if (isTRUE(reactVars$init_hint_shown)) {
+        init_hint(FALSE)
+      }
       reactVars$is_running <- FALSE
       reactVars$pending_finish <- NULL
       spectrum_busy(FALSE)
@@ -1731,6 +1758,8 @@ server <- function(
 
       # Initialization variables
       reactVars$is_running <- TRUE
+      reactVars$started_at <- Sys.time()
+      reactVars$engine_ready <- FALSE
       reactVars$catch_error <- FALSE
       reactVars$expected_files <- length(raw_dirs)
       reactVars$initial_file_count <- 0L # check_progress already scopes to raw_dirs
@@ -1874,8 +1903,12 @@ server <- function(
               ),
               as.character(isTRUE(read_user_settings()$deconv_keep_raw_output))
             ),
+            # "2>&1" shares stdout's handle. Naming the same file for both
+            # opened it twice, each handle with its own write position, so
+            # stdout and stderr overwrote each other and the log came out
+            # scrambled.
             stdout = reactVars$decon_process_out,
-            stderr = reactVars$decon_process_out
+            stderr = "2>&1"
           )
         },
         error = function(e) {
@@ -1950,6 +1983,9 @@ server <- function(
                 value = 0,
                 title = "Deconvolution aborted ..."
               )
+              if (isTRUE(reactVars$init_hint_shown)) {
+                init_hint(FALSE)
+              }
 
               hide(selector = "#app-deconvolution_main-processing")
               show(selector = "#app-deconvolution_main-processing_error")
@@ -2128,6 +2164,25 @@ server <- function(
               paste0(trimws(input$analysis_name), ".db")
             )
           )
+
+          # The hint is about start-up only, so it waits for the subprocess
+          # to report its engine ready rather than for the first sample: how
+          # long that sample takes depends on the data. A warm start is ready
+          # within seconds, so 20 s still starting means a cold one.
+          if (!isTRUE(reactVars$engine_ready)) {
+            reactVars$engine_ready <- reactVars$completed_files > 0 ||
+              decon_engine_ready(db_pth)
+          }
+          if (isTRUE(reactVars$engine_ready)) {
+            if (isTRUE(reactVars$init_hint_shown)) {
+              init_hint(FALSE)
+            }
+          } else if (
+            !isTRUE(reactVars$init_hint_shown) &&
+              difftime(Sys.time(), reactVars$started_at, units = "secs") >= 20
+          ) {
+            init_hint(TRUE)
+          }
 
           if (reactVars$completed_files == 0) {
             title <- paste0(
@@ -2855,6 +2910,9 @@ server <- function(
         value = 0,
         title = "Processing aborted"
       )
+      if (isTRUE(reactVars$init_hint_shown)) {
+        init_hint(FALSE)
+      }
 
       # Change spinner icons to stop
       hide(selector = "#app-deconvolution_main-processing")
@@ -3291,8 +3349,9 @@ server <- function(
                   command = file.path(R.home("bin"), "Rscript.exe"),
                   args = args,
                   wd = script_dir,
+                  # One shared handle, as for the deconvolution log above
                   stdout = reactVars$decon_rep_process_out,
-                  stderr = reactVars$decon_rep_process_out
+                  stderr = "2>&1"
                 )
 
                 # Track report generation process status in reactive variable

@@ -65,6 +65,9 @@ Source: "KiwiMS_App\resources\*"; DestDir: "{app}\resources"; Flags: ignoreversi
 Source: "setup\favicon.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "setup\VC_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "setup\config.ps1"; DestDir: "{tmp}"; Flags: deleteafterinstall
+; Into {app} rather than {tmp}: it runs as the original user, who cannot read an
+; elevated Setup's {tmp} when elevation used a different administrator account.
+Source: "setup\warmup.ps1"; DestDir: "{app}"; Flags: deleteafterinstall
 Source: "LICENSE"; DestDir: "{app}";
 
 [InstallDelete]
@@ -441,6 +444,35 @@ begin
     UpdateStatus('Cleaning up environment metadata ...');
     DelTree(ExpandConstant('{app}\env_kiwims\conda-meta'), True, True, True);
     SaveStringToFile(LogFile, '[OK] conda-meta removed.' + #13#10, True);
+
+    // Step 3: Warm up the first start (see setup\warmup.ps1). Windows Defender
+    // scans every R and Python binary the first time it is loaded, which made
+    // the first launch after an install take ~80 s instead of ~10 s and the
+    // first deconvolution sit on "Initializing" for ~170 s instead of ~16 s.
+    // Loading the same files once here moves that wait into the progress bar.
+    //
+    // As the original user, because the matplotlib and multiplierz caches it
+    // creates are per-user. After compileall, so it loads the final bytecode,
+    // and after the conda-meta cleanup, so reticulate sees what a real start
+    // sees. Never fatal; the script logs and always exits 0.
+    if not InstallationFailed then
+    begin
+      UpdateStatus('Preparing KiwiMS for its first start (this can take a few minutes) ...');
+      UpdateProgress(97);
+      PsArgs := '-NonInteractive -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\warmup.ps1') + '"'
+              + ' -basePath "' + ExpandConstant('{app}') + '"'
+              + ' -logFile "' + LogFile + '"';
+      // ResultCode is only logged: the script exits 0 on every path it controls,
+      // so a non-zero code means PowerShell itself refused it (e.g. a Group
+      // Policy execution policy overriding -ExecutionPolicy Bypass).
+      if not ExecAsOriginalUser('powershell.exe', PsArgs, ExpandConstant('{app}'), SW_HIDE,
+                                ewWaitUntilTerminated, ResultCode) then
+        SaveStringToFile(LogFile,
+          '[WARN] First-start warm-up could not be started; the first start will be slow.' + #13#10, True)
+      else if ResultCode <> 0 then
+        SaveStringToFile(LogFile,
+          '[WARN] First-start warm-up exited ' + IntToStr(ResultCode) + '; the first start may be slow.' + #13#10, True);
+    end;
 
     UpdateProgress(100);
     if InstallationFailed then Abort;

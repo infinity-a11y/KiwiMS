@@ -203,6 +203,9 @@ tryCatch(
     if (DBI::dbExistsTable(con_init, "completed")) {
       DBI::dbExecute(con_init, "DROP TABLE completed")
     }
+    # Likewise the start-up sentinel an aborted run may have left, so the
+    # slow-start note is not suppressed before this run's engine is up.
+    DBI::dbExecute(con_init, "DROP TABLE IF EXISTS engine_ready")
 
     DBI::dbExecute(con_init, "COMMIT")
     DBI::dbDisconnect(con_init)

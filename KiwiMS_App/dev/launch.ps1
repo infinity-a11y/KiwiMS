@@ -180,11 +180,22 @@ try {
         # the browser via Start-Process (uses the system default browser handler).
         Write-Host "Waiting for app to start..." -ForegroundColor Yellow
         $appUrl = $null
-        $maxWait = 120  # seconds
+        # A normal start takes ~10 s, but the first one after an install was
+        # measured at ~80 s on a fresh VM; 120 s left too little headroom for a
+        # slower machine, which then never got its browser tab.
+        $maxWait = 300  # seconds
         $elapsed = 0
+        $hintShown = $false
         while ($elapsed -lt $maxWait -and $null -eq $appUrl) {
             Start-Sleep -Milliseconds 500
             $elapsed += 0.5
+            # Nothing else moves on screen during a slow start, so say why
+            # before it starts to look hung.
+            if (-not $hintShown -and $elapsed -ge 15) {
+                Write-Host "The first start after installing or updating KiwiMS can take a minute or two" -ForegroundColor DarkGray
+                Write-Host "while Windows checks the program files. Later starts are much faster." -ForegroundColor DarkGray
+                $hintShown = $true
+            }
             if ($rProcess.HasExited) {
                 throw "R process exited unexpectedly (code $($rProcess.ExitCode)). See: $appErrLog"
             }

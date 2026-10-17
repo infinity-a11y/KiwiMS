@@ -223,7 +223,10 @@ server <- function(
         shiny::checkboxInput(
           ns("run_kinact_ki"),
           tooltip(
-            shiny::span(class = "settings-label-tooltip", "Run Kinetics Analysis"),
+            shiny::span(
+              class = "settings-label-tooltip",
+              "Run Kinetics Analysis"
+            ),
             paste(
               "Fits binding over time and kinact/KI. Every sample then needs",
               "a concentration and an incubation time: at least three non-zero",
@@ -782,7 +785,7 @@ server <- function(
           inputId = ns("analysis_select"),
           label = NULL,
           choiceNames = list(
-            "Summary Statistics",
+            "Summary",
             "Hits Table",
             "Relative Binding",
             "Kinetic Analysis"

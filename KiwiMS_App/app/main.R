@@ -703,10 +703,13 @@ ui <- function(id) {
         var hasLegend = div._fullLayout.showlegend !== false &&
                         !!div.querySelector('.infolayer .legend');
         var pad = kiwiLegendSafetyPad(div);
-        // The legend, the gap before it, and room for kiwiFitLegendClip
+        // The legend, the gap before it, and room for kiwiFitLegendClip, on
+        // top of any gutter the side tables hold already
         var gutter = hasLegend ? Math.ceil(kiwiLegendWidth(div) + 3 * pad) : 0;
         var start = gutter > 0 ?
-          Plotly.relayout(div, { 'margin.r': gutter }).then(function() { return kiwiWait(300); }) :
+          Plotly.relayout(div, {
+            'margin.r': ((div._fullLayout.margin && div._fullLayout.margin.r) || 0) + gutter
+          }).then(function() { return kiwiWait(300); }) :
           Promise.resolve();
         return start.then(function() {
           return kiwiSeparateSceneLabels(div, key);
@@ -731,24 +734,62 @@ ui <- function(id) {
         });
       }
 
-      // The part of the canvas to keep: the drawn scene and the legend, with
-      // `pad` pixels all round, in the div's own pixels.
+      // The side tables of the cubic spectrum are anchored at the right edge
+      // of the plot area, in the gutter the export keeps for them. The fitted
+      // cube rarely reaches that edge, so the tables are moved in to start
+      // their own gap past the drawn scene, top-aligned with it where they
+      // still fit the canvas that way.
+      function kiwiPlaceSideTables(div, box) {
+        var full = div._fullLayout;
+        if (!box || !kiwiHasSideTables(full)) return Promise.resolve();
+        var size = full._size;
+        var x = Math.min(1, (box.right - size.l) / size.w);
+        var extent = 0;
+        (full.shapes || []).forEach(function(s) {
+          if (kiwiIsSideTable(s) && s.ysizemode === 'pixel')
+            extent = Math.max(extent, -Math.min(s.y0, s.y1));
+        });
+        var y = box.top + extent + 8 <= full.height ?
+          Math.min(1, 1 - (box.top - size.t) / size.h) : 1;
+        var update = {};
+        (full.annotations || []).forEach(function(a, i) {
+          if (!kiwiIsSideTable(a)) return;
+          update['annotations[' + i + '].x'] = x;
+          update['annotations[' + i + '].y'] = y;
+        });
+        (full.shapes || []).forEach(function(s, i) {
+          if (!kiwiIsSideTable(s)) return;
+          update['shapes[' + i + '].xanchor'] = x;
+          update['shapes[' + i + '].yanchor'] = y;
+        });
+        return Plotly.relayout(div, update);
+      }
+
+      // The part of the canvas to keep: the drawn scene, the legend and the
+      // side tables, with `pad` pixels all round, in the div's own pixels.
       function kiwiCubicCrop(div, box, pad) {
         var W = div._fullLayout.width, H = div._fullLayout.height;
         if (!box) return { x: 0, y: 0, w: W, h: H };
         var l = box.left, t = box.top, r = box.right, b = box.bottom;
+        var page = div.getBoundingClientRect();
+        function include(node) {
+          var nb = node.getBoundingClientRect();
+          if (!nb.width || !nb.height) return;
+          l = Math.min(l, nb.left - page.left);
+          t = Math.min(t, nb.top - page.top);
+          r = Math.max(r, nb.right - page.left);
+          b = Math.max(b, nb.bottom - page.top);
+        }
         var legend = div._fullLayout.showlegend !== false &&
                      div.querySelector('.infolayer .legend .scrollbox');
-        if (legend) {
-          var page = div.getBoundingClientRect();
-          var lb = legend.getBoundingClientRect();
-          if (lb.width && lb.height) {
-            l = Math.min(l, lb.left - page.left);
-            t = Math.min(t, lb.top - page.top);
-            r = Math.max(r, lb.right - page.left);
-            b = Math.max(b, lb.bottom - page.top);
-          }
-        }
+        if (legend) include(legend);
+        var annotations = div._fullLayout.annotations || [];
+        Array.prototype.forEach.call(
+          div.querySelectorAll('.infolayer g.annotation[data-index]'),
+          function(node) {
+            if (kiwiIsSideTable(annotations[+node.getAttribute('data-index')]))
+              include(node);
+          });
         var x = Math.max(0, Math.floor(l - pad));
         var y = Math.max(0, Math.floor(t - pad));
         return {
@@ -1064,7 +1105,47 @@ ui <- function(id) {
           // grow them itself: moving a legend taller than the canvas made it
           // push the bottom margin out, which shrank the scene after it had
           // been fitted.
-          fig.layout.margin = { l: 0, r: 0, t: 0, b: 0, pad: 0, autoexpand: false };
+          // The exception is the side tables' gutter (add_side_tables() in
+          // R, 'Show All' with metrics or parameters on): they live in
+          // margin.r, already scaled with their text above, and the canvas
+          // grows by it below. The scene then has the plot area to itself,
+          // without the on-screen domain that kept it clear of the tables.
+          // The tables were scaled with the 2D labels above, which drew them
+          // large beside the scene's much smaller axis labels. Bring them,
+          // their grid and their gutter (which holds nothing else here) to
+          // the scene's factor instead.
+          if (kiwiHasSideTables(fig.layout) && contextScale > 0) {
+            var tableScale = scene3DScale / contextScale;
+            (fig.layout.annotations || []).forEach(function(anno) {
+              if (!kiwiIsSideTable(anno)) return;
+              if (anno.font && typeof anno.font.size === 'number')
+                anno.font.size = Math.max(1, Math.round(anno.font.size * tableScale));
+              ['xshift', 'yshift'].forEach(function(key) {
+                if (typeof anno[key] === 'number')
+                  anno[key] = Math.round(anno[key] * tableScale);
+              });
+            });
+            (fig.layout.shapes || []).forEach(function(shape) {
+              if (!kiwiIsSideTable(shape)) return;
+              if (shape.line && typeof shape.line.width === 'number')
+                shape.line.width = roundW(shape.line.width * tableScale);
+              ['x0', 'x1', 'y0', 'y1'].forEach(function(key) {
+                if (typeof shape[key] === 'number')
+                  shape[key] = Math.round(shape[key] * tableScale);
+              });
+            });
+            if (fig.layout.margin && typeof fig.layout.margin.r === 'number')
+              fig.layout.margin.r = Math.round(fig.layout.margin.r * tableScale);
+          }
+          var tableGutter = kiwiHasSideTables(fig.layout) ?
+            ((fig.layout.margin && fig.layout.margin.r) || 0) : 0;
+          fig.layout.margin = { l: 0, r: tableGutter, t: 0, b: 0, pad: 0, autoexpand: false };
+          if (tableGutter > 0) {
+            Object.keys(fig.layout).forEach(function(key) {
+              if (/^scene[0-9]*$/.test(key) && fig.layout[key])
+                fig.layout[key].domain = { x: [0, 1], y: [0, 1] };
+            });
+          }
           if (fig.layout.showlegend !== false) {
             Object.keys(legendDodge).forEach(function(key) {
               var cam = fig.layout[key].camera = fig.layout[key].camera || {};
@@ -1138,7 +1219,15 @@ ui <- function(id) {
           return new Promise(function(resolve) { setTimeout(resolve, isCubicSpectra ? 800 : 0); });
         }).then(function() {
           if (isCubicSpectra) {
-            return kiwiFitCubic(div).then(function(sceneBox) {
+            var sceneBox;
+            // Tables taller than the canvas grow it first, so the scene is
+            // fitted to the final height
+            return kiwiFitSideTables(div, q.height).then(function() {
+              return kiwiFitCubic(div);
+            }).then(function(box) {
+              sceneBox = box;
+              return kiwiPlaceSideTables(div, box);
+            }).then(function() {
               kiwiScaleLegendSymbols(div, legendSymbolScale);
               kiwiFitLegendClip(div);
               // A margin of 3% of the canvas height all round what was drawn

@@ -1016,6 +1016,17 @@ deconvolute <- function(
     # "No module named 'encodings'".
     Sys.setenv(RETICULATE_PYTHON = python_exe, PYTHONNOUSERSITE = "1")
     Sys.unsetenv("PYTHONHOME")
+    # Start Python ahead of the first sample, as decon_worker_init() does, so
+    # the log marks where start-up ends (see decon_engine_ready()). A failure
+    # here is left for the first sample to report as before.
+    t0 <- proc.time()[["elapsed"]]
+    try(reticulate::py_run_string("import unidec"), silent = TRUE)
+    message(sprintf(
+      "%s: Python started after %.1f s.",
+      DECON_ENGINE_READY,
+      proc.time()[["elapsed"]] - t0
+    ))
+    decon_mark_engine_ready(db_path)
     for (dir in dirs) {
       tryCatch(
         do.call(process_single_dir, c(list(waters_dir = dir), params_list)),
@@ -1082,11 +1093,13 @@ deconvolute <- function(
 
   cl_use <- cl[pool$healthy]
   message(sprintf(
-    "%d of %d worker(s) ready after %.1f s.",
+    "%s: %d of %d worker(s) ready after %.1f s.",
+    DECON_ENGINE_READY,
     length(pool$healthy),
     n_workers,
     proc.time()[["elapsed"]] - t_start
   ))
+  decon_mark_engine_ready(db_path)
 
   parallel::clusterExport(
     cl_use,
@@ -2656,6 +2669,57 @@ decon_progress_count <- function(db_path, samples = NULL) {
   )
 }
 
+# decon_engine_ready(): Has the run finished starting its Python engine? ----
+# deconvolute() creates the 'engine_ready' table (decon_mark_engine_ready())
+# once UniDec is imported, by the worker pool or, for a sequential run,
+# in-process. Until then "Initializing" is pure start-up, which is slow only on
+# a cold machine (first run after an install); after it the run is processing
+# samples, and a long wait there is the data's, not the start-up's.
+#
+# A table rather than a line in the run's log, because that log is not reliable
+# to read back mid-run. Same pattern as the 'completed' sentinel; the execute
+# script drops a stale one at start and generate_decon_rslt() drops it again,
+# so finished databases do not carry it.
+DECON_ENGINE_READY <- "Deconvolution engine ready"
+
+#' @export
+decon_engine_ready <- function(db_path) {
+  tryCatch(
+    {
+      # synchronous = NULL: a read-only check has nothing to sync, and setting
+      # it warns "database is locked" each time it lands on the subprocess's
+      # set-up writes, which a slow start polls through hundreds of times.
+      con <- DBI::dbConnect(
+        RSQLite::SQLite(),
+        db_path,
+        flags = RSQLite::SQLITE_RO,
+        synchronous = NULL
+      )
+      on.exit(DBI::dbDisconnect(con), add = TRUE)
+      DBI::dbExistsTable(con, "engine_ready")
+    },
+    error = function(e) FALSE
+  )
+}
+
+# decon_mark_engine_ready(): Record the end of start-up for the UI ----
+# Never fails the run: without the table the UI only shows its slow-start note
+# for longer than needed.
+decon_mark_engine_ready <- function(db_path) {
+  tryCatch(
+    {
+      con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+      on.exit(DBI::dbDisconnect(con), add = TRUE)
+      DBI::dbExecute(con, "PRAGMA busy_timeout=5000")
+      DBI::dbExecute(con, "CREATE TABLE IF NOT EXISTS engine_ready (at TEXT)")
+    },
+    error = function(e) {
+      message("Could not mark the engine ready: ", conditionMessage(e))
+    }
+  )
+  invisible(NULL)
+}
+
 # decon_is_complete(): TRUE when the 'completed' sentinel table exists ----
 #' @export
 decon_is_complete <- function(db_path) {
@@ -3295,6 +3359,9 @@ generate_decon_rslt <- function(
       )
     }
   }
+
+  # The start-up sentinel (decon_engine_ready()) has served its purpose
+  DBI::dbExecute(con, "DROP TABLE IF EXISTS engine_ready")
 
   # Completion marker — Shiny observer polls for this table
   DBI::dbWriteTable(
