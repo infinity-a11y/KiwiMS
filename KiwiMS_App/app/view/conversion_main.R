@@ -31,6 +31,8 @@ box::use(
       set_selected_tab,
       format_scientific,
       make_binding_plot,
+      make_binding_surface_plot,
+      kobs_model_at,
       multiple_spectra,
       spectrum_sample_ids,
       binding_ordered_hits,
@@ -2733,7 +2735,8 @@ server <- function(
 
           output$conc_tab_kobs_value <- NULL
           output$conc_tab_plateau_value <- NULL
-          output$conc_tab_v_value <- NULL
+          output$conc_tab_reached_value <- NULL
+          output$surface_plot <- NULL
           output$conc_tab_hits <- NULL
           output$conc_tab_binding_plot <- NULL
           output$conc_tab_spectra <- NULL
@@ -2996,23 +2999,31 @@ server <- function(
                 }
 
                 # Binding of each species on its own, in the order of the
-                # masses above. A value pinned by an undetected peak is marked
-                # and explained on hover.
+                # masses above. A value pinned by an undetected peak, or not
+                # resolvable because its complex fits another species, is
+                # marked and explained on hover.
                 species_binding <- proteoform_binding(sample_rows)
                 sb <- species_binding[match(
                   theor_protein_mw,
                   species_binding$species
                 ), ]
                 binding_text <- collapse_species(ifelse(
-                  is.na(sb$binding),
-                  "N/A",
+                  sb$limit %in% "shared",
+                  sprintf(
+                    "<span class=\"protocol-stat-warn\" data-bs-toggle=\"tooltip\" title=\"%s\">N/A</span>",
+                    proteoform_limit_note("shared")
+                  ),
                   ifelse(
-                    is.na(sb$limit),
-                    sprintf("%.2f%%", sb$binding),
-                    sprintf(
-                      "<span class=\"protocol-stat-warn\" data-bs-toggle=\"tooltip\" title=\"%s\">%.2f%%</span>",
-                      proteoform_limit_note(sb$limit),
-                      sb$binding
+                    is.na(sb$binding),
+                    "N/A",
+                    ifelse(
+                      is.na(sb$limit),
+                      sprintf("%.2f%%", sb$binding),
+                      sprintf(
+                        "<span class=\"protocol-stat-warn\" data-bs-toggle=\"tooltip\" title=\"%s\">%.2f%%</span>",
+                        proteoform_limit_note(sb$limit),
+                        sb$binding
+                      )
                     )
                   )
                 ))
@@ -4251,7 +4262,7 @@ server <- function(
             }
 
             # Concentrations that carried data but could not be fitted. They
-            # are absent from the Binding Analysis table and from the global
+            # are absent from the Per-Concentration Fits table and from the global
             # fit, so without this chip the only trace would be the protocol
             # log — and a missing concentration silently narrows the measured
             # range the saturation diagnostics are read against.
@@ -4515,6 +4526,40 @@ server <- function(
                   series_text,
                   title = "kinact/KI fitted to each replicate series on its own"
                 ),
+                # Cross-check against the classic two-step fit
+                if (!is.null(res$Two_Step)) {
+                  outside <- isFALSE(res$Two_Step$within_ci)
+                  kinetic_line(
+                    paste0(
+                      "<b>Two-step (classic)</b> ",
+                      if (outside) {
+                        paste0(
+                          "<span class=\"protocol-stat-warn\">",
+                          fmt_num(res$Two_Step$ratio),
+                          "</span>"
+                        )
+                      } else {
+                        fmt_num(res$Two_Step$ratio)
+                      }
+                    ),
+                    title = paste0(
+                      "For comparison only: the k_obs of each concentration ",
+                      "fitted to a hyperbola without weights, the method KiwiMS ",
+                      "used until September 2026 and most curve-fitting programs use. ",
+                      "Shown dotted in the k_obs Curve (click its legend ",
+                      "entry). ",
+                      if (outside) {
+                        paste0(
+                          "It lies outside the 95 % CI of the global fit: ",
+                          "the high concentrations, whose k_obs are least ",
+                          "certain, dominate the unweighted fit."
+                        )
+                      } else {
+                        "It agrees with the global fit within its 95 % CI."
+                      }
+                    )
+                  )
+                },
                 # Saturation is already stated by the model line and shown
                 # in the kinact and KI cards
                 card_warnings(
@@ -4549,25 +4594,63 @@ server <- function(
 
                 conc_col <- paste0("Conc. [", view$conc_unit, "]")
 
-                kobs_results <- kobs_results |>
-                  dplyr::mutate(
-                    concentration = as.numeric(rownames(kobs_results)),
-                    kobs = as.numeric(format(kobs, digits = 3)),
-                    kobs_se = ifelse(
-                      is.na(kobs_se),
-                      "N/A",
-                      as.character(signif(kobs_se, 3))
-                    ),
-                    v = as.numeric(format(v, digits = 3)),
-                    plateau = as.numeric(format(plateau, digits = 3))
-                  ) |>
-                  dplyr::relocate(concentration, .before = kobs) |>
+                # The global fit with all concentrations (the table always
+                # shows the full fit; the ticks below drive the refit)
+                full_kin <- convert_kinact_ki_units(
+                  result_list$kinact_ki_result,
+                  view
+                )
+                conc_num <- as.numeric(rownames(kobs_results))
+                pl <- full_kin$Plateaus
+                pl_row <- if (is.null(pl)) {
+                  rep(NA_integer_, length(conc_num))
+                } else {
+                  vapply(
+                    conc_num,
+                    function(c0) {
+                      i <- which(abs(pl$conc - c0) <= 1e-9 * max(abs(c0), 1e-300))
+                      if (length(i)) i[1] else NA_integer_
+                    },
+                    integer(1)
+                  )
+                }
+                kobs_global <- ifelse(
+                  is.na(pl_row),
+                  NA_real_,
+                  kobs_model_at(full_kin, conc_num)
+                )
+                plateau_global <- ifelse(
+                  is.na(pl_row),
+                  "\u2013",
+                  paste0(
+                    format(round(pl$plateau[pl_row], 1), nsmall = 1),
+                    ifelse(pl$own[pl_row] %in% TRUE, "", " (shared)")
+                  )
+                )
+
+                kobs_results <- data.frame(
+                  concentration = conc_num,
+                  kobs = as.numeric(format(kobs_results$kobs, digits = 3)),
+                  kobs_se = ifelse(
+                    is.na(kobs_results$kobs_se),
+                    "N/A",
+                    as.character(signif(kobs_results$kobs_se, 3))
+                  ),
+                  kobs_global = ifelse(
+                    is.na(kobs_global),
+                    "\u2013",
+                    as.character(signif(kobs_global, 3))
+                  ),
+                  plateau = as.numeric(format(kobs_results$plateau, digits = 3)),
+                  plateau_global = plateau_global
+                ) |>
                   stats::setNames(c(
                     conc_col,
-                    paste0("kobs [", view$time_unit, "\u207b\u00b9]"),
+                    paste0("kobs alone [", view$time_unit, "\u207b\u00b9]"),
                     paste0("SE [", view$time_unit, "\u207b\u00b9]"),
-                    "Velocity",
-                    "Plateau [%]"
+                    paste0("kobs global [", view$time_unit, "\u207b\u00b9]"),
+                    "Plateau alone [%]",
+                    "Plateau global [%]"
                   ))
 
                 kobs_result_raw(kobs_results)
@@ -4588,7 +4671,7 @@ server <- function(
                   dplyr::mutate(
                     Included = checkboxColumn(
                       nrow(kobs_results),
-                      6,
+                      7,
                       value = included
                     )
                   )
@@ -4651,7 +4734,7 @@ server <- function(
                     )
                   ) |>
                   DT::formatStyle(
-                    1:4,
+                    1:6,
                     `border-right` = "solid 1px #0000005c"
                   )
               },
@@ -4662,10 +4745,10 @@ server <- function(
             # Mean ± SD or the individual samples (both together clutter the
             # full plot); the export follows the same choice
             binding_points_mode <- shiny::reactive({
-              if (identical(input$binding_points, "samples")) {
-                "samples"
-              } else {
+              if (identical(input$binding_points, "mean")) {
                 "mean"
+              } else {
+                "samples"
               }
             })
 
@@ -4677,7 +4760,9 @@ server <- function(
                 colors = view_colors(),
                 symbol_map = view_symbols(),
                 units = view_units(),
-                points = binding_points_mode()
+                points = binding_points_mode(),
+                kinact_ki_result = view_results()$kinact_ki_result,
+                show_single = isTRUE(input$binding_show_single)
               )
             })
 
@@ -4723,7 +4808,9 @@ server <- function(
                   symbol_map = view_symbols(),
                   units = view_units(),
                   theme = theme,
-                  points = binding_points_mode()
+                  points = binding_points_mode(),
+                  kinact_ki_result = view_results()$kinact_ki_result,
+                  show_single = isTRUE(input$binding_show_single)
                 )
               },
               filename_fn = function() {
@@ -5038,6 +5125,37 @@ server <- function(
               )
             })
 
+            ##### Binding surface tab ----
+            build_surface <- function(colors, theme) {
+              res <- view_results()
+              shiny::req(res$kinact_ki_result)
+              make_binding_surface_plot(
+                res$kinact_ki_result,
+                res$binding_kobs_result,
+                colors,
+                view_units(),
+                theme,
+                log_conc = isTRUE(input$surface_log_conc)
+              )
+            }
+
+            output$surface_plot <- plotly::renderPlotly({
+              build_surface(view_colors(), "light")
+            })
+
+            setup_plot_dl(
+              input,
+              output,
+              session,
+              "surface",
+              build_fn = function(theme) {
+                build_surface(build_view_colors(theme), theme)
+              },
+              filename_fn = function() {
+                paste0(get_session_prefix(), "_Binding_Surface")
+              }
+            )
+
             ##### Concentrations tab ----
             # One concentration at a time, picked in the tab. The picker values
             # are the declared concentration keys, so the selection survives a
@@ -5096,51 +5214,104 @@ server <- function(
               list(conc_picker_observer)
             )
 
+            # The selected concentration in the global fit (current
+            # exclusions applied): k_obs of the model, its plateau, whether the
+            # plateau is its own and how far the curve gets. NULL when the
+            # concentration is not part of the global fit.
+            conc_tab_global <- shiny::reactive({
+              kin <- view_results()$kinact_ki_result
+              pl <- kin$Plateaus
+              conc <- suppressWarnings(as.numeric(conc_tab_view_conc()))
+              if (is.null(pl) || !length(conc) || is.na(conc)) {
+                return(NULL)
+              }
+              i <- which(abs(pl$conc - conc) <= 1e-9 * max(abs(conc), 1e-300))
+              if (!length(i)) {
+                return(NULL)
+              }
+              list(
+                kobs = kobs_model_at(kin, pl$conc[i[1]]),
+                plateau = pl$plateau[i[1]],
+                own = isTRUE(pl$own[i[1]]),
+                reached = pl$reached[i[1]]
+              )
+            })
+
+            # Value cards: the global fit as the main value, the concentration
+            # fitted on its own beneath it for comparison. Laid out inline: the
+            # card body's large font suits a single number, not extra lines.
+            conc_card <- function(main, ...) {
+              shiny::div(
+                style = paste(
+                  "width: 100%; text-align: center; padding: 0 10px;",
+                  "line-height: 1.25;"
+                ),
+                shiny::div(
+                  style = "font-size: 0.85em; white-space: nowrap;",
+                  shiny::HTML(main)
+                ),
+                lapply(Filter(Negate(is.null), list(...)), function(line) {
+                  shiny::div(
+                    style = "font-size: 0.42em; opacity: 0.85; margin-top: 6px;",
+                    shiny::HTML(line)
+                  )
+                })
+              )
+            }
+            short_num <- function(x) format(signif(x, 3), scientific = FALSE, drop0trailing = TRUE)
+
             ###### Calculated kobs value ----
             output$conc_tab_kobs_value <- shiny::renderUI({
               view <- unit_view()
               conc_result <- conc_tab_result()
               kobs <- conc_result$kobs / view$time_factor
               kobs_se <- conc_result$kobs_se / view$time_factor
-
-              shiny::div(
-                class = "result-card-content",
-                shiny::div(
-                  class = "main-result",
-                  shiny::HTML(paste(
-                    format_scientific(kobs),
-                    paste0(view$time_unit, "⁻¹")
-                  ))
-                ),
-                shiny::div(
-                  class = "error-result",
-                  shiny::HTML(paste(
-                    "±",
-                    if (is.na(kobs_se)) {
-                      "n.a."
-                    } else {
-                      format_scientific(kobs_se)
-                    }
-                  ))
-                )
+              alone <- paste0(
+                short_num(kobs),
+                if (!is.na(kobs_se)) paste0(" ± ", short_num(kobs_se))
               )
+              global <- conc_tab_global()
+              unit <- paste0(" ", view$time_unit, "⁻¹")
+
+              if (is.null(global)) {
+                conc_card(paste0(short_num(kobs), unit), "fitted alone · not in the global fit")
+              } else {
+                conc_card(
+                  paste0(short_num(global$kobs), unit),
+                  "global fit",
+                  paste0("fitted alone: ", alone)
+                )
+              }
             })
 
             ###### Binding plateau value ----
             output$conc_tab_plateau_value <- shiny::renderUI({
-              shiny::div(
-                class = "kobs-val",
-                paste0(format_scientific(conc_tab_result()$plateau), "%")
-              )
+              global <- conc_tab_global()
+              alone <- paste0(round(conc_tab_result()$plateau, 1), " %")
+              if (is.null(global)) {
+                conc_card(alone, "fitted alone · not in the global fit")
+              } else {
+                conc_card(
+                  paste0(round(global$plateau, 1), " %"),
+                  if (global$own) "global fit · own plateau" else "global fit · shared plateau",
+                  paste0("fitted alone: ", alone)
+                )
+              }
             })
 
-            ###### Velocity v value ----
-            output$conc_tab_v_value <- shiny::renderUI({
-              shiny::div(
-                class = "kobs-val",
-                format_scientific(
-                  conc_tab_result()$v / unit_view()$time_factor
-                )
+            ###### Curve completion ----
+            # Share of its plateau the curve reaches by the last time point in
+            # the global fit; at least plateau_min_reached gives the
+            # concentration a plateau of its own
+            output$conc_tab_reached_value <- shiny::renderUI({
+              global <- conc_tab_global()
+              if (is.null(global)) {
+                return(conc_card("N/A", "not in the global fit"))
+              }
+              conc_card(
+                paste0(round(100 * global$reached), " %"),
+                "of the plateau reached",
+                "by the last time point"
               )
             })
 
@@ -5213,10 +5384,10 @@ server <- function(
 
             ###### Binding plot ----
             conc_tab_binding_points_mode <- shiny::reactive({
-              if (identical(input$conc_tab_binding_points, "samples")) {
-                "samples"
-              } else {
+              if (identical(input$conc_tab_binding_points, "mean")) {
                 "mean"
+              } else {
+                "samples"
               }
             })
 
@@ -5230,7 +5401,9 @@ server <- function(
                 colors = view_colors(),
                 symbol_map = view_symbols(),
                 units = view_units(),
-                points = conc_tab_binding_points_mode()
+                points = conc_tab_binding_points_mode(),
+                kinact_ki_result = view_results()$kinact_ki_result,
+                show_single = TRUE
               )
             })
 
@@ -5250,7 +5423,9 @@ server <- function(
                   symbol_map = view_symbols(),
                   units = view_units(),
                   theme = theme,
-                  points = conc_tab_binding_points_mode()
+                  points = conc_tab_binding_points_mode(),
+                  kinact_ki_result = view_results()$kinact_ki_result,
+                  show_single = TRUE
                 )
               },
               filename_fn = function() {
@@ -7050,7 +7225,7 @@ server <- function(
         tbl$Included <- unname(conversion_vars$select_concentration)
         tbl
       },
-      filename_fn = function() paste0(get_session_prefix(), "_Binding_Analysis")
+      filename_fn = function() paste0(get_session_prefix(), "_Per_Concentration_Fits")
     )
 
     ## Events for conversion result interface ----

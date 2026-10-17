@@ -43,7 +43,11 @@ All in `app/logic/conversion_functions.R`.
      with the preferred one ticked; the Warnings card counts these.
 - **`conversion()`** turns intensities into binding. A peak counts once
   towards the total. A peak claimed by n preferred readings (different
-  proteoforms, or different compounds) gives each 1/n of its intensity.
+  proteoforms, or different compounds) shows 1/n of its intensity on each of
+  their rows, so the rows add up to the total. **`proteoform_binding()`**
+  does not use that share: a species whose complex peak is claimed by another
+  species too has no binding of its own in that sample (NA, limit "shared",
+  "not resolvable") and stays out of its per-proteoform fit.
 - **`mass_ambiguities()`** finds every pair of predicted peaks **≤ 2 ×
   tolerance** apart (+1e-9 for floating-point sums) and sorts it:
 
@@ -51,7 +55,7 @@ All in `app/logic/conversion_functions.R`.
   |---|---|---|---|
   | `compounds` | one species, two different compounds | binding can't be attributed | **blocked** |
   | `species` | unbound and a complex, or two unbound | unbound reading wins | warning |
-  | `proteoform` | complexes of two different species | intensity split evenly | warning |
+  | `proteoform` | complexes of two different species | counts once; not resolvable per proteoform | warning |
   | (none) | one species, one compound, two shifts or stoichiometries | preferred assignment rule | no hint; logged per peak |
 
 - **`declaration_ambiguities()`** runs that once per protein and set of
@@ -92,7 +96,7 @@ All in `app/logic/conversion_functions.R`.
 | 5 | The same compounds in separate samples | not compared; can fake a hit (caveat) | MA1e |
 | 6 | An unbound mass equal to a complex of another mass | warning; unbound wins, logged per sample | MA2 |
 | 7 | Two unbound masses within the window | warning; one peak counts for the first only | MA3, *peak of two species* |
-| 8 | A complex shared by two (or more) proteoforms | warning; split evenly, total unchanged | MA4, *three proteoforms* |
+| 8 | A complex shared by two (or more) proteoforms | warning; total unchanged, binding of those forms not resolvable there | MA4, *three proteoforms* |
 | 9 | Two shifts of one compound close together | no hint; closer shift preferred, first declared one on a tie | MA5a, *default rule* |
 | 10 | One shift close to a multiple of another | no hint; lowest stoichiometry preferred | MA5b, *default rule* |
 | 11 | Masses typed close together in the Proteins/Compounds table | coloured at ≤ 2 × tolerance | MA6 |
@@ -192,10 +196,10 @@ is blocked earlier by the one-compound rule (CX4).
 - **Log:**
   - a block "AMBIGUOUS MASS ASSIGNMENTS (within 2 × 3 Da)", "rule applied when
     a peak matches both", then one branch per pair: "⚠ read as unbound" once
-    and "⚠ split evenly" three times, each with Δ 0.0 Da and the two readings
-    below it. No line is wider than 45 characters, and a blank line comes
-    before the first "Hit Screening";
-  - the three "split evenly" pairs never act here: no compound peak above
+    and "⚠ not resolvable per form" three times, each with Δ 0.0 Da and the
+    two readings below it. No line is wider than 45 characters, and a blank
+    line comes before the first "Hit Screening";
+  - the three "not resolvable per form" pairs never act here: no compound peak above
     22,100 Da is detected;
   - in each of 120 samples, "⚠ Peak 21903 Da read as unbound 21,904.8 Da,
     also fits: 21,638.8 Da + BI-8925 (266.0 Da ×1)".
@@ -234,7 +238,7 @@ is blocked earlier by the one-compound rule (CX4).
 - Results are identical to B0, kinetics included: no peak lies within 3 Da of
   21,643.84 (the main peak at 21,638 is 5.8 Da away).
 
-### MA4 A complex shared by two proteoforms (warning, intensity split)
+### MA4 A complex shared by two proteoforms (warning, not resolvable per proteoform)
 
 `mass_ambiguity/proteins_shared_complex` (third mass 21654.84) · `mass_ambiguity/compounds_shift_250` (BI-8925 266, 250) · `baseline/config_baseline`
 
@@ -244,24 +248,29 @@ hint and every sample reads as in B0.
 
 - **Declaration:** orange hint "Ambiguous masses …: 1 pair", tooltip
   "21,638.8 Da + BI-8925 (266.0 Da ×1) ↔ 21,654.8 Da + BI-8925 (250.0 Da ×1)
-  (Δ 0.0 Da)".
+  (Δ 0.0 Da)"; the note says the per-proteoform binding of those samples is
+  not resolvable.
+- **Log:** "Ambiguous assignment at 21903.50 Da (shared by 2 proteoforms)" in
+  each sample with the adduct peak.
 - **Hits, reference sample:** the 21,903.5 Da peak appears twice, for
-  21,638.84/266 and 21,654.84/250, each at **6.02 %**. Total stays
-  **12.04 %**.
+  21,638.84/266 and 21,654.84/250, each at **6.02 %** (row bookkeeping, so the
+  rows add up). Total stays **12.04 %**.
 - **Pooled results:** identical to B0 (all samples 70.24, kinact/KI 334.1).
-  The split never double counts.
+  The shared peak counts once.
 - **Tot. Binding card:** 0–100 %, **70.24 ± 26.86**, as in B0. Every sample
   has the same value; the shared peak only adds hit rows for the third
   proteoform, and the card counts each sample once.
-- **Proteoforms tab:**
-  - 21,638.84 drops to **210.4**, since half its complex went to the other form;
-  - 21,654.84 sits at 100 % in every sample (its unbound peak is never
-    detected), 119 / 119 limit values (orange). kinact/KI N/A, hover "Binding
-    at 2 concentrations only, at least 3 are needed";
-  - in k_obs per Proteoform and the k_obs Curve it is "21,654.8 Da · limit
-    values" and starts hidden: its two k_obs (about 0.38 s⁻¹) would stretch the
-    axis 30-fold. A click on the legend row shows them;
-  - 21,816.84: 231.2.
+- **Sample View, reference sample:** the binding of 21,638.84 and 21,654.84
+  reads **N/A** (orange), hover "Complex peak also fits another proteoform:
+  binding not resolvable".
+- **Proteoforms tab:** nothing tells how much of the adduct peak belongs to
+  which form, so neither gets a binding of its own where it appears:
+  - 21,638.84 and 21,654.84: kinact/KI N/A, Limit Values ends in
+    "· 119 not resolvable", hover "Its complex peak also fits another
+    proteoform in 119 samples: binding not resolvable there". 21,638.84 keeps
+    the one sample without an adduct peak (1 / 1 at a limit);
+  - 21,816.84: 231.2, now the reference (the only form with measured
+    binding).
 - **Spectrum** of the reference sample: 21,654.84 has no unbound peak. There
   is no stray line and no "NA Da" label.
 - **Compound Distribution donut:** the slices add up to the total.
@@ -324,7 +333,7 @@ on the MLKL series; the synthetic ones pin the rules on made-up peak lists.
 | MA1e: compounds in separate samples are not checked against each other | 5 |
 | MA2: an unbound mass equal to a complex is read as unbound | 6, log block |
 | MA3: two unbound masses 5 Da apart warn but change nothing | 7 |
-| MA4: a complex shared by two proteoforms is split between them | 8 |
+| MA4: a complex shared by two proteoforms is not resolvable per proteoform | 8 |
 | MA5a: two close shifts of one compound resolve to the closer one | 9 |
 | MA5b: a shift close to twice another prefers the lower stoichiometry | 10 |
 | MA6: the tables colour masses within the declaration check's window | 11 |
@@ -349,8 +358,8 @@ on the MLKL series; the synthetic ones pin the rules on made-up peak lists.
 | the Preferred column is shown when a reading was not preferred | 23 |
 
 `test-conversion-unit.R` covers the same rules at unit level (the
-`mass_ambiguities()` kinds, the split between two compounds and between two
-proteoforms).
+`mass_ambiguities()` kinds, the row split between two compounds and between
+two proteoforms, and a shared complex left unresolved per proteoform).
 
 MA6 can only check what R hands the browser (the tolerance and the 2 ×
 tolerance window in the renderer); the colours themselves need the manual

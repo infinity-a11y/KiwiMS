@@ -237,7 +237,7 @@ test_that("MA2: an unbound mass equal to a complex is read as unbound", {
   block <- strsplit(gsub("\033\\[[0-9;]*m", "", paste(block, collapse = "")), "\n")[[1]]
   expect_equal(block[1], "AMBIGUOUS MASS ASSIGNMENTS (within 2 \u00d7 3 Da)")
   expect_equal(sum(grepl("read as unbound \\(\u0394 0.0 Da\\)$", block)), 1)
-  expect_equal(sum(grepl("split evenly \\(\u0394 0.0 Da\\)$", block)), 3)
+  expect_equal(sum(grepl("not resolvable per form \\(\u0394 0.0 Da\\)$", block)), 3)
   expect_lte(max(nchar(block)), 45)
   expect_equal(block[length(block)], "")
 
@@ -280,7 +280,7 @@ test_that("MA3: two unbound masses 5 Da apart warn but change nothing", {
   expect_equal(r$total, base$total[names(r$total)])
 })
 
-test_that("MA4: a complex shared by two proteoforms is split between them", {
+test_that("MA4: a complex shared by two proteoforms is not resolvable per proteoform", {
   ctrl_d <- kit_check(B("proteins_baseline"), M("compounds_shift_250"), B("config_baseline"))
   expect_equal(ctrl_d$status, "PASS")
   base <- kit_case(B("proteins_baseline"), B("compounds_baseline"), B("config_baseline"))
@@ -302,7 +302,7 @@ test_that("MA4: a complex shared by two proteoforms is split between them", {
   expect_rounded(100 * shared$`% Binding`[1], 6.02, 2)
   expect_equal(shared$`% Binding`[1], shared$`% Binding`[2])
   expect_rounded(r$total[[kit_reference_sample]], 12.04, 2)
-  # The split never counts the peak twice
+  # The shared peak counts once: every sample as in B0
   expect_equal(r$total, base$total[names(r$total)])
 
   card <- kit_card(r, "BI-8925")
@@ -310,12 +310,20 @@ test_that("MA4: a complex shared by two proteoforms is split between them", {
   expect_rounded(card[["sd"]], 26.86, 2)
   k <- r$kinetics[["MLKL + BI-8925"]]
   expect_rounded(k$ratio, 334.1)
-  expect_rounded(k$proteoforms[["21638.84"]]$ratio, 210.4)
-  third <- k$proteoforms[["21654.84"]]
-  expect_true(is.na(third$ratio))
-  expect_equal(third$reason, "Binding at 2 concentrations only, at least 3 are needed")
-  expect_equal(c(third$n_limit, third$n), c(119, 119))
-  expect_true(third$flagged)
+  # Both forms claiming the adduct peak lose their own binding wherever it
+  # appears, instead of half of it each; the third form is unaffected and
+  # becomes the reference, the only one measured
+  reason <- "Its complex peak also fits another proteoform in 119 samples: binding not resolvable there"
+  for (p in c("21638.84", "21654.84")) {
+    expect_true(is.na(k$proteoforms[[p]]$ratio))
+    expect_equal(k$proteoforms[[p]]$n_shared, 119)
+    expect_equal(k$proteoforms[[p]]$reason, reason)
+  }
+  expect_equal(c(k$proteoforms[["21638.84"]]$n_limit, k$proteoforms[["21638.84"]]$n), c(1, 1))
+  expect_equal(k$proteoforms[["21654.84"]]$n, 0)
+  expect_equal(k$reference, 21816.84)
+  expect_rounded(k$proteoforms[["21816.84"]]$ratio, 231.2)
+  expect_equal(k$proteoforms[["21816.84"]]$n_shared, 0)
 })
 
 # ---- MA5: shifts of one compound on one form --------------------------------
@@ -657,11 +665,11 @@ test_that("an ambiguous peak is logged with its rule and the preferred reading",
   expect_true(any(grepl("✓ 1,000 Da + A (133.0 Da ×2), Δ 0.20 Da", msgs, fixed = TRUE)))
   expect_true(any(grepl("· 1,000 Da + A (267.0 Da ×1), Δ 0.80 Da", msgs, fixed = TRUE)))
 
-  # A peak shared by two proteoforms is split, not resolved by the rule
+  # A peak shared by two proteoforms is not resolved by the rule
   msgs <- synth_hits(c(1002, 1102), c(60, 40), c(1000, 1004), log = TRUE)
   expect_match(
     grep("Ambiguous assignment", msgs, value = TRUE),
-    "(split between 2 proteoforms)",
+    "(shared by 2 proteoforms)",
     fixed = TRUE
   )
 })

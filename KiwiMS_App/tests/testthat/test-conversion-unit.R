@@ -36,6 +36,10 @@ box::use(
     overview_subset,
     predict_peaks,
     proteoform_binding,
+    proteoform_limit_note,
+    classic_two_step,
+    global_binding_curves,
+    make_binding_plot,
     read_uploaded_file,
     render_hits_table,
     render_hits_view,
@@ -1134,7 +1138,7 @@ test_that("a peak claimed by two compounds is split, not counted twice", {
   expect_equal(sum(complexes$`% Binding`), unique(hits$`Total % Binding`))
 })
 
-test_that("a complex shared by two proteoforms is split between them", {
+test_that("a complex shared by two proteoforms is not resolvable per proteoform", {
   # 1200 is 1000 + 2 x 100 and 1100 + 100
   hits <- screen_compounds(
     mass = c(1000, 1100, 1200),
@@ -1143,14 +1147,103 @@ test_that("a complex shared by two proteoforms is split between them", {
     compounds = list(A = 100)
   )
 
-  binding <- proteoform_binding(hits)
-  pooled <- sum(binding$complex) / sum(binding$unbound + binding$complex)
-
-  expect_equal(pooled, unique(hits$`Total % Binding`))
-  # Split evenly: half of the shared peak for each proteoform
-  expect_equal(binding$complex, c(20, 20))
+  # The sample's binding counts the peak once: 40 of 200 (intensities scaled
+  # to the base peak), and the row values still add up to it
+  expect_equal(unique(hits$`Total % Binding`), 0.2)
   preferred <- hits[hits$Preferred %in% TRUE, ]
   expect_equal(sum(preferred$`% Binding`), unique(hits$`Total % Binding`))
+
+  # Nothing tells how much of the peak belongs to which form: neither gets a
+  # binding of its own, and the peak is not counted for either
+  binding <- proteoform_binding(hits)
+  expect_true(all(is.na(binding$binding)))
+  expect_equal(binding$limit, c("shared", "shared"))
+  expect_true(all(binding$shared))
+  expect_equal(binding$complex, c(0, 0))
+  expect_match(proteoform_limit_note("shared"), "not resolvable")
+})
+
+test_that("the classic two-step cross-check recovers an exact hyperbola", {
+  conc <- c(1, 2, 5, 10, 20, 50)
+  kobs_result <- list(kobs_result_table = data.frame(
+    kobs = 0.3 * conc / (8 + conc),
+    kobs_se = 0.01,
+    row.names = as.character(conc)
+  ))
+  ts <- classic_two_step(kobs_result)
+  expect_equal(ts$kinact, 0.3, tolerance = 1e-5)
+  expect_equal(ts$KI, 8, tolerance = 1e-5)
+  expect_equal(ts$ratio, 0.3 / 8, tolerance = 1e-5)
+  expect_equal(ts$n_concentrations, 6)
+
+  # Too few concentrations for two parameters
+  short <- list(kobs_result_table = kobs_result$kobs_result_table[1:2, ])
+  expect_null(classic_two_step(short))
+})
+
+test_that("the binding curve shows the global fit, single fits on request", {
+  bt <- data.frame(
+    time = rep(c(0, 10, 20), 3),
+    predicted_binding = c(0, 0, 0, 0, 40, 60, 0, 70, 80),
+    binding = c(NA, 0, 0, NA, 41, 59, NA, 71, 79),
+    binding_sd = NA_real_,
+    n = 1,
+    concentration = factor(rep(c("0", "2", "8"), each = 3), levels = c("8", "2", "0")),
+    kobs = rep(c(0, 0.05, 0.12), each = 3),
+    kobs_se = NA_real_,
+    skip_reason = NA_character_
+  )
+  kin <- list(
+    Model = "linear",
+    Ratio = c(Estimate = 0.01),
+    Fit = list(KI_hyperbolic = NA_real_),
+    Plateaus = data.frame(conc = c(2, 8), plateau = c(80, 90), own = TRUE)
+  )
+
+  # One curve per fitted concentration from the global model; the control is
+  # not part of the fit
+  curves <- global_binding_curves(kin, bt)
+  expect_setequal(unique(as.character(curves$concentration)), c("2", "8"))
+  at <- curves[curves$concentration == "8" & curves$time == 20, ]
+  expect_equal(at$predicted_binding, 90 * (1 - exp(-0.08 * 20)))
+
+  units <- c(Concentration = "Conc. [µM]", Time = "Time [min]")
+  labels <- function(plot) {
+    built <- plotly::plotly_build(plot)
+    unique(unlist(lapply(built$x$data, `[[`, "text")))
+  }
+  plain <- labels(make_binding_plot(list(binding_table = bt), units = units, points = "mean", kinact_ki_result = kin))
+  expect_true("Global fit" %in% plain)
+  expect_true("Untreated control" %in% plain)
+  expect_false("Fitted alone (for comparison)" %in% plain)
+  both <- labels(make_binding_plot(list(binding_table = bt), units = units, points = "mean", kinact_ki_result = kin, show_single = TRUE))
+  expect_true("Fitted alone (for comparison)" %in% both)
+})
+
+test_that("a shared peak leaves the other samples of a proteoform measured", {
+  hits <- rbind(
+    screen_compounds(
+      mass = c(1000, 1100, 1200),
+      intensity = c(50, 30, 20),
+      protein_masses = c(1000, 1100),
+      compounds = list(A = 100)
+    ),
+    # No shared peak in S2: 1000 + 100 only
+    within(
+      screen_compounds(
+        mass = c(1000, 1100, 1300),
+        intensity = c(50, 30, 20),
+        protein_masses = c(1000, 1100),
+        compounds = list(A = 100)
+      ),
+      Sample <- "S2"
+    )
+  )
+  binding <- proteoform_binding(hits)
+  s2 <- binding[binding$sample == "S2", ]
+  expect_false(any(s2$shared))
+  expect_true(all(!is.na(s2$binding)))
+  expect_true(all(binding$shared[binding$sample != "S2"]))
 })
 
 # ---- Overview tab of the Relative Binding interface ----------------------------

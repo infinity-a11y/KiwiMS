@@ -66,6 +66,12 @@ test_that("B0: kinetics of the baseline", {
   expect_rounded(k$series[["R1"]], 327.9)
   expect_rounded(k$series[["R2"]], 341.0)
 
+  # The classic two-step cross-check reproduces what KiwiMS reported before
+  # the global fit (227.6 for this declaration) and lies outside the CI: the
+  # unweighted hyperbola follows the uncertain high-concentration k_obs
+  expect_rounded(k$two_step, 227.6)
+  expect_false(k$two_step_within_ci)
+
   # Proteoforms tab: the fitted concentrations only, so 120 samples, not 122
   expect_equal(k$reference, 21638.84)
   main <- k$proteoforms[["21638.84"]]

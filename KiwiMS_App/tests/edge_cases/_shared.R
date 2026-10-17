@@ -370,6 +370,9 @@ kit_complex_summary <- function(entry) {
     reason = entry$reason,
     ratio = ratio(k),
     ci = if (!is.null(k)) kit_per_M_s(unlist(k$Ratio[c("CI 2.5%", "CI 97.5%")])),
+    # The classic two-step cross-check and whether it lies in the CI
+    two_step = if (!is.null(k$Two_Step)) kit_per_M_s(k$Two_Step$ratio),
+    two_step_within_ci = k$Two_Step$within_ci,
     status = k$Status,
     warnings = vapply(k$Warnings, `[[`, character(1), "title"),
     series = if (!is.null(k$Series)) {
@@ -382,6 +385,8 @@ kit_complex_summary <- function(entry) {
         reason = p$reason,
         n = p$n_samples,
         n_limit = p$n_limit,
+        # Samples left out: complex peak shared with another proteoform
+        n_shared = p$n_shared,
         # More than half of the values at a detection limit: orange
         flagged = p$n_samples > 0 && p$n_limit / p$n_samples > 0.5
       )
@@ -497,9 +502,10 @@ kit_show <- function(title, d, r = NULL) {
     for (p in names(k$proteoforms)) {
       x <- k$proteoforms[[p]]
       cat(sprintf(
-        "    %s: kinact/KI %s  status %s  limit %d/%d%s%s\n",
+        "    %s: kinact/KI %s  status %s  limit %d/%d%s%s%s\n",
         p, kit_fmt(x$ratio), if (is.null(x$status)) "-" else x$status,
         x$n_limit, x$n, if (x$flagged) "  (orange)" else "",
+        if (isTRUE(x$n_shared > 0)) sprintf("  not resolvable %d", x$n_shared) else "",
         if (is.null(x$reason)) "" else paste0("  hover: ", x$reason)
       ))
     }

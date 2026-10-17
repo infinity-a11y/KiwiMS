@@ -200,9 +200,11 @@ hit_columns <- function() {
     ),
     help_def(
       "Binding [%]",
-      "Share of this complex peak in the protein signal of the sample. A ",
-      "peak claimed by several proteoforms or compounds is split evenly ",
-      "between them, so the rows still add up to the total."
+      "Share of this complex peak in the protein signal of the sample. In ",
+      "the rare case that a peak fits complexes of several proteoforms, each ",
+      "of its rows shows an equal part, so the rows still add up to the ",
+      "total; the binding of each single proteoform is then not resolvable ",
+      "(see the Proteoforms help)."
     ),
     help_def(
       "Tot. Binding [%]",
@@ -1228,31 +1230,55 @@ binding_curve_page <- function() {
   help_modal(
     "Binding Curve",
     shiny::p(
-      "Binding over incubation time, one curve per concentration. Each ",
-      "concentration is fitted on its own, all of its samples as individual ",
-      "points, to a single exponential:"
+      "Binding over incubation time, one curve per concentration. The curves ",
+      "are the global fit, the fit ",
+      k_inact(),
+      ", ",
+      K_i(),
+      " and ",
+      k_inact(),
+      "/",
+      K_i(),
+      " come from. All samples of all concentrations are fitted at once to"
     ),
     exponential_formula(),
     shiny::p(
-      mvar("P"),
-      " is the plateau, the binding approached at long incubation (bounded ",
-      "to 0 – 100 %), and ",
+      "with ",
       k_obs(),
-      " the observed rate constant. The curve starts at 0 % at ",
+      " of every concentration on one curve (k",
+      htmltools::tags$sub("obs"),
+      " Curve) and ",
+      mvar("P"),
+      " the plateau, the binding approached at long incubation (bounded to ",
+      "0 – 100 %). Curves that get close to their plateau within the measured ",
+      "time have a plateau of their own; the others share one. Every curve ",
+      "starts at 0 % at ",
       math(mvar("t"), " = 0"),
-      " by construction."
+      "."
     ),
     help_defs(
+      help_def(
+        "Points",
+        "Each sample as it enters the fit (Settings → Data Points: Samples). ",
+        "Mean ± SD per time point is the alternative view; the fit does not ",
+        "use the means."
+      ),
+      help_def(
+        "Show Single-Concentration Fits",
+        "(Settings) Adds each concentration fitted on its own as a dashed ",
+        "line. Where it differs clearly from the global curve, that ",
+        "concentration does not follow the common model well."
+      ),
       help_def(
         "Untreated control",
         "Concentration 0 is drawn as a flat baseline and not fitted. A control ",
         "that does not stay at 0 % points at background adducts or carry-over."
       ),
       help_def(
-        "No response",
-        "A concentration without binding at any time point gets ",
-        k_obs(),
-        " = 0."
+        "Outside the global fit",
+        "A concentration without binding, or one unticked in Per-Concentration ",
+        "Fits, ",
+        "is not part of the global fit; it shows its own fit, dotted."
       ),
       help_def(
         "Not fitted",
@@ -1260,11 +1286,7 @@ binding_curve_page <- function() {
         "not converge, a concentration is drawn as points without a curve."
       )
     ),
-    shiny::p(
-      shiny::strong("Settings → Data Points"),
-      " shows either the mean ± SD per time point or the individual samples ",
-      "the curves were fitted to. The export uses the same choice."
-    )
+    shiny::p("The export follows the settings.")
   )
 }
 
@@ -1272,24 +1294,31 @@ binding_curve_single_page <- function() {
   help_modal(
     "Binding Curve (Single Concentration)",
     shiny::p(
-      "Binding over incubation time at the selected concentration, fitted to ",
-      "a single exponential with all samples as individual points:"
+      "Binding over incubation time at the selected concentration, with two ",
+      "curves of"
     ),
     exponential_formula(),
-    shiny::p(
-      "The fit gives ",
-      k_obs(),
-      ", the plateau ",
-      mvar("P"),
-      " (bounded to 0 – 100 %) and the initial velocity ",
-      mvar("v"),
-      " shown in the cards beside. The curve starts at 0 % at ",
-      math(mvar("t"), " = 0"),
-      " by construction."
+    help_defs(
+      help_def(
+        "Solid",
+        "The global fit at this concentration: its ",
+        k_obs(),
+        " lies on the common ",
+        k_obs(),
+        " curve, the plateau is its own or shared (cards beside)."
+      ),
+      help_def(
+        "Dashed",
+        "This concentration fitted on its own, for comparison. A clear gap ",
+        "between the two means it does not follow the common model well."
+      )
     ),
     shiny::p(
+      "A concentration outside the global fit (excluded or without binding) ",
+      "shows only its own fit, dotted. ",
       shiny::strong("Settings → Data Points"),
-      " shows either the mean ± SD per time point or the individual samples."
+      " shows the individual samples (as fitted) or the mean ± SD per time ",
+      "point."
     )
   )
 }
@@ -1316,10 +1345,13 @@ kobs_curve_page <- function() {
       help_def(
         "Points",
         k_obs(),
-        " ± SE of each concentration fitted on its own (Binding Curve)."
+        " ± SE of each concentration fitted on its own (Per-Concentration ",
+        "Fits), shown for comparison. The global fit does not use them: it ",
+        "fits the samples directly, so the line need not pass through points ",
+        "with large error bars."
       ),
       help_def(
-        "Line",
+        "Global fit",
         k_obs(),
         "(",
         conc_c(),
@@ -1334,6 +1366,15 @@ kobs_curve_page <- function() {
         "."
       ),
       help_def(
+        "Two-step (classic)",
+        "Dotted, hidden until its legend entry is clicked: a hyperbola through ",
+        "the points without weights, the classic two-step route (see the ",
+        k_inact(),
+        "/",
+        K_i(),
+        " help)."
+      ),
+      help_def(
         "Show Extrapolation",
         "(Settings) Shades the measured concentration range and continues the ",
         "fitted line beyond it, dashed, for the proteoforms too when they are ",
@@ -1345,25 +1386,42 @@ kobs_curve_page <- function() {
 
 binding_analysis_page <- function() {
   help_modal(
-    "Binding Analysis",
-    shiny::p("The fit of each concentration on its own (Binding Curve)."),
+    "Per-Concentration Fits",
+    shiny::p(
+      "Each concentration fitted on its own next to its values in the global ",
+      "fit. ",
+      k_inact(),
+      "/",
+      K_i(),
+      " comes from the global fit; the single fits are there to compare. ",
+      "The global values are those of the fit with all concentrations; the ",
+      "cards follow the ticks in Included."
+    ),
     help_defs(
       help_def("Conc.", "Compound concentration."),
-      help_def(k_obs(), "Observed rate constant."),
       help_def(
-        "SE",
-        "Standard error of ",
+        shiny::tagList(k_obs(), " alone ± SE"),
+        "Observed rate constant of the concentration fitted on its own, with ",
+        "its standard error (N/A when it cannot be estimated, typically with ",
+        "too few usable time points). High concentrations have large errors: ",
+        "their curves are nearly complete at the first time point."
+      ),
+      help_def(
+        shiny::tagList(k_obs(), " global"),
         k_obs(),
-        " from that fit; N/A when it cannot be estimated, typically with too ",
-        "few usable time points."
+        " of the global fit at this concentration, the point on the fitted ",
+        k_obs(),
+        " curve."
       ),
       help_def(
-        "Velocity",
-        mvar("v"),
-        ", the initial rate of binding as a fraction of the protein per time ",
-        "unit (see the Velocity help of the Concentrations tab)."
+        "Plateau alone / global",
+        "The plateau ",
+        mvar("P"),
+        " fitted alone, and in the global fit; ",
+        shiny::em("shared"),
+        " marks a concentration whose curve is still rising and shares its ",
+        "plateau with the other rising curves."
       ),
-      help_def("Plateau [%]", "The fitted plateau ", mvar("P"), "."),
       help_def(
         "Included",
         "Whether the concentration enters the global fit. Unchecking it ",
@@ -1538,6 +1596,24 @@ ratio_page <- function() {
         "repeat of the experiment varies."
       ),
       help_def(
+        "Two-step (classic)",
+        "For comparison only: the classic route, which KiwiMS used until ",
+        "September 2026 and most curve-fitting programs use. The ",
+        k_obs(),
+        " of each concentration is fitted to a hyperbola without weights, and ",
+        k_inact(),
+        "/",
+        K_i(),
+        " is the quotient of the two fitted constants. The k_obs Curve draws ",
+        "it dotted (click its legend entry). It is orange when it lies outside ",
+        "the 95 % CI of the global fit. The usual cause is the high ",
+        "concentrations: their curves are nearly complete at the first time ",
+        "point, so their ",
+        k_obs(),
+        " are the least certain, yet they weigh as much as the others in the ",
+        "unweighted fit. The global fit weighs every sample equally instead."
+      ),
+      help_def(
         "Warnings",
         "Hover for details. They flag results that need care, for example ",
         "missing saturation, plateaus that disagree, or early samples reading ",
@@ -1576,8 +1652,8 @@ diag_plateaus_page <- function() {
       "All values in % binding. The symbol (same colour and shape as in the ",
       "other plots) is the mean binding observed at the concentration's last ",
       "time point. The short horizontal tick is the plateau of that ",
-      "concentration fitted on its own (the Plateau column of the Binding ",
-      "Analysis table). The wide grey bar is the plateau used in the global ",
+      "concentration fitted on its own (Plateau alone in the Per-Concentration ",
+      "Fits table). The wide grey bar is the plateau used in the global ",
       "fit; a bar spanning several concentrations means they share one ",
       "plateau."
     ),
@@ -1675,6 +1751,15 @@ proteoforms_page <- function() {
     ),
     help_defs(
       help_def(
+        shiny::tagList(k_obs(), " per Proteoform"),
+        "Per proteoform, the ",
+        k_obs(),
+        " of each concentration fitted on its own (points) and the proteoform's ",
+        "own global fit (line); the pooled fit is drawn dotted for reference. ",
+        "Forms that react alike lie on one curve. A form with mostly limit ",
+        "values starts hidden: its points describe the detection limit."
+      ),
+      help_def(
         "Reference",
         "The proteoform carrying the most signal among those whose binding is ",
         "measured in at least one sample. It is listed first, under the pooled ",
@@ -1695,7 +1780,16 @@ proteoforms_page <- function() {
         "Samples whose value is pinned to 0 or 100 % because the complex or ",
         "the unbound peak of the proteoform was not detected. Paired Binding ",
         "leaves them out; Settings → Show Limit Values draws them as open ",
-        "symbols."
+        "symbols. With more than half of its values at a limit, a proteoform's ",
+        "constants read ",
+        shiny::em("not meaningful"),
+        ": its fit would describe the detection limit. ",
+        shiny::strong("not resolvable"),
+        " counts the samples whose complex peak also fits a complex of ",
+        "another proteoform (their masses plus mass shifts coincide). The ",
+        "spectrum cannot tell how much of that peak belongs to which form, so ",
+        "these samples have no binding of their own and stay out of the ",
+        "proteoform's fit. The pooled binding counts the peak once."
       )
     ),
     help_note(
@@ -1713,19 +1807,28 @@ kobs_value_page <- function() {
     shiny::p(
       k_obs(),
       " is the observed pseudo-first-order rate constant of complex ",
-      "formation at the selected concentration, from the single-exponential ",
-      "fit of its binding curve. Its unit is the inverse time unit of the ",
-      "Unit View."
+      "formation at the selected concentration. Its unit is the inverse time ",
+      "unit of the Unit View."
     ),
     shiny::p(
-      shiny::strong("± on the card"),
-      " is the standard error of ",
+      shiny::strong("The large value"),
+      " is ",
       k_obs(),
-      " in that fit: how precisely the curve determines the rate constant. It ",
-      "is not the standard deviation of the replicates; their scatter is ",
-      "visible in the binding curve (Settings → Data Points). It reads n.a. ",
-      "when the fit cannot estimate it, typically with too few usable time ",
-      "points."
+      " of the global fit at this concentration: the point of the fitted ",
+      k_obs(),
+      " curve, the value behind ",
+      k_inact(),
+      "/",
+      K_i(),
+      "."
+    ),
+    shiny::p(
+      shiny::strong("fitted alone"),
+      " is the single-exponential fit of this concentration on its own, with ",
+      "its standard error, for comparison: how precisely this curve alone ",
+      "determines the rate. It is not the standard deviation of the ",
+      "replicates. A concentration outside the global fit (excluded, or ",
+      "without response) shows only this value."
     ),
     shiny::p("Under the two-step model,"),
     hyperbolic_formula(),
@@ -1768,6 +1871,13 @@ plateau_page <- function() {
       ),
       htmltools::tags$li("reversible covalent binding.")
     ),
+    shiny::p(
+      shiny::strong("On the card:"),
+      " the plateau of this concentration in the global fit, whether it is ",
+      "its own or shared with the other curves that are still rising (see ",
+      "Curve Completion), and beneath it the plateau when the concentration ",
+      "is fitted alone."
+    ),
     help_note(
       "A curve that has not levelled off within the measured time gives a ",
       "poorly determined plateau, which is an extrapolation. The Plateau per ",
@@ -1776,36 +1886,80 @@ plateau_page <- function() {
   )
 }
 
-velocity_page <- function() {
+surface_page <- function() {
   help_modal(
-    shiny::span("Velocity ", mvar("v")),
+    "Binding Surface",
     shiny::p(
-      mvar("v"),
-      " is the initial rate of binding: the slope of the binding curve at ",
-      math(mvar("t"), " = 0"),
-      ", as a fraction of the protein per time unit. It follows from the ",
-      "plateau and ",
-      k_obs(),
-      ":"
+      "The global fit as one model: binding over incubation time and ",
+      "compound concentration,"
     ),
-    help_formula(
-      mvar("v"),
-      op("="),
-      frac(shiny::tagList(mvar("P"), op("·"), k_obs()), "100")
-    ),
+    exponential_formula(),
     shiny::p(
-      "Multiplied by 100 it is the initial slope in % per time unit. When the ",
-      "plateau is 100 %, ",
-      mvar("v"),
-      " equals ",
+      "with ",
       k_obs(),
-      ". Only ",
-      k_obs(),
-      " enters the global ",
+      " given by one curve over the concentration (k",
+      htmltools::tags$sub("obs"),
+      " Curve). Two numbers, ",
       k_inact(),
       "/",
       K_i(),
-      " analysis."
+      " and ",
+      K_i(),
+      ", shape the whole surface; the plateaus set its height."
+    ),
+    help_defs(
+      help_def(
+        "Surface",
+        "The fitted model. Between measured concentrations its plateau is ",
+        "interpolated for display; the fit itself has plateaus only at the ",
+        "measured concentrations."
+      ),
+      help_def(
+        "Coloured lines",
+        "The model at each measured concentration: the curves of the Binding ",
+        "Curve, lying on the surface."
+      ),
+      help_def(
+        "Points",
+        "The samples, as fitted. Points scattering evenly above and below the ",
+        "surface mean the one model describes all concentrations."
+      ),
+      help_def(
+        "Log Concentration Axis",
+        "(Settings) Spreads the low concentrations, which crowd near zero on a ",
+        "linear axis. The untreated control is then left out."
+      )
+    ),
+    shiny::p("Drag to rotate, scroll to zoom, double-click to reset the view.")
+  )
+}
+
+completion_page <- function() {
+  help_modal(
+    "Curve Completion",
+    shiny::p(
+      "How far the binding curve of the selected concentration gets towards ",
+      "its plateau by the last measured time point, according to the global ",
+      "fit:"
+    ),
+    help_formula(
+      "1",
+      op("−"),
+      shiny::tagList(
+        "e",
+        shiny::tags$sup(shiny::tagList("−", k_obs(), " · ", mvar("t"), "max"))
+      )
+    ),
+    shiny::p(
+      "A curve that gets at least ",
+      round(100 * kinetics_settings$plateau_min_reached),
+      " % of the way has a plateau of its own in the global fit. Curves that ",
+      "are still rising share one plateau: on their own they cannot tell the ",
+      "plateau from the rate, and a free plateau there could distort ",
+      k_inact(),
+      "/",
+      K_i(),
+      "."
     )
   )
 }
@@ -2283,7 +2437,8 @@ conversion_help <- list(
   proteoform_tooltip_bttn = proteoforms_page,
   kobs_value_tooltip_bttn = kobs_value_page,
   binding_plateau_tooltip_bttn = plateau_page,
-  v_value_tooltip_bttn = velocity_page,
+  reached_value_tooltip_bttn = completion_page,
+  surface_tooltip_bttn = surface_page,
   hits_table_tooltip_bttn = hits_table_page,
   hits_tooltip_bttn = hits_page,
   binding_curve_single_tooltip_bttn = binding_curve_single_page,

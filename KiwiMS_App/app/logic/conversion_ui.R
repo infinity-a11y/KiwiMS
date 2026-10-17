@@ -111,7 +111,11 @@ kinact_ki_concentrations_panel <- function(
               "binding_plateau_tooltip_bttn",
               "conc_tab_plateau_value"
             ),
-            stat_card("Velocity v", "v_value_tooltip_bttn", "conc_tab_v_value")
+            stat_card(
+              "Curve Completion",
+              "reached_value_tooltip_bttn",
+              "conc_tab_reached_value"
+            )
           )
         ),
         # Top right: hits of the concentration
@@ -232,10 +236,10 @@ kinact_ki_concentrations_panel <- function(
                     ns("conc_tab_binding_points"),
                     label = NULL,
                     choices = c(
-                      "Mean ± SD" = "mean",
-                      "Samples" = "samples"
+                      "Samples" = "samples",
+                      "Mean ± SD" = "mean"
                     ),
-                    selected = "mean",
+                    selected = "samples",
                     size = "sm"
                   ),
                   style = "margin-right:20px;"
@@ -328,11 +332,19 @@ kinact_ki_results_ui <- function(
                       ns("binding_points"),
                       label = NULL,
                       choices = c(
-                        "Mean ± SD" = "mean",
-                        "Samples" = "samples"
+                        "Samples" = "samples",
+                        "Mean ± SD" = "mean"
                       ),
-                      selected = "mean",
+                      selected = "samples",
                       size = "sm"
+                    ),
+                    # Each concentration fitted on its own, dashed, next to
+                    # the global fit the curves show
+                    shinyWidgets::materialSwitch(
+                      ns("binding_show_single"),
+                      label = "Show Single-Concentration Fits",
+                      value = FALSE,
+                      right = TRUE
                     ),
                     style = "margin-right:20px;"
                   )),
@@ -434,7 +446,7 @@ kinact_ki_results_ui <- function(
               full_screen = TRUE,
               bslib::card_header(
                 class = "bg-dark help-header d-flex justify-content-between",
-                "Binding Analysis",
+                "Per-Concentration Fits",
                 shiny::div(
                   class = "box-header-settings-help",
                   table_dl_popover(ns, "kobs_result"),
@@ -656,9 +668,65 @@ kinact_ki_results_ui <- function(
     shiny::tags$script(popover_autoclose)
   )
 
+  # The global fit as one model: binding over time and concentration
+  surface_panel <- bslib::nav_panel(
+    title = "Binding Surface",
+    shiny::div(
+      class = "conversion-result-wrapper",
+      # One card filling the tab: the diagnostics grid, as a single cell
+      shiny::div(
+        class = "kinetics-diagnostics-tab",
+        style = "grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr);",
+      shiny::div(
+        class = "card-custom",
+        bslib::card(
+          full_screen = TRUE,
+          bslib::card_header(
+            class = "bg-dark help-header d-flex justify-content-between",
+            "Binding Surface",
+            shiny::div(
+              class = "box-header-settings-help",
+              card_settings_popover(shiny::div(
+                shinyWidgets::materialSwitch(
+                  ns("surface_log_conc"),
+                  label = "Log Concentration Axis",
+                  value = FALSE,
+                  right = TRUE
+                ),
+                style = "margin-right:20px;"
+              )),
+              plot_dl_popover(ns, "surface"),
+              bslib::tooltip(
+                shiny::div(
+                  class = "tooltip-bttn",
+                  shiny::actionButton(
+                    ns("surface_tooltip_bttn"),
+                    label = NULL,
+                    icon = shiny::icon("circle-question")
+                  )
+                ),
+                "Help",
+                placement = "top"
+              )
+            )
+          ),
+          bslib::card_body(
+            shinycssloaders::withSpinner(
+              plotly::plotlyOutput(ns("surface_plot"), height = "100%"),
+              type = 1,
+              color = "#7777f9"
+            )
+          )
+        )
+      )
+      )
+    ),
+    shiny::tags$script(popover_autoclose)
+  )
+
   all_tabs <- c(
     static_panels,
-    list(diagnostics_panel),
+    list(surface_panel, diagnostics_panel),
     proteoform_panels,
     concentration_panels
   )

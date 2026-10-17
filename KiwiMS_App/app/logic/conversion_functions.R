@@ -302,6 +302,16 @@ convert_kinact_ki_units <- function(kinact_ki_result, view) {
     kinact_ki_result$Params_CI["KI", ] <-
       kinact_ki_result$Params_CI["KI", ] * view$conc_factor
   }
+  if (!is.null(kinact_ki_result$Two_Step)) {
+    two_step <- kinact_ki_result$Two_Step
+    two_step$ratio <- two_step$ratio / ratio_factor
+    two_step$ratio_se <- two_step$ratio_se / ratio_factor
+    two_step$kinact <- two_step$kinact / view$time_factor
+    two_step$kinact_se <- two_step$kinact_se / view$time_factor
+    two_step$KI <- two_step$KI * view$conc_factor
+    two_step$KI_se <- two_step$KI_se * view$conc_factor
+    kinact_ki_result$Two_Step <- two_step
+  }
   if (!is.null(kinact_ki_result$Series)) {
     series <- kinact_ki_result$Series
     series$ratio <- series$ratio / ratio_factor
@@ -1740,8 +1750,9 @@ check_sample_table <- function(
         ),
         details = format_ambiguities(amb),
         note = paste(
-          "Unbound readings are kept and complexes shared by proteoforms are",
-          "split between them."
+          "Unbound readings are kept. A complex shared by proteoforms counts",
+          "once in the binding; the per-proteoform binding of those samples is",
+          "not resolvable."
         )
       )
     }
@@ -2379,8 +2390,9 @@ interpretation_label <- function(peaks) {
 #                refuses such a sample.
 #   species    - an unbound species and a complex, or two unbound species. The
 #                unbound reading wins; the run logs it.
-#   proteoform - complexes of two different species. The peak's intensity is
-#                split between them.
+#   proteoform - complexes of two different species. The peak counts once in
+#                the pooled binding; per species it is not resolvable (see
+#                proteoform_binding()).
 # Pairs within one compound on one species - two of its mass shifts or
 # stoichiometries - are left out: the preferred assignment resolves those
 # (prefer_hits()).
@@ -2820,7 +2832,8 @@ check_hits <- function(
     if (nrow(hits_add) > 1) {
       # One reading per species and compound names the peak, picked by the
       # chosen rule. Readings of different species (proteoforms) each stay
-      # preferred: conversion() splits the peak between them.
+      # preferred: nothing tells them apart. conversion() counts the peak once
+      # for the sample; proteoform_binding() leaves it unresolved per species.
       hits_add$preferred <- prefer_hits(
         hits_add,
         shift = matched$shift,
@@ -2985,6 +2998,13 @@ unbound_label <- function(species_mass, multi_species = FALSE) {
 # threshold well before the main species' do, and its binding then snaps to an
 # end of the scale instead of being measured. Accepts the hits frame in its raw
 # or its display column naming.
+#
+# A complex peak that fits complexes of several species (their masses plus the
+# mass shifts coincide) cannot be attributed to any one of them: nothing in the
+# spectrum says how much of it belongs to which. The binding of every species
+# claiming it is then not resolvable in that sample - NA, `limit` "shared" -
+# rather than resting on an assumed share. The pooled Total % Binding counts
+# the peak once either way.
 #' @export
 proteoform_binding <- function(hits) {
   cols <- if ("Mw Protein [Da]" %in% names(hits)) {
@@ -3014,7 +3034,8 @@ proteoform_binding <- function(hits) {
     unbound = numeric(0),
     complex = numeric(0),
     binding = numeric(0),
-    limit = character(0)
+    limit = character(0),
+    shared = logical(0)
   )
 
   if (!is.data.frame(hits) || !nrow(hits) || !all(cols %in% names(hits))) {
@@ -3043,8 +3064,7 @@ proteoform_binding <- function(hits) {
     return(empty)
   }
 
-  # A peak that is a complex of several species is split evenly between them,
-  # so the species' complex signals add up to the pooled one
+  # Complex peaks claimed by more than one species: not attributable
   claimed <- df$is_complex & !is.na(df$complex)
   peak_key <- paste(df$sample, df$peak)
   n_species <- tapply(
@@ -3052,8 +3072,8 @@ proteoform_binding <- function(hits) {
     peak_key[claimed],
     function(x) length(unique(x))
   )
-  df$share <- 1
-  df$share[claimed] <- 1 / n_species[peak_key[claimed]]
+  df$shared <- FALSE
+  df$shared[claimed] <- n_species[peak_key[claimed]] > 1
 
   out <- df |>
     dplyr::group_by(sample, protein, species) |>
@@ -3063,30 +3083,40 @@ proteoform_binding <- function(hits) {
         u <- unbound[!is.na(unbound)]
         if (length(u)) u[1] else 0
       },
-      # A peak carrying several interpretations (compounds, mass shifts)
-      # contributes its intensity once
+      # The species' own complex signal. A peak carrying several readings of
+      # the species (compounds, mass shifts) contributes its intensity once; a
+      # peak shared with another species is left out (see `shared`).
       complex = {
-        keep <- is_complex & !is.na(complex)
-        x <- complex[keep] * share[keep]
+        keep <- is_complex & !is.na(complex) & !shared
+        x <- complex[keep]
         sum(x[!duplicated(peak[keep])])
       },
+      shared = any(shared),
       .groups = "drop"
     ) |>
     as.data.frame()
 
   total <- out$unbound + out$complex
-  out$binding <- ifelse(total > 0, 100 * out$complex / total, NA_real_)
+  out$binding <- ifelse(
+    out$shared | total <= 0,
+    NA_real_,
+    100 * out$complex / total
+  )
   out$limit <- ifelse(
-    total <= 0,
-    NA_character_,
+    out$shared,
+    "shared",
     ifelse(
-      out$unbound <= 0,
-      "unbound",
-      ifelse(out$complex <= 0, "complex", NA_character_)
+      total <= 0,
+      NA_character_,
+      ifelse(
+        out$unbound <= 0,
+        "unbound",
+        ifelse(out$complex <= 0, "complex", NA_character_)
+      )
     )
   )
 
-  out
+  out[, c(names(empty)), drop = FALSE]
 }
 
 # Card text for a list of per-species values ----
@@ -3447,16 +3477,21 @@ has_proteoforms <- function(binding) {
   any(tapply(binding$species, protein, function(x) length(unique(x))) > 1)
 }
 
-# Hover note for a proteoform binding value pinned by an undetected peak
+# Hover note for a proteoform binding value pinned by an undetected peak, or
+# not resolvable because its complex peak also fits another proteoform
 #' @export
 proteoform_limit_note <- function(limit) {
   ifelse(
     is.na(limit),
     NA_character_,
     ifelse(
-      limit == "unbound",
-      "Unbound peak not detected: binding may be overestimated",
-      "No complex detected: binding may be underestimated"
+      limit == "shared",
+      "Complex peak also fits another proteoform: binding not resolvable",
+      ifelse(
+        limit == "unbound",
+        "Unbound peak not detected: binding may be overestimated",
+        "No complex detected: binding may be underestimated"
+      )
     )
   )
 }
@@ -3547,6 +3582,23 @@ proteoform_kinetics <- function(
     ]
     rows <- rows[!duplicated(rows$Sample), , drop = FALSE]
     rows$binding <- b$binding[match(rows$Sample, b$sample)]
+
+    # Samples whose complex peak also fits another species have no binding of
+    # their own (see proteoform_binding()); they leave the fit but are counted
+    shared <- rows[
+      b$limit[match(rows$Sample, b$sample)] %in% "shared",
+      ,
+      drop = FALSE
+    ]
+    if (!is.null(concentrations_select) && conc_col %in% names(shared)) {
+      shared <- shared[
+        shared[[conc_col]] %in% concentrations_select,
+        ,
+        drop = FALSE
+      ]
+    }
+    n_shared <- nrow(shared)
+
     rows <- rows[!is.na(rows$binding), , drop = FALSE]
 
     if (!is.null(concentrations_select) && conc_col %in% names(rows)) {
@@ -3602,10 +3654,22 @@ proteoform_kinetics <- function(
     } else {
       sum(kobs$kobs_result_table$kobs > 0, na.rm = TRUE)
     }
+    # Too little data left because samples were not resolvable: that is the
+    # reason to name, not the shortage it causes
+    short_of_data <- is.null(kobs) || n_response < 3
     reason <- if (!is.null(kinact_ki)) {
       NULL
     } else if (isTRUE(nonphysical)) {
       "The fit gave a negative parameter"
+    } else if (n_shared > 0 && short_of_data) {
+      sprintf(
+        paste(
+          "Its complex peak also fits another proteoform in %d sample%s:",
+          "binding not resolvable there"
+        ),
+        n_shared,
+        if (n_shared == 1) "" else "s"
+      )
     } else if (is.null(kobs)) {
       "k_obs could not be fitted at any concentration"
     } else if (n_response == 0) {
@@ -3625,10 +3689,12 @@ proteoform_kinetics <- function(
       binding_kobs_result = kobs,
       kinact_ki_result = kinact_ki,
       nonphysical = isTRUE(nonphysical),
-      no_response = !is.null(kobs) && n_response == 0,
+      no_response = !is.null(kobs) && n_response == 0 && n_shared == 0,
       reason = reason,
       n_samples = nrow(used),
-      n_limit = sum(!is.na(limit))
+      n_limit = sum(!is.na(limit)),
+      # Samples left out because the binding is not resolvable
+      n_shared = n_shared
     )
   })
 }
@@ -3674,14 +3740,19 @@ proteoform_comparison_table <- function(kinetics, pooled, binding, view) {
     # Fitted mostly on values pinned by an undetected peak, the parameters
     # describe the detection limit rather than the proteoform
     unreliable <- k$n_samples > 0 && k$n_limit / k$n_samples > 0.5
+    # The fitted value is not shown at all: it would describe the detection
+    # limit (e.g. a form read at 100 % from the first time point gets an
+    # arbitrarily high rate), and a number invites reading it anyway
     flag <- function(x) {
       if (x == "N/A" || !unreliable) {
         return(x)
       }
       sprintf(
-        "<span class=\"protocol-stat-warn\" data-bs-toggle=\"tooltip\" title=\"%s\">%s</span>",
-        "More than half of the values sit at a detection limit",
-        x
+        "<span class=\"protocol-stat-warn\" data-bs-toggle=\"tooltip\" title=\"%s\">not meaningful</span>",
+        paste(
+          "More than half of the values sit at a detection limit, so the fit",
+          "describes the limit, not the proteoform"
+        )
       )
     }
     # Say why a proteoform has no fit when the reason is known
@@ -3743,16 +3814,26 @@ proteoform_comparison_table <- function(kinetics, pooled, binding, view) {
       delta = delta,
       # Flagged on its own as well, so the warning also shows when there is
       # no fitted value to flag
-      limit = if (unreliable) {
-        sprintf(
-          "<span class=\"protocol-stat-warn\" data-bs-toggle=\"tooltip\" title=\"%s\">%d / %d</span>",
-          "More than half of the values sit at a detection limit",
-          k$n_limit,
-          k$n_samples
-        )
-      } else {
-        sprintf("%d / %d", k$n_limit, k$n_samples)
-      }
+      limit = paste0(
+        if (unreliable) {
+          sprintf(
+            "<span class=\"protocol-stat-warn\" data-bs-toggle=\"tooltip\" title=\"%s\">%d / %d</span>",
+            "More than half of the values sit at a detection limit",
+            k$n_limit,
+            k$n_samples
+          )
+        } else {
+          sprintf("%d / %d", k$n_limit, k$n_samples)
+        },
+        # Samples left out of the fit as not resolvable
+        if (isTRUE(k$n_shared > 0)) {
+          sprintf(
+            " · <span class=\"protocol-stat-warn\" data-bs-toggle=\"tooltip\" title=\"%s\">%d not resolvable</span>",
+            "Samples whose complex peak also fits another proteoform: left out of this fit",
+            k$n_shared
+          )
+        }
+      )
     )
   })
 
@@ -4412,6 +4493,8 @@ conversion <- function(hits) {
     # preferred interpretations - complexes of different proteoforms, or of
     # different compounds - is split evenly between them, so the per-row
     # values still add up to the total instead of counting the peak twice.
+    # This is bookkeeping for the row values only: the binding of a single
+    # proteoform treats such a peak as not resolvable (proteoform_binding()).
     n_claims <- stats::ave(
       as.numeric(hits$preferred %in% TRUE),
       hits$peak,
@@ -4492,8 +4575,9 @@ log_status <- function(n_peaks, mass = NULL) {
 }
 
 # A peak with more than one reading. Readings of one compound on one species
-# are resolved by the preference rule, readings of different species split the
-# peak between them; the header says which happened and every reading follows,
+# are resolved by the preference rule, readings of different species share the
+# peak (counted once, not resolvable per species); the header says which
+# happened and every reading follows,
 # the preferred ones ticked. The header is a warning: the Warnings card of the
 # Protocol tab lists it, folded per resolution.
 log_ambiguous_peak <- function(hits, preference) {
@@ -4511,7 +4595,7 @@ log_ambiguous_peak <- function(hits, preference) {
     },
     if (n_split > 1) {
       sprintf(
-        "split between %d %s",
+        "shared by %d %s",
         n_split,
         if (n_species == n_split) "proteoforms" else "readings"
       )
@@ -4563,7 +4647,7 @@ log_mass_ambiguities <- function(amb, tolerance) {
   }
   kinds <- c(
     species = "read as unbound",
-    proteoform = "split evenly",
+    proteoform = "not resolvable per form",
     compounds = "not distinguishable"
   )
   # Found from the declared masses; each rule only acts on a detected peak
@@ -5019,13 +5103,26 @@ log_kinact_ki_results <- function(results, units) {
       "     ├─ kinact, KI = not determinable"
     },
     sprintf(
-      "     └─ kinact/KI = %s ± %s %s⁻¹ %s⁻¹%s",
+      "     %s kinact/KI = %s ± %s %s⁻¹ %s⁻¹%s",
+      if (is.null(results$Two_Step)) "└─" else "├─",
       fmt_log(ratio[["Estimate"]]),
       fmt_log(ratio[["Std. Error"]]),
       units[["Concentration"]],
       units[["Time"]],
       ci
-    )
+    ),
+    # The classic result, for comparison only
+    if (!is.null(results$Two_Step)) {
+      sprintf(
+        "     └─ Two-step (classic, comparison only): kinact/KI = %s%s",
+        fmt_log(results$Two_Step$ratio),
+        if (isFALSE(results$Two_Step$within_ci)) {
+          paste0(" ", .col_warn("outside the 95 % CI"))
+        } else {
+          ""
+        }
+      )
+    }
   )
 
   message(paste(lines, collapse = "\n"))
@@ -5667,7 +5764,49 @@ resolve_symbol_map <- function(symbol_map, concentrations) {
   symbol_map
 }
 
+# Curves of the global fit for the Binding Curve: per fitted concentration
+# Plateau * (1 - exp(-kobs * t)) with the plateau and k_obs([I]) of the global
+# kinact/KI fit, keyed by the concentration labels of `binding_table` (matched
+# numerically, the labels follow the unit view). NULL without a global fit.
+#' @export
+global_binding_curves <- function(kinact_ki_result, binding_table, n = 201) {
+  plateaus <- kinact_ki_result$Plateaus
+  if (is.null(plateaus) || !nrow(plateaus) || !nrow(binding_table)) {
+    return(NULL)
+  }
+  keys <- unique(as.character(binding_table$concentration))
+  key_num <- suppressWarnings(as.numeric(keys))
+  grid <- seq(0, max(binding_table$time, na.rm = TRUE), length.out = n)
+
+  curves <- lapply(seq_len(nrow(plateaus)), function(i) {
+    conc <- plateaus$conc[i]
+    hit <- which(abs(key_num - conc) <= 1e-9 * max(abs(conc), 1e-300))
+    if (!length(hit)) {
+      return(NULL)
+    }
+    kobs <- kobs_model_at(kinact_ki_result, conc)
+    data.frame(
+      time = grid,
+      predicted_binding = plateaus$plateau[i] * (1 - exp(-kobs * grid)),
+      concentration = keys[hit[1]],
+      kobs = kobs,
+      plateau = plateaus$plateau[i]
+    )
+  })
+  curves <- do.call(rbind, curves)
+  if (is.null(curves)) {
+    return(NULL)
+  }
+  curves$concentration <- factor(curves$concentration, levels = keys)
+  curves
+}
+
 # Function to generate and display binding plot
+#
+# With `kinact_ki_result` the curves are those of the global fit, the model
+# kinact/KI and KI come from; concentrations outside it (untreated control,
+# excluded or without response) keep their own fit. `show_single` adds the fit
+# of every concentration on its own as a dashed line, for comparison.
 #' @export
 make_binding_plot <- function(
   kobs_result,
@@ -5675,11 +5814,13 @@ make_binding_plot <- function(
   colors = NULL,
   units = NULL,
   theme = "light",
-  points = c("mean", "samples", "both"),
-  symbol_map = NULL
+  points = c("samples", "mean", "both"),
+  symbol_map = NULL,
+  kinact_ki_result = NULL,
+  show_single = FALSE
 ) {
-  # Which observations to draw: mean ± SD per time point, the individual
-  # samples, or both (both clutters the full plot; single concentrations cope)
+  # Which observations to draw: the individual samples (what the global fit
+  # sees), mean ± SD per time point, or both
   points <- match.arg(points)
   show_means <- points != "samples"
 
@@ -5746,36 +5887,94 @@ make_binding_plot <- function(
 
   time_unit <- gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])
 
-  # Generate plot
-  binding_plot <- plotly::plot_ly() |>
-    # Predicted/modeled binding
-    plotly::add_lines(
-      data = kobs_result$binding_table,
+  curve_hover <- paste(
+    "<b>%{text}</b><br>",
+    paste("Time: %{x}", time_unit, "<br>"),
+    "Binding [%]: %{y:.2f}<br>",
+    paste0("k<sub>obs</sub>: %{customdata:.3~g} ", time_unit, "⁻¹"),
+    "<extra></extra>"
+  )
+
+  # Curves: the global fit where it covers a concentration, otherwise the
+  # concentration's own fit (untreated control, excluded, no response)
+  global <- if (!is.null(kinact_ki_result)) {
+    global_binding_curves(kinact_ki_result, kobs_result$binding_table)
+  }
+  if (!is.null(global) && !is.null(filter_conc)) {
+    global <- global[global$concentration == filter_conc, , drop = FALSE]
+  }
+  if (!is.null(global) && !nrow(global)) {
+    global <- NULL
+  }
+  in_global <- if (is.null(global)) {
+    character(0)
+  } else {
+    unique(as.character(global$concentration))
+  }
+  single <- kobs_result$binding_table
+  own <- single[!as.character(single$concentration) %in% in_global, ]
+  own$label <- ifelse(
+    suppressWarnings(as.numeric(as.character(own$concentration))) %in% 0,
+    "Untreated control",
+    if (is.null(global)) "Fit" else "Fitted alone (not in the global fit)"
+  )
+
+  binding_plot <- plotly::plot_ly()
+  if (!is.null(global)) {
+    global$label <- "Global fit"
+    binding_plot <- plotly::add_lines(
+      binding_plot,
+      data = global,
       x = ~time,
       y = ~predicted_binding,
       color = ~concentration,
       legendgroup = ~concentration,
       colors = colors,
       symbols = symbol_map,
-      line = list(width = 2, opacity = 0.6),
-      hovertemplate = paste(
-        "<b>Predicted</b><br>",
-        paste(
-          "Time: %{x}",
-          gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
-          "<br>"
-        ),
-        "Binding [%]: %{y:.2f}<br>",
-        paste0(
-          "k<sub>obs</sub>: %{customdata:.3~g} ",
-          gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
-          "⁻¹"
-        ),
-        "<extra></extra>"
-      ),
+      line = list(width = 2),
+      text = ~label,
       customdata = ~kobs,
+      hovertemplate = curve_hover,
       showlegend = FALSE
     )
+  }
+  if (nrow(own)) {
+    binding_plot <- plotly::add_lines(
+      binding_plot,
+      data = own,
+      x = ~time,
+      y = ~predicted_binding,
+      color = ~concentration,
+      legendgroup = ~concentration,
+      colors = colors,
+      symbols = symbol_map,
+      line = list(width = 2, dash = if (is.null(global)) "solid" else "dot"),
+      text = ~label,
+      customdata = ~kobs,
+      hovertemplate = curve_hover,
+      showlegend = FALSE
+    )
+  }
+  # Each concentration fitted on its own, for comparison with the global fit
+  if (isTRUE(show_single) && !is.null(global)) {
+    alone <- single[as.character(single$concentration) %in% in_global, ]
+    alone$label <- "Fitted alone (for comparison)"
+    binding_plot <- plotly::add_lines(
+      binding_plot,
+      data = alone,
+      x = ~time,
+      y = ~predicted_binding,
+      color = ~concentration,
+      legendgroup = ~concentration,
+      colors = colors,
+      symbols = symbol_map,
+      line = list(width = 1.2, dash = "dash"),
+      text = ~label,
+      customdata = ~kobs,
+      hovertemplate = curve_hover,
+      showlegend = FALSE
+    )
+  }
 
   if (show_means) {
     binding_plot <- binding_plot |>
@@ -5813,15 +6012,9 @@ make_binding_plot <- function(
             gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
             "<br>"
           ),
-          "Binding [%]: %{y:.2f}<br>",
-          paste0(
-            "k<sub>obs</sub>: %{customdata:.3~g} ",
-            gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
-            "⁻¹"
-          ),
+          "Binding [%]: %{y:.2f}",
           "<extra></extra>"
         ),
-        customdata = ~kobs,
         showlegend = ifelse(is.null(filter_conc), TRUE, FALSE)
       )
   }
@@ -5941,7 +6134,15 @@ make_binding_plot <- function(
       )
   }
 
-  # Add explicit legend-only entries for no-response concentrations (no observed points)
+  # Add explicit legend-only entries for no-response concentrations (no observed
+  # points). In Samples mode a concentration whose samples are drawn (the
+  # untreated control at t = 0) already has its entry.
+  if (!show_means && !is.null(sample_points)) {
+    missing_conc <- setdiff(
+      missing_conc,
+      unique(as.character(sample_points$concentration))
+    )
+  }
   if (is.null(filter_conc) && length(missing_conc) > 0) {
     for (conc_name in as.character(sort(
       as.numeric(missing_conc),
@@ -6015,6 +6216,7 @@ make_binding_plot <- function(
 
 # k_obs of the selected model (linear or hyperbolic) of a kinact/KI result at
 # `conc`, with the reported kinact/KI
+#' @export
 kobs_model_at <- function(kinact_ki_result, conc) {
   ratio <- kinact_ki_result$Ratio[["Estimate"]]
   if (identical(kinact_ki_result$Model, "hyperbolic")) {
@@ -6111,7 +6313,9 @@ make_kobs_plot <- function(
       y = ~predicted_kobs,
       colors = colors,
       symbols = symbol_map,
-      line = list(width = 1.5, color = font_color),
+      line = list(width = 2.5, color = font_color),
+      name = "Global fit",
+      legendgroup = "global_fit",
       hovertemplate = paste(
         paste0("<b>Global fit (", kinact_ki_result$Model, ")</b><br>"),
         paste0(
@@ -6126,7 +6330,7 @@ make_kobs_plot <- function(
         ),
         "<extra></extra>"
       ),
-      showlegend = FALSE
+      showlegend = TRUE
     )
   }
 
@@ -6164,8 +6368,8 @@ make_kobs_plot <- function(
       name = conc_name,
       legendgroup = conc_name,
       marker = list(
-        size = 12,
-        opacity = 1,
+        size = 10,
+        opacity = 0.85,
         color = unname(colors[conc_name]),
         symbol = unname(symbol_map[conc_name]),
         line = list(width = 1, color = font_color)
@@ -6175,12 +6379,12 @@ make_kobs_plot <- function(
         type = "data",
         array = ~kobs_se,
         visible = TRUE,
-        thickness = 1.5,
-        width = 4,
+        thickness = 1.2,
+        width = 3,
         color = font_color
       ),
       hovertemplate = paste0(
-        "<b>Calculated</b><br>",
+        "<b>Fitted alone</b> (for comparison, not used by the fit)<br>",
         "Concentration: ",
         conc_name,
         " ",
@@ -6190,6 +6394,35 @@ make_kobs_plot <- function(
         time_unit,
         "⁻¹",
         "<extra></extra>"
+      ),
+      showlegend = TRUE,
+      inherit = FALSE
+    )
+  }
+
+  # Classic two-step fit through the k_obs points, for comparison only. Hidden
+  # until its legend entry is clicked, so the global fit stays the curve the
+  # plot shows.
+  two_step <- kinact_ki_result$Two_Step
+  if (!fit_failed && !is.null(two_step) && nrow(df_points)) {
+    conc_top <- max(as.numeric(as.character(df_points$conc)), na.rm = TRUE)
+    grid_classic <- seq(0, conc_top, length.out = 200)
+    kobs_plot <- plotly::add_lines(
+      kobs_plot,
+      x = grid_classic,
+      y = two_step$kinact * grid_classic / (two_step$KI + grid_classic),
+      name = "Two-step (classic)",
+      legendgroup = "two_step_classic",
+      visible = "legendonly",
+      line = list(width = 1.5, color = font_color, dash = "dot"),
+      hovertemplate = paste0(
+        "<b>Two-step (classic), for comparison</b><br>",
+        "Unweighted hyperbola through the k<sub>obs</sub> points<br>",
+        "Concentration: %{x:.3~g} ",
+        conc_unit,
+        "<br>k<sub>obs</sub>: %{y:.3~g} ",
+        time_unit,
+        "⁻¹<extra></extra>"
       ),
       showlegend = TRUE,
       inherit = FALSE
@@ -6334,6 +6567,179 @@ make_kobs_plot <- function(
 #
 # Four views on how well the data support the global fit. All of them take
 # the theme so exports stay readable on light and dark backgrounds.
+
+# Binding surface: the global fit as one model over time and concentration ----
+#
+# Binding(t, [I]) = P([I]) * (1 - exp(-kobs([I]) * t)), with kobs([I]) of the
+# fitted model, drawn as a surface; the curves at the measured concentrations
+# (the Binding Curve) lie on it, the samples around it. Between measured
+# concentrations the plateau is interpolated linearly (held constant beyond
+# them), which is display only: the fit has plateaus at the measured
+# concentrations alone. `log_conc` puts the concentration axis on a log scale
+# and leaves out the untreated control.
+#' @export
+make_binding_surface_plot <- function(
+  kinact_ki_result,
+  kobs_result,
+  colors,
+  units,
+  theme = "light",
+  log_conc = FALSE
+) {
+  pl <- kinact_ki_result$Plateaus
+  if (is.null(pl) || !nrow(pl) || is.null(kobs_result$binding_points)) {
+    return(kinetics_message_plot("No global fit to show", theme))
+  }
+  pl <- pl[order(pl$conc), , drop = FALSE]
+  pal <- kinetics_plot_colors(theme)
+  conc_unit <- gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]])
+  time_unit <- gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])
+
+  pts <- kobs_result$binding_points
+  pts$conc_num <- suppressWarnings(as.numeric(as.character(pts$concentration)))
+  pts <- pts[!is.na(pts$binding) & !is.na(pts$conc_num), , drop = FALSE]
+  if (isTRUE(log_conc)) {
+    pts <- pts[pts$conc_num > 0, , drop = FALSE]
+  }
+
+  conc_grid <- if (isTRUE(log_conc)) {
+    exp(seq(log(min(pl$conc)), log(max(pl$conc)), length.out = 60))
+  } else {
+    seq(0, max(pl$conc), length.out = 60)
+  }
+  time_grid <- seq(0, max(pts$time, na.rm = TRUE), length.out = 80)
+  plateau_at <- stats::approx(pl$conc, pl$plateau, xout = conc_grid, rule = 2)$y
+  kobs_at <- kobs_model_at(kinact_ki_result, conc_grid)
+  z <- plateau_at * (1 - exp(-outer(kobs_at, time_grid)))
+
+  # Neutral surface, so the concentration colours of curves and samples stand
+  # out on it
+  scale <- if (theme == "light") {
+    list(c(0, "#e3e6eb"), c(1, "#3f4b63"))
+  } else {
+    list(c(0, "#3f4b63"), c(1, "#e3e6eb"))
+  }
+
+  p <- plotly::plot_ly() |>
+    plotly::add_surface(
+      x = time_grid,
+      y = conc_grid,
+      z = z,
+      colorscale = scale,
+      showscale = FALSE,
+      opacity = 0.55,
+      name = "Global fit",
+      hovertemplate = paste0(
+        "<b>Global fit</b><br>Time: %{x:.3~g} ",
+        time_unit,
+        "<br>Compound: %{y:.3~g} ",
+        conc_unit,
+        "<br>Binding: %{z:.1f} %<extra></extra>"
+      )
+    )
+
+  # Label of a measured concentration as the plots key it (the points' level)
+  key_of <- function(conc) {
+    levels_chr <- unique(as.character(pts$concentration))
+    num <- suppressWarnings(as.numeric(levels_chr))
+    hit <- which(abs(num - conc) <= 1e-9 * max(abs(conc), 1e-300))
+    if (length(hit)) levels_chr[hit[1]] else as.character(conc)
+  }
+
+  # The global curve of every fitted concentration, on the surface
+  for (i in seq_len(nrow(pl))) {
+    key <- key_of(pl$conc[i])
+    curve <- pl$plateau[i] *
+      (1 - exp(-kobs_model_at(kinact_ki_result, pl$conc[i]) * time_grid))
+    p <- plotly::add_trace(
+      p,
+      type = "scatter3d",
+      mode = "lines",
+      x = time_grid,
+      y = rep(pl$conc[i], length(time_grid)),
+      z = curve,
+      line = list(width = 6, color = unname(colors[key])),
+      name = key,
+      legendgroup = key,
+      showlegend = FALSE,
+      hovertemplate = paste0(
+        "<b>Global fit, ",
+        key,
+        " ",
+        conc_unit,
+        "</b><br>Time: %{x:.3~g} ",
+        time_unit,
+        "<br>Binding: %{z:.1f} %<extra></extra>"
+      )
+    )
+  }
+
+  # The samples, highest concentration first in the legend
+  keys <- unique(as.character(pts$concentration[order(-pts$conc_num)]))
+  for (key in keys) {
+    d <- pts[as.character(pts$concentration) == key, , drop = FALSE]
+    p <- plotly::add_trace(
+      p,
+      type = "scatter3d",
+      mode = "markers",
+      x = d$time,
+      y = d$conc_num,
+      z = d$binding,
+      marker = list(
+        size = 3.5,
+        color = unname(colors[key]),
+        line = list(width = 0.5, color = pal$font)
+      ),
+      text = d$Sample,
+      name = key,
+      legendgroup = key,
+      hovertemplate = paste0(
+        "<b>Sample</b><br>%{text}<br>Time: %{x:.3~g} ",
+        time_unit,
+        "<br>Binding: %{z:.1f} %<extra></extra>"
+      )
+    )
+  }
+
+  axis <- function(title, extra = list()) {
+    c(
+      list(
+        title = list(text = title, font = list(color = pal$font)),
+        color = pal$font,
+        gridcolor = pal$grid,
+        zerolinecolor = pal$zero,
+        backgroundcolor = "rgba(0,0,0,0)"
+      ),
+      extra
+    )
+  }
+
+  p |>
+    plotly::layout(
+      paper_bgcolor = "rgba(0,0,0,0)",
+      font = list(size = 13, color = pal$font),
+      legend = list(
+        title = list(
+          text = paste0("Concentration [", conc_unit, "]  "),
+          font = list(color = pal$font)
+        ),
+        bgcolor = "rgba(0,0,0,0)",
+        font = list(color = pal$font),
+        itemsizing = "constant"
+      ),
+      scene = list(
+        xaxis = axis(paste0("Time [", time_unit, "]")),
+        yaxis = axis(
+          paste0("Compound [", conc_unit, "]"),
+          if (isTRUE(log_conc)) list(type = "log") else list()
+        ),
+        zaxis = axis("Binding [%]", list(range = c(0, 105))),
+        aspectmode = "manual",
+        aspectratio = list(x = 1.3, y = 1.1, z = 0.75),
+        camera = list(eye = list(x = 1.55, y = -1.65, z = 0.85))
+      )
+    )
+}
 
 kinetics_plot_colors <- function(theme) {
   light <- theme == "light"
@@ -6642,7 +7048,7 @@ make_kinetics_residual_plot <- function(
 # Plateau per concentration, all in % binding. For each concentration the
 # binding observed at its last time point (the concentration's symbol) is
 # joined by a dotted stem to the plateau of its single-concentration fit (the
-# tick, as in the Binding Analysis table): a long stem means the curve was
+# tick, as in the Per-Concentration Fits table): a long stem means the curve was
 # still rising when measurement stopped, so that plateau is extrapolated. The
 # bar is the plateau the global fit used; one bar across several
 # concentrations means they share it because none of them got close enough to
@@ -7331,7 +7737,7 @@ compute_kobs <- function(hits, units) {
     # drawn in the Binding Curve as the experiment's baseline — a control that
     # does not sit flat at 0 % points at background adduct or carry-over, and
     # the Binding Curve is where that is noticed. It gets no entry in
-    # concentration_list, so it stays out of the Binding Analysis table, the
+    # concentration_list, so it stays out of the Per-Concentration Fits table, the
     # concentration tabs and the global fit.
     if (isTRUE(as.numeric(i) == 0)) {
       message(sprintf(
@@ -7798,6 +8204,78 @@ kinact_ki_warning <- function(code, title, detail) {
   list(code = code, title = title, detail = detail)
 }
 
+# Classic two-step fit, shown next to the global fit as a cross-check ----
+#
+# The textbook route KiwiMS used until September 2026 and most users know from
+# general curve-fitting programs: the k_obs of each concentration (the per-concentration
+# fits of compute_kobs()) fitted to kobs = kinact * [I] / (KI + [I]),
+# unweighted. kinact/KI is the quotient of the two estimates, its standard
+# error from the delta method with their covariance. It does not feed any
+# result: unweighted, it gives the least precise k_obs (high concentrations,
+# curves nearly complete at the first time point) as much say as the precise
+# ones, which is why the global fit replaced it. NULL with fewer than three
+# concentrations or when the fit fails.
+#' @export
+classic_two_step <- function(kobs_result) {
+  tbl <- kobs_result$kobs_result_table
+  if (is.null(tbl) || !nrow(tbl)) {
+    return(NULL)
+  }
+  d <- data.frame(conc = as.numeric(rownames(tbl)), kobs = tbl$kobs)
+  d <- d[is.finite(d$conc) & d$conc > 0 & is.finite(d$kobs), , drop = FALSE]
+  if (nrow(d) < 3 || max(d$kobs) <= 0) {
+    return(NULL)
+  }
+
+  # Fitted on scaled values (concentration and k_obs over their maxima), so
+  # the parameters are of order one whatever the units
+  conc_max <- max(d$conc)
+  kobs_max <- max(d$kobs)
+  x <- d$conc / conc_max
+  y <- d$kobs / kobs_max
+  lower <- c(0, 1e-6)
+  upper <- c(Inf, 1e6)
+
+  fits <- lapply(c(0.5, 2, 10), function(ki) {
+    tryCatch(
+      minpack.lm::nls.lm(
+        par = c(kinact = 1 + 1 / ki, KI = ki),
+        fn = function(p) y - p[1] * x / (p[2] + x),
+        lower = lower,
+        upper = upper,
+        control = minpack.lm::nls.lm.control(maxiter = 1000)
+      ),
+      error = function(e) NULL
+    )
+  })
+  fits <- Filter(Negate(is.null), fits)
+  if (!length(fits)) {
+    return(NULL)
+  }
+  fit <- fits[[which.min(vapply(fits, function(f) f$deviance, numeric(1)))]]
+  cov <- nls_lm_covariance(fit, nrow(d), lower, upper)
+
+  kinact_n <- unname(fit$par[1])
+  ki_n <- unname(fit$par[2])
+  # d(kinact/KI) / d(kinact, KI)
+  grad <- c(1 / ki_n, -kinact_n / ki_n^2)
+  ratio_var <- as.numeric(t(grad) %*% cov$vcov %*% grad)
+
+  list(
+    kinact = kinact_n * kobs_max,
+    kinact_se = cov$se[1] * kobs_max,
+    KI = ki_n * conc_max,
+    KI_se = cov$se[2] * conc_max,
+    ratio = kinact_n / ki_n * kobs_max / conc_max,
+    ratio_se = if (is.finite(ratio_var)) {
+      sqrt(ratio_var) * kobs_max / conc_max
+    } else {
+      NA_real_
+    },
+    n_concentrations = nrow(d)
+  )
+}
+
 compute_kinact_ki <- function(kobs_result, units = units) {
   conc_names <- setdiff(
     names(kobs_result),
@@ -8230,6 +8708,17 @@ compute_kinact_ki <- function(kobs_result, units = units) {
     global_fit_estimates(hyperbolic_fit, conc_max, time_max)
   }
 
+  # The classic two-step result for comparison, and whether it lies inside
+  # the 95 % interval of the global fit (NA without an interval)
+  two_step <- classic_two_step(kobs_result)
+  if (!is.null(two_step)) {
+    two_step$within_ci <- if (all(is.finite(ratio_ci))) {
+      two_step$ratio >= ratio_ci[1] && two_step$ratio <= ratio_ci[2]
+    } else {
+      NA
+    }
+  }
+
   list(
     Params = params,
     Ratio = ratio,
@@ -8264,6 +8753,7 @@ compute_kinact_ki <- function(kobs_result, units = units) {
       bootstrap_ok = n_boot_ok
     ),
     Series = series,
+    Two_Step = two_step,
     Warnings = warnings,
     Points = fitted_points,
     Plateaus = plateau_table,
