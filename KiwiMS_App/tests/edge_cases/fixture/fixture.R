@@ -82,3 +82,25 @@ kit_build_fixture <- function(
   DBI::dbExecute(con, "VACUUM")
   invisible(out)
 }
+
+# kit_four_series_peaks(): The series with four replicate series ----
+# The run limit allows four replicate series (run_limits$max_series), the
+# recorded series has two. R3 and R4 are copies of R1 and R2 with every peak
+# intensity scattered by a few percent (log-normal, sd `scatter`, fixed seed),
+# so they behave like further repeats of the experiment: same design, slightly
+# different binding. For looking at the plots with the most series a run may
+# have; the numbers mean nothing beyond that.
+kit_four_series_peaks <- function(
+  peaks = ref_peaks("kinact_MLKL_3"),
+  scatter = 0.08,
+  seed = 4L
+) {
+  copy <- function(from, to, offset) {
+    p <- peaks[grepl(paste0("_", from, "$"), peaks$sample), , drop = FALSE]
+    p$sample <- sub(paste0("_", from, "$"), paste0("_", to), p$sample)
+    p$intensity <- p$intensity *
+      withr::with_seed(seed + offset, exp(stats::rnorm(nrow(p), 0, scatter)))
+    p
+  }
+  rbind(peaks, copy("R1", "R3", 1L), copy("R2", "R4", 2L))
+}

@@ -36,6 +36,14 @@ source(file.path(
   "reference_data",
   "reference_data.R"
 ))
+# The fixture builders, for the four-series variant of the series (RP6)
+source(file.path(
+  getOption("box.path")[1],
+  "tests",
+  "edge_cases",
+  "fixture",
+  "fixture.R"
+))
 
 # kit_root(): The tests/edge_cases directory ----
 kit_root <- function() {
@@ -71,7 +79,7 @@ kit_context <- function(peaks = ref_peaks("kinact_MLKL_3")) {
       list(peaks = p)
     }
   ))
-  m <- regmatches(samples, regexec("_([0-9o]+)_([0-9]+)min_(R[12])$", samples))
+  m <- regmatches(samples, regexec("_([0-9o]+)_([0-9]+)min_(R[0-9]+)$", samples))
   list(
     result = result,
     samples = samples,
@@ -80,6 +88,10 @@ kit_context <- function(peaks = ref_peaks("kinact_MLKL_3")) {
     rep = vapply(m, `[`, "", 4)
   )
 }
+
+# kit_four_series_context(): The series with four replicate series (RP6) ----
+# R1 and R2 as recorded, R3 and R4 derived from them (kit_four_series_peaks()).
+kit_four_series_context <- function() kit_context(kit_four_series_peaks())
 
 # ---- Builders of the test files ---------------------------------------------
 

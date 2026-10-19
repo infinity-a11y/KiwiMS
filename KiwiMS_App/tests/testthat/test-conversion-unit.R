@@ -38,7 +38,9 @@ box::use(
     proteoform_binding,
     proteoform_limit_note,
     classic_two_step,
+    conc_display,
     global_binding_curves,
+    legend_key_group,
     make_binding_plot,
     read_uploaded_file,
     render_hits_table,
@@ -1220,6 +1222,119 @@ test_that("the binding curve shows the global fit, single fits on request", {
   expect_true("Fitted alone (for comparison)" %in% both)
 })
 
+test_that("the binding curve tells four replicate series apart by fill", {
+  pts <- expand.grid(time = c(5, 10, 20), series = paste0("R", 1:4), stringsAsFactors = FALSE)
+  pts$Sample <- paste0("S_", pts$time, "_", pts$series)
+  pts$binding <- 50
+  pts$concentration <- factor("8", levels = "8")
+  bt <- data.frame(
+    time = c(0, 5, 10, 20), predicted_binding = c(0, 30, 45, 55), binding = NA_real_,
+    binding_sd = NA_real_, n = 1, concentration = factor("8", levels = "8"),
+    kobs = 0.1, kobs_se = NA_real_, skip_reason = NA_character_
+  )
+  units <- c(Concentration = "Conc. [µM]", Time = "Time [min]")
+  built <- plotly::plotly_build(make_binding_plot(
+    list(binding_table = bt, binding_points = pts),
+    colors = c(`8` = "red"), symbol_map = c(`8` = "square"), units = units, points = "samples"
+  ))$x$data
+  data_traces <- Filter(function(t) !identical(t$legendgroup, legend_key_group("series")), built)
+  symbols <- unlist(lapply(data_traces, function(t) if (identical(t$mode, "markers")) t$marker$symbol))
+  expect_setequal(unique(symbols), c("square", "square-open", "square-dot", "square-open-dot"))
+  # One legend group names the series
+  series_entries <- Filter(function(t) identical(t$legendgroup, legend_key_group("series")), built)
+  expect_equal(vapply(series_entries, `[[`, character(1), "name"), paste0("R", 1:4))
+})
+
+test_that("the k_obs curve marks kinact, KI and the initial slope on request", {
+  conc <- c(2, 5, 10, 20, 40)
+  grid <- seq(0, 40, length.out = 51)
+  kin <- list(
+    Model = "hyperbolic",
+    Status = "saturated",
+    Ratio = c(Estimate = 0.02),
+    Fit = list(KI_hyperbolic = 30),
+    Params = matrix(
+      c(0.6, 0.1, 30, 8),
+      nrow = 2,
+      byrow = TRUE,
+      dimnames = list(c("kinact", "KI"), c("Estimate", "Std. Error"))
+    ),
+    Kobs_Data = rbind(
+      data.frame(conc = grid, predicted_kobs = 0.6 * grid / (30 + grid), kobs = NA, kobs_se = NA),
+      data.frame(conc = conc, predicted_kobs = NA, kobs = 0.6 * conc / (30 + conc), kobs_se = 0.01)
+    )
+  )
+  units <- c(Concentration = "Conc. [μM]", Time = "Time [min]")
+  colors <- stats::setNames(c("red", "orange", "green", "blue", "purple"), conc)
+  layout_of <- function(...) plotly::plotly_build(make_kobs_plot(kin, colors, units, ...))$x$layout
+
+  expect_length(layout_of()$shapes, 0)
+  marked <- layout_of(show_constants = TRUE)
+  # kinact level, KI drop line, half-maximum line, initial slope
+  expect_length(marked$shapes, 4)
+  texts <- vapply(marked$annotations, `[[`, character(1), "text")
+  expect_true(any(grepl("K<sub>I</sub> = 30", texts, fixed = TRUE)))
+  expect_true(any(grepl("k<sub>inact</sub> = 0.6", texts, fixed = TRUE)))
+
+  # Without saturation only the slope, and a note
+  kin$Status <- "ki_undetermined"
+  curved <- layout_of(show_constants = TRUE)
+  expect_length(curved$shapes, 1)
+  # A linear fit is the slope itself: no guide line on top of it
+  kin$Status <- "linear"
+  kin$Model <- "linear"
+  linear <- layout_of(show_constants = TRUE)
+  expect_length(linear$shapes, 0)
+  expect_true(any(grepl("not determinable", vapply(linear$annotations, `[[`, character(1), "text"))))
+
+  # Log concentration axis: ticks at the measured concentrations, and the
+  # guides in log10 positions with the slope drawn as a line instead
+  kin$Status <- "saturated"
+  kin$Model <- "hyperbolic"
+  logged <- layout_of(show_constants = TRUE, log_conc = TRUE)
+  expect_identical(logged$xaxis$type, "log")
+  expect_equal(unlist(logged$xaxis$tickvals), conc)
+  expect_length(logged$shapes, 3)
+  ki_drop <- Filter(function(s) identical(s$x0, s$x1), logged$shapes)[[1]]
+  expect_equal(ki_drop$x0, log10(30))
+})
+
+test_that("the k_obs curve draws the two-step fit only when switched on", {
+  conc <- c(2, 5, 10, 20, 40)
+  kin <- list(
+    Model = "hyperbolic",
+    Status = "saturated",
+    Ratio = c(Estimate = 0.02),
+    Fit = list(KI_hyperbolic = 30),
+    Two_Step = list(kinact = 0.5, KI = 25),
+    Kobs_Data = data.frame(conc = conc, predicted_kobs = 0.6 * conc / (30 + conc),
+                           kobs = 0.6 * conc / (30 + conc), kobs_se = 0.01)
+  )
+  units <- c(Concentration = "Conc. [μM]", Time = "Time [min]")
+  colors <- stats::setNames(c("red", "orange", "green", "blue", "purple"), conc)
+  build <- function(...) plotly::plotly_build(make_kobs_plot(kin, colors, units, ...))$x
+  names_of <- function(b) unlist(lapply(b$data, `[[`, "name"))
+
+  off <- build()
+  expect_false("Two-step (classic)" %in% names_of(off))
+  expect_false(off$layout$legend$itemclick)
+  expect_false(off$layout$legend$itemdoubleclick)
+  on <- build(show_two_step = TRUE)
+  two_step <- Filter(function(t) identical(t$name, "Two-step (classic)"), on$data)
+  expect_length(two_step, 1)
+  expect_null(two_step[[1]]$visible)
+  # Not dotted like the guides to the constants, not dashed like the
+  # extrapolation, and listed with the global fit under one title
+  expect_equal(two_step[[1]]$line$dash, "dashdot")
+  global <- Filter(function(t) identical(t$name, "Global fit"), on$data)[[1]]
+  expect_equal(two_step[[1]]$legendgroup, global$legendgroup)
+  expect_equal(global$legendgrouptitle$text, "Fit")
+  points <- Filter(function(t) t$name %in% as.character(conc), on$data)
+  expect_length(unique(vapply(points, `[[`, character(1), "legendgroup")), 1)
+  titles <- unlist(lapply(points, function(t) t$legendgrouptitle$text))
+  expect_equal(titles, "Concentration [μM]")
+})
+
 test_that("a shared peak leaves the other samples of a proteoform measured", {
   hits <- rbind(
     screen_compounds(
@@ -1777,4 +1892,12 @@ test_that("the statistics plots leave out a sample without a value, without a wa
       expect_false(anyNA(unlist(lapply(built$x$data, `[[`, "y"))))
     }
   }
+})
+
+test_that("concentrations in molar units read as powers of ten on screen", {
+  expect_equal(
+    conc_display(c("8e-05", "2.5e-06", "1e-04", "2.5", "937.5", NA)),
+    c("8×10⁻⁵", "2.5×10⁻⁶", "1×10⁻⁴", "2.5", "937.5", NA)
+  )
+  expect_equal(conc_display(c(8e-05, 40)), c("8×10⁻⁵", "40"))
 })

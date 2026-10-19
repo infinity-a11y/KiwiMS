@@ -3315,6 +3315,9 @@ table .protocol-stat-warn {
 // The Spectrum card's 3D scene ("Show All", cubic) keeps plotly's own size
 // and position: forced to the full width, it ignored its domain and ran
 // under the metrics and parameters tables in the figure's margin.
+// The other 3D scenes fill their whole card, the legend laid over them:
+// plotly's own scene stops where the legend's margin begins, so a 3D view
+// zoomed or turned on screen was cut off there.
 .deconvolution-spectrum-card .plot-container .plotly,
 .deconvolution-spectrum-card .plotly .gl-container,
 .deconvolution-heatmap-card .plotly #scene,
@@ -3322,7 +3325,13 @@ table .protocol-stat-warn {
 .deconvolution-heatmap-card .plotly .gl-container,
 .conversion-samples-wrapper .plotly #scene,
 .conversion-samples-wrapper .plot-container .plotly,
-.conversion-samples-wrapper .plotly .gl-container {
+.conversion-samples-wrapper .plotly .gl-container,
+// The binding curve's wrappers are unset under "Conversion Plots", which
+// leaves them no height for a full-size scene to take
+#app-conversion_main-binding_plot > div,
+#app-conversion_main-binding_plot > div > div,
+#app-conversion_main-binding_plot .plotly #scene,
+#app-conversion_main-binding_plot .plotly .gl-container {
   top: unset !important;
   left: unset !important;
   height: 100% !important;
@@ -3462,32 +3471,66 @@ table .protocol-stat-warn {
   }
 }
 
-/* kinact and KI: the text scales down with the card instead of overflowing
-   it. A short value with stats beside it fits on one line, a long value (e.g.
-   9.8 x 10^-5 M) pushes the stats onto a line of their own, so the height
-   limit allows for the value plus up to three stat lines. */
+/* kinact and KI: the layout follows the card's shape and the text scales with
+   the card instead of overflowing it. The cqi/cqh limits come from the
+   widest content (two-digit exponents): the value with unit ~6em, the CI
+   ~14.5em and the SE ~6em (each in its own font size), plus the padding. */
 .binding-analysis-tab .result-cards > .card-custom:nth-child(-n + 2) {
+  /* Tall or square cards: value on top, one stat per line below it */
   .kinetic-card-content {
-    font-size: min(1em, 28cqh, 14cqi);
+    flex-direction: column;
+    flex-wrap: nowrap;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    font-size: min(1em, 11cqi, 29cqh);
+
+    > *,
+    > .kinetic-main,
+    > .kinetic-stats,
+    > .result-warnings {
+      flex: 0 0 auto;
+      max-width: 100%;
+    }
   }
 
-  /* Wide, short cards: value on the left, one stat per line on the right,
-     never wrapping, so the content needs ~2 lines of height instead of 3-4 */
-  @container (min-aspect-ratio: 5 / 2) {
-    .kinetic-card-content {
-      flex-wrap: nowrap;
-      font-size: min(1em, 40cqh, 7.5cqi);
+  .kinetic-stats {
+    flex-direction: column;
+    align-items: center;
+    font-size: 0.55em;
+  }
 
+  /* Moderately wide cards: both stats share one line below the value */
+  @container (min-aspect-ratio: 11 / 5) {
+    .kinetic-card-content {
+      font-size: min(1em, 7.6cqi, 37cqh);
+    }
+
+    .kinetic-stats {
+      flex-direction: row;
+      justify-content: center;
+    }
+  }
+
+  /* Very flat cards: value on the left, one stat per line on the right */
+  @container (min-aspect-ratio: 6) {
+    .kinetic-card-content {
+      flex-direction: row;
+      justify-content: space-between;
+      text-align: left;
+      font-size: min(1em, 6.3cqi, 52cqh);
+
+      /* The value is never cut; the stats beside it give way instead */
       > .kinetic-stats,
       > .result-warnings {
-        flex: 1 1 auto;
+        flex: 0 1 auto;
+        min-width: 0;
       }
     }
 
     .kinetic-stats {
       flex-direction: column;
       align-items: flex-end;
-      font-size: 0.48em;
     }
 
     .kinetic-stat {
@@ -4487,6 +4530,17 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   height: 100%;
   position: relative;
   align-items: center;
+}
+
+// A plot setting that does not apply to the current view (e.g. the Binding
+// Curve's 2D-only settings in 3D)
+.kiwi-setting-off {
+  opacity: 0.45;
+  cursor: not-allowed;
+
+  > * {
+    pointer-events: none;
+  }
 }
 
 .conversion-tab-items-label {

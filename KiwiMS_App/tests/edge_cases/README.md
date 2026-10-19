@@ -31,6 +31,7 @@ database are generated on request and git-ignored:
 |---|---|---|
 | `<category>/*.csv` | no | `<category>/generate.R`, `generate_all.R` |
 | `fixture/mlkl_bi8925.db` | no | `fixture/make_fixture.R`, `generate_all.R --fixture` |
+| `fixture/mlkl_bi8925_4series.db` (four replicate series, RP6) | no | `fixture/make_fixture_four_series.R`, `generate_all.R --fixture` |
 | the series itself | `../reference_data/kinact_MLKL_3/peaks.tsv` | a deconvolution of the reference dataset |
 
 The automated tests need none of the generated files: they write a fresh set

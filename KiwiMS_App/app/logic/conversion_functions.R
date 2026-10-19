@@ -142,6 +142,26 @@ convert_conc_keys <- function(keys, view) {
   )
 }
 
+# Concentration as shown on screen. Keys stay plain numbers because they are
+# parsed back; the ones R writes as "8e-05" (molar units) read as 8×10⁻⁵, the
+# style of the plot axes. Everything else passes through unchanged.
+#' @export
+conc_display <- function(x) {
+  x <- as.character(x)
+  sci <- !is.na(x) & grepl("^-?[0-9.]+e[-+]?[0-9]+$", x)
+  if (!any(sci)) {
+    return(x)
+  }
+  mantissa <- sub("e.*$", "", x[sci])
+  exponent <- as.character(as.integer(sub("^.*e", "", x[sci])))
+  x[sci] <- paste0(
+    mantissa,
+    "×10",
+    chartr("0123456789-", "⁰¹²³⁴⁵⁶⁷⁸⁹⁻", exponent)
+  )
+  x
+}
+
 # Rescale and relabel the concentration/time columns of a hits table
 #' @export
 convert_hits_units <- function(hits, units, view) {
@@ -5117,7 +5137,7 @@ log_kinact_ki_results <- function(results, units) {
         "     └─ Two-step (classic, comparison only): kinact/KI = %s%s",
         fmt_log(results$Two_Step$ratio),
         if (isFALSE(results$Two_Step$within_ci)) {
-          paste0(" ", .col_warn("outside the 95 % CI"))
+          " (outside the 95 % CI)"
         } else {
           ""
         }
@@ -5764,6 +5784,82 @@ resolve_symbol_map <- function(symbol_map, concentrations) {
   symbol_map
 }
 
+# Replicate series of single samples ----
+#
+# Shared by the plots that draw every sample (Global Fit Residuals, Binding
+# Curve, its 3D view): colour and shape give the concentration, the fill the
+# replicate series - filled, open, dotted, open with dot. 3D markers know
+# fewer symbols, so there it is filled and open circle, filled and open square.
+series_fill_variants <- function(series) {
+  levels <- sort_series(series)
+  variants <- c("", "-open", "-dot", "-open-dot")
+  stats::setNames(variants[(seq_along(levels) - 1) %% length(variants) + 1], levels)
+}
+
+series_symbols_3d <- function(series) {
+  levels <- sort_series(series)
+  symbols <- c("circle", "circle-open", "square", "square-open")
+  stats::setNames(symbols[(seq_along(levels) - 1) %% length(symbols) + 1], levels)
+}
+
+# Legend group naming the series by their fill, in shape-neutral circles of
+# the text colour. `symbols` maps series to the full symbol name. Each entry
+# carries one missing point: plotly.js leaves traces without any point out of
+# the legend, and a missing value draws nothing. It is wrapped in a list since
+# plotly_build() drops plain NA values together with the whole trace.
+add_series_legend <- function(p, symbols, font_color, scene = FALSE) {
+  # A filled dotted marker draws its dot in the line colour, which therefore
+  # has to stand off the filled text colour
+  contrast <- if (mean(grDevices::col2rgb(font_color)) < 128) "white" else "black"
+  for (i in seq_along(symbols)) {
+    s <- names(symbols)[i]
+    open <- grepl("open", symbols[[s]])
+    filled_dot <- !open && grepl("dot", symbols[[s]])
+    marker <- list(
+      size = if (scene) 6 else 10,
+      color = font_color,
+      symbol = symbols[[s]],
+      line = if (filled_dot) {
+        list(width = 1, color = contrast)
+      } else {
+        list(width = if (open) 2 else 0, color = font_color)
+      }
+    )
+    group_title <- if (i == 1) {
+      list(text = "Replicate series", font = list(color = font_color))
+    }
+    p <- if (scene) {
+      plotly::add_trace(
+        p,
+        type = "scatter3d",
+        mode = "markers",
+        x = list(NA),
+        y = list(NA),
+        z = list(NA),
+        name = s,
+        legendgroup = legend_key_group("series"),
+        legendgrouptitle = group_title,
+        marker = marker,
+        hoverinfo = "skip",
+        inherit = FALSE
+      )
+    } else {
+      plotly::add_markers(
+        p,
+        x = list(NA),
+        y = list(NA),
+        name = s,
+        legendgroup = legend_key_group("series"),
+        legendgrouptitle = group_title,
+        marker = marker,
+        hoverinfo = "skip",
+        inherit = FALSE
+      )
+    }
+  }
+  p
+}
+
 # Curves of the global fit for the Binding Curve: per fitted concentration
 # Plateau * (1 - exp(-kobs * t)) with the plateau and k_obs([I]) of the global
 # kinact/KI fit, keyed by the concentration labels of `binding_table` (matched
@@ -5985,6 +6081,13 @@ make_binding_plot <- function(
         y = ~binding,
         color = ~concentration,
         legendgroup = ~concentration,
+        # Legend label as shown on screen, in the order of the levels
+        name = ~ factor(
+          conc_display(concentration),
+          levels = unique(conc_display(
+            if (is.factor(concentration)) levels(concentration) else concentration
+          ))
+        ),
         colors = colors,
         symbol = ~concentration,
         marker = list(
@@ -6006,7 +6109,7 @@ make_binding_plot <- function(
         },
         text = ~ paste0("n = ", n, " · SD ", sd_label),
         hovertemplate = ~ paste(
-          "<b>Mean ± SD</b> (%{text})<br>",
+          "<b>Mean ± SD</b> (%{text}) · display only, the fit uses every sample<br>",
           paste(
             "Time: %{x}",
             gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]]),
@@ -6040,27 +6143,72 @@ make_binding_plot <- function(
   }
 
   if (!is.null(sample_points) && nrow(sample_points) > 0 && !show_means) {
-    # Samples alone: filled in the concentration colour with an outline in
-    # the theme's text colour, carrying the legend in place of the means
-    binding_plot <- binding_plot |>
-      plotly::add_markers(
-        data = sample_points,
-        x = ~time,
-        y = ~binding,
-        color = ~concentration,
-        colors = colors,
-        symbol = ~concentration,
-        symbols = symbol_map,
-        legendgroup = ~concentration,
-        marker = list(
-          size = 10,
-          opacity = 1,
-          line = list(width = 1.5, color = font_color)
-        ),
-        text = ~Sample,
-        hovertemplate = sample_hover,
-        showlegend = is.null(filter_conc)
+    # Samples alone, as the global fit sees them: colour and shape give the
+    # concentration, the fill the replicate series (as in Global Fit
+    # Residuals). The first series of a concentration carries its legend
+    # entry in place of the means.
+    series <- if ("series" %in% names(sample_points)) {
+      as.character(sample_points$series)
+    } else {
+      rep(NA_character_, nrow(sample_points))
+    }
+    series[is.na(series) | series == ""] <- "–"
+    sample_points$series_label <- series
+    variants <- series_fill_variants(series)
+    multi_series <- length(variants) > 1
+
+    for (conc_name in levels(droplevels(sample_points$concentration))) {
+      conc_color <- unname(colors[conc_name])
+      if (is.na(conc_color)) {
+        conc_color <- font_color
+      }
+      first <- TRUE
+      for (s in names(variants)) {
+        sub <- sample_points[
+          as.character(sample_points$concentration) == conc_name &
+            sample_points$series_label == s,
+          ,
+          drop = FALSE
+        ]
+        if (!nrow(sub)) {
+          next
+        }
+        open <- grepl("open", variants[[s]])
+        binding_plot <- plotly::add_markers(
+          binding_plot,
+          x = sub$time,
+          y = sub$binding,
+          name = conc_display(conc_name),
+          legendgroup = conc_name,
+          showlegend = first && is.null(filter_conc),
+          marker = list(
+            size = 10,
+            opacity = 1,
+            color = conc_color,
+            symbol = paste0(symbol_map[[conc_name]], variants[[s]]),
+            line = if (open) {
+              list(width = 2)
+            } else {
+              list(width = 1.5, color = font_color)
+            }
+          ),
+          text = paste0(
+            sub$Sample,
+            if (multi_series) paste0("<br>Series: ", s) else ""
+          ),
+          hovertemplate = sample_hover,
+          inherit = FALSE
+        )
+        first <- FALSE
+      }
+    }
+    if (multi_series) {
+      binding_plot <- add_series_legend(
+        binding_plot,
+        stats::setNames(paste0("circle", variants), names(variants)),
+        font_color
       )
+    }
   } else if (!is.null(sample_points) && nrow(sample_points) > 0) {
     # Samples on top of the means: solid in the text colour of the theme
     # (white on dark, black on light) with a ring in the concentration colour,
@@ -6108,7 +6256,7 @@ make_binding_plot <- function(
         data = unfitted,
         x = ~time,
         y = ~binding,
-        name = ~ paste0(concentration, " (not fitted)"),
+        name = ~ paste0(conc_display(concentration), " (not fitted)"),
         legendgroup = ~concentration,
         marker = list(
           size = 11,
@@ -6152,7 +6300,7 @@ make_binding_plot <- function(
         plotly::add_markers(
           x = 0,
           y = 0,
-          name = conc_name,
+          name = conc_display(conc_name),
           legendgroup = legend_key_group(conc_name),
           marker = list(
             size = 12,
@@ -6175,14 +6323,18 @@ make_binding_plot <- function(
       plot_bgcolor = "rgba(0,0,0,0)",
       font = list(size = 14, color = font_color),
       legend = list(
-        title = list(
-          text = paste0(
-            "Concentration [",
-            gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
-            "]  "
-          ),
-          font = list(color = font_color)
-        ),
+        # One concentration (Concentrations tab) has no concentration entries,
+        # so no title over them either
+        title = if (is.null(filter_conc)) {
+          list(
+            text = paste0(
+              "Concentration [",
+              gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
+              "]  "
+            ),
+            font = list(color = font_color)
+          )
+        },
         bgcolor = "rgba(0,0,0,0)",
         bordercolor = "rgba(0,0,0,0)",
         font = list(color = font_color)
@@ -6238,10 +6390,13 @@ make_kobs_plot <- function(
   units,
   theme = "light",
   show_extrapolation = FALSE,
+  show_constants = FALSE,
+  show_two_step = FALSE,
   symbol_map = NULL,
   proteoforms = NULL,
   proteoform_palette = NULL,
-  kobs_table = NULL
+  kobs_table = NULL,
+  log_conc = FALSE
 ) {
   # Without a kinact/KI fit the k_obs values of `kobs_table` are drawn alone
   fit_failed <- is.null(kinact_ki_result)
@@ -6302,6 +6457,35 @@ make_kobs_plot <- function(
     "rgba(255,255,255,0.5)"
   }
 
+  conc_unit <- gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]])
+  time_unit <- gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])
+
+  # Log concentration axis: the origin is not on it, so lines start at the
+  # left edge, a bit below the lowest concentration. Shapes and annotations
+  # take log10 positions there; lx() places them on either axis.
+  log_conc <- isTRUE(log_conc) && nrow(df_points) > 0
+  conc_measured <- sort(unique(as.numeric(as.character(df_points$conc))))
+  x_left <- if (log_conc) min(conc_measured) / 1.6 else 0
+  lx <- function(x) if (log_conc) log10(pmax(x, x_left)) else x
+
+  # Line styles, one per kind of line so none is mistaken for another: the
+  # global fit solid, continued dashed beyond the measured range; the two-step
+  # fit dash-dot; the guides to the constants thin, faded and dotted. The
+  # proteoform fits are coloured.
+  extrap_line <- list(width = 1.5, color = font_color, dash = "dash")
+
+  # Legend in two titled groups (plus the proteoforms' own): the fits and the
+  # concentrations of the points. The title goes on the group's first row.
+  fit_group <- "kobs_fits"
+  conc_group <- "kobs_concentrations"
+  group_title <- function(text) {
+    list(text = text, font = list(color = font_color))
+  }
+
+  two_step <- kinact_ki_result$Two_Step
+  draw_two_step <- isTRUE(show_two_step) && !fit_failed &&
+    !is.null(two_step) && nrow(df_points) > 0
+
   # Generate plot
   kobs_plot <- plotly::plot_ly()
   if (nrow(df)) {
@@ -6315,7 +6499,8 @@ make_kobs_plot <- function(
       symbols = symbol_map,
       line = list(width = 2.5, color = font_color),
       name = "Global fit",
-      legendgroup = "global_fit",
+      legendgroup = fit_group,
+      legendgrouptitle = group_title("Fit"),
       hovertemplate = paste(
         paste0("<b>Global fit (", kinact_ki_result$Model, ")</b><br>"),
         paste0(
@@ -6333,9 +6518,6 @@ make_kobs_plot <- function(
       showlegend = TRUE
     )
   }
-
-  conc_unit <- gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]])
-  time_unit <- gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])
 
   # Collected here and set in the single layout() call at the end, so the
   # fit-failed note and the extrapolation shading cannot overwrite each other
@@ -6365,8 +6547,11 @@ make_kobs_plot <- function(
       data = sub,
       x = ~ as.numeric(as.character(conc)),
       y = ~kobs,
-      name = conc_name,
-      legendgroup = conc_name,
+      name = conc_display(conc_name),
+      legendgroup = conc_group,
+      legendgrouptitle = if (identical(conc_name, ordered_conc[1])) {
+        group_title(paste0("Concentration [", conc_unit, "]"))
+      },
       marker = list(
         size = 10,
         opacity = 0.85,
@@ -6386,7 +6571,7 @@ make_kobs_plot <- function(
       hovertemplate = paste0(
         "<b>Fitted alone</b> (for comparison, not used by the fit)<br>",
         "Concentration: ",
-        conc_name,
+        conc_display(conc_name),
         " ",
         conc_unit,
         "<br>",
@@ -6400,21 +6585,24 @@ make_kobs_plot <- function(
     )
   }
 
-  # Classic two-step fit through the k_obs points, for comparison only. Hidden
-  # until its legend entry is clicked, so the global fit stays the curve the
-  # plot shows.
-  two_step <- kinact_ki_result$Two_Step
-  if (!fit_failed && !is.null(two_step) && nrow(df_points)) {
+  # Classic two-step fit through the k_obs points, for comparison only. Drawn
+  # only when switched on in the settings, so the global fit stays the curve
+  # the plot shows.
+  if (draw_two_step) {
     conc_top <- max(as.numeric(as.character(df_points$conc)), na.rm = TRUE)
-    grid_classic <- seq(0, conc_top, length.out = 200)
+    grid_classic <- if (log_conc) {
+      exp(seq(log(x_left), log(conc_top), length.out = 200))
+    } else {
+      seq(0, conc_top, length.out = 200)
+    }
     kobs_plot <- plotly::add_lines(
       kobs_plot,
       x = grid_classic,
       y = two_step$kinact * grid_classic / (two_step$KI + grid_classic),
       name = "Two-step (classic)",
-      legendgroup = "two_step_classic",
-      visible = "legendonly",
-      line = list(width = 1.5, color = font_color, dash = "dot"),
+      legendgroup = fit_group,
+      legendgrouptitle = if (!nrow(df)) group_title("Fit"),
+      line = list(width = 1.5, color = font_color, dash = "dashdot"),
       hovertemplate = paste0(
         "<b>Two-step (classic), for comparison</b><br>",
         "Unweighted hyperbola through the k<sub>obs</sub> points<br>",
@@ -6457,12 +6645,16 @@ make_kobs_plot <- function(
   }
 
   if (extrapolate) {
-    grid_out <- seq(max_conc, extrap_max, length.out = 200)
+    grid_out <- if (log_conc) {
+      exp(seq(log(max_conc), log(extrap_max), length.out = 200))
+    } else {
+      seq(max_conc, extrap_max, length.out = 200)
+    }
     kobs_plot <- kobs_plot |>
       plotly::add_lines(
         x = grid_out,
         y = kobs_model_at(kinact_ki_result, grid_out),
-        line = list(width = 1.5, color = font_color, dash = "dash"),
+        line = extrap_line,
         hovertemplate = paste0(
           "<b>Global fit (",
           kinact_ki_result$Model,
@@ -6482,8 +6674,8 @@ make_kobs_plot <- function(
         type = "rect",
         xref = "x",
         yref = "paper",
-        x0 = 0,
-        x1 = max_conc,
+        x0 = lx(0),
+        x1 = lx(max_conc),
         y0 = 0,
         y1 = 1,
         fillcolor = if (theme == "light") {
@@ -6498,7 +6690,7 @@ make_kobs_plot <- function(
     annotations <- c(
       annotations,
       list(list(
-        x = max_conc,
+        x = lx(max_conc),
         y = 1,
         xref = "x",
         yref = "paper",
@@ -6511,6 +6703,190 @@ make_kobs_plot <- function(
     )
   }
 
+  x_end <- NULL
+  # Optional guide to the constants: kinact as the level the curve approaches,
+  # KI where it reaches half of it, kinact/KI as its initial slope. Without
+  # saturation only the slope is defined, and a note says so.
+  if (isTRUE(show_constants) && !fit_failed && nrow(df)) {
+    fmt3 <- function(x) trimws(formatC(x, digits = 3, format = "g"))
+    ratio <- kinact_ki_result$Ratio[["Estimate"]]
+    saturated <- identical(kinact_ki_result$Status, "saturated")
+    measured_max <- max(as.numeric(as.character(df_points$conc)), na.rm = TRUE)
+    kinact <- if (saturated) kinact_ki_result$Params["kinact", 1] else NA_real_
+    ki <- if (saturated) kinact_ki_result$Params["KI", 1] else NA_real_
+    x_end <- if (extrapolate) {
+      extrap_max
+    } else if (saturated) {
+      max(measured_max, 1.25 * ki)
+    } else {
+      measured_max
+    }
+    # Reference lines, set apart from the curves by being thin and faded; the
+    # labels tell them apart
+    guide <- list(color = font_color, width = 1, dash = "dot")
+    guide_opacity <- 0.7
+
+    # The model beyond the measured range, dashed, when KI lies beyond it
+    if (saturated && !extrapolate && x_end > measured_max) {
+      grid_beyond <- if (log_conc) {
+        exp(seq(log(measured_max), log(x_end), length.out = 100))
+      } else {
+        seq(measured_max, x_end, length.out = 100)
+      }
+      kobs_plot <- plotly::add_lines(
+        kobs_plot,
+        x = grid_beyond,
+        y = kobs_model_at(kinact_ki_result, grid_beyond),
+        line = extrap_line,
+        hoverinfo = "skip",
+        showlegend = FALSE,
+        inherit = FALSE
+      )
+    }
+
+    # Initial slope: kobs = (kinact/KI) * [I] from the origin. It meets the
+    # kinact level exactly at [I] = KI, which the drawing shows.
+    # A linear fit is that slope itself, and the guide on top of it (and on
+    # its dashed extrapolation) would only blur the line.
+    # On the log axis the straight slope bends, so it is drawn as a line.
+    if (!identical(kinact_ki_result$Model, "linear")) {
+      x_slope <- if (saturated) ki else x_end
+      if (log_conc) {
+        grid_slope <- exp(seq(log(x_left), log(x_slope), length.out = 100))
+        kobs_plot <- plotly::add_lines(
+          kobs_plot,
+          x = grid_slope,
+          y = ratio * grid_slope,
+          line = guide,
+          opacity = guide_opacity,
+          hoverinfo = "skip",
+          showlegend = FALSE,
+          inherit = FALSE
+        )
+      } else {
+        shapes <- c(shapes, list(list(
+          type = "line", xref = "x", yref = "y",
+          x0 = 0, y0 = 0, x1 = x_slope, y1 = ratio * x_slope,
+          line = guide, opacity = guide_opacity
+        )))
+      }
+    }
+    slope_text <- paste0(
+      "initial slope k<sub>inact</sub>/K<sub>I</sub> = ", fmt3(ratio), " ",
+      conc_unit, "⁻¹ ", time_unit, "⁻¹"
+    )
+
+    if (saturated) {
+      # Labelled below the kinact line at the left, where the plot is empty
+      annotations <- c(annotations, list(list(
+        x = lx(0), y = kinact, xref = "x", yref = "y",
+        text = slope_text,
+        showarrow = FALSE, xanchor = "left", yanchor = "top", xshift = 4,
+        font = list(size = 12, color = font_color)
+      )))
+      shapes <- c(
+        shapes,
+        list(
+          # kinact: the level k_obs approaches at saturation
+          list(
+            type = "line", xref = "x", yref = "y",
+            x0 = lx(0), x1 = lx(x_end), y0 = kinact, y1 = kinact,
+            line = guide, opacity = guide_opacity
+          ),
+          # KI: the concentration at half of kinact
+          list(
+            type = "line", xref = "x", yref = "y",
+            x0 = lx(ki), x1 = lx(ki), y0 = 0, y1 = kinact / 2,
+            line = guide, opacity = guide_opacity
+          ),
+          list(
+            type = "line", xref = "x", yref = "y",
+            x0 = lx(0), x1 = lx(ki), y0 = kinact / 2, y1 = kinact / 2,
+            line = guide, opacity = guide_opacity
+          )
+        )
+      )
+      annotations <- c(
+        annotations,
+        list(
+          list(
+            x = lx(x_end), y = kinact, xref = "x", yref = "y",
+            text = paste0("k<sub>inact</sub> = ", fmt3(kinact), " ", time_unit, "⁻¹"),
+            showarrow = FALSE, xanchor = "right", yanchor = "bottom",
+                        font = list(size = 12, color = font_color)
+          ),
+          list(
+            x = lx(ki), y = 0, xref = "x", yref = "y",
+            text = paste0("K<sub>I</sub> = ", fmt3(ki), " ", conc_unit),
+            showarrow = FALSE, xanchor = "left", yanchor = "bottom",
+            xshift = 4, font = list(size = 12, color = font_color)
+          ),
+          list(
+            x = lx(0), y = kinact / 2, xref = "x", yref = "y",
+            text = "½ k<sub>inact</sub>",
+            showarrow = FALSE, xanchor = "left", yanchor = "bottom",
+            xshift = 4, font = list(size = 11, color = font_color)
+          )
+        )
+      )
+      # The half-maximum point
+      kobs_plot <- plotly::add_markers(
+        kobs_plot,
+        x = ki,
+        y = kinact / 2,
+        marker = list(
+          size = 9,
+          symbol = "circle-open",
+          color = font_color,
+          line = list(width = 2, color = font_color)
+        ),
+        hovertemplate = paste0(
+          "K<sub>I</sub>: %{x:.3~g} ", conc_unit,
+          "<br>½ k<sub>inact</sub>: %{y:.3~g} ", time_unit, "⁻¹<extra></extra>"
+        ),
+        showlegend = FALSE,
+        inherit = FALSE
+      )
+      # Invisible point keeping kinact and its label inside the axis range
+      kobs_plot <- plotly::add_markers(
+        kobs_plot,
+        x = x_end,
+        y = 1.08 * kinact,
+        marker = list(size = 1, opacity = 0),
+        hoverinfo = "skip",
+        showlegend = FALSE,
+        inherit = FALSE
+      )
+    } else {
+      # Slope and note in the top left corner, which a curve without
+      # saturation leaves empty (its points rise to the right). Two labels
+      # with fixed gaps, below the "measured" label of the shading, which
+      # also sits at the top; the note set apart in italics.
+      top <- if (extrapolate) -26 else -2
+      corner_label <- function(text, yshift, size) {
+        list(
+          text = text,
+          xref = "paper", yref = "paper", x = 0, y = 1,
+          xanchor = "left", yanchor = "top", align = "left",
+          xshift = 6, yshift = yshift,
+          showarrow = FALSE,
+          font = list(size = size, color = font_color)
+        )
+      }
+      annotations <- c(annotations, list(
+        corner_label(slope_text, top, 12),
+        corner_label(
+          paste0(
+            "<i>k<sub>inact</sub> and K<sub>I</sub> not determinable: ",
+            "the data define the initial slope only</i>"
+          ),
+          top - 24,
+          11
+        )
+      ))
+    }
+  }
+
   # A failed fit without any usable kobs point leaves no trace
   kobs_plot <- ensure_trace(kobs_plot) |>
     plotly::layout(
@@ -6521,17 +6897,12 @@ make_kobs_plot <- function(
       plot_bgcolor = "rgba(0,0,0,0)",
       font = list(size = 14, color = font_color),
       legend = list(
-        title = list(
-          text = paste0(
-            "Concentration [",
-            gsub(".*\\[(.+)\\].*", "\\1", units[["Concentration"]]),
-            "]  "
-          ),
-          font = list(color = font_color)
-        ),
         bgcolor = "rgba(0,0,0,0)",
         bordercolor = "rgba(0,0,0,0)",
-        font = list(color = font_color)
+        font = list(color = font_color),
+        # Hiding single traces breaks the curve/point pairing of this plot
+        itemclick = FALSE,
+        itemdoubleclick = FALSE
       ),
       xaxis = c(
         list(
@@ -6545,7 +6916,19 @@ make_kobs_plot <- function(
           gridcolor = grid_color,
           zerolinecolor = zeroline_color
         ),
-        sci_axis_ticks
+        if (log_conc) {
+          # The measured concentrations as ticks, labelled like the legend
+          x_right <- max(conc_measured, if (extrapolate) extrap_max, x_end)
+          list(
+            type = "log",
+            tickmode = "array",
+            tickvals = conc_measured,
+            ticktext = conc_display(conc_measured),
+            range = log10(c(x_left, 1.15 * x_right))
+          )
+        } else {
+          sci_axis_ticks
+        }
       ),
       yaxis = c(
         list(
@@ -6659,12 +7042,12 @@ make_binding_surface_plot <- function(
       y = rep(pl$conc[i], length(time_grid)),
       z = curve,
       line = list(width = 6, color = unname(colors[key])),
-      name = key,
+      name = conc_display(key),
       legendgroup = key,
       showlegend = FALSE,
       hovertemplate = paste0(
         "<b>Global fit, ",
-        key,
+        conc_display(key),
         " ",
         conc_unit,
         "</b><br>Time: %{x:.3~g} ",
@@ -6674,41 +7057,71 @@ make_binding_surface_plot <- function(
     )
   }
 
-  # The samples, highest concentration first in the legend
+  # The samples, highest concentration first in the legend; the symbol tells
+  # the replicate series apart (filled / open circle, filled / open square)
+  series <- if ("series" %in% names(pts)) as.character(pts$series) else NA
+  series[is.na(series) | series == ""] <- "–"
+  pts$series_label <- series
+  symbols <- series_symbols_3d(series)
+  multi_series <- length(symbols) > 1
   keys <- unique(as.character(pts$concentration[order(-pts$conc_num)]))
   for (key in keys) {
-    d <- pts[as.character(pts$concentration) == key, , drop = FALSE]
-    p <- plotly::add_trace(
-      p,
-      type = "scatter3d",
-      mode = "markers",
-      x = d$time,
-      y = d$conc_num,
-      z = d$binding,
-      marker = list(
-        size = 3.5,
-        color = unname(colors[key]),
-        line = list(width = 0.5, color = pal$font)
-      ),
-      text = d$Sample,
-      name = key,
-      legendgroup = key,
-      hovertemplate = paste0(
-        "<b>Sample</b><br>%{text}<br>Time: %{x:.3~g} ",
-        time_unit,
-        "<br>Binding: %{z:.1f} %<extra></extra>"
+    first <- TRUE
+    for (s in names(symbols)) {
+      d <- pts[
+        as.character(pts$concentration) == key & pts$series_label == s,
+        ,
+        drop = FALSE
+      ]
+      if (!nrow(d)) {
+        next
+      }
+      p <- plotly::add_trace(
+        p,
+        type = "scatter3d",
+        mode = "markers",
+        x = d$time,
+        y = d$conc_num,
+        z = d$binding,
+        marker = list(
+          size = 3.5,
+          color = unname(colors[key]),
+          symbol = symbols[[s]],
+          line = list(width = 0.5, color = pal$font)
+        ),
+        text = paste0(d$Sample, if (multi_series) paste0("<br>Series: ", s) else ""),
+        name = conc_display(key),
+        legendgroup = key,
+        showlegend = first,
+        hovertemplate = paste0(
+          "<b>Sample</b><br>%{text}<br>Time: %{x:.3~g} ",
+          time_unit,
+          "<br>Binding: %{z:.1f} %<extra></extra>"
+        )
       )
-    )
+      first <- FALSE
+    }
+  }
+  if (multi_series) {
+    p <- add_series_legend(p, symbols, pal$font, scene = TRUE)
   }
 
+  # Scene axes as the cubic spectrum sets them (multiple_spectra()): explicit
+  # tick and title sizes, which the plot export reads to scale 3D labels on
+  # their own, shallower ladder and to keep them clear of each other; no
+  # backgrounds or spikes
   axis <- function(title, extra = list()) {
     c(
       list(
-        title = list(text = title, font = list(color = pal$font)),
+        title = list(text = title, font = list(size = 14, color = pal$font)),
+        tickfont = list(size = 12, color = pal$font),
         color = pal$font,
         gridcolor = pal$grid,
+        showgrid = TRUE,
+        showline = FALSE,
         zerolinecolor = pal$zero,
-        backgroundcolor = "rgba(0,0,0,0)"
+        showspikes = FALSE,
+        showbackground = FALSE
       ),
       extra
     )
@@ -6717,26 +7130,43 @@ make_binding_surface_plot <- function(
   p |>
     plotly::layout(
       paper_bgcolor = "rgba(0,0,0,0)",
-      font = list(size = 13, color = pal$font),
+      plot_bgcolor = "rgba(0,0,0,0)",
+      font = list(size = 14, color = pal$font),
       legend = list(
         title = list(
           text = paste0("Concentration [", conc_unit, "]  "),
           font = list(color = pal$font)
         ),
         bgcolor = "rgba(0,0,0,0)",
-        font = list(color = pal$font),
-        itemsizing = "constant"
+        bordercolor = "rgba(0,0,0,0)",
+        font = list(size = 11, color = pal$font),
+        itemsizing = "constant",
+        tracegroupgap = 4
       ),
       scene = list(
         xaxis = axis(paste0("Time [", time_unit, "]")),
+        # On the log axis plotly's own ticks (digits between the decades)
+        # crowd and overlap; tick the measured concentrations instead,
+        # labelled like the legend
         yaxis = axis(
           paste0("Compound [", conc_unit, "]"),
-          if (isTRUE(log_conc)) list(type = "log") else list()
+          if (isTRUE(log_conc)) {
+            ticks <- unique(pts[, c("conc_num", "concentration")])
+            ticks <- ticks[order(ticks$conc_num), , drop = FALSE]
+            list(
+              type = "log",
+              tickmode = "array",
+              tickvals = ticks$conc_num,
+              ticktext = conc_display(ticks$concentration)
+            )
+          } else {
+            list()
+          }
         ),
         zaxis = axis("Binding [%]", list(range = c(0, 105))),
         aspectmode = "manual",
-        aspectratio = list(x = 1.3, y = 1.1, z = 0.75),
-        camera = list(eye = list(x = 1.55, y = -1.65, z = 0.85))
+        aspectratio = list(x = 1.15, y = 1, z = 0.7),
+        camera = list(eye = list(x = 1.95, y = -2.05, z = 1.05))
       )
     )
 }
@@ -6896,7 +7326,7 @@ make_kinetics_residual_plot <- function(
     "</b>",
     if (multi_series) paste0("<br>Series: ", pts$series) else "",
     "<br>Concentration: ",
-    pts$concentration,
+    conc_display(pts$concentration),
     " ",
     conc_unit,
     "<br>Time: ",
@@ -6951,7 +7381,7 @@ make_kinetics_residual_plot <- function(
         p,
         x = sub$time,
         y = sub$residual,
-        name = conc_name,
+        name = conc_display(conc_name),
         legendgroup = conc_name,
         showlegend = first,
         marker = list(
@@ -6972,35 +7402,13 @@ make_kinetics_residual_plot <- function(
     }
   }
 
-  # Legend entries explaining the fill of each series (shape-neutral circles
-  # in the text colour)
+  # Legend entries explaining the fill of each series
   if (multi_series) {
-    for (i in seq_along(series_levels)) {
-      s <- series_levels[i]
-      variant <- series_variant[[s]]
-      p <- plotly::add_markers(
-        p,
-        x = numeric(0),
-        y = numeric(0),
-        name = s,
-        legendgroup = legend_key_group("series"),
-        legendgrouptitle = if (i == 1) {
-          list(text = "Replicate series", font = list(color = pal$font))
-        },
-        marker = list(
-          size = 10,
-          color = pal$font,
-          symbol = paste0("circle", variant),
-          line = if (grepl("open", variant)) {
-            list(width = 2)
-          } else {
-            list(width = 0)
-          }
-        ),
-        hoverinfo = "skip",
-        inherit = FALSE
-      )
-    }
+    p <- add_series_legend(
+      p,
+      stats::setNames(paste0("circle", series_variant), names(series_variant)),
+      pal$font
+    )
   }
 
   guide <- function(y, dash) {
@@ -7135,7 +7543,7 @@ make_kinetics_plateau_plot <- function(
     group_tab$plateau
   )
 
-  hover_head <- paste0("<b>", tab$label, " ", conc_unit, "</b><br>")
+  hover_head <- paste0("<b>", conc_display(tab$label), " ", conc_unit, "</b><br>")
 
   p <- plotly::plot_ly() |>
     plotly::add_lines(
@@ -7230,7 +7638,7 @@ make_kinetics_plateau_plot <- function(
       list(
         tickmode = "array",
         tickvals = tab$x,
-        ticktext = tab$label,
+        ticktext = conc_display(tab$label),
         range = c(0.4, nrow(tab) + 0.6),
         showgrid = FALSE,
         zeroline = FALSE
@@ -7496,7 +7904,7 @@ make_kinetics_saturation_plot <- function(
         yref = "y",
         text = sprintf(
           "K<sub>I</sub> ≈ %s %s<br>%s",
-          signif(ki, 3),
+          conc_display(signif(ki, 3)),
           conc_unit,
           selected_label
         ),
@@ -10788,6 +11196,12 @@ render_table_view <- function(table, colors, tab, inputs, units) {
   }
   if (!is.null(inputs$tot_binding_bar) && !isTRUE(inputs$tot_binding_bar)) {
     table[["Total %"]] <- sprintf("%.2f", table[["Total %"]])
+  }
+  # Concentrations as the plots write them (8×10⁻⁵ in molar units); the row
+  # colours key on col_var, not on this column
+  conc_col <- if ("Concentration" %in% names(units)) units[["Concentration"]]
+  if (!is.null(conc_col) && conc_col %in% names(table)) {
+    table[[conc_col]] <- conc_display(table[[conc_col]])
   }
 
   # Add  prefix to group rows

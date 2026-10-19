@@ -240,9 +240,10 @@ kinact_ki_concentrations_panel <- function(
                       "Mean ± SD" = "mean"
                     ),
                     selected = "samples",
-                    size = "sm"
+                    size = "sm",
+                    justified = TRUE
                   ),
-                  style = "margin-right:20px;"
+                  style = "width:220px;"
                 )),
                 plot_dl_popover(ns, "conc_tab_binding"),
                 bslib::tooltip(
@@ -326,27 +327,59 @@ kinact_ki_results_ui <- function(
                   card_settings_popover(shiny::div(
                     shiny::div(
                       class = "conversion-tab-items-label",
-                      shiny::HTML("Data Points")
+                      shiny::HTML("View")
                     ),
+                    # 3D: the same global fit as one surface over time and
+                    # concentration
                     shinyWidgets::radioGroupButtons(
-                      ns("binding_points"),
+                      ns("binding_view"),
                       label = NULL,
-                      choices = c(
-                        "Samples" = "samples",
-                        "Mean ± SD" = "mean"
+                      choices = c("2D" = "2d", "3D" = "3d"),
+                      selected = "2d",
+                      size = "sm",
+                      justified = TRUE
+                    ),
+                    # Settings of one view only are greyed out in the other
+                    # (see the binding_view observer)
+                    shiny::div(
+                      id = ns("surface_log_conc_wrap"),
+                      class = "kiwi-setting-off",
+                      shinyWidgets::materialSwitch(
+                        ns("surface_log_conc"),
+                        label = "Log Concentration",
+                        value = FALSE,
+                        right = TRUE
+                      )
+                    ),
+                    shiny::div(
+                      id = ns("binding_2d_settings"),
+                      shiny::div(
+                        class = "conversion-tab-items-label",
+                        shiny::HTML("Data Points")
                       ),
-                      selected = "samples",
-                      size = "sm"
+                      # The means are per time point and display only; the
+                      # help page and their hover say so
+                      shinyWidgets::radioGroupButtons(
+                        ns("binding_points"),
+                        label = NULL,
+                        choices = c(
+                          "Samples" = "samples",
+                          "Mean ± SD" = "mean"
+                        ),
+                        selected = "samples",
+                        size = "sm",
+                        justified = TRUE
+                      ),
+                      # Each concentration fitted on its own, dashed, next to
+                      # the global fit the curves show
+                      shinyWidgets::materialSwitch(
+                        ns("binding_show_single"),
+                        label = "Per-Concentration Fits",
+                        value = FALSE,
+                        right = TRUE
+                      )
                     ),
-                    # Each concentration fitted on its own, dashed, next to
-                    # the global fit the curves show
-                    shinyWidgets::materialSwitch(
-                      ns("binding_show_single"),
-                      label = "Show Single-Concentration Fits",
-                      value = FALSE,
-                      right = TRUE
-                    ),
-                    style = "margin-right:20px;"
+                    style = "width:220px;"
                   )),
                   plot_dl_popover(ns, "binding"),
                   bslib::tooltip(
@@ -395,6 +428,38 @@ kinact_ki_results_ui <- function(
                       shinyWidgets::materialSwitch(
                         ns("kobs_show_extrapolation"),
                         label = "Show Extrapolation",
+                        value = FALSE,
+                        right = TRUE
+                      ),
+                      style = "margin-right:20px;"
+                    ),
+                    shiny::div(
+                      shinyWidgets::materialSwitch(
+                        ns("kobs_show_constants"),
+                        label = htmltools::tagList(
+                          "Show k",
+                          htmltools::tags$sub("inact"),
+                          " and K",
+                          htmltools::tags$sub("I")
+                        ),
+                        value = FALSE,
+                        right = TRUE
+                      ),
+                      style = "margin-right:20px;"
+                    ),
+                    shiny::div(
+                      shinyWidgets::materialSwitch(
+                        ns("kobs_show_two_step"),
+                        label = "Show Two-step (classic)",
+                        value = FALSE,
+                        right = TRUE
+                      ),
+                      style = "margin-right:20px;"
+                    ),
+                    shiny::div(
+                      shinyWidgets::materialSwitch(
+                        ns("kobs_log_conc"),
+                        label = "Log Concentration",
                         value = FALSE,
                         right = TRUE
                       ),
@@ -668,65 +733,9 @@ kinact_ki_results_ui <- function(
     shiny::tags$script(popover_autoclose)
   )
 
-  # The global fit as one model: binding over time and concentration
-  surface_panel <- bslib::nav_panel(
-    title = "Binding Surface",
-    shiny::div(
-      class = "conversion-result-wrapper",
-      # One card filling the tab: the diagnostics grid, as a single cell
-      shiny::div(
-        class = "kinetics-diagnostics-tab",
-        style = "grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr);",
-      shiny::div(
-        class = "card-custom",
-        bslib::card(
-          full_screen = TRUE,
-          bslib::card_header(
-            class = "bg-dark help-header d-flex justify-content-between",
-            "Binding Surface",
-            shiny::div(
-              class = "box-header-settings-help",
-              card_settings_popover(shiny::div(
-                shinyWidgets::materialSwitch(
-                  ns("surface_log_conc"),
-                  label = "Log Concentration Axis",
-                  value = FALSE,
-                  right = TRUE
-                ),
-                style = "margin-right:20px;"
-              )),
-              plot_dl_popover(ns, "surface"),
-              bslib::tooltip(
-                shiny::div(
-                  class = "tooltip-bttn",
-                  shiny::actionButton(
-                    ns("surface_tooltip_bttn"),
-                    label = NULL,
-                    icon = shiny::icon("circle-question")
-                  )
-                ),
-                "Help",
-                placement = "top"
-              )
-            )
-          ),
-          bslib::card_body(
-            shinycssloaders::withSpinner(
-              plotly::plotlyOutput(ns("surface_plot"), height = "100%"),
-              type = 1,
-              color = "#7777f9"
-            )
-          )
-        )
-      )
-      )
-    ),
-    shiny::tags$script(popover_autoclose)
-  )
-
   all_tabs <- c(
     static_panels,
-    list(surface_panel, diagnostics_panel),
+    list(diagnostics_panel),
     proteoform_panels,
     concentration_panels
   )

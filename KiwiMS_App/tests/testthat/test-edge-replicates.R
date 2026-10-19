@@ -86,6 +86,28 @@ test_that("RP5: without Replicate values the file names name the series", {
   expect_rounded(k$series[["R2"]], 341.0)
 })
 
+test_that("RP6: four replicate series, the most a run may have, pass and fit", {
+  d <- kit_check(B("proteins_baseline"), B("compounds_baseline"), R("config_four_series"))
+  expect_equal(d$status, "PASS")
+
+  r <- kit_cached("rp6", {
+    f <- function(x) kit_load(dirname(x), basename(x))
+    kit_run(
+      kit_four_series_context(),
+      f(B("proteins_baseline")),
+      f(B("compounds_baseline")),
+      f(R("config_four_series"))
+    )
+  })
+  k <- r$kinetics[["MLKL + BI-8925"]]
+  expect_equal(k$n, 244)
+  expect_equal(names(k$series), c("R1", "R2", "R3", "R4"))
+  # R1 and R2 are the recorded series, as in B0; R3 and R4 their copies
+  expect_rounded(k$series[["R1"]], 327.9)
+  expect_rounded(k$series[["R2"]], 341.0)
+  expect_rounded(k$ratio, 328.3)
+})
+
 # ---- Synthetic: naming ---------------------------------------------------------
 
 test_that("the series comes from the config, else the _R<n> ending, else nothing", {

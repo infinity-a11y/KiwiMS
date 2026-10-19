@@ -101,6 +101,7 @@ box::use(
       stats_violin,
       batch_plate_heatmap,
       make_unit_view,
+      conc_display,
       convert_conc_keys,
       convert_hits_units,
       convert_kobs_result_units,
@@ -2206,6 +2207,11 @@ server <- function(
     overview_table_view_raw <- shiny::reactiveVal()
     kobs_result_raw <- shiny::reactiveVal()
 
+    # Concentration ticks not yet applied: rapid clicks in the Per-Concentration
+    # Fits table collect here and refit once the clicking pauses
+    kobs_selection_pending <- shiny::reactiveVal(NULL)
+    kobs_selection_settled <- shiny::debounce(kobs_selection_pending, 600)
+
     ## Reactive functions ----
     # The results with the kinetics of the complex picked in the Results Menu.
     # Only the kinetics differ between complexes; the hits stay those of the
@@ -2477,6 +2483,7 @@ server <- function(
       samples_table_view_raw(NULL)
       overview_table_view_raw(NULL)
       kobs_result_raw(NULL)
+      kobs_selection_pending(NULL)
       heatmap_pending_sample(NULL)
       stats_scatter_pending_sample(NULL)
       stats_boxplot_pending_sample(NULL)
@@ -2736,7 +2743,6 @@ server <- function(
           output$conc_tab_kobs_value <- NULL
           output$conc_tab_plateau_value <- NULL
           output$conc_tab_reached_value <- NULL
-          output$surface_plot <- NULL
           output$conc_tab_hits <- NULL
           output$conc_tab_binding_plot <- NULL
           output$conc_tab_spectra <- NULL
@@ -4115,6 +4121,7 @@ server <- function(
             conc_selected <- rep(TRUE, length(all_fitted_conc))
             names(conc_selected) <- all_fitted_conc
             conversion_vars$select_concentration <- conc_selected
+            kobs_selection_pending(NULL)
 
             ##### Unit view ----
             # The "Unit View" pickers let the user read the results in units
@@ -4431,17 +4438,14 @@ server <- function(
                 ))
               }
 
+              # No t / p: they test the constant against zero, which any
+              # binding data passes and which reads like a quality measure;
+              # the confidence interval answers how well it is determined
               kinetic_card(
                 kinetic_value(fmt_num(params[row, 1]), unit_label),
                 kinetic_stats(
                   paste0("± ", fmt_num(params[row, 2])),
-                  ci_text(res$Params_CI[row, ]),
-                  paste0(
-                    "<b>t</b> ",
-                    fmt_num(params[row, 3]),
-                    " · <b>p</b> ",
-                    fmt_num(params[row, 4])
-                  )
+                  ci_text(res$Params_CI[row, ])
                 )
               )
             }
@@ -4532,27 +4536,18 @@ server <- function(
                   kinetic_line(
                     paste0(
                       "<b>Two-step (classic)</b> ",
-                      if (outside) {
-                        paste0(
-                          "<span class=\"protocol-stat-warn\">",
-                          fmt_num(res$Two_Step$ratio),
-                          "</span>"
-                        )
-                      } else {
-                        fmt_num(res$Two_Step$ratio)
-                      }
+                      fmt_num(res$Two_Step$ratio)
                     ),
                     title = paste0(
                       "For comparison only: the k_obs of each concentration ",
-                      "fitted to a hyperbola without weights, the method KiwiMS ",
-                      "used until September 2026 and most curve-fitting programs use. ",
-                      "Shown dotted in the k_obs Curve (click its legend ",
-                      "entry). ",
+                      "fitted to a hyperbola without weights; kinact/KI is ",
+                      "the quotient of the two fitted constants. Shown ",
+                      "dash-dotted in the k_obs Curve (enable in the plot ",
+                      "settings). ",
                       if (outside) {
                         paste0(
-                          "It lies outside the 95 % CI of the global fit: ",
-                          "the high concentrations, whose k_obs are least ",
-                          "certain, dominate the unweighted fit."
+                          "Outside the 95 % CI of the global fit: the least ",
+                          "certain k_obs at high concentrations dominate it."
                         )
                       } else {
                         "It agrees with the global fit within its 95 % CI."
@@ -4655,10 +4650,16 @@ server <- function(
 
                 kobs_result_raw(kobs_results)
 
+                # On screen the concentration reads like the plots (8×10⁻⁵ in
+                # molar units); the export above keeps the number
+                conc_key <- as.character(kobs_results[[conc_col]])
+                kobs_results[[conc_col]] <- conc_display(conc_key)
+
                 # Preserve the current exclusions across a re-render (e.g. when
-                # the displayed unit changes)
+                # the displayed unit changes), including ticks not yet applied
                 included <- shiny::isolate(
-                  conversion_vars$select_concentration
+                  kobs_selection_pending() %||%
+                    conversion_vars$select_concentration
                 )
                 included <- if (is.null(included)) {
                   rep(TRUE, nrow(kobs_results))
@@ -4721,14 +4722,14 @@ server <- function(
                     backgroundColor = DT::styleEqual(
                       levels = as.character(kobs_conc),
                       values = unname(conc_colors[match(
-                        kobs_conc,
+                        conc_key,
                         names(conc_colors)
                       )])
                     ),
                     color = DT::styleEqual(
                       levels = as.character(kobs_conc),
                       values = unname(get_contrast_color(conc_colors[match(
-                        kobs_conc,
+                        conc_key,
                         names(conc_colors)
                       )]))
                     )
@@ -4752,18 +4753,55 @@ server <- function(
               }
             })
 
-            output$binding_plot <- plotly::renderPlotly({
-              shiny::req(result_list)
+            # Settings of the other view are greyed out and disabled: the
+            # log axis is 3D only, data points and single fits 2D only
+            shiny::observeEvent(input$binding_view, {
+              is_3d <- identical(input$binding_view, "3d")
+              shinyjs::toggleClass(
+                "surface_log_conc_wrap",
+                "kiwi-setting-off",
+                condition = !is_3d
+              )
+              shinyjs::toggleState("surface_log_conc", condition = is_3d)
+              shinyjs::toggleClass(
+                "binding_2d_settings",
+                "kiwi-setting-off",
+                condition = is_3d
+              )
+              shinyjs::toggleState("binding_points", condition = !is_3d)
+              shinyjs::toggleState("binding_show_single", condition = !is_3d)
+            })
 
+            # 2D: one curve per concentration; 3D: the same global fit as one
+            # surface over time and concentration. Screen and export share it.
+            build_binding <- function(colors, theme) {
+              res <- view_results()
+              if (identical(input$binding_view, "3d")) {
+                shiny::req(res$kinact_ki_result)
+                return(make_binding_surface_plot(
+                  res$kinact_ki_result,
+                  res$binding_kobs_result,
+                  colors,
+                  view_units(),
+                  theme,
+                  log_conc = isTRUE(input$surface_log_conc)
+                ))
+              }
               make_binding_plot(
-                kobs_result = view_results()$binding_kobs_result,
-                colors = view_colors(),
+                kobs_result = res$binding_kobs_result,
+                colors = colors,
                 symbol_map = view_symbols(),
                 units = view_units(),
+                theme = theme,
                 points = binding_points_mode(),
-                kinact_ki_result = view_results()$kinact_ki_result,
+                kinact_ki_result = res$kinact_ki_result,
                 show_single = isTRUE(input$binding_show_single)
               )
+            }
+
+            output$binding_plot <- plotly::renderPlotly({
+              shiny::req(result_list)
+              build_binding(view_colors(), "light")
             })
 
             ###### Kobs plot ----
@@ -4786,6 +4824,9 @@ server <- function(
                 symbol_map = view_symbols(),
                 units = view_units(),
                 show_extrapolation = isTRUE(input$kobs_show_extrapolation),
+                show_constants = isTRUE(input$kobs_show_constants),
+                show_two_step = isTRUE(input$kobs_show_two_step),
+                log_conc = isTRUE(input$kobs_log_conc),
                 proteoforms = kobs_overlay(),
                 proteoform_palette = if (show_proteoforms) proteoform_palette,
                 kobs_table = view_results()$binding_kobs_result$kobs_result_table
@@ -4799,22 +4840,17 @@ server <- function(
               "binding",
               build_fn = function(theme) {
                 shiny::req(result_list)
-                make_binding_plot(
-                  kobs_result = convert_kobs_result_units(
-                    result_list$binding_kobs_result,
-                    unit_view()
-                  ),
-                  colors = build_view_colors(theme),
-                  symbol_map = view_symbols(),
-                  units = view_units(),
-                  theme = theme,
-                  points = binding_points_mode(),
-                  kinact_ki_result = view_results()$kinact_ki_result,
-                  show_single = isTRUE(input$binding_show_single)
-                )
+                build_binding(build_view_colors(theme), theme)
               },
               filename_fn = function() {
-                paste0(get_session_prefix(), "_Binding_Curve")
+                paste0(
+                  get_session_prefix(),
+                  if (identical(input$binding_view, "3d")) {
+                    "_Binding_Surface"
+                  } else {
+                    "_Binding_Curve"
+                  }
+                )
               }
             )
 
@@ -4832,6 +4868,9 @@ server <- function(
                   units = view_units(),
                   theme = theme,
                   show_extrapolation = isTRUE(input$kobs_show_extrapolation),
+                  show_constants = isTRUE(input$kobs_show_constants),
+                  show_two_step = isTRUE(input$kobs_show_two_step),
+                  log_conc = isTRUE(input$kobs_log_conc),
                   proteoforms = kobs_overlay(),
                   proteoform_palette = if (show_proteoforms) {
                     proteoform_colors(proteoform_species_binding$species, theme)
@@ -5125,37 +5164,6 @@ server <- function(
               )
             })
 
-            ##### Binding surface tab ----
-            build_surface <- function(colors, theme) {
-              res <- view_results()
-              shiny::req(res$kinact_ki_result)
-              make_binding_surface_plot(
-                res$kinact_ki_result,
-                res$binding_kobs_result,
-                colors,
-                view_units(),
-                theme,
-                log_conc = isTRUE(input$surface_log_conc)
-              )
-            }
-
-            output$surface_plot <- plotly::renderPlotly({
-              build_surface(view_colors(), "light")
-            })
-
-            setup_plot_dl(
-              input,
-              output,
-              session,
-              "surface",
-              build_fn = function(theme) {
-                build_surface(build_view_colors(theme), theme)
-              },
-              filename_fn = function() {
-                paste0(get_session_prefix(), "_Binding_Surface")
-              }
-            )
-
             ##### Concentrations tab ----
             # One concentration at a time, picked in the tab. The picker values
             # are the declared concentration keys, so the selection survives a
@@ -5202,7 +5210,7 @@ server <- function(
                 choices = stats::setNames(
                   all_fitted_conc,
                   paste(
-                    unname(view_conc[all_fitted_conc]),
+                    conc_display(unname(view_conc[all_fitted_conc])),
                     unit_view()$conc_unit
                   )
                 ),
@@ -5258,7 +5266,29 @@ server <- function(
                 })
               )
             }
-            short_num <- function(x) format(signif(x, 3), scientific = FALSE, drop0trailing = TRUE)
+            # Power-of-ten notation with 3 significant digits; a standard
+            # error shares the exponent of the value: (9.59 ± 0.69) × 10⁻⁴
+            sci_num <- function(x, se = NA) {
+              if (!is.finite(x)) {
+                return("N/A")
+              }
+              e <- if (x == 0) 0 else floor(log10(abs(x)))
+              m <- signif(x / 10^e, 3)
+              if (abs(m) >= 10) {
+                m <- m / 10
+                e <- e + 1
+              }
+              fmt <- function(v) format(v, scientific = FALSE, drop0trailing = TRUE)
+              mant <- fmt(m)
+              if (isTRUE(is.finite(se))) {
+                mant <- paste0(mant, " ± ", fmt(signif(se / 10^e, 2)))
+                if (e != 0) mant <- paste0("(", mant, ")")
+              }
+              if (e == 0) {
+                return(mant)
+              }
+              paste0(mant, " × 10<sup>", sub("-", "−", e), "</sup>")
+            }
 
             ###### Calculated kobs value ----
             output$conc_tab_kobs_value <- shiny::renderUI({
@@ -5266,18 +5296,15 @@ server <- function(
               conc_result <- conc_tab_result()
               kobs <- conc_result$kobs / view$time_factor
               kobs_se <- conc_result$kobs_se / view$time_factor
-              alone <- paste0(
-                short_num(kobs),
-                if (!is.na(kobs_se)) paste0(" ± ", short_num(kobs_se))
-              )
+              alone <- sci_num(kobs, kobs_se)
               global <- conc_tab_global()
               unit <- paste0(" ", view$time_unit, "⁻¹")
 
               if (is.null(global)) {
-                conc_card(paste0(short_num(kobs), unit), "fitted alone · not in the global fit")
+                conc_card(paste0(sci_num(kobs), unit), "fitted alone · not in the global fit")
               } else {
                 conc_card(
-                  paste0(short_num(global$kobs), unit),
+                  paste0(sci_num(global$kobs), unit),
                   "global fit",
                   paste0("fitted alone: ", alone)
                 )
@@ -7259,20 +7286,37 @@ server <- function(
         edited_conc <- all_conc[input[["kobs_result_cell_edit"]]$row]
         shiny::req(!is.null(edited_conc), !is.na(edited_conc))
 
-        # Expand select_concentration if this concentration is not yet tracked
-        if (!(edited_conc %in% names(conversion_vars$select_concentration))) {
+        # Build on the ticks still waiting to be applied, if any
+        select <- kobs_selection_pending() %||%
+          conversion_vars$select_concentration
+
+        # Expand the selection if this concentration is not yet tracked
+        if (!(edited_conc %in% names(select))) {
           new_entry <- TRUE
           names(new_entry) <- edited_conc
-          conversion_vars$select_concentration <- c(
-            conversion_vars$select_concentration,
-            new_entry
-          )
+          select <- c(select, new_entry)
+        }
+
+        select[edited_conc] <- input[["kobs_result_cell_edit"]]$value
+        kobs_selection_pending(select)
+      },
+      ignoreInit = TRUE,
+      label = "Concentration Selection Tick"
+    )
+
+    shiny::observeEvent(
+      kobs_selection_settled(),
+      {
+        select <- kobs_selection_settled()
+        kobs_selection_pending(NULL)
+
+        # Ticked back to the applied selection: nothing to refit
+        if (identical(select, conversion_vars$select_concentration)) {
+          return(NULL)
         }
 
         # Apply changes to included concentrations
-        conversion_vars$select_concentration[edited_conc] <- input[[
-          "kobs_result_cell_edit"
-        ]]$value
+        conversion_vars$select_concentration <- select
 
         # Check number of selected concentrations
         if (sum(conversion_vars$select_concentration) < 3) {
@@ -7289,6 +7333,7 @@ server <- function(
         # Recalculate result object according to included concentrations, on
         # the samples of the picked complex
         result_list <- kinetics_result_list()
+        shiny::req(result_list)
 
         # Transformed units argument
         units_adapt <- c(

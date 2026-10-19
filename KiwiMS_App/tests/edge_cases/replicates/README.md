@@ -64,7 +64,7 @@ Replicates are counted per condition, series across the whole experiment.
 | 6 | Names without `_R<n>`, or a group of one | no group, no warning | *no group* |
 | 7 | 5 series in the config | upload refused | RP2, *config caps* |
 | 8 | 5 series in the Samples table | blocked with kinact/KI, passes without | RP2, *series cap* |
-| 9 | Exactly 4 series | passes | *series cap*, *config caps* |
+| 9 | Exactly 4 series | passes | RP6, *series cap*, *config caps* |
 | 10 | Replicate column holding condition names (pre-0.7.5) | read as empty, name decides | *condition names* |
 | 11 | 5–6 replicates of one condition | blocked | RP3, *at most 4* |
 | 12 | Exactly 4 replicates | passes | *at most 4* |
@@ -134,6 +134,33 @@ Tests in *italics* are synthetic, in the automated suite only.
   `_R<n>` endings.
 - Results equal B0, series included (R1 327.9, R2 341.0).
 
+### RP6 Four replicate series (the most a run may have)
+
+Fixture **`fixture/mlkl_bi8925_4series.db`** (instead of `mlkl_bi8925.db`) ·
+`baseline/proteins_baseline` · `baseline/compounds_baseline` · `replicates/config_four_series`
+
+The recorded series has two replicate series; the run limit allows four. This
+fixture keeps R1 and R2 and adds R3 and R4 as copies of them, every peak
+intensity scattered by a few percent (`kit_four_series_peaks()` in
+`fixture/fixture.R`, fixed seed), so they behave like further repeats of the
+experiment. 244 samples, 4 per condition. Build it with
+`Rscript tests/edge_cases/fixture/make_fixture_four_series.R` (after
+`make_fixture.R`), or `generate_all.R --fixture` builds both. Its numbers mean
+nothing beyond the test; it is there to look at the plots with the most series.
+
+- **Declaration:** passes, with no hint. The Replicate column shows R1–R4.
+- **Kinetics:** kinact/KI 328.3 (95 % CI 306.4–356.3); per series R1 327.9,
+  R2 341.0 (as in B0), R3 326.6, R4 320.0.
+- **What to look at:**
+  - Binding Curve, Samples: every concentration in its colour and shape, the
+    series by fill (R1 filled, R2 open, R3 dotted, R4 open with dot), and a
+    "Replicate series" legend group naming them; the hover gives the series.
+    The same in the Concentrations tab.
+  - Binding Curve, Settings → View 3D: filled and open circles, then filled
+    and open squares, with the same legend group; also in the export.
+  - Fit → Global Fit Residuals: the same fills; kinact/KI by Replicate Series:
+    four rows.
+
 ## Automated tests
 
 `tests/testthat/test-edge-replicates.R`:
@@ -147,6 +174,7 @@ Tests in *italics* are synthetic, in the automated suite only.
 | RP3: six replicates of one condition are refused | 11 |
 | RP4: a Replicate value contradicting the file name warns and wins | 15 |
 | RP5: without Replicate values the file names name the series | 17 |
+| RP6: four replicate series, the most a run may have, pass and fit | 9 |
 | the series comes from the config, else the _R<n> ending, else nothing | 17, 18 |
 | series sort naturally | 19 |
 | the series cap is 4, with kinact/KI only | 8, 9 |

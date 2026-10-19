@@ -8,7 +8,8 @@
 # --report     prints what the app shows for every test
 # --fixture    also builds fixture/mlkl_bi8925.db, the database the manual
 #              tests load; =<result_db> takes its spectra from an existing
-#              deconvolution of kinact_MLKL_3 (see fixture/make_fixture.R)
+#              deconvolution of kinact_MLKL_3 (see fixture/make_fixture.R),
+#              and its four-series variant mlkl_bi8925_4series.db (RP6)
 
 here <- dirname(normalizePath(sub(
   "^--file=",
@@ -36,4 +37,6 @@ if (length(fixture)) {
     file.path(here, "fixture", "make_fixture.R"),
     if (nzchar(from)) paste0("--from=", shQuote(from))
   )
+  # The four-series variant (RP6), derived from it
+  run(file.path(here, "fixture", "make_fixture_four_series.R"))
 }

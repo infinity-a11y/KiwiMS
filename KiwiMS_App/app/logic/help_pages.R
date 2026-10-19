@@ -1260,13 +1260,32 @@ binding_curve_page <- function() {
       help_def(
         "Points",
         "Each sample as it enters the fit (Settings → Data Points: Samples). ",
-        "Mean ± SD per time point is the alternative view; the fit does not ",
-        "use the means."
+        "Colour and shape give the concentration, the fill the replicate ",
+        "series (R1 filled, R2 open, R3 dotted, R4 open with dot; in 3D filled ",
+        "and open circles, then squares), as in Global Fit Residuals. Mean ± SD ",
+        "shows the mean of each time point instead, for reading only; the fit ",
+        "does not use the means. 2D view only."
       ),
       help_def(
-        "Show Single-Concentration Fits",
-        "(Settings) Adds each concentration fitted on its own as a dashed ",
-        "line. Where it differs clearly from the global curve, that ",
+        "View: 2D / 3D",
+        "(Settings) 3D shows the same global fit as one surface over time and ",
+        "concentration, with the curves of the 2D view lying on it and the ",
+        "samples around it: two numbers, ",
+        k_inact(),
+        "/",
+        K_i(),
+        " and ",
+        K_i(),
+        ", shape the whole surface. Between measured concentrations its ",
+        "plateau is interpolated for display only. Log Concentration (3D view ",
+        "only) spreads dilution series such as 2.5, 5, … 80, whose low ",
+        "concentrations crowd together on a linear axis; the untreated control ",
+        "is left out. Drag to rotate, double-click to reset."
+      ),
+      help_def(
+        "Per-Concentration Fits",
+        "(Settings, 2D view only) Adds each concentration fitted on its own as ",
+        "a dashed line. Where it differs clearly from the global curve, that ",
         "concentration does not follow the common model well."
       ),
       help_def(
@@ -1366,8 +1385,8 @@ kobs_curve_page <- function() {
         "."
       ),
       help_def(
-        "Two-step (classic)",
-        "Dotted, hidden until its legend entry is clicked: a hyperbola through ",
+        "Show Two-step (classic)",
+        "(Settings) Draws, dash-dotted, a hyperbola through ",
         "the points without weights, the classic two-step route (see the ",
         k_inact(),
         "/",
@@ -1375,10 +1394,38 @@ kobs_curve_page <- function() {
         " help)."
       ),
       help_def(
+        "Log Concentration",
+        "(Settings) Puts the concentration axis on a log scale, with a tick at ",
+        "each measured concentration, so dilution series such as 2.5, 5, … 80 ",
+        "are evenly spaced. The origin is not on a log axis, so the lines start ",
+        "just below the lowest concentration, and the initial slope bends."
+      ),
+      help_def(
         "Show Extrapolation",
         "(Settings) Shades the measured concentration range and continues the ",
         "fitted line beyond it, dashed, for the proteoforms too when they are ",
         "shown."
+      ),
+      help_def(
+        shiny::tagList("Show ", k_inact(), " and ", K_i()),
+        "(Settings) Marks the constants on the curve with thin, faded, ",
+        "dotted guide lines: ",
+        k_inact(),
+        " as the level ",
+        k_obs(),
+        " approaches, ",
+        K_i(),
+        " as the concentration where it reaches half of ",
+        k_inact(),
+        " (with a circle), and ",
+        k_inact(),
+        "/",
+        K_i(),
+        " as the initial slope. When ",
+        K_i(),
+        " lies beyond the measured concentrations, the axis extends to it ",
+        "and the curve continues dashed: those values are extrapolated. ",
+        "Without saturation only the slope is drawn."
       )
     )
   )
@@ -1597,16 +1644,16 @@ ratio_page <- function() {
       ),
       help_def(
         "Two-step (classic)",
-        "For comparison only: the classic route, which KiwiMS used until ",
-        "September 2026 and most curve-fitting programs use. The ",
+        "For comparison only: the classic route most curve-fitting programs ",
+        "use. The ",
         k_obs(),
         " of each concentration is fitted to a hyperbola without weights, and ",
         k_inact(),
         "/",
         K_i(),
         " is the quotient of the two fitted constants. The k_obs Curve draws ",
-        "it dotted (click its legend entry). It is orange when it lies outside ",
-        "the 95 % CI of the global fit. The usual cause is the high ",
+        "it dash-dotted (switch it on in its settings). When it lies outside the 95 % CI ",
+        "of the global fit, the hover text says so; this is no warning. The usual cause is the high ",
         "concentrations: their curves are nearly complete at the first time ",
         "point, so their ",
         k_obs(),
@@ -1883,54 +1930,6 @@ plateau_page <- function() {
       "poorly determined plateau, which is an extrapolation. The Plateau per ",
       "Concentration plot in the Fit tab shows how far each curve got."
     )
-  )
-}
-
-surface_page <- function() {
-  help_modal(
-    "Binding Surface",
-    shiny::p(
-      "The global fit as one model: binding over incubation time and ",
-      "compound concentration,"
-    ),
-    exponential_formula(),
-    shiny::p(
-      "with ",
-      k_obs(),
-      " given by one curve over the concentration (k",
-      htmltools::tags$sub("obs"),
-      " Curve). Two numbers, ",
-      k_inact(),
-      "/",
-      K_i(),
-      " and ",
-      K_i(),
-      ", shape the whole surface; the plateaus set its height."
-    ),
-    help_defs(
-      help_def(
-        "Surface",
-        "The fitted model. Between measured concentrations its plateau is ",
-        "interpolated for display; the fit itself has plateaus only at the ",
-        "measured concentrations."
-      ),
-      help_def(
-        "Coloured lines",
-        "The model at each measured concentration: the curves of the Binding ",
-        "Curve, lying on the surface."
-      ),
-      help_def(
-        "Points",
-        "The samples, as fitted. Points scattering evenly above and below the ",
-        "surface mean the one model describes all concentrations."
-      ),
-      help_def(
-        "Log Concentration Axis",
-        "(Settings) Spreads the low concentrations, which crowd near zero on a ",
-        "linear axis. The untreated control is then left out."
-      )
-    ),
-    shiny::p("Drag to rotate, scroll to zoom, double-click to reset the view.")
   )
 }
 
@@ -2438,7 +2437,6 @@ conversion_help <- list(
   kobs_value_tooltip_bttn = kobs_value_page,
   binding_plateau_tooltip_bttn = plateau_page,
   reached_value_tooltip_bttn = completion_page,
-  surface_tooltip_bttn = surface_page,
   hits_table_tooltip_bttn = hits_table_page,
   hits_tooltip_bttn = hits_page,
   binding_curve_single_tooltip_bttn = binding_curve_single_page,

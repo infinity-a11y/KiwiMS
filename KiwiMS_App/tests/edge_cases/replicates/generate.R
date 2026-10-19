@@ -28,7 +28,10 @@ kit_files <- function(ctx) {
     config_six_replicates = kit_config(ctx, "BI-8925", time = six),
     config_rep_swapped = kit_config(ctx, "BI-8925", replicate = swapped),
     # RP5: no Replicate values, the _R<n> endings name the series
-    config_no_replicate = kit_config(ctx, "BI-8925", replicate = "")
+    config_no_replicate = kit_config(ctx, "BI-8925", replicate = ""),
+    # RP6: four replicate series, the most a run may have, on the fixture
+    # variant mlkl_bi8925_4series.db (R3, R4 derived from R1, R2)
+    config_four_series = kit_config(kit_four_series_context(), "BI-8925")
   )
 }
 
@@ -58,6 +61,12 @@ kit_report <- function(ctx) {
   kit_show("RP4 Replicate swapped for the 10 uM samples", kit_declare(pt, ct, swapped), kit_run(ctx, pt, ct, swapped))
   plain <- R("config_no_replicate")
   kit_show("RP5 Replicate column empty", kit_declare(pt, ct, plain), kit_run(ctx, pt, ct, plain))
+  four <- R("config_four_series")
+  kit_show(
+    "RP6 four replicate series",
+    kit_declare(pt, ct, four),
+    kit_run(kit_four_series_context(), pt, ct, four)
+  )
 }
 
 if (sys.nframe() == 0L) {
