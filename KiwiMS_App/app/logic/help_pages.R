@@ -1126,7 +1126,9 @@ compound_distribution_page <- function() {
         "of its spectrum no protein or complex peak explains. A sample with ",
         "little or no binding but a high Unmatched [%] has peaks the ",
         "declaration does not account for, such as an unexpected mass shift; ",
-        "check it in the Sample View."
+        "check it in the Sample View. The dots are read off the right-hand ",
+        "axis, always 0 – 100 %: Unmatched [%] is a share of the whole ",
+        "spectrum, binding a share of the protein."
       ),
       click_note(
         "Click a bar or a red dot to open its sample in the Sample View."
@@ -1134,8 +1136,8 @@ compound_distribution_page <- function() {
       help_defs(
         help_def(
           "Range",
-          "Maximum scales the axis to the highest binding or Unmatched [%], ",
-          "100 to the full 0 – 100 %."
+          "Maximum scales the binding axis to the highest binding, 100 to the ",
+          "full 0 – 100 %."
         ),
         help_def("Show Labels", "Writes the names below the bars."),
         help_def(

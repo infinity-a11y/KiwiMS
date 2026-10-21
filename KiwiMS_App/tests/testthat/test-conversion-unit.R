@@ -1739,6 +1739,46 @@ test_that("the Overview distribution keeps the samples and compounds without a h
 
   # The markers can be switched off
   expect_length(unmatched_trace(built("P", c("A", "B"), FALSE)), 0)
+
+  # The markers sit on a 0 - 100 axis of their own on the right, after the
+  # bars' axes (one per group with several compounds)
+  um_axis <- function(fig) {
+    yaxis <- unmatched_trace(fig)[[1]]$yaxis
+    fig$layout[[sub("^y", "yaxis", yaxis)]]
+  }
+  for (fig in list(both, only_b)) {
+    axis <- um_axis(fig)
+    expect_equal(axis$side, "right")
+    expect_equal(axis$overlaying, "y")
+    expect_equal(unlist(axis$range), c(0, 101))
+    expect_equal(axis$title$text, "Unmatched [%]")
+    expect_equal(fig$layout$yaxis$title$text, "Binding [%]")
+  }
+  expect_false(isTRUE(um_axis(both)$matches == "y"))
+})
+
+test_that("the Overview distribution's Maximum range follows the bars alone", {
+  view <- overview_run()$view
+  # A sample with little binding but most of its spectrum unmatched
+  view$`Unmatched [%]`[view$`Sample ID` == "S1"] <- 95
+  y_top <- function(compounds, show_unmatched, scale = "Maximum") {
+    fig <- plotly::plotly_build(overview_compound_distribution(
+      view, "P", compounds,
+      color_variable = "Compounds",
+      truncate_names = FALSE,
+      distribution_scale = scale,
+      show_unmatched = show_unmatched
+    ))$x
+    unlist(fig$layout$yaxis$range)[2]
+  }
+  binding <- suppressWarnings(as.numeric(as.character(
+    view$`Tot. Binding [%]`[view$Protein == "P"]
+  )))
+  for (cmps in list("A", c("A", "B"))) {
+    expect_equal(y_top(cmps, TRUE), y_top(cmps, FALSE))
+    expect_equal(y_top(cmps, TRUE), max(binding, na.rm = TRUE) + 10)
+    expect_equal(y_top(cmps, TRUE, "100"), 101)
+  }
 })
 
 test_that("the Overview distribution follows a given sample order", {

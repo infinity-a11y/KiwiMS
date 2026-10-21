@@ -13553,6 +13553,9 @@ distribution_binding_text <- function(binding) {
 # distribution. A sample with a high share unmatched - an unexpected mass
 # shift, say - stands out whatever its binding, also one without any.
 # `sample` is the name shown, `sample_id` the full ID a click opens.
+# The markers get a right-hand axis of their own (`yaxis`), always 0 - 100:
+# Unmatched [%] is a share of the whole spectrum, binding one of the protein,
+# so the bars' axis can follow the Range setting without them.
 add_unmatched_markers <- function(
   plot,
   x,
@@ -13560,17 +13563,32 @@ add_unmatched_markers <- function(
   sample,
   compound,
   theme,
-  sample_id = sample
+  sample_id = sample,
+  yaxis = "y2"
 ) {
   keep <- !is.na(y)
   if (!any(keep)) {
     return(plot)
   }
   outline <- if (theme == "light") "black" else "#ffffff"
-  plotly::add_trace(
+  axis <- list(
+    title = list(text = "Unmatched [%]"),
+    overlaying = "y",
+    side = "right",
+    anchor = "x",
+    range = c(0, 101),
+    dtick = 20,
+    tick0 = 0,
+    showgrid = FALSE,
+    zeroline = FALSE,
+    color = outline,
+    automargin = TRUE
+  )
+  plot <- plotly::add_trace(
     plot,
     x = x[keep],
     y = y[keep],
+    yaxis = yaxis,
     customdata = I(as.character(sample_id[keep])),
     type = "scatter",
     mode = "markers",
@@ -13598,19 +13616,23 @@ add_unmatched_markers <- function(
     hoverlabel = list(align = "left", valign = "middle"),
     showlegend = TRUE,
     inherit = FALSE
-  ) |>
-    plotly::layout(
-      # The bars keep theirs hidden, so the markers' key is the only entry
-      showlegend = TRUE,
-      legend = list(
-        orientation = "h",
-        x = 1,
-        xanchor = "right",
-        y = 1.02,
-        yanchor = "bottom",
-        bgcolor = "rgba(0,0,0,0)"
-      )
+  )
+
+  layout_args <- list(
+    plot,
+    # The bars keep theirs hidden, so the markers' key is the only entry
+    showlegend = TRUE,
+    legend = list(
+      orientation = "h",
+      x = 1,
+      xanchor = "right",
+      y = 1.02,
+      yanchor = "bottom",
+      bgcolor = "rgba(0,0,0,0)"
     )
+  )
+  layout_args[[sub("^y", "yaxis", yaxis)]] <- axis
+  do.call(plotly::layout, layout_args)
 }
 
 # Make compound distribution plot for proteins tab. Samples a compound was
@@ -13784,20 +13806,14 @@ prot_compound_distribution <- function(
     ) |>
     dplyr::ungroup()
 
-  range <- c(
-    0,
-    max(
-      tbl$`Tot. Binding [%]`,
-      if (show_unmatched) tbl$.unmatched,
-      0,
-      na.rm = TRUE
-    ) +
-      10
-  )
+  # The Unmatched [%] markers have an axis of their own
+  range <- c(0, max(tbl$`Tot. Binding [%]`, 0, na.rm = TRUE) + 10)
 
   if (!is.null(distribution_scale) && distribution_scale == "100") {
     range <- c(0, 101)
   }
+  # Steps of 20 on the full scale, finer on a short Maximum range
+  dtick <- diff(pretty(range))[1]
 
   condition <- ifelse(
     length(levels(tbl$`Cmp Name`)) > 1,
@@ -13841,7 +13857,7 @@ prot_compound_distribution <- function(
         zeroline = FALSE,
         gridcolor = grid_color,
         color = axis_color,
-        dtick = 20,
+        dtick = dtick,
         tick0 = 0
       )
     )
@@ -13878,7 +13894,7 @@ prot_compound_distribution <- function(
           overlaying = "y",
           anchor = "x",
           range = range,
-          dtick = 20,
+          dtick = dtick,
           tick0 = 0
         )
       }
@@ -13993,7 +14009,9 @@ prot_compound_distribution <- function(
         sample = markers$sample,
         compound = markers$compound,
         theme = theme,
-        sample_id = markers$sample_id
+        sample_id = markers$sample_id,
+        # After the bars' axes, one per group
+        yaxis = paste0("y", n_groups + 1)
       )
     }
   } else {
@@ -14271,16 +14289,8 @@ cmp_compound_distribution <- function(
     )
   }
 
-  range <- c(
-    0,
-    max(
-      tbl$`Tot. Binding [%]`,
-      if (show_unmatched) tbl$.unmatched,
-      0,
-      na.rm = TRUE
-    ) +
-      10
-  )
+  # The Unmatched [%] markers have an axis of their own
+  range <- c(0, max(tbl$`Tot. Binding [%]`, 0, na.rm = TRUE) + 10)
 
   if (!is.null(distribution_scale) && distribution_scale == "100") {
     range <- c(0, 101)
