@@ -12,16 +12,16 @@
 
 # Modal ----
 
-# The dialog itself. `...` is its content.
+# The dialog itself. `...` is its content; `footer` its buttons.
 #' @export
-help_modal <- function(title, ...) {
+help_modal <- function(title, ..., footer = shiny::modalButton("Dismiss")) {
   shiny::div(
     class = "help-modal",
     shiny::modalDialog(
       shiny::div(class = "help-modal-body", ...),
       title = title,
       easyClose = TRUE,
-      footer = shiny::modalButton("Dismiss")
+      footer = footer
     )
   )
 }

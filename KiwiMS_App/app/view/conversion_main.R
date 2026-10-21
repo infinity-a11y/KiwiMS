@@ -94,6 +94,8 @@ box::use(
       overview_colors,
       overview_compound_distribution,
       overview_distribution_note,
+      overview_has_distribution,
+      sample_view_col_kind,
       smpl_compound_distribution,
       stats_histogram,
       stats_boxplot,
@@ -289,7 +291,8 @@ server <- function(
   conversion_sidebar_vars,
   deconvolution_main_vars,
   config_file,
-  config_apply_trigger = NULL
+  config_apply_trigger = NULL,
+  restore = NULL
 ) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
@@ -460,6 +463,37 @@ server <- function(
       type = "Compound"
     ))
     sample_table_data <- shiny::reactiveVal()
+
+    ## Restored state ----
+    # A page reloaded after a dropped connection takes back the declaration
+    # its last session parked (park() below, session_restore.R). Set before
+    # the first flush, so the declaration interface is drawn in that state
+    # and the observers of the tables see it as their starting point.
+    if (!is.null(restore)) {
+      for (field in names(restore$declaration)) {
+        declaration_vars[[field]] <- restore$declaration[[field]]
+      }
+      protein_table_data(restore$protein_table_data)
+      compound_table_data(restore$compound_table_data)
+      sample_table_data(restore$sample_table_data)
+      conc_unit_selected(restore$conc_unit)
+      time_unit_selected(restore$time_unit)
+      saved_tabs <- c(
+        proteins = isFALSE(restore$declaration$protein_table_active),
+        compounds = isFALSE(restore$declaration$compound_table_active),
+        samples = isTRUE(restore$declaration$samples_confirmed)
+      )
+      for (tab in names(saved_tabs)[saved_tabs]) {
+        output[[paste0(tab, "_table_info")]] <- shiny::renderText(
+          "Table saved!"
+        )
+      }
+    }
+    # The kinact/KI checkbox comes back with its restored value: not a change
+    # of it (see kinact/KI Activation)
+    kinact_ki_last <- restore$run_kinact_ki
+    # Restored results are not announced as a finished analysis
+    completion_toast_muted <- isTRUE(restore$has_results)
 
     # Helper: compute and inject Replicate column (right after Sample)
     add_replicate_col <- function(tbl, config = NULL) {
@@ -1051,6 +1085,19 @@ server <- function(
           shinyWidgets::show_toast(db_err, type = "info", timer = 6000)
           return()
         }
+        # Moved out of the upload folder, which Shiny deletes when the session
+        # ends: a page reloaded after a dropped connection keeps the results
+        # (session_restore.R), and the conversion reads them from here
+        kept_dir <- file.path(tempdir(), "kiwims_uploads")
+        dir.create(kept_dir, showWarnings = FALSE)
+        kept_path <- file.path(
+          kept_dir,
+          paste0(basename(tempfile("result_")), ".", file_ext)
+        )
+        if (file.rename(file_path, kept_path) ||
+          file.copy(file_path, kept_path)) {
+          file_path <- kept_path
+        }
         meta <- read_decon_metadata(file_path)
         declaration_vars$result <- c(meta, list(.db_path = file_path))
         write_log(paste(
@@ -1485,6 +1532,17 @@ server <- function(
     shiny::observeEvent(
       conversion_sidebar_vars$run_kinact_ki(),
       {
+        # Its first value after a restore is the state the table is in already
+        if (!is.null(kinact_ki_last)) {
+          unchanged <- identical(
+            isTRUE(conversion_sidebar_vars$run_kinact_ki()),
+            isTRUE(kinact_ki_last)
+          )
+          kinact_ki_last <<- NULL
+          if (unchanged) {
+            return()
+          }
+        }
         shiny::req(
           input$samples_table,
           sample_table_data()
@@ -2982,11 +3040,16 @@ server <- function(
                 theor_protein_mw <- theor_protein_mw[species_order]
                 measured_protein_mw <- measured_protein_mw[species_order]
 
-                fmt_mw <- function(x) {
+                fmt_mw <- function(x, nsmall = 0) {
                   vapply(
                     x,
                     function(v) {
-                      format(v, big.mark = ",", scientific = FALSE)
+                      format(
+                        v,
+                        big.mark = ",",
+                        nsmall = nsmall,
+                        scientific = FALSE
+                      )
                     },
                     character(1)
                   )
@@ -3000,7 +3063,7 @@ server <- function(
                   signal_average <- collapse_species(ifelse(
                     is.na(measured_protein_mw),
                     "No signal",
-                    paste(fmt_mw(round(measured_protein_mw, 2)), "Da")
+                    paste(fmt_mw(round(measured_protein_mw, 1), 1), "Da")
                   ))
                 }
 
@@ -3229,7 +3292,8 @@ server <- function(
               list(
                 input$overview_distribution_labels,
                 input$overview_distribution_scale,
-                input$overview_distribution_sort_binding
+                input$overview_distribution_sort_binding,
+                input$overview_distribution_unmatched
               ),
               ov_dist_settings(ov_dist_settings() + 1L),
               ignoreInit = TRUE,
@@ -3456,10 +3520,16 @@ server <- function(
 
             ###### Compound distribution ----
             # Kept apart from the selection, so the plot output is only
-            # replaced when there starts or stops being something to plot
+            # replaced when there starts or stops being something to plot:
+            # a sample with a binding, 0 % included, or an Unmatched [%]
             ov_has_binding <- shiny::reactiveVal(NA)
             track_iface_observer(shiny::observe({
-              ov_has_binding(any(is_complex_row(ov_subset())))
+              sel <- ov_selection()
+              ov_has_binding(overview_has_distribution(
+                hits_summary,
+                sel$protein,
+                sel$compounds
+              ))
             }))
 
             output$overview_distribution_ui <- shiny::renderUI({
@@ -3512,7 +3582,9 @@ server <- function(
                   !isTRUE(input$overview_distribution_sort_binding)
                 ) {
                   ckey$samples
-                }
+                },
+                # On until switched off (NULL before the popover is opened)
+                show_unmatched = !isFALSE(input$overview_distribution_unmatched)
               )
               shiny::req(plot)
               plot
@@ -3524,6 +3596,32 @@ server <- function(
                 ov_dist_settings()
               )
 
+            # A click on a bar or an Unmatched [%] marker opens the sample in
+            # the Sample View (the plot carries the full ID as customdata)
+            session$sendCustomMessage(
+              "kiwiMS_attachScatterClicks",
+              list(
+                inputId = session$ns("overview_distribution_click"),
+                plotElId = session$ns("overview_compound_distribution")
+              )
+            )
+            track_iface_observer(shiny::observeEvent(
+              input$overview_distribution_click,
+              {
+                click <- input$overview_distribution_click
+                shiny::req(
+                  !is.null(click$sample),
+                  nzchar(trimws(as.character(click$sample)))
+                )
+                hits_pending_nav(list(
+                  type = "sample",
+                  value = as.character(click$sample)
+                ))
+              },
+              ignoreNULL = TRUE,
+              ignoreInit = TRUE
+            ))
+
             ####### Show labels (update static switch) ----
             # Compound names are the axis labels once several compounds are
             # plotted, sample names otherwise
@@ -3531,7 +3629,8 @@ server <- function(
               list(ov_selection(), input$truncate_names),
               {
                 tbl <- ov_subset()
-                cmps <- unique(tbl$`Cmp Name`[is_complex_row(tbl)])
+                # Every picked compound is plotted, with a hit or without
+                cmps <- unique(stats::na.omit(tbl$`Cmp Name`))
                 sample_ids <- if (isTRUE(input$truncate_names)) {
                   tbl$truncSample_ID
                 } else {
@@ -6526,7 +6625,10 @@ server <- function(
                 ),
                 proteins_table = protein_table_data(),
                 compounds_table = compound_table_data(),
-                samples_table = declaration_vars$sample_table
+                samples_table = declaration_vars$sample_table,
+                max_multiples = shiny::isolate(
+                  conversion_sidebar_vars$result_list()
+                )$max_multiples
               )
             }
 
@@ -6569,11 +6671,9 @@ server <- function(
                 # picked column brings the columns of all proteoforms
                 always_cols <- c(
                   "Tot. Binding [%]",
-                  grep(
-                    "^(Binding|Total Binding|Tot\\. Binding) \\(|^Mass ",
-                    names(hits_table),
-                    value = TRUE
-                  )
+                  names(hits_table)[
+                    !is.na(sample_view_col_kind(names(hits_table)))
+                  ]
                 )
                 hits_table <- filter_hits_table(
                   hits_table,
@@ -6679,12 +6779,11 @@ server <- function(
                   adduct_cols <- unique(hits_base_col(names(
                     sample_view_table()
                   )))
-                  adduct_binding_cols <- grep(
-                    "^(Binding|Total Binding|Tot\\. Binding) \\(",
-                    adduct_cols,
-                    value = TRUE
-                  )
-                  adduct_mass_cols <- grep("^Mass ", adduct_cols, value = TRUE)
+                  kind <- sample_view_col_kind(adduct_cols)
+                  adduct_binding_cols <- adduct_cols[
+                    kind %in% c("binding", "total", "complex")
+                  ]
+                  adduct_mass_cols <- adduct_cols[kind %in% "mass"]
                   new_choices <- adduct_cols[
                     !adduct_cols %in%
                       c(always_excluded, adduct_binding_cols, adduct_mass_cols)
@@ -6858,6 +6957,11 @@ server <- function(
       {
         n_hits <- show_completion_toast()
         shiny::req(!is.null(n_hits))
+        # Results restored after a dropped connection were not just computed
+        if (completion_toast_muted) {
+          completion_toast_muted <<- FALSE
+          return()
+        }
         shinyWidgets::show_toast(
           title = "Analysis completed",
           text = paste0(n_hits, " hit(s) detected."),
@@ -7111,7 +7215,8 @@ server <- function(
           theme = theme,
           sample_order = if (!isTRUE(input$overview_distribution_sort_binding)) {
             conversion_vars$color_key$samples
-          }
+          },
+          show_unmatched = !isFALSE(input$overview_distribution_unmatched)
         )
         shiny::req(plot)
         plot
@@ -7391,8 +7496,25 @@ server <- function(
       suspendWhenHidden = FALSE
     )
 
+    # State of the module for a page reloaded after a dropped connection
+    # (session_restore.R): the declaration with its tables as edited. The
+    # result interfaces are rebuilt from the sidebar's result list.
+    park <- function() {
+      shiny::isolate(list(
+        declaration = shiny::reactiveValuesToList(declaration_vars),
+        protein_table_data = protein_table_data(),
+        compound_table_data = compound_table_data(),
+        sample_table_data = sample_table_data(),
+        conc_unit = conc_unit_selected(),
+        time_unit = time_unit_selected(),
+        run_kinact_ki = conversion_sidebar_vars$run_kinact_ki(),
+        has_results = !is.null(conversion_sidebar_vars$result_list())
+      ))
+    }
+
     # Return server values ----
     list(
+      park = park,
       conversion_ready = shiny::reactive(declaration_vars$conversion_ready),
       input_list = shiny::reactive(list(
         Protein_Table = protein_table_data(),

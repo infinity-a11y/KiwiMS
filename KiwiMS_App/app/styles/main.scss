@@ -376,6 +376,16 @@ th {
   background: rgb(255 255 255 / 10%);
 }
 
+/* bslib >= 0.12 halves the card header's vertical padding
+   (padding-block: cap-padding-y / 2), but Bootstrap's .card-header-tabs still
+   pulls the tabs down by the full cap-padding-y. The tabs then hang 4px into
+   the card body, whose translucent background paints over their bottom edge
+   as a light band. Restore the full padding on tabset headers so the tabs end
+   flush with the body again. */
+.bslib-card > .card-header:has(> .card-header-tabs) {
+  padding-block: var(--bs-card-cap-padding-y);
+}
+
 .card-header-tabs .nav-link.active {
   background-color: rgba(255, 255, 255, 0.1);
   border-top: 1px solid #e5e5e5;
@@ -2421,17 +2431,17 @@ decon-report-modal .btn-default {
   line-height: 1;
 }
 
-div[data-value="Protein Conversion"] .collapse-toggle {
+div[data-value="Conversion"] .collapse-toggle {
   display: none;
 }
 
-div[data-value="Protein Conversion"] .bslib-sidebar-layout.sidebar-collapsed > .collapse-toggle {
+div[data-value="Conversion"] .bslib-sidebar-layout.sidebar-collapsed > .collapse-toggle {
   color: white;
   top: 35px;
   border-color: white;
 }
 
-div[data-value="Protein Conversion"] .tab-pane {
+div[data-value="Conversion"] .tab-pane {
   height: 100%;
 }
 
@@ -3764,13 +3774,57 @@ th.sorting {
 }
 
 /* Log output specialized text */
-#app-logs-log-output {
+// Logs view: a tab per log file of the session (log_view.R), the card as
+// tall as the page, each log scrolling inside it
+.logs-tabset {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+
+  > .shiny-html-output {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  // Framed like the tabset cards of Conversion: the tabs end flush with the body
+  .bslib-card {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0;
+    border: 1px solid rgb(0 0 0 / 10%);
+  }
+
+  .bslib-card > .card-header {
+    border-bottom: none;
+  }
+
+  .tab-content {
+    overflow: auto;
+  }
+}
+
+.log-file-output {
   font-family: monospace;
-  padding-bottom: 2rem;
-  max-height: 26rem;
-  padding-left: 1rem;
-  padding-right: 1rem;
   font-size: 0.8em;
+  padding: 0.5rem 1rem 2rem;
+}
+
+.log-file-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.log-file-cut {
+  font-style: italic;
+  opacity: 0.7;
+  margin-bottom: 0.75rem;
+}
+
+.log-file-extra {
+  margin-top: 1.5rem;
 }
 
 .log-button .repeat .fa-repeat:before {
@@ -4342,6 +4396,13 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
     font-weight: 600;
   }
 
+  /* The negative margin aligns a pill at the start of the line with the rows
+     above; after a separator it would eat the space next to the bar */
+  .species-sep + .protocol-stat-warn,
+  .species-sep + .protocol-stat-err {
+    margin-left: 0;
+  }
+
   .protocol-stat-warn {
     background: $warn-fill;
     color: $warn-text;
@@ -4763,17 +4824,33 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 
 #app-config:hover,
 #app-config:focus,
-#app-config,
-#app-settings:hover,
-#app-settings:focus,
-#app-settings,
-#app-licence:hover,
-#app-licence:focus,
-#app-licence {
+#app-config {
   background-color: transparent !important;
   box-shadow: unset !important;
   border-radius: 0px !important;
   min-width: 90px;
+}
+
+// Buttons of the navigation bar (Settings, Help, License) read as its links:
+// no button face, on hover or focus either
+.navbar .navbar-button,
+.navbar .navbar-button:hover,
+.navbar .navbar-button:focus,
+.navbar .navbar-button:active {
+  background-color: transparent !important;
+  box-shadow: unset !important;
+  border-radius: 0px !important;
+}
+
+// Every entry of the navigation bar, the tabs on the left and the buttons and
+// links on the right, has the same minimum width (Deconvolution, the longest
+// label, a little more)
+.navbar .navbar-nav > .nav-item > .nav-link,
+.navbar .navbar-nav > .nav-item > a,
+.navbar .navbar-nav > .nav-item > .navbar-button {
+  min-width: 100px;
+  text-align: center;
+  justify-content: center;
 }
 
 .navbar .nav-underline .nav-link,
@@ -4788,7 +4865,6 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
 
 .nav-item a {
   color: black;
-  min-width: 90px;
   text-align: center;
 }
 

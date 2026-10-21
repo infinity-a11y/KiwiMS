@@ -4,91 +4,242 @@ box::use(
   logr[log_open, log_print, log_close, log_warning, log_error]
 )
 
-# Resolve log directory: use stored setting if available, otherwise default to
-# %LOCALAPPDATA%\KiwiMS\log
-log_dir <- local({
-  settings_file <- file.path(
-    Sys.getenv("LOCALAPPDATA"),
-    "KiwiMS",
-    "settings",
-    "user_settings.rds"
-  )
-  # Guard with file.exists(): readRDS() warns before it errors, and
-  # tryCatch(error=) swallows only the error - see app/logic/user_settings.R.
-  stored <- if (!file.exists(settings_file)) {
-    NULL
-  } else {
-    tryCatch(
-      {
-        s <- readRDS(settings_file)
-        d <- s[["log_dir"]]
-        if (!is.null(d) && nzchar(trimws(d))) trimws(d) else NULL
-      },
-      error = function(e) NULL
-    )
-  }
-  if (!is.null(stored)) {
-    stored
-  } else {
-    file.path(Sys.getenv("LOCALAPPDATA"), "KiwiMS", "logs")
-  }
-})
+# The log folder, %LOCALAPPDATA%\KiwiMS\logs: in the user's profile, where
+# KiwiMS can always write. It used to be a setting; a folder that was not
+# writable, or that the launcher and the app saw differently, lost the logs.
+log_dir <- file.path(Sys.getenv("LOCALAPPDATA"), "KiwiMS", "logs")
 log_daily <- file.path(log_dir, Sys.Date())
 session_start_time <- Sys.time()
 
-# Get new session id return log path
-new_session_path <- function() {
-  valid_id <- FALSE
-  while (!valid_id) {
-    session_id <- sample(1000:9999, 1) # Random 4-digit session ID
-    log_filename <- paste0("KiwiMS_", Sys.Date(), "_id", session_id, ".log")
+# Every start of KiwiMS (a session: one R process, however many browser pages
+# it serves) logs into a folder of its own, <log dir>/<date>/KiwiMS_<date>_id<n>,
+# with all its logs: the session log, R's console the launcher redirects
+# (console.log; console_stderr.log, what bypasses R), the launcher's lines for
+# this start (launcher.log), and the output of each deconvolution run. The
+# launcher makes the folder, as it opens the console logs before R starts, and
+# hands it over in KIWIMS_SESSION_DIR; started otherwise (development), R makes
+# one itself.
+#' @export
+session_dir_pattern <- "^KiwiMS_\\d{4}-\\d{2}-\\d{2}_id\\d{4}$"
 
-    if (!log_filename %in% list.files(log_daily)) {
-      valid_id <- TRUE
-      log_path <- file.path(log_daily, log_filename)
+new_session_dir <- function(daily = log_daily) {
+  repeat {
+    session_id <- sample(1000:9999, 1) # Random 4-digit session ID
+    name <- paste0("KiwiMS_", Sys.Date(), "_id", session_id)
+    # Not taken by a session folder, nor by a session log of the earlier
+    # layout (one file per session in the date folder)
+    if (
+      !dir.exists(file.path(daily, name)) &&
+        !file.exists(file.path(daily, paste0(name, ".log")))
+    ) {
       message(paste("Assigned ID", session_id, "to current session."))
-      return(log_path)
-    } else {
-      message(paste("Session ID", session_id, "already present. Redrawing ..."))
+      return(file.path(daily, name))
     }
   }
 }
 
-log_path <- new_session_path()
+# The session's folder and log; changed by start_logging() when the folder
+# cannot be made
+session <- new.env()
+session$dir <- local({
+  given <- Sys.getenv("KIWIMS_SESSION_DIR")
+  # A folder this R process made itself belongs to an earlier start of the app
+  # in it (development: runApp() again in the same console). Taken up again,
+  # its session log would be overwritten.
+  own <- identical(Sys.getenv("KIWIMS_SESSION_DIR_PID"), as.character(Sys.getpid()))
+  if (nzchar(given) && grepl(session_dir_pattern, basename(given)) && !own) {
+    given
+  } else {
+    new_session_dir()
+  }
+})
+session$log_path <- file.path(session$dir, paste0(basename(session$dir), ".log"))
+session$moved_from <- NULL
+# For the deconvolution processes, which write their output here too
+set_session_dir_env <- function(dir) {
+  Sys.setenv(
+    KIWIMS_SESSION_DIR = dir,
+    KIWIMS_SESSION_DIR_PID = Sys.getpid()
+  )
+}
+set_session_dir_env(session$dir)
 
-# Start logging
+# The folder of this session's logs
+#' @export
+get_session_dir <- function() {
+  session$dir
+}
+
+# Start logging. Should the log folder not be writable after all (a profile
+# locked down by policy), the session logs to R's temporary folder, so KiwiMS
+# still starts.
 #' @export
 start_logging <- function() {
-  # Create log dir in Documents
-  if (!dir.exists(log_dir)) {
-    dir.create(log_dir, recursive = TRUE)
+  dir.create(session$dir, recursive = TRUE, showWarnings = FALSE)
+  if (!dir.exists(session$dir)) {
+    session$moved_from <- session$dir
+    session$dir <- new_session_dir(file.path(tempdir(), "logs", Sys.Date()))
+    session$log_path <- file.path(
+      session$dir,
+      paste0(basename(session$dir), ".log")
+    )
+    dir.create(session$dir, recursive = TRUE, showWarnings = FALSE)
+    set_session_dir_env(session$dir)
   }
-  # Create daily log dir
-  if (!dir.exists(log_daily)) {
-    dir.create(log_daily, recursive = TRUE)
-  }
+  # The pointer the launcher read while the log folder was a setting
+  unlink(file.path(Sys.getenv("LOCALAPPDATA"), "KiwiMS", "settings", "log_dir.txt"))
 
-  log_open(log_path, logdir = FALSE)
+  log_open(session$log_path, logdir = FALSE)
+  if (!is.null(session$moved_from)) {
+    write_log(
+      paste0(
+        "Log folder not writable (",
+        dirname(dirname(session$moved_from)),
+        "), logging to R's temporary folder"
+      ),
+      level = "WARN"
+    )
+  }
 }
 
 # Get the current 4-digit session ID
 #' @export
 get_session_id <- function() {
   # Regex looks for "id" followed by 4 digits before the .log extension
-  session_id <- gsub(".*_id(\\d{4})\\.log$", "\\1", log_path)
+  session_id <- gsub(".*_id(\\d{4})\\.log$", "\\1", session$log_path)
   return(session_id)
 }
 
 # Get full session prefix e.g. "KiwiMS_2026-04-19_id2686"
 #' @export
 get_session_prefix <- function() {
-  gsub("\\.log$", "", basename(log_path))
+  gsub("\\.log$", "", basename(session$log_path))
 }
 
-# Log messages
+# Log messages; level "INFO", "WARN" or "ERROR". logr rewraps a message into
+# 80 columns and so runs its lines together, which turns a stack trace or a
+# table into one block of text: a message of several lines is written to the
+# file as it is, its lines after the first indented, with logr's time note.
 #' @export
 write_log <- function(msg, level = "INFO") {
-  log_print(paste0("[", level, "] ", msg))
+  text <- paste0("[", level, "] ", msg)
+  if (!grepl("\n", text, fixed = TRUE)) {
+    log_print(text)
+    return(invisible(text))
+  }
+  lines <- strsplit(text, "\n", fixed = TRUE)[[1]]
+  entry <- c(
+    lines[1],
+    paste0("    ", lines[-1]),
+    "",
+    paste("NOTE: Log Print Time: ", format(Sys.time())),
+    ""
+  )
+  cat(entry, sep = "\n")
+  ok <- tryCatch(
+    {
+      cat(entry, sep = "\n", file = session$log_path, append = TRUE)
+      TRUE
+    },
+    error = function(e) FALSE
+  )
+  if (!ok) {
+    log_print(text)
+  }
+  invisible(text)
+}
+
+# The last `n` lines of a text file, for the log ("(not readable)" without it)
+#' @export
+log_tail <- function(path, n = 30) {
+  lines <- tryCatch(
+    readLines(path, warn = FALSE, encoding = "UTF-8"),
+    error = function(e) NULL
+  )
+  if (is.null(lines)) {
+    return("(not readable)")
+  }
+  paste(utils::tail(lines, n), collapse = "\n")
+}
+
+# The last error log_app_errors() saw (`seen`), and the last it logged
+# (`message`, `time`): a repeat within a minute is seen but not logged
+app_errors <- new.env()
+app_errors$message <- ""
+app_errors$time <- -Inf
+app_errors$seen <- -Inf
+
+# Errors of the app's outputs and observers to the session log, with where
+# they happened and their stack trace. Without, the log has only the one line
+# logr makes of Shiny's warning ("Warning: Error in f: ..."); the trace is
+# printed to the console alone (console.log, kept for the ten newest
+# sessions). Called once per process.
+#' @export
+log_app_errors <- function() {
+  last <- app_errors
+
+  # Called by Shiny's calling handler (shinyCallingHandlers()) for every error
+  # that is not a req()/validate() one; the condition is in that handler's
+  # frame. An output failing on every update is logged once a minute.
+  options(shiny.error = function() {
+    cond <- tryCatch(
+      get("e", envir = parent.frame(), inherits = FALSE),
+      error = function(e) NULL
+    )
+    if (!inherits(cond, "condition")) {
+      return(invisible(NULL))
+    }
+    msg <- conditionMessage(cond)
+    now <- as.numeric(Sys.time())
+    # Always noted: the same error ending a session again must still be told
+    # apart from a dropped connection (last_app_error_age())
+    last$seen <- now
+    if (identical(msg, last$message) && now - last$time < 60) {
+      return(invisible(NULL))
+    }
+    last$message <- msg
+    last$time <- now
+    # The trace's messages caught as they come: capture.output(type =
+    # "message") would reset the launcher's sink of R's messages into
+    # console.log to stderr when done
+    trace <- character(0)
+    tryCatch(
+      withCallingHandlers(
+        shiny::printStackTrace(cond),
+        message = function(m) {
+          trace <<- c(trace, sub("\n$", "", conditionMessage(m)))
+          invokeRestart("muffleMessage")
+        }
+      ),
+      error = function(e) NULL
+    )
+    call <- conditionCall(cond)
+    try(
+      write_log(
+        paste0(
+          msg,
+          if (!is.null(call)) {
+            paste0("\nIn: ", paste(deparse(call, nlines = 3), collapse = " "))
+          },
+          if (length(trace)) {
+            paste0("\n", paste(utils::head(trace, 40), collapse = "\n"))
+          }
+        ),
+        level = "ERROR"
+      ),
+      silent = TRUE
+    )
+    invisible(NULL)
+  })
+  invisible(NULL)
+}
+
+# Seconds since the last error log_app_errors() saw (Inf without one), logged
+# or not: an error in an observer ends the session, which main.R tells apart
+# from a dropped connection this way
+#' @export
+last_app_error_age <- function() {
+  as.numeric(Sys.time()) - app_errors$seen
 }
 
 # Close logging
@@ -100,7 +251,7 @@ close_logging <- function() {
 # Get current session log file path
 #' @export
 get_log <- function() {
-  return(log_path)
+  return(session$log_path)
 }
 
 # Get base log directory (the parent that holds daily sub-folders)

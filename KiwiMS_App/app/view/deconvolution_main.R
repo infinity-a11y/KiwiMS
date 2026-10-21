@@ -57,7 +57,9 @@ box::use(
   app / logic / help_modal[bind_help],
   app / logic / help_pages[deconvolution_help],
   app / logic / plot_download[setup_plot_dl],
-  app / logic / logging[write_log, get_log, get_session_prefix],
+  app /
+    logic /
+    logging[write_log, get_log, get_session_dir, get_session_prefix, log_tail],
   app / logic / user_settings[update_user_setting, read_user_settings],
   app / logic / conversion_functions[read_decon_metadata, multiple_spectra],
   app / logic / palette[sample_colors],
@@ -109,13 +111,44 @@ ui <- function(id) {
   )
 }
 
+# Deconvolution processes of this R process, by PID - list(proc, db) - which
+# no longer end with the session that started them (see onSessionEnded in
+# server()), but with KiwiMS
+active_runs <- new.env()
+
+register_active_run <- function(proc, db) {
+  for (key in ls(active_runs)) {
+    if (!active_runs[[key]]$proc$is_alive()) {
+      rm(list = key, envir = active_runs)
+    }
+  }
+  active_runs[[as.character(proc$get_pid())]] <- list(proc = proc, db = db)
+}
+
+# Ends the deconvolutions still running, as KiwiMS stops
+#' @export
+stop_active_runs <- function() {
+  for (key in ls(active_runs)) {
+    run <- active_runs[[key]]
+    if (run$proc$is_alive()) {
+      write_log("Deconvolution cancelled as KiwiMS closes")
+      run$proc$kill_tree()
+      Sys.sleep(0.75) # let the OS release file handles before connecting
+    }
+    cleanup_wal(run$db)
+    rm(list = key, envir = active_runs)
+  }
+  invisible(NULL)
+}
+
 #' @export
 server <- function(
   id,
   deconvolution_sidebar_vars,
   conversion_main_vars,
   reset_button,
-  config_file
+  config_file,
+  restore = NULL
 ) {
   shiny$moduleServer(id, function(input, output, session) {
     Sys.setenv(CONDA_DLL_SEARCH_MODIFICATION_ENABLE = "1")
@@ -360,6 +393,55 @@ server <- function(
 
     # Locked destination — set once when deconvolute_start_conf fires
     analysis_dest <- shiny$reactiveVal(NULL)
+    # Locked analysis name (the run's database is <name>.db), set with it.
+    # The name input belongs to the start interface: a page reloaded during or
+    # after the run (session_restore.R) no longer has it.
+    run_name <- shiny$reactiveVal(NULL)
+    run_db_file <- function() {
+      file.path(analysis_dest(), paste0(run_name(), ".db"))
+    }
+
+    # The failed samples of the run with the cause of each, for the log
+    log_failed_samples <- function(samples) {
+      if (!length(samples)) {
+        return(invisible(NULL))
+      }
+      db <- shiny$isolate(run_db_file())
+      causes <- vapply(
+        samples,
+        function(s) {
+          info <- tryCatch(decon_failure_detail(db, s), error = function(e) NULL)
+          if (is.null(info$cause)) "cause unknown" else info$cause
+        },
+        character(1)
+      )
+      write_log(
+        paste0(
+          "Failed samples:\n",
+          paste0("  ", samples, ": ", causes, collapse = "\n")
+        ),
+        level = "WARN"
+      )
+    }
+    # What a run was started with - list(raw_dirs, run_selected, run_params) -
+    # for a page reloaded during or after it; NULL without a run
+    run_record <- shiny$reactiveVal(NULL)
+
+    # A run outlives its page: a page reloaded after a dropped connection, or
+    # F5, takes it up again (session_restore.R), and it ends when KiwiMS stops
+    # (stop_active_runs()). Here the database of an ended run is tidied.
+    session$onSessionEnded(function() {
+      shiny$isolate({
+        proc <- decon_process_data()
+        if (
+          !is.null(analysis_dest()) &&
+            !is.null(run_name()) &&
+            (is.null(proc) || !proc$is_alive())
+        ) {
+          cleanup_wal(run_db_file())
+        }
+      })
+    })
 
     # Update the text input when the output path or input path changes
     shiny$observeEvent(
@@ -898,7 +980,7 @@ server <- function(
       message("Checking progress at: ", Sys.time())
       db <- file.path(
         analysis_dest(),
-        paste0(trimws(input$analysis_name), ".db")
+        paste0(run_name(), ".db")
       )
       sample_bases <- ms_sample_base(basename(raw_dirs))
       count <- decon_progress_count(db, sample_bases)
@@ -939,12 +1021,13 @@ server <- function(
     # peaks detected in each done one, for the Sample Distribution and the sample
     # picker. Picker values are sample names in every mode. With `final` (the
     # run is over) and more than one sample deconvoluted, "Show All" heads the
-    # picker and is selected.
-    refresh_results <- function(final = FALSE) {
+    # picker and is selected - unless `keep` asks to keep the selection (a
+    # page reloaded after the run, session_restore.R).
+    refresh_results <- function(final = FALSE, keep = FALSE) {
       shiny$isolate({
         db_path <- file.path(
           analysis_dest(),
-          paste0(trimws(input$analysis_name), ".db")
+          paste0(run_name(), ".db")
         )
         samples <- reactVars$sample_names
         done_db <- decon_samples_with_state(db_path, samples, "done")
@@ -972,7 +1055,7 @@ server <- function(
         }
 
         sel <- result_files_sel()
-        if (show_all) {
+        if (show_all && !(keep && isTRUE(sel %in% choices))) {
           sel <- show_all_value
         } else if (is.null(sel) || !sel %in% choices) {
           sel <- unname(choices[1])
@@ -1094,6 +1177,8 @@ server <- function(
       reactVars$last_check <- Sys.time()
       reactVars$results_last_check <- Sys.time()
       reactVars$deconv_report_status <- NULL
+      reactVars$final_state <- NULL
+      run_record(NULL)
 
       decon_rep_process_data(NULL)
 
@@ -1113,6 +1198,817 @@ server <- function(
         value = 0,
         title = "Ready"
       )
+    }
+
+    ### Run ----
+    #### attach_run ----
+    # Follows the deconvolution process of decon_process_data() over the
+    # samples `raw_dirs`: its exit status, the picker and Sample Distribution,
+    # and the progress up to the finished run. Called when a run starts and
+    # by a page reloaded while it runs (session_restore.R).
+    attach_run <- function(raw_dirs, run_selected) {
+      # Track process exit status for errors
+      set_run_observer("exit_status", shiny$observe({
+        shiny$req(decon_process_data())
+
+        if (isTRUE(reactVars$is_running)) {
+          shiny$invalidateLater(2000)
+
+          # Check if the process is still alive
+          if (!decon_process_data()$is_alive()) {
+            # Retrieve exit status
+            exit_status <- decon_process_data()$get_exit_status()
+
+            # Check if the exit status indicates an error (non-zero)
+            if (exit_status != 0) {
+              # The end of the process output says why
+              write_log(
+                paste0(
+                  "Error in deconvolution execution (exit status ",
+                  exit_status,
+                  "). Last lines of the deconvolution output:\n",
+                  log_tail(reactVars$decon_process_out)
+                ),
+                level = "ERROR"
+              )
+
+              # Change UI elements to indicate error
+              shiny$updateActionButton(
+                session,
+                "deconvolute_end",
+                label = "Reset",
+                icon = shiny$icon("repeat")
+              )
+
+              updateProgressBar(
+                session = session,
+                id = ns("progressBar"),
+                value = 0,
+                title = "Deconvolution aborted ..."
+              )
+              reactVars$final_state <- list(
+                icon = "processing_error",
+                value = 0,
+                title = "Deconvolution aborted ...",
+                reset = TRUE
+              )
+              if (isTRUE(reactVars$init_hint_shown)) {
+                init_hint(FALSE)
+              }
+
+              hide(selector = "#app-deconvolution_main-processing")
+              show(selector = "#app-deconvolution_main-processing_error")
+
+              shiny$showNotification(
+                "Deconvolution execution failed",
+                type = "error",
+                duration = 5
+              )
+
+              delay(
+                1000,
+                runjs(
+                  "document.querySelector('#app-deconvolution_main-show_log').click();"
+                )
+              )
+
+              # Stop spinner for spectrum and heatmap plot
+              waiter_hide(id = ns("heatmap"))
+              waiter_hide(id = ns("spectrum"))
+
+              # Stop observers
+              if (!is.null(reactVars$progress_observer)) {
+                reactVars$progress_observer$destroy()
+              }
+              if (!is.null(reactVars$process_observer)) {
+                reactVars$process_observer$destroy()
+              }
+              if (
+                run_selected == "folder" &&
+                  !is.null(reactVars$results_observer)
+              ) {
+                reactVars$results_observer$destroy()
+              }
+
+              # Set reactive status variables (error path only — for successful
+              # completion the progress observer sets is_running=FALSE and
+              # updates the button to "Reset" atomically at lines ~1918/2090)
+              reactVars$is_running <- FALSE
+              reactVars$deconv_report_status <- NULL
+            }
+          }
+        }
+      }))
+
+      #### Results tracking observer for picker and Sample Distribution ----
+      if (run_selected == "folder") {
+        reactVars$results_observer <- shiny$observe({
+          shiny$invalidateLater(10000)
+
+          runjs(paste0(
+            'document.getElementById("blocking-overlay").style.display ',
+            '= "block";'
+          ))
+
+          if (
+            difftime(
+              Sys.time(),
+              reactVars$results_last_check,
+              units = "secs"
+            ) >=
+              10
+          ) {
+            refresh_results()
+
+            reactVars$results_last_check <- Sys.time()
+          }
+
+          runjs(paste0(
+            'document.getElementById("blocking-overlay").style.display ',
+            '= "none";'
+          ))
+        })
+      }
+
+      #### Progress tracking observer ----
+      reactVars$progress_observer <- shiny$observe({
+        shiny$invalidateLater(1000)
+
+        if (difftime(Sys.time(), reactVars$last_check, units = "secs") >= 0.5) {
+          # Scan only for sentinels that belong to the current raw_dirs so that
+          # residual files from other runs in the same directory are ignored.
+          current_base_names <- ms_sample_base(basename(raw_dirs))
+          db_pth <- file.path(
+            analysis_dest(),
+            paste0(run_name(), ".db")
+          )
+          failed_in_db <- decon_failed_samples(db_pth)
+          newly_failed <- setdiff(
+            intersect(current_base_names, failed_in_db),
+            reactVars$failed_samples
+          )
+          newly_failed <- newly_failed[nzchar(trimws(newly_failed))]
+          if (length(newly_failed) > 0) {
+            reactVars$failed_samples <- c(
+              reactVars$failed_samples,
+              newly_failed
+            )
+          }
+
+          reactVars$current_total_files <- check_progress(raw_dirs)
+          reactVars$completed_files <-
+            (reactVars$current_total_files - reactVars$initial_file_count) +
+            length(reactVars$failed_samples)
+          reactVars$last_check <- Sys.time()
+
+          progress_pct <- min(
+            100,
+            round(
+              100 * reactVars$completed_files / reactVars$expected_files
+            )
+          )
+
+          message(
+            "Updating progress: ",
+            progress_pct,
+            "% (",
+            reactVars$completed_files,
+            "/",
+            reactVars$expected_files,
+            ")"
+          )
+
+          if (reactVars$count < 3) {
+            reactVars$count <- reactVars$count + 1
+          } else {
+            reactVars$count <- 0
+          }
+
+          result_files <- file.path(
+            analysis_dest(),
+            ms_result_dirname(raw_dirs)
+          )
+
+          # Poll completion sentinel on every cycle
+          all_processed <- decon_is_complete(
+            file.path(
+              analysis_dest(),
+              paste0(run_name(), ".db")
+            )
+          )
+
+          # The hint is about start-up only, so it waits for the subprocess
+          # to report its engine ready rather than for the first sample: how
+          # long that sample takes depends on the data. A warm start is ready
+          # within seconds, so 20 s still starting means a cold one.
+          if (!isTRUE(reactVars$engine_ready)) {
+            reactVars$engine_ready <- reactVars$completed_files > 0 ||
+              decon_engine_ready(db_pth)
+          }
+          if (isTRUE(reactVars$engine_ready)) {
+            if (isTRUE(reactVars$init_hint_shown)) {
+              init_hint(FALSE)
+            }
+          } else if (
+            !isTRUE(reactVars$init_hint_shown) &&
+              difftime(Sys.time(), reactVars$started_at, units = "secs") >= 20
+          ) {
+            init_hint(TRUE)
+          }
+
+          if (reactVars$completed_files == 0) {
+            title <- paste0(
+              "Initializing ",
+              paste0(rep(".", reactVars$count), collapse = "")
+            )
+          } else if (!all_processed) {
+            title <- paste0(
+              sprintf(
+                "Processing Files (%d/%d) ",
+                reactVars$completed_files,
+                reactVars$expected_files
+              ),
+              paste0(rep(".", reactVars$count), collapse = "")
+            )
+          } else {
+            title <- paste0(
+              "Saving Results ",
+              paste0(rep(".", reactVars$count), collapse = "")
+            )
+
+            if (all_processed) {
+              # Stop observers
+              if (!is.null(reactVars$progress_observer)) {
+                reactVars$progress_observer$destroy()
+              }
+              if (!is.null(reactVars$process_observer)) {
+                reactVars$process_observer$destroy()
+              }
+              if (
+                run_selected == "folder" &&
+                  !is.null(reactVars$results_observer)
+              ) {
+                reactVars$results_observer$destroy()
+              }
+
+              # Set reactive status variable "is_running" to FALSE
+              reactVars$is_running <- FALSE
+
+              # Final picker (with "Show All") and Sample Distribution state
+              refresh_results(final = TRUE)
+
+              # The sidebar stays hidden until Reset, however the run went
+              collapse_decon_sidebar()
+
+              # update "Abort" button to "Reset"
+              shiny$updateActionButton(
+                session,
+                "deconvolute_end",
+                label = "Reset",
+                icon = shiny$icon("repeat")
+              )
+
+              # Change progress bar title to "Finalized!"
+              title <- "Finalized!"
+
+              # Report generation is temporarily disabled
+
+              # Enable continuation button to protein conversion. Retried
+              # until the button is on the page: a page reloaded just before
+              # the run ended may still be drawing it (session_restore.R).
+              runjs(sprintf(
+                paste0(
+                  "(function enableForward(n) {",
+                  "  var b = document.getElementById('%s');",
+                  "  if (b) {",
+                  "    b.disabled = false;",
+                  "    b.removeAttribute('disabled');",
+                  "    b.classList.remove('disabled');",
+                  "  } else if (n < 50) {",
+                  "    setTimeout(function() { enableForward(n + 1); }, 200);",
+                  "  }",
+                  "})(0);"
+                ),
+                ns("forward_deconvolution")
+              ))
+
+              # Change spinner: error icon when all samples failed, check otherwise
+              n_succeeded <- reactVars$current_total_files -
+                reactVars$initial_file_count
+              n_failed <- length(reactVars$failed_samples)
+              n_total <- reactVars$expected_files
+              if (n_succeeded == 0 && n_failed > 0) {
+                final_icon <- "#app-deconvolution_main-processing_error"
+                title <- paste0(
+                  "Finalized with errors (",
+                  n_failed,
+                  "/",
+                  n_total,
+                  " failed)"
+                )
+                write_log(
+                  paste(
+                    "Deconvolution finalized — all",
+                    n_failed,
+                    "/",
+                    n_total,
+                    "sample(s) failed"
+                  ),
+                  level = "WARN"
+                )
+                log_failed_samples(reactVars$failed_samples)
+              } else {
+                final_icon <- "#app-deconvolution_main-processing_fin"
+                if (n_failed > 0) {
+                  title <- paste0(
+                    "Finalized (",
+                    n_failed,
+                    "/",
+                    n_total,
+                    " failed)"
+                  )
+                  write_log(
+                    paste(
+                      "Deconvolution finalized —",
+                      n_succeeded,
+                      "succeeded,",
+                      n_failed,
+                      "/",
+                      n_total,
+                      "failed"
+                    ),
+                    level = "WARN"
+                  )
+                  log_failed_samples(reactVars$failed_samples)
+                } else {
+                  write_log("Deconvolution finalized")
+                }
+              }
+
+              # How the run ended, for a page reloaded after it
+              reactVars$final_state <- list(
+                icon = sub("^#app-deconvolution_main-", "", final_icon),
+                value = progress_pct,
+                title = title,
+                reset = TRUE,
+                forward = TRUE
+              )
+
+              if (is_show_all(shiny$isolate(result_files_sel()))) {
+                # "Show All" takes the browser seconds to draw: the run reads
+                # as finished once it is on screen (input$spectrum_drawn)
+                reactVars$pending_finish <- list(title = title, icon = final_icon)
+                title <- "Loading Spectra ..."
+                progress_drawing(TRUE)
+              } else {
+                hide(selector = "#app-deconvolution_main-processing")
+                show(selector = final_icon)
+              }
+            }
+          }
+
+          updateProgressBar(
+            session = session,
+            id = ns("progressBar"),
+            value = progress_pct,
+            title = title
+          )
+        }
+      })
+
+    }
+
+    #### show_run_results ----
+    # The interface of a run: the picker's Sample Distribution, the spectrum
+    # of the selection and the run's controls, drawn as `state` gives them
+    # (deconvolution_results_ui()) - the state a run left them in, for a page
+    # reloaded after a dropped connection. `run_params` are the run's
+    # deconvolution settings, shown beside the spectrum.
+    show_run_results <- function(run_params, state = NULL) {
+      run_db_path <- run_db_file
+
+      #### Sample Distribution click observer ----
+      # A click on a done or failed sample's tile selects it, in the picker
+      # too. The plate has its own plotly source, so clicks on the spectrum
+      # never land here. Clicks are only read once the plate has been drawn:
+      # event_data() on a source no rendered plot has registered yet warns
+      # (deferred to the end of the flush, so it cannot be suppressed here).
+      # A reactiveVal, unlike reactVars$heatmap_ready, triggers this once
+      # rather than on every redraw, which would replay the last click.
+      plate_shown <- shiny$reactiveVal(FALSE)
+      set_run_observer("heatmap_click", shiny$observeEvent(
+        if (plate_shown()) event_data("plotly_click", source = "decon_plate"),
+        {
+          click <- event_data("plotly_click", source = "decon_plate")
+          shiny$req(is.numeric(click$x), is.numeric(click$y))
+
+          clicked_sample <- plate_sample_at(reactVars$plate, click$x, click$y)
+          # Pending samples have nothing to show yet
+          shiny$req(
+            length(clicked_sample) == 1,
+            clicked_sample %in% picker_state$choices
+          )
+
+          runjs(paste0(
+            'document.getElementById("blocking-overlay").styl',
+            'e.display = "block";'
+          ))
+          result_files_sel(clicked_sample)
+          updatePickerInput(session, "result_picker", selected = clicked_sample)
+          # Unblock after renders complete (delay covers the spectrum)
+          delay(
+            2000,
+            runjs(paste0(
+              'document.getElementById("blocking-overlay").styl',
+              'e.display = "none";'
+            ))
+          )
+        }
+      ))
+
+      #### Sample Distribution selection highlight observer ----
+      # Frames the selected sample's tile; "Show All" clears the frame
+      set_run_observer("heatmap_highlight", shiny$observe({
+        sel <- result_files_sel()
+        shiny$req(reactVars$heatmap_ready > 0L)
+
+        shapes <- plate_highlight(
+          shiny$isolate(reactVars$plate),
+          if (!is.null(sel) && !is_show_all(sel)) ms_sample_base(sel)
+        )
+
+        delay(400, {
+          plotlyProxy("heatmap", session) |>
+            plotlyProxyInvoke("relayout", list(shapes = shapes))
+        })
+      }))
+
+      #### Switch to running UI ----
+      # Hide the sidebar for the run
+      collapse_decon_sidebar()
+      output$deconvolution_ui <- shiny$renderUI({
+        deconvolution_results_ui(ns, state)
+      })
+
+      ### Render result spectrum
+      spectrum_ready <- shiny$reactiveVal(FALSE)
+      set_run_observer("spectrum_ready", shiny$observeEvent(
+        result_files_sel(),
+        {
+          spectrum_ready(FALSE)
+        },
+        ignoreNULL = FALSE
+      ))
+
+      # The Spectrum settings offer the Cubic/Planar switch for "Show All"
+      # and the single-sample ones otherwise. They live in a popover that is
+      # not in the DOM while closed, so the swap is a body class main.scss
+      # keys on rather than hiding the inputs themselves.
+      set_run_observer("spectrum_settings_mode", shiny$observe({
+        runjs(sprintf(
+          "document.body.classList.toggle('decon-show-all', %s);",
+          tolower(is_show_all())
+        ))
+      }))
+
+      #### All spectra ("Show All") ----
+      # Read once per finished run; switching Cubic/Planar only redraws
+      show_all_data <- shiny$reactive({
+        samples <- reactVars$show_all_samples
+        shiny$req(length(samples) > 1)
+        db <- run_db_path()
+        stats::setNames(
+          lapply(samples, function(s) process_plot_data_db(db, s)),
+          samples
+        )
+      })
+
+      show_all_metrics <- shiny$reactive({
+        samples <- reactVars$show_all_samples
+        shiny$req(length(samples) > 1)
+        summarise_decon_metrics(run_db_path(), samples)
+      })
+
+      # Show Symbols is isolated: flipping it toggles the marker traces on the
+      # figure already on screen (observer below) instead of rebuilding it.
+      # Read here, a rebuild for any other reason starts from the current view.
+      show_peak_symbols <- function() {
+        !isFALSE(shiny$isolate(input$spectrum_symbols))
+      }
+
+      # The peak markers are the figure's only marker traces (the lines are
+      # "lines", the metrics annotations), single sample and "Show All" alike
+      set_run_observer("spectrum_symbols", shiny$observeEvent(
+        input$spectrum_symbols,
+        {
+          runjs(sprintf(
+            paste0(
+              "var gd = document.getElementById('%s');",
+              "if (gd && gd.data) {",
+              "  var idx = [];",
+              "  gd.data.forEach(function(t, i) {",
+              "    if (t.mode === 'markers') idx.push(i);",
+              "  });",
+              "  if (idx.length) Plotly.restyle(gd, {visible: %s}, idx);",
+              "}"
+            ),
+            ns("spectrum"),
+            tolower(isTRUE(input$spectrum_symbols))
+          ))
+        },
+        ignoreInit = TRUE
+      ))
+
+      all_spectra_plot <- function(theme = "light") {
+        data <- show_all_data()
+        data <- data[!vapply(data, is.null, logical(1))]
+        shiny$req(length(data) > 0)
+        samples <- names(data)
+
+        plot <- multiple_spectra(
+          results_list = NULL,
+          samples = samples,
+          cubic = !identical(input$spectrum_kind, "Planar"),
+          # Same rule as the conversion results: the categorical colours
+          # while they suffice, the sample ramp beyond
+          color_cmp = stats::setNames(
+            sample_colors(length(samples), theme),
+            samples
+          ),
+          color_variable = "Samples",
+          # (points per spectrum: multiple_spectra()'s budget for the figure)
+          # A legend this long would run into the metrics; hover and the
+          # sample axis still name the spectra
+          legend_show = length(samples) <= 12,
+          symbols_show = show_peak_symbols(),
+          theme = theme,
+          plot_data = data
+        )
+
+        blocks <- side_blocks(
+          function() show_all_metrics(),
+          sprintf("Metrics (mean ± SD, n = %d)", length(samples))
+        )
+        if (length(blocks) == 0) {
+          return(plot)
+        }
+        # No sample legend beside the tables: with sample names this long and
+        # the card this narrow, it ran into them on the right and took most of
+        # the height above the plot. The hover names every spectrum (and the
+        # cubic view's sample axis does when the names are short). Set on the
+        # built figure directly; layout() would make add_side_tables() build
+        # all of it again.
+        plot$x$layout$showlegend <- FALSE
+        add_side_tables(plot, blocks, theme = theme)
+      }
+
+      # side_blocks(): The tables beside the spectrum, as switched on ----
+      # The metrics (`metrics_fn` is only called while they are shown, as it
+      # reads the database) and the run's deconvolution settings.
+      side_blocks <- function(metrics_fn, metrics_caption = "Metrics") {
+        Filter(
+          Negate(is.null),
+          list(
+            if (!isFALSE(input$spectrum_metrics)) {
+              list(rows = metrics_fn(), caption = metrics_caption)
+            },
+            if (!isFALSE(input$spectrum_params)) {
+              list(rows = decon_param_rows(run_params), caption = "Parameters")
+            }
+          )
+        )
+      }
+
+      #### Spectrum of the selection ----
+      # The selected sample's spectrum, with its fit statistics beside it
+      # while Show Metrics is on, or all spectra for "Show All". NULL when
+      # there is no data for the sample.
+      build_spectrum <- function(theme = "light") {
+        sel <- result_files_sel()
+        if (is_show_all(sel)) {
+          return(all_spectra_plot(theme))
+        }
+
+        sel_base <- ms_sample_base(sel)
+        result_dir <- file.path(analysis_dest(), ms_result_dirname(sel))
+        db_sp <- run_db_path()
+        is_raw_toggle <- isTRUE(as.logical(input$toggle_result))
+        show_labels <- !isFALSE(input$spectrum_annotation)
+
+        # Try DB first (works even when raw files were cleaned up), and fall
+        # back to the file-based reader when it is not available (older runs)
+        plot_data <- if (file.exists(db_sp)) {
+          process_plot_data_db(db_sp, sel_base, raw = is_raw_toggle)
+        }
+        plot <- if (!is.null(plot_data)) {
+          spectrum_plot(
+            plot_data = plot_data,
+            raw = is_raw_toggle,
+            show_peak_labels = show_labels,
+            show_mass_diff = FALSE,
+            show_peak_symbols = show_peak_symbols(),
+            theme = theme
+          )
+        } else if (dir.exists(result_dir)) {
+          spectrum_plot(
+            result_path = result_dir,
+            raw = is_raw_toggle,
+            show_peak_labels = show_labels,
+            show_mass_diff = FALSE,
+            show_peak_symbols = show_peak_symbols(),
+            theme = theme
+          )
+        }
+
+        if (!is.null(plot)) {
+          plot <- add_side_tables(
+            plot,
+            side_blocks(function() {
+              read_decon_metrics(db_sp, sel_base, result_dir)
+            }),
+            theme = theme
+          )
+        }
+        plot
+      }
+
+      setup_plot_dl(
+        input,
+        output,
+        session,
+        "decon_spectrum",
+        build_fn = function(theme) {
+          shiny$req(result_files_sel())
+          plot <- build_spectrum(theme)
+          shiny$req(plot)
+          plot
+        },
+        filename_fn = function() paste0(get_session_prefix(), "_Spectrum"),
+        available_fn = spectrum_ready
+      )
+
+      output$spectrum <- renderPlotly({
+        shiny$req(result_files_sel())
+
+        # spectrum_container decides whether to mount this output at all --
+        # a failed sample gets the failure message in its place instead
+        # (see below). This is just a defensive backstop against a stale
+        # binding rather than something expected to fire in normal use.
+        db_sp <- run_db_path()
+        shiny$req(
+          is_show_all() ||
+            !(file.exists(db_sp) &&
+              ms_sample_base(result_files_sel()) %in%
+                decon_failed_samples(db_sp))
+        )
+
+        # Lifted by the browser once drawn; all spectra block the page meanwhile
+        spectrum_busy(block = is_show_all())
+
+        spectrum <- build_spectrum()
+        spectrum_ready(TRUE)
+        if (!is.null(spectrum)) {
+          return(spectrum)
+        }
+
+        # Neither the DB nor the on-disk UniDec output had data to show.
+        # For the raw m/z view this is expected when "Keep UniDec output files" was
+        # off during deconvolution, since the raw files were never written
+        # to disk. Surface a hint instead of leaving a blank plot.
+        is_raw_toggle <- isTRUE(as.logical(input$toggle_result))
+        hint_text <- if (is_raw_toggle) {
+          if (!isTRUE(read_user_settings()$deconv_keep_raw_output)) {
+            paste0(
+              "No raw m/z spectrum available.<br>",
+              "Enable \"Keep UniDec output files\" in Settings before running ",
+              "deconvolution to store raw spectra for this view."
+            )
+          } else {
+            "No raw m/z spectrum available for this sample."
+          }
+        } else {
+          "No spectrum data available for this sample."
+        }
+
+        plotly::plot_ly(type = "scatter", mode = "markers") |>
+          plotly::layout(
+            paper_bgcolor = "rgba(0,0,0,0)",
+            plot_bgcolor = "rgba(0,0,0,0)",
+            xaxis = list(visible = FALSE),
+            yaxis = list(visible = FALSE),
+            annotations = list(list(
+              x = 0.5,
+              y = 0.5,
+              xref = "paper",
+              yref = "paper",
+              xanchor = "center",
+              yanchor = "middle",
+              text = hint_text,
+              showarrow = FALSE,
+              font = list(size = 14, color = "white")
+            ))
+          )
+      })
+
+      ### Failure state for the Spectrum card ----
+
+      # current_failed_selection(): (sample, cause, detail) for whichever
+      # sample is selected right now, or NULL if it did not fail ----
+      # A single cheap SQLite read; called fresh wherever it's needed rather
+      # than cached, so it always reflects what is currently selected.
+      current_failed_selection <- function() {
+        shiny$req(result_files_sel())
+        if (is_show_all()) {
+          return(NULL)
+        }
+        sel <- ms_sample_base(result_files_sel())
+        db_fm <- run_db_path()
+        if (!file.exists(db_fm) || !(sel %in% decon_failed_samples(db_fm))) {
+          return(NULL)
+        }
+        list(sample = sel, info = decon_failure_detail(db_fm, sel))
+      }
+
+      #### Spectrum card: plot, or the failure message in its place ----
+      # A failed sample's plotlyOutput is never mounted at all (rather than
+      # mounted-but-blank with the message overlaid on top of it): plotly
+      # builds its own layered DOM under the hood, and that layering was
+      # swallowing clicks on the Copy button placed over it. Showing one or
+      # the other as the card's only content sidesteps that entirely.
+      set_run_observer("copy_error", shiny$observeEvent(input$spectrum_copy_error, {
+        current <- current_failed_selection()
+        shiny$req(current)
+        text <- paste(
+          c(
+            paste("Sample failed to deconvolute:", current$sample),
+            if (!is.null(current$info)) current$info$cause,
+            if (!is.null(current$info) && !is.null(current$info$detail)) {
+              c("", current$info$detail)
+            }
+          ),
+          collapse = "\n"
+        )
+        write_clip(text, allow_non_interactive = TRUE)
+        runjs("alert('Error message copied to clipboard!');")
+      }))
+
+      output$spectrum_container <- shiny$renderUI({
+        current <- current_failed_selection()
+        if (is.null(current)) {
+          return(withWaiter(plotlyOutput(ns("spectrum"), height = "100%")))
+        }
+        info <- current$info
+        shiny$div(
+          class = "sample-failed-msg",
+          shiny$div(
+            class = "sample-failed-msg-title",
+            "Sample failed to deconvolute"
+          ),
+          if (!is.null(info)) {
+            shiny$div(class = "sample-failed-msg-cause", info$cause)
+          },
+          if (!is.null(info) && !is.null(info$detail)) {
+            shiny$tags$pre(class = "sample-failed-msg-detail", info$detail)
+          },
+          shiny$actionButton(
+            ns("spectrum_copy_error"),
+            "Copy",
+            icon = shiny$icon("clipboard"),
+            class = "sample-failed-copy-btn"
+          )
+        )
+      })
+
+      ### Render Sample Distribution ----
+      # Drawn once the first sample is done or failed, and redrawn as samples
+      # finish (peak counts) or fail (crosses). An all-pending plate has
+      # nothing to show or click on.
+      output$heatmap <- renderPlotly({
+        plate <- reactVars$plate
+        shiny$req(
+          plate,
+          nrow(reactVars$peak_counts) > 0 ||
+            any(plate$tiles$sample %in% reactVars$failed_samples)
+        )
+        waiter_show(id = ns("heatmap"), html = spin_wave())
+        on.exit(waiter_hide(id = ns("heatmap")))
+
+        heatmap <- plate_heatmap(
+          plate,
+          peak_counts = reactVars$peak_counts,
+          failed = reactVars$failed_samples,
+          source = "decon_plate"
+        ) |>
+          event_register("plotly_click")
+
+        # Signal the highlight observer to re-apply the selection frame, and
+        # the click observer that the click event is registered now
+        reactVars$heatmap_ready <- shiny$isolate(reactVars$heatmap_ready) + 1L
+        plate_shown(TRUE)
+
+        heatmap
+      })
+
     }
 
     ### Event start deconvolution ----
@@ -1576,11 +2472,11 @@ server <- function(
       # the safety net should it ever be pressed anyway. The dialog stays open
       # and its red line says why, so no toast (it would sit behind the dialog).
       if (!is.null(sample_cap_message(planned_db_samples()))) {
-        write_log("Deconvolution refused - sample cap exceeded")
+        write_log("Deconvolution refused - sample cap exceeded", level = "WARN")
         return(NULL)
       }
       if (!is.null(duplicate_sample_message(planned_inputs()))) {
-        write_log("Deconvolution refused - duplicate sample names")
+        write_log("Deconvolution refused - duplicate sample names", level = "WARN")
         return(NULL)
       }
 
@@ -1599,6 +2495,7 @@ server <- function(
 
       # Lock in analysis destination (sidebar path — no subfolder created)
       analysis_dest(effective_dest())
+      run_name(trimws(input$analysis_name))
 
       # Snapshot the inputs this run was started with. Everything rendered or
       # polled for this run reads the snapshot: reading config_file() and the
@@ -1647,9 +2544,16 @@ server <- function(
           dirname(raw_dirs[1])
         ))
       }
-      write_log(paste(
-        "Output path:",
-        analysis_dest()
+      # The run's database as the start interface showed it, before the run
+      # creates it
+      write_log(paste0(
+        "Result database: ",
+        normalizePath(run_db_file(), winslash = "\\", mustWork = FALSE),
+        if (file.exists(run_db_file())) {
+          " (extends the existing analysis)"
+        } else {
+          " (new analysis)"
+        }
       ))
 
       # Handle duplicate samples already present (done) in an existing DB
@@ -1793,11 +2697,16 @@ server <- function(
       config_path <- file.path(temp, "config.rds")
       saveRDS(config, config_path)
 
-      # Initiate output file
+      # Output of the run and of its workers, in the session's log folder: one
+      # pair of files per run, so a later run keeps an earlier one's
+      run_stamp <- format(Sys.time(), "%H%M%S")
       output_path <- file.path(
-        Sys.getenv("LOCALAPPDATA"),
-        "KiwiMS",
-        "deconvolution.log"
+        get_session_dir(),
+        paste0("deconvolution_", run_stamp, ".log")
+      )
+      reactVars$decon_worker_out <- file.path(
+        get_session_dir(),
+        paste0("deconvolution_", run_stamp, "_workers.log")
       )
       dir.create(dirname(output_path), showWarnings = FALSE, recursive = TRUE)
       file.create(output_path)
@@ -1814,7 +2723,7 @@ server <- function(
         {
           db_path_pre <- file.path(
             analysis_dest(),
-            paste0(trimws(input$analysis_name), ".db")
+            paste0(run_name(), ".db")
           )
           if (file.exists(db_path_pre)) {
             active_bases <- ms_sample_base(basename(raw_dirs))
@@ -1899,7 +2808,7 @@ server <- function(
               Sys.getenv("KIWIMS_DEV_MODE"),
               file.path(
                 analysis_dest(),
-                paste0(trimws(input$analysis_name), ".db")
+                paste0(run_name(), ".db")
               ),
               as.character(isTRUE(read_user_settings()$deconv_keep_raw_output))
             ),
@@ -1908,7 +2817,14 @@ server <- function(
             # stdout and stderr overwrote each other and the log came out
             # scrambled.
             stdout = reactVars$decon_process_out,
-            stderr = "2>&1"
+            stderr = "2>&1",
+            # Where the process reads its own output back from and its workers
+            # write theirs (deconvolution_execute.R, deconvolution_functions.R)
+            env = c(
+              "current",
+              KIWIMS_DECON_OUTPUT = reactVars$decon_process_out,
+              KIWIMS_DECON_WORKER_LOG = reactVars$decon_worker_out
+            )
           )
         },
         error = function(e) {
@@ -1920,7 +2836,7 @@ server <- function(
           waiter_hide(id = ns("spectrum"))
 
           error_msg <- paste("Failed to start deconvolution:", e$message)
-          write_log(error_msg)
+          write_log(error_msg, level = "ERROR")
 
           # Show error notification
           shiny$showNotification(
@@ -1953,83 +2869,18 @@ server <- function(
       # Track process metadata in reactive variable
       decon_process_data(rx_process)
 
-      # Track process exit status for errors
-      set_run_observer("exit_status", shiny$observe({
-        shiny$req(decon_process_data())
 
-        if (isTRUE(reactVars$is_running)) {
-          shiny$invalidateLater(2000)
+      # The run for a page reloaded while it runs or after (session_restore.R),
+      # and for KiwiMS to end when it closes (stop_active_runs())
+      run_record(list(
+        raw_dirs = raw_dirs,
+        run_selected = run_selected,
+        run_params = run_params
+      ))
+      register_active_run(rx_process, run_db_file())
 
-          # Check if the process is still alive
-          if (!decon_process_data()$is_alive()) {
-            # Retrieve exit status
-            exit_status <- decon_process_data()$get_exit_status()
-
-            # Check if the exit status indicates an error (non-zero)
-            if (exit_status != 0) {
-              write_log("Error in deconvolution execution")
-
-              # Change UI elements to indicate error
-              shiny$updateActionButton(
-                session,
-                "deconvolute_end",
-                label = "Reset",
-                icon = shiny$icon("repeat")
-              )
-
-              updateProgressBar(
-                session = session,
-                id = ns("progressBar"),
-                value = 0,
-                title = "Deconvolution aborted ..."
-              )
-              if (isTRUE(reactVars$init_hint_shown)) {
-                init_hint(FALSE)
-              }
-
-              hide(selector = "#app-deconvolution_main-processing")
-              show(selector = "#app-deconvolution_main-processing_error")
-
-              shiny$showNotification(
-                "Deconvolution execution failed",
-                type = "error",
-                duration = 5
-              )
-
-              delay(
-                1000,
-                runjs(
-                  "document.querySelector('#app-deconvolution_main-show_log').click();"
-                )
-              )
-
-              # Stop spinner for spectrum and heatmap plot
-              waiter_hide(id = ns("heatmap"))
-              waiter_hide(id = ns("spectrum"))
-
-              # Stop observers
-              if (!is.null(reactVars$progress_observer)) {
-                reactVars$progress_observer$destroy()
-              }
-              if (!is.null(reactVars$process_observer)) {
-                reactVars$process_observer$destroy()
-              }
-              if (
-                run_selected == "folder" &&
-                  !is.null(reactVars$results_observer)
-              ) {
-                reactVars$results_observer$destroy()
-              }
-
-              # Set reactive status variables (error path only — for successful
-              # completion the progress observer sets is_running=FALSE and
-              # updates the button to "Reset" atomically at lines ~1918/2090)
-              reactVars$is_running <- FALSE
-              reactVars$deconv_report_status <- NULL
-            }
-          }
-        }
-      }))
+      # Follow the process, and show its results as they come
+      attach_run(raw_dirs, run_selected)
 
       # Log deconvolution initiation parameter
       write_log("Deconvolution started")
@@ -2041,709 +2892,10 @@ server <- function(
         paste(formatted_params, collapse = "\n")
       ))
 
-      # On app close: kill process and checkpoint DB to remove WAL sidecar files
-      reactVars$process_observer <- shiny$observe({
-        proc <- decon_process_data()
-        db_snap <- file.path(
-          analysis_dest(),
-          paste0(trimws(input$analysis_name), ".db")
-        )
-
-        completed_files <- reactVars$completed_files
-        expected_files <- reactVars$expected_files
-
-        session$onSessionEnded(function() {
-          if (!is.null(proc) && proc$is_alive()) {
-            write_log(paste(
-              "Deconvolution cancelled with",
-              completed_files,
-              "out of",
-              expected_files,
-              "target(s) completed"
-            ))
-            proc$kill_tree()
-            Sys.sleep(0.75) # let the OS release file handles before connecting
-          }
-          cleanup_wal(db_snap)
-        })
-      })
-
-      #### Results tracking observer for picker and Sample Distribution ----
-      if (run_selected == "folder") {
-        reactVars$results_observer <- shiny$observe({
-          shiny$invalidateLater(10000)
-
-          runjs(paste0(
-            'document.getElementById("blocking-overlay").style.display ',
-            '= "block";'
-          ))
-
-          if (
-            difftime(
-              Sys.time(),
-              reactVars$results_last_check,
-              units = "secs"
-            ) >=
-              10
-          ) {
-            refresh_results()
-
-            reactVars$results_last_check <- Sys.time()
-          }
-
-          runjs(paste0(
-            'document.getElementById("blocking-overlay").style.display ',
-            '= "none";'
-          ))
-        })
-      }
-
-      #### Progress tracking observer ----
-      reactVars$progress_observer <- shiny$observe({
-        shiny$invalidateLater(1000)
-
-        if (difftime(Sys.time(), reactVars$last_check, units = "secs") >= 0.5) {
-          # Scan only for sentinels that belong to the current raw_dirs so that
-          # residual files from other runs in the same directory are ignored.
-          current_base_names <- ms_sample_base(basename(raw_dirs))
-          db_pth <- file.path(
-            analysis_dest(),
-            paste0(trimws(input$analysis_name), ".db")
-          )
-          failed_in_db <- decon_failed_samples(db_pth)
-          newly_failed <- setdiff(
-            intersect(current_base_names, failed_in_db),
-            reactVars$failed_samples
-          )
-          newly_failed <- newly_failed[nzchar(trimws(newly_failed))]
-          if (length(newly_failed) > 0) {
-            reactVars$failed_samples <- c(
-              reactVars$failed_samples,
-              newly_failed
-            )
-          }
-
-          reactVars$current_total_files <- check_progress(raw_dirs)
-          reactVars$completed_files <-
-            (reactVars$current_total_files - reactVars$initial_file_count) +
-            length(reactVars$failed_samples)
-          reactVars$last_check <- Sys.time()
-
-          progress_pct <- min(
-            100,
-            round(
-              100 * reactVars$completed_files / reactVars$expected_files
-            )
-          )
-
-          message(
-            "Updating progress: ",
-            progress_pct,
-            "% (",
-            reactVars$completed_files,
-            "/",
-            reactVars$expected_files,
-            ")"
-          )
-
-          if (reactVars$count < 3) {
-            reactVars$count <- reactVars$count + 1
-          } else {
-            reactVars$count <- 0
-          }
-
-          result_files <- file.path(
-            analysis_dest(),
-            ms_result_dirname(raw_dirs)
-          )
-
-          # Poll completion sentinel on every cycle
-          all_processed <- decon_is_complete(
-            file.path(
-              analysis_dest(),
-              paste0(trimws(input$analysis_name), ".db")
-            )
-          )
-
-          # The hint is about start-up only, so it waits for the subprocess
-          # to report its engine ready rather than for the first sample: how
-          # long that sample takes depends on the data. A warm start is ready
-          # within seconds, so 20 s still starting means a cold one.
-          if (!isTRUE(reactVars$engine_ready)) {
-            reactVars$engine_ready <- reactVars$completed_files > 0 ||
-              decon_engine_ready(db_pth)
-          }
-          if (isTRUE(reactVars$engine_ready)) {
-            if (isTRUE(reactVars$init_hint_shown)) {
-              init_hint(FALSE)
-            }
-          } else if (
-            !isTRUE(reactVars$init_hint_shown) &&
-              difftime(Sys.time(), reactVars$started_at, units = "secs") >= 20
-          ) {
-            init_hint(TRUE)
-          }
-
-          if (reactVars$completed_files == 0) {
-            title <- paste0(
-              "Initializing ",
-              paste0(rep(".", reactVars$count), collapse = "")
-            )
-          } else if (!all_processed) {
-            title <- paste0(
-              sprintf(
-                "Processing Files (%d/%d) ",
-                reactVars$completed_files,
-                reactVars$expected_files
-              ),
-              paste0(rep(".", reactVars$count), collapse = "")
-            )
-          } else {
-            title <- paste0(
-              "Saving Results ",
-              paste0(rep(".", reactVars$count), collapse = "")
-            )
-
-            if (all_processed) {
-              # Stop observers
-              if (!is.null(reactVars$progress_observer)) {
-                reactVars$progress_observer$destroy()
-              }
-              if (!is.null(reactVars$process_observer)) {
-                reactVars$process_observer$destroy()
-              }
-              if (
-                run_selected == "folder" &&
-                  !is.null(reactVars$results_observer)
-              ) {
-                reactVars$results_observer$destroy()
-              }
-
-              # Set reactive status variable "is_running" to FALSE
-              reactVars$is_running <- FALSE
-
-              # Final picker (with "Show All") and Sample Distribution state
-              refresh_results(final = TRUE)
-
-              # The sidebar stays hidden until Reset, however the run went
-              collapse_decon_sidebar()
-
-              # update "Abort" button to "Reset"
-              shiny$updateActionButton(
-                session,
-                "deconvolute_end",
-                label = "Reset",
-                icon = shiny$icon("repeat")
-              )
-
-              # Change progress bar title to "Finalized!"
-              title <- "Finalized!"
-
-              # Report generation is temporarily disabled
-
-              # Enable continuation button to protein conversion
-              enable(
-                selector = "#app-deconvolution_main-forward_deconvolution"
-              )
-
-              # Change spinner: error icon when all samples failed, check otherwise
-              n_succeeded <- reactVars$current_total_files -
-                reactVars$initial_file_count
-              n_failed <- length(reactVars$failed_samples)
-              n_total <- reactVars$expected_files
-              if (n_succeeded == 0 && n_failed > 0) {
-                final_icon <- "#app-deconvolution_main-processing_error"
-                title <- paste0(
-                  "Finalized with errors (",
-                  n_failed,
-                  "/",
-                  n_total,
-                  " failed)"
-                )
-                write_log(paste(
-                  "Deconvolution finalized — all",
-                  n_failed,
-                  "/",
-                  n_total,
-                  "sample(s) failed"
-                ))
-              } else {
-                final_icon <- "#app-deconvolution_main-processing_fin"
-                if (n_failed > 0) {
-                  title <- paste0(
-                    "Finalized (",
-                    n_failed,
-                    "/",
-                    n_total,
-                    " failed)"
-                  )
-                  write_log(paste(
-                    "Deconvolution finalized —",
-                    n_succeeded,
-                    "succeeded,",
-                    n_failed,
-                    "/",
-                    n_total,
-                    "failed"
-                  ))
-                } else {
-                  write_log("Deconvolution finalized")
-                }
-              }
-
-              if (is_show_all(shiny$isolate(result_files_sel()))) {
-                # "Show All" takes the browser seconds to draw: the run reads
-                # as finished once it is on screen (input$spectrum_drawn)
-                reactVars$pending_finish <- list(title = title, icon = final_icon)
-                title <- "Loading Spectra ..."
-                progress_drawing(TRUE)
-              } else {
-                hide(selector = "#app-deconvolution_main-processing")
-                show(selector = final_icon)
-              }
-            }
-          }
-
-          updateProgressBar(
-            session = session,
-            id = ns("progressBar"),
-            value = progress_pct,
-            title = title
-          )
-        }
-      })
-
-      run_db_path <- function() {
-        file.path(
-          analysis_dest(),
-          paste0(trimws(input$analysis_name), ".db")
-        )
-      }
-
-      #### Sample Distribution click observer ----
-      # A click on a done or failed sample's tile selects it, in the picker
-      # too. The plate has its own plotly source, so clicks on the spectrum
-      # never land here. Clicks are only read once the plate has been drawn:
-      # event_data() on a source no rendered plot has registered yet warns
-      # (deferred to the end of the flush, so it cannot be suppressed here).
-      # A reactiveVal, unlike reactVars$heatmap_ready, triggers this once
-      # rather than on every redraw, which would replay the last click.
-      plate_shown <- shiny$reactiveVal(FALSE)
-      set_run_observer("heatmap_click", shiny$observeEvent(
-        if (plate_shown()) event_data("plotly_click", source = "decon_plate"),
-        {
-          click <- event_data("plotly_click", source = "decon_plate")
-          shiny$req(is.numeric(click$x), is.numeric(click$y))
-
-          clicked_sample <- plate_sample_at(reactVars$plate, click$x, click$y)
-          # Pending samples have nothing to show yet
-          shiny$req(
-            length(clicked_sample) == 1,
-            clicked_sample %in% picker_state$choices
-          )
-
-          runjs(paste0(
-            'document.getElementById("blocking-overlay").styl',
-            'e.display = "block";'
-          ))
-          result_files_sel(clicked_sample)
-          updatePickerInput(session, "result_picker", selected = clicked_sample)
-          # Unblock after renders complete (delay covers the spectrum)
-          delay(
-            2000,
-            runjs(paste0(
-              'document.getElementById("blocking-overlay").styl',
-              'e.display = "none";'
-            ))
-          )
-        }
-      ))
-
-      #### Sample Distribution selection highlight observer ----
-      # Frames the selected sample's tile; "Show All" clears the frame
-      set_run_observer("heatmap_highlight", shiny$observe({
-        sel <- result_files_sel()
-        shiny$req(reactVars$heatmap_ready > 0L)
-
-        shapes <- plate_highlight(
-          shiny$isolate(reactVars$plate),
-          if (!is.null(sel) && !is_show_all(sel)) ms_sample_base(sel)
-        )
-
-        delay(400, {
-          plotlyProxy("heatmap", session) |>
-            plotlyProxyInvoke("relayout", list(shapes = shapes))
-        })
-      }))
-
-      #### Switch to running UI ----
-      # Hide the sidebar for the run
-      collapse_decon_sidebar()
-      output$deconvolution_ui <- shiny$renderUI({
-        deconvolution_results_ui(ns)
-      })
+      show_run_results(run_params)
 
       # Render status spinner icon
       delay(1000, show(selector = "#app-deconvolution_main-processing"))
-
-      ### Render result spectrum
-      spectrum_ready <- shiny$reactiveVal(FALSE)
-      set_run_observer("spectrum_ready", shiny$observeEvent(
-        result_files_sel(),
-        {
-          spectrum_ready(FALSE)
-        },
-        ignoreNULL = FALSE
-      ))
-
-      # The Spectrum settings offer the Cubic/Planar switch for "Show All"
-      # and the single-sample ones otherwise. They live in a popover that is
-      # not in the DOM while closed, so the swap is a body class main.scss
-      # keys on rather than hiding the inputs themselves.
-      set_run_observer("spectrum_settings_mode", shiny$observe({
-        runjs(sprintf(
-          "document.body.classList.toggle('decon-show-all', %s);",
-          tolower(is_show_all())
-        ))
-      }))
-
-      #### All spectra ("Show All") ----
-      # Read once per finished run; switching Cubic/Planar only redraws
-      show_all_data <- shiny$reactive({
-        samples <- reactVars$show_all_samples
-        shiny$req(length(samples) > 1)
-        db <- run_db_path()
-        stats::setNames(
-          lapply(samples, function(s) process_plot_data_db(db, s)),
-          samples
-        )
-      })
-
-      show_all_metrics <- shiny$reactive({
-        samples <- reactVars$show_all_samples
-        shiny$req(length(samples) > 1)
-        summarise_decon_metrics(run_db_path(), samples)
-      })
-
-      # Show Symbols is isolated: flipping it toggles the marker traces on the
-      # figure already on screen (observer below) instead of rebuilding it.
-      # Read here, a rebuild for any other reason starts from the current view.
-      show_peak_symbols <- function() {
-        !isFALSE(shiny$isolate(input$spectrum_symbols))
-      }
-
-      # The peak markers are the figure's only marker traces (the lines are
-      # "lines", the metrics annotations), single sample and "Show All" alike
-      set_run_observer("spectrum_symbols", shiny$observeEvent(
-        input$spectrum_symbols,
-        {
-          runjs(sprintf(
-            paste0(
-              "var gd = document.getElementById('%s');",
-              "if (gd && gd.data) {",
-              "  var idx = [];",
-              "  gd.data.forEach(function(t, i) {",
-              "    if (t.mode === 'markers') idx.push(i);",
-              "  });",
-              "  if (idx.length) Plotly.restyle(gd, {visible: %s}, idx);",
-              "}"
-            ),
-            ns("spectrum"),
-            tolower(isTRUE(input$spectrum_symbols))
-          ))
-        },
-        ignoreInit = TRUE
-      ))
-
-      all_spectra_plot <- function(theme = "light") {
-        data <- show_all_data()
-        data <- data[!vapply(data, is.null, logical(1))]
-        shiny$req(length(data) > 0)
-        samples <- names(data)
-
-        plot <- multiple_spectra(
-          results_list = NULL,
-          samples = samples,
-          cubic = !identical(input$spectrum_kind, "Planar"),
-          # Same rule as the conversion results: the categorical colours
-          # while they suffice, the sample ramp beyond
-          color_cmp = stats::setNames(
-            sample_colors(length(samples), theme),
-            samples
-          ),
-          color_variable = "Samples",
-          # (points per spectrum: multiple_spectra()'s budget for the figure)
-          # A legend this long would run into the metrics; hover and the
-          # sample axis still name the spectra
-          legend_show = length(samples) <= 12,
-          symbols_show = show_peak_symbols(),
-          theme = theme,
-          plot_data = data
-        )
-
-        blocks <- side_blocks(
-          function() show_all_metrics(),
-          sprintf("Metrics (mean ± SD, n = %d)", length(samples))
-        )
-        if (length(blocks) == 0) {
-          return(plot)
-        }
-        # No sample legend beside the tables: with sample names this long and
-        # the card this narrow, it ran into them on the right and took most of
-        # the height above the plot. The hover names every spectrum (and the
-        # cubic view's sample axis does when the names are short). Set on the
-        # built figure directly; layout() would make add_side_tables() build
-        # all of it again.
-        plot$x$layout$showlegend <- FALSE
-        add_side_tables(plot, blocks, theme = theme)
-      }
-
-      # side_blocks(): The tables beside the spectrum, as switched on ----
-      # The metrics (`metrics_fn` is only called while they are shown, as it
-      # reads the database) and the run's deconvolution settings.
-      side_blocks <- function(metrics_fn, metrics_caption = "Metrics") {
-        Filter(
-          Negate(is.null),
-          list(
-            if (!isFALSE(input$spectrum_metrics)) {
-              list(rows = metrics_fn(), caption = metrics_caption)
-            },
-            if (!isFALSE(input$spectrum_params)) {
-              list(rows = decon_param_rows(run_params), caption = "Parameters")
-            }
-          )
-        )
-      }
-
-      #### Spectrum of the selection ----
-      # The selected sample's spectrum, with its fit statistics beside it
-      # while Show Metrics is on, or all spectra for "Show All". NULL when
-      # there is no data for the sample.
-      build_spectrum <- function(theme = "light") {
-        sel <- result_files_sel()
-        if (is_show_all(sel)) {
-          return(all_spectra_plot(theme))
-        }
-
-        sel_base <- ms_sample_base(sel)
-        result_dir <- file.path(analysis_dest(), ms_result_dirname(sel))
-        db_sp <- run_db_path()
-        is_raw_toggle <- isTRUE(as.logical(input$toggle_result))
-        show_labels <- !isFALSE(input$spectrum_annotation)
-
-        # Try DB first (works even when raw files were cleaned up), and fall
-        # back to the file-based reader when it is not available (older runs)
-        plot_data <- if (file.exists(db_sp)) {
-          process_plot_data_db(db_sp, sel_base, raw = is_raw_toggle)
-        }
-        plot <- if (!is.null(plot_data)) {
-          spectrum_plot(
-            plot_data = plot_data,
-            raw = is_raw_toggle,
-            show_peak_labels = show_labels,
-            show_mass_diff = FALSE,
-            show_peak_symbols = show_peak_symbols(),
-            theme = theme
-          )
-        } else if (dir.exists(result_dir)) {
-          spectrum_plot(
-            result_path = result_dir,
-            raw = is_raw_toggle,
-            show_peak_labels = show_labels,
-            show_mass_diff = FALSE,
-            show_peak_symbols = show_peak_symbols(),
-            theme = theme
-          )
-        }
-
-        if (!is.null(plot)) {
-          plot <- add_side_tables(
-            plot,
-            side_blocks(function() {
-              read_decon_metrics(db_sp, sel_base, result_dir)
-            }),
-            theme = theme
-          )
-        }
-        plot
-      }
-
-      setup_plot_dl(
-        input,
-        output,
-        session,
-        "decon_spectrum",
-        build_fn = function(theme) {
-          shiny$req(result_files_sel())
-          plot <- build_spectrum(theme)
-          shiny$req(plot)
-          plot
-        },
-        filename_fn = function() paste0(get_session_prefix(), "_Spectrum"),
-        available_fn = spectrum_ready
-      )
-
-      output$spectrum <- renderPlotly({
-        shiny$req(result_files_sel())
-
-        # spectrum_container decides whether to mount this output at all --
-        # a failed sample gets the failure message in its place instead
-        # (see below). This is just a defensive backstop against a stale
-        # binding rather than something expected to fire in normal use.
-        db_sp <- run_db_path()
-        shiny$req(
-          is_show_all() ||
-            !(file.exists(db_sp) &&
-              ms_sample_base(result_files_sel()) %in%
-                decon_failed_samples(db_sp))
-        )
-
-        # Lifted by the browser once drawn; all spectra block the page meanwhile
-        spectrum_busy(block = is_show_all())
-
-        spectrum <- build_spectrum()
-        spectrum_ready(TRUE)
-        if (!is.null(spectrum)) {
-          return(spectrum)
-        }
-
-        # Neither the DB nor the on-disk UniDec output had data to show.
-        # For the raw m/z view this is expected when "Keep UniDec output files" was
-        # off during deconvolution, since the raw files were never written
-        # to disk. Surface a hint instead of leaving a blank plot.
-        is_raw_toggle <- isTRUE(as.logical(input$toggle_result))
-        hint_text <- if (is_raw_toggle) {
-          if (!isTRUE(read_user_settings()$deconv_keep_raw_output)) {
-            paste0(
-              "No raw m/z spectrum available.<br>",
-              "Enable \"Keep UniDec output files\" in Settings before running ",
-              "deconvolution to store raw spectra for this view."
-            )
-          } else {
-            "No raw m/z spectrum available for this sample."
-          }
-        } else {
-          "No spectrum data available for this sample."
-        }
-
-        plotly::plot_ly(type = "scatter", mode = "markers") |>
-          plotly::layout(
-            paper_bgcolor = "rgba(0,0,0,0)",
-            plot_bgcolor = "rgba(0,0,0,0)",
-            xaxis = list(visible = FALSE),
-            yaxis = list(visible = FALSE),
-            annotations = list(list(
-              x = 0.5,
-              y = 0.5,
-              xref = "paper",
-              yref = "paper",
-              xanchor = "center",
-              yanchor = "middle",
-              text = hint_text,
-              showarrow = FALSE,
-              font = list(size = 14, color = "white")
-            ))
-          )
-      })
-
-      ### Failure state for the Spectrum card ----
-
-      # current_failed_selection(): (sample, cause, detail) for whichever
-      # sample is selected right now, or NULL if it did not fail ----
-      # A single cheap SQLite read; called fresh wherever it's needed rather
-      # than cached, so it always reflects what is currently selected.
-      current_failed_selection <- function() {
-        shiny$req(result_files_sel())
-        if (is_show_all()) {
-          return(NULL)
-        }
-        sel <- ms_sample_base(result_files_sel())
-        db_fm <- run_db_path()
-        if (!file.exists(db_fm) || !(sel %in% decon_failed_samples(db_fm))) {
-          return(NULL)
-        }
-        list(sample = sel, info = decon_failure_detail(db_fm, sel))
-      }
-
-      #### Spectrum card: plot, or the failure message in its place ----
-      # A failed sample's plotlyOutput is never mounted at all (rather than
-      # mounted-but-blank with the message overlaid on top of it): plotly
-      # builds its own layered DOM under the hood, and that layering was
-      # swallowing clicks on the Copy button placed over it. Showing one or
-      # the other as the card's only content sidesteps that entirely.
-      set_run_observer("copy_error", shiny$observeEvent(input$spectrum_copy_error, {
-        current <- current_failed_selection()
-        shiny$req(current)
-        text <- paste(
-          c(
-            paste("Sample failed to deconvolute:", current$sample),
-            if (!is.null(current$info)) current$info$cause,
-            if (!is.null(current$info) && !is.null(current$info$detail)) {
-              c("", current$info$detail)
-            }
-          ),
-          collapse = "\n"
-        )
-        write_clip(text, allow_non_interactive = TRUE)
-        runjs("alert('Error message copied to clipboard!');")
-      }))
-
-      output$spectrum_container <- shiny$renderUI({
-        current <- current_failed_selection()
-        if (is.null(current)) {
-          return(withWaiter(plotlyOutput(ns("spectrum"), height = "100%")))
-        }
-        info <- current$info
-        shiny$div(
-          class = "sample-failed-msg",
-          shiny$div(
-            class = "sample-failed-msg-title",
-            "Sample failed to deconvolute"
-          ),
-          if (!is.null(info)) {
-            shiny$div(class = "sample-failed-msg-cause", info$cause)
-          },
-          if (!is.null(info) && !is.null(info$detail)) {
-            shiny$tags$pre(class = "sample-failed-msg-detail", info$detail)
-          },
-          shiny$actionButton(
-            ns("spectrum_copy_error"),
-            "Copy",
-            icon = shiny$icon("clipboard"),
-            class = "sample-failed-copy-btn"
-          )
-        )
-      })
-
-      ### Render Sample Distribution ----
-      # Drawn once the first sample is done or failed, and redrawn as samples
-      # finish (peak counts) or fail (crosses). An all-pending plate has
-      # nothing to show or click on.
-      output$heatmap <- renderPlotly({
-        plate <- reactVars$plate
-        shiny$req(
-          plate,
-          nrow(reactVars$peak_counts) > 0 ||
-            any(plate$tiles$sample %in% reactVars$failed_samples)
-        )
-        waiter_show(id = ns("heatmap"), html = spin_wave())
-        on.exit(waiter_hide(id = ns("heatmap")))
-
-        heatmap <- plate_heatmap(
-          plate,
-          peak_counts = reactVars$peak_counts,
-          failed = reactVars$failed_samples,
-          source = "decon_plate"
-        ) |>
-          event_register("plotly_click")
-
-        # Signal the highlight observer to re-apply the selection frame, and
-        # the click observer that the click event is registered now
-        reactVars$heatmap_ready <- shiny$isolate(reactVars$heatmap_ready) + 1L
-        plate_shown(TRUE)
-
-        heatmap
-      })
 
       # Unblock mouse pointer
       runjs(paste0(
@@ -2831,7 +2983,7 @@ server <- function(
 
         cleanup_wal(file.path(
           analysis_dest(),
-          paste0(trimws(input$analysis_name), ".db")
+          paste0(run_name(), ".db")
         ))
 
         # Reset reactive status variables
@@ -2900,7 +3052,7 @@ server <- function(
 
       cleanup_wal(file.path(
         analysis_dest(),
-        paste0(trimws(input$analysis_name), ".db")
+        paste0(run_name(), ".db")
       ))
 
       # Update progress bar to show cancellation
@@ -2909,6 +3061,12 @@ server <- function(
         id = ns("progressBar"),
         value = 0,
         title = "Processing aborted"
+      )
+      reactVars$final_state <- list(
+        icon = "processing_stop",
+        value = 0,
+        title = "Processing aborted",
+        reset = TRUE
       )
       if (isTRUE(reactVars$init_hint_shown)) {
         init_hint(FALSE)
@@ -3367,7 +3525,7 @@ server <- function(
                   e$message
                 )
 
-                write_log(error_msg)
+                write_log(error_msg, level = "ERROR")
 
                 # Display error message on modal window
                 output$decon_rep_logtext <- shiny$renderText(error_msg)
@@ -3425,7 +3583,7 @@ server <- function(
 
           # Check if the exit status indicates an error (non-zero)
           if (exit_status != 0) {
-            write_log("Failed to generate deconvolution report")
+            write_log("Failed to generate deconvolution report", level = "ERROR")
 
             reactVars$deconv_report_status <- "error"
             decon_rep_process_data(NULL)
@@ -3608,7 +3766,7 @@ server <- function(
       # Return result file path as module output
       reactVars$continue_conversion <- file.path(
         analysis_dest(),
-        paste0(trimws(input$analysis_name), ".db")
+        paste0(run_name(), ".db")
       )
 
       # Disable continuation/forward button
@@ -3627,8 +3785,92 @@ server <- function(
     ### Help modals ----
     bind_help(input, deconvolution_help)
 
+    ### State for a reloaded page ----
+    # What a page reloaded after a dropped connection (or F5) needs to take
+    # the run up again (session_restore.R): the run with its process, held by
+    # reference, and how far it got
+    park <- function() {
+      shiny$isolate({
+        record <- run_record()
+        if (is.null(record)) {
+          return(NULL)
+        }
+        proc <- decon_process_data()
+        list(
+          running = isTRUE(reactVars$is_running) &&
+            !is.null(proc) &&
+            proc$is_alive(),
+          analysis_dest = analysis_dest(),
+          run_name = run_name(),
+          record = record,
+          proc = proc,
+          vars = shiny$reactiveValuesToList(reactVars)[c(
+            "sample_names",
+            "plate",
+            "failed_samples",
+            "expected_files",
+            "completed_files",
+            "initial_file_count",
+            "current_total_files",
+            "started_at",
+            "engine_ready",
+            "continue_conversion",
+            "final_state",
+            "decon_process_out",
+            "decon_prelaunch_info"
+          )],
+          selected = result_files_sel()
+        )
+      })
+    }
+
+    # A run parked by the page this one replaces: its interface, drawn as the
+    # run left it, and the process followed again if it still runs
+    if (!is.null(restore$record)) {
+      analysis_dest(restore$analysis_dest)
+      run_name(restore$run_name)
+      run_record(restore$record)
+      for (field in names(restore$vars)) {
+        reactVars[[field]] <- restore$vars[[field]]
+      }
+      result_files_sel(restore$selected)
+      reactVars$last_check <- Sys.time()
+      reactVars$results_last_check <- Sys.time() - 60
+
+      if (isTRUE(restore$running)) {
+        write_log("Deconvolution taken up again after the page reloaded")
+        reactVars$is_running <- TRUE
+        decon_process_data(restore$proc)
+        show_run_results(
+          restore$record$run_params,
+          state = list(
+            icon = "processing",
+            value = min(100, round(
+              100 * restore$vars$completed_files /
+                max(1, restore$vars$expected_files)
+            )),
+            title = "Processing Files ..."
+          )
+        )
+        attach_run(restore$record$raw_dirs, restore$record$run_selected)
+        refresh_results(keep = TRUE)
+      } else {
+        reactVars$is_running <- FALSE
+        state <- restore$vars$final_state
+        # Conversion stays disabled once the results went on to it
+        state$forward <- isTRUE(state$forward) &&
+          is.null(restore$vars$continue_conversion)
+        show_run_results(restore$record$run_params, state = state)
+        refresh_results(
+          final = isTRUE(state$icon %in% c("processing_fin", "processing_error")),
+          keep = TRUE
+        )
+      }
+    }
+
     return(
       shiny::reactiveValues(
+        park = park,
         forward_deconvolution = shiny::reactive(input$forward_deconvolution),
         continue_conversion = shiny::reactive(reactVars$continue_conversion)
       )

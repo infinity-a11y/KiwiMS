@@ -781,8 +781,17 @@ deconvolution_init_ui <- function(ns, analysis_name_default = "") {
   )
 }
 
-# Deconvolution result controls interface
-deconvolution_status_controls <- function(ns) {
+# Deconvolution result controls interface. `state` draws them as a run left
+# them (a page reloaded after a dropped connection): `icon` the status icon
+# shown ("processing", "processing_fin", "processing_error",
+# "processing_stop"), `value` and `title` of the progress bar, `reset` for the
+# Reset button in place of Abort, `forward` to enable Conversion. Without it,
+# as a run starts.
+deconvolution_status_controls <- function(ns, state = NULL) {
+  # The status icons are hidden but the one the state shows
+  status_icon <- function(id, tag) {
+    if (identical(state$icon, id)) tag else shinyjs::hidden(tag)
+  }
   shiny$fluidRow(
     shiny$column(
       width = 6,
@@ -792,7 +801,8 @@ deconvolution_status_controls <- function(ns) {
           shiny$column(
             width = 3,
             align = "center",
-            shinyjs::hidden(
+            status_icon(
+              "processing",
               shiny$div(
                 id = ns("processing"),
                 shiny$HTML(
@@ -803,7 +813,8 @@ deconvolution_status_controls <- function(ns) {
                 )
               )
             ),
-            shinyjs::hidden(
+            status_icon(
+              "processing_stop",
               shiny$div(
                 id = ns("processing_stop"),
                 shiny$HTML(
@@ -814,7 +825,8 @@ deconvolution_status_controls <- function(ns) {
                 )
               )
             ),
-            shinyjs::hidden(
+            status_icon(
+              "processing_error",
               shiny$div(
                 id = ns("processing_error"),
                 shiny$HTML(
@@ -825,7 +837,8 @@ deconvolution_status_controls <- function(ns) {
                 )
               )
             ),
-            shinyjs::hidden(
+            status_icon(
+              "processing_fin",
               shiny$div(
                 id = ns("processing_fin"),
                 shiny$HTML(
@@ -841,8 +854,12 @@ deconvolution_status_controls <- function(ns) {
             width = 7,
             progressBar(
               id = ns("progressBar"),
-              value = 0,
-              title = "Initiating Deconvolution",
+              value = if (is.null(state$value)) 0 else state$value,
+              title = if (is.null(state$title)) {
+                "Initiating Deconvolution"
+              } else {
+                state$title
+              },
               display_pct = TRUE
             )
           ),
@@ -872,12 +889,21 @@ deconvolution_status_controls <- function(ns) {
           shiny$fluidRow(
             shiny$column(
               width = 4,
-              shiny$actionButton(
-                ns("deconvolute_end"),
-                "Abort",
-                icon = shiny$icon("circle-stop"),
-                width = "100%"
-              )
+              if (isTRUE(state$reset)) {
+                shiny$actionButton(
+                  ns("deconvolute_end"),
+                  "Reset",
+                  icon = shiny$icon("repeat"),
+                  width = "100%"
+                )
+              } else {
+                shiny$actionButton(
+                  ns("deconvolute_end"),
+                  "Abort",
+                  icon = shiny$icon("circle-stop"),
+                  width = "100%"
+                )
+              }
             ),
             shiny$column(
               width = 4,
@@ -901,7 +927,7 @@ deconvolution_status_controls <- function(ns) {
               width = 4,
               shiny$div(
                 class = "decon-btn",
-                disabled(
+                (if (isTRUE(state$forward)) identity else disabled)(
                   shiny$actionButton(
                     ns("forward_deconvolution"),
                     "Conversion",
@@ -919,9 +945,10 @@ deconvolution_status_controls <- function(ns) {
 }
 
 
-# Deconvolution running interface (no batch mode)
+# Deconvolution running interface (no batch mode); `state` as for
+# deconvolution_status_controls()
 #' @export
-deconvolution_results_ui <- function(ns) {
+deconvolution_results_ui <- function(ns, state = NULL) {
   # Deliberate delay to show spinner
   Sys.sleep(1)
 
@@ -1042,7 +1069,8 @@ deconvolution_results_ui <- function(ns) {
       shiny$div(
         class = "heatmap-plot",
         withWaiter(plotlyOutput(ns("heatmap"), height = "100%"))
-      )
+      ),
+      full_screen = TRUE
     )
   )
 
@@ -1050,7 +1078,7 @@ deconvolution_results_ui <- function(ns) {
     class = "deconvolution-parent-card",
     shiny$div(
       class = "deconvolution-running-interface",
-      deconvolution_status_controls(ns),
+      deconvolution_status_controls(ns, state),
       card(
         class = "deconvolution-running-result-card",
         shiny$div(

@@ -19,6 +19,7 @@ box::use(
     hits_col_choices,
     hits_col_tooltip,
     hits_view_table,
+    sample_view_col_kind,
     is_complex_row,
     key_colors,
     make_kobs_plot,
@@ -31,6 +32,7 @@ box::use(
     overview_colors,
     overview_compound_distribution,
     overview_distribution_note,
+    overview_has_distribution,
     overview_selection,
     overview_status_note,
     overview_subset,
@@ -539,12 +541,14 @@ test_that("the sample view gives a compound without an adduct no mass columns", 
   # B, which has no complex
   expect_false(any(grepl("Mass 2", names(per_adduct))))
   expect_false(any(grepl("\\bB\\b", grep("Mass", names(per_adduct), value = TRUE))))
-  expect_equal(per_adduct$`Mass 1 (A)`, 100)
+  expect_equal(per_adduct$`A·Mass 1`, 100)
+  # 1,010 Da is Mass 2 of the protein: proteoform 2
+  expect_equal(per_adduct$`PF2 [Da]`, 1010)
   expect_equal(
-    per_adduct$`Binding (1,010 Da, A, Mass 1)x1 [%]`,
+    per_adduct$`Binding PF2 + 1× A·Mass 1 [%]`,
     10 / 90 * 100
   )
-  expect_equal(per_adduct$`Total Binding (A, Mass 1) [%]`, 10 / 90 * 100)
+  expect_equal(per_adduct$`Total Binding A·Mass 1 [%]`, 10 / 90 * 100)
   # The binding of each complex, the value its kinetics are fitted to, next
   # to the sample's total
   expect_equal(
@@ -587,14 +591,92 @@ test_that("the sample view orders shared columns by mass shift and stoichiometry
     names(per_adduct)[grepl("^(Mass|Binding|Total)", names(per_adduct))],
     c(
       "Mass 1",
-      "Binding (Mass 1)x1 [%]",
-      "Binding (Mass 1)x2 [%]",
-      "Total Binding (Mass 1) [%]"
+      "Binding P + 1× Mass 1 [%]",
+      "Binding P + 2× Mass 1 [%]",
+      "Total Binding Mass 1 [%]"
     )
   )
+  # A sample reads 0 % where it has no complex, also under the columns of
+  # the other compound: they are shared
+  expect_equal(per_adduct$`Binding P + 1× Mass 1 [%]`, c(0, 50))
+  expect_equal(per_adduct$`Binding P + 2× Mass 1 [%]`, c(50, 0))
+  expect_equal(per_adduct$`Mass 1`, c(100, 150))
 })
 
-test_that("the sample view gives every proteoform its columns, named by mass", {
+test_that("the sample view has a column for every stoichiometry searched", {
+  screened <- screen_declared(
+    mass = c(1000, 1100),
+    intensity = c(50, 50),
+    protein_masses = 1000,
+    compounds = c(A = 100)
+  )
+  per_adduct <- function(max_multiples) {
+    transform_per_adduct(
+      screened$view,
+      proteins_table = screened$protein_table,
+      compounds_table = screened$compound_table,
+      samples_table = screened$sample_table,
+      max_multiples = max_multiples
+    )
+  }
+
+  # Without the Max. Stoichiometry of the run, the ones found
+  expect_equal(
+    grep("^Binding", names(per_adduct(NULL)), value = TRUE),
+    "Binding P + 1× Mass 1 [%]"
+  )
+  # With it, every one up to it, read as 0 % where nothing was found
+  table <- per_adduct(7)
+  expect_equal(
+    grep("^Binding", names(table), value = TRUE),
+    sprintf("Binding P + %d× Mass 1 [%%]", 1:7)
+  )
+  expect_equal(table$`Binding P + 1× Mass 1 [%]`, 50)
+  expect_equal(unname(unlist(table[sprintf("Binding P + %d× Mass 1 [%%]", 2:7)])), rep(0, 6))
+  expect_equal(table$`Total Binding Mass 1 [%]`, 50)
+})
+
+test_that("the sample view reads 0 % for a measured sample without a complex", {
+  bound <- screen_declared(
+    mass = c(1000, 1100),
+    intensity = c(50, 50),
+    protein_masses = 1000,
+    compounds = c(A = 100)
+  )
+  unbound <- screen_declared(
+    mass = 1000,
+    intensity = 50,
+    protein_masses = 1000,
+    compounds = c(A = 100)
+  )$view
+  unbound$`Sample ID` <- "S2"
+  # No protein peak at all: nothing was measured
+  silent <- screen_declared(
+    mass = 500,
+    intensity = 50,
+    protein_masses = 1000,
+    compounds = c(A = 100)
+  )$view
+  silent$`Sample ID` <- "S3"
+
+  per_adduct <- transform_per_adduct(
+    rbind(bound$view, unbound, silent),
+    proteins_table = bound$protein_table,
+    compounds_table = bound$compound_table,
+    samples_table = bound$sample_table,
+    max_multiples = 2
+  )
+
+  expect_equal(per_adduct$`Sample ID`, c("S1", "S2", "S3"))
+  # The compound is named whatever the binding
+  expect_equal(per_adduct$`Cmp Name`, c("A", "A", "A"))
+  expect_equal(per_adduct$`Binding P + 1× Mass 1 [%]`, c(50, 0, NA))
+  expect_equal(per_adduct$`Binding P + 2× Mass 1 [%]`, c(0, 0, NA))
+  expect_equal(per_adduct$`Total Binding Mass 1 [%]`, c(50, 0, NA))
+  expect_equal(per_adduct$`Mass 1`, c(100, 100, NA))
+})
+
+test_that("the sample view gives every proteoform its columns, numbered as declared", {
   screened <- screen_declared(
     mass = c(1000, 1010, 1100, 1110),
     intensity = c(40, 20, 30, 10),
@@ -609,10 +691,32 @@ test_that("the sample view gives every proteoform its columns, named by mass", {
   )
 
   expect_equal(nrow(per_adduct), 1)
-  # The mass in the name replaces Theor. Prot. [Da]
+  # PF1 and PF2 (Mass 1 and 2 of the protein) hold the masses in place of
+  # Theor. Prot. [Da]
   expect_false("Theor. Prot. [Da]" %in% names(per_adduct))
+  expect_equal(per_adduct$`PF1 [Da]`, 1000)
+  expect_equal(per_adduct$`PF2 [Da]`, 1010)
+  expect_match(hits_col_tooltip("PF2 [Da]"), "^Proteoform 2")
+  expect_match(hits_col_tooltip("Int. PF2 [%]"), "proteoform 2$")
+  expect_equal(
+    hits_col_tooltip("Binding PF2 + 2× A·Mass 1* [%]"),
+    paste0(
+      "Binding [%] of proteoform 2 carrying 2 × mass shift 1 of A. *: not ",
+      "the preferred reading of its peak, not counted in the totals"
+    )
+  )
+  expect_equal(
+    hits_col_tooltip(c("Total Binding Mass 1 [%]", "A·Mass 1")),
+    c(
+      paste0(
+        "Total binding of mass shift 1: its preferred readings over all ",
+        "proteoforms and stoichiometries"
+      ),
+      "Declared mass shift 1 of A [Da]"
+    )
+  )
   expect_true(all(
-    c("Int. Prot. (1,000 Da) [%]", "Int. Prot. (1,010 Da) [%]") %in%
+    c("Int. PF1 [%]", "Int. PF2 [%]") %in%
       names(per_adduct)
   ))
   expect_false(any(grepl("Prot. Binding", names(per_adduct), fixed = TRUE)))
@@ -622,23 +726,31 @@ test_that("the sample view gives every proteoform its columns, named by mass", {
     names(per_adduct)[grepl("^(Mass|Binding|Total)", names(per_adduct))],
     c(
       "Mass 1",
-      "Binding (1,000 Da, Mass 1)x1 [%]",
-      "Binding (1,010 Da, Mass 1)x1 [%]",
-      "Total Binding (Mass 1) [%]"
+      "Binding PF1 + 1× Mass 1 [%]",
+      "Binding PF2 + 1× Mass 1 [%]",
+      "Total Binding Mass 1 [%]"
     )
   )
-  expect_equal(per_adduct$`Binding (1,010 Da, Mass 1)x1 [%]`, 10)
-  expect_equal(per_adduct$`Total Binding (Mass 1) [%]`, 40)
+  expect_equal(per_adduct$`Binding PF2 + 1× Mass 1 [%]`, 10)
+  expect_equal(per_adduct$`Total Binding Mass 1 [%]`, 40)
   expect_equal(
-    per_adduct$`Total Binding (Mass 1) [%]`,
+    per_adduct$`Total Binding Mass 1 [%]`,
     per_adduct$`Tot. Binding [%]`
   )
   # One compound per sample: no total per complex next to the sample's
   expect_false(any(grepl("^Tot\\. Binding \\(", names(per_adduct))))
   # Pickers, bars and number formats read the plain column
   expect_equal(
-    hits_base_col(c("Int. Prot. (1,010 Da) [%]", "Binding (1,010 Da, Mass 1)x1 [%]")),
-    c("Int. Prot. [%]", "Binding (1,010 Da, Mass 1)x1 [%]")
+    hits_base_col(c("Int. PF2 [%]", "PF2 [Da]", "Binding PF2 + 1× Mass 1 [%]")),
+    c("Int. Prot. [%]", "Theor. Prot. [Da]", "Binding PF2 + 1× Mass 1 [%]")
+  )
+  expect_equal(
+    sample_view_col_kind(c(
+      "Binding PF2 + 1× Mass 1 [%]", "Binding P + 3× A·Mass 2* [%]",
+      "Total Binding A·Mass 1 [%]", "Tot. Binding (A) [%]", "Mass 1",
+      "A·Mass 2", "Binding [%]", "Tot. Binding [%]", "PF1 [Da]"
+    )),
+    c("binding", "binding", "total", "complex", "mass", "mass", NA, NA, NA)
   )
   dt <- render_hits_table(
     per_adduct,
@@ -654,7 +766,7 @@ test_that("the sample view gives every proteoform its columns, named by mass", {
   expect_setequal(
     unlist(bar_def$targets),
     match(
-      c("Int. Prot. (1,000 Da) [%]", "Int. Prot. (1,010 Da) [%]"),
+      c("Int. PF1 [%]", "Int. PF2 [%]"),
       names(per_adduct)
     ) -
       1
@@ -673,7 +785,7 @@ test_that("the sample view gives every proteoform its columns, named by mass", {
     unlist(all_bars$targets),
     match(hits_bar_cols(per_adduct), names(per_adduct)) - 1
   )
-  expect_true("Int. Prot. (1,010 Da) [%]" %in% hits_bar_cols(per_adduct))
+  expect_true("Int. PF2 [%]" %in% hits_bar_cols(per_adduct))
 })
 
 test_that("the sample view stars a reading that is not preferred and leaves it out of the totals", {
@@ -702,20 +814,22 @@ test_that("the sample view stars a reading that is not preferred and leaves it o
   per_adduct <- transform_per_adduct(view, protein_table, compound_table, sample_table)
 
   expect_equal(nrow(per_adduct), 1)
-  expect_equal(per_adduct$`Binding (Mass 1)x1 [%]`, 40)
-  expect_equal(per_adduct$`Binding (Mass 2*)x2 [%]`, 40)
-  expect_equal(per_adduct$`Total Binding (Mass 1) [%]`, 40)
-  expect_equal(per_adduct$`Total Binding (Mass 2) [%]`, 0)
+  expect_equal(per_adduct$`Binding P + 1× Mass 1 [%]`, 40)
+  expect_equal(per_adduct$`Binding P + 2× Mass 2* [%]`, 40)
+  expect_equal(per_adduct$`Total Binding Mass 1 [%]`, 40)
+  expect_equal(per_adduct$`Total Binding Mass 2 [%]`, 0)
+  # A shift read only as the alternative gets no 0 % columns of its own
+  expect_false(any(grepl("^Binding P \\+ [0-9]+× Mass 2 ", names(per_adduct))))
   expect_match(
-    hits_col_tooltip("Binding (Mass 2*)x2 [%]"),
+    hits_col_tooltip("Binding P + 2× Mass 2* [%]"),
     "not the preferred reading"
   )
 
   # Without the declaration the shifts are numbered by size
   undeclared <- transform_per_adduct(view, protein_table, compound_table[0, ], sample_table)
   expect_equal(undeclared$`Mass 1`, 50.5)
-  expect_equal(undeclared$`Binding (Mass 1*)x2 [%]`, 40)
-  expect_equal(undeclared$`Total Binding (Mass 2) [%]`, 40)
+  expect_equal(undeclared$`Binding P + 2× Mass 1* [%]`, 40)
+  expect_equal(undeclared$`Total Binding Mass 2 [%]`, 40)
 })
 
 test_that("a proteoform is named in the labels only when there are several", {
@@ -1557,15 +1671,74 @@ test_that("the Overview distribution plots the picked complexes with binding", {
   bars <- built[vapply(built, `[[`, character(1), "type") == "bar"]
   expect_setequal(unlist(lapply(bars, `[[`, "x")), c("S1", "S5", "S7"))
 
-  # B adds nothing to plot, so A is shown on its own
   expect_s3_class(plot("P", c("A", "B"), "Samples"), "plotly")
 
-  # Nothing to plot: no binding, or not measured at all
-  expect_null(plot("P", "B"))
-  expect_null(plot("Q", "A"))
-  expect_equal(overview_distribution_note(view, "P", "B"), "No binding events")
-  expect_equal(overview_distribution_note(view, "Q", "A"), "No protein or complex peak found")
+  # Nothing to plot: no compound, or no sample
+  expect_null(plot("P", character(0)))
+  expect_null(plot("R", "A"))
+  expect_false(overview_has_distribution(view, "R", "A"))
   expect_equal(overview_distribution_note(view, "P", character(0)), "No compound selected")
+  expect_equal(overview_distribution_note(view, "R", "A"), "No samples to show")
+})
+
+test_that("the Overview distribution keeps the samples and compounds without a hit", {
+  view <- overview_run()$view
+  built <- function(protein, compounds, show_unmatched = TRUE) {
+    plotly::plotly_build(overview_compound_distribution(
+      view, protein, compounds,
+      color_variable = "Compounds",
+      truncate_names = FALSE,
+      distribution_scale = "Maximum",
+      show_unmatched = show_unmatched
+    ))$x
+  }
+  unmatched_trace <- function(fig) {
+    Filter(function(t) identical(t$name, "Unmatched [%]"), fig$data)
+  }
+
+  # B is found in no sample: its samples S1 and S2 stay in the plot at 0 %,
+  # with A's three, each with its Unmatched [%]
+  both <- built("P", c("A", "B"))
+  expect_equal(both$layout$xaxis$ticktext, c("A", "B"))
+  bars <- Filter(function(t) identical(t$type, "bar"), both$data)
+  expect_equal(sum(vapply(bars, function(t) t$x[[1]] == 1, logical(1))), 2)
+  expect_true(all(vapply(
+    Filter(function(t) t$x[[1]] == 1, bars),
+    function(t) t$y[[1]] == 0,
+    logical(1)
+  )))
+  markers <- unmatched_trace(both)
+  expect_length(markers, 1)
+  expect_length(markers[[1]]$y, 5)
+  # A marker sits over its own bar, not at the compound's centre
+  expect_setequal(round(unlist(markers[[1]]$x), 6), round(vapply(
+    Filter(function(t) !is.na(t$y[[1]]), bars),
+    function(t) t$x[[1]] + t$offset[[1]] + t$width[[1]] / 2,
+    numeric(1)
+  ), 6))
+
+  # A compound found nowhere is plotted on its own as well
+  only_b <- built("P", "B")
+  expect_setequal(
+    unlist(lapply(Filter(function(t) identical(t$type, "bar"), only_b$data), `[[`, "x")),
+    c("S1", "S2")
+  )
+
+  # Without any protein peak (Q is not in the spectra): no bar, but the
+  # samples are there with all of their spectrum unmatched
+  unmeasured <- built("Q", "A")
+  expect_true(overview_has_distribution(view, "Q", "A"))
+  expect_true(all(is.na(unlist(lapply(
+    Filter(function(t) identical(t$type, "bar"), unmeasured$data),
+    `[[`,
+    "y"
+  )))))
+  q_markers <- unmatched_trace(unmeasured)[[1]]
+  expect_setequal(unlist(q_markers$x), c("S3", "S6"))
+  expect_equal(as.numeric(unlist(q_markers$y)), c(100, 100))
+
+  # The markers can be switched off
+  expect_length(unmatched_trace(built("P", c("A", "B"), FALSE)), 0)
 })
 
 test_that("the Overview distribution follows a given sample order", {
@@ -1892,6 +2065,58 @@ test_that("the statistics plots leave out a sample without a value, without a wa
       expect_false(anyNA(unlist(lapply(built$x$data, `[[`, "y"))))
     }
   }
+})
+
+test_that("the hit rate scatter draws a sample without a protein peak at 0 %, open", {
+  # S3 has no protein or complex peak: no binding, but all of its spectrum
+  # unmatched - an unexpected mass shift
+  hs <- data.frame(
+    Sample = paste0("S", 1:3),
+    Protein = "P",
+    `% Correct` = c(90, 80, 0),
+    `% Unmatched` = c(10, 20, 100),
+    `Total % Binding` = c(0.5, 0, NA),
+    check.names = FALSE
+  )
+  expect_no_warning(built <- plotly::plotly_build(
+    stats_scatter(hs, show = "Unmatched")
+  )$x$data)
+  points <- Filter(function(t) identical(t$name, "P"), built)[[1]]
+  expect_equal(as.character(unlist(points$customdata)), c("S1", "S2", "S3"))
+  # Jittered by up to 0.6 points
+  expect_lt(abs(unlist(points$x)[3]), 1)
+  expect_lt(abs(unlist(points$y)[3] - 100), 1)
+  expect_equal(
+    as.character(unlist(points$marker$symbol)),
+    c("circle", "circle", "circle-open")
+  )
+  expect_match(unlist(points$text)[3], "N/A", fixed = TRUE)
+  # The open marker is keyed in the legend, only when there is one
+  expect_true(any(vapply(built, function(t) identical(t$name, "No protein or complex peak"), logical(1))))
+  hs$`Total % Binding`[3] <- 0.1
+  expect_false(any(vapply(
+    plotly::plotly_build(stats_scatter(hs))$x$data,
+    function(t) identical(t$name, "No protein or complex peak"),
+    logical(1)
+  )))
+})
+
+test_that("the Overview distribution carries the full sample ID for a click", {
+  view <- overview_run()$view
+  view$truncSample_ID <- paste0("short-", view$`Sample ID`)
+  ids <- function(compounds) {
+    built <- plotly::plotly_build(overview_compound_distribution(
+      view, "P", compounds,
+      color_variable = "Compounds",
+      truncate_names = TRUE,
+      distribution_scale = "Maximum"
+    ))$x$data
+    clickable <- Filter(function(t) identical(t$type, "bar") || identical(t$name, "Unmatched [%]"), built)
+    unique(unlist(lapply(clickable, `[[`, "customdata")))
+  }
+  # Truncated names on the axis, the full IDs to open
+  expect_setequal(ids("A"), c("S1", "S5", "S7"))
+  expect_setequal(ids(c("A", "B")), c("S1", "S2", "S5", "S7"))
 })
 
 test_that("concentrations in molar units read as powers of ten on screen", {

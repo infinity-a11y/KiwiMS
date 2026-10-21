@@ -1,25 +1,22 @@
 # app/view/log_sidebar.R
 
 box::use(
-  bslib[sidebar, tooltip],
+  bslib[sidebar],
   shiny[
     actionButton,
-    br,
     div,
     icon,
     moduleServer,
     NS,
-    column,
     reactiveValues,
     reactive,
     renderPrint,
     verbatimTextOutput,
-    observeEvent,
   ],
 )
 
 box::use(
-  app / logic / logging[get_log, get_log_dir, get_session_id, get_session_start]
+  app / logic / logging[get_session_dir, get_session_id, get_session_start]
 )
 
 #' @export
@@ -90,25 +87,12 @@ ui <- function(id) {
       ),
       div(
         class = "sidebar-section",
-        div(class = "sidebar-title custom-sidebar-title", "Session Directory"),
-        div(class = "sidebar-desc-label", "Current logging directory"),
+        div(class = "sidebar-title custom-sidebar-title", "Session Folder"),
+        div(class = "sidebar-desc-label", "The logs of this session"),
         div(
           class = "log-dir-row",
           verbatimTextOutput(
             ns("log_dir_display")
-          ),
-          tooltip(
-            div(
-              class = "save-button",
-              actionButton(
-                ns("open_log_settings"),
-                label = NULL,
-                icon = icon("gear"),
-                class = "btn-default"
-              )
-            ),
-            "Log Settings",
-            placement = "top"
           )
         )
       )
@@ -119,15 +103,8 @@ ui <- function(id) {
 #' @export
 server <- function(id) {
   moduleServer(id, function(input, output, session) {
-    observeEvent(input$show_log_file, {
-      log_file <- get_log()
-      if (file.exists(log_file)) {
-        shell.exec(normalizePath(log_file))
-      }
-    })
-
     output$log_dir_display <- renderPrint({
-      cat(normalizePath(get_log_dir(), winslash = "\\", mustWork = FALSE))
+      cat(normalizePath(get_session_dir(), winslash = "\\", mustWork = FALSE))
     })
 
     refresh_logs <- reactive({
@@ -138,14 +115,12 @@ server <- function(id) {
       input$copy_logs
     })
 
-    open_settings <- reactive({
-      input$open_log_settings
-    })
-
+    # Clipboard and Show File act on the log shown in the Logs view
+    # (log_view.R), which knows which one that is
     reactiveValues(
       refresh = refresh_logs,
       copy = copy_logs,
-      open_settings = open_settings
+      show_file = reactive(input$show_log_file)
     )
   })
 }

@@ -53,10 +53,11 @@ tryCatch(
     result_dir <- commandArgs(trailingOnly = TRUE)[4]
     db_path <- commandArgs(trailingOnly = TRUE)[6]
     keep_raw_output <- isTRUE(as.logical(commandArgs(trailingOnly = TRUE)[7]))
-    output_path <- file.path(
-      Sys.getenv("LOCALAPPDATA"),
-      "KiwiMS",
-      "deconvolution.log"
+    # The file the app redirects this process's output to (in the session's
+    # log folder); the fixed one of earlier releases when started otherwise
+    output_path <- Sys.getenv(
+      "KIWIMS_DECON_OUTPUT",
+      unset = file.path(Sys.getenv("LOCALAPPDATA"), "KiwiMS", "deconvolution.log")
     )
   },
   error = function(e) {

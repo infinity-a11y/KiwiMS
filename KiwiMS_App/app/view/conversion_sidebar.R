@@ -37,6 +37,7 @@ box::use(
       get_session_id,
     ],
   app / logic / user_settings[read_user_settings, update_user_setting],
+  app / logic / session_restore[when_bound],
 )
 
 #' @export
@@ -57,19 +58,27 @@ server <- function(
   conversion_main_vars,
   deconvolution_main_vars,
   config_file,
-  config_filename = shiny::reactive(NULL)
+  config_filename = shiny::reactive(NULL),
+  restore = NULL
 ) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
     # Declare reactive vars ----
-    result_list <- shiny::reactiveVal(NULL)
-    complexes <- shiny::reactiveVal(NULL)
-    complex_default <- shiny::reactiveVal(NULL)
-    analysis_status <- shiny::reactiveVal("pending")
-    kinact_ki_available <- shiny::reactiveVal(FALSE)
-    console_log_snapshot <- shiny::reactiveVal(NULL)
+    # A page reloaded after a dropped connection starts from the state its
+    # last session parked (`restore`, see park() below and session_restore.R)
+    result_list <- shiny::reactiveVal(restore$result_list)
+    complexes <- shiny::reactiveVal(restore$complexes)
+    complex_default <- shiny::reactiveVal(restore$complex)
+    analysis_status <- shiny::reactiveVal(
+      if (is.null(restore$analysis_status)) "pending" else restore$analysis_status
+    )
+    kinact_ki_available <- shiny::reactiveVal(isTRUE(
+      restore$kinact_ki_available
+    ))
+    console_log_snapshot <- shiny::reactiveVal(restore$console_log_snapshot)
     analysis_running <- shiny::reactiveVal(FALSE)
+    select_once <- restore$analysis_select
 
     shiny::observeEvent(input$console_log_snapshot, {
       console_log_snapshot(input$console_log_snapshot)
@@ -87,9 +96,12 @@ server <- function(
     ## Analysis controls UI ----
     output$conversion_analysis_controls_ui <- shiny::renderUI({
       saved <- read_user_settings()
-      pt_default <- saved$peak_tolerance
-      mm_default <- saved$max_multiples
-      hp_default <- hit_preference_rule(saved$hit_preference)
+      # The settings of a restored run over the saved defaults
+      pt_default <- restore$peak_tolerance %||% saved$peak_tolerance
+      mm_default <- restore$max_multiples %||% saved$max_multiples
+      hp_default <- hit_preference_rule(
+        restore$hit_preference %||% saved$hit_preference
+      )
 
       shiny::div(
         class = "sidebar-section",
@@ -235,7 +247,7 @@ server <- function(
             ),
             placement = "top"
           ),
-          value = FALSE
+          value = isTRUE(restore$run_kinact_ki)
         ),
         shiny::uiOutput(ns("run_button_wrapper"))
       )
@@ -434,6 +446,28 @@ server <- function(
       }
     }
 
+    # A restored run locks its settings and turns Start into Reset, as the
+    # run did; applied once the inputs are on the page
+    if (identical(restore$analysis_status, "done")) {
+      when_bound(input, "peak_tolerance", function() {
+        shinyjs::disable("peak_tolerance")
+        shinyjs::disable("max_multiples")
+        shinyjs::disable("run_kinact_ki")
+        shinyjs::addClass(selector = ".checkbox", class = "checkbox-disable")
+      })
+      when_bound(input, "hit_preference", function() {
+        toggle_hit_preference(FALSE)
+      })
+      when_bound(input, "run_binding_analysis", function() {
+        shiny::updateActionButton(
+          session = session,
+          "run_binding_analysis",
+          label = "Reset",
+          icon = shiny::icon("repeat")
+        )
+      })
+    }
+
     # Update UI on reset results event ----
     shiny::observeEvent(
       deconvolution_main_vars$continue_conversion(),
@@ -495,7 +529,8 @@ server <- function(
           )
           if (any(ambiguities$kind == "compounds")) {
             write_log(
-              "Conversion refused - compounds of one sample not distinguishable"
+              "Conversion refused - compounds of one sample not distinguishable",
+              level = "WARN"
             )
             shinyWidgets::show_toast(
               "Compounds not distinguishable",
@@ -516,7 +551,8 @@ server <- function(
           multiples <- shift_multiples(declared$Compound_Table)
           if (nrow(multiples)) {
             write_log(
-              "Conversion refused - mass shifts that are multiples of each other"
+              "Conversion refused - mass shifts that are multiples of each other",
+              level = "WARN"
             )
             shinyWidgets::show_toast(
               "Mass shift multiples",
@@ -588,6 +624,8 @@ server <- function(
                 config = config_file(),
                 preference = preference
               )
+              # The Sample View has a column for every stoichiometry searched
+              result_with_hits$max_multiples <- input$max_multiples
 
               result_with_hits$hits_summary <- summarize_hits(
                 result_with_hits,
@@ -790,7 +828,14 @@ server <- function(
             "Relative Binding",
             "Kinetic Analysis"
           ),
-          choiceValues = list(1, 4, 2, 3)
+          choiceValues = list(1, 4, 2, 3),
+          # The interface open before the connection dropped, at the first
+          # rendering only
+          selected = {
+            selected <- select_once
+            select_once <<- NULL
+            selected
+          }
         ),
         if (!ki) {
           shiny::tags$script(shiny::HTML(paste0(
@@ -936,9 +981,29 @@ server <- function(
       suspendWhenHidden = FALSE
     )
 
+    # State of the module for a page reloaded after a dropped connection
+    # (session_restore.R): the run, its results and settings, and the result
+    # interface shown
+    park <- function() {
+      shiny::isolate(list(
+        result_list = result_list(),
+        complexes = complexes(),
+        complex = input$complex %||% complex_default(),
+        analysis_status = analysis_status(),
+        kinact_ki_available = kinact_ki_available(),
+        console_log_snapshot = console_log_snapshot(),
+        peak_tolerance = input$peak_tolerance,
+        max_multiples = input$max_multiples,
+        hit_preference = input$hit_preference,
+        run_kinact_ki = input$run_kinact_ki,
+        analysis_select = input$analysis_select
+      ))
+    }
+
     # Server return values ----
     return(
       shiny::reactiveValues(
+        park = park,
         result_list = shiny::reactive(result_list()),
         complex = shiny::reactive(input$complex),
         run_analysis = shiny::reactive(input$run_binding_analysis),

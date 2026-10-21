@@ -22,7 +22,16 @@ box::use(
   app / view / deconvolution_sidebar,
   app / view / log_view,
   app / view / log_sidebar,
-  app / logic / logging[start_logging, write_log, close_logging],
+  app /
+    logic /
+    logging[
+      start_logging,
+      write_log,
+      close_logging,
+      get_session_dir,
+      log_app_errors,
+      last_app_error_age,
+    ],
   app /
     logic /
     user_settings[
@@ -47,10 +56,88 @@ box::use(
   app / logic / ms_formats[has_ms_extension],
   app /
     logic /
+    support_bundle[list_log_sessions, session_choices, write_support_bundle],
+  app / logic / help_modal[help_modal, help_note, help_section],
+  app /
+    logic /
+    session_restore[
+      park_state,
+      register_live,
+      tab_token,
+      take_state,
+      unregister_live,
+    ],
+  app /
+    logic /
     conversion_functions[hit_preference_choices, hit_preference_rule],
 )
 
 suppressWarnings(library(logr))
+
+# Browser connections of this R process. The server used to stop as soon as
+# its browser session ended, but a session also ends when the browser drops
+# the connection on its own: a background tab put to sleep or discarded after
+# some time without use, a laptop in standby. The page then stayed greyed out
+# and KiwiMS had to be started again. Now only a page that was closed or
+# reloaded (static/js/connection.js says so before it goes) stops the server,
+# after a grace period in which a reload comes back; after a dropped
+# connection the server keeps running and the page reconnects by reloading.
+connections <- new.env()
+connections$open <- 0L
+connections$cancel_stop <- NULL
+connections$logging <- FALSE
+
+# Seconds a closed page has to come back (a reload) before the server stops
+close_grace <- 15
+
+# The count is also written for the launcher (KIWIMS_SESSION_FILE, set by
+# dev/launch.ps1): a second launch opens a browser tab while no page is open
+set_open_connections <- function(n) {
+  connections$open <- max(0L, n)
+  file <- Sys.getenv("KIWIMS_SESSION_FILE")
+  if (nzchar(file)) {
+    try(writeLines(as.character(connections$open), file), silent = TRUE)
+  }
+}
+
+# Notes in the log when R itself did not run for a while - the computer was in
+# standby or hibernation - which is what a dropped connection often follows.
+# One loop per process.
+watch_r_pauses <- function() {
+  last <- Sys.time()
+  tick <- function() {
+    now <- Sys.time()
+    gap <- as.numeric(difftime(now, last, units = "secs"))
+    if (gap > 120) {
+      write_log(sprintf(
+        "KiwiMS did not run for %.0f s (computer in standby?)",
+        gap
+      ))
+    }
+    last <<- now
+    later::later(tick, 30)
+  }
+  later::later(tick, 30)
+}
+
+# A parked state without the place in the app it was left at: the main tab,
+# the result interface and the deconvolution sample shown. Kept for a session
+# an error ended, so the reload opens the analysis but not the view that
+# failed. Marked, so a failure right after it is recognised (see server()).
+without_place <- function(state) {
+  state$crashed <- TRUE
+  state$main$tab <- NULL
+  state$conv_sidebar$analysis_select <- NULL
+  state$decon_main$selected <- NULL
+  state
+}
+
+cancel_pending_stop <- function() {
+  if (is.function(connections$cancel_stop)) {
+    connections$cancel_stop()
+  }
+  connections$cancel_stop <- NULL
+}
 
 #' @export
 ui <- function(id) {
@@ -64,6 +151,13 @@ ui <- function(id) {
         type = "text/css",
         href = paste0(
           "static/css/app.min.css?v=",
+          get_kiwims_version()["version"]
+        )
+      ),
+      # Tells a closed page from a dropped connection, reconnects after one
+      shiny$tags$script(
+        src = paste0(
+          "static/js/connection.js?v=",
           get_kiwims_version()["version"]
         )
       )
@@ -1405,7 +1499,7 @@ ui <- function(id) {
         )
       ),
       bslib$nav_panel(
-        title = "Protein Conversion",
+        title = "Conversion",
         bslib$page_sidebar(
           sidebar = conversion_sidebar$ui(ns("conversion_sidebar")),
           conversion_main$ui(ns("conversion_main"))
@@ -1416,10 +1510,8 @@ ui <- function(id) {
         icon = shiny::icon("list-check"),
         bslib$page_sidebar(
           sidebar = log_sidebar$ui(ns("log_sidebar")),
-          bslib$card(
-            class = "logs-card",
-            log_view$ui(ns("logs"))
-          )
+          # A tab per log file of the session (log_view.R)
+          log_view$ui(ns("logs"))
         )
       ),
       bslib$nav_spacer(),
@@ -1428,7 +1520,15 @@ ui <- function(id) {
           ns("settings"),
           "Settings",
           icon = shiny::icon("gear"),
-          class = "nav-link"
+          class = "nav-link navbar-button"
+        )
+      ),
+      bslib$nav_item(
+        shiny::actionButton(
+          ns("help"),
+          "Help",
+          icon = shiny::icon("circle-question"),
+          class = "nav-link navbar-button"
         )
       ),
       bslib$nav_item(
@@ -1436,7 +1536,7 @@ ui <- function(id) {
           ns("licence"),
           "License",
           icon = shiny::icon("info"),
-          class = "nav-link"
+          class = "nav-link navbar-button"
         )
       ),
       bslib$nav_item(shiny::uiOutput(
@@ -1511,19 +1611,139 @@ server <- function(id) {
     Sys.setenv(CONDA_DLL_SEARCH_MODIFICATION_ENABLE = "1")
     ns <- session$ns
 
-    # Kill server on session end
+    # Stop the server once the page is closed, not when the connection drops
+    # (see connections above)
+    cancel_pending_stop()
+    set_open_connections(connections$open + 1L)
+    # Set once the modules are up (below)
+    token <- NULL
+    restored <- NULL
+    live_handle <- list(retired = TRUE)
+    session_started <- Sys.time()
     session$onSessionEnded(function() {
+      set_open_connections(connections$open - 1L)
+      # An error in an observer ends the session (see log_app_errors())
+      crashed <- last_app_error_age() < 5
+      # The work of the page, for the one its tab opens next - a reload after
+      # a dropped connection, or F5 (session_restore.R). Not when a newer page
+      # of the tab has taken it already.
+      if (isFALSE(live_handle$retired)) {
+        state <- tryCatch(park_all(), error = function(e) {
+          write_log(
+            paste("Session state not kept:", conditionMessage(e)),
+            level = "ERROR"
+          )
+          NULL
+        })
+        # A session an error ended must not bring the page back to where it
+        # failed, or the reload fails again: its state is kept without the
+        # place in the app. A page restored that way failing again soon after
+        # starts afresh - the state itself is what fails.
+        if (crashed && !is.null(state)) {
+          again <- isTRUE(restored$crashed) &&
+            difftime(Sys.time(), session_started, units = "secs") < 120
+          if (again) {
+            write_log(
+              "Session state dropped: the page restored after an error failed again",
+              level = "WARN"
+            )
+            state <- NULL
+          } else {
+            write_log(
+              "Session state kept without the place in the app, as an error ended the session",
+              level = "WARN"
+            )
+            state <- without_place(state)
+          }
+        }
+        park_state(token, state)
+      }
+      unregister_live(token, live_handle)
+      page_closed <- !is.null(shiny$isolate(
+        session$rootScope()$input$kiwims_page_closing
+      ))
+      if (!page_closed) {
+        if (crashed) {
+          write_log("Session ended by the error above", level = "ERROR")
+        } else {
+          write_log("Session disconnected - server kept running for a reconnect")
+        }
+        return()
+      }
       write_log("Session closed")
-      shiny$stopApp()
+      if (connections$open > 0L) {
+        return()
+      }
+      cancel_pending_stop()
+      connections$cancel_stop <- later::later(
+        function() {
+          connections$cancel_stop <- NULL
+          if (connections$open == 0L) {
+            # Runs outlive their page (deconvolution_main.R), not KiwiMS
+            deconvolution_main$stop_active_runs()
+            shiny$stopApp()
+          }
+        },
+        delay = close_grace
+      )
     })
 
     shiny::observeEvent(input$quit_kiwims, {
+      deconvolution_main$stop_active_runs()
       shiny::stopApp() # This signals the mother process that the app is done
     })
 
-    # Initiate logging
-    start_logging()
+    # Initiate logging, once per process: log_open() starts the file anew, so
+    # a page reloaded after a dropped connection would wipe the log of the
+    # work before it
+    if (!isTRUE(connections$logging)) {
+      start_logging()
+      connections$logging <- TRUE
+      log_app_errors()
+      watch_r_pauses()
+    }
     write_log("Session started")
+
+    # The work of this browser tab from before a dropped connection, if any
+    # (session_restore.R); handed to the modules below
+    token <- tab_token(session)
+    # The only page open may take the work of a tab that was lost
+    restored <- take_state(token, orphan = connections$open == 1L)
+    if (!is.null(restored)) {
+      write_log("Session state restored after the page reloaded")
+    }
+    # After an error ended the last session: say so, and where to turn
+    if (isTRUE(restored$crashed)) {
+      shiny$showNotification(
+        paste(
+          "KiwiMS reloaded after an error. Your analysis was kept; the view",
+          "you were on was not reopened. If this happens again, please send",
+          "a support package (Help in the navigation bar)."
+        ),
+        type = "warning",
+        duration = 20
+      )
+    }
+
+    # Traffic on the connection every 30 s: software between browser and
+    # server (a virus scanner's web filter, a proxy) may cut one that is idle.
+    # The page answers and notes gaps for the connection report below.
+    shiny$observe({
+      shiny$invalidateLater(30000)
+      session$sendCustomMessage("kiwims_heartbeat", list())
+    })
+
+    # What the page noted about a dropped connection (connection.js): sent
+    # once it is back, so the log tells why it dropped
+    shiny$observeEvent(
+      session$rootScope()$input$kiwims_connection_report,
+      {
+        write_log(paste0(
+          "Connection report of the page:\n",
+          session$rootScope()$input$kiwims_connection_report
+        ))
+      }
+    )
 
     # Log view server
     active_tab_reactive <- shiny$reactive({
@@ -1532,21 +1752,131 @@ server <- function(id) {
     log_buttons <- log_sidebar$server("log_sidebar")
     log_view$server("logs", active_tab_reactive, log_buttons)
 
-    # Gear button in log sidebar opens Settings modal scrolled to Logs section
+    # For testing how KiwiMS recovers from an unexpected error: opening the
+    # tab named in KIWIMS_TEST_CRASH_TAB (e.g. "Logs") fails in an observer,
+    # as a bug would. Unset, nothing happens.
+    crash_tab <- Sys.getenv("KIWIMS_TEST_CRASH_TAB")
+    if (nzchar(crash_tab)) {
+      shiny$observe({
+        if (identical(input$tabs, crash_tab)) {
+          stop("Simulated error on opening ", crash_tab, " (KIWIMS_TEST_CRASH_TAB)")
+        }
+      })
+    }
+
+    # The browser, once per page (connection.js): a dropped connection or a
+    # display problem often depends on it
     shiny$observeEvent(
-      log_buttons$open_settings(),
+      session$rootScope()$input$kiwims_browser,
+      write_log(paste(
+        "Browser:",
+        session$rootScope()$input$kiwims_browser$userAgent
+      )),
+      once = TRUE
+    )
+
+    # The state of a module (its park(), NULL without), for the page the tab
+    # opens next (park_all() below)
+    park_of <- function(vars) {
+      park <- shiny$isolate(vars$park)
+      if (is.function(park)) park()
+    }
+
+    # Help and support package ----
+    # The Help entry of the navigation bar: where help is found in the app,
+    # and the support package to send with a problem - the logs of one
+    # session, versions and settings, no analysis data (support_bundle.R)
+    shiny$observeEvent(
+      input$help,
       {
-        open_settings_modal(open_section = "logs")
+        sessions <- tryCatch(list_log_sessions(), error = function(e) NULL)
+        shiny$showModal(help_modal(
+          "Help",
+          help_section(
+            "Help in KiwiMS",
+            shiny$p(
+              "Every card and setting has a",
+              shiny$icon("circle-question"),
+              "button: it explains what the card shows and how to read it.",
+              "Hovering over a column header or a plot shows more."
+            )
+          ),
+          help_section(
+            "Report a problem",
+            shiny$p(
+              "Describe what you did and what happened, and send the support",
+              "package along: one file with the logs of a session, the versions",
+              "of KiwiMS and its components, and your KiwiMS settings."
+            ),
+            shiny$selectInput(
+              ns("support_session"),
+              "Session",
+              choices = if (!is.null(sessions) && nrow(sessions)) {
+                session_choices(sessions)
+              } else {
+                c("Current session" = "")
+              },
+              width = "100%"
+            ),
+            shiny$p(
+              "The current session is preselected. If KiwiMS crashed or was",
+              "closed while the problem happened, start it again and choose",
+              "the session it happened in: its logs are complete only once",
+              "that session has ended. Each start of KiwiMS is a session;",
+              "sessions that logged errors are marked."
+            ),
+            help_note(
+              "The logs name files, folders and samples. No analysis data is",
+              "included: no declaration tables, results or measurements."
+            )
+          ),
+          footer = shiny$tagList(
+            shiny$modalButton("Dismiss"),
+            shiny$downloadButton(
+              ns("support_download"),
+              "Support Package",
+              icon = shiny$icon("download")
+            )
+          )
+        ))
       },
       ignoreInit = TRUE
     )
 
+    output$support_download <- shiny$downloadHandler(
+      filename = function() {
+        paste0(
+          "KiwiMS_support_",
+          format(Sys.time(), "%Y-%m-%d_%H%M"),
+          ".zip"
+        )
+      },
+      content = function(file) {
+        # Only a session listed: the value comes from the browser
+        chosen <- input$support_session
+        listed <- tryCatch(list_log_sessions()$path, error = function(e) NULL)
+        target <- if (length(chosen) == 1 && chosen %in% listed) {
+          chosen
+        } else {
+          get_session_dir()
+        }
+        write_log(paste("Support package created for", basename(target)))
+        write_support_bundle(
+          file,
+          session = target,
+          client = session$rootScope()$input$kiwims_browser
+        )
+        shiny$removeModal()
+      },
+      contentType = "application/zip"
+    )
+
     reset_button <- shiny$reactiveVal(0)
-    configfile <- shiny$reactiveVal(NULL)
+    configfile <- shiny$reactiveVal(restored$main$configfile)
     pending_config <- shiny$reactiveVal(NULL)
     config_modal_state <- shiny$reactiveVal("upload")
-    config_filename <- shiny$reactiveVal(NULL)
-    # Modal opened from the Protein Conversion module — offers applying the
+    config_filename <- shiny$reactiveVal(restored$main$config_filename)
+    # Modal opened from the Conversion module — offers applying the
     # config to the samples table on top of activating it
     config_modal_from_conversion <- shiny$reactiveVal(FALSE)
     config_apply_trigger <- shiny$reactiveVal(0L)
@@ -1958,12 +2288,12 @@ server <- function(id) {
                 )
               ),
 
-              # --- Protein Conversion Input Values ---
+              # --- Conversion Input Values ---
               shiny$div(
                 class = "settings-collapse-header",
                 `data-bs-toggle` = "collapse",
                 `data-bs-target` = paste0("#", ns("settings_conv_body")),
-                "Protein Conversion Input Values",
+                "Conversion Input Values",
                 shiny$icon("chevron-down", class = "settings-collapse-icon")
               ),
               shiny$div(
@@ -2046,65 +2376,6 @@ server <- function(id) {
                         colspan = "2",
                         shiny$actionButton(
                           ns("reset_conv"),
-                          "Reset Section",
-                          icon = shiny$icon("rotate-left"),
-                          width = "100%"
-                        )
-                      )
-                    )
-                  )
-                )
-              ),
-
-              # --- Logs ---
-              shiny$div(
-                class = "settings-collapse-header settings-logs-section",
-                `data-bs-toggle` = "collapse",
-                `data-bs-target` = paste0("#", ns("settings_logs_body")),
-                "Logs",
-                shiny$icon("chevron-down", class = "settings-collapse-icon")
-              ),
-              shiny$div(
-                id = ns("settings_logs_body"),
-                class = if (identical(open_section, "logs")) {
-                  "collapse show"
-                } else {
-                  "collapse"
-                },
-                shiny$tags$table(
-                  class = "table table-sm table-bordered settings-table",
-                  shiny$tags$tbody(
-                    shiny$tags$tr(
-                      shiny$tags$td(
-                        class = "settings-table-label",
-                        settings_label_tooltip(
-                          "Log Directory",
-                          "Parent folder for daily log sub-folders. Takes effect on next app start."
-                        )
-                      ),
-                      shiny$tags$td(
-                        shiny$textInput(
-                          ns("settings_log_dir"),
-                          label = NULL,
-                          value = if (nzchar(us$log_dir)) us$log_dir else "",
-                          placeholder = paste0(
-                            Sys.getenv("USERPROFILE"),
-                            "\\Documents\\KiwiMS\\logs  (default)"
-                          ),
-                          width = "100%"
-                        )
-                      ),
-                      shiny$tags$td(
-                        class = "settings-table-feedback",
-                        shiny$uiOutput(ns("settings_log_dir_display"))
-                      )
-                    ),
-                    shiny$tags$tr(
-                      shiny$tags$td(class = "settings-table-label"),
-                      shiny$tags$td(
-                        colspan = "2",
-                        shiny$actionButton(
-                          ns("reset_logs"),
                           "Reset Section",
                           icon = shiny$icon("rotate-left"),
                           width = "100%"
@@ -2233,19 +2504,13 @@ server <- function(id) {
       )
     }
 
-    do_reset_logs <- function() {
-      shiny::updateTextInput(session, "settings_log_dir", value = d$log_dir)
-    }
-
     shiny$observeEvent(input$reset_general, do_reset_general())
     shiny$observeEvent(input$reset_deconv, do_reset_deconv())
     shiny$observeEvent(input$reset_conv, do_reset_conv())
-    shiny$observeEvent(input$reset_logs, do_reset_logs())
     shiny$observeEvent(input$reset_default, {
       do_reset_general()
       do_reset_deconv()
       do_reset_conv()
-      do_reset_logs()
     })
 
     # Resolve typed/pasted path from the text input
@@ -2257,11 +2522,6 @@ server <- function(id) {
     settings_input_path_picked <- shiny$reactive({
       p <- input$settings_input_path
       trimws(if (!is.null(p)) p else read_user_settings()$deconv_input_dir)
-    })
-
-    settings_log_dir_picked <- shiny$reactive({
-      p <- input$settings_log_dir
-      trimws(if (!is.null(p)) p else "")
     })
 
     # Settings opened from nav button
@@ -2311,31 +2571,6 @@ server <- function(id) {
           " Cannot use a sample as default input; pick the folder holding it"
         )
       } else if (dir.exists(path)) {
-        shiny$div(
-          class = "settings-dest-feedback settings-dest-feedback--valid",
-          shiny$icon("circle-check"),
-          " Folder exists"
-        )
-      } else {
-        shiny$div(
-          class = "settings-dest-feedback settings-dest-feedback--invalid",
-          shiny$icon("triangle-exclamation"),
-          " Folder not found"
-        )
-      }
-    })
-
-    # Live feedback for log directory path inside modal
-    output$settings_log_dir_display <- shiny$renderUI({
-      path <- settings_log_dir_picked()
-      if (!nzchar(path)) {
-        return(shiny$div(
-          class = "settings-dest-feedback",
-          shiny$icon("circle-minus"),
-          " Using default"
-        ))
-      }
-      if (dir.exists(path)) {
         shiny$div(
           class = "settings-dest-feedback settings-dest-feedback--valid",
           shiny$icon("circle-check"),
@@ -2702,10 +2937,6 @@ server <- function(id) {
       )
       current$deconv_input_dir <- inp
 
-      current$log_dir <- trimws(
-        if (!is.null(input$settings_log_dir)) input$settings_log_dir else ""
-      )
-
       save_user_settings(current)
 
       shiny$removeModal()
@@ -2731,7 +2962,8 @@ server <- function(id) {
       default_input_path = shiny$reactive({
         p <- read_user_settings()$deconv_input_dir
         if (length(p) == 1L && nzchar(p) && dir.exists(p)) p else NULL
-      })
+      }),
+      restore = restored$decon_sidebar
     )
 
     # Save default input folder when floppy button next to Input is clicked
@@ -2785,7 +3017,8 @@ server <- function(id) {
       deconvolution_sidebar_vars,
       conversion_main_vars,
       reset_button = reset_button,
-      config_file = configfile
+      config_file = configfile,
+      restore = restored$decon_main
     )
 
     # Conversion sidebar server
@@ -2794,7 +3027,8 @@ server <- function(id) {
       conversion_main_vars,
       deconvolution_main_vars,
       config_file = configfile,
-      config_filename = config_filename
+      config_filename = config_filename,
+      restore = restored$conv_sidebar
     )
 
     # Conversion main server
@@ -2803,8 +3037,30 @@ server <- function(id) {
       conversion_sidebar_vars,
       deconvolution_main_vars,
       config_file = configfile,
-      config_apply_trigger = config_apply_trigger
+      config_apply_trigger = config_apply_trigger,
+      restore = restored$conv_main
     )
+
+    # State of the page for the one its tab opens next (session_restore.R)
+    park_all <- function() {
+      list(
+        main = shiny$isolate(list(
+          configfile = configfile(),
+          config_filename = config_filename(),
+          tab = input$tabs
+        )),
+        decon_sidebar = park_of(deconvolution_sidebar_vars),
+        decon_main = park_of(deconvolution_main_vars),
+        conv_sidebar = park_of(conversion_sidebar_vars),
+        conv_main = park_of(conversion_main_vars)
+      )
+    }
+    live_handle <- register_live(token, session, park_all)
+
+    # Back on the main tab the page was on
+    if (!is.null(restored$main$tab)) {
+      bslib::nav_select("tabs", session = session, selected = restored$main$tab)
+    }
 
     # Check update availability
     version_info <- get_kiwims_version()
@@ -2868,12 +3124,12 @@ server <- function(id) {
       # )
     })
 
-    # Switch Protein Conversion tab when user forwards
+    # Switch to the Conversion tab when user forwards
     shiny$observeEvent(deconvolution_main_vars$forward_deconvolution(), {
       bslib::nav_select(
         "tabs",
         session = session,
-        "Protein Conversion"
+        "Conversion"
       )
     })
 
@@ -3074,7 +3330,7 @@ server <- function(id) {
     })
 
     # "Apply to samples" footer button — only offered when the modal was opened
-    # from the Protein Conversion module. Follows the same sample table states
+    # from the Conversion module. Follows the same sample table states
     # as the use_config button there; disabled with the reason as tooltip.
     config_apply_button <- function(id, label) {
       if (!isTRUE(config_modal_from_conversion())) {
@@ -3263,7 +3519,7 @@ server <- function(id) {
     })
 
     # Confirm & Apply — as Confirm, then autofill the samples table exactly as
-    # the use_config button of the Protein Conversion module does
+    # the use_config button of the Conversion module does
     shiny$observeEvent(input$confirm_apply_config, {
       shiny$req(is.null(conversion_main_vars$config_apply_block()))
       commit_pending_config()

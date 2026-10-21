@@ -1771,6 +1771,14 @@ overview_results_panel <- function(
                       value = TRUE,
                       right = TRUE
                     ),
+                    # A marker per sample: the spectrum no protein or complex
+                    # explains, e.g. an unexpected mass shift
+                    shinyWidgets::materialSwitch(
+                      ns("overview_distribution_unmatched"),
+                      label = "Show Unmatched [%]",
+                      value = TRUE,
+                      right = TRUE
+                    ),
                     sort_binding_switch("overview_distribution_sort_binding"),
                     style = "margin-right: 20px;"
                   )

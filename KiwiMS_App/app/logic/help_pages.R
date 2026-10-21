@@ -577,8 +577,9 @@ well_plate_page <- function() {
     ),
     shiny::p(
       "The plate appears once the first sample is deconvoluted or has ",
-      "failed. Click a tile to show its sample in the Spectrum card."
-    )
+      "failed."
+    ),
+    click_note("Click a tile to show its sample in the Spectrum card.")
   )
 }
 
@@ -1115,16 +1116,32 @@ compound_distribution_page <- function() {
         "compound the bars stand side by side; with several they are grouped ",
         "by compound. Samples follow the order of the Table View and the ",
         "sample colours (concentration, then time; otherwise from least to ",
-        "most bound); a sample declared with the compound but without a hit ",
-        "of it stays at 0 %."
+        "most bound). Every sample declared with a selected compound is ",
+        "shown: one without a hit of it stays at 0 %, one without any protein ",
+        "or complex peak keeps its place without a bar, and compounds without ",
+        "any hit are plotted too."
+      ),
+      shiny::p(
+        "A red dot over each bar marks the sample's Unmatched [%]: the share ",
+        "of its spectrum no protein or complex peak explains. A sample with ",
+        "little or no binding but a high Unmatched [%] has peaks the ",
+        "declaration does not account for, such as an unexpected mass shift; ",
+        "check it in the Sample View."
+      ),
+      click_note(
+        "Click a bar or a red dot to open its sample in the Sample View."
       ),
       help_defs(
         help_def(
           "Range",
-          "Maximum scales the axis to the highest binding, 100 to the full ",
-          "0 – 100 %."
+          "Maximum scales the axis to the highest binding or Unmatched [%], ",
+          "100 to the full 0 – 100 %."
         ),
         help_def("Show Labels", "Writes the names below the bars."),
+        help_def(
+          "Show Unmatched [%]",
+          "Marks each sample's Unmatched [%] with a red dot."
+        ),
         help_def(
           "Sort by Binding",
           "With concentrations: ranks the samples from least to most bound."
@@ -2015,10 +2032,10 @@ hits_page <- function() {
           "Narrow the table; the export follows the selection."
         )
       ),
-      shiny::p(
-        "Percentages are drawn as bars in their cells. Click a sample to open ",
-        "it in the Sample View, a protein or compound to open it in the ",
-        "Overview, and a concentration to open its kinetics."
+      shiny::p("Percentages are drawn as bars in their cells."),
+      click_note(
+        "Click a sample to open it in the Sample View, a protein or compound ",
+        "to open it in the Overview, and a concentration to open its kinetics."
       )
     ),
     help_section(
@@ -2045,12 +2062,14 @@ hits_page <- function() {
           "Declared mass shift n of the compound (Mass n of the Compounds table)."
         ),
         help_def(
-          "Binding (Mass n)xk [%]",
-          "Binding of the complex carrying k molecules of mass shift n: the ",
-          "Binding [%] of its peak."
+          "Binding P + k× Mass n [%]",
+          "Binding of the complex of the protein (P) with k adducts of mass ",
+          "shift n: the Binding [%] of its peak. Every stoichiometry up to the ",
+          "Max. Stoichiometry of the run has a column; a sample without that ",
+          "complex reads 0 %, one without any protein or complex peak N/A."
         ),
         help_def(
-          "Total Binding (Mass n) [%]",
+          "Total Binding Mass n [%]",
           "Binding of mass shift n over all proteoforms and stoichiometries. ",
           "Only preferred readings count, so the totals of a sample add up to ",
           "its Tot. Binding [%]."
@@ -2058,24 +2077,25 @@ hits_page <- function() {
         help_def(
           "*",
           "A reading that is not the preferred one of its peak, e.g. Binding ",
-          "(Mass 2*)x1 [%]. Its value is listed but not counted in the totals; ",
-          "the preferred reading of the same peak has a column without the ",
-          "asterisk (see Preferred Assignment in the sidebar)."
+          "P + 1× Mass 2* [%]. Its value is listed but not counted in the ",
+          "totals; the preferred reading of the same peak has a column without ",
+          "the asterisk (see Preferred Assignment in the sidebar)."
         ),
         help_def(
           "Proteoforms",
           "When a sample holds several proteoforms (a protein declared with ",
-          "several masses), the columns of each carry its declared mass: Int. ",
-          "Prot. (21,816.8 Da) [%], Binding (21,816.8 Da, Mass 1)x1 [%]. ",
-          "Theor. Prot. [Da] is then left out, as the names give it. Select ",
-          "Columns picks a column for every proteoform at once. The totals ",
-          "pool the proteoforms: they are forms of one protein."
+          "several masses), they are numbered as in the Proteins table: PF1 is ",
+          "Mass 1 of the protein. PF1 [Da], PF2 [Da] hold their masses, and ",
+          "their columns carry the number: Int. PF2 [%], Binding PF2 + 1× ",
+          "Mass 1 [%]. Select Columns picks a column for every proteoform at ",
+          "once. The totals pool the proteoforms: they are forms of one ",
+          "protein."
         ),
         help_def(
           "Several compounds",
           "A sample declaring several compounds lists them in Cmp Name (A, B), ",
-          "and its mass-shift columns carry the compound: Mass 1 (A), Binding ",
-          "(A, Mass 1)x1 [%]. Tot. Binding (A) [%] is the binding of each ",
+          "and its mass-shift columns carry the compound: A·Mass 1, Binding ",
+          "P + 1× A·Mass 1 [%]. Tot. Binding (A) [%] is the binding of each ",
           "complex, the value its kinetics are fitted to; Tot. Binding [%] ",
           "pools the compounds. A click on Cmp Name opens the first compound ",
           "listed."
@@ -2290,6 +2310,11 @@ stats_controls <- function() {
   )
 }
 
+# What a click in a plot or table opens
+click_note <- function(...) {
+  help_note(shiny::icon("hand-pointer"), " ", ...)
+}
+
 stats_histogram_page <- function() {
   help_modal(
     "Hit Rate Distribution",
@@ -2324,6 +2349,7 @@ stats_boxplot_page <- function() {
         "fills the plot. Samples left out are counted above or below the plot."
       )
     ),
+    click_note("Click a point to open its sample in the Sample View."),
     stats_controls()
   )
 }
@@ -2348,10 +2374,17 @@ stats_scatter_page <- function() {
       "hide among the unmatched peaks, for example with an undeclared mass ",
       "shift, so the binding of these samples may be underestimated."
     ),
+    shiny::p(
+      "A sample without any protein or complex peak has no binding; it is ",
+      "drawn at 0 % with an open marker. Most of its spectrum is then ",
+      "unmatched - typically the protein carries a mass shift that was not ",
+      "declared."
+    ),
     help_note(
       "Points are shifted by up to ±0.6 percentage points so that samples ",
       "with equal values stay visible; the hover shows the exact values."
     ),
+    click_note("Click a point to open its sample in the Sample View."),
     stats_controls()
   )
 }
@@ -2366,6 +2399,7 @@ stats_violin_page <- function() {
       "that stand out point at a protein or compound whose declaration misses ",
       "a species."
     ),
+    click_note("Click a point to open its sample in the Sample View."),
     stats_controls()
   )
 }
@@ -2404,7 +2438,8 @@ batch_heatmap_page <- function() {
       "number, named in the legend. A click on a legend entry hides its ",
       "wells, a double click shows them alone; another double click shows ",
       "all wells again."
-    )
+    ),
+    click_note("Click a well to open its sample in the Sample View.")
   )
 }
 

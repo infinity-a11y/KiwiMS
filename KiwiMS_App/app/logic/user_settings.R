@@ -48,7 +48,6 @@ get_default_user_settings <- function() {
     deconv_massbins = 0.5,
     deconv_keep_raw_output = FALSE,
     deconv_input_dir = "",
-    log_dir = "",
     # Version of the stored defaults; see migrate_settings().
     settings_version = 2L
   )
@@ -94,6 +93,8 @@ migrate_settings <- function(stored) {
 
   stored$deconv_time_window_notice_seen <- NULL
   stored$deconv_time_window_applied <- NULL
+  # The log folder is no longer a setting (logging.R)
+  stored$log_dir <- NULL
   stored
 }
 

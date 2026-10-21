@@ -132,16 +132,20 @@ server <- function(
   config_file,
   config_filename,
   default_dest_path = shiny::reactive(NULL),
-  default_input_path = shiny::reactive(NULL)
+  default_input_path = shiny::reactive(NULL),
+  restore = NULL
 ) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
-    selected <- shiny::reactiveVal("")
+    # A page reloaded after a dropped connection starts from the paths its
+    # last session had chosen (`restore`, see park() below)
+    selected <- shiny::reactiveVal(restore$selected %||% "")
 
     # Collection of reactive vars
-    rootdir <- shiny::reactiveVal(character())
-    targetpath <- shiny::reactiveVal(character())
+    rootdir <- shiny::reactiveVal(restore$rootdir %||% character())
+    targetpath <- shiny::reactiveVal(restore$targetpath %||% character())
+    use_config_once <- restore$use_config
 
     # Where the dialog opens: whatever is already chosen, else the configured
     # default, else the user's profile. Deliberately not validated with
@@ -207,8 +211,11 @@ server <- function(
       }
     })
 
+    # Only a chosen path is taken: at start the pickers have none, which would
+    # wipe a restored one
     shiny::observe({
-      rootdir(root_dir())
+      r <- root_dir()
+      if (length(r) && nzchar(r)) rootdir(r)
       p <- target_path()
       if (length(p) && nzchar(p)) targetpath(p)
     })
@@ -356,8 +363,10 @@ server <- function(
       chk <- checkboxInput(
         ns("use_config"),
         "Use Config in Analysis",
-        value = active
+        # As it was before the page reloaded, the first time
+        value = active && !isFALSE(use_config_once)
       )
+      use_config_once <<- NULL
       div(
         class = "sidebar-config-status",
         shiny::tags$p(
@@ -382,7 +391,19 @@ server <- function(
     shiny::outputOptions(output, "config_status_ui", suspendWhenHidden = FALSE)
 
     # Return paths and config state
+    # The chosen paths, for a page reloaded after a dropped connection
+    # (session_restore.R)
+    park <- function() {
+      shiny::isolate(list(
+        rootdir = rootdir(),
+        targetpath = targetpath(),
+        selected = selected(),
+        use_config = input$use_config
+      ))
+    }
+
     reactiveValues(
+      park = park,
       dir = rootdir,
       targetpath = targetpath,
       selected = selected,

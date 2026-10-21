@@ -40,14 +40,23 @@ Write-Host "---------------------------------------------------" -ForegroundColo
 $logDirectory = "$env:LOCALAPPDATA\KiwiMS"
 $logFile = Join-Path $logDirectory "launch.log"
 $urlFile = Join-Path $logDirectory "current_url.txt"
+# Number of browser pages connected to the running app, written by the app
+# (main.R) to the path it is handed in KIWIMS_SESSION_FILE
+$sessionFile = Join-Path $logDirectory "active_sessions.txt"
 
 if (-Not (Test-Path $logDirectory)) { New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null }
 
 # launch.log is shared by every instance, so append and tag each line with the
 # launcher PID rather than truncating it. It used to be overwritten on every
-# start, which meant a second launch erased the record of the first.
+# start, which meant a second launch erased the record of the first. Once this
+# start has its session folder (below), its lines go to launcher.log there too.
+$sessionLauncherLog = $null
 function Write-LaunchLog([string] $Message) {
-    "$(Get-Date) - [$PID] $Message" | Add-Content -Path $logFile -Encoding utf8
+    $line = "$(Get-Date) - [$PID] $Message"
+    $line | Add-Content -Path $logFile -Encoding utf8
+    if ($sessionLauncherLog) {
+        $line | Add-Content -Path $sessionLauncherLog -Encoding utf8 -ErrorAction SilentlyContinue
+    }
 }
 
 # Appending forever would grow without bound, so keep the tail.
@@ -87,8 +96,24 @@ if (-not $Headless) {
         # guard exists to prevent in the first place. Telling them where it
         # already is and letting them switch to it themselves reads as correct
         # instead of broken.
+        # The app keeps running when the browser drops its connection (a tab
+        # put to sleep, standby), so it can be up with no page open. Then
+        # there is no tab to switch to, and opening one is what the user
+        # wants - the exception to the rule above.
+        $openPages = $null
+        if (Test-Path $sessionFile) {
+            $openPages = (Get-Content $sessionFile -TotalCount 1 -ErrorAction SilentlyContinue)
+            if ($openPages) { $openPages = $openPages.Trim() }
+        }
+
         Write-Host ""
-        if ($runningUrl) {
+        if ($runningUrl -and $openPages -eq "0") {
+            Write-LaunchLog "INFO: Instance running without an open page - opening $runningUrl"
+            Write-Host "KiwiMS is already running - opening it in your browser:" -ForegroundColor Yellow
+            Write-Host "  $runningUrl" -ForegroundColor Gray
+            Start-Process $runningUrl
+        }
+        elseif ($runningUrl) {
             Write-Host "KiwiMS is already running - switch to its browser tab:" -ForegroundColor Yellow
             Write-Host "  $runningUrl" -ForegroundColor Gray
         }
@@ -141,21 +166,64 @@ try {
     # first launch. The project .Renviron sets this too; repeated here so a
     # damaged install still starts quickly.
     $env:RENV_CONFIG_SANDBOX_ENABLED = "FALSE"
+    # Only the lock holder's app reports its open pages; a headless run must
+    # not overwrite the count of the interactive instance
+    if (-not $Headless) {
+        Remove-Item $sessionFile -Force -ErrorAction SilentlyContinue
+        $env:KIWIMS_SESSION_FILE = $sessionFile
+    }
 
-    # R's stdout/stderr, one pair of files per launcher. These used to be fixed
-    # names truncated at every start, so a concurrent launch would erase the
-    # output another instance was still polling for its "Listening on" line.
-    $appLog = Join-Path $logDirectory "app_output_$PID.log"
-    $appErrLog = Join-Path $logDirectory "app_error_$PID.log"
+    # Every start logs into a session folder of its own (see app/logic/
+    # logging.R): <log folder>\<date>\KiwiMS_<date>_id<n>, holding the session
+    # log the app writes, R's console output, this start's launcher lines and
+    # the output of its deconvolution runs. The launcher makes it, as it opens
+    # the console logs before R starts. The log folder is fixed, in the user's
+    # profile where KiwiMS can always write (it used to be a setting).
+    $logRoot = Join-Path $logDirectory "logs"
+    $today = Get-Date -Format "yyyy-MM-dd"
+    do {
+        $sessionId = Get-Random -Minimum 1000 -Maximum 10000
+        $sessionName = "KiwiMS_${today}_id$sessionId"
+        $sessionDir = Join-Path (Join-Path $logRoot $today) $sessionName
+    } while ((Test-Path $sessionDir) -or (Test-Path "$sessionDir.log"))
+    New-Item -ItemType Directory -Force -Path $sessionDir | Out-Null
+    $sessionLauncherLog = Join-Path $sessionDir "launcher.log"
+    $env:KIWIMS_SESSION_DIR = $sessionDir
+    Write-LaunchLog "INFO: Session folder $sessionDir"
+
+    # R's console, in the session folder. Fixed names truncated at every start
+    # used to let a concurrent launch erase the output another instance was
+    # still polling for its "Listening on" line. R sends its messages,
+    # warnings and errors to its output (see $shinyCmd), so console.log has
+    # all of it in the order it happened; console_stderr.log gets only what
+    # bypasses R's console (native code, a hard crash) and stays empty
+    # otherwise.
+    $appLog = Join-Path $sessionDir "console.log"
+    $appErrLog = Join-Path $sessionDir "console_stderr.log"
     "" | Set-Content $appLog -Encoding utf8
     "" | Set-Content $appErrLog -Encoding utf8
+    $env:KIWIMS_APP_LOG = $appLog
+    $env:KIWIMS_APP_ERR_LOG = $appErrLog
 
-    # Bound the per-instance logs: keep the six newest files (this run's pair
-    # plus the two before it) and drop the rest, so a user who launched twice
-    # can still hand over the relevant pair without them piling up forever.
-    Get-ChildItem -Path $logDirectory -Filter "app_*_*.log" -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime -Descending |
-        Select-Object -Skip 6 |
+    # The console logs grow with every deconvolution (R reports its progress
+    # there), so only the ten newest sessions keep theirs; the session logs
+    # themselves stay
+    Get-ChildItem -Path $logRoot -Directory -ErrorAction SilentlyContinue |
+        Get-ChildItem -Directory -Filter "KiwiMS_*_id*" -ErrorAction SilentlyContinue |
+        Sort-Object CreationTime -Descending |
+        Select-Object -Skip 10 |
+        ForEach-Object {
+            Get-ChildItem -Path $_.FullName -Filter "console*.log" -ErrorAction SilentlyContinue |
+                Remove-Item -Force -ErrorAction SilentlyContinue
+        }
+    # Console logs of the earlier layout (one pair per launcher PID in this
+    # folder, where nothing writes them any more) and its deconvolution logs:
+    # kept two weeks after an update, in case they are asked for, then dropped
+    Get-ChildItem -Path $logDirectory -File -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Name -match '^(app_(output|error)_\d+\.log|deconvolution\.log|last_cluster_log\.txt)$' -and
+            $_.LastWriteTime -lt (Get-Date).AddDays(-14)
+        } |
         Remove-Item -Force -ErrorAction SilentlyContinue
 
     # Timed so launch.log records where a slow start went. The first launch
@@ -164,8 +232,14 @@ try {
     # tree is roughly 3.6 GB across 60,000 files.
     $startupTimer = [System.Diagnostics.Stopwatch]::StartNew()
 
-    # Start R in a background process (non-blocking).
-    $shinyCmd = "shiny::runApp('app.R', launch.browser = FALSE)"
+    # R's own messages, warnings and errors in English, whatever the language
+    # of Windows: the logs read the same on every machine, and the Help
+    # dialog recognises an error in them (app/logic/support_bundle.R).
+    $env:LANGUAGE = "en"
+
+    # Start R in a background process (non-blocking). R's messages go to its
+    # output from the first line on, package start-up messages included.
+    $shinyCmd = "sink(stdout(), type = 'message'); shiny::runApp('app.R', launch.browser = FALSE)"
     $rProcess = Start-Process -FilePath $RPortablePath `
         -ArgumentList "--no-save", "--no-restore", "-e", "`"$shinyCmd`"" `
         -WorkingDirectory $appRoot `
@@ -176,7 +250,7 @@ try {
     Write-LaunchLog "INFO: R process started (PID $($rProcess.Id))"
 
     if (-not $Headless) {
-        # Poll app_output.log for Shiny's "Listening on <url>" line, then open
+        # Poll console.log for Shiny's "Listening on <url>" line, then open
         # the browser via Start-Process (uses the system default browser handler).
         Write-Host "Waiting for app to start..." -ForegroundColor Yellow
         $appUrl = $null
@@ -197,9 +271,10 @@ try {
                 $hintShown = $true
             }
             if ($rProcess.HasExited) {
-                throw "R process exited unexpectedly (code $($rProcess.ExitCode)). See: $appErrLog"
+                throw "R process exited unexpectedly (code $($rProcess.ExitCode)). See: $appLog"
             }
-            # Shiny prints "Listening on <url>" to stderr; check both logs.
+            # Shiny prints "Listening on <url>" as a message, so to console.log;
+            # both logs are checked, in case R's messages did not get there.
             $lines = (Get-Content $appLog    -ErrorAction SilentlyContinue) +
             (Get-Content $appErrLog -ErrorAction SilentlyContinue)
             foreach ($line in $lines) {
@@ -266,9 +341,10 @@ try {
 
     Write-Host "App is running. Close this window to stop the application." -ForegroundColor Green
     $rProcess.WaitForExit()
-    # Exit code 0  → clean shutdown (e.g. user closed the browser tab).
+    # Exit code 0  → clean shutdown (e.g. user closed the browser tab; a
+    # connection the browser dropped on its own leaves the app running).
     if ($rProcess.ExitCode -ne 0 -and $null -eq $appUrl) {
-        throw "R process exited with code $($rProcess.ExitCode). See: $appErrLog"
+        throw "R process exited with code $($rProcess.ExitCode). See: $appLog"
     }
 }
 catch {
@@ -277,6 +353,32 @@ catch {
     Write-Host "FAILED TO START" -ForegroundColor Red
     Write-Host "Error: $($_.Exception.Message)"
     Write-Host "Detailed logs: $logFile"
+
+    # The app's Support Package needs the app; without it the launcher packs
+    # the logs itself, so a failed start can be reported in one file
+    try {
+        $supportZip = Join-Path $logDirectory ("KiwiMS_support_" + (Get-Date -Format "yyyy-MM-dd_HHmm") + ".zip")
+        # This start's session folder (launcher.log, console logs, the session
+        # log if R got that far), or the shared launch log alone when the
+        # start failed before the folder was made
+        $supportFiles = @()
+        if ($sessionDir -and (Test-Path $sessionDir)) {
+            $supportFiles += @(Get-ChildItem -Path $sessionDir -File -ErrorAction SilentlyContinue)
+        }
+        if (Test-Path $logFile) {
+            $supportFiles += @(Get-Item $logFile)
+        }
+        if ($supportFiles.Count -gt 0) {
+            Compress-Archive -Path $supportFiles.FullName -DestinationPath $supportZip -Force
+            Write-LaunchLog "INFO: Support package written: $supportZip"
+            Write-Host ""
+            Write-Host "Please send this file along with your report:" -ForegroundColor Yellow
+            Write-Host "  $supportZip" -ForegroundColor Gray
+        }
+    }
+    catch {
+        Write-LaunchLog "WARN: Support package not written: $($_.Exception.Message)"
+    }
     if (-not $Headless) { pause }
     exit 1
 }
@@ -287,6 +389,7 @@ finally {
         # The URL is only meaningful while this process is alive. Leaving it
         # behind would send the next launch to a dead port.
         Remove-Item $urlFile -Force -ErrorAction SilentlyContinue
+        Remove-Item $sessionFile -Force -ErrorAction SilentlyContinue
 
         # Windows releases an abandoned mutex on its own when a process dies, so
         # this only matters for a clean exit - but releasing it before the handle

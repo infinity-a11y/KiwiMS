@@ -563,6 +563,20 @@ decon_omp_threads <- function(n_workers) {
   max(1L, as.integer(logical %/% max(1L, n_workers)))
 }
 
+# Keeps Windows out of standby while a deconvolution runs, so a long run is not
+# cut off: ES_CONTINUOUS | ES_SYSTEM_REQUIRED for the thread Python runs on,
+# held until that process ends - the worker, or the sequential run - and never
+# longer, also when the run is cancelled. The display may still turn off, and
+# closing the lid still sleeps. A user-level call, no rights needed; best
+# effort.
+decon_keep_awake_py <- paste(
+  "import sys",
+  "if sys.platform == 'win32':",
+  "    import ctypes",
+  "    ctypes.windll.kernel32.SetThreadExecutionState(ctypes.c_uint(0x80000001))",
+  sep = "\n"
+)
+
 # decon_worker_init(): One-shot bring-up of a parallel worker ----
 # Runs INSIDE a worker.  Returns "ok" or an "error: ..." string and never
 # signals a condition, so a single bad worker cannot abort the whole run.
@@ -606,6 +620,18 @@ decon_worker_init <- function(python_exe, lib_paths, omp_threads = NULL) {
       # Forces PyInitialize() and warms the UniDec import so the first sample
       # this worker handles pays no interpreter or import cost.
       reticulate::py_run_string("import unidec")
+      # No standby while the worker lives (see decon_keep_awake_py; written
+      # out here, as the worker gets this function without its globals)
+      try(
+        reticulate::py_run_string(paste(
+          "import sys",
+          "if sys.platform == 'win32':",
+          "    import ctypes",
+          "    ctypes.windll.kernel32.SetThreadExecutionState(ctypes.c_uint(0x80000001))",
+          sep = "\n"
+        )),
+        silent = TRUE
+      )
 
       canon <- function(p) {
         tolower(normalizePath(p, winslash = "/", mustWork = FALSE))
@@ -1021,6 +1047,7 @@ deconvolute <- function(
     # here is left for the first sample to report as before.
     t0 <- proc.time()[["elapsed"]]
     try(reticulate::py_run_string("import unidec"), silent = TRUE)
+    try(reticulate::py_run_string(decon_keep_awake_py), silent = TRUE)
     message(sprintf(
       "%s: Python started after %.1f s.",
       DECON_ENGINE_READY,
@@ -1054,10 +1081,11 @@ deconvolute <- function(
   # below, so a one-off first-run cost is not reported as pool start-up time.
   decon_prepare_python_home(python_exe)
 
-  outfile <- file.path(
-    Sys.getenv("LOCALAPPDATA"),
-    "KiwiMS",
-    "last_cluster_log.txt"
+  # The workers' output: in the session's log folder when the app started the
+  # run (KIWIMS_DECON_WORKER_LOG), the fixed file of earlier releases otherwise
+  outfile <- Sys.getenv(
+    "KIWIMS_DECON_WORKER_LOG",
+    unset = file.path(Sys.getenv("LOCALAPPDATA"), "KiwiMS", "last_cluster_log.txt")
   )
   outfile <- tryCatch(
     {

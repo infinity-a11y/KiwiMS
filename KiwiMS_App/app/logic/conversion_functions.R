@@ -3158,8 +3158,12 @@ ellipsis_html <- function(hidden, sep) {
   )
 }
 
+# The separator is an element so the card CSS can tell a pill right after it
+# from one at the start of the line.
 #' @export
-collapse_species <- function(values, max_shown = 2, sep = " | ") {
+collapse_species <- function(values,
+                             max_shown = 2,
+                             sep = " <span class=\"species-sep\">|</span> ") {
   if (length(values) <= max_shown) {
     return(paste(values, collapse = sep))
   }
@@ -11491,52 +11495,142 @@ sample_view_species_cols <- c(
   "Int. Prot. [%]"
 )
 
-# Column names of the Sample View without their proteoform, so "Int. Prot.
-# (21,816.8 Da) [%]" reads as "Int. Prot. [%]": the column pickers, bars and
-# number formats of the hits table name the columns this way.
+# Name of a proteoform's column in the Sample View: its number PFk in place
+# of "Prot." ("Int. PF2 [%]"), and "PFk [Da]" for its mass (Theor. Prot.
+# [Da]). One name per entry of `pf`.
+pf_col_name <- function(col, pf) {
+  vapply(
+    pf,
+    function(p) {
+      if (col == "Theor. Prot. [Da]") {
+        paste0(p, " [Da]")
+      } else {
+        sub("Prot\\.", p, col)
+      }
+    },
+    character(1),
+    USE.NAMES = FALSE
+  )
+}
+
+# Number of each row's proteoform: the position of its mass among the masses
+# declared for its protein (Mass n of the Proteins table), so PF1 is Mass 1
+# there. Without the declaration (results loaded on their own) the masses of
+# a protein are numbered by size.
+proteoform_numbers <- function(protein, species, proteins_table) {
+  num <- function(x) suppressWarnings(as.numeric(as.character(x)))
+  out <- rep(NA_integer_, length(species))
+  protein <- as.character(protein)
+  for (p in unique(protein[!is.na(species)])) {
+    at <- which(protein %in% p & !is.na(species))
+    row <- if (is.null(proteins_table)) NA else match(p, proteins_table$Protein)
+    declared <- if (is.na(row)) {
+      numeric(0)
+    } else {
+      num(unlist(proteins_table[row, -1, drop = FALSE]))
+    }
+    k <- vapply(
+      species[at],
+      function(m) {
+        hit <- which(abs(declared - m) < 0.01)
+        if (length(hit)) hit[which.min(abs(declared[hit] - m))] else NA_integer_
+      },
+      integer(1)
+    )
+    if (anyNA(k)) {
+      k <- match(species[at], sort(unique(species[at])))
+    }
+    out[at] <- k
+  }
+  out
+}
+
+# Kind of each column of the Sample View by its name: "binding" ("Binding PF1
+# + 2× Mass 1 [%]"), "total" ("Total Binding Mass 1 [%]"), "complex" ("Tot.
+# Binding (A) [%]"), "mass" ("Mass 1", "A·Mass 1"), NA for the others
+#' @export
+sample_view_col_kind <- function(cols) {
+  kind <- rep(NA_character_, length(cols))
+  kind[grepl("^(.+·)?Mass [0-9]+$", cols)] <- "mass"
+  kind[grepl("^Tot\\. Binding \\(.+\\) \\[%\\]$", cols)] <- "complex"
+  kind[grepl("^Total Binding (.+·)?Mass [0-9]+ \\[%\\]$", cols)] <- "total"
+  kind[grepl(
+    "^Binding (P|PF[0-9]+) \\+ [0-9]+× (.+·)?Mass [0-9]+\\*? \\[%\\]$",
+    cols
+  )] <- "binding"
+  kind
+}
+
+# Column names of the Sample View without their proteoform, so "Int. PF2
+# [%]" reads as "Int. Prot. [%]" and "PF2 [Da]" as "Theor. Prot. [Da]": the
+# column pickers, bars and number formats of the hits table name the columns
+# this way.
 #' @export
 hits_base_col <- function(cols) {
-  sub(" \\([0-9][0-9,.]* Da\\) \\[", " [", cols)
+  cols <- sub("^PF[0-9]+ \\[Da\\]$", "Theor. Prot. [Da]", cols)
+  sub("^(Meas\\.|Δ|Int\\.) PF[0-9]+ \\[", "\\1 Prot. [", cols)
 }
 
 # Header tooltip of a hits table column: its full name, with the proteoform,
 # compound and mass shift a Sample View column belongs to
 #' @export
 hits_col_tooltip <- function(cols) {
+  of_compound <- function(x) if (nzchar(x)) paste0(" of ", x) else ""
   vapply(
     cols,
     function(col) {
       if (col %in% names(hits_col_full_names)) {
         return(hits_col_full_names[[col]])
       }
+      pf_mass <- regmatches(col, regexec("^PF([0-9]+) \\[Da\\]$", col))[[1]]
+      if (length(pf_mass)) {
+        return(paste0(
+          "Proteoform ",
+          pf_mass[2],
+          ": declared mass ",
+          pf_mass[2],
+          " of the protein (Proteins table) [Da]"
+        ))
+      }
       base <- hits_base_col(col)
       if (base != col && base %in% names(hits_col_full_names)) {
-        species <- sub("^.* \\(([0-9][0-9,.]* Da)\\) \\[.*$", "\\1", col)
-        return(paste0(hits_col_full_names[[base]], ", proteoform ", species))
+        pf <- sub("^.*PF([0-9]+).*$", "\\1", col)
+        return(paste0(hits_col_full_names[[base]], ", proteoform ", pf))
       }
       binding <- regmatches(
         col,
-        regexec("^Binding \\((.*?)(\\*?)\\)x([0-9]+) \\[%\\]$", col)
+        regexec(
+          "^Binding (P|PF([0-9]+)) \\+ ([0-9]+)× (([^·]+)·)?Mass ([0-9]+)(\\*?) \\[%\\]$",
+          col
+        )
       )[[1]]
       if (length(binding)) {
         return(paste0(
           "Binding [%] of ",
-          binding[2],
-          " at stoichiometry ",
-          binding[4],
           if (nzchar(binding[3])) {
+            paste("proteoform", binding[3])
+          } else {
+            "the protein"
+          },
+          " carrying ",
+          binding[4],
+          " × mass shift ",
+          binding[7],
+          of_compound(binding[6]),
+          if (nzchar(binding[8])) {
             ". *: not the preferred reading of its peak, not counted in the totals"
           }
         ))
       }
       total <- regmatches(
         col,
-        regexec("^Total Binding \\((.*)\\) \\[%\\]$", col)
+        regexec("^Total Binding (([^·]+)·)?Mass ([0-9]+) \\[%\\]$", col)
       )[[1]]
       if (length(total)) {
         return(paste0(
-          "Total binding of ",
-          total[2],
+          "Total binding of mass shift ",
+          total[4],
+          of_compound(total[3]),
           ": its preferred readings over all proteoforms and stoichiometries"
         ))
       }
@@ -11553,13 +11647,13 @@ hits_col_tooltip <- function(cols) {
       }
       mass <- regmatches(
         col,
-        regexec("^Mass ([0-9]+)( \\((.*)\\))?$", col)
+        regexec("^(([^·]+)·)?Mass ([0-9]+)$", col)
       )[[1]]
       if (length(mass)) {
         return(paste0(
           "Declared mass shift ",
-          mass[2],
-          if (nzchar(mass[4])) paste0(" of ", mass[4]),
+          mass[4],
+          of_compound(mass[3]),
           " [Da]"
         ))
       }
@@ -11570,24 +11664,31 @@ hits_col_tooltip <- function(cols) {
   )
 }
 
-# Sample View of the hits table: one row per sample. The values of a
-# proteoform carry its mass in the column name ("Int. Prot. (21,816.8 Da)
-# [%]") once a sample holds several proteoforms; Theor. Prot. [Da] is then
-# left out, the name says it. A sample declaring several compounds lists them
-# in Cmp Name, its binding columns carry the compound and each complex gets its
-# own Tot. Binding (compound) [%]. Every complex gets a column per declared
-# mass shift of its compound (Mass n of the Compounds table), proteoform and
-# stoichiometry, e.g. "Binding (21,816.8 Da, Mass 1)x1 [%]"; a reading that is
-# not the preferred one of its peak is marked with an asterisk, "Binding
-# (Mass 2*)x1 [%]". Total Binding (Mass n) sums the preferred readings of the
+# Sample View of the hits table: one row per sample. Once a sample holds
+# several proteoforms, they are numbered as in the Proteins table (PF1 is the
+# protein's Mass 1): PF1 [Da], PF2 [Da] hold their masses in place of Theor.
+# Prot. [Da], and their values carry the number ("Int. PF2 [%]"). A sample
+# declaring several compounds lists them in Cmp Name, its binding columns
+# carry the compound ("A·Mass 1") and each complex gets its own Tot. Binding
+# (compound) [%]. Every complex gets a column per declared mass shift of its
+# compound (Mass n of the Compounds table), proteoform and stoichiometry,
+# written as the complex: "Binding PF1 + 2× Mass 1 [%]" is proteoform 1 with
+# two adducts of mass shift 1 ("P" without proteoforms). A reading that is not
+# the preferred one of its peak is marked with an asterisk, "Binding P + 1×
+# Mass 2* [%]". Total Binding Mass n [%] sums the preferred readings of the
 # shift over all proteoforms and stoichiometries, so the totals of a sample add
 # up to its Tot. Binding [%] as the rows of the Adduct View do.
+# A shift (of a proteoform) a complex was found with gets a column for every
+# stoichiometry up to max_multiples, the Max. Stoichiometry of the run, also
+# one no sample reached. A measured sample declaring the compound reads 0 %
+# where it has no complex, not N/A: no binding is as much a result as binding.
 #' @export
 transform_per_adduct <- function(
   hits_table,
   proteins_table,
   compounds_table,
-  samples_table
+  samples_table,
+  max_multiples = NULL
 ) {
   if (!nrow(hits_table)) {
     return(hits_table)
@@ -11622,24 +11723,11 @@ transform_per_adduct <- function(
   by_species <- several(species)
   by_cmp <- several(cmp)
 
-  # Proteoforms by mass; more decimals only if one place cannot tell them
-  # apart
-  species_set <- sort(unique(species[!is.na(species)]))
-  species_lab <- paste(fmt_species_mass(species_set), "Da")
-  if (anyDuplicated(species_lab)) {
-    species_lab <- paste(
-      formatC(species_set, format = "f", digits = 3, big.mark = ","),
-      "Da"
-    )
-  }
-  with_species <- function(col, lab) {
-    vapply(
-      lab,
-      function(l) sub("^(.*) (\\[[^]]*\\])$", paste0("\\1 (", l, ") \\2"), col),
-      character(1),
-      USE.NAMES = FALSE
-    )
-  }
+  # Proteoforms by number, PF1 being Mass 1 of the protein in the Proteins
+  # table; their masses are the values of the PFk [Da] columns
+  pf <- proteoform_numbers(hits_table$Protein, species, proteins_table)
+  species_set <- sort(unique(pf[!is.na(pf)]))
+  species_lab <- paste0("PF", species_set)
 
   # Compounds in the order of the Compounds table
   cmp_rank <- function(x) {
@@ -11670,28 +11758,23 @@ transform_per_adduct <- function(
     USE.NAMES = FALSE
   )
 
-  # Values of each proteoform, expanded in place of the plain column
+  # Values of each proteoform, expanded in place of the plain column: PF1
+  # [Da], PF2 [Da] for Theor. Prot. [Da], Int. PF1 [%] for Int. Prot. [%]
   col_order <- names(hits_table)[!names(hits_table) %in% complex_cols]
   if (by_species) {
-    first_of_species <- !duplicated(paste(sample, species)) & !is.na(species)
-    species_cols <- intersect(
-      setdiff(sample_view_species_cols, "Theor. Prot. [Da]"),
-      names(hits_table)
-    )
+    first_of_species <- !duplicated(paste(sample, pf)) & !is.na(pf)
+    species_cols <- intersect(sample_view_species_cols, names(hits_table))
     col_order <- unlist(lapply(col_order, function(col) {
-      if (col == "Theor. Prot. [Da]") {
-        return(character(0))
-      }
       if (!col %in% species_cols) {
         return(col)
       }
-      with_species(col, species_lab)
+      pf_col_name(col, species_lab)
     }))
     for (k in seq_along(species_set)) {
-      rows <- which(first_of_species & species == species_set[k])
+      rows <- which(first_of_species & pf == species_set[k])
       at <- match(samples, sample[rows])
       for (col in species_cols) {
-        out[[with_species(col, species_lab[k])]] <- hits_table[[col]][
+        out[[pf_col_name(col, species_lab[k])]] <- hits_table[[col]][
           rows[at]
         ]
       }
@@ -11778,35 +11861,45 @@ transform_per_adduct <- function(
     stoich <- as.character(hits_table$`Bind. Stoich.`[cx])
     preferred <- is_preferred[cx]
     binding <- num(hits_table$`Binding [%]`[cx])
-    sp_k <- match(species[cx], species_set)
-
-    # The totals pool the proteoforms, as Tot. Binding [%] and the kinetics
-    # do: they are forms of one protein
-    total_qualifier <- paste0(
-      if (by_cmp) paste0(cmp[cx], ", ") else "",
-      "Mass ",
-      mass_no
-    )
-    qualifier <- paste0(
-      if (by_species) paste0(species_lab[sp_k], ", ") else "",
-      total_qualifier
-    )
-    mass_col <- if (by_cmp) {
-      paste0("Mass ", mass_no, " (", cmp[cx], ")")
+    sp_k <- if (by_species) {
+      match(pf[cx], species_set)
     } else {
-      paste("Mass", mass_no)
+      rep(0, length(cx))
+    }
+
+    # Column names write the complex out: the protein (P) or its proteoform
+    # (PFk) with k adducts of a mass shift, "Binding PF1 + 2× Mass 1 [%]",
+    # "Binding P + 1× A·Mass 2* [%]" (a reading not preferred). The totals
+    # pool the proteoforms, as Tot. Binding [%] and the kinetics do: they are
+    # forms of one protein.
+    shift_name <- function(compound, mass_no) {
+      paste0(if (by_cmp) paste0(compound, "·") else "", "Mass ", mass_no)
+    }
+    binding_name <- function(sp, compound, mass_no, stoich, star = FALSE) {
+      paste0(
+        "Binding ",
+        if (by_species) species_lab[sp] else "P",
+        " + ",
+        stoich,
+        "× ",
+        shift_name(compound, mass_no),
+        ifelse(star, "*", ""),
+        " [%]"
+      )
+    }
+    total_name <- function(compound, mass_no) {
+      paste0("Total Binding ", shift_name(compound, mass_no), " [%]")
     }
 
     # Column order by what the names tell apart. Without the compound (or the
     # proteoform) in the name, the samples of different compounds share a
     # column, which must not take the rank of whichever compound came first.
     rank_cmp <- if (by_cmp) cmp_rank(cmp[cx]) else 0
-    sp_k <- if (by_species) sp_k else rep(0, length(cx))
 
     readings <- rbind(
       data.frame(
         sample = sample[cx],
-        col = mass_col,
+        col = shift_name(cmp[cx], mass_no),
         value = shift,
         stat = "first",
         rank_cmp = rank_cmp,
@@ -11818,14 +11911,7 @@ transform_per_adduct <- function(
       ),
       data.frame(
         sample = sample[cx],
-        col = paste0(
-          "Binding (",
-          qualifier,
-          ifelse(preferred, "", "*"),
-          ")x",
-          stoich,
-          " [%]"
-        ),
+        col = binding_name(sp_k, cmp[cx], mass_no, stoich, !preferred),
         value = binding,
         stat = "sum",
         rank_cmp = rank_cmp,
@@ -11837,7 +11923,7 @@ transform_per_adduct <- function(
       ),
       data.frame(
         sample = sample[cx],
-        col = paste0("Total Binding (", total_qualifier, ") [%]"),
+        col = total_name(cmp[cx], mass_no),
         value = ifelse(preferred, binding, 0),
         stat = "sum",
         rank_cmp = rank_cmp,
@@ -11848,6 +11934,105 @@ transform_per_adduct <- function(
         rank_star = 0
       )
     )
+
+    # 0 % readings of each stoichiometry, for every measured sample under the
+    # columns of its compound (and proteoform): the shifts a complex was found
+    # with as preferred reading - of that compound when the names carry it,
+    # else of any compound declaring the shift. Summed with the readings above
+    # they change nothing where a complex was found.
+    seen <- unique(data.frame(
+      key = if (by_cmp) cmp[cx] else "",
+      mass_no = mass_no,
+      sp = sp_k
+    )[preferred, , drop = FALSE])
+    measured <- which(
+      !is.na(cmp) & !is.na(num(hits_table$`Binding [%]`))
+    )
+    present <- unique(data.frame(
+      sample = sample[measured],
+      cmp = cmp[measured],
+      key = if (by_cmp) cmp[measured] else rep("", length(measured)),
+      sp = if (by_species) {
+        match(pf[measured], species_set)
+      } else {
+        rep(0, length(measured))
+      }
+    ))
+    seeds <- merge(present[!is.na(present$sp), ], seen, by = c("key", "sp"))
+    # The shift as the sample's compound declares it; a compound without it
+    # has nothing to read there
+    seeds$shift <- as.numeric(mapply(
+      function(compound, k) {
+        declared <- declared_shifts[[compound]]
+        if (is.null(declared)) {
+          row <- match(compound, compounds_table$Compound)
+          declared <- if (is.na(row)) {
+            numeric(0)
+          } else {
+            num(unlist(compounds_table[row, -1, drop = FALSE]))
+          }
+        }
+        if (k <= length(declared)) declared[k] else NA_real_
+      },
+      seeds$cmp,
+      seeds$mass_no,
+      USE.NAMES = FALSE
+    ))
+    seeds <- seeds[!is.na(seeds$shift), , drop = FALSE]
+    stoichs <- seq_len(max(
+      suppressWarnings(as.integer(max_multiples)),
+      num(stoich),
+      na.rm = TRUE
+    ))
+    if (nrow(seeds)) {
+      seeds <- seeds[rep(seq_len(nrow(seeds)), each = length(stoichs)), ]
+      seeds$stoich <- rep(stoichs, length.out = nrow(seeds))
+      seed_rank_cmp <- if (by_cmp) cmp_rank(seeds$cmp) else 0
+      readings <- rbind(
+        readings,
+        data.frame(
+          sample = seeds$sample,
+          col = shift_name(seeds$cmp, seeds$mass_no),
+          value = seeds$shift,
+          stat = "first",
+          rank_cmp = seed_rank_cmp,
+          rank_mass = seeds$mass_no,
+          rank_species = 0,
+          rank_kind = 0,
+          rank_stoich = 0,
+          rank_star = 0
+        ),
+        data.frame(
+          sample = seeds$sample,
+          col = binding_name(
+            seeds$sp,
+            seeds$cmp,
+            seeds$mass_no,
+            seeds$stoich
+          ),
+          value = 0,
+          stat = "sum",
+          rank_cmp = seed_rank_cmp,
+          rank_mass = seeds$mass_no,
+          rank_species = seeds$sp,
+          rank_kind = 1,
+          rank_stoich = seeds$stoich,
+          rank_star = 0
+        ),
+        data.frame(
+          sample = seeds$sample,
+          col = total_name(seeds$cmp, seeds$mass_no),
+          value = 0,
+          stat = "sum",
+          rank_cmp = seed_rank_cmp,
+          rank_mass = seeds$mass_no,
+          rank_species = Inf,
+          rank_kind = 2,
+          rank_stoich = 0,
+          rank_star = 0
+        )
+      )
+    }
 
     first <- !duplicated(readings$col)
     cols <- readings[first, ]
@@ -12104,7 +12289,9 @@ render_hits_table <- function(
   }
 
   adduct_fmt_cols <- setdiff(
-    grep("^(Binding|Total Binding) \\(", names(hits_table), value = TRUE),
+    names(hits_table)[
+      sample_view_col_kind(names(hits_table)) %in% c("binding", "total")
+    ],
     bar_chart
   )
   if (length(adduct_fmt_cols) > 0) {
@@ -13300,7 +13487,95 @@ conversion_tracking_js <- "
     };
   "
 
-# Make compound distribution plot for proteins tab
+# Unmatched [%] of the rows' samples as numbers (NA without the column): the
+# share of the spectrum no protein or complex peak explains, one value per
+# sample repeated on its rows
+row_unmatched <- function(tbl) {
+  if (!"Unmatched [%]" %in% names(tbl)) {
+    return(rep(NA_real_, nrow(tbl)))
+  }
+  suppressWarnings(as.numeric(as.character(tbl$`Unmatched [%]`)))
+}
+
+# The compound distribution's hover line of a bar: the binding, or why a
+# sample has none to show
+distribution_binding_text <- function(binding) {
+  binding <- suppressWarnings(as.numeric(as.character(binding)))
+  ifelse(
+    is.na(binding),
+    "N/A (no protein or complex peak)",
+    paste0(sprintf("%.2f", binding), "%")
+  )
+}
+
+# Markers of the samples' Unmatched [%] over their bars in the compound
+# distribution. A sample with a high share unmatched - an unexpected mass
+# shift, say - stands out whatever its binding, also one without any.
+# `sample` is the name shown, `sample_id` the full ID a click opens.
+add_unmatched_markers <- function(
+  plot,
+  x,
+  y,
+  sample,
+  compound,
+  theme,
+  sample_id = sample
+) {
+  keep <- !is.na(y)
+  if (!any(keep)) {
+    return(plot)
+  }
+  outline <- if (theme == "light") "black" else "#ffffff"
+  plotly::add_trace(
+    plot,
+    x = x[keep],
+    y = y[keep],
+    customdata = I(as.character(sample_id[keep])),
+    type = "scatter",
+    mode = "markers",
+    name = "Unmatched [%]",
+    marker = list(
+      symbol = "circle",
+      size = 9,
+      color = status_colors(theme)$unmatched,
+      line = list(color = outline, width = 1)
+    ),
+    cliponaxis = FALSE,
+    hovertemplate = paste0(
+      "<span style='opacity: 0.8'>Unmatched [%]:</span> <b>",
+      sprintf("%.2f", y[keep]),
+      "%</b>",
+      "<extra><div style='text-align: left;'>",
+      "<span style='opacity: 0.8;'>Cmp Name: </span><b>",
+      compound[keep],
+      "</b><br>",
+      "<span style='opacity: 0.8;'>Sample ID: </span><b>",
+      sample[keep],
+      "</b>",
+      "</div></extra>"
+    ),
+    hoverlabel = list(align = "left", valign = "middle"),
+    showlegend = TRUE,
+    inherit = FALSE
+  ) |>
+    plotly::layout(
+      # The bars keep theirs hidden, so the markers' key is the only entry
+      showlegend = TRUE,
+      legend = list(
+        orientation = "h",
+        x = 1,
+        xanchor = "right",
+        y = 1.02,
+        yanchor = "bottom",
+        bgcolor = "rgba(0,0,0,0)"
+      )
+    )
+}
+
+# Make compound distribution plot for proteins tab. Samples a compound was
+# declared for but not found in keep their place in its group, with an empty
+# bar at 0 % (none if nothing was measured); show_unmatched marks every
+# sample's Unmatched [%].
 #' @export
 prot_compound_distribution <- function(
   hits_summary,
@@ -13312,11 +13587,19 @@ prot_compound_distribution <- function(
   distribution_labels = NULL,
   theme = "light",
   colors = NULL,
-  sample_order = NULL
+  sample_order = NULL,
+  show_unmatched = FALSE
 ) {
-  tbl <- hits_summary[
-    hits_summary$Protein %in% protein & is_complex_row(hits_summary),
+  rows <- hits_summary[
+    hits_summary$Protein %in% protein & !is.na(hits_summary$`Cmp Name`),
   ]
+  rows$.unmatched <- row_unmatched(rows)
+  complex <- is_complex_row(rows)
+  tbl <- rows[complex, ]
+
+  # A sample of a compound without its complex: one row for the empty bar
+  pair <- paste(rows$`Cmp Name`, rows$`Sample ID`, sep = "\r")
+  empty <- rows[!pair %in% pair[complex] & !duplicated(pair), ]
 
   # Adducts of different proteoforms are separate bar segments and need labels
   # that tell them apart
@@ -13329,33 +13612,52 @@ prot_compound_distribution <- function(
   }
 
   # Merge non-preferred hits (same peak) into their preferred counterpart
+  tbl <- if (nrow(tbl)) {
+    tbl |>
+      dplyr::group_by(`Cmp Name`, `Sample ID`, `Peak Signal [Da]`) |>
+      dplyr::reframe(
+        `Protein` = `Protein`[1],
+        `Tot. Binding [%]` = suppressWarnings(as.numeric(as.character(
+          `Tot. Binding [%]`[1]
+        ))),
+        `truncSample_ID` = `truncSample_ID`[1],
+        .unmatched = .unmatched[1],
+        mass_stoich_raw = mass_shift_label(
+          `Theor. Cmp [Da]`,
+          `Bind. Stoich.`,
+          species_mass = `Theor. Prot. [Da]`[1],
+          multi_species = multi_species
+        ),
+        `Theor. Cmp [Da]` = `Theor. Cmp [Da]`[Preferred == "TRUE"][1],
+        `Bind. Stoich.` = `Bind. Stoich.`[Preferred == "TRUE"][1],
+        `Binding [%]` = {
+          pref <- `Binding [%]`[Preferred == "TRUE"]
+          suppressWarnings(as.numeric(as.character(
+            if (length(pref) > 0) pref[1] else `Binding [%]`[1]
+          )))
+        }
+      ) |>
+      dplyr::select(-`Peak Signal [Da]`)
+  }
+
+  if (nrow(empty)) {
+    tot <- suppressWarnings(as.numeric(as.character(empty$`Tot. Binding [%]`)))
+    tbl <- dplyr::bind_rows(
+      tbl,
+      tibble::tibble(
+        `Cmp Name` = empty$`Cmp Name`,
+        `Sample ID` = empty$`Sample ID`,
+        `Protein` = empty$Protein,
+        `Tot. Binding [%]` = tot,
+        `truncSample_ID` = empty$truncSample_ID,
+        .unmatched = empty$.unmatched,
+        mass_stoich_raw = "",
+        `Binding [%]` = ifelse(is.na(tot), NA_real_, 0)
+      )
+    )
+  }
+
   tbl <- tbl |>
-    # dplyr::arrange(
-    #   `Cmp Name`,
-    #   `Sample ID`,
-    #   `Peak Signal [Da]`,
-    #   dplyr::desc(Preferred == "TRUE"),
-    #   dplyr::desc(suppressWarnings(as.numeric(`Theor. Cmp [Da]`)))
-    # ) |>
-    dplyr::group_by(`Cmp Name`, `Sample ID`, `Peak Signal [Da]`) |>
-    dplyr::reframe(
-      `Protein` = `Protein`[1],
-      `Tot. Binding [%]` = `Tot. Binding [%]`[1],
-      `truncSample_ID` = `truncSample_ID`[1],
-      mass_stoich_raw = mass_shift_label(
-        `Theor. Cmp [Da]`,
-        `Bind. Stoich.`,
-        species_mass = `Theor. Prot. [Da]`[1],
-        multi_species = multi_species
-      ),
-      `Theor. Cmp [Da]` = `Theor. Cmp [Da]`[Preferred == "TRUE"][1],
-      `Bind. Stoich.` = `Bind. Stoich.`[Preferred == "TRUE"][1],
-      `Binding [%]` = {
-        pref <- `Binding [%]`[Preferred == "TRUE"]
-        if (length(pref) > 0) pref[1] else `Binding [%]`[1]
-      }
-    ) |>
-    dplyr::select(-`Peak Signal [Da]`) |>
     dplyr::arrange(`Cmp Name`, `Tot. Binding [%]`, `Binding [%]`, `Sample ID`)
 
   .sid_raw <- if (truncate_names) tbl$truncSample_ID else tbl$`Sample ID`
@@ -13398,6 +13700,8 @@ prot_compound_distribution <- function(
     )
   }
 
+  # The full ID goes with every bar and marker, so a click can open the sample
+  tbl$.sid <- as.character(tbl$`Sample ID`)
   tbl <- tbl |>
     dplyr::group_by(`Cmp Name`) |>
     dplyr::mutate(
@@ -13441,7 +13745,13 @@ prot_compound_distribution <- function(
 
   range <- c(
     0,
-    max(tbl$`Tot. Binding [%]`) + 10
+    max(
+      tbl$`Tot. Binding [%]`,
+      if (show_unmatched) tbl$.unmatched,
+      0,
+      na.rm = TRUE
+    ) +
+      10
   )
 
   if (!is.null(distribution_scale) && distribution_scale == "100") {
@@ -13465,15 +13775,20 @@ prot_compound_distribution <- function(
   grid_color <- if (theme == "light") "rgba(0,0,0,0.2)" else "#7f7f7fff"
 
   if (length(unique(tbl$`Cmp Name`)) > 1) {
+    # Compounds at 0, 1, ... on a linear axis rather than as categories, so
+    # the Unmatched [%] markers can sit over the bars within a compound
+    cmp_levels <- levels(tbl$`Cmp Name`)
     layout_list <- list(
       barmode = "relative",
       font = list(size = 12, color = axis_color),
       paper_bgcolor = 'rgba(0,0,0,0)',
       plot_bgcolor = 'rgba(0,0,0,0)',
       xaxis = list(
-        type = "category",
-        categoryorder = "array",
-        categoryarray = levels(tbl$`Cmp Name`),
+        type = "linear",
+        tickmode = "array",
+        tickvals = seq_along(cmp_levels) - 1,
+        ticktext = cmp_levels,
+        range = c(-0.5, length(cmp_levels) - 0.5),
         showgrid = FALSE,
         zeroline = FALSE,
         color = axis_color,
@@ -13534,6 +13849,9 @@ prot_compound_distribution <- function(
       c(list(bar_chart), layout_list)
     )
 
+    # One Unmatched [%] marker per sample of a compound, over its bar
+    markers <- list()
+
     for (i in 1:nrow(tbl)) {
       row <- tbl[i, ]
       g <- row$Group[[1]]
@@ -13548,6 +13866,24 @@ prot_compound_distribution <- function(
           local_i_map$Group == g
       ]
       off <- -local_cluster_width / 2 + local_i * (bar_width + group_gap)
+      x_pos <- match(as.character(row$`Cmp Name`[[1]]), cmp_levels) - 1
+
+      marker_key <- paste(row$`Cmp Name`[[1]], g, sep = "\r")
+      if (is.null(markers[[marker_key]])) {
+        markers[[marker_key]] <- data.frame(
+          x = x_pos + off + bar_width / 2,
+          y = row$.unmatched[[1]],
+          sample = as.character(row$`Sample ID`[[1]]),
+          sample_id = row$.sid[[1]],
+          compound = as.character(row$`Cmp Name`[[1]])
+        )
+      }
+
+      y_val <- as.numeric(as.character(row$`Binding [%]`[[1]]))
+      # Nothing measured: no bar, the marker says what there is to say
+      if (is.na(y_val)) {
+        next
+      }
 
       if (color_variable == "Compounds") {
         var <- as.character(row$`Cmp Name`[[1]])
@@ -13555,16 +13891,22 @@ prot_compound_distribution <- function(
         var <- as.character(row$`Sample ID`[[1]])
       }
 
-      col <- colors[[var]]
-      y_val <- row$`Binding [%]`[[1]]
+      col <- unname(colors[var])
+      if (is.na(col)) {
+        col <- status_colors(theme)$muted
+      }
 
       hover_text <- paste0(
         "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
-        row$mass_stoich_raw[[1]],
+        if (nzchar(row$mass_stoich_raw[[1]])) {
+          row$mass_stoich_raw[[1]]
+        } else {
+          "No complex found"
+        },
         "</b><br>",
         "<span style='opacity: 0.8'>Binding [%]:</span> <b>",
-        sprintf("%.2f", as.numeric(as.character(row$`Binding [%]`[[1]]))),
-        "%</b>",
+        distribution_binding_text(y_val),
+        "</b>",
         "<extra><div style='text-align: left;'>",
         "<span style='opacity: 0.8;;'>Cmp Name: </span><b>",
         row$`Cmp Name`[[1]],
@@ -13577,8 +13919,8 @@ prot_compound_distribution <- function(
 
       bar_chart <- plotly::add_bars(
         bar_chart,
-        x = row$`Cmp Name`[[1]],
-        y = as.numeric(as.character(y_val)),
+        x = x_pos,
+        y = y_val,
         offsetgroup = local_i,
         offset = off,
         width = bar_width,
@@ -13592,6 +13934,7 @@ prot_compound_distribution <- function(
           color = col,
           line = list(color = axis_color, width = 1)
         ),
+        customdata = I(row$.sid[[1]]),
         yaxis = yax,
         showlegend = FALSE
       )
@@ -13599,6 +13942,19 @@ prot_compound_distribution <- function(
 
     bar_chart <- bar_chart |>
       plotly::layout(xaxis = list(title = list(text = NULL)))
+
+    if (show_unmatched && length(markers)) {
+      markers <- do.call(rbind, markers)
+      bar_chart <- add_unmatched_markers(
+        bar_chart,
+        x = markers$x,
+        y = markers$y,
+        sample = markers$sample,
+        compound = markers$compound,
+        theme = theme,
+        sample_id = markers$sample_id
+      )
+    }
   } else {
     bar_chart <- plotly::plot_ly(data = tbl) |>
       plotly::add_trace(
@@ -13671,11 +14027,14 @@ cmp_compound_distribution <- function(
   distribution_labels = NULL,
   theme = "light",
   colors = NULL,
-  sample_order = NULL
+  sample_order = NULL,
+  show_unmatched = FALSE
 ) {
-  # A sample without any protein or complex peak has no binding to show
+  # Every sample of the compound. One without any protein or complex peak has
+  # no binding to show, but keeps its place for its Unmatched [%].
   tbl <- hits_summary |>
-    dplyr::filter(`Cmp Name` == compound & !is.na(`Tot. Binding [%]`))
+    dplyr::filter(`Cmp Name` == compound)
+  tbl$.unmatched <- row_unmatched(tbl)
 
   # A sample the compound was declared for but not found in stays in the plot
   # with one empty bar at 0 %. Next to adducts, its rows without one (unbound
@@ -13706,6 +14065,7 @@ cmp_compound_distribution <- function(
       `Cmp Name` = `Cmp Name`[1],
       `Tot. Binding [%]` = `Tot. Binding [%]`[1],
       `truncSample_ID` = `truncSample_ID`[1],
+      .unmatched = .unmatched[1],
       # The empty bar of a sample without an adduct carries no label
       mass_stoich_raw = if (all(`Theor. Cmp [Da]` %in% c(NA, "N/A"))) {
         ""
@@ -13731,6 +14091,8 @@ cmp_compound_distribution <- function(
   if (length(sample_order)) {
     tbl <- tbl[order(match(tbl$`Sample ID`, sample_order)), , drop = FALSE]
   }
+  # The full ID goes with every bar and marker, so a click can open the sample
+  tbl$.sid <- as.character(tbl$`Sample ID`)
   tbl <- dplyr::mutate(
     tbl,
     `Sample ID` = if (truncate_names) `truncSample_ID` else `Sample ID`
@@ -13782,43 +14144,53 @@ cmp_compound_distribution <- function(
   axis_color <- if (theme == "light") "black" else "#ffffff"
   grid_color <- if (theme == "light") "rgba(0,0,0,0.2)" else "#7f7f7fff"
 
-  bar_chart <- plotly::plot_ly(data = tbl) |>
-    plotly::add_trace(
-      x = ~`Sample ID`,
-      y = ~`Binding [%]`,
-      color = color,
-      colors = colors,
-      type = 'bar',
-      name = ~mass_stoich,
-      hovertemplate = ~ paste0(
-        "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
-        mass_stoich_raw,
-        "</b><br>",
-        "<span style='opacity: 0.8'>Binding [%]:</span> <b>",
-        sprintf("%.2f", `Binding [%]`),
-        "%</b>",
-        "<extra><div style='text-align: left;'>",
-        "<span style='opacity: 0.8;;'>Cmp Name: </span><b>",
-        `Cmp Name`,
-        "</b><br>",
-        "<span style='opacity: 0.8;'>Sample ID: </span><b>",
-        `Sample ID`,
-        "</b>",
-        "</div></extra>"
-      ),
-      hoverlabel = list(align = "left", valign = "middle"),
-      text = ~mass_stoich,
-      textposition = 'inside',
-      textfont = list(size = 12),
-      marker = list(line = list(color = axis_color, width = 1)),
-      showlegend = FALSE
-    )
+  # A sample without a measured binding has no bar; it keeps its place on the
+  # axis through the levels of Sample ID
+  bars <- tbl[!is.na(tbl$`Binding [%]`), , drop = FALSE]
+  bar_chart <- if (!nrow(bars)) {
+    plotly::plot_ly()
+  } else {
+    plotly::plot_ly(data = bars) |>
+      plotly::add_trace(
+        x = ~`Sample ID`,
+        y = ~`Binding [%]`,
+        color = color,
+        colors = colors,
+        type = 'bar',
+        name = ~mass_stoich,
+        hovertemplate = ~ paste0(
+          "<span style='opacity: 0.8'>Mass Shift:</span> <b>",
+          ifelse(nzchar(mass_stoich_raw), mass_stoich_raw, "No complex found"),
+          "</b><br>",
+          "<span style='opacity: 0.8'>Binding [%]:</span> <b>",
+          distribution_binding_text(`Binding [%]`),
+          "</b>",
+          "<extra><div style='text-align: left;'>",
+          "<span style='opacity: 0.8;;'>Cmp Name: </span><b>",
+          `Cmp Name`,
+          "</b><br>",
+          "<span style='opacity: 0.8;'>Sample ID: </span><b>",
+          `Sample ID`,
+          "</b>",
+          "</div></extra>"
+        ),
+        hoverlabel = list(align = "left", valign = "middle"),
+        text = ~mass_stoich,
+        textposition = 'inside',
+        textfont = list(size = 12),
+        marker = list(line = list(color = axis_color, width = 1)),
+        customdata = ~.sid,
+        showlegend = FALSE
+      )
+  }
 
-  if (length(tbl$`Sample ID`) <= 20) {
-    totals <- dplyr::group_by(tbl, `Sample ID`) |>
+  if (length(tbl$`Sample ID`) <= 20 && nrow(bars)) {
+    # A sample without a measured binding gets no total
+    totals <- dplyr::group_by(bars, `Sample ID`) |>
       dplyr::summarize(
         total_val = sum(`Binding [%]`)
-      )
+      ) |>
+      dplyr::filter(!is.na(total_val))
     bar_chart <- bar_chart |>
       plotly::add_trace(
         data = totals,
@@ -13844,9 +14216,29 @@ cmp_compound_distribution <- function(
       )
   }
 
+  if (show_unmatched) {
+    first <- !duplicated(tbl$`Sample ID`)
+    bar_chart <- add_unmatched_markers(
+      bar_chart,
+      # The factor keeps the bars' sample order on the axis
+      x = tbl$`Sample ID`[first],
+      y = tbl$.unmatched[first],
+      sample = as.character(tbl$`Sample ID`[first]),
+      compound = as.character(tbl$`Cmp Name`[first]),
+      theme = theme,
+      sample_id = tbl$.sid[first]
+    )
+  }
+
   range <- c(
     0,
-    max(tbl$`Tot. Binding [%]`, 0, na.rm = TRUE) + 10
+    max(
+      tbl$`Tot. Binding [%]`,
+      if (show_unmatched) tbl$.unmatched,
+      0,
+      na.rm = TRUE
+    ) +
+      10
   )
 
   if (!is.null(distribution_scale) && distribution_scale == "100") {
@@ -13881,10 +14273,22 @@ cmp_compound_distribution <- function(
     )
 }
 
+# Whether the Overview selection has anything for its compound distribution:
+# a sample with a binding (0 % included) or an Unmatched [%] to show
+#' @export
+overview_has_distribution <- function(hits_summary, protein, compounds) {
+  tbl <- overview_subset(hits_summary, protein, compounds)
+  binding <- suppressWarnings(as.numeric(as.character(tbl$`Tot. Binding [%]`)))
+  any(!is.na(binding) | !is.na(row_unmatched(tbl)))
+}
+
 # Compound distribution of the Overview selection: one protein with the picked
 # compounds. A single compound gets the per-sample bars of its samples, the
 # ones it was declared for but not found in at 0 %; several are grouped by
-# compound. NULL when the selection has no binding event to show.
+# compound, the ones without a hit included. Every sample stays in the plot,
+# also one without a protein or complex peak: show_unmatched marks its
+# Unmatched [%], which is what makes a sample with an unexpected mass shift
+# stand out. NULL when the selection has nothing to show.
 #' @export
 overview_compound_distribution <- function(
   hits_summary,
@@ -13897,10 +14301,11 @@ overview_compound_distribution <- function(
   distribution_labels = NULL,
   theme = "light",
   colors = NULL,
-  sample_order = NULL
+  sample_order = NULL,
+  show_unmatched = TRUE
 ) {
   tbl <- overview_subset(hits_summary, protein, compounds)
-  if (!any(is_complex_row(tbl))) {
+  if (!overview_has_distribution(hits_summary, protein, compounds)) {
     return(NULL)
   }
 
@@ -13920,14 +14325,14 @@ overview_compound_distribution <- function(
   # its concentration, time or protein (see overview_colors())
   mode <- if (identical(color_variable, "Compounds")) "Compounds" else "Samples"
 
-  # Compounds without a hit add nothing to the plot, so one with hits among
-  # several picked ones is shown on its own
-  hit_cmps <- unique(tbl$`Cmp Name`[is_complex_row(tbl)])
+  # Compounds without a hit stay in the plot: their samples' 0 % and
+  # Unmatched [%] are results too
+  cmps <- unique(tbl$`Cmp Name`)
 
-  if (length(hit_cmps) == 1) {
+  if (length(cmps) == 1) {
     cmp_compound_distribution(
       hits_summary = tbl,
-      compound = hit_cmps,
+      compound = cmps,
       color_variable = mode,
       truncate_names = truncate_names,
       key = key,
@@ -13935,7 +14340,8 @@ overview_compound_distribution <- function(
       distribution_labels = distribution_labels,
       theme = theme,
       colors = colors,
-      sample_order = sample_order
+      sample_order = sample_order,
+      show_unmatched = show_unmatched
     )
   } else {
     prot_compound_distribution(
@@ -13948,7 +14354,8 @@ overview_compound_distribution <- function(
       distribution_labels = distribution_labels,
       theme = theme,
       colors = colors,
-      sample_order = sample_order
+      sample_order = sample_order,
+      show_unmatched = show_unmatched
     )
   }
 }
@@ -13965,7 +14372,7 @@ overview_distribution_note <- function(hits_summary, protein, compounds) {
   if (nrow(tbl) && all(is.na(tbl$`Tot. Binding [%]`))) {
     "No protein or complex peak found"
   } else {
-    "No binding events"
+    "No samples to show"
   }
 }
 
@@ -14643,14 +15050,17 @@ stats_scatter <- function(
   metric_col <- if (show == "Unmatched") "% Unmatched" else "% Correct"
   metric_label <- if (show == "Unmatched") "Unmatched [%]" else "Correct [%]"
 
-  # A sample without any protein or complex peak (NA binding) is not drawn
+  # Every sample with a hit rate. One without any protein or complex peak has
+  # no binding; it is drawn at 0 % with an open marker, as its hit rate is what
+  # shows it up - most of its spectrum unmatched, e.g. an unexpected mass shift.
   df <- dplyr::distinct(hits_summary, Sample, .keep_all = TRUE)
-  df <- df[
-    !is.na(df[[metric_col]]) & !is.na(df$`Total % Binding`),
-    ,
-    drop = FALSE
-  ]
-  df$`Total % Binding` <- df$`Total % Binding` * 100
+  df <- df[!is.na(df[[metric_col]]), , drop = FALSE]
+  df$.unmeasured <- is.na(df$`Total % Binding`)
+  df$`Total % Binding` <- ifelse(
+    df$.unmeasured,
+    0,
+    df$`Total % Binding` * 100
+  )
 
   font_color <- if (theme == "light") "black" else "white"
   grid_color <- if (theme == "light") {
@@ -14718,7 +15128,11 @@ stats_scatter <- function(
           Sample,
           "<br>",
           "Tot. Binding [%]: ",
-          round(`Total % Binding`, 2),
+          ifelse(
+            .unmeasured,
+            "N/A (no protein or complex peak)",
+            round(`Total % Binding`, 2)
+          ),
           "<br>",
           metric_label,
           ": ",
@@ -14737,10 +15151,44 @@ stats_scatter <- function(
       hovertemplate = "%{text}<extra></extra>",
       marker = list(
         color = color_map[[grp]],
-        symbol = symbol_map[[grp]],
+        # Per point only where the group has an open one
+        symbol = if (any(sub_df$.unmeasured)) {
+          I(ifelse(
+            sub_df$.unmeasured,
+            paste0(symbol_map[[grp]], "-open"),
+            symbol_map[[grp]]
+          ))
+        } else {
+          symbol_map[[grp]]
+        },
         size = 8,
         opacity = 0.8,
-        line = list(color = dot_border_color, width = 1)
+        line = list(
+          color = dot_border_color,
+          width = if (any(sub_df$.unmeasured)) {
+            I(ifelse(sub_df$.unmeasured, 2, 1))
+          } else {
+            1
+          }
+        )
+      )
+    )
+  }
+
+  # Key to the open markers, only when there are some
+  if (any(df$.unmeasured)) {
+    p <- plotly::add_markers(
+      p,
+      x = list(NA),
+      y = list(NA),
+      name = "No protein or complex peak",
+      showlegend = TRUE,
+      hoverinfo = "skip",
+      marker = list(
+        color = font_color,
+        symbol = "circle-open",
+        size = 8,
+        line = list(width = 2)
       )
     )
   }
