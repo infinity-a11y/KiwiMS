@@ -27,7 +27,7 @@ Setup and conventions are in the [kit README](../README.md).
 - **The R2 control reads binding:** `0_0min_R2` reads **9.20 %** although no
   compound was added. See [Background under the complex peak](#background-under-the-complex-peak).
 - **Kinetics** (complex picker: MLKL › BI-8925 only):
-  - kinact/KI **334.1** M⁻¹s⁻¹, 95 % CI 300.7–378.6;
+  - kinact/KI **334.1** M⁻¹s⁻¹, 95 % CI 297.0–377.3;
   - status saturated, so kinact and KI are shown;
   - one warning: "Plateaus differ";
   - kinact/KI by replicate series: R1 327.9, R2 341.0.
@@ -53,7 +53,7 @@ stored peak lists exactly) and running the baseline on them:
 
 | Threshold | Samples at 100 % | kinact/KI [95 % CI] | 21,638.84 (limit values) | 21,816.84 (limit values) |
 |---|---|---|---|---|
-| 0.07 (kit) | 13 | 334.1 [300.7–378.6] | 357.6 (14/120) | 231.2 (59/120) |
+| 0.07 (kit) | 13 | 334.1 [297.0–377.3] | 357.6 (14/120) | 231.2 (59/120) |
 | 0.05 (default) | 7 | 353.1 [315.0–394.8] | 356.4 (8/120) | 343.2 (41/120) |
 | 0.03 | 1 | 357.4 [322.4–394.5] | 353.3 (2/120) | 375.1 (14/120) |
 

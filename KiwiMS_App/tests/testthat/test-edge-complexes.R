@@ -68,15 +68,15 @@ test_that("CX3a: two complexes, one per concentration range, are fitted apart", 
   # BI-8925 keeps the 0 µM controls, BI-8926 has none
   expect_equal(c(k1$n, k2$n), c(62, 60))
   expect_rounded(k1$ratio, 224.3)
-  expect_rounded(k1$ci[[1]], 199.9)
+  expect_rounded(k1$ci[[1]], 199.4)
   expect_rounded(k1$ci[[2]], 251.0)
   expect_equal(k1$status, "linear")
   expect_equal(k1$warnings, "Saturation not reached")
   expect_rounded(k1$series[["R1"]], 220.2)
   expect_rounded(k1$series[["R2"]], 228.6)
   expect_rounded(k2$ratio, 330.4)
-  expect_rounded(k2$ci[[1]], 306.9)
-  expect_rounded(k2$ci[[2]], 357.2)
+  expect_rounded(k2$ci[[1]], 303.8)
+  expect_rounded(k2$ci[[2]], 358.2)
   expect_equal(k2$status, "linear")
 })
 

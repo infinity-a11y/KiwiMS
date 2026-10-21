@@ -149,7 +149,7 @@ experiment. 244 samples, 4 per condition. Build it with
 nothing beyond the test; it is there to look at the plots with the most series.
 
 - **Declaration:** passes, with no hint. The Replicate column shows R1–R4.
-- **Kinetics:** kinact/KI 328.3 (95 % CI 306.4–356.3); per series R1 327.9,
+- **Kinetics:** kinact/KI 328.3 (95 % CI 302.3–356.4); per series R1 327.9,
   R2 341.0 (as in B0), R3 326.6, R4 320.0.
 - **What to look at:**
   - Binding Curve, Samples: every concentration in its colour and shape, the

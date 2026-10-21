@@ -187,8 +187,8 @@ test_that("MA1e: compounds in separate samples are not checked against each othe
   k <- r$kinetics[["MLKL + BI-8925"]]
   expect_equal(k$n, 61)
   expect_rounded(k$ratio, 327.9)
-  expect_rounded(k$ci[[1]], 281.2)
-  expect_rounded(k$ci[[2]], 387.5)
+  expect_rounded(k$ci[[1]], 276.3)
+  expect_rounded(k$ci[[2]], 395.2)
   expect_setequal(k$warnings, c("Plateaus differ", "Early 0 % readings"))
   # The DECOY mass picks up the BI-8925 complex 2.8-3.3 Da off: a plausible
   # kinact/KI for a compound that is not there, flagged only by its wide CI
@@ -196,8 +196,8 @@ test_that("MA1e: compounds in separate samples are not checked against each othe
   decoy <- r$kinetics[["MLKL + DECOY"]]
   expect_equal(decoy$n, 61)
   expect_rounded(decoy$ratio, 277.0)
-  expect_rounded(decoy$ci[[1]], 177.7)
-  expect_rounded(decoy$ci[[2]], 438.3)
+  expect_rounded(decoy$ci[[1]], 182.4)
+  expect_rounded(decoy$ci[[2]], 442.2)
   expect_equal(decoy$status, "linear")
   expect_true("Saturation not reached" %in% decoy$warnings)
   # Each complex holds one series only: no per-series fits
@@ -255,8 +255,8 @@ test_that("MA2: an unbound mass equal to a complex is read as unbound", {
 
   k <- r$kinetics[["MLKL + BI-8925"]]
   expect_rounded(k$ratio, 290.3)
-  expect_rounded(k$ci[[1]], 257.5)
-  expect_rounded(k$ci[[2]], 342.6)
+  expect_rounded(k$ci[[1]], 254.2)
+  expect_rounded(k$ci[[2]], 331.5)
   # The species carrying the most signal never binds, so it cannot be the
   # reference of the Proteoforms tab
   expect_equal(k$reference, 21816.84)
@@ -351,8 +351,8 @@ test_that("MA5a: two close shifts of one compound resolve to the closer one", {
   expect_rounded(kit_all_samples(r), 70.30, 2)
   k <- r$kinetics[["MLKL + BI-8925"]]
   expect_rounded(k$ratio, 334.9)
-  expect_rounded(k$ci[[1]], 301.6)
-  expect_rounded(k$ci[[2]], 379.1)
+  expect_rounded(k$ci[[1]], 300.1)
+  expect_rounded(k$ci[[2]], 378.9)
   expect_rounded(k$proteoforms[["21638.84"]]$ratio, 358.8)
 })
 

@@ -2717,6 +2717,9 @@ div[data-value="Conversion"] .tab-pane {
   width: 100%;
   align-content: center;
   text-align: center;
+  // The spinner container is display: contents, so without this the spinner
+  // centres on the whole card (header included) instead of the value area
+  position: relative;
 }
 
 .kobs-val div:where(.shiny-html-output):has(> *).recalculating > * {

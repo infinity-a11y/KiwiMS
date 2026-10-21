@@ -276,6 +276,10 @@ empty_protein_table <- data.frame(
 # standard error of at most ki_max_rel_se and no further above the highest
 # measured concentration than ki_max_over_conc. Otherwise only kinact/KI is
 # reported.
+# The 95 % interval is a percentile interval of bootstrap_n refits; 999
+# makes its ends whole order statistics, (999 + 1) x 0.025 = 25 and 975
+# (Davison & Hinkley 1997), and keeps their Monte Carlo error near 2 % of
+# the interval width.
 #' @export
 kinetics_settings <- list(
   curvature_alpha = 0.05,
@@ -283,7 +287,7 @@ kinetics_settings <- list(
   plateau_max_spread = 10,
   ki_max_rel_se = 0.5,
   ki_max_over_conc = 2,
-  bootstrap_n = 200,
+  bootstrap_n = 999,
   bootstrap_min_success = 0.8,
   bootstrap_seed = 20260917L,
   curve_points = 500

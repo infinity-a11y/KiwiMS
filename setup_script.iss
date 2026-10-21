@@ -361,8 +361,12 @@ begin
     UpdateProgress(82);
     Exec(ExpandConstant('{tmp}\VC_redist.x64.exe'),
          '/quiet /norestart', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    SaveStringToFile(LogFile,
-      '[INFO] VC++ redistributable exit code: ' + IntToStr(ResultCode) + #13#10, True);
+    if ResultCode = 1638 then
+      SaveStringToFile(LogFile,
+        '[INFO] VC++ redistributable exit code: 1638 (a same or newer version is already installed).' + #13#10, True)
+    else
+      SaveStringToFile(LogFile,
+        '[INFO] VC++ redistributable exit code: ' + IntToStr(ResultCode) + #13#10, True);
 
     // Step 2: Run conda-unpack.exe via PowerShell so output is captured in the log
     UpdateStatus('Finalizing portable environment ...');
@@ -419,14 +423,30 @@ begin
     // `import unidec` or could ever be imported. With those excluded a clean run
     // exits 0, so a non-zero code in the log is a real signal rather than noise.
     // Either way the install continues: worst case the environment starts slower.
+    //
+    // Two passes, because the parallel workers are Python processes themselves.
+    // Each one imports part of the standard library (concurrent.futures.process,
+    // _compression, ...) and, through the .pth files, a few site-packages modules.
+    // Compiling those same files in parallel meant one worker replacing a .pyc
+    // another had open, which Windows refuses ("[WinError 5] Access denied" on a
+    // reinstall). So the standard library (~730 files, ~8 s) is compiled first,
+    // in one process, and only then site-packages in parallel. -S keeps site and
+    // the .pth files out of the workers, so all they load is standard library
+    // bytecode that is already final.
     UpdateStatus('Pre-compiling the Python environment ...');
     UpdateProgress(94);
     CompileCmd := '& ' + Chr(39) + ExpandConstant('{app}\env_kiwims\python.exe') + Chr(39)
-                + ' -W ignore -m compileall -q -f -j 0 --invalidation-mode unchecked-hash'
-                + ' -x ' + Chr(39) + '(netpubsub|wx_monitor|chargeTransform)\.py$' + Chr(39)
+                + ' -W ignore -m compileall -q -f --invalidation-mode unchecked-hash'
+                + ' -x ' + Chr(39) + '\\site-packages\\' + Chr(39)
                 + ' ' + Chr(39) + ExpandConstant('{app}\env_kiwims\Lib') + Chr(39)
                 + ' *>&1 | Add-Content -Path ' + Chr(39) + LogFile + Chr(39)
-                + '; exit $LASTEXITCODE';
+                + '; $stdlibExit = $LASTEXITCODE; '
+                + '& ' + Chr(39) + ExpandConstant('{app}\env_kiwims\python.exe') + Chr(39)
+                + ' -S -W ignore -m compileall -q -f -j 0 --invalidation-mode unchecked-hash'
+                + ' -x ' + Chr(39) + '(netpubsub|wx_monitor|chargeTransform)\.py$' + Chr(39)
+                + ' ' + Chr(39) + ExpandConstant('{app}\env_kiwims\Lib\site-packages') + Chr(39)
+                + ' *>&1 | Add-Content -Path ' + Chr(39) + LogFile + Chr(39)
+                + '; exit [math]::Max($stdlibExit, $LASTEXITCODE)';
     PsArgs := '-NonInteractive -ExecutionPolicy Bypass -Command ' + Chr(34) + CompileCmd + Chr(34);
 
     if not Exec('powershell.exe', PsArgs, ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then

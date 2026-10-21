@@ -59,8 +59,8 @@ test_that("B0: kinetics of the baseline", {
   k <- r$kinetics[["MLKL + BI-8925"]]
   expect_equal(k$n, 122)
   expect_rounded(k$ratio, 334.1)
-  expect_rounded(k$ci[[1]], 300.7)
-  expect_rounded(k$ci[[2]], 378.6)
+  expect_rounded(k$ci[[1]], 297.0)
+  expect_rounded(k$ci[[2]], 377.3)
   expect_equal(k$status, "saturated")
   expect_equal(k$warnings, "Plateaus differ")
   expect_rounded(k$series[["R1"]], 327.9)

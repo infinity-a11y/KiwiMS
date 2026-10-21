@@ -172,7 +172,7 @@ is blocked earlier by the one-compound rule (CX4).
   measured left out: 65.69.
 - **Kinetics:** the complex picker lists BI-8925 and DECOY under MLKL.
   - **BI-8925** (selected by default): its 61 R1 samples. kinact/KI
-    **327.9** M⁻¹s⁻¹ (CI 281.2–387.5). Warnings "Plateaus differ", "Early 0 %
+    **327.9** M⁻¹s⁻¹ (CI 276.3–395.2). Warnings "Plateaus differ", "Early 0 %
     readings".
   - **DECOY:** 61 R2 samples, the 2 not measured left out of the fit.
     kinact/KI **277.0** (CI 177.7–438.3), status linear, warning "Saturation

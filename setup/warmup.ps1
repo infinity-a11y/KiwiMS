@@ -95,12 +95,14 @@ else {
 if (Test-Path $python) {
     # `from unidec import tools` pulls in the Waters and Thermo readers, which
     # the worker's first sample would otherwise be the first to load.
+    # -X importtime writes a line to stderr as each module finishes loading, so
+    # a run that is stopped still shows in the log how far it got.
     $pyCmd = "import unidec, multiplierz, matplotlib.pyplot; from unidec import tools"
     try {
         $jobs += [pscustomobject]@{
             Name = "Python"
             Proc = Start-Process -FilePath $python `
-                -ArgumentList "-W ignore -c `"$pyCmd`"" `
+                -ArgumentList "-W ignore -X importtime -c `"$pyCmd`"" `
                 -WorkingDirectory $envRoot -NoNewWindow -PassThru `
                 -RedirectStandardOutput (Join-Path $env:TEMP "kiwims_warmup_py_out.txt") `
                 -RedirectStandardError  (Join-Path $env:TEMP "kiwims_warmup_py_err.txt")
@@ -119,13 +121,13 @@ $timer = [System.Diagnostics.Stopwatch]::StartNew()
 foreach ($job in $jobs) { $null = $job.Proc.Handle }
 
 foreach ($job in $jobs) {
+    $errFile = Join-Path $env:TEMP ("kiwims_warmup_{0}_err.txt" -f
+        $(if ($job.Name -eq "R") { "r" } else { "py" }))
     $remainingMs = [math]::Max(0, $timeoutSec * 1000 - $timer.ElapsedMilliseconds)
     if ($job.Proc.WaitForExit([int] $remainingMs)) {
         Write-Log ("INFO: {0} warm-up finished after {1:N1} s (exit {2})." -f
             $job.Name, $timer.Elapsed.TotalSeconds, $job.Proc.ExitCode)
         if ($job.Proc.ExitCode -ne 0) {
-            $errFile = Join-Path $env:TEMP ("kiwims_warmup_{0}_err.txt" -f
-                $(if ($job.Name -eq "R") { "r" } else { "py" }))
             Get-Content $errFile -Tail 15 -ErrorAction SilentlyContinue |
                 ForEach-Object { Write-Log "  $_" }
         }
@@ -133,6 +135,12 @@ foreach ($job in $jobs) {
     else {
         Stop-Tree $job.Proc
         Write-Log "WARN: $($job.Name) warm-up still running after $timeoutSec s and was stopped."
+        # The last modules that finished loading; the one it was stuck in is
+        # their parent, or the next one in the import chain.
+        $tail = @(Get-Content $errFile -Tail 8 -ErrorAction SilentlyContinue)
+        Write-Log ("  stderr had {0} lines; last:" -f
+            @(Get-Content $errFile -ErrorAction SilentlyContinue).Count)
+        $tail | ForEach-Object { Write-Log "  $_" }
     }
 }
 

@@ -5108,6 +5108,19 @@ log_kinact_ki_results <- function(results, units) {
       model_label,
       fmt_log(fit$p_curvature, 2)
     ),
+    if (!is.null(fit$starts)) {
+      sprintf(
+        "     │  └─ %d of %d starts converged, %d reached the best fit",
+        fit$starts_converged,
+        fit$starts,
+        fit$starts_at_best
+      )
+    },
+    sprintf(
+      "     ├─ Bootstrap: %d of %d refits converged",
+      fit$bootstrap_ok,
+      fit$bootstrap_n
+    ),
     if (results$Status == "saturated") {
       c(
         sprintf(
@@ -8387,6 +8400,12 @@ fit_global_kinetics <- function(points, model, groups, start) {
     upper = upper,
     control = minpack.lm::nls.lm.control(maxiter = 1000)
   )
+  # A fit stopped by the iteration or evaluation limit (or bad input) has not
+  # converged; the callers drop it like a fit that failed. 1-4 are the
+  # convergence criteria, 6-8 mean no further reduction is possible.
+  if (!fit$info %in% c(1:4, 6:8)) {
+    stop("global fit did not converge (nls.lm info ", fit$info, ")")
+  }
   cov <- nls_lm_covariance(fit, nrow(points), lower, upper)
 
   list(
@@ -8400,7 +8419,11 @@ fit_global_kinetics <- function(points, model, groups, start) {
     deviance = fit$deviance,
     n = nrow(points),
     np = np,
-    conc_levels = conc_levels
+    conc_levels = conc_levels,
+    # Termination code of nls.lm: 1-4 converged, 6-8 no further reduction
+    # possible (converged to machine precision); 5/9 hit the evaluation or
+    # iteration limit, 0 bad input
+    info = fit$info
   )
 }
 
@@ -8448,7 +8471,18 @@ fit_global_best <- function(points, model, groups, plateau_start, k2_start) {
   if (length(fits) == 0) {
     return(NULL)
   }
-  fits[[which.min(vapply(fits, function(f) f$deviance, numeric(1)))]]
+  # Converged starts often stop in a worse local minimum or on a bound; the
+  # best one wins. How many starts reached it is kept as a diagnostic: many
+  # independent starts landing in the same minimum is the evidence that it is
+  # the global one.
+  deviances <- vapply(fits, function(f) f$deviance, numeric(1))
+  best <- fits[[which.min(deviances)]]
+  best$starts <- nrow(combos)
+  best$starts_converged <- length(fits)
+  best$starts_at_best <- sum(
+    abs(deviances - best$deviance) <= 1e-6 * max(best$deviance, 1e-12)
+  )
+  best
 }
 
 # Extra-sum-of-squares F-test of a nested model pair: p value for the simpler
@@ -8926,7 +8960,9 @@ compute_kinact_ki <- function(kobs_result, units = units) {
     ) {
       return(c(NA_real_, NA_real_))
     }
-    unname(stats::quantile(x, c(0.025, 0.975), na.rm = TRUE))
+    # Type 6 takes the (B + 1) p-th ordered refit: with 999 refits exactly
+    # the 25th and 975th
+    unname(stats::quantile(x, c(0.025, 0.975), type = 6, na.rm = TRUE))
   }
   ratio_ci <- if (n_boot_ok > 0) ci(boot$ratio) else c(NA_real_, NA_real_)
   if (all(is.na(ratio_ci))) {
@@ -9162,7 +9198,12 @@ compute_kinact_ki <- function(kobs_result, units = units) {
       },
       plateaus = est$plateaus,
       bootstrap_n = kinetics_settings$bootstrap_n,
-      bootstrap_ok = n_boot_ok
+      bootstrap_ok = n_boot_ok,
+      # Multi-start of the selected fit: starts run, converged, and ending in
+      # the best minimum
+      starts = selected$starts,
+      starts_converged = selected$starts_converged,
+      starts_at_best = selected$starts_at_best
     ),
     Series = series,
     Two_Step = two_step,

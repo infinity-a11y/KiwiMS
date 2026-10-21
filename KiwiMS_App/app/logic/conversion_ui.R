@@ -697,7 +697,7 @@ kinact_ki_results_ui <- function(
   }
 
   diagnostics_panel <- bslib::nav_panel(
-    title = "Fit",
+    title = "Fit Diagnostics",
     shiny::div(
       class = "conversion-result-wrapper",
       shiny::div(
@@ -1339,13 +1339,13 @@ summary_results_ui <- function(ns, batch_control) {
                       )
                     )
                   ),
+                  # No spinner: its container is display: contents and the
+                  # empty output 0 x 0, so Shiny 1.14's resize/intersection
+                  # observers never see this tab open and the output stays
+                  # suspended (spinner forever)
                   bslib::card_body(
                     class = "protocol-stat-body",
-                    shinycssloaders::withSpinner(
-                      shiny::uiOutput(ns("pstat_correct_stat")),
-                      type = 1,
-                      color = "#7777f9"
-                    )
+                    shiny::uiOutput(ns("pstat_correct_stat"))
                   )
                 )
               ),
@@ -1373,11 +1373,7 @@ summary_results_ui <- function(ns, batch_control) {
                   ),
                   bslib::card_body(
                     class = "protocol-stat-body",
-                    shinycssloaders::withSpinner(
-                      shiny::uiOutput(ns("pstat_unmatched_stat")),
-                      type = 1,
-                      color = "#7777f9"
-                    )
+                    shiny::uiOutput(ns("pstat_unmatched_stat"))
                   )
                 )
               )
