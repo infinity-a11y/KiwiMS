@@ -2553,6 +2553,26 @@ server <- function(
       invisible(NULL)
     }
 
+    # Ids of the outputs a withSpinner() wraps in `ui`
+    spinner_output_ids <- function(x) {
+      if (inherits(x, "shiny.tag")) {
+        cls <- htmltools::tagGetAttribute(x, "class")
+        if (!is.null(cls) &&
+          "shiny-spinner-output-container" %in% strsplit(cls, " +")[[1]]) {
+          return(unlist(lapply(x$children, function(child) {
+            if (inherits(child, "shiny.tag")) {
+              htmltools::tagGetAttribute(child, "id")
+            }
+          })))
+        }
+        return(spinner_output_ids(x$children))
+      }
+      if (is.list(x)) {
+        return(unlist(lapply(x, spinner_output_ids)))
+      }
+      NULL
+    }
+
     render_result_interface <- function(key, ui) {
       # The first panel of a result: what exists now is not the result's
       if (length(iface_state$built) == 0) {
@@ -2561,6 +2581,14 @@ server <- function(
       # A panel built again (the kinetics of another complex) would show the
       # figures of its last build until the new ones arrive
       forget_panel_outputs(key)
+      # shinycssloaders shows a spinner on binding only for an output it has
+      # not seen a value of yet; one known from an earlier build (the result
+      # before a reset) showed none until it began recalculating, so cards
+      # still waiting their turn sat empty. Their spinners are reset here,
+      # before the panel arrives, as on a first build.
+      for (id in spinner_output_ids(ui)) {
+        shinycssloaders::showSpinner(sub(ns(""), "", id, fixed = TRUE))
+      }
       # The declaration interface and the result panels are mutually
       # exclusive; clearing it here also keeps its tab ids unique. It is
       # emptied in the browser at once too: the emptied output arrives with
