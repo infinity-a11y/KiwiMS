@@ -3106,6 +3106,9 @@ div[data-value="Conversion"] .tab-pane {
   text-align: center;
   height: 100%;
   padding: 1rem !important;
+  // The spinner container is display: contents; this keeps the spinner on
+  // the value area instead of the whole card
+  position: relative;
 
   > .shinycssloaders-container {
     height: 100%;
@@ -3271,6 +3274,8 @@ table .protocol-stat-warn {
   align-items: center;
   justify-content: center;
   font-size: 1.7em;
+  // Keeps the spinner on the value area (its container is display: contents)
+  position: relative;
 }
 
 .conc-hits-table {
@@ -4417,12 +4422,18 @@ table.dataTable tr.dtrg-group.dtrg-level-0 th {
   }
 }
 
+// One grid row per label and value (sample_info_rows()), so a value that
+// wraps in a narrow card keeps the labels below in line with their values
 .conversion-sample-protein-box {
-  display: flex;
-  justify-content: left;
-  gap: 3em;
+  display: grid;
+  grid-template-columns: auto auto;
+  column-gap: 3em;
   font-size: 0.9em;
   justify-self: center;
+
+  .conversion-sample-protein-names {
+    white-space: nowrap;
+  }
 }
 
 /* Mass Shifts cards (Overview) - at most three lines plus the

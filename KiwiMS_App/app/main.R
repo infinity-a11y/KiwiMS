@@ -160,6 +160,13 @@ ui <- function(id) {
           "static/js/connection.js?v=",
           get_kiwims_version()["version"]
         )
+      ),
+      # Lets spinner-wrapped outputs built hidden render once they are shown
+      shiny$tags$script(
+        src = paste0(
+          "static/js/hidden_outputs.js?v=",
+          get_kiwims_version()["version"]
+        )
       )
     ),
     shiny$div(id = "blocking-overlay"),

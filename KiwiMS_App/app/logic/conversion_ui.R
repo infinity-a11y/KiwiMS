@@ -67,7 +67,11 @@ kinact_ki_concentrations_panel <- function(
             placement = "top"
           )
         ),
-        shiny::uiOutput(ns(output_id))
+        shinycssloaders::withSpinner(
+          shiny::uiOutput(ns(output_id)),
+          type = 1,
+          color = "#7777f9"
+        )
       )
     )
   }
@@ -242,6 +246,14 @@ kinact_ki_concentrations_panel <- function(
                     selected = "samples",
                     size = "sm",
                     justified = TRUE
+                  ),
+                  # The concentration fitted on its own, dashed, next to its
+                  # curve of the global fit
+                  shinyWidgets::materialSwitch(
+                    ns("conc_tab_binding_show_single"),
+                    label = "Single-Concentration Fit",
+                    value = TRUE,
+                    right = TRUE
                   ),
                   style = "width:220px;"
                 )),
@@ -948,7 +960,11 @@ summary_results_ui <- function(ns, batch_control) {
                   shiny::div(
                     id = ns("protocol_log_body"),
                     class = "protocol-log-body",
-                    shiny::uiOutput(ns("summary_protocol"))
+                    shinycssloaders::withSpinner(
+                      shiny::uiOutput(ns("summary_protocol")),
+                      type = 1,
+                      color = "#7777f9"
+                    )
                   ),
                   bslib::tooltip(
                     shiny::actionButton(
@@ -1028,7 +1044,13 @@ summary_results_ui <- function(ns, batch_control) {
                 ),
                 bslib::card_body(
                   class = "protocol-stat-body",
-                  shiny::uiOutput(ns("pstat_alerts"))
+                  shinycssloaders::withSpinner(
+                    shiny::uiOutput(ns("pstat_alerts")),
+                    type = 1,
+                    color = "#7777f9",
+                    # The Alerts and Warnings cards are a single line high
+                    size = 0.4
+                  )
                 )
               )
             ),
@@ -1056,7 +1078,12 @@ summary_results_ui <- function(ns, batch_control) {
                 ),
                 bslib::card_body(
                   class = "protocol-stat-body",
-                  shiny::uiOutput(ns("pstat_warnings"))
+                  shinycssloaders::withSpinner(
+                    shiny::uiOutput(ns("pstat_warnings")),
+                    type = 1,
+                    color = "#7777f9",
+                    size = 0.4
+                  )
                 )
               )
             )
@@ -1088,7 +1115,11 @@ summary_results_ui <- function(ns, batch_control) {
               ),
               bslib::card_body(
                 class = "protocol-stat-body",
-                shiny::uiOutput(ns("pstat_n_samples")),
+                shinycssloaders::withSpinner(
+                  shiny::uiOutput(ns("pstat_n_samples")),
+                  type = 1,
+                  color = "#7777f9"
+                ),
               )
             )
           ),
@@ -1116,7 +1147,11 @@ summary_results_ui <- function(ns, batch_control) {
               ),
               bslib::card_body(
                 class = "protocol-stat-body",
-                shiny::uiOutput(ns("pstat_n_hits"))
+                shinycssloaders::withSpinner(
+                  shiny::uiOutput(ns("pstat_n_hits")),
+                  type = 1,
+                  color = "#7777f9"
+                )
               )
             )
           ),
@@ -1144,7 +1179,11 @@ summary_results_ui <- function(ns, batch_control) {
               ),
               bslib::card_body(
                 class = "protocol-stat-body",
-                shiny::uiOutput(ns("pstat_n_proteins"))
+                shinycssloaders::withSpinner(
+                  shiny::uiOutput(ns("pstat_n_proteins")),
+                  type = 1,
+                  color = "#7777f9"
+                )
               )
             )
           ),
@@ -1172,7 +1211,11 @@ summary_results_ui <- function(ns, batch_control) {
               ),
               bslib::card_body(
                 class = "protocol-stat-body",
-                shiny::uiOutput(ns("pstat_n_compounds"))
+                shinycssloaders::withSpinner(
+                  shiny::uiOutput(ns("pstat_n_compounds")),
+                  type = 1,
+                  color = "#7777f9"
+                )
               )
             )
           ),
@@ -1200,7 +1243,11 @@ summary_results_ui <- function(ns, batch_control) {
               ),
               bslib::card_body(
                 class = "protocol-stat-body",
-                shiny::uiOutput(ns("pstat_correct"))
+                shinycssloaders::withSpinner(
+                  shiny::uiOutput(ns("pstat_correct")),
+                  type = 1,
+                  color = "#7777f9"
+                )
               )
             )
           ),
@@ -1228,7 +1275,11 @@ summary_results_ui <- function(ns, batch_control) {
               ),
               bslib::card_body(
                 class = "protocol-stat-body",
-                shiny::uiOutput(ns("pstat_unmatched"))
+                shinycssloaders::withSpinner(
+                  shiny::uiOutput(ns("pstat_unmatched")),
+                  type = 1,
+                  color = "#7777f9"
+                )
               )
             )
           ),
@@ -1256,7 +1307,11 @@ summary_results_ui <- function(ns, batch_control) {
               ),
               bslib::card_body(
                 class = "protocol-stat-body",
-                shiny::uiOutput(ns("pstat_peak_tol"))
+                shinycssloaders::withSpinner(
+                  shiny::uiOutput(ns("pstat_peak_tol")),
+                  type = 1,
+                  color = "#7777f9"
+                )
               )
             )
           ),
@@ -1284,7 +1339,11 @@ summary_results_ui <- function(ns, batch_control) {
               ),
               bslib::card_body(
                 class = "protocol-stat-body",
-                shiny::uiOutput(ns("pstat_max_stoich"))
+                shinycssloaders::withSpinner(
+                  shiny::uiOutput(ns("pstat_max_stoich")),
+                  type = 1,
+                  color = "#7777f9"
+                )
               )
             )
           )
@@ -1339,13 +1398,13 @@ summary_results_ui <- function(ns, batch_control) {
                       )
                     )
                   ),
-                  # No spinner: its container is display: contents and the
-                  # empty output 0 x 0, so Shiny 1.14's resize/intersection
-                  # observers never see this tab open and the output stays
-                  # suspended (spinner forever)
                   bslib::card_body(
                     class = "protocol-stat-body",
-                    shiny::uiOutput(ns("pstat_correct_stat"))
+                    shinycssloaders::withSpinner(
+                      shiny::uiOutput(ns("pstat_correct_stat")),
+                      type = 1,
+                      color = "#7777f9"
+                    )
                   )
                 )
               ),
@@ -1373,7 +1432,11 @@ summary_results_ui <- function(ns, batch_control) {
                   ),
                   bslib::card_body(
                     class = "protocol-stat-body",
-                    shiny::uiOutput(ns("pstat_unmatched_stat"))
+                    shinycssloaders::withSpinner(
+                      shiny::uiOutput(ns("pstat_unmatched_stat")),
+                      type = 1,
+                      color = "#7777f9"
+                    )
                   )
                 )
               )

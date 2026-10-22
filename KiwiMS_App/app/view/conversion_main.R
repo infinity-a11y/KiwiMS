@@ -122,6 +122,7 @@ box::use(
       proteoform_paired_has_limits,
       proteoform_colors,
       collapse_species,
+      sample_info_rows,
       declared_masses,
       compound_mass_entries,
       protein_mass_entries,
@@ -3063,7 +3064,7 @@ server <- function(
                   signal_average <- collapse_species(ifelse(
                     is.na(measured_protein_mw),
                     "No signal",
-                    paste(fmt_mw(round(measured_protein_mw, 1), 1), "Da")
+                    paste0(fmt_mw(round(measured_protein_mw, 1), 1), "&nbsp;Da")
                   ))
                 }
 
@@ -3097,23 +3098,16 @@ server <- function(
                   )
                 ))
 
-                shiny::div(
-                  class = "conversion-sample-protein-box",
-                  shiny::div(
-                    class = "conversion-sample-protein-names",
-                    shiny::HTML("Name<br>Mw<br>Signal<br>Binding")
-                  ),
-                  shiny::div(
-                    class = "conversion-sample-protein",
-                    shiny::HTML(paste(
-                      protein,
-                      "<br>",
-                      collapse_species(paste(fmt_mw(theor_protein_mw), "Da")),
-                      "<br>",
-                      signal_average,
-                      "<br>",
-                      binding_text
-                    ))
+                sample_info_rows(
+                  c("Name", "Mw", "Signal", "Binding"),
+                  c(
+                    paste(protein, collapse = ", "),
+                    collapse_species(paste0(
+                      fmt_mw(theor_protein_mw),
+                      "&nbsp;Da"
+                    )),
+                    signal_average,
+                    binding_text
                   )
                 )
               }
@@ -3170,29 +3164,20 @@ server <- function(
                 ))
               }
 
-              shiny::div(
-                class = "conversion-sample-protein-box",
-                shiny::div(
-                  class = "conversion-sample-protein-names",
-                  shiny::HTML("Correct<br>Unmatched<br>Peaks")
-                ),
-                shiny::div(
-                  class = "conversion-sample-protein",
-                  shiny::HTML(paste0(
-                    fmt_metric(
-                      correct,
-                      warn = function(x) x < 50,
-                      err = function(x) x < 10
-                    ),
-                    "<br>",
-                    fmt_metric(
-                      unmatched,
-                      warn = function(x) x > 50,
-                      err = function(x) x > 90
-                    ),
-                    "<br>",
-                    sprintf("%d / %d matched", n_matched, n_peaks)
-                  ))
+              sample_info_rows(
+                c("Correct", "Unmatched", "Peaks"),
+                c(
+                  fmt_metric(
+                    correct,
+                    warn = function(x) x < 50,
+                    err = function(x) x < 10
+                  ),
+                  fmt_metric(
+                    unmatched,
+                    warn = function(x) x > 50,
+                    err = function(x) x > 90
+                  ),
+                  sprintf("%d / %d matched", n_matched, n_peaks)
                 )
               )
             })
@@ -5529,7 +5514,7 @@ server <- function(
                 units = view_units(),
                 points = conc_tab_binding_points_mode(),
                 kinact_ki_result = view_results()$kinact_ki_result,
-                show_single = TRUE
+                show_single = !isFALSE(input$conc_tab_binding_show_single)
               )
             })
 
@@ -5551,7 +5536,7 @@ server <- function(
                   theme = theme,
                   points = conc_tab_binding_points_mode(),
                   kinact_ki_result = view_results()$kinact_ki_result,
-                  show_single = TRUE
+                  show_single = !isFALSE(input$conc_tab_binding_show_single)
                 )
               },
               filename_fn = function() {

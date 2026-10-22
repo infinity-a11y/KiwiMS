@@ -1348,7 +1348,8 @@ binding_curve_single_page <- function() {
       help_def(
         "Dashed",
         "This concentration fitted on its own, for comparison. A clear gap ",
-        "between the two means it does not follow the common model well."
+        "between the two means it does not follow the common model well. ",
+        "Settings → Single-Concentration Fit hides it."
       )
     ),
     shiny::p(

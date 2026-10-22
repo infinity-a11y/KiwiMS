@@ -3159,11 +3159,12 @@ ellipsis_html <- function(hidden, sep) {
 }
 
 # The separator is an element so the card CSS can tell a pill right after it
-# from one at the start of the line.
+# from one at the start of the line. It is bound to the value before it, so a
+# line too long for its card breaks after a bar, never before one.
 #' @export
 collapse_species <- function(values,
                              max_shown = 2,
-                             sep = " <span class=\"species-sep\">|</span> ") {
+                             sep = "&nbsp;<span class=\"species-sep\">|</span> ") {
   if (length(values) <= max_shown) {
     return(paste(values, collapse = sep))
   }
@@ -3173,6 +3174,25 @@ collapse_species <- function(values,
       ellipsis_html(values[-seq_len(max_shown)], "\n")
     ),
     collapse = sep
+  )
+}
+
+# Label / value rows of the Sample View's Protein and Quality cards, one grid
+# row each: a value that wraps keeps its label beside it, and the rows below
+# stay aligned. `values` are HTML.
+#' @export
+sample_info_rows <- function(labels, values) {
+  htmltools::div(
+    class = "conversion-sample-protein-box",
+    lapply(seq_along(labels), function(i) {
+      htmltools::tagList(
+        htmltools::div(class = "conversion-sample-protein-names", labels[i]),
+        htmltools::div(
+          class = "conversion-sample-protein",
+          htmltools::HTML(values[i])
+        )
+      )
+    })
   )
 }
 
@@ -5877,6 +5897,33 @@ add_series_legend <- function(p, symbols, font_color, scene = FALSE) {
   p
 }
 
+# Legend group naming the curve styles of the Binding Curve in the text
+# colour. `styles` maps the entry name to its line dash. Legend-only entries as
+# in add_series_legend().
+add_fit_legend <- function(p, styles, font_color) {
+  for (i in seq_along(styles)) {
+    group_title <- if (i == 1) {
+      list(text = "Fits", font = list(color = font_color))
+    }
+    p <- plotly::add_lines(
+      p,
+      x = list(NA),
+      y = list(NA),
+      name = names(styles)[i],
+      legendgroup = legend_key_group("fits"),
+      legendgrouptitle = group_title,
+      line = list(
+        width = if (styles[[i]] == "dash") 1.2 else 2,
+        dash = styles[[i]],
+        color = font_color
+      ),
+      hoverinfo = "skip",
+      inherit = FALSE
+    )
+  }
+  p
+}
+
 # Curves of the global fit for the Binding Curve: per fitted concentration
 # Plateau * (1 - exp(-kobs * t)) with the plateau and k_obs([I]) of the global
 # kinact/KI fit, keyed by the concentration labels of `binding_table` (matched
@@ -6259,6 +6306,18 @@ make_binding_plot <- function(
       )
   }
 
+  # Key to the curve styles, once there is more than the one fit
+  if (!is.null(global)) {
+    fit_styles <- c("Global fit" = "solid")
+    if (isTRUE(show_single)) {
+      fit_styles <- c(fit_styles, "Fitted alone" = "dash")
+    }
+    if (nrow(own)) {
+      fit_styles <- c(fit_styles, "Not in the global fit" = "dot")
+    }
+    binding_plot <- add_fit_legend(binding_plot, fit_styles, font_color)
+  }
+
   # Concentrations that were measured but could not be fitted: their means are
   # drawn in a neutral open marker with no curve behind them, so real data
   # never disappears from the plot without trace. The hover carries the reason.
@@ -6478,12 +6537,14 @@ make_kobs_plot <- function(
   time_unit <- gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])
 
   # Log concentration axis: the origin is not on it, so lines start at the
-  # left edge, a bit below the lowest concentration. Shapes and annotations
-  # take log10 positions there; lx() places them on either axis.
+  # left edge, a bit below the lowest concentration. On a log axis plotly
+  # takes annotation positions as log10 but shape positions as data values:
+  # lx() places annotations, sx() shapes, on either axis.
   log_conc <- isTRUE(log_conc) && nrow(df_points) > 0
   conc_measured <- sort(unique(as.numeric(as.character(df_points$conc))))
   x_left <- if (log_conc) min(conc_measured) / 1.6 else 0
-  lx <- function(x) if (log_conc) log10(pmax(x, x_left)) else x
+  sx <- function(x) if (log_conc) pmax(x, x_left) else x
+  lx <- function(x) if (log_conc) log10(sx(x)) else x
 
   # Line styles, one per kind of line so none is mistaken for another: the
   # global fit solid, continued dashed beyond the measured range; the two-step
@@ -6691,8 +6752,8 @@ make_kobs_plot <- function(
         type = "rect",
         xref = "x",
         yref = "paper",
-        x0 = lx(0),
-        x1 = lx(max_conc),
+        x0 = sx(0),
+        x1 = sx(max_conc),
         y0 = 0,
         y1 = 1,
         fillcolor = if (theme == "light") {
@@ -6807,18 +6868,18 @@ make_kobs_plot <- function(
           # kinact: the level k_obs approaches at saturation
           list(
             type = "line", xref = "x", yref = "y",
-            x0 = lx(0), x1 = lx(x_end), y0 = kinact, y1 = kinact,
+            x0 = sx(0), x1 = sx(x_end), y0 = kinact, y1 = kinact,
             line = guide, opacity = guide_opacity
           ),
           # KI: the concentration at half of kinact
           list(
             type = "line", xref = "x", yref = "y",
-            x0 = lx(ki), x1 = lx(ki), y0 = 0, y1 = kinact / 2,
+            x0 = sx(ki), x1 = sx(ki), y0 = 0, y1 = kinact / 2,
             line = guide, opacity = guide_opacity
           ),
           list(
             type = "line", xref = "x", yref = "y",
-            x0 = lx(0), x1 = lx(ki), y0 = kinact / 2, y1 = kinact / 2,
+            x0 = sx(0), x1 = sx(ki), y0 = kinact / 2, y1 = kinact / 2,
             line = guide, opacity = guide_opacity
           )
         )
