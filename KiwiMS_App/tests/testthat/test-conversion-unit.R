@@ -14,6 +14,7 @@ box::use(
     compound_mass_entries,
     ensure_trace,
     format_scientific,
+    fmt_sci_html,
     hits_bar_cols,
     hits_base_col,
     hits_col_choices,
@@ -1409,8 +1410,23 @@ test_that("the k_obs curve marks kinact, KI and the initial slope on request", {
   expect_identical(logged$xaxis$type, "log")
   expect_equal(unlist(logged$xaxis$tickvals), conc)
   expect_length(logged$shapes, 3)
+  # Shapes take data values on a log axis, annotations log10 positions
   ki_drop <- Filter(function(s) identical(s$x0, s$x1), logged$shapes)[[1]]
-  expect_equal(ki_drop$x0, log10(30))
+  expect_equal(ki_drop$x0, 30)
+  ki_label <- Filter(function(a) startsWith(a$text, "K<sub>I</sub> ="), logged$annotations)[[1]]
+  expect_equal(ki_label$x, log10(30))
+})
+
+test_that("plot annotations write small and large numbers as powers of ten", {
+  expect_equal(fmt_sci_html(0.000106), "1.06×10<sup>−4</sup>")
+  expect_equal(fmt_sci_html(-2.5e-5), "−2.5×10<sup>−5</sup>")
+  expect_equal(fmt_sci_html(12345), "1.23×10<sup>4</sup>")
+  # Rounding up into the next power
+  expect_equal(fmt_sci_html(0.0009996), "1×10<sup>−3</sup>")
+  expect_equal(fmt_sci_html(0.0387), "0.0387")
+  expect_equal(fmt_sci_html(364), "364")
+  expect_equal(fmt_sci_html(0), "0")
+  expect_equal(fmt_sci_html(NA_real_), "N/A")
 })
 
 test_that("the k_obs curve draws the two-step fit only when switched on", {

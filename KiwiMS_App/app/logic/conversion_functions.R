@@ -5786,6 +5786,27 @@ sci_axis_ticks <- list(
   showexponent = "all"
 )
 
+# A number for plot annotations in the style of those ticks: 1.06×10⁻⁴ as
+# HTML, three significant digits. Powers of ten from the same magnitudes as
+# format_scientific(); in between a plain number.
+#' @export
+fmt_sci_html <- function(x, digits = 3) {
+  if (!is.numeric(x) || length(x) != 1 || !is.finite(x)) {
+    return("N/A")
+  }
+  exponent <- if (x == 0) 0 else floor(log10(abs(signif(x, digits))))
+  if (exponent > -3 && exponent < 4) {
+    return(trimws(formatC(x, digits = digits, format = "g")))
+  }
+  mantissa <- signif(x / 10^exponent, digits)
+  paste0(
+    sub("-", "−", format(mantissa, digits = digits)),
+    "×10<sup>",
+    sub("-", "−", exponent),
+    "</sup>"
+  )
+}
+
 # Marker symbol per concentration, highest concentration first. Built once
 # from all analysed concentrations and handed to every plot that shows
 # concentrations, so a concentration keeps its shape whatever subset a plot
@@ -6206,6 +6227,8 @@ make_binding_plot <- function(
     )
   }
 
+  # Key to the replicate series fills, added with the other keys at the end
+  series_key <- NULL
   if (!is.null(sample_points) && nrow(sample_points) > 0 && !show_means) {
     # Samples alone, as the global fit sees them: colour and shape give the
     # concentration, the fill the replicate series (as in Global Fit
@@ -6267,11 +6290,7 @@ make_binding_plot <- function(
       }
     }
     if (multi_series) {
-      binding_plot <- add_series_legend(
-        binding_plot,
-        stats::setNames(paste0("circle", variants), names(variants)),
-        font_color
-      )
+      series_key <- stats::setNames(paste0("circle", variants), names(variants))
     }
   } else if (!is.null(sample_points) && nrow(sample_points) > 0) {
     # Samples on top of the means: solid in the text colour of the theme
@@ -6304,18 +6323,6 @@ make_binding_plot <- function(
         showlegend = FALSE,
         inherit = FALSE
       )
-  }
-
-  # Key to the curve styles, once there is more than the one fit
-  if (!is.null(global)) {
-    fit_styles <- c("Global fit" = "solid")
-    if (isTRUE(show_single)) {
-      fit_styles <- c(fit_styles, "Fitted alone" = "dash")
-    }
-    if (nrow(own)) {
-      fit_styles <- c(fit_styles, "Not in the global fit" = "dot")
-    }
-    binding_plot <- add_fit_legend(binding_plot, fit_styles, font_color)
   }
 
   # Concentrations that were measured but could not be fitted: their means are
@@ -6390,6 +6397,23 @@ make_binding_plot <- function(
           inherit = FALSE
         )
     }
+  }
+
+  # The style keys go last: the legend lists groups in the order they are
+  # added, and every concentration belongs under the legend title above them
+  if (!is.null(series_key)) {
+    binding_plot <- add_series_legend(binding_plot, series_key, font_color)
+  }
+  # Key to the curve styles, once there is more than the one fit
+  if (!is.null(global)) {
+    fit_styles <- c("Global fit" = "solid")
+    if (isTRUE(show_single)) {
+      fit_styles <- c(fit_styles, "Fitted alone" = "dash")
+    }
+    if (nrow(own)) {
+      fit_styles <- c(fit_styles, "Not in the global fit" = "dot")
+    }
+    binding_plot <- add_fit_legend(binding_plot, fit_styles, font_color)
   }
 
   binding_plot <- binding_plot |>
@@ -6786,7 +6810,6 @@ make_kobs_plot <- function(
   # KI where it reaches half of it, kinact/KI as its initial slope. Without
   # saturation only the slope is defined, and a note says so.
   if (isTRUE(show_constants) && !fit_failed && nrow(df)) {
-    fmt3 <- function(x) trimws(formatC(x, digits = 3, format = "g"))
     ratio <- kinact_ki_result$Ratio[["Estimate"]]
     saturated <- identical(kinact_ki_result$Status, "saturated")
     measured_max <- max(as.numeric(as.character(df_points$conc)), na.rm = TRUE)
@@ -6850,7 +6873,7 @@ make_kobs_plot <- function(
       }
     }
     slope_text <- paste0(
-      "initial slope k<sub>inact</sub>/K<sub>I</sub> = ", fmt3(ratio), " ",
+      "initial slope k<sub>inact</sub>/K<sub>I</sub> = ", fmt_sci_html(ratio), " ",
       conc_unit, "⁻¹ ", time_unit, "⁻¹"
     )
 
@@ -6889,13 +6912,13 @@ make_kobs_plot <- function(
         list(
           list(
             x = lx(x_end), y = kinact, xref = "x", yref = "y",
-            text = paste0("k<sub>inact</sub> = ", fmt3(kinact), " ", time_unit, "⁻¹"),
+            text = paste0("k<sub>inact</sub> = ", fmt_sci_html(kinact), " ", time_unit, "⁻¹"),
             showarrow = FALSE, xanchor = "right", yanchor = "bottom",
                         font = list(size = 12, color = font_color)
           ),
           list(
             x = lx(ki), y = 0, xref = "x", yref = "y",
-            text = paste0("K<sub>I</sub> = ", fmt3(ki), " ", conc_unit),
+            text = paste0("K<sub>I</sub> = ", fmt_sci_html(ki), " ", conc_unit),
             showarrow = FALSE, xanchor = "left", yanchor = "bottom",
             xshift = 4, font = list(size = 12, color = font_color)
           ),
@@ -15316,6 +15339,10 @@ stats_scatter <- function(
     "rgba(255,255,255,0.7)"
   }
 
+  # First-draw estimate of the labels plus legend; stat_margin_js measures
+  legend_names <- c(groups, if (any(df$.unmeasured)) "No protein or complex peak")
+  stat_margin_guess <- 90 + 7 * max(nchar(legend_names), 1) + 40
+
   # No groups left (e.g. no sample has a value for the metric)
   ensure_trace(p) |>
     plotly::layout(
@@ -15323,10 +15350,16 @@ stats_scatter <- function(
       plot_bgcolor = "rgba(0,0,0,0)",
       font = list(size = 14, color = font_color),
       showlegend = TRUE,
+      # The legend sits at the figure's right edge, the Mean / SD labels in
+      # the gap between it and the plot area (margin sized by stat_margin_js)
       legend = list(
         bgcolor = "rgba(0,0,0,0)",
-        font = list(color = font_color)
+        font = list(color = font_color),
+        xref = "container",
+        x = 1,
+        xanchor = "right"
       ),
+      margin = list(r = stat_margin_guess),
       xaxis = list(
         title = "Tot. Binding [%]",
         color = font_color,
@@ -15377,16 +15410,18 @@ stats_scatter <- function(
           list()
         }
       ),
+      # Outside the plot area, so they never cover a point
       annotations = c(
         list(list(
           x = 1,
           xref = "paper",
+          xshift = 4,
           y = correct_mean,
           yref = "y",
           text = sprintf("<b>Mean</b> %.2f%%", correct_mean),
           showarrow = FALSE,
-          xanchor = "right",
-          yanchor = "bottom",
+          xanchor = "left",
+          yanchor = "middle",
           font = list(color = font_color, size = 11)
         )),
         if (show_sd) {
@@ -15394,22 +15429,24 @@ stats_scatter <- function(
             list(
               x = 1,
               xref = "paper",
+              xshift = 4,
               y = correct_upper,
               yref = "y",
-              text = sprintf("+1 SD  %.2f%%", correct_upper),
+              text = sprintf("+1 SD %.2f%%", correct_upper),
               showarrow = FALSE,
-              xanchor = "right",
+              xanchor = "left",
               yanchor = "bottom",
               font = list(color = font_color, size = 10)
             ),
             list(
               x = 1,
               xref = "paper",
+              xshift = 4,
               y = correct_lower,
               yref = "y",
-              text = sprintf("− 1 SD  %.2f%%", correct_lower),
+              text = sprintf("−1 SD %.2f%%", correct_lower),
               showarrow = FALSE,
-              xanchor = "right",
+              xanchor = "left",
               yanchor = "top",
               font = list(color = font_color, size = 10)
             )
@@ -15419,8 +15456,31 @@ stats_scatter <- function(
         }
       )
     ) |>
-    htmlwidgets::onRender(group_highlight_js)
+    htmlwidgets::onRender(group_highlight_js) |>
+    htmlwidgets::onRender(stat_margin_js)
 }
+
+# Sizes the right margin of stats_scatter() to hold the Mean / SD labels and
+# the legend side by side, measured once drawn (0 while the tab is hidden, so
+# it waits for the next draw).
+stat_margin_js <- "
+function(el) {
+  var fit = function() {
+    var leg = el.querySelector('.legend');
+    var notes = el.querySelectorAll('.annotation');
+    var lw = leg ? leg.getBBox().width : 0;
+    var aw = 0;
+    notes.forEach(function(n) { aw = Math.max(aw, n.getBBox().width); });
+    if (!aw) return;
+    var r = Math.ceil(lw + aw + 4);
+    if (Math.abs((el.layout.margin && el.layout.margin.r || 0) - r) > 1) {
+      Plotly.relayout(el, {'margin.r': r});
+    }
+  };
+  el.on('plotly_afterplot', fit);
+  fit();
+}
+"
 
 # Fades every other group while a point is hovered, so a group stays easy to
 # pick out when the colours repeat. Opacity only: the traces stay as built.

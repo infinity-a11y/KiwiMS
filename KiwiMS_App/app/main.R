@@ -319,6 +319,11 @@ ui <- function(id) {
       // simply appends a legend-width gutter to its right.
       function kiwiFitLegend(div, width) {
         if (div._fullLayout.showlegend === false) return Promise.resolve(width);
+        // A horizontal legend runs along the top or bottom and wraps to the
+        // canvas width. It always overlaps the plot area's span, which read
+        // as a legend lying on the plot and appended an empty gutter.
+        if (div._fullLayout.legend && div._fullLayout.legend.orientation === 'h')
+          return Promise.resolve(width);
         var legend = div.querySelector('.infolayer .legend');
         if (!legend) return Promise.resolve(width);
         var legendWidth = kiwiLegendWidth(div);
@@ -336,6 +341,25 @@ ui <- function(id) {
         div.style.width = newWidth + 'px';
         return Plotly.relayout(div, { width: newWidth, 'margin.r': neededR })
           .then(function() { return newWidth; });
+      }
+
+      // A legend taller than the canvas allows (_effHeight, capped by the
+      // figure's height) gets a scrollbar, and in an image the entries past
+      // it are simply gone - at the larger label sizes the fit key of the
+      // binding curve. Grow the canvas by the shortfall until it fits; the
+      // margins stay put, so the plot area takes the extra height. Resolves
+      // to the canvas height.
+      function kiwiFitLegendHeight(div, height, tries) {
+        var lg = div._fullLayout.legend;
+        tries = tries || 0;
+        if (div._fullLayout.showlegend === false || !lg || tries > 3 ||
+            !(lg._height > lg._effHeight + 0.5))
+          return Promise.resolve(height);
+        var newHeight = height + Math.ceil(lg._height - lg._effHeight) + 8;
+        div.style.height = newHeight + 'px';
+        return Plotly.relayout(div, { height: newHeight }).then(function() {
+          return kiwiFitLegendHeight(div, newHeight, tries + 1);
+        });
       }
 
       // How wide the legend really is, which is not always what Plotly thinks.
@@ -971,8 +995,14 @@ ui <- function(id) {
         // Every level doubled: the old ladder read far too small in an
         // exported figure, where the plot is viewed at print size rather than
         // in a card. The old top level (2.0) is now the second step down.
-        var contextScale = ({ small: 1.5, normal: 2.0, large: 3.0, xlarge: 4.0 }[msg.context] || 2.0)
-          * qualityFontScale;
+        var contextLevel = { small: 1.5, normal: 2.0, large: 3.0, xlarge: 4.0 }[msg.context] || 2.0;
+        var contextScale = contextLevel * qualityFontScale;
+        // Markers, lines, outlines and error bars grow with the labels, but
+        // by the square root of the step: at the same factor a large label
+        // size drew bloated markers and heavy curves that crowded the data,
+        // while held fixed they read hairline beside large text. Normal is
+        // the anchor, so it renders exactly as before.
+        var geomScale = 2.0 * Math.sqrt(contextLevel / 2.0) * qualityFontScale;
         // Line widths keep one decimal rather than rounding to whole pixels:
         // the spectrum's dotted connectors (1) and its peak leader lines (1.5)
         // are deliberately different weights, and integer rounding collapses
@@ -1068,30 +1098,41 @@ ui <- function(id) {
             if (typeof obj.size === 'number') obj.size = Math.round(obj.size * contextScale);
             Object.values(obj).forEach(scaleFonts);
           })(fig.layout);
+          // A size or width is a number, or one per point (I() in R)
+          function scaleVal(v, f, round) {
+            if (typeof v === 'number') return round(v * f);
+            if (Array.isArray(v))
+              return v.map(function(x) { return typeof x === 'number' ? round(x * f) : x; });
+            return v;
+          }
           fig.data.forEach(function(trace) {
-            if (trace.marker && typeof trace.marker.size === 'number')
-              trace.marker.size = Math.round(trace.marker.size * contextScale);
-            // The single-sample spectrum never sets a line width, so it draws
-            // at Plotly's scatter default of 2 and there was no number here to
-            // scale - the trace stayed hairline-thin while every label around
-            // it grew. Fill the default in so the scaling below applies to it.
-            if (trace.line && typeof trace.line.width !== 'number' &&
-                typeof trace.mode === 'string' && trace.mode.indexOf('lines') !== -1)
-              trace.line.width = 2;
-            if (trace.line && typeof trace.line.width === 'number')
-              trace.line.width = roundW(trace.line.width * contextScale);
+            var mode = typeof trace.mode === 'string' ? trace.mode : '';
+            var scatter = !trace.type || /^scatter/.test(trace.type);
+            // Plotly's defaults (marker 6, line 2) carry no number to scale,
+            // so a trace left on them stayed at its on-screen size while every
+            // label around it grew - the single-sample spectrum's line, a
+            // plotly-R trace without a marker size. Fill them in first.
+            if (scatter && mode.indexOf('markers') !== -1) {
+              trace.marker = trace.marker || {};
+              if (trace.marker.size === undefined) trace.marker.size = 6;
+            }
+            if (scatter && mode.indexOf('lines') !== -1) {
+              trace.line = trace.line || {};
+              if (typeof trace.line.width !== 'number') trace.line.width = 2;
+            }
+            if (trace.marker)
+              trace.marker.size = scaleVal(trace.marker.size, geomScale, Math.round);
+            if (trace.line)
+              trace.line.width = scaleVal(trace.line.width, geomScale, roundW);
             // Marker outlines are nested one level deeper than marker.size, so
             // they were missed as well.
-            if (trace.marker && trace.marker.line &&
-                typeof trace.marker.line.width === 'number')
-              trace.marker.line.width = roundW(trace.marker.line.width * contextScale);
+            if (trace.marker && trace.marker.line)
+              trace.marker.line.width = scaleVal(trace.marker.line.width, geomScale, roundW);
             ['error_x', 'error_y'].forEach(function(key) {
               var err = trace[key];
-              if (!err) return;
-              if (typeof err.thickness === 'number')
-                err.thickness = err.thickness * contextScale;
-              if (typeof err.width === 'number')
-                err.width = err.width * contextScale;
+              if (!err || err.visible === false) return;
+              err.thickness = (typeof err.thickness === 'number' ? err.thickness : 2) * geomScale;
+              err.width = (typeof err.width === 'number' ? err.width : 4) * geomScale;
             });
             ['textfont', 'outsidetextfont', 'insidetextfont'].forEach(function(key) {
               if (trace[key] && typeof trace[key].size === 'number')
@@ -1121,8 +1162,12 @@ ui <- function(id) {
           // left alone - it is a multiplier on arrowwidth, so scaling both
           // would grow the arrowhead quadratically.
           (fig.layout.shapes || []).forEach(function(shape) {
-            if (shape.line && typeof shape.line.width === 'number')
-              shape.line.width = roundW(shape.line.width * contextScale);
+            // Plotly's default shape outline is 2 px
+            shape.line = shape.line || {};
+            if (typeof shape.line.width !== 'number') shape.line.width = 2;
+            // A side-table rule divides text, so it goes with the text
+            shape.line.width = roundW(shape.line.width *
+              (kiwiIsSideTable(shape) ? contextScale : geomScale));
             ['arrowwidth', 'standoff'].forEach(function(key) {
               if (typeof shape[key] === 'number')
                 shape[key] = roundW(shape[key] * contextScale);
@@ -1278,9 +1323,11 @@ ui <- function(id) {
           var legendFont = (legend.font && legend.font.size) ||
                            (fig.layout.font && fig.layout.font.size) || 12;
           var LEGEND_MARKER_MAX = 16;
-          // On screen a key symbol and its label are the same size; hold that
-          // relationship at every label size.
-          legendSymbolScale = Math.max(1, legendFont / LEGEND_MARKER_MAX);
+          // On screen a key symbol and its label are the same size. The key
+          // stands for the markers in the plot, so past normal it grows the
+          // way they do (geomScale), more slowly than its label.
+          legendSymbolScale = Math.max(
+            1, legendFont / LEGEND_MARKER_MAX * geomScale / contextScale);
           // 2.2x rather than a snug fit: the symbol is drawn centred in this
           // slot, so the slack is what keeps an enlarged key clear of the text
           // beside it.
@@ -1339,6 +1386,8 @@ ui <- function(id) {
           }
           return kiwiFitPaper(div).then(function() {
             return kiwiFitSideTables(div, q.height);
+          }).then(function(tablesHeight) {
+            return kiwiFitLegendHeight(div, tablesHeight);
           }).then(function(finalHeight) {
             exportHeight = finalHeight;
             return kiwiFitLegend(div, exportWidth);
