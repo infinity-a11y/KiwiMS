@@ -4882,6 +4882,7 @@ server <- function(
               )
               shinyjs::toggleState("binding_points", condition = !is_3d)
               shinyjs::toggleState("binding_show_single", condition = !is_3d)
+              shinyjs::toggleState("binding_show_control", condition = !is_3d)
             })
 
             # 2D: one curve per concentration; 3D: the same global fit as one
@@ -4907,7 +4908,9 @@ server <- function(
                 theme = theme,
                 points = binding_points_mode(),
                 kinact_ki_result = res$kinact_ki_result,
-                show_single = isTRUE(input$binding_show_single)
+                show_single = isTRUE(input$binding_show_single),
+                # NULL until the settings popover first opens: on by default
+                show_control = !isFALSE(input$binding_show_control)
               )
             }
 
@@ -5226,7 +5229,9 @@ server <- function(
                     colors,
                     units,
                     theme,
-                    view_symbols()
+                    view_symbols(),
+                    # NULL until the settings popover first opens: on
+                    fit_y = !isFALSE(input$diag_plateaus_fit_y)
                   )
                 },
                 file = "_Plateaus"
@@ -5600,6 +5605,7 @@ server <- function(
               output,
               session,
               "conc_tab_spectra",
+              plot_id = "conc_tab_spectra",
               build_fn = function(theme) {
                 multiple_spectra(
                   results_list = result_list,
@@ -5928,6 +5934,7 @@ server <- function(
                   output,
                   session,
                   plot_id,
+                  plot_id = plot_id,
                   build_fn = build_heatmap,
                   filename_fn = function() {
                     active_v <- if (is_combined) {
@@ -7054,6 +7061,7 @@ server <- function(
       output,
       session,
       "samples_spectrum",
+      plot_id = "samples_annotated_spectrum",
       build_fn = function(theme) {
         result_list <- conversion_sidebar_vars$result_list()
         selected_sample <- input$conversion_sample_picker
@@ -7093,6 +7101,7 @@ server <- function(
       output,
       session,
       "samples_cmp_dist",
+      plot_id = "samples_compound_distribution",
       build_fn = function(theme) {
         shiny::req(
           conversion_vars$hits_summary,
@@ -7127,6 +7136,7 @@ server <- function(
       output,
       session,
       "overview_spectrum",
+      plot_id = "overview_annotated_spectrum",
       build_fn = function(theme) {
         hits_summary <- conversion_vars$hits_summary
         protein <- overview_protein()
@@ -7209,6 +7219,7 @@ server <- function(
       output,
       session,
       "overview_cmp_dist",
+      plot_id = "overview_compound_distribution",
       build_fn = function(theme) {
         shiny::req(
           conversion_vars$hits_summary,
@@ -7244,6 +7255,7 @@ server <- function(
       output,
       session,
       "stats_histogram",
+      plot_id = "stats_histogram",
       build_fn = function(theme) {
         rl <- conversion_sidebar_vars$result_list()
         shiny::req(rl, rl$hits_summary)
@@ -7263,6 +7275,7 @@ server <- function(
       output,
       session,
       "stats_boxplot",
+      plot_id = "stats_boxplot",
       build_fn = function(theme) {
         rl <- conversion_sidebar_vars$result_list()
         shiny::req(rl, rl$hits_summary)
@@ -7284,6 +7297,7 @@ server <- function(
       output,
       session,
       "stats_scatter",
+      plot_id = "stats_scatter",
       build_fn = function(theme) {
         rl <- conversion_sidebar_vars$result_list()
         shiny::req(rl, rl$hits_summary)
@@ -7312,6 +7326,7 @@ server <- function(
       output,
       session,
       "stats_violin",
+      plot_id = "stats_violin",
       build_fn = function(theme) {
         rl <- conversion_sidebar_vars$result_list()
         shiny::req(rl, rl$hits_summary)

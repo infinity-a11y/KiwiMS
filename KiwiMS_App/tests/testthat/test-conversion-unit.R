@@ -45,6 +45,8 @@ box::use(
     global_binding_curves,
     legend_key_group,
     make_binding_plot,
+    make_binding_surface_plot,
+    make_kinetics_plateau_plot,
     read_uploaded_file,
     render_hits_table,
     render_hits_view,
@@ -61,7 +63,7 @@ box::use(
   ],
   app/logic/conversion_ui[binding_results_ui, hits_results_ui],
   app/logic/deconvolution_functions[spectrum_plot],
-  app/logic/plot_download[prepare_hits_export],
+  app/logic/plot_download[apply_trace_visibility, prepare_hits_export],
   app/logic/palette[status_colors],
 )
 
@@ -1335,6 +1337,90 @@ test_that("the binding curve shows the global fit, single fits on request", {
   expect_false("Fitted alone (for comparison)" %in% plain)
   both <- labels(make_binding_plot(list(binding_table = bt), units = units, points = "mean", kinact_ki_result = kin, show_single = TRUE))
   expect_true("Fitted alone (for comparison)" %in% both)
+
+  # The control's baseline can be left out; with it goes its legend key, as
+  # nothing else is outside the global fit
+  no_control <- make_binding_plot(list(binding_table = bt), units = units, points = "mean", kinact_ki_result = kin, show_control = FALSE)
+  expect_false("Untreated control" %in% labels(no_control))
+  names <- unlist(lapply(plotly::plotly_build(no_control)$x$data, `[[`, "name"))
+  expect_false("Not in the global fit" %in% names)
+})
+
+test_that("the binding surface keeps the 0 labels of its axes apart", {
+  pts <- expand.grid(time = c(5, 10, 20), conc = c(0, 2, 8))
+  pts$binding <- c(0, 0, 0, 10, 20, 35, 30, 55, 75)
+  pts$concentration <- factor(pts$conc)
+  pts$Sample <- paste0("S", seq_len(nrow(pts)))
+  kin <- list(
+    Model = "linear",
+    Ratio = c(Estimate = 0.01),
+    Fit = list(KI_hyperbolic = NA_real_),
+    Plateaus = data.frame(conc = c(2, 8), plateau = c(80, 90))
+  )
+  units <- c(Concentration = "Conc. [µM]", Time = "Time [min]")
+  scene <- function(log_conc) {
+    p <- make_binding_surface_plot(kin, list(binding_points = pts), c("0" = "#000000", "2" = "#ff0000", "8" = "#0000ff"), units, log_conc = log_conc)
+    plotly::plotly_build(p)$x$layout$scene
+  }
+
+  linear <- scene(FALSE)
+  expect_lt(linear$xaxis$range[1], 0)
+  expect_lt(linear$yaxis$range[1], 0)
+  expect_false(0 %in% linear$zaxis$tickvals)
+  expect_equal(linear$zaxis$range, c(0, 105))
+  # A log axis has no 0 and keeps the measured concentrations as ticks
+  expect_null(scene(TRUE)$yaxis$range)
+})
+
+test_that("the plateau plot fits its binding axis to the values on request", {
+  kin <- list(
+    Plateaus = data.frame(
+      conc = c(2, 8),
+      plateau = c(80, 84),
+      plateau_single = c(79, 86),
+      group = c(1, 2),
+      reached = c(0.9, 0.95)
+    ),
+    Points = data.frame(conc = c(2, 2, 8, 8), time = c(10, 20, 10, 20), binding = c(70, 78, 80, 85))
+  )
+  units <- c(Concentration = "Conc. [µM]", Time = "Time [min]")
+  y_range <- function(...) {
+    p <- make_kinetics_plateau_plot(kin, c("2" = "#ff0000", "8" = "#0000ff"), units, ...)
+    plotly::plotly_build(p)$x$layout$yaxis$range
+  }
+
+  # Values 78 – 86: a fifth of the span is under the 5-point minimum
+  expect_equal(y_range(), c(73, 91))
+  expect_equal(y_range(fit_y = FALSE), c(0, 105))
+})
+
+test_that("an export takes over the traces hidden in the legend on screen", {
+  p <- plotly::plot_ly() |>
+    plotly::add_markers(x = 1, y = 1, name = "a", legendgroup = "a") |>
+    plotly::add_lines(x = 1:2, y = 1:2, name = "a", legendgroup = "a") |>
+    plotly::add_markers(x = 2, y = 2, name = "b", legendgroup = "b") |>
+    plotly::add_markers(x = 3, y = 3, name = "b", legendgroup = "b")
+  screen <- data.frame(
+    type = "scatter",
+    name = c("a", "a", "b", "b", "gone"),
+    legendgroup = c("a", "a", "b", "b", "gone"),
+    visible = c("legendonly", "legendonly", "true", "false", "legendonly")
+  )
+  visible <- function(fig) lapply(fig$x$data, `[[`, "visible")
+
+  # Paired by name and group and their order among equals; a trace only the
+  # screen has is ignored
+  expect_equal(
+    visible(apply_trace_visibility(p, screen)),
+    list("legendonly", "legendonly", TRUE, FALSE)
+  )
+  # A reordered screen pairs by key, not by position
+  expect_equal(
+    visible(apply_trace_visibility(p, screen[c(3, 4, 1, 2), ]))[[1]],
+    "legendonly"
+  )
+  # Nothing reported: the export is left as built
+  expect_identical(apply_trace_visibility(p, NULL), p)
 })
 
 test_that("the binding curve tells four replicate series apart by fill", {

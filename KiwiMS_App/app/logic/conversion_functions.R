@@ -5998,7 +5998,8 @@ make_binding_plot <- function(
   points = c("samples", "mean", "both"),
   symbol_map = NULL,
   kinact_ki_result = NULL,
-  show_single = FALSE
+  show_single = FALSE,
+  show_control = TRUE
 ) {
   # Which observations to draw: the individual samples (what the global fit
   # sees), mean ± SD per time point, or both
@@ -6094,8 +6095,17 @@ make_binding_plot <- function(
   }
   single <- kobs_result$binding_table
   own <- single[!as.character(single$concentration) %in% in_global, ]
+  own_control <- suppressWarnings(
+    as.numeric(as.character(own$concentration))
+  ) %in%
+    0
+  # The untreated control's flat baseline can be left out; its samples stay
+  if (!isTRUE(show_control)) {
+    own <- own[!own_control, , drop = FALSE]
+    own_control <- own_control[!own_control]
+  }
   own$label <- ifelse(
-    suppressWarnings(as.numeric(as.character(own$concentration))) %in% 0,
+    own_control,
     "Untreated control",
     if (is.null(global)) "Fit" else "Fitted alone (not in the global fit)"
   )
@@ -7228,6 +7238,13 @@ make_binding_surface_plot <- function(
     )
   }
 
+  # Time, compound and binding all start at 0, so their 0 labels would meet
+  # at the corner the axes share and run into each other, whichever way the
+  # scene is turned. Time and a linear compound axis start a little below 0,
+  # which moves their 0 off that corner, and binding leaves out its 0 label.
+  below_zero <- function(top) c(-0.04 * top, top)
+  time_max <- max(time_grid)
+
   p |>
     plotly::layout(
       paper_bgcolor = "rgba(0,0,0,0)",
@@ -7245,7 +7262,10 @@ make_binding_surface_plot <- function(
         tracegroupgap = 4
       ),
       scene = list(
-        xaxis = axis(paste0("Time [", time_unit, "]")),
+        xaxis = axis(
+          paste0("Time [", time_unit, "]"),
+          list(range = below_zero(time_max))
+        ),
         # On the log axis plotly's own ticks (digits between the decades)
         # crowd and overlap; tick the measured concentrations instead,
         # labelled like the legend
@@ -7261,10 +7281,17 @@ make_binding_surface_plot <- function(
               ticktext = conc_display(ticks$concentration)
             )
           } else {
-            list()
+            list(range = below_zero(max(conc_grid)))
           }
         ),
-        zaxis = axis("Binding [%]", list(range = c(0, 105))),
+        zaxis = axis(
+          "Binding [%]",
+          list(
+            range = c(0, 105),
+            tickmode = "array",
+            tickvals = seq(20, 100, by = 20)
+          )
+        ),
         aspectmode = "manual",
         aspectratio = list(x = 1.15, y = 1, z = 0.7),
         camera = list(eye = list(x = 1.95, y = -2.05, z = 1.05))
@@ -7561,14 +7588,16 @@ make_kinetics_residual_plot <- function(
 # still rising when measurement stopped, so that plateau is extrapolated. The
 # bar is the plateau the global fit used; one bar across several
 # concentrations means they share it because none of them got close enough to
-# define its own.
+# define its own. `fit_y` narrows the binding axis to the values drawn, with
+# some room around them, instead of the full 0 – 105 %.
 #' @export
 make_kinetics_plateau_plot <- function(
   kinact_ki_result,
   colors,
   units,
   theme = "light",
-  symbol_map = NULL
+  symbol_map = NULL,
+  fit_y = TRUE
 ) {
   tab <- kinact_ki_result$Plateaus
   if (is.null(tab) || nrow(tab) == 0) {
@@ -7645,6 +7674,20 @@ make_kinetics_plateau_plot <- function(
   )
 
   hover_head <- paste0("<b>", conc_display(tab$label), " ", conc_unit, "</b><br>")
+
+  # Binding axis: the full scale, or only the span of the values drawn. The
+  # room around them (a fifth of the span, at least 5 percentage points)
+  # keeps symbols, ticks and bars clear of the plot edge and gives a near
+  # flat set of values a readable scale rather than one blown up to fill it.
+  y_range <- c(0, 105)
+  if (isTRUE(fit_y)) {
+    y_values <- c(tab$last_binding, tab$plateau_single, group_tab$plateau)
+    y_values <- y_values[is.finite(y_values)]
+    if (length(y_values)) {
+      pad <- max(0.2 * diff(range(y_values)), 5)
+      y_range <- c(max(min(y_values) - pad, 0), max(y_values) + pad)
+    }
+  }
 
   p <- plotly::plot_ly() |>
     plotly::add_lines(
@@ -7745,7 +7788,7 @@ make_kinetics_plateau_plot <- function(
         zeroline = FALSE
       )
     ),
-    yaxis = kinetics_axis("Binding [%]", pal, list(range = c(0, 105)))
+    yaxis = kinetics_axis("Binding [%]", pal, list(range = y_range))
   ) |>
     kinetics_top_legend(pal)
 }

@@ -4,6 +4,7 @@ box::use(
   base64enc[base64encode],
   bslib,
   htmlwidgets[saveWidget],
+  jsonlite[fromJSON],
   openxlsx[
     addStyle,
     addWorksheet,
@@ -14,7 +15,7 @@ box::use(
     setColWidths,
     writeData
   ],
-  plotly[as_widget, layout, plotly_json],
+  plotly[as_widget, layout, plotly_build, plotly_json],
   shiny,
   shinyWidgets[materialSwitch, show_toast],
 )
@@ -299,9 +300,71 @@ inline_widget_style <- function(staging, path, tag) {
   paste0("<style>\n", css, "\n</style>")
 }
 
+# Applies the trace visibility of the plot on screen to an export of it.
+#
+# Hiding a trace in the legend, or isolating one with a double-click, happens
+# in the browser only; the export is rebuilt from R and so came out with every
+# trace shown. `traces` is what the page reported for the plot (kiwiCaptureView
+# in main.R): type, name, legend group and visibility of each trace, in order.
+# Traces are paired by those three and their order among equals rather than by
+# position alone, so a trace the export has and the screen lacks, or the other
+# way round, leaves the rest paired correctly; an unpaired trace keeps the
+# visibility it was built with.
+#' @export
+apply_trace_visibility <- function(p, traces) {
+  if (!is.data.frame(traces) || !nrow(traces)) {
+    return(p)
+  }
+  p <- plotly_build(p)
+  data <- p$x$data
+  if (!length(data)) {
+    return(p)
+  }
+
+  field <- function(trace, name, default) {
+    value <- trace[[name]]
+    if (is.null(value) || !length(value)) default else as.character(value[[1]])
+  }
+  numbered <- function(keys) {
+    paste(keys, stats::ave(seq_along(keys), keys, FUN = seq_along), sep = "\r")
+  }
+  built_keys <- numbered(vapply(
+    data,
+    function(trace) {
+      paste(
+        field(trace, "type", "scatter"),
+        field(trace, "name", ""),
+        field(trace, "legendgroup", ""),
+        sep = "\r"
+      )
+    },
+    character(1)
+  ))
+  screen_keys <- numbered(paste(
+    traces$type,
+    traces$name,
+    traces$legendgroup,
+    sep = "\r"
+  ))
+
+  visible <- traces$visible[match(built_keys, screen_keys)]
+  for (i in which(!is.na(visible))) {
+    data[[i]]$visible <- switch(
+      visible[i],
+      true = TRUE,
+      false = FALSE,
+      visible[i]
+    )
+  }
+  p$x$data <- data
+  p
+}
+
 # Registers HTML/PNG/SVG download handlers for a plot card.
 # build_fn(theme) must return a plotly figure.
 # filename_fn() must return a string (no extension).
+# plot_id is the output id of the plot on screen, whose legend state (traces
+# hidden or isolated) the export takes over.
 #
 # Several plot cards are created inside observers that re-run whenever new
 # results arrive (the conversion results renderer, the deconvolution run
@@ -321,7 +384,8 @@ setup_plot_dl <- function(
   prefix,
   build_fn,
   filename_fn,
-  available_fn = NULL
+  available_fn = NULL,
+  plot_id = paste0(prefix, "_plot")
 ) {
   registry <- session$userData$plot_dl_registry
   if (is.null(registry)) {
@@ -336,6 +400,7 @@ setup_plot_dl <- function(
     entry$build_fn <- build_fn
     entry$filename_fn <- filename_fn
     entry$available_fn <- available_fn
+    entry$plot_id <- plot_id
     # Re-runs the export-state observer against the swapped callbacks.
     entry$version(shiny::isolate(entry$version()) + 1L)
     return(invisible(NULL))
@@ -345,6 +410,7 @@ setup_plot_dl <- function(
   entry$build_fn <- build_fn
   entry$filename_fn <- filename_fn
   entry$available_fn <- available_fn
+  entry$plot_id <- plot_id
   entry$version <- shiny::reactiveVal(0L)
   registry[[key]] <- entry
 
@@ -373,10 +439,29 @@ setup_plot_dl <- function(
     )
   }
 
+  # The traces of this card's plot as the page last reported them, NULL when
+  # the report is about another plot (or there is none yet). The page sends
+  # it as the export popover opens, so it is current by the time a format is
+  # picked.
+  screen_traces <- function() {
+    raw <- session$rootScope()$input$kiwims_export_traces
+    if (!is.character(raw) || length(raw) != 1L) {
+      return(NULL)
+    }
+    view <- tryCatch(fromJSON(raw), error = function(e) NULL)
+    if (!identical(view$plot, session$ns(entry$plot_id))) {
+      return(NULL)
+    }
+    view$traces
+  }
+
   try_build <- function(theme) {
     tryCatch(
       # The builders draw the palette variant of the theme (see palette.R)
-      shiny::isolate(entry$build_fn(theme)),
+      shiny::isolate(apply_trace_visibility(
+        entry$build_fn(theme),
+        screen_traces()
+      )),
       error = function(e) NULL
     )
   }

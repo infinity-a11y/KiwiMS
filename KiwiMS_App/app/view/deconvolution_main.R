@@ -1837,6 +1837,7 @@ server <- function(
         output,
         session,
         "decon_spectrum",
+        plot_id = "spectrum",
         build_fn = function(theme) {
           shiny$req(result_files_sel())
           plot <- build_spectrum(theme)

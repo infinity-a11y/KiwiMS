@@ -1310,7 +1310,9 @@ binding_curve_page <- function() {
       help_def(
         "Untreated control",
         "Concentration 0 is drawn as a flat baseline and not fitted. A control ",
-        "that does not stay at 0 % points at background adducts or carry-over."
+        "that does not stay at 0 % points at background adducts or carry-over. ",
+        "Settings → Control Baseline (2D view only) hides the dotted baseline; ",
+        "the control's samples stay."
       ),
       help_def(
         "Outside the global fit",
@@ -1741,6 +1743,12 @@ diag_plateaus_page <- function() {
       kinetics_settings$plateau_max_spread,
       " percentage points raise a warning; they can point at compound ",
       "depletion or instability."
+    ),
+    shiny::p(
+      "Settings → Fit Binding Axis to Values (on by default) limits the ",
+      "binding axis to the values shown, with a margin of at least 5 ",
+      "percentage points, so small differences between plateaus are visible. ",
+      "Switch it off for the full 0 – 100 % scale."
     )
   )
 }

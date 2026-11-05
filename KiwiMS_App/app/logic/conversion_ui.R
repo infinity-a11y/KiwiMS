@@ -389,6 +389,14 @@ kinact_ki_results_ui <- function(
                         label = "Per-Concentration Fits",
                         value = FALSE,
                         right = TRUE
+                      ),
+                      # The untreated control's dotted baseline, which is not
+                      # part of the global fit; its samples stay either way
+                      shinyWidgets::materialSwitch(
+                        ns("binding_show_control"),
+                        label = "Control Baseline",
+                        value = TRUE,
+                        right = TRUE
                       )
                     ),
                     style = "width:220px;"
@@ -672,7 +680,8 @@ kinact_ki_results_ui <- function(
   }
 
   # Fit diagnostics: how well the data support the global kinact/KI fit
-  diagnostics_card <- function(title, id, help_id) {
+  # `settings`, if given, is the content of a settings popover for the plot
+  diagnostics_card <- function(title, id, help_id, settings = NULL) {
     shiny::div(
       class = "card-custom",
       bslib::card(
@@ -682,6 +691,7 @@ kinact_ki_results_ui <- function(
           title,
           shiny::div(
             class = "box-header-settings-help",
+            if (!is.null(settings)) card_settings_popover(settings),
             plot_dl_popover(ns, id),
             bslib::tooltip(
               shiny::div(
@@ -722,7 +732,17 @@ kinact_ki_results_ui <- function(
         diagnostics_card(
           "Plateau per Concentration",
           "diag_plateaus",
-          "diag_plateaus_tooltip_bttn"
+          "diag_plateaus_tooltip_bttn",
+          settings = shiny::div(
+            # Off: the full 0 – 105 % binding scale
+            shinyWidgets::materialSwitch(
+              ns("diag_plateaus_fit_y"),
+              label = "Fit Binding Axis to Values",
+              value = TRUE,
+              right = TRUE
+            ),
+            style = "width:220px;"
+          )
         ),
         diagnostics_card(
           htmltools::tagList(shiny::div(

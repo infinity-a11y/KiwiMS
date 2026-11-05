@@ -1452,6 +1452,24 @@ ui <- function(id) {
 
         _kiwiPendingZoomRange = Object.keys(ranges).length ? ranges : null;
         _kiwiPendingCamera = Object.keys(cameras).length ? cameras : null;
+
+        // Traces hidden or isolated in the legend (click, double-click). The
+        // export is rebuilt in R, which never sees those clicks, so every
+        // trace's visibility goes to the server, keyed by the plot's output
+        // id; setup_plot_dl() applies it to the export, HTML included.
+        if (gd.id && Array.isArray(gd.data) && window.Shiny && Shiny.setInputValue) {
+          Shiny.setInputValue('kiwims_export_traces', JSON.stringify({
+            plot: gd.id,
+            traces: gd.data.map(function(t) {
+              return {
+                type: String(t.type || 'scatter'),
+                name: t.name == null ? '' : String(t.name),
+                legendgroup: t.legendgroup == null ? '' : String(t.legendgroup),
+                visible: t.visible === undefined ? 'true' : String(t.visible)
+              };
+            })
+          }), { priority: 'event' });
+        }
         return true;
       }
 
