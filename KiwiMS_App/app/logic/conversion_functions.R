@@ -5985,9 +5985,11 @@ global_binding_curves <- function(kinact_ki_result, binding_table, n = 201) {
 # Function to generate and display binding plot
 #
 # With `kinact_ki_result` the curves are those of the global fit, the model
-# kinact/KI and KI come from; concentrations outside it (untreated control,
-# excluded or without response) keep their own fit. `show_single` adds the fit
-# of every concentration on its own as a dashed line, for comparison.
+# kinact/KI and KI come from; concentrations outside it (excluded or without
+# response) keep their own fit. The untreated control gets no curve: it is not
+# fitted, and its samples show any background binding by themselves.
+# `show_single` adds the fit of every concentration on its own as a dashed
+# line, for comparison.
 #' @export
 make_binding_plot <- function(
   kobs_result,
@@ -5998,8 +6000,7 @@ make_binding_plot <- function(
   points = c("samples", "mean", "both"),
   symbol_map = NULL,
   kinact_ki_result = NULL,
-  show_single = FALSE,
-  show_control = TRUE
+  show_single = FALSE
 ) {
   # Which observations to draw: the individual samples (what the global fit
   # sees), mean ± SD per time point, or both
@@ -6078,7 +6079,7 @@ make_binding_plot <- function(
   )
 
   # Curves: the global fit where it covers a concentration, otherwise the
-  # concentration's own fit (untreated control, excluded, no response)
+  # concentration's own fit (excluded, no response)
   global <- if (!is.null(kinact_ki_result)) {
     global_binding_curves(kinact_ki_result, kobs_result$binding_table)
   }
@@ -6094,20 +6095,18 @@ make_binding_plot <- function(
     unique(as.character(global$concentration))
   }
   single <- kobs_result$binding_table
-  own <- single[!as.character(single$concentration) %in% in_global, ]
-  own_control <- suppressWarnings(
-    as.numeric(as.character(own$concentration))
+  # The untreated control is not fitted and gets no curve; a flat line at 0 %
+  # would only look like a fit, its samples show any binding themselves
+  is_control <- suppressWarnings(
+    as.numeric(as.character(single$concentration))
   ) %in%
     0
-  # The untreated control's flat baseline can be left out; its samples stay
-  if (!isTRUE(show_control)) {
-    own <- own[!own_control, , drop = FALSE]
-    own_control <- own_control[!own_control]
-  }
-  own$label <- ifelse(
-    own_control,
-    "Untreated control",
-    if (is.null(global)) "Fit" else "Fitted alone (not in the global fit)"
+  own <- single[
+    !as.character(single$concentration) %in% in_global & !is_control,
+  ]
+  own$label <- rep(
+    if (is.null(global)) "Fit" else "Fitted alone (not in the global fit)",
+    nrow(own)
   )
 
   binding_plot <- plotly::plot_ly()

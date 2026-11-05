@@ -1003,6 +1003,10 @@ ui <- function(id) {
         // while held fixed they read hairline beside large text. Normal is
         // the anchor, so it renders exactly as before.
         var geomScale = 2.0 * Math.sqrt(contextLevel / 2.0) * qualityFontScale;
+        // Lines (curves, connectors, error bars, guides) on a steeper curve,
+        // nearly that of the text: most start as 1 px hairlines, and on the
+        // square root they grew too little to see beside the text.
+        var lineScale = 2.0 * Math.pow(contextLevel / 2.0, 0.8) * qualityFontScale;
         // Line widths keep one decimal rather than rounding to whole pixels:
         // the spectrum's dotted connectors (1) and its peak leader lines (1.5)
         // are deliberately different weights, and integer rounding collapses
@@ -1123,7 +1127,7 @@ ui <- function(id) {
             if (trace.marker)
               trace.marker.size = scaleVal(trace.marker.size, geomScale, Math.round);
             if (trace.line)
-              trace.line.width = scaleVal(trace.line.width, geomScale, roundW);
+              trace.line.width = scaleVal(trace.line.width, lineScale, roundW);
             // Marker outlines are nested one level deeper than marker.size, so
             // they were missed as well.
             if (trace.marker && trace.marker.line)
@@ -1131,7 +1135,7 @@ ui <- function(id) {
             ['error_x', 'error_y'].forEach(function(key) {
               var err = trace[key];
               if (!err || err.visible === false) return;
-              err.thickness = (typeof err.thickness === 'number' ? err.thickness : 2) * geomScale;
+              err.thickness = (typeof err.thickness === 'number' ? err.thickness : 2) * lineScale;
               err.width = (typeof err.width === 'number' ? err.width : 4) * geomScale;
             });
             ['textfont', 'outsidetextfont', 'insidetextfont'].forEach(function(key) {
@@ -1167,7 +1171,7 @@ ui <- function(id) {
             if (typeof shape.line.width !== 'number') shape.line.width = 2;
             // A side-table rule divides text, so it goes with the text
             shape.line.width = roundW(shape.line.width *
-              (kiwiIsSideTable(shape) ? contextScale : geomScale));
+              (kiwiIsSideTable(shape) ? contextScale : lineScale));
             ['arrowwidth', 'standoff'].forEach(function(key) {
               if (typeof shape[key] === 'number')
                 shape[key] = roundW(shape[key] * contextScale);

@@ -1333,17 +1333,27 @@ test_that("the binding curve shows the global fit, single fits on request", {
   }
   plain <- labels(make_binding_plot(list(binding_table = bt), units = units, points = "mean", kinact_ki_result = kin))
   expect_true("Global fit" %in% plain)
-  expect_true("Untreated control" %in% plain)
+  expect_false("Untreated control" %in% plain)
   expect_false("Fitted alone (for comparison)" %in% plain)
   both <- labels(make_binding_plot(list(binding_table = bt), units = units, points = "mean", kinact_ki_result = kin, show_single = TRUE))
   expect_true("Fitted alone (for comparison)" %in% both)
 
-  # The control's baseline can be left out; with it goes its legend key, as
-  # nothing else is outside the global fit
-  no_control <- make_binding_plot(list(binding_table = bt), units = units, points = "mean", kinact_ki_result = kin, show_control = FALSE)
-  expect_false("Untreated control" %in% labels(no_control))
-  names <- unlist(lapply(plotly::plotly_build(no_control)$x$data, `[[`, "name"))
+  # The control is not fitted and gets no curve, so nothing is outside the
+  # global fit and its legend key is absent; the control's samples still show
+  names <- unlist(lapply(plotly::plotly_build(
+    make_binding_plot(list(binding_table = bt), units = units, points = "mean", kinact_ki_result = kin)
+  )$x$data, `[[`, "name"))
   expect_false("Not in the global fit" %in% names)
+  sampled <- make_binding_plot(
+    list(binding_table = bt, binding_points = data.frame(
+      time = c(10, 20), binding = c(6, 8), concentration = "0", Sample = c("c1", "c2")
+    )),
+    units = units, points = "samples", kinact_ki_result = kin,
+    colors = c("0" = "#555555", "2" = "#ff0000", "8" = "#0000ff")
+  )
+  ctrl <- Filter(function(tr) identical(tr$name, "0"), plotly::plotly_build(sampled)$x$data)
+  expect_length(ctrl, 1)
+  expect_equal(as.numeric(unlist(ctrl[[1]]$y)), c(6, 8))
 })
 
 test_that("the binding surface keeps the 0 labels of its axes apart", {

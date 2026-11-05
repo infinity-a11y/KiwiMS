@@ -4881,9 +4881,7 @@ server <- function(
                 condition = is_3d
               )
               shinyjs::toggleState("binding_points", condition = !is_3d)
-              shinyjs::toggleState("binding_show_single", condition = !is_3d)
-              shinyjs::toggleState("binding_show_control", condition = !is_3d)
-            })
+              shinyjs::toggleState("binding_show_single", condition = !is_3d)            })
 
             # 2D: one curve per concentration; 3D: the same global fit as one
             # surface over time and concentration. Screen and export share it.
@@ -4908,9 +4906,7 @@ server <- function(
                 theme = theme,
                 points = binding_points_mode(),
                 kinact_ki_result = res$kinact_ki_result,
-                show_single = isTRUE(input$binding_show_single),
-                # NULL until the settings popover first opens: on by default
-                show_control = !isFALSE(input$binding_show_control)
+                show_single = isTRUE(input$binding_show_single)
               )
             }
 

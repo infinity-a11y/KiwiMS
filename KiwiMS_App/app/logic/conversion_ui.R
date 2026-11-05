@@ -389,14 +389,6 @@ kinact_ki_results_ui <- function(
                         label = "Per-Concentration Fits",
                         value = FALSE,
                         right = TRUE
-                      ),
-                      # The untreated control's dotted baseline, which is not
-                      # part of the global fit; its samples stay either way
-                      shinyWidgets::materialSwitch(
-                        ns("binding_show_control"),
-                        label = "Control Baseline",
-                        value = TRUE,
-                        right = TRUE
                       )
                     ),
                     style = "width:220px;"

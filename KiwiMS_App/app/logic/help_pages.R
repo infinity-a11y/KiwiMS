@@ -1309,10 +1309,8 @@ binding_curve_page <- function() {
       ),
       help_def(
         "Untreated control",
-        "Concentration 0 is drawn as a flat baseline and not fitted. A control ",
-        "that does not stay at 0 % points at background adducts or carry-over. ",
-        "Settings → Control Baseline (2D view only) hides the dotted baseline; ",
-        "the control's samples stay."
+        "Concentration 0 is drawn as samples only and not fitted. A control ",
+        "that does not stay at 0 % points at background adducts or carry-over."
       ),
       help_def(
         "Outside the global fit",
