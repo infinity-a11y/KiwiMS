@@ -1725,11 +1725,14 @@ diag_plateaus_page <- function() {
       "plateau."
     ),
     shiny::p(
-      "The dotted stem from the symbol up to the tick is the rise the fit ",
-      "expects after the last measurement. A long stem means the curve was ",
-      "still rising when measurement stopped, so that plateau is an ",
-      "extrapolation. The hover on a symbol also gives the model's estimate of ",
-      "how far the curve got towards its plateau."
+      "The dotted stem joins the symbol and the tick; its length is the ",
+      "difference between the last observation and the fitted plateau (the ",
+      "hover on a symbol gives it in percentage points, observed minus ",
+      "plateau). Symbol below the tick: the curve was still rising when ",
+      "measurement stopped, so that plateau is an extrapolation. Symbol above ",
+      "the tick: the fitted plateau lies below the data, so the fit ",
+      "underestimates the maximum occupancy. The hover also gives the model's ",
+      "estimate of how far the curve got towards its plateau."
     ),
     shiny::p(
       "A plateau can only be measured when the curve gets close to it. ",

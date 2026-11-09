@@ -7704,7 +7704,7 @@ make_kinetics_plateau_plot <- function(
       y = stems$y,
       line = list(color = pal$font, width = 1.5, dash = "dot"),
       hoverinfo = "skip",
-      name = "Rise still to come",
+      name = "Last observation vs. plateau",
       legendrank = 4,
       inherit = FALSE
     ) |>
@@ -7740,13 +7740,15 @@ make_kinetics_plateau_plot <- function(
       ),
       text = paste0(
         hover_head,
-        "Observed at ",
+        "Mean observed at last time point (",
         signif(tab$last_time, 4),
         " ",
         time_unit,
-        ": ",
+        "): ",
         sprintf("%.2f", tab$last_binding),
-        " %<br>Model: curve reached ",
+        " %<br>Observed − single-fit plateau: ",
+        sprintf("%+.2f", tab$last_binding - tab$plateau_single),
+        " percentage points<br>Model: curve reached ",
         sprintf("%.2f", 100 * tab$reached),
         " % of its plateau"
       ),
@@ -7765,7 +7767,7 @@ make_kinetics_plateau_plot <- function(
         color = pal$muted,
         line = list(width = 1, color = pal$font)
       ),
-      name = "Observed at last time point",
+      name = "Mean observed at last time point",
       legendgroup = legend_key_group("observed"),
       legendrank = 1,
       inherit = FALSE
