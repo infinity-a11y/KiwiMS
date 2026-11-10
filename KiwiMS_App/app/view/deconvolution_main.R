@@ -1651,14 +1651,12 @@ server <- function(
       })
 
       ### Render result spectrum
+      # Drives the export buttons of the Spectrum card. It is reset at the start
+      # of the render itself (see output$spectrum) rather than by a separate
+      # observer on the selection: two observers invalidated by the same
+      # change run in no guaranteed order, and when the reset ran after the
+      # render's `TRUE` the buttons stayed disabled for a plot on screen.
       spectrum_ready <- shiny$reactiveVal(FALSE)
-      set_run_observer("spectrum_ready", shiny$observeEvent(
-        result_files_sel(),
-        {
-          spectrum_ready(FALSE)
-        },
-        ignoreNULL = FALSE
-      ))
 
       # The Spectrum settings offer the Cubic/Planar switch for "Show All"
       # and the single-sample ones otherwise. They live in a popover that is
@@ -1849,6 +1847,7 @@ server <- function(
       )
 
       output$spectrum <- renderPlotly({
+        spectrum_ready(FALSE)
         shiny$req(result_files_sel())
 
         # spectrum_container decides whether to mount this output at all --
