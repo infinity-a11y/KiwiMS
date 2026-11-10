@@ -7056,6 +7056,143 @@ make_kobs_plot <- function(
   return(kobs_plot)
 }
 
+## 3D axis titles (TRIAL) ----
+#
+# TRIAL, to be cut down to the variant chosen. plotly.js draws a 3D tick
+# label at its font size squared over 12 but an axis title at its plain size
+# (gl-axes3d builds tick glyphs at fontSize / 12, then scales them by the
+# font size again; titles are built at 12), so the export, which enlarges
+# both, left the titles far behind the ticks. The ways of naming the axes on
+# trial, picked by the environment variable KIWIMS_AXIS_TITLES:
+#   native  plotly's own titles; the export enlarges them to match (main.R)
+#   annot   the titles as scene annotations beside the axes
+#   units   no titles; the unit on the last tick label of each axis
+#   key     no titles; a key naming each axis with its range, bottom right
+scene_title_mode <- function() {
+  mode <- tolower(Sys.getenv("KIWIMS_AXIS_TITLES", "native"))
+  if (mode %in% c("native", "annot", "units", "key")) mode else "native"
+}
+
+# Tick label of a value, 21000 as 21k on the axes that read in thousands
+tick_label <- function(v, thousands = FALSE) {
+  if (thousands) {
+    ifelse(
+      abs(v) >= 1000,
+      paste0(format(v / 1000, trim = TRUE, drop0trailing = TRUE), "k"),
+      format(v, trim = TRUE, drop0trailing = TRUE)
+    )
+  } else {
+    vapply(v, function(x) format(signif(x, 6), trim = TRUE, drop0trailing = TRUE), "")
+  }
+}
+
+# scene_axis_titles(): Names the axes of a 3D scene by the trial's mode ----
+# `spec` per axis ("xaxis", "yaxis", "zaxis"): title, unit, lim (the axis's
+# data range, c(lo, hi)), log (TRUE on a log axis), at (where the title sits,
+# as fractions of the three axis ranges, may lie outside 0..1), angle (text
+# angle of that title), tickvals/ticktext (the axis's ticks when it sets them
+# itself), thousands (ticks read 21k). Returns the scene and the paper
+# annotations to add to the layout.
+scene_axis_titles <- function(scene, spec, font_color, mode = scene_title_mode()) {
+  annotations <- list()
+  if (mode == "native") {
+    return(list(scene = scene, annotations = annotations))
+  }
+  # A fraction of the ranges as a point of the scene. It has to lie inside
+  # the cube: plotly hides a 3D annotation outside a fixed range and widens
+  # an automatic one to take it in, so a title is pinned to its axis's edge
+  # and moved off it in pixels (shift). A log axis takes the log10 value.
+  at_point <- function(f) {
+    axes <- c("xaxis", "yaxis", "zaxis")
+    stats::setNames(
+      lapply(seq_along(axes), function(i) {
+        s <- spec[[axes[i]]] %||% scene_axis_lim(scene[[axes[i]]])
+        lim <- s$lim
+        if (isTRUE(s$log)) {
+          log10(lim[1]) + f[i] * diff(log10(lim))
+        } else {
+          lim[1] + f[i] * diff(lim)
+        }
+      }),
+      c("x", "y", "z")
+    )
+  }
+  key_rows <- character(0)
+  for (ax in names(spec)) {
+    s <- spec[[ax]]
+    if (is.null(s$title) || !nzchar(s$title)) {
+      next
+    }
+    scene[[ax]]$title <- list(text = "", font = list(size = 14, color = font_color))
+    scene[[ax]]$titlefont <- NULL
+    if (mode == "annot") {
+      scene$annotations <- c(
+        scene$annotations,
+        list(c(
+          at_point(s$at),
+          list(
+            text = s$title,
+            showarrow = FALSE,
+            xshift = s$shift[1] %||% 0,
+            yshift = s$shift[2] %||% 0,
+            textangle = s$angle %||% 0,
+            font = list(size = 14, color = font_color),
+            name = "kiwims-axis-title"
+          )
+        ))
+      )
+    } else if (mode == "units") {
+      vals <- s$tickvals
+      text <- s$ticktext
+      if (is.null(vals)) {
+        vals <- pretty(s$lim, n = s$n %||% 4)
+        vals <- vals[vals >= s$lim[1] - 1e-9 & vals <= s$lim[2] + 1e-9]
+      }
+      if (is.null(text)) {
+        text <- tick_label(vals, isTRUE(s$thousands))
+      }
+      last <- which.max(vals)
+      text[last] <- paste(text[last], s$unit)
+      scene[[ax]]$tickmode <- "array"
+      scene[[ax]]$tickvals <- vals
+      scene[[ax]]$ticktext <- text
+    } else if (mode == "key") {
+      ends <- s$key_range %||% s$lim
+      key_rows <- c(
+        key_rows,
+        paste0(
+          s$title,
+          ":  ",
+          paste(
+            if (is.character(ends)) ends else tick_label(signif(ends, 3), isTRUE(s$thousands)),
+            collapse = " – "
+          )
+        )
+      )
+    }
+  }
+  if (length(key_rows)) {
+    annotations <- list(list(
+      text = paste(key_rows, collapse = "<br>"),
+      x = 1,
+      y = 0,
+      xref = "paper",
+      yref = "paper",
+      xanchor = "right",
+      yanchor = "bottom",
+      align = "left",
+      showarrow = FALSE,
+      font = list(size = 11, color = font_color),
+      name = "kiwims-axis-key"
+    ))
+  }
+  list(scene = scene, annotations = annotations)
+}
+
+scene_axis_lim <- function(axis) {
+  list(lim = axis$range %||% c(0, 1), log = identical(axis$type, "log"))
+}
+
 ## Kinetics diagnostics plots ----
 #
 # Four views on how well the data support the global fit. All of them take
@@ -7244,23 +7381,7 @@ make_binding_surface_plot <- function(
   below_zero <- function(top) c(-0.04 * top, top)
   time_max <- max(time_grid)
 
-  p |>
-    plotly::layout(
-      paper_bgcolor = "rgba(0,0,0,0)",
-      plot_bgcolor = "rgba(0,0,0,0)",
-      font = list(size = 14, color = pal$font),
-      legend = list(
-        title = list(
-          text = paste0("Concentration [", conc_unit, "]  "),
-          font = list(color = pal$font)
-        ),
-        bgcolor = "rgba(0,0,0,0)",
-        bordercolor = "rgba(0,0,0,0)",
-        font = list(size = 11, color = pal$font),
-        itemsizing = "constant",
-        tracegroupgap = 4
-      ),
-      scene = list(
+  scene <- list(
         xaxis = axis(
           paste0("Time [", time_unit, "]"),
           list(range = below_zero(time_max))
@@ -7295,6 +7416,63 @@ make_binding_surface_plot <- function(
         aspectratio = list(x = 1.15, y = 1, z = 0.7),
         camera = list(eye = list(x = 1.95, y = -2.05, z = 1.05))
       )
+
+  # TRIAL: how the axes are named (scene_axis_titles())
+  conc_lim <- if (isTRUE(log_conc)) range(conc_grid) else below_zero(max(conc_grid))
+  titled <- scene_axis_titles(
+    scene,
+    list(
+      xaxis = list(
+        title = paste0("Time [", time_unit, "]"),
+        unit = time_unit,
+        lim = c(0, time_max),
+        at = c(0.5, 0, 0),
+        shift = c(-50, -34)
+      ),
+      yaxis = list(
+        title = paste0("Compound [", conc_unit, "]"),
+        unit = conc_unit,
+        lim = conc_lim,
+        log = isTRUE(log_conc),
+        tickvals = scene$yaxis$tickvals,
+        ticktext = scene$yaxis$ticktext,
+        key_range = range(pl$conc),
+        at = c(1, 0.5, 0),
+        shift = c(78, -46)
+      ),
+      zaxis = list(
+        title = "Binding [%]",
+        unit = "%",
+        lim = c(0, 105),
+        tickvals = seq(20, 100, by = 20),
+        key_range = c(0, 100),
+        at = c(0, 0, 0.5),
+        shift = c(-62, 0),
+        angle = -90
+      )
+    ),
+    pal$font
+  )
+  scene <- titled$scene
+
+  p |>
+    plotly::layout(
+      paper_bgcolor = "rgba(0,0,0,0)",
+      plot_bgcolor = "rgba(0,0,0,0)",
+      font = list(size = 14, color = pal$font),
+      legend = list(
+        title = list(
+          text = paste0("Concentration [", conc_unit, "]  "),
+          font = list(color = pal$font)
+        ),
+        bgcolor = "rgba(0,0,0,0)",
+        bordercolor = "rgba(0,0,0,0)",
+        font = list(size = 11, color = pal$font),
+        itemsizing = "constant",
+        tracegroupgap = 4
+      ),
+      scene = scene,
+      annotations = titled$annotations
     )
 }
 
@@ -10867,12 +11045,14 @@ multiple_spectra <- function(
     }
 
     # Lines as WebGL rather than SVG: a spectrum runs to thousands of points
-    # per sample, which the SVG renderer draws one path node at a time. The
-    # single-sample spectrum_plot() already uses scattergl for the same
-    # reason. Downloads go out via saveWidget(), so WebGL traces export fine.
-    # Markers as SVG, though: plotly.js draws the WebGL canvas underneath the
-    # SVG layers, so an SVG marker trace is always in front of the spectrum
-    # lines. There are only a handful of peaks per sample, so nothing is lost.
+    # per sample, which the SVG renderer draws one path node at a time. (The
+    # single-sample spectrum_plot() draws one SVG line, so its markers can sit
+    # in front of it.) Downloads go out via saveWidget(), so WebGL traces
+    # export fine.
+    # Markers as SVG. Note that plotly.js stacks the WebGL canvas above the SVG
+    # that holds scatter traces, so these markers sit behind the spectrum
+    # lines where they overlap. WebGL markers are no way out: they draw garbled
+    # on some GPUs (see unmatched_marker()).
     per_sample <- sample_traces(
       "scattergl",
       function(lvl, rows) {
@@ -11033,6 +11213,47 @@ multiple_spectra <- function(
     per_sample[[1]]$legendgrouptitle <- group_title
   }
   fig$x$data <- c(per_sample, fig$x$data)
+
+  # TRIAL: how the axes are named (scene_axis_titles())
+  if (cubic && nrow(spectrum_data) > 0) {
+    z_levels <- levels(spectrum_data$z)
+    time_unit <- if (time) gsub(".*\\[(.+)\\].*", "\\1", units[["Time"]])
+    titled <- scene_axis_titles(
+      fig$x$layout$scene,
+      list(
+        xaxis = list(
+          title = "Mass [Da]",
+          unit = "Da",
+          lim = range(spectrum_data$mass, na.rm = TRUE),
+          thousands = TRUE,
+          at = c(0.5, 0, 1),
+          shift = c(-74, -42)
+        ),
+        yaxis = list(
+          title = "Intensity [%]",
+          unit = "%",
+          lim = c(0, max(spectrum_data$intensity, na.rm = TRUE)),
+          n = 2,
+          at = c(0, 0.5, 1),
+          shift = c(-72, 0),
+          angle = -90
+        ),
+        zaxis = list(
+          title = if (time) paste0("Time [", time_unit, "]") else "",
+          unit = time_unit,
+          lim = c(1, max(1, length(z_levels))),
+          tickvals = seq_along(z_levels),
+          ticktext = z_levels,
+          key_range = z_levels[c(1, length(z_levels))],
+          at = c(1, 0, 0.5),
+          shift = c(60, -30)
+        )
+      ),
+      font_color
+    )
+    fig$x$layout$scene <- titled$scene
+    fig$x$layout$annotations <- c(fig$x$layout$annotations, titled$annotations)
+  }
   fig
 }
 
@@ -11081,7 +11302,8 @@ unmatched_sample_traces <- function(
     lvl <- as.character(um_lvl$z[1])
 
     trace <- list(
-      # SVG like the hit markers, so they draw above the WebGL spectrum lines
+      # SVG in 2D, as WebGL draws the symbol garbled on some GPUs; see
+      # unmatched_marker()
       type = if (cubic) "scatter3d" else "scatter",
       mode = "markers",
       x = I(um_lvl$mass),
@@ -11093,11 +11315,11 @@ unmatched_sample_traces <- function(
       # is line-only and drawn by its line colour; the solid 3D one gets an
       # outline like the hit markers of that view.
       marker = list(
-        color = um$color,
+        color = if (cubic) um$color else um$fill,
         symbol = if (cubic) um$symbol_3d else um$symbol,
         size = if (cubic) 3 else 8,
         line = list(
-          color = if (cubic) inv_color else um$color,
+          color = if (cubic) inv_color else um$fill,
           width = if (cubic) 2 else um$width
         )
       ),
@@ -11145,10 +11367,10 @@ add_unmatched_traces <- function(
     name = "Unmatched",
     legendgroup = legend_key_group("unmatched"),
     marker = list(
-      color = um$color,
+      color = um$fill,
       symbol = um$symbol,
       size = 8,
-      line = list(color = um$color, width = um$width)
+      line = list(color = um$fill, width = um$width)
     ),
     visible = visible,
     meta = unmatched_trace_tag,
@@ -15397,6 +15619,10 @@ stats_scatter <- function(
       # The legend sits at the figure's right edge, the Mean / SD labels in
       # the gap between it and the plot area (margin sized by stat_margin_js)
       legend = list(
+        title = list(
+          text = paste0(group_by, "  "),
+          font = list(color = font_color)
+        ),
         bgcolor = "rgba(0,0,0,0)",
         font = list(color = font_color),
         xref = "container",

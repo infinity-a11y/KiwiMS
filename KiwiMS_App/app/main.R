@@ -227,6 +227,9 @@ ui <- function(id) {
       // zoom state, so this has to be read out of the live Plotly DOM node.
       var _kiwiPendingZoomRange = null;
       var _kiwiPendingCamera = null;
+      // The tick values each 3D axis showed on screen, by scene and axis, so
+      // the export labels the same values rather than ones plotly picks anew
+      var _kiwiPendingTicks = null;
 
       // Annotations and axis titles are cut off by the SVG viewport as soon as
       // they're drawn past the edge of the paper - a label anchored above a
@@ -330,17 +333,48 @@ ui <- function(id) {
         if (!(legendWidth > 0)) return Promise.resolve(width);
         var domainRight = div.getBoundingClientRect().right -
           ((div._fullLayout.margin && div._fullLayout.margin.r) || 0);
+        // Labels hung just right of the plot (the Mean / SD lines of the
+        // binding-vs-hit-rate plot) share the right margin with the legend,
+        // which sits at the canvas edge: the room they take comes out of the
+        // gutter next to the legend
+        var notes = kiwiMarginNotes(div);
+        var noteNeed = notes.reach > 0 ? Math.ceil(notes.reach + 12) : 0;
         if (legend.getBoundingClientRect().left >= domainRight - 1) {
-          return Promise.resolve(width);
+          var shortfall = noteNeed ?
+            Math.ceil(noteNeed - (legend.getBoundingClientRect().left - notes.edge)) : 0;
+          if (shortfall <= 0) return Promise.resolve(width);
+          var grownWidth = width + shortfall;
+          var grownMargin = ((div._fullLayout.margin && div._fullLayout.margin.r) || 0) + shortfall;
+          div.style.width = grownWidth + 'px';
+          return Plotly.relayout(div, { width: grownWidth, 'margin.r': grownMargin })
+            .then(function() { return grownWidth; });
         }
         // Room for the safety margin kiwiFitLegendClip takes, plus a visible
         // gap: at export sizes a fixed 12px gutter is invisible and the last
         // glyph ends up flush against the edge of the page.
-        var neededR = Math.ceil(legendWidth + kiwiLegendSafetyPad(div) + 12);
+        var neededR = Math.ceil(legendWidth + kiwiLegendSafetyPad(div) + 12) + noteNeed;
         var newWidth = width + neededR;
         div.style.width = newWidth + 'px';
         return Plotly.relayout(div, { width: newWidth, 'margin.r': neededR })
           .then(function() { return newWidth; });
+      }
+
+      // The annotations anchored at the plot's right edge (paper x >= 1): where
+      // that edge is on the page, and how far the widest of them reaches past it
+      function kiwiMarginNotes(div) {
+        var anns = div._fullLayout.annotations || [];
+        var edge = Infinity, reach = 0;
+        Array.prototype.forEach.call(
+          div.querySelectorAll('.infolayer .annotation[data-index]'), function(node) {
+            var ann = anns[+node.getAttribute('data-index')];
+            if (!ann || ann.xref !== 'paper' || !(ann.x >= 1)) return;
+            var nb = node.getBoundingClientRect();
+            if (!nb.width) return;
+            var shift = ann.xshift || 0;
+            edge = Math.min(edge, nb.left - shift);
+            reach = Math.max(reach, nb.width + shift);
+          });
+        return { edge: edge, reach: reach };
       }
 
       // A legend taller than the canvas allows (_effHeight, capped by the
@@ -514,10 +548,36 @@ ui <- function(id) {
         }
         if (x1 < 0) return null;
         var f = shot.frame;
-        return {
+        var box = {
           left: f.left + x0, top: f.top + y0, right: f.left + x1 + 1,
           bottom: f.top + y1 + 1, frame: f
         };
+        // TRIAL: axis titles drawn as scene annotations are SVG, not part of
+        // the canvas, but belong to the drawing all the same
+        var page = div.getBoundingClientRect();
+        Array.prototype.forEach.call(
+          div.querySelectorAll('.infolayer g.annotation-' + key),
+          function(node) {
+            var b = node.getBoundingClientRect();
+            if (!b.width || !b.height) return;
+            box.left = Math.min(box.left, b.left - page.left);
+            box.top = Math.min(box.top, b.top - page.top);
+            box.right = Math.max(box.right, b.right - page.left);
+            box.bottom = Math.max(box.bottom, b.bottom - page.top);
+          });
+        return box;
+      }
+
+      // TRIAL (KIWIMS_AXIS_TITLES=key): the paper annotation naming the 3D
+      // axes, { index, node } or null
+      function kiwiAxisKey(div) {
+        var anns = (div._fullLayout && div._fullLayout.annotations) || [];
+        for (var i = 0; i < anns.length; i++) {
+          if (anns[i].name !== 'kiwims-axis-key') continue;
+          var node = div.querySelector('.infolayer g.annotation[data-index=\"' + i + '\"]');
+          return { index: i, node: node };
+        }
+        return null;
       }
 
       // The pixels that differ between two reads of the scene, as a 0/1 mask
@@ -663,17 +723,28 @@ ui <- function(id) {
           var other = kiwiDilate(own[d === pair.a ? pair.b : pair.a], bare.w, bare.h, gap);
           // The scene works its ticks out from the axis afresh on every
           // redraw, so each label is drawn alone by giving the axis that one
-          // tick for the moment
-          var axis = div._fullLayout[key][['xaxis', 'yaxis', 'zaxis'][d]];
+          // tick for the moment. It has to be the axis the scene draws
+          // from: after a relayout that did not replot the scene (the
+          // legend's gutter), _fullLayout holds a newer copy the scene never
+          // reads. A tick's position is in the scene's scaled units, and on
+          // a log axis in log10 of the value.
+          var axis = (scene.fullSceneLayout || div._fullLayout[key])[['xaxis', 'yaxis', 'zaxis'][d]];
           var saved = { tickmode: axis.tickmode, tickvals: axis.tickvals, ticktext: axis.ticktext };
           var ticks = opts.ticks[d].slice(), keep = [];
           try {
             ticks.forEach(function(tick) {
               var value = tick.x / scene.dataScale[d];
+              if (axis.type === 'log') value = Math.pow(10, value);
+              value = +value.toPrecision(12);
               axis.tickmode = 'array';
               axis.tickvals = [value];
               axis.ticktext = [tick.text];
-              if (overlap(kiwiPixelDiff(shoot(d, NONE), bare), other) === 0)
+              // Against the scene drawn with the same single tick, but its
+              // label hidden: the grid follows the ticks, so against the
+              // full grid of `bare` the missing grid lines would count as
+              // part of the label
+              var label = kiwiPixelDiff(shoot(d, NONE), shoot(NONE, NONE));
+              if (overlap(label, other) === 0)
                 keep.push(value);
             });
           } finally {
@@ -764,6 +835,28 @@ ui <- function(id) {
         return Plotly.relayout(div, update).then(function() { return kiwiWait(300); });
       }
 
+      // The tick values a 3D axis showed on screen, cut to at most six for
+      // the export's larger labels by keeping every second (third, …) one.
+      // Which of them to start from is the one that keeps the roundest
+      // values: multiples of the new step (20k, 21k, … rather than 20.5k,
+      // 21.5k, …), or powers of ten on a log axis. Null without values.
+      function kiwiThinTicks(vals, log) {
+        if (!Array.isArray(vals) || vals.length < 2) return null;
+        vals = vals.slice().sort(function(a, b) { return a - b; });
+        var max = 6;
+        if (vals.length <= max) return vals;
+        var step = Math.ceil(vals.length / max);
+        var spacing = vals[1] - vals[0];
+        var start = 0;
+        for (var o = 0; o < step; o++) {
+          var v = vals[o];
+          var round = log ? Math.abs(Math.log10(v) - Math.round(Math.log10(v))) < 1e-6 :
+            Math.abs(v / (step * spacing) - Math.round(v / (step * spacing))) < 1e-6;
+          if (round) { start = o; break; }
+        }
+        return vals.filter(function(v, i) { return i >= start && (i - start) % step === 0; });
+      }
+
       function kiwiCameraDistance(div, key) {
         var cam = div._fullLayout[key]._scene.getCamera();
         var c = cam.center, e = cam.eye;
@@ -771,10 +864,13 @@ ui <- function(id) {
                          Math.pow(c.z - e.z, 2));
       }
 
-      // Centres the drawn scene in its frame and sets the camera's distance
-      // so that it fills 96% of the frame on its tightest side. Under
-      // perspective neither the pan nor the zoom is exact, so each step is
-      // measured again. Anything reaching the edge of the frame may be cut
+      // Sets the camera's distance so that the drawn scene reaches 96% of
+      // the way to the frame's edge on its tightest side. The camera only
+      // moves along its line of sight: panning it to centre the drawing
+      // would show the cube from another angle under perspective, so the
+      // drawing stays wherever on screen it sat, off-centre or not, and the
+      // crop centres it. Under perspective the zoom is not exact, so each
+      // step is measured again. Anything reaching the edge of the frame may be cut
       // off there, so the distance is bracketed between the closest one known
       // to fit and the farthest one known to reach the edge: a step never
       // goes back past either, which is what keeps the search from swinging
@@ -788,20 +884,41 @@ ui <- function(id) {
         var d = kiwiCameraDistance(div, key);
         var touches = box.left <= f.left + 1 || box.top <= f.top + 1 ||
                       box.right >= f.right - 1 || box.bottom >= f.bottom - 1;
-        var dx = 0, dy = 0, target;
+        var target;
         if (touches) {
           bracket.clip = Math.max(bracket.clip, d);
           target = isFinite(bracket.fit) ? (d + bracket.fit) / 2 : d / 0.7;
         } else {
           bracket.fit = Math.min(bracket.fit, d);
-          // How far the drawing's centre sits from the frame's, in pixels
-          dx = (box.left + box.right - f.left - f.right) / 2;
-          dy = (box.top + box.bottom - f.top - f.bottom) / 2;
-          var zoom = 0.96 * Math.min(fw / (box.right - box.left),
-                                     fh / (box.bottom - box.top));
+          // Zooming scales the drawing about the frame's centre, so each
+          // side may grow until it reaches its own edge
+          var cx = (f.left + f.right) / 2, cy = (f.top + f.bottom) / 2;
+          var reachX = Math.max(cx - box.left, box.right - cx, 1);
+          var reachY = Math.max(cy - box.top, box.bottom - cy, 1);
+          var zoomX = fw / 2 / reachX, zoomY = fh / 2 / reachY;
+          // A drawing well off-centre sideways (the on-screen camera clears
+          // the legend that way) runs out of width long before height. The
+          // projection scales with the frame's height alone, so a wider
+          // canvas leaves the drawing as it is and only adds room beside
+          // it: widen it until the width no longer limits the zoom, within
+          // what the WebGL canvas can take. The crop drops the extra width.
+          if (zoomX < 0.98 * zoomY) {
+            var full = div._fullLayout;
+            bracket.maxWidth = bracket.maxWidth || Math.round(1.6 * full.width);
+            var width = Math.min(bracket.maxWidth,
+                                 Math.ceil(full.width + 2 * reachX * zoomY - fw));
+            if (width > full.width + 1) {
+              div.style.width = width + 'px';
+              return Plotly.relayout(div, { width: width }).then(function() {
+                return kiwiWait(300);
+              }).then(function() {
+                return kiwiZoomToFit(div, key, round + 1, bracket);
+              });
+            }
+          }
+          var zoom = 0.96 * Math.min(zoomX, zoomY);
           target = Math.max(d / zoom, (d + bracket.clip) / 2);
-          var settled = Math.abs(target / d - 1) < 0.02 &&
-                        Math.abs(dx) < 0.01 * fw && Math.abs(dy) < 0.01 * fh;
+          var settled = Math.abs(target / d - 1) < 0.02;
           if (settled || round >= 10) return Promise.resolve(box);
         }
         if (round >= 10) {
@@ -812,7 +929,7 @@ ui <- function(id) {
             return kiwiSceneContentBox(div, key);
           });
         }
-        return kiwiMoveCamera(div, key, target, dx, dy, fh).then(function() {
+        return kiwiMoveCamera(div, key, target, 0, 0, fh).then(function() {
           return kiwiZoomToFit(div, key, round + 1, bracket);
         });
       }
@@ -831,6 +948,11 @@ ui <- function(id) {
         // The legend, the gap before it, and room for kiwiFitLegendClip, on
         // top of any gutter the side tables hold already
         var gutter = hasLegend ? Math.ceil(kiwiLegendWidth(div) + 3 * pad) : 0;
+        // TRIAL: the axis key goes in the same column, below the legend
+        var axisKey = kiwiAxisKey(div);
+        if (axisKey && axisKey.node && !kiwiHasSideTables(div._fullLayout))
+          gutter = Math.max(gutter,
+            Math.ceil(axisKey.node.getBoundingClientRect().width + 3 * pad));
         var start = gutter > 0 ?
           Plotly.relayout(div, {
             'margin.r': ((div._fullLayout.margin && div._fullLayout.margin.r) || 0) + gutter
@@ -843,10 +965,17 @@ ui <- function(id) {
         }).then(function(box) {
           // The projection of the axes shifts a little as the camera moves,
           // so the labels are checked again at the final view, and the fit
-          // redone if any had to move.
-          return kiwiSeparateSceneLabels(div, key).then(function(moved) {
-            return moved ? kiwiZoomToFit(div, key, 0) : box;
-          });
+          // redone if any had to move - a few times over, as each fit can
+          // bring two labels together again where the axes meet.
+          function settle(box, round) {
+            return kiwiSeparateSceneLabels(div, key).then(function(moved) {
+              if (!moved || round >= 3) return box;
+              return kiwiZoomToFit(div, key, 0).then(function(next) {
+                return settle(next, round + 1);
+              });
+            });
+          }
+          return settle(box, 0);
         }).then(function(box) {
           if (!box || !hasLegend) return box;
           var size = div._fullLayout._size;
@@ -857,6 +986,34 @@ ui <- function(id) {
             'legend.yanchor': 'top'
           }).then(function() { return box; });
         });
+      }
+
+      // TRIAL: puts the axis key beside the drawn scene, below the legend
+      // and the side tables (or top-aligned with the scene without either)
+      function kiwiPlaceAxisKey(div, box, pad) {
+        var key = kiwiAxisKey(div);
+        if (!box || !key) return Promise.resolve();
+        var page = div.getBoundingClientRect();
+        var top = box.top;
+        var nodes = [div.querySelector('.infolayer .legend .scrollbox')];
+        var anns = div._fullLayout.annotations || [];
+        Array.prototype.forEach.call(
+          div.querySelectorAll('.infolayer g.annotation[data-index]'),
+          function(node) {
+            if (kiwiIsSideTable(anns[+node.getAttribute('data-index')])) nodes.push(node);
+          });
+        nodes.forEach(function(node) {
+          if (!node) return;
+          var b = node.getBoundingClientRect();
+          if (b.width && b.height) top = Math.max(top, b.bottom - page.top + 2 * pad);
+        });
+        var size = div._fullLayout._size;
+        var update = {};
+        update['annotations[' + key.index + '].x'] = (box.right + pad - size.l) / size.w;
+        update['annotations[' + key.index + '].xanchor'] = 'left';
+        update['annotations[' + key.index + '].y'] = 1 - (top - size.t) / size.h;
+        update['annotations[' + key.index + '].yanchor'] = 'top';
+        return Plotly.relayout(div, update);
       }
 
       // The side tables of the cubic spectrum are anchored at the right edge
@@ -912,7 +1069,8 @@ ui <- function(id) {
         Array.prototype.forEach.call(
           div.querySelectorAll('.infolayer g.annotation[data-index]'),
           function(node) {
-            if (kiwiIsSideTable(annotations[+node.getAttribute('data-index')]))
+            var ann = annotations[+node.getAttribute('data-index')];
+            if (kiwiIsSideTable(ann) || (ann && ann.name === 'kiwims-axis-key'))
               include(node);
           });
         var x = Math.max(0, Math.floor(l - pad));
@@ -1050,18 +1208,15 @@ ui <- function(id) {
           });
           _kiwiPendingZoomRange = null;
         }
-        // On screen the cubic spectrum's legend overlays its scene, and the
-        // figure nudges the camera sideways to clear it (camera.center.x,
-        // spectrum_legend_camera_x in R). The export gives the legend a
-        // gutter of its own, so that nudge only pushes the spectrum off
-        // centre. Read it off the figure as built, before the on-screen
-        // camera replaces it.
-        var legendDodge = {};
-        Object.keys(fig.layout).forEach(function(key) {
-          if (!/^scene[0-9]*$/.test(key)) return;
-          var cam = fig.layout[key] && fig.layout[key].camera;
-          legendDodge[key] = (cam && cam.center && cam.center.x) || 0;
-        });
+        // The camera goes into the export exactly as it was on screen,
+        // including the sideways nudge that clears the cubic spectrum's
+        // legend there (camera.center.x, spectrum_legend_camera_x in R).
+        // Under perspective any change to where the camera stands - taking
+        // that nudge out, or panning to centre the drawing - shows the cube
+        // from a different angle than the one on screen. kiwiFitCubic only
+        // moves the camera along its line of sight, and the crop centres.
+        var pendingTicks = _kiwiPendingTicks || {};
+        _kiwiPendingTicks = null;
         if (_kiwiPendingCamera) {
           Object.keys(_kiwiPendingCamera).forEach(function(sceneKey) {
             if (!fig.layout[sceneKey]) return;
@@ -1083,13 +1238,26 @@ ui <- function(id) {
         // the figure's own values instead of being unwound back out of an
         // already-scaled number.
         var sceneAxes = [];
+        // TRIAL (KIWIMS_AXIS_TITLES=annot): axis titles drawn as scene
+        // annotations, sized below like the plotly-drawn titles
+        var sceneTitles = [];
         Object.keys(fig.layout).forEach(function(key) {
           if (!/^scene[0-9]*$/.test(key)) return;
+          ((fig.layout[key] && fig.layout[key].annotations) || []).forEach(function(anno) {
+            if (anno.name !== 'kiwims-axis-title') return;
+            sceneTitles.push({
+              anno: anno,
+              size: (anno.font && anno.font.size) || 14,
+              xshift: anno.xshift || 0,
+              yshift: anno.yshift || 0
+            });
+          });
           ['xaxis', 'yaxis', 'zaxis'].forEach(function(ax) {
             var axis = fig.layout[key] && fig.layout[key][ax];
             if (!axis) return;
             sceneAxes.push({
               axis: axis,
+              screenTicks: pendingTicks[key] && pendingTicks[key][ax],
               tick: axis.tickfont && axis.tickfont.size,
               title: (axis.titlefont && axis.titlefont.size) ||
                      (axis.title && axis.title.font && axis.title.font.size)
@@ -1232,18 +1400,47 @@ ui <- function(id) {
             }
             if (typeof rec.tick === 'number')
               axis.tickfont.size = Math.max(1, Math.round(rec.tick * scale));
-            // Keep the title on the same factor as its ticks so the gap the
-            // on-screen figure already reads cleanly at is preserved.
+            // plotly.js draws a 3D tick label at its font size squared over
+            // 12 (gl-axes3d builds the glyphs at fontSize / 12 and scales them
+            // by the font size once more) but an axis title at its plain
+            // size. At the 12 px of the screen the two agree; scaled by the
+            // same factor the ticks grew with its square and the titles
+            // only with the factor, ending up half the size of their ticks
+            // and less. So the title gets the square too, which keeps it to
+            // its drawn ticks as it is on screen.
             if (typeof rec.title === 'number') {
-              var titleSize = Math.max(1, Math.round(rec.title * scale));
+              var tickFactor = typeof rec.tick === 'number' && rec.tick > 0 ?
+                axis.tickfont.size / rec.tick : scale;
+              var titleSize = Math.max(1, Math.round(rec.title * tickFactor * tickFactor));
               if (axis.titlefont) axis.titlefont.size = titleSize;
               if (axis.title && axis.title.font) axis.title.font.size = titleSize;
             }
-            // Thin the numeric axes out as well: the mass axis defaults to
-            // enough ticks that 21.2K / 21.4K / 21.6K … already run together
-            // along the receding edge before any scaling is applied.
-            if (axis.type !== 'category' && typeof axis.nticks !== 'number')
+            // Thin the numeric axes out as well: at the export's label sizes
+            // the on-screen spacing (20k / 20.5k / 21k … on the mass axis)
+            // runs together along the receding edge. The values kept are
+            // the ones shown on screen (kiwiThinTicks); without them,
+            // plotly is left to pick about five.
+            var thinned = kiwiThinTicks(rec.screenTicks, axis.type === 'log');
+            if (thinned) {
+              axis.tickmode = 'array';
+              axis.tickvals = thinned;
+              delete axis.nticks;
+              delete axis.dtick;
+              delete axis.tick0;
+            } else if (axis.type !== 'category' && axis.tickmode !== 'array' &&
+                       typeof axis.nticks !== 'number') {
               axis.nticks = 5;
+            }
+          });
+          // TRIAL: annotation titles stand to the drawn ticks as the
+          // plotly-drawn titles above do (the square of the tick factor),
+          // and so does their pixel offset from the axis
+          var noteFactor = scene3DScale * scene3DScale;
+          sceneTitles.forEach(function(rec) {
+            rec.anno.font = Object.assign({}, rec.anno.font,
+              { size: Math.max(1, Math.round(rec.size * noteFactor)) });
+            rec.anno.xshift = Math.round(rec.xshift * noteFactor);
+            rec.anno.yshift = Math.round(rec.yshift * noteFactor);
           });
           // How much of the scene's box the projected cube fills depends on
           // the camera, so no fixed margin fits: Plotly's defaults left the
@@ -1294,13 +1491,6 @@ ui <- function(id) {
             Object.keys(fig.layout).forEach(function(key) {
               if (/^scene[0-9]*$/.test(key) && fig.layout[key])
                 fig.layout[key].domain = { x: [0, 1], y: [0, 1] };
-            });
-          }
-          if (fig.layout.showlegend !== false) {
-            Object.keys(legendDodge).forEach(function(key) {
-              var cam = fig.layout[key].camera = fig.layout[key].camera || {};
-              cam.center = Object.assign({ x: 0, y: 0, z: 0 }, cam.center);
-              cam.center.x -= legendDodge[key];
             });
           }
           // The scene reaches the file as a raster of its WebGL canvas, which
@@ -1380,6 +1570,8 @@ ui <- function(id) {
               sceneBox = box;
               return kiwiPlaceSideTables(div, box);
             }).then(function() {
+              return kiwiPlaceAxisKey(div, sceneBox, kiwiLegendSafetyPad(div));
+            }).then(function() {
               kiwiScaleLegendSymbols(div, legendSymbolScale);
               kiwiFitLegendClip(div);
               // A margin of 3% of the canvas height all round what was drawn
@@ -1454,8 +1646,34 @@ ui <- function(id) {
           if (cam) cameras[key] = JSON.parse(JSON.stringify(cam));
         });
 
+        // The tick values the scene's numeric axes drew, read off the gl
+        // axes: their positions are in the scene's scaled units (dataScale),
+        // and on a log axis in log10 of the value.
+        var ticks = {};
+        Object.keys(gd._fullLayout).forEach(function(key) {
+          if (!/^scene[0-9]*$/.test(key)) return;
+          var sc = gd._fullLayout[key];
+          var scene = sc && sc._scene;
+          var drawn = scene && scene.glplot && scene.glplot.axes && scene.glplot.axes.ticks;
+          if (!drawn || !scene.dataScale) return;
+          ['xaxis', 'yaxis', 'zaxis'].forEach(function(ax, i) {
+            var axis = sc[ax];
+            if (!axis || axis.type === 'category' || axis.type === 'date' ||
+                axis.tickmode === 'array' || !Array.isArray(drawn[i])) return;
+            var vals = drawn[i].map(function(t) {
+              var v = t.x / scene.dataScale[i];
+              if (axis.type === 'log') v = Math.pow(10, v);
+              return +v.toPrecision(12);
+            });
+            if (vals.length < 2) return;
+            ticks[key] = ticks[key] || {};
+            ticks[key][ax] = vals;
+          });
+        });
+
         _kiwiPendingZoomRange = Object.keys(ranges).length ? ranges : null;
         _kiwiPendingCamera = Object.keys(cameras).length ? cameras : null;
+        _kiwiPendingTicks = Object.keys(ticks).length ? ticks : null;
 
         // Traces hidden or isolated in the legend (click, double-click). The
         // export is rebuilt in R, which never sees those clicks, so every

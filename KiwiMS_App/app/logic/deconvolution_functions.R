@@ -1842,8 +1842,12 @@ unmatched_spectrum_peaks <- function(peaks, assigned, mass) {
 
 # Marker style of the unmatched peaks. A cross reads as "not assigned" next to
 # the protein diamond and compound circles. 2D traces draw it as a thin,
-# line-only cross, so it stays lighter than the hit markers it sits among; 3D
-# scatter traces support only the solid "x" of the few symbols they know.
+# line-only cross in `fill` (black on light, white on dark), which reads
+# against the spectrum line; 3D scatter traces support only the solid "x" of
+# the few symbols they know, filled with the grey `color`.
+# 2D marker traces must be SVG: WebGL draws these symbols garbled on some
+# GPUs. plotly.js stacks the WebGL canvas above the SVG traces, though, so
+# they only draw in front of a spectrum line that is SVG too.
 #' @export
 unmatched_marker <- function(theme = "light") {
   light <- tolower(theme) == "light"
@@ -1851,9 +1855,9 @@ unmatched_marker <- function(theme = "light") {
     symbol = "x-thin-open",
     symbol_3d = "x",
     color = status_colors(if (light) "light" else "dark")$unassigned,
+    fill = if (light) "#000000" else "#ffffff",
     # The thin cross is drawn by its line alone
-    width = 2,
-    line = if (light) "#000000" else "#ffffff"
+    width = 2
   )
 }
 
@@ -2147,7 +2151,11 @@ spectrum_plot <- function(
       ),
       x = ~mass,
       y = ~intensity,
-      type = "scattergl",
+      # SVG, not WebGL: plotly.js stacks the WebGL canvas above the SVG
+      # traces, so the hit and unmatched markers (SVG, see unmatched_marker())
+      # would sit behind a WebGL line. At one point per Da the line stays
+      # light enough for SVG.
+      type = "scatter",
       mode = "lines",
       color = I(data_line_color),
       showlegend = FALSE,
@@ -2586,11 +2594,10 @@ spectrum_plot <- function(
         meta = unmatched_trace_tag,
         # Open symbols are drawn by their line alone
         marker = list(
-          color = um$color,
-          line = list(color = um$color, width = um$width),
+          color = um$fill,
+          line = list(color = um$fill, width = um$width),
           symbol = um$symbol,
-          size = 9,
-          zindex = 90
+          size = 9
         ),
         hoverinfo = "text",
         text = ~ paste0(
