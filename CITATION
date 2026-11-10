@@ -4,9 +4,9 @@ authors:
   - family-names: "Freisleben"
     given-names: "Marian"
 title: "KiwiMS"
-version: "0.8.0"
+version: "0.8.1"
 doi: "10.5281/zenodo.16575976"
-date-released: 2026-10-15
+date-released: 2026-11-10
 url: "https://github.com/infinity-a11y/KiwiMS"
 references:
   - type: article
